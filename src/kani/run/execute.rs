@@ -737,10 +737,15 @@ pub fn launch_evidence(
     report: Option<&[u8]>,
     kind: Option<ObligationKind>,
 ) -> Result<(ClassifiedRun, Option<i32>), KaniExecutionRefusal> {
-    let stopped_reason = if matches!(launch, LaunchOutcome::MemoryExhausted) {
-        KaniInconclusiveReason::MemoryExhausted
-    } else {
-        KaniInconclusiveReason::TimedOut
+    let stopped = |reason| {
+        (
+            ClassifiedRun {
+                outcome: KaniRunOutcome::Inconclusive { reason },
+                success_checks: 0,
+                checks: Vec::new(),
+            },
+            None,
+        )
     };
     match settle(launch)? {
         Concluded::Completed {
@@ -751,16 +756,8 @@ pub fn launch_evidence(
             classify_kani_run(exited_successfully, report, &text, kind)?,
             exit_code,
         )),
-        Concluded::TimedOut | Concluded::MemoryExhausted => Ok((
-            ClassifiedRun {
-                outcome: KaniRunOutcome::Inconclusive {
-                    reason: stopped_reason,
-                },
-                success_checks: 0,
-                checks: Vec::new(),
-            },
-            None,
-        )),
+        Concluded::TimedOut => Ok(stopped(KaniInconclusiveReason::TimedOut)),
+        Concluded::MemoryExhausted => Ok(stopped(KaniInconclusiveReason::MemoryExhausted)),
     }
 }
 
