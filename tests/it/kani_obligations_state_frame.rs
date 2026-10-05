@@ -2987,7 +2987,7 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
 /// the object body's members, finds no member and refuses with `MemberAbsent`. A harness is
 /// therefore generated from the hand-built fixture package, whose object body has the members.
 ///
-/// Trace: FR-015-AC-27, TC-035
+/// Trace: FR-015-AC-27, TC-025
 #[test]
 fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
     let twin = Twin::new();

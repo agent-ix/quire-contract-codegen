@@ -355,8 +355,7 @@ FR-024-AC-11 to FR-024-AC-30:
   scope, ranges and pre snapshot are checked before the request is built. The twin
   (`tests/state_frame_support/native_twin.rs`) passes no identity. Its harness scope is aligned
   to the node ids QSL names (`Twin::aligned`), because the fixture's checked package is hand-built
-  and its node ids are its own; a harness generated from QSL's own emitted package already
-  carries them. The frame path's `declared_domains` stays `Some(Vec::new())` (FR-024-AC-29).
+  and its node ids are its own; the package QSL itself emits carries them (measured below). The frame path's `declared_domains` stays `Some(Vec::new())` (FR-024-AC-29).
 - Node ids, measured: `qsl_replay::call_site` returns the compiled package's
   `quire.checked-package/v2` bytes (`CallSite::package`), and the model reader admits them given
   the domain package. In the package QSL emits from the twin's unit, the `operation_anchor` and
