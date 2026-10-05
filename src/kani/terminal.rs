@@ -1,5 +1,6 @@
-//! The terminal-value map of a Kani run (FR-029): one total `match` from a [`KaniRunOutcome`],
-//! paired with the settlement of its counterexample's replay, to QSL's FR-331 terminal value.
+//! The terminal-value maps of a Kani run (FR-029) and of a Contract IR outcome (FR-030): one
+//! total `match` each, from a [`KaniRunOutcome`] or an IR [`KaniOutcome`], paired with the
+//! settlement of its counterexample's replay, to QSL's FR-331 terminal value.
 //!
 //! The map is total over the pair, not over the outcome alone: a falsified run is a refutation
 //! only once its replay reproduces it. This module defines the replay settlement as the typed
@@ -9,8 +10,10 @@
 //! no `proof_category` function exists here.
 
 use qsl_replay::{
-    Code, DisagreementCause, IncompleteCause, InconclusiveCause, ReplayRefusal, TerminalValue,
+    Code, DeclineCode, DisagreementCause, IncompleteCause, InconclusiveCause, ProofRefusalCause,
+    ReplayRefusal, Std001Code, TerminalValue, UnavailabilityCause,
 };
+use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
 use crate::kani::classify::{KaniInconclusiveReason, KaniRunOutcome};
 
@@ -115,6 +118,67 @@ pub fn run_terminal_value(
         (Verified | CoverUnsatisfied { .. } | Inconclusive { .. }, Some(_)) => {
             return Err(TerminalPairError::UnexpectedSettlement)
         }
+    })
+}
+
+/// Maps one Contract IR [`KaniOutcome`] that arrived from Contract IR, with the SUCCESS check
+/// count its transcript reports and, for a `Counterexample`, its replay settlement, to QSL's
+/// terminal value (FR-030).
+///
+/// This is not applied to an outcome derived from a run this repository executed: that run's
+/// value is [`run_terminal_value`]'s (FR-030 precedence). The map reads the kind, and the `code`
+/// only for `Unavailable` and `Inconclusive`, plus the `Declined` kinds, whose code is carried
+/// as the STD-001 code IR issued: [`DeclineCode::Std001`], never respelled as a QSL catalog
+/// code and never checked for registration (QSL records no issuer and refuses no unregistered
+/// code). It never reads `source_id` or `context`. A vacuous proof is `Proved { success_checks:
+/// 0 }`; no outcome maps to `Tested`.
+///
+/// # Errors
+///
+/// [`TerminalPairError`] when a `Counterexample` has no settlement, or another kind has one.
+pub fn ir_outcome_terminal_value(
+    outcome: &KaniOutcome,
+    success_checks: u32,
+    settlement: Option<ReplaySettlement<'_>>,
+) -> Result<TerminalValue, TerminalPairError> {
+    use KaniOutcomeKind as Kind;
+    let declined = |cause| TerminalValue::Declined {
+        cause,
+        code: DeclineCode::Std001(outcome.code),
+    };
+    Ok(match (&outcome.kind, settlement) {
+        (Kind::Proved, None) => TerminalValue::Proved { success_checks },
+        (Kind::Counterexample, Some(settlement)) => settled(settlement),
+        (Kind::Counterexample, None) => return Err(TerminalPairError::MissingSettlement),
+        (Kind::Refused, None) => declined(ProofRefusalCause::Refused),
+        (Kind::InvalidInput, None) => declined(ProofRefusalCause::InvalidInput),
+        (Kind::IncompleteInput, None) => declined(ProofRefusalCause::IncompleteInput),
+        (Kind::Unavailable, None) if outcome.code == Std001Code::KANI_SOLVER_ABSENT => {
+            TerminalValue::Unsupported(UnavailabilityCause::SolverAbsent)
+        }
+        // `kani_backend_absent` and every other cause: FR-030's table sends both here.
+        (Kind::Unavailable, None) => TerminalValue::Unsupported(UnavailabilityCause::BackendAbsent),
+        (Kind::TimedOut, None) => TerminalValue::Incomplete(IncompleteCause::TimedOut),
+        (Kind::ResourceExhausted, None) => {
+            TerminalValue::Incomplete(IncompleteCause::ResourceExhausted)
+        }
+        (Kind::Cancelled, None) => TerminalValue::Incomplete(IncompleteCause::Cancelled),
+        (Kind::Inconclusive, None) if outcome.code == Std001Code::KANI_VACUOUS_PROOF => {
+            TerminalValue::Proved { success_checks: 0 }
+        }
+        (Kind::Inconclusive, None) => TerminalValue::Failed,
+        (
+            Kind::Proved
+            | Kind::Refused
+            | Kind::InvalidInput
+            | Kind::IncompleteInput
+            | Kind::Unavailable
+            | Kind::TimedOut
+            | Kind::ResourceExhausted
+            | Kind::Cancelled
+            | Kind::Inconclusive,
+            Some(_),
+        ) => return Err(TerminalPairError::UnexpectedSettlement),
     })
 }
 
