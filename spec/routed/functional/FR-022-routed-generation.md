@@ -256,7 +256,9 @@ already does for the FR-331 envelope.
 ## Out of Scope
 
 - Backend kinds other than Kani. `BackendKind` has one variant, `Kani`, and
-  that is the registry's measured state (see the FR-019 matrix notes). The
+  that is the registry's measured state (see the FR-019 matrix notes). FR-019 specifies a second,
+  process-provider variant (QSL ADR-029 PV-4); its generation arm here is not stated by PV-4 and is
+  open (FR-019 open question 3), so this requirement states none. The
   crate's other generators (FR-002 tri-state harnesses and strategies, FR-008
   to FR-013 bound strategies, and the FR-014, FR-018 and FR-021 oracles) are
   not selected by a backend kind. Callers invoke them directly, and this
