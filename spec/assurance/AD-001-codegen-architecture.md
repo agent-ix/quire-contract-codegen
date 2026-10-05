@@ -20,6 +20,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/ADR-015
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-288
+    type: references
   - target: ix://agent-ix/quire-specification/AD-016
     type: references
 ---
@@ -172,10 +174,16 @@ success fallback, and no requirement converts one into another.
 - A backend adapter is one implementation of one adapter trait, reached only through an exhaustive
   match on the closed `BackendKind` enum, and it owns its own execution evidence type (ADR-002,
   FR-026). Adding a kind without an arm is a compile error (FR-019, FR-022).
-- The QSL registry builder alone sets `ProviderOrigin::Linked` for a compile-time provider and
-  `ProviderOrigin::Process` for a plugin `hello` (QSL ADR-029 PV-1). CG's own typed
-  `ProviderOrigin` preserves the driver's projection; CG never infers it from identity text,
-  executable or provider bytes, or an identity-to-origin side map. Built-in Kani remains linked.
+- At registration, the driver's manifest-to-QSL-descriptor conversion supplies
+  `ProviderOrigin::Linked` for a compile-time provider or `ProviderOrigin::Process` for a plugin
+  `hello` to QSL `BackendDescriptor::new` or `admit` (QSL ADR-029 PV-1). The QSL registry holds
+  that value and checks conflicts. QSL layer R owns the closed origin vocabulary and descriptor
+  semantics (QSL FR-288, ADR-029 PV-1). CG's typed `ProviderOrigin` is a local projection of QSL's
+  two-valued semantics under
+  ADR-013 T-7, with no independently defined category: the driver maps both QSL
+  variants exhaustively into CG's corresponding variants, with no wildcard, and tests each.
+  CG never infers origin from identity text, executable or provider bytes, or an
+  identity-to-origin side map. Built-in Kani remains linked.
   The later process-kind classification and settlement belong to IR-629 (QSL ADR-029 PV-4).
 - Every harness is bounded: inclusive bounds from the declared model domains, and a memory ceiling
   and a wall-clock ceiling in its identity. A family proves the production code where it verifies

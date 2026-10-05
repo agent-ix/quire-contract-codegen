@@ -39,11 +39,13 @@ Ask each settlement that is not `supported`
 whether it routes a backend at all, and ask a manifest that repeats one backend
 identity the same question.
 
-For planned FR-019-AC-15, inspect the driver projection from each QSL registry
-descriptor to CG's descriptor. Project two otherwise equal descriptors separately,
-one with `Linked` and one with `Process` origin, and confirm identity and advertised pairs
+For planned FR-019-AC-15, inspect the driver projection from each QSL
+`Registry::descriptors()` value to CG's descriptor. Build two registries separately, each with
+an otherwise equal descriptor, one with `Linked` and one with `Process` origin. Project each,
+and confirm identity and advertised pairs
 are equal in the CG values while origin alone differs. Verify that a linked
-Kani descriptor remains `Linked`, no identity or manifest byte test chooses
+Kani descriptor remains `Linked`, the driver conversion exhaustively matches both QSL origin
+variants with no wildcard, no identity or manifest byte test chooses
 the origin, and CG has no direct `qsl-route` dependency or new FR-331 origin
 wire member. Run this row when IR-633 implements the projection.
 

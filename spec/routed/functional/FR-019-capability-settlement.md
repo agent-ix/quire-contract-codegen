@@ -13,6 +13,10 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-specification/TC-271
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-288
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-029
+    type: references
 ---
 # FR-019: Settle every capability claim at one negotiation point
 
@@ -119,23 +123,30 @@ nothing says so.
 
 ### Provider origin at the QSL to CG boundary (IR-633)
 
-The driver shall make one projection from each descriptor in its QSL registry to this crate's
-`BackendDescriptor` for the FR-331 envelope. It copies the registry descriptor's `id`, advertised
+The driver shall make one projection from each descriptor in `Registry::descriptors()` to this
+crate's `BackendDescriptor` for the FR-331 envelope. It copies the registry descriptor's `id`, advertised
 (kind, mode) pairs and `origin()` into CG's corresponding typed members without changing their
-meaning. QSL's registry builder sets `ProviderOrigin::Linked` for a linked provider and
-`ProviderOrigin::Process` for a plugin `hello` (QSL ADR-029 PV-1); neither the manifest nor the
-plugin supplies the origin. CG shall preserve that value and shall not derive or override it from
-the backend identity, executable or provider bytes, or a second identity-to-origin side map. A
+meaning. At registration, the driver's manifest-to-QSL-descriptor conversion supplies
+`ProviderOrigin::Linked` for a compile-time provider or `ProviderOrigin::Process` for a plugin
+`hello` to QSL `BackendDescriptor::new` or `admit` (QSL ADR-029 PV-1). The QSL registry holds that
+typed value and checks conflicting registrations; neither the manifest nor the plugin supplies
+the origin. CG shall preserve that value and shall not derive or override it from the backend
+identity, executable or provider bytes, or a second identity-to-origin side map. A
 built-in Kani descriptor supplied by the driver has origin `Linked`; its existing Kani
 classification remains the built-in path. A process descriptor's origin is the sole fact that
 permits the planned `Process(id)` classification, including when its identity text resembles a
 built-in identity. QSL's registry conflict rule removes registrations with one identity and
 different origins before this projection (ADR-029 PV-1).
 
-This is a Rust input boundary, not a new FR-331 wire member. CG owns its descriptor and origin
-type; the driver performs the typed projection, and CG takes no direct `qsl-route` dependency
-(QSL ADR-013 T-7; FR-022 "Where the input type lives"). This slice does not add
-`BackendKind::Process`, change its serialization, or settle a process item; IR-629 owns those
+This is a Rust input boundary, not a new FR-331 wire member. QSL layer R owns the closed,
+two-valued origin vocabulary and descriptor semantics (QSL FR-288; ADR-029 PV-1); its registry
+holds the authoritative value. CG's enum is a local typed projection of those meanings and
+defines no independent origin category. QSL ADR-013 T-7 requires separate native representations
+across this boundary, so the driver maps QSL `ProviderOrigin` to CG `ProviderOrigin` in one exhaustive match
+with no wildcard arm and tests both values. A new QSL variant fails the driver build until that
+projection is updated. CG takes no direct `qsl-route` dependency (FR-022 "Where the input type
+lives"). This slice does not add `BackendKind::Process`, change its serialization, or settle a
+process item; IR-629 owns those
 behavioral changes and the open process-provider questions below.
 
 Measured present fact, not a requirement of this change: `BackendKind::from_identity` (`src/routed/capability.rs`)
@@ -189,7 +200,7 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-12 | PLANNED (IR-629). The process-provider arm's disposition is a function of the descriptor's advertised capability, mode, domain and bound and the item's extent classification: descriptors with equal advertisements and different identity text, manifest position or ambient state settle identically apart from the backend each names, and an unbounded extent against `bounded`-only never settles `supported`. Identity text cannot choose a disposition beyond naming the backend. The concrete mode, domain and bound rows follow QSL ADR-029 PV-4 and FR-290. | Test (TC-046) |
 | FR-019-AC-13 | Settling a process-provider item reaches no plugin: a descriptor whose identity names a non-existent executable settles identically to one with an ordinary identity, apart from the backend each names, and starts nothing, and a descriptor whose identity names an executable that records its own start leaves no record. A mutant arm that starts or resolves the identity as a process either changes the first disposition or leaves the record, and fails this. | Test (TC-046) |
 | FR-019-AC-14 | The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result or artifact member, so settling returns none of them. A change that returns one does not compile against that type. | Analysis |
-| FR-019-AC-15 | PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` with exactly `Linked` and `Process`; the driver projects each QSL registry descriptor once into CG's descriptor, copying `id`, advertised pairs and `origin()` without deriving origin from identity, manifest or provider bytes or a side map. Two registry descriptors identical except for origin produce CG descriptors identical except for origin; a linked Kani descriptor remains `Linked`. The CG dependency graph adds no direct `qsl-route` edge and the FR-331 wire gains no origin field. | Test (TC-030) |
+| FR-019-AC-15 | PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` projecting exactly QSL layer R's `Linked` and `Process` meanings (QSL FR-288, ADR-029 PV-1); layer R owns that vocabulary. The driver projects each descriptor from `Registry::descriptors()` once into CG's descriptor, copying `id` and advertised pairs unchanged and mapping `origin()` exhaustively, `Linked` to `Linked` and `Process` to `Process`, with no wildcard or origin inference from identity, manifest or provider bytes or a side map. Two registry descriptors identical except for origin produce CG descriptors identical except for origin; a linked Kani descriptor remains `Linked`. The CG dependency graph adds no direct `qsl-route` edge and the FR-331 wire gains no origin field. | Test (TC-030) |
 
 ## Dependencies
 

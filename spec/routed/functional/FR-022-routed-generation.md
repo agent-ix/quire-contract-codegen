@@ -71,11 +71,13 @@ the kind as this crate's `BackendKind`, and the node as the IR
 `CheckedNodeId`. The driver converts its own routed value into it, as it
 already does for the FR-331 envelope.
 
-For that envelope, the driver projects each registered QSL descriptor once into
-CG's own `BackendDescriptor`, copying identity, advertised (kind, mode) pairs
-and `origin()` without changing their meaning (FR-019-AC-15). QSL's registry
-builder sets the origin; neither this routed-item conversion nor CG infers one
-from the backend identity, provider bytes or a side map. The current built-in
+For that envelope, the driver projects each descriptor from QSL `Registry::descriptors()` once
+into CG's own `BackendDescriptor`, copying identity, advertised (kind, mode) pairs
+and `origin()` without changing their meaning (FR-019-AC-15). QSL layer R owns the closed origin
+vocabulary (QSL FR-288, ADR-029 PV-1); CG's type is its local projection under ADR-013 T-7. The
+driver's registration conversion supplies the origin to QSL's descriptor; its registry
+holds and conflict-checks that value. Neither this routed-item conversion nor CG infers one from
+the backend identity, provider bytes or a side map. The current built-in
 Kani route remains linked. The planned process-kind classification and its
 generation output belong to IR-629; they do not change this crate boundary.
 
