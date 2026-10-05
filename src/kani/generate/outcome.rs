@@ -12,7 +12,9 @@ use serde::{Serialize, Serializer};
 use crate::{
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
-    kani::identity::{KaniObligationHarness, KaniScalarObligationHarness, ObligationKind},
+    kani::identity::{
+        KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
+    },
     oracle::claim::{ClaimMap, UpstreamBlocker},
     oracle::scalar::{ClaimDerivationRefusal, ExactScalarClaim, ExactScalarRefusal},
 };
@@ -23,9 +25,48 @@ pub const MAX_OBLIGATION_ITEMS: usize = 256;
 /// Largest accepted loop unwind bound.
 pub const MAX_OBLIGATION_UNWIND: u32 = 1024;
 
+/// Which of a state clause's two harnesses a [`ObligationItem::StateFrame`] item asks for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StateFrameRole {
+    /// The operation-contract harness: the clause's comparison between the pre-state and the
+    /// post-state. Its record's kind is [`ObligationKind::Postcondition`].
+    Contract,
+    /// The frame-effect harness: every state field the frame does not grant is left unchanged.
+    /// Its record's kind is [`ObligationKind::Frame`].
+    Frame,
+}
+
+impl StateFrameRole {
+    /// The obligation kind a record of this role carries.
+    pub(crate) const fn obligation_kind(self) -> ObligationKind {
+        match self {
+            Self::Contract => ObligationKind::Postcondition,
+            Self::Frame => ObligationKind::Frame,
+        }
+    }
+}
+
 /// One item to negotiate.
 #[derive(Clone, Copy, Debug)]
 pub enum ObligationItem<'a> {
+    /// One role of one `postcondition` `state_clause` of an admitted package. The inputs are
+    /// those of [`StateFrameRequest`](crate::kani::generate::frame::StateFrameRequest), and the
+    /// request's unwind bound applies. The harness calls the item's own `subject_path`; the
+    /// request's `subject_path` serves the other arms and is not read by this one.
+    StateFrame {
+        /// The admitted package.
+        package: &'a CheckedPackageV2,
+        /// The `state`/`state_clause` node of a `postcondition` clause.
+        clause: &'a CheckedNodeId,
+        /// The harness asked for.
+        role: StateFrameRole,
+        /// Rust path of the state struct.
+        state_path: &'a str,
+        /// Every field of the state struct, in declaration order.
+        state_fields: &'a [&'a str],
+        /// Rust path of the operation subject.
+        subject_path: &'a str,
+    },
     /// One clause of a frozen V1 bound package.
     BoundClause {
         /// The package the clause belongs to.
@@ -404,6 +445,8 @@ pub enum KaniObligationOutcome {
         harnesses: Vec<KaniObligationHarness>,
         /// V2 IR-confirmed exact-scalar claim harnesses.
         scalar_harnesses: Vec<KaniScalarObligationHarness>,
+        /// State-clause harnesses, one per `supported` `StateFrame` record, in request order.
+        state_frame_harnesses: Vec<StateFrameHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {
@@ -748,17 +791,6 @@ impl std::error::Error for StateFrameRefusal {}
 /// and [`StateFrameLoweringRefusal`] arm, with no wildcard arm, so a variant added to any of them
 /// fails to compile until the table says where it goes. The `deny` below makes a wildcard arm a
 /// lint error under `make lint`.
-// The `StateFrame` arm of negotiation calls this; until it lands (FR-015-AC-59 to FR-015-AC-65,
-// IR-461 code change 2) only the tests do. That change removes this allowance. It is an `allow`
-// and not the stricter lint expectation because NFR-005's scan reads the word `expect` in
-// non-test code as a panic token.
-#[cfg_attr(
-    not(test),
-    allow(
-        dead_code,
-        reason = "called by the StateFrame arm, IR-461 code change 2"
-    )
-)]
 #[deny(
     clippy::wildcard_enum_match_arm,
     clippy::match_wildcard_for_single_variants

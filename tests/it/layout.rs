@@ -655,6 +655,7 @@ fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
             "clause",
             "precondition",
             "contract",
+            "frame",
         ]),
         _ => None,
     }

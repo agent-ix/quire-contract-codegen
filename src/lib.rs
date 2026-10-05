@@ -150,7 +150,8 @@ pub use kani::generate::outcome::{
     BoundNotResolvedCause, DerivedDomain, InvalidObligationItem, KaniObligationError,
     KaniObligationOutcome, KaniObligationRequest, ObligationDisposition, ObligationItem,
     ObligationRecord, ObligationSubject, StateFrameLoweringRefusal, StateFrameRefusal,
-    UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
+    MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
     EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,

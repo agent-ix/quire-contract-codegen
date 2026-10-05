@@ -32,9 +32,11 @@
 //! that name: `CallerDeclaredOperation` is constructed once, inside the `Generated` arm of
 //! `classify_claim`, so a claim codegen refused outright is classified through the `Refused` arm
 //! instead and never reaches it. V1 has no
-//! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so this
-//! negotiation emits no frame harness; `generate_state_frame_obligations` generates them from a
-//! state clause. A V2 scalar claim's graph node that is present but is neither the one
+//! frame clause kind, and V2 frames have no finite encoding in the scalar profile, so the clause
+//! and scalar arms emit no frame harness. A [`ObligationItem::StateFrame`] item is the arm that
+//! does: one role of one `postcondition` `state_clause`, whose harness comes from
+//! `generate_state_frame_role` and whose refusal becomes its record by
+//! `state_frame_disposition`, each item settling on its own. A V2 scalar claim's graph node that is present but is neither the one
 //! recognized `state`/`frame` pair nor `expression`-tagged (the only family this generator ever
 //! lowers to a `Generated` claim) is refused as [`UnsupportedObligation::UnknownNodeKind`] rather
 //! than accounted with a null contract role and no typed reason; a claim naming a `node_id`
@@ -65,10 +67,12 @@ use crate::{
         SlotContext,
     },
     kani::generate::contract::render_contract,
+    kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
     kani::generate::outcome::{
-        InvalidObligationItem, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
-        ObligationDisposition, ObligationItem, ObligationRecord, ObligationSubject,
-        UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+        state_frame_disposition, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
+        KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
+        ObligationSubject, StateFrameRefusal, StateFrameRole, UnsupportedObligation,
+        MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
     kani::generate::precondition::render_precondition,
     kani::generate::record::{artifact, harness_path, record},
@@ -78,6 +82,7 @@ use crate::{
     },
     kani::identity::{
         EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, ObligationKind,
+        StateFrameHarness,
     },
     oracle::boolean_v1::{generate_named_boolean_oracle, OracleRequest, OracleShape},
     oracle::claim::{ClaimDisposition, ClaimMap, UpstreamBlocker},
@@ -92,16 +97,19 @@ pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
 ) -> Result<KaniObligationOutcome, KaniObligationError> {
     validate_request(request)?;
-    let mut states = request.items.iter().map(classify).collect::<Vec<_>>();
+    let mut states = request
+        .items
+        .iter()
+        .map(|item| classify(item, request.unwind))
+        .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(&mut states);
     resolve_assumptions(&mut states);
-    let rejected = states
-        .iter()
-        .any(|state| matches!(state.outcome, Outcome::Invalid(_)));
+    let rejected = states.iter().any(|state| state.outcome.is_invalid());
     let mut records = Vec::with_capacity(states.len());
     let mut harnesses = Vec::new();
     let mut scalar_harnesses = Vec::new();
+    let mut state_frame_harnesses = Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness()
@@ -127,6 +135,13 @@ pub fn negotiate_kani_obligations(
                     }
                     Err(reason) => ObligationDisposition::Unsupported { reason },
                 },
+                Outcome::StateFrame(harness) => {
+                    let symbol = harness.identity.harness_symbol.clone();
+                    state_frame_harnesses.push(*harness);
+                    ObligationDisposition::Supported {
+                        harness_symbol: symbol,
+                    }
+                }
                 other => other.disposition_without_harness(),
             }
         };
@@ -144,6 +159,7 @@ pub fn negotiate_kani_obligations(
             records,
             harnesses,
             scalar_harnesses,
+            state_frame_harnesses,
         }
     })
 }
@@ -189,22 +205,53 @@ enum ItemIdentity {
         package: String,
         node: CheckedNodeId,
     },
+    /// One role of one state clause. `DuplicateItem` spans this arm and one role only.
+    StateFrame {
+        package: String,
+        clause: CheckedNodeId,
+        role: StateFrameRole,
+    },
 }
 
 enum Outcome<'a> {
     Lowered(Box<LoweredClause<'a>>),
     LoweredScalar(Box<LoweredScalarClaim>),
+    /// A `StateFrame` item that yielded its harness.
+    StateFrame(Box<StateFrameHarness>),
+    /// A `StateFrame` item the engine refused. The refusal is held, not its record, so the item
+    /// cannot be `supported`; `state_frame_disposition` maps it where the record is built.
+    StateFrameRefused(StateFrameRefusal),
     RequiresBound(CheckedNodeId),
     Unsupported(UnsupportedObligation),
     Invalid(InvalidObligationItem),
 }
 
 impl Outcome<'_> {
+    /// Whether this item rejects the whole request.
+    fn is_invalid(&self) -> bool {
+        match self {
+            Self::Invalid(_) => true,
+            Self::StateFrameRefused(refusal) => matches!(
+                state_frame_disposition(refusal.clone()),
+                ObligationDisposition::InvalidRequest { .. }
+            ),
+            Self::Lowered(_)
+            | Self::LoweredScalar(_)
+            | Self::StateFrame(_)
+            | Self::RequiresBound(_)
+            | Self::Unsupported(_) => false,
+        }
+    }
+
     fn disposition_without_harness(self) -> ObligationDisposition {
         match self {
             // A lowered item in a rejected request is accounted but not emitted.
             Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
+            Self::StateFrame(harness) => ObligationDisposition::Supported {
+                harness_symbol: harness.identity.harness_symbol,
+            },
+            Self::StateFrameRefused(refusal) => state_frame_disposition(refusal),
             Self::RequiresBound(unbounded_type) => {
                 ObligationDisposition::RequiresBound { unbounded_type }
             }
@@ -228,7 +275,7 @@ fn supported_without_harness(harness: &str) -> ObligationDisposition {
 
 /// Classifies one request item. Its generated names are its readable stems until
 /// [`assign_names`] settles them across the request.
-fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
+fn classify<'a>(item: &ObligationItem<'a>, unwind: u32) -> ItemState<'a> {
     match *item {
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
@@ -236,6 +283,55 @@ fn classify<'a>(item: &ObligationItem<'a>) -> ItemState<'a> {
             claim_map,
             node_id,
         } => classify_node(package, claim_map, node_id),
+        ObligationItem::StateFrame {
+            package,
+            clause,
+            role,
+            state_path,
+            state_fields,
+            subject_path,
+        } => classify_state_frame(
+            &StateFrameRequest {
+                package,
+                clause,
+                state_path,
+                state_fields,
+                subject_path,
+                unwind,
+            },
+            role,
+        ),
+    }
+}
+
+/// One `StateFrame` item: its harness, or the record its engine refusal maps to. The item's own
+/// subject path is what the harness calls.
+fn classify_state_frame<'a>(
+    request: &StateFrameRequest<'a>,
+    role: StateFrameRole,
+) -> ItemState<'a> {
+    let outcome = match generate_state_frame_role(request, role) {
+        Ok(harness) => Outcome::StateFrame(Box::new(harness)),
+        Err(refusal) => Outcome::StateFrameRefused(refusal),
+    };
+    ItemState {
+        kind: Some(role.obligation_kind()),
+        subject: ObligationSubject::CheckedNode {
+            node_id: request.clause.clone(),
+            source_map: request
+                .package
+                .source_map()
+                .iter()
+                .filter(|entry| &entry.node_id == request.clause)
+                .cloned()
+                .collect(),
+        },
+        identity: Some(ItemIdentity::StateFrame {
+            package: request.package.package_id().digest.to_string(),
+            clause: request.clause.clone(),
+            role,
+        }),
+        outcome,
     }
 }
 
@@ -672,6 +768,7 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
 
 fn reject_duplicates_and_mixtures(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
     let mut first_bound_package: Option<String> = None;
+    let mut first_state_package: Option<String> = None;
     for index in 0..states.len() {
         let Some(identity) = states[index].identity.clone() else {
             continue;
@@ -691,6 +788,16 @@ fn reject_duplicates_and_mixtures(items: &[ObligationItem<'_>], states: &mut [It
                 Some(first) if *first != digest => {
                     states[index].outcome =
                         Outcome::Invalid(InvalidObligationItem::MixedBoundPackages);
+                }
+                Some(_) => {}
+            }
+        }
+        if let ItemIdentity::StateFrame { package, .. } = &identity {
+            match &first_state_package {
+                None => first_state_package = Some(package.clone()),
+                Some(first) if first != package => {
+                    states[index].outcome =
+                        Outcome::Invalid(InvalidObligationItem::MixedStatePackages);
                 }
                 Some(_) => {}
             }
@@ -1009,7 +1116,7 @@ mod tests {
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
     fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(item).outcome else {
+        let Outcome::Lowered(lowered) = classify(item, 4).outcome else {
             panic!("render-probe precondition must lower to a harness");
         };
         lowered

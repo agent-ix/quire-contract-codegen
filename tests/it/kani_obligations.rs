@@ -1085,6 +1085,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         records,
         harnesses,
         scalar_harnesses,
+        ..
     } = outcome
     else {
         panic!("unexpected rejection");
