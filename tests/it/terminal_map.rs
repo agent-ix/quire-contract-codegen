@@ -378,8 +378,9 @@ fn reproduced_without_violation() -> EvidenceFailureCause {
     }
 }
 
-/// The fault reading is `Failed`. QSL's `InternalFault` cannot be built here, so FR-029-AC-10 is
-/// not tagged; the reading this crate owns is asserted all the same.
+/// The fault reading is `Failed`. The QSL `InternalFault` fault wrappers are not yet tested
+/// (it is now constructible; a follow-up backs FR-029-AC-10), so FR-029-AC-10 is not tagged; the
+/// reading this crate owns is asserted all the same.
 ///
 /// Trace: TC-040
 #[test]
@@ -1062,8 +1063,9 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
 }
 
 /// Each failure this repository raises that carries no QSL catalog code settles a counterexample
-/// as `Failed`. QSL's `InternalFault` cannot be built here, so the fault half of FR-030-AC-10 is
-/// not tagged and the criterion stays planned.
+/// as `Failed`. The QSL `InternalFault` fault half of FR-030-AC-10 is not yet tested
+/// (it is now constructible; a follow-up backs it), so it is not tagged and the criterion stays
+/// planned.
 ///
 /// Trace: TC-041
 #[test]
