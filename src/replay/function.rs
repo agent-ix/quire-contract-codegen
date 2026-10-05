@@ -120,6 +120,30 @@ pub fn replay_falsification(
     )
 }
 
+/// The one function that renders a backend-witness transcript (FR-024-AC-2): the assertion block
+/// `qsl-replay` admits, built from decoded values only and never from backend-native text. Each
+/// binding is a name (a parameter node id, or a state field) and the integer decoded for it.
+/// Every transcript this crate passes to [`Witness::parse`] comes from here.
+///
+/// # Errors
+///
+/// [`MalformedTranscript`] when `qsl-replay` does not admit the rendered block, as when a field
+/// holds a delimiter.
+pub(crate) fn render_witness(
+    harness: &str,
+    check_text: &str,
+    bindings: &[(&str, i64)],
+) -> Result<Witness, MalformedTranscript> {
+    let bindings = bindings
+        .iter()
+        .map(|(name, integer)| format!("{name}={integer}"))
+        .collect::<Vec<_>>();
+    Witness::parse(format!(
+        "<<<assertion|{harness}|{check_text}|{}>>>",
+        bindings.join(";")
+    ))
+}
+
 /// What executes a built request: [`qsl_replay::replay`], or a caller's wrapper around it.
 type Execute<'a> = &'a mut dyn FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>;
 
@@ -150,13 +174,10 @@ fn replay_falsification_through(
                 WitnessValue::Integer(integer) => *integer,
                 WitnessValue::Boolean(boolean) => i64::from(*boolean),
             };
-            Ok(format!("{}={integer}", parameter.node_id))
+            Ok((parameter.node_id, integer))
         })
         .collect::<Result<Vec<_>, SpineReplayError>>()?;
-    let witness = Witness::parse(format!(
-        "<<<assertion|{harness}|{check_text}|{}>>>",
-        bindings.join(";")
-    ))?;
+    let witness = render_witness(harness, check_text, &bindings)?;
     match execute(request(ReplaySource::Witness(witness))) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
         Ok(ReplayResult::Input(_)) => Err(SpineReplayError::WrongArm),

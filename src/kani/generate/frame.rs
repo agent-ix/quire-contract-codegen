@@ -454,12 +454,12 @@ fn lowering_refusal(record: CompleteLoweringRecordV2) -> Option<StateFrameLoweri
 }
 
 /// The admitted graph by node id.
-struct Graph<'g> {
-    nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
+pub(crate) struct Graph<'g> {
+    pub(crate) nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
 }
 
 impl<'g> Graph<'g> {
-    fn of(package: &'g CheckedPackageV2) -> Self {
+    pub(crate) fn of(package: &'g CheckedPackageV2) -> Self {
         Self {
             nodes: package
                 .graph()
@@ -510,11 +510,11 @@ fn application<'v>(body: &'v Value, operator: &str, identity: &str) -> Option<&'
     body.get("arguments")?.as_array().map(Vec::as_slice)
 }
 
-struct ClauseShape {
+pub(crate) struct ClauseShape {
     /// The clause's parameters: `self` first, then the result and every operation parameter.
     /// Only `self` is a read of the framed state.
-    parameters: Vec<CheckedNodeId>,
-    scope: StateFrameScope,
+    pub(crate) parameters: Vec<CheckedNodeId>,
+    pub(crate) scope: StateFrameScope,
     condition: Value,
 }
 
@@ -525,8 +525,45 @@ struct Condition {
 }
 
 impl ClauseShape {
+    /// The `name` and `level` of each parameter the clause binds after `self` (FR-341: `result`
+    /// when the operation has one, then its parameters in declared order), read from each
+    /// parameter node's body. The state-clause replay classifies them; the generator owns the
+    /// decode so the replay needs no graph-term reader of its own.
+    ///
+    /// # Errors
+    ///
+    /// The parameter node that is not a `name` and `level` aggregate, or is not in the graph.
+    pub(crate) fn declared_parameters(
+        &self,
+        graph: &Graph<'_>,
+    ) -> Result<Vec<(String, String)>, CheckedNodeId> {
+        self.parameters
+            .iter()
+            .skip(1)
+            .map(|parameter| {
+                let decoded = || {
+                    let members = graph
+                        .nodes
+                        .get(parameter)?
+                        .body
+                        .get("members")?
+                        .as_array()?;
+                    let [name, level] = bound_members(members, ["name", "level"])?;
+                    Some((
+                        literal(name, "text")?.to_owned(),
+                        literal(level, "integer")?.to_owned(),
+                    ))
+                };
+                decoded().ok_or_else(|| parameter.clone())
+            })
+            .collect()
+    }
+
     /// Decodes the clause, its anchor and its frame by QSpec FR-341 and FR-342.
-    fn read<'g>(graph: &Graph<'g>, clause: &'g CheckedNodeId) -> Result<Self, StateFrameRefusal> {
+    pub(crate) fn read<'g>(
+        graph: &Graph<'g>,
+        clause: &'g CheckedNodeId,
+    ) -> Result<Self, StateFrameRefusal> {
         let malformed = || StateFrameRefusal::MalformedClause { at: clause.clone() };
         let node = *graph.nodes.get(clause).ok_or_else(malformed)?;
         if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" {
@@ -781,8 +818,10 @@ fn range_literals(body: &Value) -> Option<(&str, &str)> {
 /// The `i64` range the framed object's member of `field` declares, or the ground it declares
 /// none: the member's `value.target` is not a bound, is a bound that is not a readable
 /// `integer_range`, or is one with an endpoint outside `i64`; or the member is absent or its
-/// value is not a reference.
-fn field_range(
+/// value is not a reference. The harness generator and the state-clause replay
+/// (`replay/state_clause.rs`) both read a field's range here, so they cannot disagree on one
+/// package.
+pub(crate) fn field_range(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
     field: &str,
