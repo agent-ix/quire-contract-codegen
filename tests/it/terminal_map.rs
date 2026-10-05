@@ -402,9 +402,9 @@ fn reproduced_without_violation() -> EvidenceFailureCause {
     }
 }
 
-/// Hands `check` the settlement of each fault wrapper FR-029-AC-10 names, built from QSL's
-/// constructible `InternalFault`, and returns how many it handed over: a replay-result fault
-/// (`ReplaySettlement::Fault`), `ReplayRefusal::Fault` and
+/// Hands `check` the settlement of each fault wrapper the run-outcome map's fault criterion names,
+/// built from QSL's constructible `InternalFault`, and returns how many it handed over: the
+/// call-site fault's own reading (`ReplaySettlement::Fault`), `ReplayRefusal::Fault` and
 /// `ReplayRefusal::Admission(AdmissionFailure::Fault)` bare and as the cause of each replay
 /// error that wraps a `ReplayRefusal`, and `CallSiteRefusal::Fault` bare and wrapped in
 /// `ReplayPackageError`, `FrameReplayError` and `StateClauseReplayError`.
@@ -1128,8 +1128,8 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
     );
 }
 
-/// A counterexample settles as `Failed` with a fault walked through every wrapper FR-029-AC-10
-/// lists and with each failure this repository raises that carries no QSL catalog code.
+/// A counterexample settles as `Failed` with a fault walked through every wrapper the run-outcome
+/// map's fault criterion lists and with each failure this repository raises that carries no QSL catalog code.
 ///
 /// Trace: FR-030-AC-10, TC-041
 #[test]

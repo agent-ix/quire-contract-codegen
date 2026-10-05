@@ -548,7 +548,8 @@ fn tc_035_a_violating_run_reproduces_and_a_respecting_run_is_inconclusive() {
 /// endpoints are admitted. The out-of-range value is put in the playback alone, and separately in
 /// the post state alone, so the test says which side the range is read from: the playback. The
 /// post state is whatever the subject ran to; how a post state outside the range should settle
-/// is open (FR-024 Current state), and this test pins no answer to it.
+/// is a pending QSL ruling (see the replay spec's Current state), and this test pins no answer to
+/// it.
 ///
 /// Trace: FR-024-AC-17, TC-035
 #[test]
@@ -668,8 +669,8 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 /// reproduces the violation. The subject is the debit that stops at the floor of `balance`'s range
 /// (`deposit_debiting_within_range`): the wrapping debit's real playback is the floor, whose native
 /// post state is -1, outside the range, and QSL's snapshot admission refuses it (`invalid-value`).
-/// How a violation that yields such a post state should settle is open and is not decided here
-/// (FR-024 Current state).
+/// How a violation that yields such a post state should settle is a pending QSL ruling and is not
+/// decided here (see the replay spec's Current state).
 ///
 /// Trace: FR-024-AC-18, TC-035
 #[test]

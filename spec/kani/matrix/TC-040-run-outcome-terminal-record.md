@@ -26,7 +26,7 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
    `NoValue`).
 8. Map `falsified` with a non-fault `ReplayRefusal`.
 9. Map `falsified` with a fault in each position, built from QSL's `InternalFault`: the
-   replay-result fault (`ReplaySettlement::Fault`); `ReplayRefusal::Fault` and
+   call-site fault's own reading (`ReplaySettlement::Fault`; QSL's replay result carries no fault); `ReplayRefusal::Fault` and
    `ReplayRefusal::Admission(AdmissionFailure::Fault)`, each bare and inside
    `SpineReplayError::Refused`, `FrameReplayError::Refused` and `StateClauseReplayError::Refused`;
    and `CallSiteRefusal::Fault` bare and inside `ReplayPackageError::CallSite`,
@@ -44,9 +44,9 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     inconclusive `StateClauseReplayResult` (FR-024).
 16. Map `verified` with each proof strength, and `falsified` and `inconclusive` of a
     `bounded_shadow` harness (FR-029-AC-17, planned, IR-241; see Expected Results).
-17. Map a `falsified` state-clause run whose post-state value lies outside its field's declared
-    range, once QSL admits it as an exact out-of-range observation (FR-029-AC-18, planned, pending
-    QSL-634, IR-460).
+17. Map the `falsified` state-clause run of `deposit_debiting`, whose post-state value lies outside
+    its field's declared range, with the exact unclamped post snapshot (FR-029-AC-18, planned,
+    pending QSL-634, IR-460).
 
 ## Expected Results
 
@@ -85,10 +85,9 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     `inconclusive` of a `bounded_shadow` harness (FR-029-AC-17, planned, IR-241): `Proved` for
     `production_proved` only, `NonProductionProof` carrying the strength for each other, `ShadowCounterexample`
     for the falsified shadow, with no value for any of them, and the usual value for the inconclusive one.
-17. `Refuted`, never `Inconclusive(ReplayRefused)`, for a falsified state-clause run whose post-state
-    value lies outside its field's range, once QSL admits it as an exact out-of-range observation
-    and settles the replay as a reproduced `violation` (FR-029-AC-18, planned, pending QSL-634,
-    IR-460). Not built: QSL-634 is not merged, and until it lands the run reads
+17. The post snapshot holds the exact unclamped value and CG refuses nothing itself, and the run is
+    `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, planned, pending
+    QSL-634, IR-460). Not built: QSL-634 is not merged, and until it lands the run reads
     `Inconclusive(ReplayRefused(InvalidRuntimeInput))`.
 
 ## Status
