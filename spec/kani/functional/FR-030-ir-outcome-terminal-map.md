@@ -55,6 +55,9 @@ terminal value, so neither map applies to them.
 ## Outputs
 
 - One `qsl_replay::TerminalValue`.
+- A typed refusal, `TerminalPairError`, for a pair the map's input does not express: a
+  `Counterexample` with no replay settlement (`MissingSettlement`), or any other kind with one
+  (`UnexpectedSettlement`).
 
 ## Behavior
 
@@ -94,6 +97,11 @@ terminal value, so neither map applies to them.
   `invalid_package`, so it is `ReplayRefused` too (FR-029-AC-14).
   `ReplayPackageError::InvalidFunction` and `FrameReplayError::Name` carry no QSL code and map to
   `Failed`.
+- The generator shall refuse a `Counterexample` given no replay settlement with
+  `TerminalPairError::MissingSettlement`, and any other kind given a settlement with
+  `TerminalPairError::UnexpectedSettlement`, and shall return no terminal value for either. The
+  refusal is typed rather than a value, as in [FR-029](./FR-029-run-outcome-terminal-record.md)
+  (FR-029-AC-15).
 - The generator shall map a `Counterexample` to `Refuted` only with a reproduced replay.
 - The generator shall classify a fault and the CG-raised failures FR-029-AC-11 lists as
   [FR-029](./FR-029-run-outcome-terminal-record.md) states: by walking the whole error, and with
@@ -131,6 +139,7 @@ terminal value, so neither map applies to them.
 | FR-030-AC-11 | Across every replay settlement other than reproduced, `Counterexample` maps to a value other than `Refuted`. | Test (TC-041) |
 | FR-030-AC-12 | `Counterexample` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped, maps to `Inconclusive(ReplayRefused)` carrying that refusal's QSL catalog code, never to `Declined`. | Test (TC-041) |
 | FR-030-AC-13 | `Counterexample` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-041) |
+| FR-030-AC-14 | A `Counterexample` given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other kind given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-041) |
 
 ## Dependencies
 

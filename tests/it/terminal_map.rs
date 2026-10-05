@@ -616,26 +616,46 @@ fn map_ir_settled<'a>(settlement: impl Into<ReplaySettlement<'a>>) -> TerminalVa
 }
 
 /// Every pair the map's input can express maps to one value: nine kinds with no settlement and a
-/// counterexample with each of the six readings. The other pairs are typed refusals.
+/// counterexample with each of the six readings.
 ///
 /// Trace: FR-030-AC-1, TC-041
 #[test]
 fn tc_041_every_expressible_pair_maps_to_one_value() {
     let mut values = Vec::new();
     for outcome in ir_outcomes() {
-        let bare = ir_outcome_terminal_value(&outcome, 3, None);
-        let settled = ir_outcome_terminal_value(&outcome, 3, Some(ReplaySettlement::Reproduced));
         if outcome.kind == KaniOutcomeKind::Counterexample {
-            assert_eq!(bare, Err(TerminalPairError::MissingSettlement));
-            values.push(settled.expect("a counterexample takes a settlement"));
+            values.push(map_ir_settled(ReplaySettlement::Reproduced));
         } else {
-            assert_eq!(settled, Err(TerminalPairError::UnexpectedSettlement));
-            values.push(bare.expect("an outcome other than a counterexample maps bare"));
+            values.push(map_ir(&outcome));
         }
     }
     with_settlements(|settlement| values.push(map_ir_settled(settlement)));
     // Nine kinds with no settlement and the counterexample with each of the six readings.
     assert_eq!(values.len(), 9 + 6);
+}
+
+/// A pair outside the map's input is a typed refusal, not a value: a counterexample needs its
+/// settlement and no other kind has one.
+///
+/// Trace: FR-030-AC-14, TC-041
+#[test]
+fn tc_041_a_settlement_accompanies_a_counterexample_only() {
+    for outcome in ir_outcomes() {
+        let bare = ir_outcome_terminal_value(&outcome, 3, None);
+        let settled = ir_outcome_terminal_value(&outcome, 3, Some(ReplaySettlement::Reproduced));
+        if outcome.kind == KaniOutcomeKind::Counterexample {
+            assert_eq!(bare, Err(TerminalPairError::MissingSettlement));
+            assert_eq!(settled, Ok(TerminalValue::Refuted));
+        } else {
+            assert_eq!(
+                settled,
+                Err(TerminalPairError::UnexpectedSettlement),
+                "{:?}",
+                outcome.kind
+            );
+            assert!(bare.is_ok(), "{:?}", outcome.kind);
+        }
+    }
 }
 
 /// `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with their own cause, and the

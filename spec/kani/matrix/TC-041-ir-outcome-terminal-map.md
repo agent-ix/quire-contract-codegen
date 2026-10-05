@@ -35,6 +35,7 @@ cause, and that the map is one match with no wildcard arm.
     each bare and wrapped.
 12. Map `Counterexample` with the refusal QSL's `DependencyInput::new` returns for a lock whose
     only defect is one library identity selected twice.
+13. Map `Counterexample` with no replay settlement, and each other `KaniOutcomeKind` with one.
 
 ## Expected Results
 
@@ -54,10 +55,12 @@ cause, and that the map is one match with no wildcard arm.
 11. The call-site and lock-input refusals are `Inconclusive(ReplayRefused)` carrying their QSL
     catalog code and none is `Declined` (FR-030-AC-12).
 12. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-030-AC-13).
+13. `TerminalPairError::MissingSettlement` for the counterexample and `UnexpectedSettlement` for each
+    other kind, with no terminal value (FR-030-AC-14).
 
 ## Status
 
-Implemented in `tests/it/terminal_map.rs` except step 9's fault half. Steps 1 to 8 and 10 to 12 run,
+Implemented in `tests/it/terminal_map.rs` except step 9's fault half. Steps 1 to 8 and 10 to 13 run,
 and step 7's inspection is a `syn` test over `kani/terminal.rs`. Step 9 maps each CG-raised failure
 and `ReplaySettlement::Fault` in a test traced to TC-041 only: the fault wrappers FR-029-AC-10 lists
 name QSL's `InternalFault`, which `qsl-replay` does not re-export, so no test here can build one.
