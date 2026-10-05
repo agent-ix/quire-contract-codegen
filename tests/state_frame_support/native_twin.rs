@@ -1,18 +1,14 @@
-//! The hand-mirrored QSL twin of the state-frame fixture: the `test/bank` domain package, the
-//! native unit whose `post` clause and operation frame mirror the checked package the harnesses
-//! are generated from, and the invocation documents of one concrete run.
+//! The QSL twin of the state-frame fixture: the `test/bank` domain package, the native unit
+//! whose `post` clause and operation frame produce the checked package used for harnesses, and
+//! the invocation documents of one concrete run.
 //!
 //! The twin's fields, their ranges and the fields its frame grants come from `model`, the same
 //! source the Rust fixture's checked package is built from. The rest is tied to the Rust side only
 //! by names: the model `Bank`, its object `Account` and its operation `deposit`. The request and
 //! envelope that put a run before QSL are built by the crate under test
 //! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
-//! counterexample names; they are not the fixture package's node ids. The frame replay is given
-//! the falsified harness's identity and its playback and mints the obligation identity itself, so
-//! the twin supplies none. The fixture's checked package is hand-built and its node ids are its
-//! own, while QSL names the nodes of the package it compiles from the twin's unit, so
-//! [`Twin::aligned`] gives a harness identity QSL's anchor and frame, as the identity of a harness
-//! generated from QSL's own emitted package carries them.
+//! counterexample names. The frame replay is given the falsified harness's identity and its
+//! playback and mints the obligation identity itself, so the twin supplies none.
 
 use super::model;
 
@@ -390,6 +386,22 @@ impl Twin {
         Self::build(&model::GRANTED, &CLAUSES, 0)
     }
 
+    /// A twin whose present `audit` field has plain Integer rather than an `i64` range.
+    pub fn without_audit_range() -> Self {
+        let mut twin = Self::new();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let audit = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type");
+        audit["constraints"] = json!([]);
+        twin.domain = domain.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin
+    }
+
     /// A twin whose operations' frames modify `granted`, whose unit holds `clauses` and has
     /// `blank_lines` empty lines before the first of them.
     pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
@@ -446,25 +458,6 @@ impl Twin {
         }))
         .expect("a node id");
         (package, clause_node)
-    }
-
-    /// `harness` with the scope's anchor and frame the ones QSL names for `operation` in this
-    /// twin's unit.
-    pub fn aligned(&self, harness: &StateFrameIdentity, operation: &str) -> StateFrameIdentity {
-        let site = self
-            .operation_site(operation)
-            .expect("the twin's operation is located");
-        let node = |id: qsl_replay::WireNodeId| -> quire_contract_model::CheckedNodeId {
-            serde_json::from_value(json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": id.to_string(),
-            }))
-            .expect("a node id")
-        };
-        let mut aligned = harness.clone();
-        aligned.scope.anchor = node(site.anchor);
-        aligned.scope.frame = node(site.frame);
-        aligned
     }
 
     /// The invocation of `deposit` on `account` from `pre` to `post`, each `(balance, audit)`.

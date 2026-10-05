@@ -27,8 +27,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
-    falsified, fixture_declaring, fixture_with_unbounded_balance, generate_over, model,
-    native_twin::Twin, playback_state, prove, self_parameter, subject, Declares, Fixture,
+    falsified, fixture_declaring, fixture_with_unbounded_balance, model, native_twin::Twin,
+    playback_state, prove, self_parameter, subject, Declares, Fixture,
 };
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
@@ -67,7 +67,9 @@ fn tc_035_emitted_model_fields_bind_replay_before_playback() {
     let mut absent = input.clone();
     absent.state_fields.push("ghost".to_owned());
     absent.playback.clear();
-    let error = StateClauseReplay::new(absent).expect_err("model absence precedes binding");
+    let error = StateClauseReplay::new(absent)
+        .err()
+        .expect("model absence precedes binding");
     assert!(matches!(
         error,
         StateClauseReplayError::ModelFields {
@@ -723,9 +725,21 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
-    let (twin, fixture) = (Twin::new(), healthy());
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package(BALANCE);
+    let generated = quire_contract_codegen::generate_state_frame_obligations(
+        &quire_contract_codegen::StateFrameRequest {
+            package: &package,
+            clause: &clause,
+            state_path: "crate::subject::Account",
+            state_fields: &["balance", "audit"],
+            subject_path: "crate::subject::deposit_debiting_within_range",
+            unwind: 4,
+        },
+    )
+    .expect("emitted package generates");
     let counterexample = falsified(
-        prove(&generate_over(&fixture, "deposit_debiting_within_range").postcondition),
+        prove(&generated.postcondition),
         "postcondition `post.balance >= pre.balance` failed",
     );
     let (balance, audit) = playback_state(&counterexample);
@@ -735,13 +749,14 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         account.balance, balance,
         "the native run reproduces the debit"
     );
-    let replay = built(
-        &twin,
-        &fixture,
+    let replay = StateClauseReplay::new(twin.state_clause_inputs(
+        &package,
+        &clause,
         BALANCE,
         (balance, audit),
         (account.balance, account.audit),
-    );
+    ))
+    .expect("emitted package replays");
     assert!(matches!(
         replay.packet.source,
         Some(ReplaySource::Witness(_))

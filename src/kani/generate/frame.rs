@@ -20,7 +20,7 @@
 //!
 //! No other value family is lowered: a condition that is not one integer comparison of pre and
 //! post reads of a single field through `self`, a frame that creates, deletes or grants a
-//! relationship, and a clause field whose object member declares no integer range are each
+//! relationship, and a clause field whose admitted model type declares no integer range are each
 //! refused with a typed reason and produce no harness.
 //!
 //! The subject ABI is fixed and documented on [`StateFrameRequest`]. Nothing in this module runs
@@ -822,12 +822,9 @@ fn range_literals(body: &Value) -> Option<(&str, &str)> {
     Some((literal(minimum, "integer")?, literal(maximum, "integer")?))
 }
 
-/// The `i64` range the framed object's member of `field` declares, or the ground it declares
-/// none: the member's `value.target` is not a bound, is a bound that is not a readable
-/// `integer_range`, or is one with an endpoint outside `i64`; or the member is absent or its
-/// value is not a reference. The harness generator and the state-clause replay
-/// (`replay/state_clause.rs`) both read a field's range here, so they cannot disagree on one
-/// package.
+/// The `i64` range admitted for one state field. Model declaration objects read the checked
+/// field table retained at admission; a non-declaration object reads its body member's target.
+/// The harness generator and state-clause replay both use this reader, so their bounds agree.
 pub(crate) fn field_range(
     graph: &Graph<'_>,
     object: &CheckedNodeId,
@@ -839,9 +836,12 @@ pub(crate) fn field_range(
         .is_some_and(|members| !members.is_empty());
     match graph.package.model_object_fields(object) {
         Ok(fields) => {
-            let member = fields
-                .field(field)
-                .ok_or(BoundNotResolvedCause::MemberAbsent)?;
+            let member =
+                fields
+                    .field(field)
+                    .ok_or_else(|| BoundNotResolvedCause::MemberAbsent {
+                        object: object.clone(),
+                    })?;
             return match member.member_type() {
                 Some(CheckedMemberType::IntRange { lower, upper }) => {
                     match (i64::try_from(*lower), i64::try_from(*upper)) {
@@ -891,7 +891,9 @@ pub(crate) fn field_range(
     let member = members
         .iter()
         .find(|member| member.get("name").and_then(Value::as_str) == Some(field))
-        .ok_or(BoundNotResolvedCause::MemberAbsent)?;
+        .ok_or_else(|| BoundNotResolvedCause::MemberAbsent {
+            object: object.clone(),
+        })?;
     let target = member
         .get("value")
         .and_then(|value| value.get("target"))
@@ -932,7 +934,7 @@ fn state_domains(
                 maximum,
             }),
             Err(
-                cause @ (BoundNotResolvedCause::MemberAbsent
+                cause @ (BoundNotResolvedCause::MemberAbsent { .. }
                 | BoundNotResolvedCause::ModelFieldsUnavailable { .. }),
             ) => {
                 return Err(StateFrameRefusal::BoundNotResolved {

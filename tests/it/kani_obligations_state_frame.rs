@@ -632,13 +632,30 @@ fn generate(fixture: &Fixture) -> StateFrameObligations {
 const FORBIDDEN_CHECK: &str =
     "operation `deposit` changed `audit`, which its frame does not modify";
 
-/// The healthy fixture's frame harness identity, with the scope's anchor and frame the ones QSL
-/// names for `deposit` in the twin's unit.
+/// Generate both roles directly from the checked package QSL emits for the twin's clause.
+fn generated_from_twin(
+    twin: &Twin,
+    clause_name: &str,
+    fields: &[&str],
+    subject_path: &str,
+) -> StateFrameObligations {
+    let (package, clause) = twin.emitted_package(clause_name);
+    generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: fields,
+        subject_path,
+        unwind: 4,
+    })
+    .expect("the emitted clause generates both roles")
+}
+
+/// The healthy twin's frame identity from QSL's emitted checked package.
 fn frame_harness(twin: &Twin) -> StateFrameIdentity {
-    twin.aligned(
-        &generate(&fixture(&Shape::HEALTHY)).frame.identity,
-        "deposit",
-    )
+    generated_from_twin(twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+        .frame
+        .identity
 }
 
 /// The run of `harness` whose playback binds `values`, in the harness's draw order.
@@ -652,19 +669,6 @@ fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
 /// The forbidden-write run at the pre state `(balance, audit) = (5, 0)`.
 fn forbidden_run(twin: &Twin) -> Run {
     run_of(&frame_harness(twin), [5, 0])
-}
-
-/// A run whose harness is scoped to `operation`, for a replay that names that operation. Its
-/// anchor and frame are the ones QSL names for the operation when the unit names it.
-fn run_for_operation(twin: &Twin, operation: &str) -> Run {
-    let mut harness = generate(&fixture(&Shape::HEALTHY)).frame.identity;
-    harness.scope.operation = operation.to_owned();
-    let harness = if twin.operation_site(operation).is_ok() {
-        twin.aligned(&harness, operation)
-    } else {
-        harness
-    };
-    run_of(&harness, [5, 0])
 }
 
 /// The identity the replay of `operation` over `run` puts in the request, the invocation at
@@ -2133,7 +2137,9 @@ fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 0));
     for operation in ["transfer", "withdraw"] {
-        let run = run_for_operation(&twin, operation);
+        let mut harness = frame_harness(&twin);
+        harness.scope.operation = operation.to_owned();
+        let run = run_of(&harness, [5, 0]);
         let refusal = twin
             .try_frame_replay(operation, &invocation, "account", "audit", &run)
             .err()
@@ -2203,12 +2209,14 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
     let base = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
 
     let granting_nothing = Twin::build(&[], &CLAUSES, 0);
-    let emptied = fixture(&Shape {
-        variant: 1,
-        modifies: &[],
-        ..Shape::HEALTHY
-    });
-    let harness = granting_nothing.aligned(&generate(&emptied).frame.identity, "deposit");
+    let harness = generated_from_twin(
+        &granting_nothing,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        SUBJECT_PATH,
+    )
+    .frame
+    .identity;
     let changed =
         replay_of(&granting_nothing, "deposit", &run_of(&harness, [5, 0])).expect("builds");
 
@@ -2240,8 +2248,9 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
 /// Trace: FR-024-AC-21, TC-035
 #[test]
 fn tc_035_the_frame_identity_follows_what_call_site_names() {
-    let identity =
-        |twin: &Twin, operation: &str| minted(twin, operation, &run_for_operation(twin, operation));
+    let identity = |twin: &Twin, operation: &str| {
+        hand_written_identity(&twin.operation_site(operation).expect("operation site"))
+    };
     let twin = Twin::new();
     let base = identity(&twin, "deposit");
 
@@ -2290,7 +2299,9 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
 /// Trace: FR-024-AC-21, TC-035
 #[test]
 fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
-    let identity = |twin: &Twin| minted(twin, "transfer", &run_for_operation(twin, "transfer"));
+    let identity = |twin: &Twin| {
+        hand_written_identity(&twin.operation_site("transfer").expect("operation site"))
+    };
     let transfer = ("TransferKeepsBalance", "transfer", "balance");
     let alone = Twin::build(&model::GRANTED, &[transfer], 0);
     let after = Twin::build(&model::GRANTED, &[CLAUSES[0], transfer], 0);
@@ -2482,11 +2493,8 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
 /// Trace: FR-015-AC-81
 #[test]
 fn tc_025_unranged_fields_have_a_reason_and_no_duplicate_record_names() {
-    let fixture = fixture(&Shape {
-        audit_unbounded: true,
-        ..Shape::HEALTHY
-    });
-    let generated = generate(&fixture);
+    let twin = Twin::without_audit_range();
+    let generated = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
     assert_eq!(generated.frame.identity.unranged.len(), 1);
     assert_eq!(generated.frame.identity.unranged[0].field, "audit");
     assert_eq!(
@@ -2512,16 +2520,15 @@ fn tc_025_unranged_fields_have_a_reason_and_no_duplicate_record_names() {
 /// Trace: FR-024-AC-23, FR-024-AC-25, TC-035
 #[test]
 fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
-    let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
-    let reversed = generate_state_frame_obligations(&StateFrameRequest {
-        state_fields: &["audit", "balance"],
-        ..request(&fixture, &STATE_FIELDS)
-    })
-    .expect("generates")
+    let harness = generated_from_twin(
+        &twin,
+        "BalanceNeverDrops",
+        &["audit", "balance"],
+        SUBJECT_PATH,
+    )
     .frame
     .identity;
-    let harness = twin.aligned(&reversed, "deposit");
     // Draw order `audit`, `balance`: the playback `[0, 5]` is the pre state `balance = 5`,
     // `audit = 0` the invocation holds.
     let run = run_of(&harness, [0, 5]);
@@ -2553,13 +2560,10 @@ fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
 /// Trace: FR-024-AC-23, FR-024-AC-26, TC-035
 #[test]
 fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
-    let twin = Twin::new();
-    let unranged_audit = fixture(&Shape {
-        variant: 90,
-        audit_unbounded: true,
-        ..Shape::HEALTHY
-    });
-    let harness = twin.aligned(&generate(&unranged_audit).frame.identity, "deposit");
+    let twin = Twin::without_audit_range();
+    let harness = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+        .frame
+        .identity;
     assert_eq!(harness.state_fields, ["balance", "audit"]);
     assert_eq!(
         harness
@@ -2569,6 +2573,12 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
             .collect::<Vec<_>>(),
         ["balance"],
         "only the ranged field has a domain"
+    );
+    assert_eq!(harness.unranged.len(), 1);
+    assert_eq!(harness.unranged[0].field, "audit");
+    assert_eq!(
+        harness.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
     );
     let unranged = 5_000_000_000_i64;
     let invocation = twin.invocation("account", (5, unranged), (5, unranged));
@@ -3109,7 +3119,7 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
         absent,
         StateFrameRefusal::BoundNotResolved {
             field,
-            cause: BoundNotResolvedCause::MemberAbsent,
+            cause: BoundNotResolvedCause::MemberAbsent { .. },
         } if field == "ghost"
     ));
 }
@@ -3225,13 +3235,24 @@ pub(crate) fn playback_state(counterexample: &str) -> (i64, i64) {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifies_it() {
-    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::new();
     assert_eq!(
-        prove(&generate_over(&fixture, "deposit").postcondition),
+        prove(
+            &generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+                .postcondition
+        ),
         KaniRunOutcome::Verified
     );
     falsified(
-        prove(&generate_over(&fixture, "deposit_debiting").postcondition),
+        prove(
+            &generated_from_twin(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                "crate::subject::deposit_debiting",
+            )
+            .postcondition,
+        ),
         "postcondition `post.balance >= pre.balance` failed",
     );
 }
@@ -3268,25 +3289,31 @@ fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_th
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_frame_falsifies() {
-    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::new();
     // ALLOWED: only `balance` changes, and the frame grants it.
     assert_eq!(
-        prove(&generate_over(&fixture, "deposit").frame),
+        prove(&generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame),
         KaniRunOutcome::Verified
     );
     // FORBIDDEN: `audit` changes too.
     falsified(
-        prove(&generate_over(&fixture, "deposit_touching_audit").frame),
+        prove(
+            &generated_from_twin(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                "crate::subject::deposit_touching_audit",
+            )
+            .frame,
+        ),
         "changed `audit`, which its frame does not modify",
     );
     // MUTATION CONTROL: the same allowed subject against a frame that grants nothing.
-    let emptied = self::fixture(&Shape {
-        variant: 1,
-        modifies: &[],
-        ..Shape::HEALTHY
-    });
+    let emptied = Twin::build(&[], &CLAUSES, 0);
     falsified(
-        prove(&generate_over(&emptied, "deposit").frame),
+        prove(
+            &generated_from_twin(&emptied, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame,
+        ),
         "changed `balance`, which its frame does not modify",
     );
 }
@@ -3300,10 +3327,13 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
-    let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
-
-    let forbidden = generate_over(&fixture, "deposit_touching_audit");
+    let forbidden = generated_from_twin(
+        &twin,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        "crate::subject::deposit_touching_audit",
+    );
     let counterexample = falsified(
         prove(&forbidden.frame),
         "changed `audit`, which its frame does not modify",
@@ -3321,7 +3351,7 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
         (account.balance, account.audit),
     );
     let run = Run {
-        harness: twin.aligned(&forbidden.frame.identity, "deposit"),
+        harness: forbidden.frame.identity,
         playback: counterexample,
     };
     let result = twin
@@ -3353,10 +3383,8 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
-    let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
-
-    let allowed = generate_over(&fixture, "deposit");
+    let allowed = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
     assert_eq!(prove(&allowed.frame), KaniRunOutcome::Verified);
     let mut account = subject::Account {
         balance: 5,
@@ -3364,7 +3392,7 @@ fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
     };
     subject::deposit(&mut account);
     let invocation = twin.invocation("account", (5, 0), (account.balance, account.audit));
-    let harness = twin.aligned(&allowed.frame.identity, "deposit");
+    let harness = allowed.frame.identity;
     let run = run_of(&harness, [5, 0]);
     let result = twin
         .replay(&invocation, "account", "balance", &run)

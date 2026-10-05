@@ -13,14 +13,13 @@
 //! orders no member and rewrites no string.
 //!
 //! The package is read by the harness generator's own reader (`kani::generate::frame`): the
-//! clause, its anchor, the framed object and the range a field's member declares, so the replay
-//! and the generator cannot disagree about one package. This module adds only the names of the
-//! clause's parameters, to tell the supported operation shape from an unsupported one.
+//! clause, its anchor, the framed object and each field's admitted model range, so replay and
+//! generation cannot disagree about one package. This module adds the clause's parameter names
+//! to tell the supported operation shape from an unsupported one.
 //!
-//! A state field is a member of the framed object. A field whose member declares an
-//! `integer_range` is checked against it and is given a `DeclaredDomain`; a field whose member
-//! declares none (the generator draws it symbolically and bounds it by nothing) is carried in the
-//! snapshots as an integer, is not range-checked and has no `DeclaredDomain`.
+//! A state field of a model declaration comes from the caller's ordered field list, checked
+//! against the admitted model table. An `IntRange` fitting `i64` is checked and becomes a
+//! `DeclaredDomain`; a present field without one remains an integer without an assumption.
 
 use std::{collections::BTreeMap, fmt};
 
@@ -378,7 +377,7 @@ impl StateClauseReplay {
             packages,
             package,
             clause_node,
-            state_fields,
+            state_fields: requested_fields,
             operation,
             clause,
             object,
@@ -413,7 +412,7 @@ impl StateClauseReplay {
                 declaration,
             });
         }
-        let fields = state_fields(&graph, &shape, &state_fields)?;
+        let fields = state_fields(&graph, &shape, &requested_fields)?;
         let pre = bind(&fields, &playback, Side::Playback)?;
         let post = bind(&fields, &post_state, Side::PostState)?;
         let domains = declared_domains(&shape, &fields)?;

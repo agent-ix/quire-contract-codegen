@@ -710,7 +710,10 @@ pub enum BoundNotResolvedCause {
         bound: CheckedNodeId,
     },
     /// The object has no member of the field's name.
-    MemberAbsent,
+    MemberAbsent {
+        /// The framed object whose field is missing.
+        object: CheckedNodeId,
+    },
     /// The member's value is not a reference, so it has no `value.target`.
     ValueNotReference,
 }
@@ -899,7 +902,7 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
             cause:
                 Cause::NotIntegerRange { .. }
                 | Cause::EndpointOutsideI64 { .. }
-                | Cause::MemberAbsent
+                | Cause::MemberAbsent { .. }
                 | Cause::ValueNotReference
                 | Cause::ModelFieldsUnavailable { .. }
                 | Cause::ModelMemberNotI64Range { .. },
@@ -1156,7 +1159,7 @@ mod tests {
             ),
             same(
                 "bound not resolved: member absent",
-                unbound(BoundNotResolvedCause::MemberAbsent),
+                unbound(BoundNotResolvedCause::MemberAbsent { object: node(9) }),
             ),
             same(
                 "bound not resolved: value not a reference",
