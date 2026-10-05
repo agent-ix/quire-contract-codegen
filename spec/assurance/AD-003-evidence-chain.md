@@ -142,14 +142,15 @@ authored).
   and frame paths do not compute it yet; the frame path's is specified by FR-024-AC-20 to
   FR-024-AC-24, IR-459, and is planned). The frame path's subject is the operation's frame node
   and its occurrence the frame's own occurrence, both read from `OperationSite` as the envelope's
-  `clause_node` and `occurrence_key` are (FR-015-AC-34), and the operation's anchor node is a
-  fifth member so that two operations with equal frames are two proofs (`StateFrameScope`:
-  "two harnesses with different scopes are never the same proof"). Its arguments are the
-  harness's state fields, named by field name under the anchor, each with its declared integer
-  range (the full `i64` range for a field with no declared range, which is what the harness
-  draws; open question Q-2 of FR-024). The harness's module and harness symbols, paths, unwind
-  bound and options are not members: they name the generated artifact and the harness identity
-  record (FR-015-AC-48 keeps the two distinct). The function's `arguments` are all of its parameters
+  `clause_node` and `occurrence_key` are (FR-015-AC-34), mapped into the same four members under
+  their existing names; QSL gives each operation its own frame occurrence, so no member is added
+  and E-1 is not widened. Its arguments are the harness's state fields, each named by the framed
+  object's type node and the field name (FR-015-AC-48's form), with its declared integer range
+  when it declares one and no range member when it declares none, which is what the harness
+  draws. The harness's clause node, module and harness symbols, paths, unwind bound and options
+  are not members: they name the generated artifact and the harness identity record
+  (FR-015-AC-48 keeps the two distinct), and two postcondition clauses of one operation share one
+  frame identity. The function's `arguments` are all of its parameters
   (O-09): a harness that leaves a parameter without an argument, or declares an integer with no
   bound (AD-016 arrow 5: `requires-bound`, never narrowed implicitly) or a Boolean with bounds,
   has no identity and is refused with a typed error. The retained per-argument bound is the
@@ -157,24 +158,23 @@ authored).
   The closed preimage, CG's own spelling (O-09 fixes the members, and no QSL or QSpec text pins
   the member names, the domain encoding, the node-id text form or a digest label as of this
   revision; AD-016 TK-05, the seed vector `obligationIdentitySha256`, is open): one RFC 8785
-  object with members `subject` (the function node id, or for a state frame the frame node id,
-  as 64 lowercase hex digits), `occurrence` (`node` as 64 lowercase hex digits, `role` as the
+  object with members `function` (the function node id, or for a state frame the frame node id,
+  as 64 lowercase hex digits), `declaration` (`node` as 64 lowercase hex digits, `role` as the
   role string, `ordinal` as a number: the function's `declaration` key, or the frame's own),
-  `kind` (the `ObligationKind` in snake case), `anchor` (the operation's anchor node id in
-  lowercase hex, present for a state-frame obligation and absent for a function) and
-  `arguments`, an array ascending by the argument's declared identifier (a parameter's, or a
-  state field's name), each `{domain, parameter}` with `parameter` the parameter node id in
-  lowercase hex, or `{domain, field}` with `field` the state field's name, and `domain` either `{"type":"boolean"}` or
+  `kind` (the `ObligationKind` in snake case), and `arguments`, an array ascending by the
+  argument's declared identifier (a parameter's, or a state field's name), each
+  `{domain, parameter}` with `parameter` the parameter node id in lowercase hex, or, for a state
+  field, `{field}` with `field` `{node, name}` (the object type node in lowercase hex and the
+  field's name) and a `domain` member only when the field declares a range; `domain` is either `{"type":"boolean"}` or
   `{"type":"integerRange","minimum":"<decimal>","maximum":"<decimal>"}` (bounds are decimal
   strings because RFC 8785 integers above 2^53 are not exact). The digest is the plain SHA-256 of
   that text, with no domain label: interim, until QC-4 / TK-07 may add an FR-201 domain, which
   would change every identity. The golden text of the FR-016-AC-21 tests
   (`tests/it/skeleton_spine.rs`, `recomputed`) is the vector; it is written by hand, not by CG's
-  encoder. The code at this revision still spells the first two members `function` and
-  `declaration` and has no `anchor`; IR-459 renames them for the one scheme and rewrites the
-  vectors (FR-024-AC-20), and nothing reads the old spelling. If QSL later recomputes or compares
-  the identity, QSL pins the spelling and CG follows in a follow-up; until then the spelling is
-  CG's own and interim.
+  encoder. For a frame the names `function` and `declaration` read awkwardly (they hold the frame
+  node and its occurrence key) and are kept, so that no function-path identity changes
+  (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
+  follows in a follow-up; until then the spelling is CG's own and interim.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
