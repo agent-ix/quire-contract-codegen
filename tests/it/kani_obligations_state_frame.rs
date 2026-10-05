@@ -443,6 +443,20 @@ fn fixture(shape: &Shape) -> Fixture {
     }
 }
 
+/// The healthy fixture with `balance` typed by the plain integer: its member declares no range.
+pub(crate) fn fixture_with_unbounded_balance() -> Fixture {
+    fixture(&Shape {
+        variant: 32,
+        balance_bound: None,
+        ..Shape::HEALTHY
+    })
+}
+
+/// The node of the clause's `self` parameter, the node a state field's domain is declared on.
+pub(crate) fn self_parameter() -> CheckedNodeId {
+    code_id(SELF)
+}
+
 /// The healthy fixture, or one whose clause's operation declares `declares`.
 pub(crate) fn fixture_declaring(declares: Declares) -> Fixture {
     fixture(&match declares {

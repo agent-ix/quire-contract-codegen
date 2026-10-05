@@ -18,9 +18,10 @@ use qsl_replay::{
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
     DependencyLockError, DocumentError, EvidenceFailureCause, FrameReplayError,
-    KaniInconclusiveReason, KaniRunOutcome, LockedSource, ObligationIdentityError,
+    KaniInconclusiveReason, KaniRunOutcome, LockedSource, ModelError, ObligationIdentityError,
     OperationDeclaration, ReplayInputs, ReplayPackage, ReplayPackageError, ReplaySettlement,
-    ReplayVerdict, SpineReplayError, StateClauseReplay, StateClauseReplayError, TerminalPairError,
+    ReplayVerdict, SpineReplayError, StateClauseReplay, StateClauseReplayError, StateFrameRefusal,
+    TerminalPairError,
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -628,10 +629,17 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
         ),
         StateClauseReplayError::Transcript(malformed()),
         StateClauseReplayError::Envelope(envelope),
-        StateClauseReplayError::Document(DocumentError::NoRange {
-            field: "balance".to_owned(),
+        StateClauseReplayError::Document(DocumentError::Model(ModelError::Unreadable)),
+        StateClauseReplayError::Document(DocumentError::Clause {
+            refusal: StateFrameRefusal::UnwindOutOfRange { unwind: 0 },
         }),
         StateClauseReplayError::MissingField {
+            field: "balance".to_owned(),
+        },
+        StateClauseReplayError::UndeclaredField {
+            field: "ghost".to_owned(),
+        },
+        StateClauseReplayError::DuplicateField {
             field: "balance".to_owned(),
         },
         StateClauseReplayError::OutOfDomain {

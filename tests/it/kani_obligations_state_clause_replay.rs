@@ -15,18 +15,20 @@ use std::cell::RefCell;
 
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
-    DisagreementCause, EvaluatedValue, Identifier, ReplayRequestWire, ReplayResult, ReplaySource,
-    StateClauseReplayResult, Verdict, WitnessEnvelope, WitnessSettlement,
+    DisagreementCause, EvaluatedValue, FiniteBound, Identifier, Integer, ReplayRequestWire,
+    ReplayResult, ReplaySource, StateClauseReplayResult, Verdict, WireNodeId, WitnessEnvelope,
+    WitnessSettlement,
 };
 use quire_contract_codegen::{
-    OperationDeclaration, StateClauseReplay, StateClauseReplayError, StateClauseReplayInputs,
+    DocumentLabel, OperationDeclaration, StateClauseReplay, StateClauseReplayError,
+    StateClauseReplayInputs, StateObjectAddress,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
-    falsified, fixture_declaring, generate_over, model, native_twin::Twin, playback_state, prove,
-    subject, Declares, Fixture,
+    falsified, fixture_declaring, fixture_with_unbounded_balance, generate_over, model,
+    native_twin::Twin, playback_state, prove, self_parameter, subject, Declares, Fixture,
 };
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
@@ -239,6 +241,72 @@ fn integers(snapshot: &Value) -> Value {
         .expect("the snapshot holds one object's fields")
 }
 
+/// A label as a document's identity member spells it.
+fn identity_member(label: &DocumentLabel) -> Value {
+    json!({
+        "authority": label.authority,
+        "identity": label.identity,
+        "revision_namespace": label.revision_namespace,
+        "revision": label.revision,
+    })
+}
+
+/// Checks the three documents against the address, the labels (invocation, pre, post) and the
+/// `(balance, audit)` decimal strings of the pre and post snapshots.
+fn assert_documents(
+    documents: &Documents,
+    address: &StateObjectAddress,
+    labels: &[DocumentLabel; 3],
+    [(pre_balance, pre_audit), (post_balance, post_audit)]: [(&str, &str); 2],
+) {
+    let Documents {
+        invocation,
+        pre,
+        post,
+    } = documents;
+    let [invocation_label, pre_label, post_label] = labels;
+    for (document, observation, label, balance, audit) in [
+        (&pre.1, "pre", pre_label, pre_balance, pre_audit),
+        (&post.1, "post", post_label, post_balance, post_audit),
+    ] {
+        assert_eq!(document["observation"], observation);
+        assert_eq!(document["identity"], identity_member(label));
+        assert_eq!(document["model"]["identity"], "test/bank");
+        let populations = document["populations"].as_array().expect("populations");
+        assert_eq!(populations.len(), 1);
+        assert_eq!(populations[0]["population"], address.population.as_str());
+        assert_eq!(populations[0]["complete"], true);
+        let objects = populations[0]["objects"].as_array().expect("objects");
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0]["key"], address.key.as_str());
+        assert_eq!(objects[0]["type"], address.object_type.as_str());
+        assert_eq!(
+            integers(document),
+            json!({"balance": {"integer": balance}, "audit": {"integer": audit}})
+        );
+    }
+
+    assert_eq!(invocation.1["identity"], identity_member(invocation_label));
+    assert_eq!(invocation.1["model"], pre.1["model"]);
+    assert_eq!(invocation.1["context"], address.object_type.as_str());
+    assert_eq!(invocation.1["operation"], "deposit");
+    assert_eq!(
+        invocation.1["self"],
+        json!({"population": address.population, "key": address.key})
+    );
+    assert_eq!(invocation.1["parameters"], json!({}));
+    assert_eq!(invocation.1["result"], Value::Null);
+    assert_eq!(invocation.1["created"], json!([]));
+    assert_eq!(invocation.1["deleted"], json!([]));
+    for (link, snapshot, label) in [("pre", pre, pre_label), ("post", post, post_label)] {
+        assert_eq!(invocation.1[link]["identity"], identity_member(label));
+        assert_eq!(
+            invocation.1[link]["digest"],
+            format!("sha256-jcs:{}", snapshot.0)
+        );
+    }
+}
+
 /// The snapshots hold the playback's and the supplied values, the invocation holds the stated
 /// members with both digests, and a changed value changes only its own snapshot.
 ///
@@ -246,51 +314,62 @@ fn integers(snapshot: &Value) -> Value {
 #[test]
 fn tc_035_the_documents_hold_the_playback_the_post_state_and_their_digests() {
     let (twin, fixture) = (Twin::new(), healthy());
-    let wire = built(&twin, &fixture, BALANCE, (5, 7), (4, 8)).wire;
+    let default = inputs(&twin, &fixture, (5, 7), (4, 8));
+    let (address, labels) = (
+        default.object.clone(),
+        [
+            default.invocation_label.clone(),
+            default.pre_label.clone(),
+            default.post_label.clone(),
+        ],
+    );
+    let wire = StateClauseReplay::new(default)
+        .expect("the replay is built")
+        .wire;
     let Documents {
         invocation,
         pre,
         post,
     } = documents(&wire);
-
-    for (document, observation, balance, audit) in
-        [(&pre.1, "pre", "5", "7"), (&post.1, "post", "4", "8")]
-    {
-        assert_eq!(document["observation"], observation);
-        assert_eq!(document["model"]["identity"], "test/bank");
-        let populations = document["populations"].as_array().expect("populations");
-        assert_eq!(populations.len(), 1);
-        assert_eq!(populations[0]["population"], "ix://test/bank/accounts");
-        assert_eq!(populations[0]["complete"], true);
-        let objects = populations[0]["objects"].as_array().expect("objects");
-        assert_eq!(objects.len(), 1);
-        assert_eq!(objects[0]["key"], "account");
-        assert_eq!(objects[0]["type"], "ix://test/bank/Account");
-        assert_eq!(
-            integers(document),
-            json!({"balance": {"integer": balance}, "audit": {"integer": audit}})
-        );
-    }
-
-    assert_eq!(invocation.1["identity"]["identity"], "twin-invocation");
-    assert_eq!(invocation.1["model"], pre.1["model"]);
-    assert_eq!(invocation.1["context"], "ix://test/bank/Account");
-    assert_eq!(invocation.1["operation"], "deposit");
-    assert_eq!(
-        invocation.1["self"],
-        json!({"population": "ix://test/bank/accounts", "key": "account"})
+    assert_documents(
+        &Documents {
+            invocation: invocation.clone(),
+            pre: pre.clone(),
+            post: post.clone(),
+        },
+        &address,
+        &labels,
+        [("5", "7"), ("4", "8")],
     );
-    assert_eq!(invocation.1["parameters"], json!({}));
-    assert_eq!(invocation.1["result"], Value::Null);
-    assert_eq!(invocation.1["created"], json!([]));
-    assert_eq!(invocation.1["deleted"], json!([]));
-    for (link, snapshot, name) in [("pre", &pre, "twin-pre"), ("post", &post, "twin-post")] {
-        assert_eq!(invocation.1[link]["identity"]["identity"], name);
-        assert_eq!(
-            invocation.1[link]["digest"],
-            format!("sha256-jcs:{}", snapshot.0)
-        );
-    }
+
+    // The address and every member of the three labels are carried as given, each its own value:
+    // a document that wrote a literal, or swapped two label members, would not match.
+    let label = |tag: &str| DocumentLabel {
+        authority: format!("authority-{tag}"),
+        identity: format!("identity-{tag}"),
+        revision_namespace: format!("namespace-{tag}"),
+        revision: format!("revision-{tag}"),
+    };
+    let other_address = StateObjectAddress {
+        population: "ix://test/bank/other-accounts".to_owned(),
+        key: "account-two".to_owned(),
+        object_type: "ix://test/bank/Savings".to_owned(),
+    };
+    let other_labels = [label("invocation"), label("pre"), label("post")];
+    let mut varied = inputs(&twin, &fixture, (1, 2), (3, 4));
+    varied.object = other_address.clone();
+    varied.invocation_label = other_labels[0].clone();
+    varied.pre_label = other_labels[1].clone();
+    varied.post_label = other_labels[2].clone();
+    let varied = StateClauseReplay::new(varied)
+        .expect("the replay is built")
+        .wire;
+    assert_documents(
+        &documents(&varied),
+        &other_address,
+        &other_labels,
+        [("1", "2"), ("3", "4")],
+    );
 
     // One changed playback value changes the pre snapshot and nothing of the post snapshot.
     let changed_pre = documents(&built(&twin, &fixture, BALANCE, (6, 7), (4, 8)).wire);
@@ -326,6 +405,94 @@ fn tc_035_a_missing_field_is_refused_by_name() {
             );
         }
     }
+}
+
+/// A name the framed object does not declare, and a field bound twice, are refused by name on
+/// the playback and on the post state alike: no binding is dropped or taken first-wins.
+///
+/// Trace: FR-024-AC-15, TC-035
+#[test]
+fn tc_035_an_undeclared_or_repeated_binding_is_refused_by_name() {
+    let (twin, fixture) = (Twin::new(), healthy());
+    for on_post_state in [false, true] {
+        let side = |candidate: &mut StateClauseReplayInputs<'_>, name: &str, value: i64| {
+            let values = if on_post_state {
+                &mut candidate.post_state
+            } else {
+                &mut candidate.playback
+            };
+            values.push((name.to_owned(), value));
+        };
+        let mut undeclared = inputs(&twin, &fixture, RESPECTING.0, RESPECTING.1);
+        side(&mut undeclared, "ghost", 1);
+        let error = StateClauseReplay::new(undeclared)
+            .err()
+            .expect("an undeclared name is refused");
+        assert!(
+            matches!(&error, StateClauseReplayError::UndeclaredField { field } if field == "ghost"),
+            "{error}"
+        );
+
+        let mut repeated = inputs(&twin, &fixture, RESPECTING.0, RESPECTING.1);
+        side(&mut repeated, "audit", 9);
+        let error = StateClauseReplay::new(repeated)
+            .err()
+            .expect("a repeated field is refused");
+        assert!(
+            matches!(&error, StateClauseReplayError::DuplicateField { field } if field == "audit"),
+            "{error}"
+        );
+    }
+}
+
+/// The envelope's `declared_domains` are one per ranged state field, on `self`'s node at the
+/// field's child index with the declared range, and the witness transcript names the operation,
+/// the clause and each playback value. QSL's replay reads neither, so only these assertions
+/// pin them. A field whose member declares no range is carried and is not range-checked or
+/// given a domain.
+///
+/// Trace: FR-024-AC-12, TC-035
+#[test]
+fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_playback() {
+    let (twin, fixture) = (Twin::new(), healthy());
+    let candidate = inputs(&twin, &fixture, (5, 7), (4, 8));
+    let operation = candidate.operation.to_string();
+    let replay = StateClauseReplay::new(candidate).expect("the replay is built");
+
+    let Some(ReplaySource::Witness(witness)) = &replay.packet.source else {
+        panic!("the envelope is on the witness arm");
+    };
+    assert_eq!(
+        witness.transcript(),
+        format!("<<<assertion|{operation}|{BALANCE}|balance=5;audit=7>>>")
+    );
+
+    let parameter = WireNodeId::from_hex(&self_parameter().digest).expect("a node id");
+    let domains = replay.packet.declared_domains.as_ref().expect("domains");
+    assert_eq!(domains.len(), model::FIELDS.len());
+    for (position, (domain, (_, (minimum, maximum)))) in
+        domains.iter().zip(model::FIELDS).enumerate()
+    {
+        assert_eq!(domain.parameter(), parameter);
+        assert_eq!(
+            domain.domain().path(),
+            [u32::try_from(position).expect("small")]
+        );
+        assert_eq!(
+            domain.bound(),
+            &FiniteBound::integer_range(Integer::from(minimum), Integer::from(maximum))
+                .expect("a range")
+        );
+    }
+
+    // `balance` declares no range: any playback value is carried, and only `audit` has a domain.
+    let unbounded = fixture_with_unbounded_balance();
+    let mut candidate = inputs(&twin, &unbounded, (5, 7), (4, 8));
+    candidate.playback[0].1 = 1_000_000;
+    let replay = StateClauseReplay::new(candidate).expect("an unranged field is not checked");
+    let domains = replay.packet.declared_domains.as_ref().expect("domains");
+    assert_eq!(domains.len(), 1);
+    assert_eq!(domains[0].domain().path(), [1]);
 }
 
 /// The mutated subject's counterexample settles `reproduced-with-evaluated-witness` in category
@@ -373,37 +540,66 @@ fn tc_035_a_violating_run_reproduces_and_a_respecting_run_is_inconclusive() {
 }
 
 /// A playback value outside its field's declared range is refused by name, and the range's two
-/// endpoints are admitted.
+/// endpoints are admitted. The out-of-range value is put in the playback alone, and separately in
+/// the post state alone, so the test says which side the range is read from: the playback. The
+/// post state is whatever the subject ran to; how a post state outside the range should settle
+/// is open (FR-024 Current state), and this test pins no answer to it.
 ///
 /// Trace: FR-024-AC-17, TC-035
 #[test]
 fn tc_035_a_value_outside_its_declared_range_is_out_of_domain() {
     let (twin, fixture) = (Twin::new(), healthy());
     for (field, (minimum, maximum)) in model::FIELDS {
-        let with = |value: i64| {
-            // The post state keeps the field as it was, so the run changes only what the frame
-            // grants.
+        // Only the playback holds `value` for `field`; the post state keeps the field as it was.
+        let in_playback = |value: i64| {
             let mut candidate = inputs(&twin, &fixture, (5, 5), (5, 5));
-            for values in [&mut candidate.playback, &mut candidate.post_state] {
-                if let Some(entry) = values.iter_mut().find(|(name, _)| name == field) {
-                    entry.1 = value;
-                }
+            if let Some(entry) = candidate
+                .playback
+                .iter_mut()
+                .find(|(name, _)| name == field)
+            {
+                entry.1 = value;
+            }
+            candidate
+        };
+        // Only the post state holds `value` for `field`; the playback is in range.
+        let in_post_state = |value: i64| {
+            let mut candidate = inputs(&twin, &fixture, (5, 5), (5, 5));
+            if let Some(entry) = candidate
+                .post_state
+                .iter_mut()
+                .find(|(name, _)| name == field)
+            {
+                entry.1 = value;
             }
             candidate
         };
         for admitted in [minimum, maximum] {
-            let replay = StateClauseReplay::new(with(admitted))
+            // A replayed run changes only what the frame grants, so the post state holds the
+            // same value.
+            let mut candidate = in_playback(admitted);
+            if let Some(entry) = candidate
+                .post_state
+                .iter_mut()
+                .find(|(name, _)| name == field)
+            {
+                entry.1 = admitted;
+            }
+            let replay = StateClauseReplay::new(candidate)
                 .unwrap_or_else(|error| panic!("{field}={admitted} is admitted: {error}"));
             replay.replay().expect("an admitted value replays");
         }
         for refused in [minimum - 1, maximum + 1] {
-            let error = StateClauseReplay::new(with(refused))
+            let error = StateClauseReplay::new(in_playback(refused))
                 .err()
                 .unwrap_or_else(|| panic!("{field}={refused} is outside the range"));
             assert!(
                 matches!(&error, StateClauseReplayError::OutOfDomain { field: named } if named == field),
                 "{field}={refused}: {error}"
             );
+            // The same value on the post-state side is not the playback's out-of-domain error.
+            StateClauseReplay::new(in_post_state(refused))
+                .unwrap_or_else(|error| panic!("{field}={refused} in the post state: {error}"));
         }
     }
 }
@@ -464,9 +660,11 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 
 /// The falsified operation-contract harness of a postcondition state clause over a subject
 /// mutated to debit is replayed from its real Kani playback through `replay_state_clause`, which
-/// reproduces the violation. The subject debits within the declared range: the wrapping debit's
-/// playback can be the floor, whose native post state lies outside the model and which QSL's
-/// snapshot admission refuses (`invalid-value`), so that run settles no violation.
+/// reproduces the violation. The subject is the debit that stops at the floor of `balance`'s range
+/// (`deposit_debiting_within_range`): the wrapping debit's real playback is the floor, whose native
+/// post state is -1, outside the range, and QSL's snapshot admission refuses it (`invalid-value`).
+/// How a violation that yields such a post state should settle is open and is not decided here
+/// (FR-024 Current state).
 ///
 /// Trace: FR-024-AC-18, TC-035
 #[test]

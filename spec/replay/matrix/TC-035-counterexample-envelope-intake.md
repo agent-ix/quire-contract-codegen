@@ -49,7 +49,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 12. Build the document vector of FR-024-AC-14 (unsorted members, escaped characters, a large
     integer, a fractional number and an exponent form) through the builder and through
     `core::canonical`, and read the source of the new module and `Cargo.toml`.
-13. Submit a playback that binds no value for one declared state field.
+13. Submit a playback, and a post state, that binds no value for one declared state field, one
+    that binds an undeclared name, and one that binds a field twice.
 14. Replay the mutated subject's counterexample and the unmutated subject's run over the same pre
     state, and read the envelope's arm and payload `witness`.
 15. Submit state field values at, and immediately outside, each declared range endpoint.
@@ -88,7 +89,8 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     function of `quire_canonical`, no `sha2`, no `ByteDigest::of`, no member sort or hand-written
     escaping, and `sha2` is not in `[dependencies]` (FR-024-AC-14).
 13. `StateClauseReplayError::MissingField` names the field, the executor is not called and no
-    snapshot holds a default (FR-024-AC-15).
+    snapshot holds a default; a name the object does not declare and a field bound twice return
+    `UndeclaredField` and `DuplicateField` (FR-024-AC-15).
 14. The mutated subject settles `reproduced-with-evaluated-witness`, `violation`, evaluated
     `false`; the unmutated run settles `inconclusive`, `Verdicts`; both envelopes are on the
     `Witness` arm with a payload `witness` of none (FR-024-AC-16).

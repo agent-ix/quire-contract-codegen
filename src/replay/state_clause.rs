@@ -12,10 +12,15 @@
 //! `sha256-jcs` digest come from [`crate::core::canonical`] and nowhere else (AD-004): this module
 //! orders no member and rewrites no string.
 //!
-//! The package reading in this module is its own and small: the clause's parameter aggregate (to
-//! tell a supported operation shape from an unsupported one), its anchor's `context` object and
-//! that object's integer fields with the range each declares. The generator of the harness reads
-//! the same facts for its own purpose.
+//! The package is read by the harness generator's own reader (`kani::generate::frame`): the
+//! clause, its anchor, the framed object and the range a field's member declares, so the replay
+//! and the generator cannot disagree about one package. This module adds only the names of the
+//! clause's parameters, to tell the supported operation shape from an unsupported one.
+//!
+//! A state field is a member of the framed object. A field whose member declares an
+//! `integer_range` is checked against it and is given a `DeclaredDomain`; a field whose member
+//! declares none (the generator draws it symbolically and bounds it by nothing) is carried in the
+//! snapshots as an integer, is not range-checked and has no `DeclaredDomain`.
 
 use std::{collections::BTreeMap, fmt};
 
@@ -28,13 +33,17 @@ use qsl_replay::{
     WitnessSettlement,
 };
 use quire_canonical::{Encode, FixedShape};
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2, CheckedSemanticNodeV2};
+use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
-    kani::terminal::ReplaySettlement,
+    kani::{
+        generate::frame::{
+            declared_range, graph_bindings, graph_literal, ClauseShape, Graph, StateFrameRefusal,
+        },
+        terminal::ReplaySettlement,
+    },
     replay::{
         frame::ProvidedDocument,
         function::{render_witness, DependencyLockError, ReplayInputs},
@@ -111,27 +120,66 @@ pub struct OperationDeclaration {
     pub result: bool,
 }
 
+/// Why the model header of a document could not be taken from the supplied domain packages.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModelError {
+    /// The state object's type is not an `ix://<package identity>/<name>` address.
+    NotAnAddress {
+        /// The object type.
+        object_type: String,
+    },
+    /// A supplied package is not a package document: it has no `package` identity and version.
+    Unreadable,
+    /// A supplied package is addressed by a digest that is not `sha256-jcs`, the domain a model
+    /// header names its package by.
+    WrongDigestDomain,
+    /// No supplied package has an identity that owns the object type.
+    NoOwner {
+        /// The object type.
+        object_type: String,
+    },
+    /// More than one supplied package has an identity that owns the object type.
+    Ambiguous {
+        /// The object type.
+        object_type: String,
+    },
+}
+
+impl fmt::Display for ModelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotAnAddress { object_type } => {
+                write!(
+                    f,
+                    "`{object_type}` is not an `ix://<package>/<name>` address"
+                )
+            }
+            Self::Unreadable => f.write_str("a supplied package is not a package document"),
+            Self::WrongDigestDomain => {
+                f.write_str("a supplied package is not addressed by a `sha256-jcs` digest")
+            }
+            Self::NoOwner { object_type } => {
+                write!(f, "no supplied package owns `{object_type}`")
+            }
+            Self::Ambiguous { object_type } => {
+                write!(f, "more than one supplied package owns `{object_type}`")
+            }
+        }
+    }
+}
+
 /// Why a document could not be built or a fact it is built from could not be read.
 #[derive(Debug)]
 pub enum DocumentError {
     /// The document has no RFC 8785 encoding.
     Encode(DigestError),
-    /// No supplied domain package declares the state object's model, or the one that does is not
-    /// a package document.
-    Model {
-        /// The object type the model was sought for.
-        object_type: String,
-    },
-    /// The clause, its anchor, its parameters or its framed object are not readable from the
-    /// admitted package as the state-clause path reads them.
+    /// The model header could not be taken from the supplied packages.
+    Model(ModelError),
+    /// The clause, its anchor, its frame or its parameters are not readable from the admitted
+    /// package: the harness generator's own refusal of the same node.
     Clause {
-        /// The node that could not be read.
-        at: CheckedNodeId,
-    },
-    /// A field of the framed object declares no usable integer range.
-    NoRange {
-        /// The field.
-        field: String,
+        /// The generator's refusal.
+        refusal: StateFrameRefusal,
     },
 }
 
@@ -139,14 +187,8 @@ impl fmt::Display for DocumentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Encode(cause) => cause.fmt(f),
-            Self::Model { object_type } => write!(
-                f,
-                "no supplied domain package declares the model of `{object_type}`"
-            ),
-            Self::Clause { at } => write!(f, "the package node {} is not readable", at.digest),
-            Self::NoRange { field } => {
-                write!(f, "the field `{field}` declares no usable integer range")
-            }
+            Self::Model(cause) => cause.fmt(f),
+            Self::Clause { refusal } => write!(f, "the clause is not readable: {refusal}"),
         }
     }
 }
@@ -170,6 +212,16 @@ pub enum StateClauseReplayError {
     Document(DocumentError),
     /// The playback or the post state binds no value for a declared state field.
     MissingField {
+        /// The field.
+        field: String,
+    },
+    /// The playback or the post state binds a name the framed object does not declare as a field.
+    UndeclaredField {
+        /// The name.
+        field: String,
+    },
+    /// The playback or the post state binds one state field more than once.
+    DuplicateField {
         /// The field.
         field: String,
     },
@@ -201,6 +253,12 @@ impl fmt::Display for StateClauseReplayError {
             Self::Document(cause) => write!(f, "a document was not built: {cause}"),
             Self::MissingField { field } => {
                 write!(f, "no value is bound for the state field `{field}`")
+            }
+            Self::UndeclaredField { field } => {
+                write!(f, "`{field}` is not a state field of the framed object")
+            }
+            Self::DuplicateField { field } => {
+                write!(f, "the state field `{field}` is bound more than once")
             }
             Self::OutOfDomain { field } => write!(
                 f,
@@ -235,6 +293,8 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::Envelope(_)
             | StateClauseReplayError::Document(_)
             | StateClauseReplayError::MissingField { .. }
+            | StateClauseReplayError::UndeclaredField { .. }
+            | StateClauseReplayError::DuplicateField { .. }
             | StateClauseReplayError::OutOfDomain { .. }
             | StateClauseReplayError::UnsupportedOperationShape { .. } => Self::CgDefect,
             StateClauseReplayError::Refused(refusal) => Self::Refused(refusal),
@@ -315,26 +375,23 @@ impl StateClauseReplay {
         let site = located.site;
 
         let graph = Graph::of(package);
-        let read = graph.read_clause(clause_node).ok_or_else(|| {
-            StateClauseReplayError::Document(DocumentError::Clause {
-                at: clause_node.clone(),
-            })
+        let shape = ClauseShape::read(&graph, clause_node).map_err(|refusal| {
+            StateClauseReplayError::Document(DocumentError::Clause { refusal })
         })?;
-        if read.declaration.result || !read.declaration.parameters.is_empty() {
+        let declaration = operation_declaration(&graph, &shape)?;
+        if declaration.result || !declaration.parameters.is_empty() {
             return Err(StateClauseReplayError::UnsupportedOperationShape {
                 operation,
-                declaration: read.declaration,
+                declaration,
             });
         }
-        let fields = graph
-            .read_fields(&read.object)
-            .map_err(StateClauseReplayError::Document)?;
-        let pre = bind(&fields, &playback, true)?;
-        let post = bind(&fields, &post_state, false)?;
-        let domains = declared_domains(&read, &fields)?;
+        let fields = state_fields(&graph, &shape);
+        let pre = bind(&fields, &playback, Side::Playback)?;
+        let post = bind(&fields, &post_state, Side::PostState)?;
+        let domains = declared_domains(&shape, &fields)?;
 
         let model = model_header(&packages, &object.object_type)
-            .map_err(StateClauseReplayError::Document)?;
+            .map_err(|cause| StateClauseReplayError::Document(DocumentError::Model(cause)))?;
         let pre_snapshot = snapshot(&model, &object, &pre_label, "pre", &pre)
             .map_err(StateClauseReplayError::Document)?;
         let post_snapshot = snapshot(&model, &object, &post_label, "post", &post)
@@ -582,13 +639,14 @@ impl Snapshot {
     fn link(&self, label: &DocumentLabel) -> SnapshotLink {
         SnapshotLink {
             identity: label.into(),
-            digest: format!("{}:{}", DigestDomain::Sha256Jcs.as_str(), hex(&self.digest)),
+            digest: digest_text(&DigestRecord::mint(DigestDomain::Sha256Jcs, self.digest)),
         }
     }
 }
 
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+/// A digest as a document member spells it: `<domain>:<64 hex digits>`.
+fn digest_text(record: &DigestRecord) -> String {
+    format!("{}:{}", record.domain().as_str(), record.hex())
 }
 
 /// The snapshot of `object` with `values` in `observation`'s role: one `complete` population
@@ -644,33 +702,45 @@ struct DomainPackageIdentity {
 }
 
 /// The model header of the one supplied package whose identity owns `object_type`
-/// (`ix://<identity>/<name>`).
+/// (`ix://<identity>/<name>`). Every supplied package must be a package document addressed by a
+/// `sha256-jcs` digest, the domain a model header names its package by.
 fn model_header(
     packages: &[ProvidedDocument],
     object_type: &str,
-) -> Result<ModelHeader, DocumentError> {
-    let missing = || DocumentError::Model {
-        object_type: object_type.to_owned(),
-    };
-    let owner = object_type.strip_prefix("ix://").ok_or_else(missing)?;
-    let mut owners = packages.iter().filter_map(|package| {
-        let header = serde_json::from_slice::<DomainPackageHeader>(&package.bytes).ok()?;
-        owner
-            .strip_prefix(header.package.identity.as_str())
+) -> Result<ModelHeader, ModelError> {
+    let owner = object_type
+        .strip_prefix("ix://")
+        .ok_or_else(|| ModelError::NotAnAddress {
+            object_type: object_type.to_owned(),
+        })?;
+    let mut owners = Vec::new();
+    for package in packages {
+        if package.digest.domain() != DigestDomain::Sha256Jcs {
+            return Err(ModelError::WrongDigestDomain);
+        }
+        let header = serde_json::from_slice::<DomainPackageHeader>(&package.bytes)
+            .map_err(|_| ModelError::Unreadable)?;
+        let identity = header.package.identity;
+        if owner
+            .strip_prefix(identity.as_str())
             .is_some_and(|rest| rest.starts_with('/'))
-            .then(|| ModelHeader {
-                identity: header.package.identity,
+        {
+            owners.push(ModelHeader {
+                identity,
                 version: header.package.version,
-                digest: format!(
-                    "{}:{}",
-                    package.digest.domain().as_str(),
-                    package.digest.hex()
-                ),
-            })
-    });
+                digest: digest_text(&package.digest),
+            });
+        }
+    }
+    let mut owners = owners.into_iter();
     match (owners.next(), owners.next()) {
         (Some(header), None) => Ok(header),
-        (None, _) | (Some(_), Some(_)) => Err(missing()),
+        (None, _) => Err(ModelError::NoOwner {
+            object_type: object_type.to_owned(),
+        }),
+        (Some(_), Some(_)) => Err(ModelError::Ambiguous {
+            object_type: object_type.to_owned(),
+        }),
     }
 }
 
@@ -678,21 +748,61 @@ fn model_header(
 // State fields
 // ---------------------------------------------------------------------------
 
-/// One state field of the framed object and the inclusive range it declares.
+/// One state field of the framed object and the inclusive range its member declares, if any.
 struct StateField {
     name: String,
-    minimum: i64,
-    maximum: i64,
+    range: Option<(i64, i64)>,
 }
 
-/// The value bound to each declared field in `values`, in declaration order. A playback value
-/// (`check_range`) must also lie in the field's declared range; the post state is whatever the
-/// subject ran to and is not range-checked.
+/// Which supplied values are being bound.
+#[derive(Clone, Copy)]
+enum Side {
+    /// The decoded playback: range-checked.
+    Playback,
+    /// The post state: whatever the subject ran to, not range-checked.
+    PostState,
+}
+
+/// Every member of the framed object, in declaration order, with the range the generator's own
+/// reader (`declared_range`) finds for it.
+fn state_fields(graph: &Graph<'_>, shape: &ClauseShape) -> Vec<StateField> {
+    let object = &shape.scope.object;
+    let members = graph
+        .nodes
+        .get(object)
+        .and_then(|node| node.body.get("members")?.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    members
+        .iter()
+        .filter_map(|member| member.get("name")?.as_str())
+        .map(|name| StateField {
+            name: name.to_owned(),
+            range: declared_range(graph, object, name),
+        })
+        .collect()
+}
+
+/// The value bound to each declared field in `values`, in declaration order. A name the object
+/// does not declare and a field bound twice are refused before any field is read; on the
+/// playback, a value must also lie in its field's declared range.
 fn bind(
     fields: &[StateField],
     values: &[(String, i64)],
-    check_range: bool,
+    side: Side,
 ) -> Result<Vec<(String, i64)>, StateClauseReplayError> {
+    for (position, (name, _)) in values.iter().enumerate() {
+        if !fields.iter().any(|field| field.name == *name) {
+            return Err(StateClauseReplayError::UndeclaredField {
+                field: name.clone(),
+            });
+        }
+        if values.iter().take(position).any(|(seen, _)| seen == name) {
+            return Err(StateClauseReplayError::DuplicateField {
+                field: name.clone(),
+            });
+        }
+    }
     fields
         .iter()
         .map(|field| {
@@ -702,178 +812,86 @@ fn bind(
                 .ok_or_else(|| StateClauseReplayError::MissingField {
                     field: field.name.clone(),
                 })?;
-            if check_range && !(field.minimum..=field.maximum).contains(value) {
-                return Err(StateClauseReplayError::OutOfDomain {
-                    field: field.name.clone(),
-                });
+            if let (Side::Playback, Some((minimum, maximum))) = (side, field.range) {
+                if !(minimum..=maximum).contains(value) {
+                    return Err(StateClauseReplayError::OutOfDomain {
+                        field: field.name.clone(),
+                    });
+                }
             }
             Ok((field.name.clone(), *value))
         })
         .collect()
 }
 
-/// One `DeclaredDomain` per state field: the field's declared range, on `self`'s parameter node,
-/// at the field's child index in the framed object.
+/// One `DeclaredDomain` per state field that declares a range: the range, on `self`'s parameter
+/// node, at the field's child index among the framed object's members.
 fn declared_domains(
-    read: &ClauseRead,
+    shape: &ClauseShape,
     fields: &[StateField],
 ) -> Result<Vec<DeclaredDomain>, StateClauseReplayError> {
-    let clause_error = || {
+    let unreadable = |at: &CheckedNodeId| {
         StateClauseReplayError::Document(DocumentError::Clause {
-            at: read.self_parameter.clone(),
+            refusal: StateFrameRefusal::MalformedClause { at: at.clone() },
         })
     };
-    let parameter = WireNodeId::from_hex(&read.self_parameter.digest).ok_or_else(clause_error)?;
-    fields
-        .iter()
-        .enumerate()
-        .map(|(position, field)| {
-            let path = u32::try_from(position).map_err(|_| clause_error())?;
-            let bound = FiniteBound::integer_range(
-                Integer::from(field.minimum),
-                Integer::from(field.maximum),
-            )
-            .map_err(|_| {
-                StateClauseReplayError::Document(DocumentError::NoRange {
-                    field: field.name.clone(),
-                })
-            })?;
-            Ok(DeclaredDomain::new(ProofBound {
-                domain: DomainKey::new(parameter, vec![path]),
-                bound,
-            }))
-        })
-        .collect()
+    let Some(self_parameter) = shape.parameters.first() else {
+        return Err(unreadable(&shape.scope.anchor));
+    };
+    let parameter =
+        WireNodeId::from_hex(&self_parameter.digest).ok_or_else(|| unreadable(self_parameter))?;
+    let mut domains = Vec::new();
+    for (position, field) in fields.iter().enumerate() {
+        let Some((minimum, maximum)) = field.range else {
+            continue;
+        };
+        let path = u32::try_from(position).map_err(|_| unreadable(self_parameter))?;
+        let bound = FiniteBound::integer_range(Integer::from(minimum), Integer::from(maximum))
+            .map_err(|_| unreadable(&shape.scope.object))?;
+        domains.push(DeclaredDomain::new(ProofBound {
+            domain: DomainKey::new(parameter, vec![path]),
+            bound,
+        }));
+    }
+    Ok(domains)
 }
 
 // ---------------------------------------------------------------------------
 // The admitted package
 // ---------------------------------------------------------------------------
 
-/// What the clause's node says of its operation and its framed object.
-struct ClauseRead {
-    declaration: OperationDeclaration,
-    self_parameter: CheckedNodeId,
-    object: CheckedNodeId,
-}
-
-/// The admitted graph by node id.
-struct Graph<'g> {
-    nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
-}
-
-fn node_id(value: &Value) -> Option<CheckedNodeId> {
-    serde_json::from_value(value.clone()).ok()
-}
-
-/// The node a `reference` term names.
-fn target(term: &Value) -> Option<CheckedNodeId> {
-    node_id(term.get("target")?)
-}
-
-/// The value of the `binding` named `name` among `members`.
-fn binding<'v>(members: &'v [Value], name: &str) -> Option<&'v Value> {
-    members
-        .iter()
-        .find(|member| {
-            member.get("term").and_then(Value::as_str) == Some("binding")
-                && member.get("name").and_then(Value::as_str) == Some(name)
-        })
-        .and_then(|member| member.get("value"))
-}
-
-/// The text of a `literal` term of `kind`.
-fn literal<'v>(term: &'v Value, kind: &str) -> Option<&'v str> {
-    if term.get("term")?.as_str()? != "literal" || term.get("value_kind")?.as_str()? != kind {
-        return None;
-    }
-    term.get("value")?.as_str()
-}
-
-impl<'g> Graph<'g> {
-    fn of(package: &'g CheckedPackageV2) -> Self {
-        Self {
-            nodes: package
-                .graph()
-                .nodes
-                .iter()
-                .map(|node| (&node.node_id, node))
-                .collect(),
-        }
-    }
-
-    fn members(&self, id: &CheckedNodeId) -> Option<&'g [Value]> {
-        let node: &'g CheckedSemanticNodeV2 = self.nodes.get(id).copied()?;
-        node.body.get("members")?.as_array().map(Vec::as_slice)
-    }
-
-    /// The clause's parameters (FR-341: `self` at level 0, then `result` when present, then the
-    /// operation's parameters), and its anchor's `context` object (FR-342).
-    fn read_clause(&self, clause: &CheckedNodeId) -> Option<ClauseRead> {
-        let node = self.nodes.get(clause)?;
-        let arguments = node.body.get("arguments")?.as_array()?;
-        let [parameters, anchor, _condition] = arguments.as_slice() else {
-            return None;
-        };
-        let parameters = parameters
-            .get("members")?
-            .as_array()?
-            .iter()
-            .map(target)
-            .collect::<Option<Vec<_>>>()?;
-        let (self_parameter, declared) = parameters.split_first()?;
-        let mut declaration = OperationDeclaration::default();
-        for parameter in declared {
-            let members = self.members(parameter)?;
-            let name = literal(binding(members, "name")?, "text")?;
-            let level = literal(binding(members, "level")?, "integer")?;
-            if name == "result" && level == "1" {
-                declaration.result = true;
-            } else {
-                declaration.parameters.push(name.to_owned());
-            }
-        }
-        let context = binding(self.members(&target(anchor)?)?, "context")?;
-        Some(ClauseRead {
-            declaration,
-            self_parameter: self_parameter.clone(),
-            object: target(context)?,
-        })
-    }
-
-    /// Every field of the framed object, with the `integer_range` its member references.
-    fn read_fields(&self, object: &CheckedNodeId) -> Result<Vec<StateField>, DocumentError> {
-        let unreadable = || DocumentError::Clause { at: object.clone() };
-        self.members(object)
-            .ok_or_else(unreadable)?
-            .iter()
-            .map(|member| {
-                let name = member
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .ok_or_else(unreadable)?;
-                let no_range = || DocumentError::NoRange {
-                    field: name.to_owned(),
-                };
-                let bound = member
-                    .get("value")
-                    .and_then(target)
-                    .and_then(|id| self.nodes.get(&id).copied())
-                    .filter(|node| &*node.semantic_form == "integer_range")
-                    .ok_or_else(no_range)?;
-                let members = bound.body.get("members").and_then(Value::as_array);
-                let bound_value = |key: &str| {
-                    let term = binding(members?, key)?;
-                    literal(term, "integer")?.parse::<i64>().ok()
-                };
-                Ok(StateField {
-                    name: name.to_owned(),
-                    minimum: bound_value("min").ok_or_else(no_range)?,
-                    maximum: bound_value("max").ok_or_else(no_range)?,
-                })
+/// What the clause's operation declares beyond `self` (FR-341: the clause binds `self` at level
+/// 0, then `result` when the operation has one, then its parameters in declared order). The
+/// clause's parameter nodes come from the generator's `ClauseShape`; each node's `name` and
+/// `level` are read here. A parameter named `result` at level 1 is the result.
+fn operation_declaration(
+    graph: &Graph<'_>,
+    shape: &ClauseShape,
+) -> Result<OperationDeclaration, StateClauseReplayError> {
+    let mut declaration = OperationDeclaration::default();
+    for parameter in shape.parameters.iter().skip(1) {
+        let unreadable = || {
+            StateClauseReplayError::Document(DocumentError::Clause {
+                refusal: StateFrameRefusal::MalformedClause {
+                    at: parameter.clone(),
+                },
             })
-            .collect()
+        };
+        let members = graph
+            .nodes
+            .get(parameter)
+            .and_then(|node| node.body.get("members")?.as_array())
+            .ok_or_else(unreadable)?;
+        let [name, level] = graph_bindings(members, ["name", "level"]).ok_or_else(unreadable)?;
+        let name = graph_literal(name, "text").ok_or_else(unreadable)?;
+        let level = graph_literal(level, "integer").ok_or_else(unreadable)?;
+        if name == "result" && level == "1" {
+            declaration.result = true;
+        } else {
+            declaration.parameters.push(name.to_owned());
+        }
     }
+    Ok(declaration)
 }
 
 #[cfg(test)]
@@ -917,6 +935,74 @@ mod tests {
             \"large\":9007199254740991,\"middle\":null,\
             \"zebra\":\"quote \\\" backslash \\\\ control \\u0001 letter \u{e9}\"}";
         assert_eq!(String::from_utf8(built.bytes).expect("UTF-8"), expected);
+    }
+
+    fn package(bytes: &[u8], domain: DigestDomain) -> ProvidedDocument {
+        ProvidedDocument {
+            digest: DigestRecord::mint(domain, [7; 32]),
+            bytes: bytes.to_vec(),
+        }
+    }
+
+    const BANK: &[u8] = br#"{"package":{"identity":"test/bank","version":"1.0.0"}}"#;
+
+    /// The model header names the one package that owns the object type, by its `sha256-jcs`
+    /// digest; an unreadable package, a package under another digest domain, a type nobody owns,
+    /// a type that is no address, a package whose identity only shares a prefix, and two owners
+    /// are each their own error.
+    ///
+    /// Trace: FR-024-AC-13, TC-035
+    #[test]
+    fn tc_035_the_model_header_is_the_one_owner_or_a_distinct_error() {
+        let bank = package(BANK, DigestDomain::Sha256Jcs);
+        let header = model_header(std::slice::from_ref(&bank), "ix://test/bank/Account")
+            .expect("one package owns the type");
+        assert_eq!(header.identity, "test/bank");
+        assert_eq!(header.version, "1.0.0");
+        assert_eq!(header.digest, format!("sha256-jcs:{}", "07".repeat(32)));
+
+        let error = |packages: &[ProvidedDocument], object_type: &str| {
+            model_header(packages, object_type)
+                .err()
+                .expect("the header is refused")
+        };
+        let owned = "ix://test/bank/Account";
+        assert_eq!(
+            error(&[package(b"not json", DigestDomain::Sha256Jcs)], owned),
+            ModelError::Unreadable
+        );
+        assert_eq!(
+            error(&[package(BANK, DigestDomain::IrCanonical)], owned),
+            ModelError::WrongDigestDomain
+        );
+        assert_eq!(
+            error(std::slice::from_ref(&bank), "ix://other/Thing"),
+            ModelError::NoOwner {
+                object_type: "ix://other/Thing".to_owned()
+            }
+        );
+        assert_eq!(
+            error(std::slice::from_ref(&bank), "test/bank/Account"),
+            ModelError::NotAnAddress {
+                object_type: "test/bank/Account".to_owned()
+            }
+        );
+        let prefix = package(
+            br#"{"package":{"identity":"test/ban","version":"1.0.0"}}"#,
+            DigestDomain::Sha256Jcs,
+        );
+        assert_eq!(
+            error(&[prefix], owned),
+            ModelError::NoOwner {
+                object_type: owned.to_owned()
+            }
+        );
+        assert_eq!(
+            error(&[bank.clone(), bank], owned),
+            ModelError::Ambiguous {
+                object_type: owned.to_owned()
+            }
+        );
     }
 
     /// FR-024-AC-14: the production source of this module holds no encoder, no hashing, no member

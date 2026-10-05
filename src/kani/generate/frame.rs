@@ -47,6 +47,10 @@ use crate::{
     oracle::scalar::{bound_members, literal, INTEGER_RANGE_MEMBERS},
 };
 
+// The member and literal readers of the clause's graph, shared with the state-clause replay,
+// which may import `kani` but not `oracle` (AD-004).
+pub(crate) use crate::oracle::scalar::{bound_members as graph_bindings, literal as graph_literal};
+
 /// Work budget for lowering one clause and its closure.
 const LOWERING_WORK_LIMIT: u64 = 65_536;
 
@@ -450,12 +454,12 @@ fn lower_clause(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal
 }
 
 /// The admitted graph by node id.
-struct Graph<'g> {
-    nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
+pub(crate) struct Graph<'g> {
+    pub(crate) nodes: BTreeMap<&'g CheckedNodeId, &'g CheckedSemanticNodeV2>,
 }
 
 impl<'g> Graph<'g> {
-    fn of(package: &'g CheckedPackageV2) -> Self {
+    pub(crate) fn of(package: &'g CheckedPackageV2) -> Self {
         Self {
             nodes: package
                 .graph()
@@ -506,11 +510,11 @@ fn application<'v>(body: &'v Value, operator: &str, identity: &str) -> Option<&'
     body.get("arguments")?.as_array().map(Vec::as_slice)
 }
 
-struct ClauseShape {
+pub(crate) struct ClauseShape {
     /// The clause's parameters: `self` first, then the result and every operation parameter.
     /// Only `self` is a read of the framed state.
-    parameters: Vec<CheckedNodeId>,
-    scope: StateFrameScope,
+    pub(crate) parameters: Vec<CheckedNodeId>,
+    pub(crate) scope: StateFrameScope,
     condition: Value,
 }
 
@@ -522,7 +526,10 @@ struct Condition {
 
 impl ClauseShape {
     /// Decodes the clause, its anchor and its frame by QSpec FR-341 and FR-342.
-    fn read<'g>(graph: &Graph<'g>, clause: &'g CheckedNodeId) -> Result<Self, StateFrameRefusal> {
+    pub(crate) fn read<'g>(
+        graph: &Graph<'g>,
+        clause: &'g CheckedNodeId,
+    ) -> Result<Self, StateFrameRefusal> {
         let malformed = || StateFrameRefusal::MalformedClause { at: clause.clone() };
         let node = *graph.nodes.get(clause).ok_or_else(malformed)?;
         if &*node.node_tag != "state" || &*node.semantic_form != "state_clause" {
@@ -770,6 +777,30 @@ fn integer_range(body: &Value) -> Option<(i64, i64)> {
     ))
 }
 
+/// The `integer_range` the framed object's own member of `field` references, when it declares
+/// one. The harness generator and the state-clause replay (`replay/state_clause.rs`) both read a
+/// field's range here, so they cannot disagree on one package.
+pub(crate) fn declared_range(
+    graph: &Graph<'_>,
+    object: &CheckedNodeId,
+    field: &str,
+) -> Option<(i64, i64)> {
+    let members = graph
+        .nodes
+        .get(object)
+        .and_then(|node| node.body.get("members")?.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let member = members
+        .iter()
+        .find(|member| member.get("name").and_then(Value::as_str) == Some(field))?;
+    let target = node_id(member.get("value")?.get("target")?)?;
+    let bound = graph.nodes.get(&target)?;
+    (&*bound.semantic_form == "integer_range")
+        .then(|| integer_range(&bound.body))
+        .flatten()
+}
+
 /// The range of each state field: the `integer_range` the field's own member of the framed
 /// object's body references, for each field whose member declares one.
 fn state_domains(
@@ -777,27 +808,11 @@ fn state_domains(
     object: &CheckedNodeId,
     request: &StateFrameRequest<'_>,
 ) -> Vec<StateFieldDomain> {
-    let members = graph
-        .nodes
-        .get(object)
-        .and_then(|node| node.body.get("members")?.as_array())
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    let declared = |field: &str| {
-        let member = members
-            .iter()
-            .find(|member| member.get("name").and_then(Value::as_str) == Some(field))?;
-        let target = node_id(member.get("value")?.get("target")?)?;
-        let bound = graph.nodes.get(&target)?;
-        (&*bound.semantic_form == "integer_range")
-            .then(|| integer_range(&bound.body))
-            .flatten()
-    };
     request
         .state_fields
         .iter()
         .filter_map(|field| {
-            declared(field).map(|(minimum, maximum)| StateFieldDomain {
+            declared_range(graph, object, field).map(|(minimum, maximum)| StateFieldDomain {
                 field: (*field).to_owned(),
                 minimum,
                 maximum,
