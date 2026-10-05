@@ -562,7 +562,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 /// `tests/it/kani_generation.rs` validates `quire.kani-proof-graph/v2` graphs against
 /// `schemas/kani-proof-graph-v2.schema.json`.
 ///
-/// Trace: TC-023.
+/// Trace: TC-023, FR-028-AC-1.
 #[test]
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
@@ -623,7 +623,7 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
 /// A declared `Required` dependency's edge must also validate against the published schema, not
 /// only the empty-census shape the test above exercises.
 ///
-/// Trace: TC-023.
+/// Trace: TC-023, FR-028-AC-1.
 #[test]
 fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();

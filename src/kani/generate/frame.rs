@@ -77,7 +77,7 @@ const STATE_FRAME_LOWERING_TAGS: [CheckedNodeTag; 8] = [
 #[derive(Clone, Copy, Debug)]
 pub struct StateFrameRequest<'a> {
     /// Resource ceilings recorded by every generated harness.
-    pub ceilings: crate::ProofCeilings,
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// The admitted package.
     pub package: &'a CheckedPackageV2,
     /// The `state`/`state_clause` node of a `postcondition` clause.

@@ -179,7 +179,7 @@ pub(super) enum BoundedLaunchError {
 /// Run a backend with both ceilings, retaining the actual memory observations.
 pub(super) fn run_bounded_launcher(
     command: Command,
-    ceilings: crate::ProofCeilings,
+    ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
     run_bounded_launcher_at(command, ceilings, harnesses, std::path::Path::new("/proc"))
@@ -187,7 +187,7 @@ pub(super) fn run_bounded_launcher(
 
 fn run_bounded_launcher_at(
     command: Command,
-    ceilings: crate::ProofCeilings,
+    ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     procfs: &std::path::Path,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
@@ -506,7 +506,7 @@ mod tests {
         command.arg("-c").arg("touch \"$1\"").arg("sh").arg(&marker);
         let result = run_bounded_launcher_at(
             command,
-            crate::ProofCeilings {
+            crate::kani::identity::ProofCeilings {
                 memory_bytes: std::num::NonZeroU64::new(1024).unwrap(),
                 wall_clock: Duration::from_secs(5),
             },

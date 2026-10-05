@@ -52,7 +52,7 @@ pub struct KaniSubjectBinding {
 /// Explicit inputs for one bounded Boolean Kani proof bundle.
 pub struct KaniRequest<'a> {
     /// Resource ceilings recorded by this proof bundle.
-    pub ceilings: crate::ProofCeilings,
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Requirement identity and revision retained by every artifact.
     pub requirement: &'a RequirementRef,
     /// Boolean precondition clause.
@@ -80,7 +80,7 @@ pub struct KaniRequest<'a> {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProofDependencyGraph {
     /// Resource ceilings required when running the generated proof.
-    pub ceilings: crate::ProofCeilings,
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Stable graph schema identity.
     pub schema_version: String,
     /// Root proof identity.

@@ -278,7 +278,7 @@ fn supported_without_harness(harness: &str) -> ObligationDisposition {
 fn classify<'a>(
     item: &ObligationItem<'a>,
     unwind: u32,
-    ceilings: crate::ProofCeilings,
+    ceilings: crate::kani::identity::ProofCeilings,
 ) -> ItemState<'a> {
     match *item {
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
@@ -1113,7 +1113,7 @@ mod tests {
 
     fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
-            ceilings: crate::ProofCeilings {
+            ceilings: crate::kani::identity::ProofCeilings {
                 memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
                 wall_clock: std::time::Duration::from_secs(600),
             },

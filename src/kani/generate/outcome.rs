@@ -89,7 +89,7 @@ pub enum ObligationItem<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct KaniObligationRequest<'a> {
     /// Resource ceilings recorded by every generated harness.
-    pub ceilings: crate::ProofCeilings,
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Items, in the order records are reported.
     pub items: &'a [ObligationItem<'a>],
     /// Rust path of the customer subject called by postcondition and invariant harnesses.

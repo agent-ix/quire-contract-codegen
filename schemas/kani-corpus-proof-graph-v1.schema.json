@@ -6,6 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "ceilings",
     "schemaVersion",
     "proofId",
     "family",
@@ -15,6 +16,21 @@
     "dependencies"
   ],
   "properties": {
+    "ceilings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["memoryBytes", "wallClock"],
+      "properties": {
+        "memoryBytes": {"type": "integer", "minimum": 1},
+        "wallClock": {
+          "type": "object", "additionalProperties": false,
+          "required": ["secs", "nanos"],
+          "properties": {
+            "secs": {"type": "integer", "minimum": 0},
+            "nanos": {"type": "integer", "minimum": 0, "maximum": 999999999}
+          }
+        }
+      }
+    },
     "schemaVersion": {"const": "quire.kani-corpus-proof-graph/v1"},
     "proofId": {
       "type": "string",

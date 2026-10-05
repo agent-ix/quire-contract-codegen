@@ -214,11 +214,11 @@ impl From<KaniToolError> for KaniExecutionRefusal {
 #[serde(rename_all = "camelCase")]
 pub struct KaniExecutionEvidence {
     /// The identity ceilings actually enforced by this run.
-    pub ceilings: crate::ProofCeilings,
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Actual backend-tree memory mechanism and observed peak.
     pub memory: MemoryObservation,
     /// Every symbolic argument and its identity bounds.
-    pub symbolic_arguments: Vec<crate::SymbolicArgumentBounds>,
+    pub symbolic_arguments: Vec<crate::kani::identity::SymbolicArgumentBounds>,
     /// Contract role of a contract harness; `None` for an exact-scalar harness, whose claim
     /// has no contract role.
     pub kind: Option<ObligationKind>,
@@ -1203,7 +1203,7 @@ wait
         assert_eq!(evidence.ceilings, harness.identity.ceilings);
         assert_eq!(
             evidence.memory.mechanism,
-            crate::MemoryMechanism::LinuxProcfsTreeRss
+            crate::kani::run::memory::MemoryMechanism::LinuxProcfsTreeRss
         );
         assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
         let parent_kib: u64 = fs::read_to_string(stand_in.directory.join("calls.parent-rss"))
@@ -1250,7 +1250,10 @@ wait
             } => {
                 assert_eq!(members, 2);
                 assert_eq!(memory_bytes, ceiling);
-                assert_eq!(memory.mechanism, crate::MemoryMechanism::LinuxProcfsTreeRss);
+                assert_eq!(
+                    memory.mechanism,
+                    crate::kani::run::memory::MemoryMechanism::LinuxProcfsTreeRss
+                );
                 assert!(memory.peak_resident_bytes.unwrap() > ceiling);
             }
             other => panic!("a memory-overage batch must be refused as a whole: {other}"),
@@ -1265,7 +1268,7 @@ wait
     fn identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory() {
         let mut harness = memory_member("a", 128 * 1024 * 1024);
         harness.identity.state_fields = vec!["input".to_owned()];
-        harness.identity.domains = vec![crate::StateFieldDomain {
+        harness.identity.domains = vec![crate::kani::identity::StateFieldDomain {
             field: "input".to_owned(),
             minimum: -3,
             maximum: 7,
@@ -1276,9 +1279,9 @@ wait
         assert_eq!(evidence.ceilings, harness.identity.ceilings);
         assert_eq!(
             evidence.symbolic_arguments,
-            vec![crate::SymbolicArgumentBounds {
+            vec![crate::kani::identity::SymbolicArgumentBounds {
                 identifier: "input".to_owned(),
-                bounds: crate::SymbolicBounds::Integer {
+                bounds: crate::kani::identity::SymbolicBounds::Integer {
                     minimum: -3,
                     maximum: 7
                 },
@@ -1286,7 +1289,7 @@ wait
         );
         assert_eq!(
             evidence.memory.mechanism,
-            crate::MemoryMechanism::LinuxProcfsTreeRss
+            crate::kani::run::memory::MemoryMechanism::LinuxProcfsTreeRss
         );
         assert!(evidence.memory.peak_resident_bytes.is_some());
         harness.identity.ceilings.wall_clock = Duration::from_millis(200);

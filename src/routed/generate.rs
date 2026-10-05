@@ -56,7 +56,7 @@ pub struct RoutedGenerationItem {
 #[derive(Clone, Copy, Debug)]
 pub struct KaniGenerationContext<'a> {
     /// Resource ceilings recorded by every generated harness.
-    pub ceilings: crate::ProofCeilings,
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Rust path of the customer subject.
     pub subject_path: &'a str,
     /// Loop unwind bound.
@@ -621,7 +621,7 @@ mod tests {
         .expect("a checked node id");
         KaniScalarObligationHarness {
             identity: ScalarObligationIdentity {
-                ceilings: crate::ProofCeilings {
+                ceilings: crate::kani::identity::ProofCeilings {
                     memory_bytes: std::num::NonZeroU64::new(16 * 1024 * 1024 * 1024).unwrap(),
                     wall_clock: std::time::Duration::from_secs(600),
                 },

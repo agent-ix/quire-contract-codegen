@@ -44,7 +44,7 @@ impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
 
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
-    pub(super) ceilings: crate::ProofCeilings,
+    pub(super) ceilings: crate::kani::identity::ProofCeilings,
     pub(super) arguments: Vec<SymbolicArgumentBounds>,
     pub(super) rust: &'a Artifact,
     /// The `module::harness` path Kani names the harness by, which a batch passes to `--harness`
@@ -69,14 +69,16 @@ impl<'a> KaniExecutableHarness<'a> {
                         .map(|argument| SymbolicArgumentBounds {
                             identifier: argument.identifier.clone(),
                             bounds: match (&argument.primitive_type, &argument.integer_bounds) {
-                                (crate::KaniPrimitiveType::Boolean, _) => SymbolicBounds::Boolean,
-                                (crate::KaniPrimitiveType::I64, Some(bounds)) => {
+                                (crate::kani::abi::KaniPrimitiveType::Boolean, _) => {
+                                    SymbolicBounds::Boolean
+                                }
+                                (crate::kani::abi::KaniPrimitiveType::I64, Some(bounds)) => {
                                     SymbolicBounds::Integer {
                                         minimum: bounds.minimum,
                                         maximum: bounds.maximum,
                                     }
                                 }
-                                (crate::KaniPrimitiveType::I64, None) => {
+                                (crate::kani::abi::KaniPrimitiveType::I64, None) => {
                                     SymbolicBounds::Unspecified
                                 }
                             },
