@@ -30,3 +30,11 @@ Reviewed CG PR 293 at the frozen head. Ticket: IR-633.
 ## Coverage
 
 Plan completion: not assessed. The computed `quoin matrix --repo . --json` reports FR-019-AC-15 tagged to the new `tc_030_backend_descriptor_keeps_origin_independent_of_identity` test, with no run evidence. No new production stub, direct `qsl-route` dependency, wire origin field, or compatibility layer was found in the diff.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6c29eb5362d15cad6dce59d08e07af82f743c700 |
+
+Disposition round 1: The sole false FR-019-AC-15 tag was removed. The recomputed matrix now lists AC-15 as untagged; driver projection acceptance remains planned and is not claimed by this CG PR.
