@@ -185,6 +185,16 @@ fn replay_falsification_through(
     }
 }
 
+/// One document the replay reads from the request's byte provision, with the digest the request
+/// addresses it by. The frame and state-clause replays both take their documents this way.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProvidedDocument {
+    /// The document's digest record: `sha256-jcs` for a domain package or a state document.
+    pub digest: DigestRecord,
+    /// The document's bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// One source file of a proved package: the source reference its lock records and the bytes the
 /// replay recompiles.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -7,23 +7,30 @@
 //! by names: the model `Bank`, its object `Account` and its operation `deposit`. The request and
 //! envelope that put a run before QSL are built by the crate under test
 //! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
-//! counterexample names; they are not the fixture package's node ids. The envelope's obligation
-//! and originating-counterexample identities are fixed stand-ins: CG computes no identity for a
-//! frame obligation, and QSL only requires that one be present.
+//! counterexample names; they are not the fixture package's node ids. The frame replay is given
+//! the falsified harness's identity and its playback and mints the obligation identity itself, so
+//! the twin supplies none. The fixture's checked package is hand-built and its node ids are its
+//! own, while QSL names the nodes of the package it compiles from the twin's unit, so
+//! [`Twin::aligned`] gives a harness identity QSL's anchor and frame, as the identity of a harness
+//! generated from QSL's own emitted package carries them.
 
 use super::model;
 
 use qsl_replay::{
     call_site, CallSiteRefusal, ClaimedChange, ClauseName, ClauseSite, DependencyInput,
     DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
-    OperationName, ReplayRefusal, ScalarLimits, SelectedObject, SourceIdentity, StageLimits,
-    WitnessEnvelope, MAX_ENCODED_BYTES,
+    OperationName, OperationSite, ReplayRefusal, ScalarLimits, SelectedObject, SourceIdentity,
+    StageLimits, WitnessEnvelope, MAX_ENCODED_BYTES,
 };
 use quire_contract_codegen::{
     DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
-    ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateObjectAddress,
+    ProvidedDocument, ReplayInputs, StateClauseReplayInputs, StateFrameIdentity,
+    StateObjectAddress,
 };
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{
+    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
+    CheckedPackageV2ReadResult,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -113,7 +120,7 @@ fn field(owner: &str, name: &str) -> Value {
 /// operation `deposit` whose frame modifies the fields `model` grants, a declared operation
 /// `transfer` no clause names, and one closed population. Neither operation declares a parameter
 /// or a result, the shape the state-clause replay supports.
-fn domain_document() -> Vec<u8> {
+fn domain_document(granted: &[&str]) -> Vec<u8> {
     let account = account_type();
     let bound = |field: &str, keyword: &str, value: i64| {
         let range = range_type(field);
@@ -155,7 +162,7 @@ fn domain_document() -> Vec<u8> {
                 "startColumn": 1,
             }},
             "frame": {
-                "modifies": model::GRANTED.map(|name| format!("{account}/{name}")),
+                "modifies": granted.iter().map(|name| format!("{account}/{name}")).collect::<Vec<_>>(),
                 "creates": [],
                 "deletes": [],
             },
@@ -212,16 +219,29 @@ fn domain_document() -> Vec<u8> {
     .into_bytes()
 }
 
-fn unit_source(model_digest: &str) -> String {
-    format!(
+/// The clauses of the twin's unit: `(name, operation, field)`, each `post <name> ... on
+/// Bank::Account::<operation> { self.<field> >= pre(self.<field>) }`.
+pub const CLAUSES: [(&str, &str, &str); 2] = [
+    ("BalanceNeverDrops", "deposit", "balance"),
+    ("AuditNeverDrops", "deposit", "audit"),
+];
+
+fn unit_source(model_digest: &str, clauses: &[(&str, &str, &str)], blank_lines: usize) -> String {
+    let header = format!(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
-         model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n\
-         post BalanceNeverDrops using v on Bank::Account::deposit {{ \
-         self.balance >= pre(self.balance) }}\n\
-         post AuditNeverDrops using v on Bank::Account::deposit {{ \
-         self.audit >= pre(self.audit) }}\n"
-    )
+         model Bank = {PACKAGE:?} version \"1.0.0\" digest \"sha256-jcs:{model_digest}\";\n"
+    );
+    let clauses = clauses
+        .iter()
+        .map(|(name, operation, field)| {
+            format!(
+                "post {name} using v on Bank::Account::{operation} {{ \
+                 self.{field} >= pre(self.{field}) }}\n"
+            )
+        })
+        .collect::<String>();
+    format!("{header}{}{clauses}", "\n".repeat(blank_lines))
 }
 
 /// Which envelope identity a replay makes differ from the payload's.
@@ -235,6 +255,46 @@ pub enum Tamper {
     Occurrence,
 }
 
+/// One falsified frame run: the harness's identity and the playback text its run printed.
+#[derive(Clone)]
+pub struct Run {
+    /// The harness's identity, as the generator persisted it.
+    pub harness: StateFrameIdentity,
+    /// The concrete-playback text.
+    pub playback: String,
+}
+
+/// The playback block Kani prints for `harness`'s falsified assertion `check`, binding one `i64`
+/// per entry of `values` in order: the block the decoder reads, with each value's own decoded
+/// comment before its bytes. Built here for the default lane; the `kani` lane replays the real
+/// text.
+pub fn playback_text(harness: &StateFrameIdentity, check: &str, values: &[i64]) -> String {
+    let entries = values
+        .iter()
+        .map(|value| {
+            let bytes = value
+                .to_le_bytes()
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("        // {value}\n        vec![{bytes}],\n")
+        })
+        .collect::<String>();
+    format!(
+        "/// Test generated for harness `{path}`\n\
+         /// Check for `assertion`: \"{check}\"\n\
+         #[test]\n\
+         fn kani_concrete_playback_check_1() {{\n\
+         \x20   let concrete_vals: Vec<Vec<u8>> = vec![\n\
+         {entries}\
+         \x20   ];\n\
+         \x20   kani::concrete_playback_run(concrete_vals, check);\n\
+         }}\n",
+        path = harness.harness_path(),
+    )
+}
+
 /// The twin: the domain package and the native unit selecting it.
 pub struct Twin {
     unit: Vec<u8>,
@@ -245,6 +305,61 @@ pub struct Twin {
 pub struct Invocation {
     reference: DocumentRef,
     documents: Vec<(DocumentRef, Vec<u8>)>,
+}
+
+/// The position of the invocation document in [`Invocation`]'s documents.
+pub const INVOCATION_DOCUMENT: usize = 0;
+/// The position of the pre snapshot.
+pub const PRE_DOCUMENT: usize = 1;
+
+impl Invocation {
+    /// This invocation with the document at `index` edited as JSON and addressed by the digest
+    /// of its new bytes. An edited pre snapshot is re-linked from the invocation, which is
+    /// re-addressed in turn, so every provided document still hashes to its digest and the
+    /// edit is what the replay reads.
+    pub fn edited(&self, index: usize, edit: impl FnOnce(&mut Value)) -> Self {
+        let mut documents = self.documents.clone();
+        let mut value: Value =
+            serde_json::from_slice(&documents[index].1).expect("a JSON document");
+        edit(&mut value);
+        documents[index].1 = value.to_string().into_bytes();
+        documents[index].0.digest = jcs_digest(&documents[index].1);
+        if index == PRE_DOCUMENT {
+            let mut invocation: Value =
+                serde_json::from_slice(&documents[INVOCATION_DOCUMENT].1).expect("JSON");
+            invocation["pre"]["digest"] = json!(format!(
+                "sha256-jcs:{}",
+                hex(&documents[PRE_DOCUMENT].0.digest)
+            ));
+            documents[INVOCATION_DOCUMENT].1 = invocation.to_string().into_bytes();
+            documents[INVOCATION_DOCUMENT].0.digest = jcs_digest(&documents[INVOCATION_DOCUMENT].1);
+        }
+        Self {
+            reference: documents[INVOCATION_DOCUMENT].0.clone(),
+            documents,
+        }
+    }
+
+    /// This invocation with the bytes of the document at `index` replaced and its digest left
+    /// as it was: a provided document whose bytes do not match the digest it is addressed by.
+    pub fn replaced(&self, index: usize, bytes: &[u8]) -> Self {
+        let mut documents = self.documents.clone();
+        documents[index].1 = bytes.to_vec();
+        Self {
+            reference: self.reference.clone(),
+            documents,
+        }
+    }
+
+    /// This invocation with the document at `index` not provided.
+    pub fn without(&self, index: usize) -> Self {
+        let mut documents = self.documents.clone();
+        documents.remove(index);
+        Self {
+            reference: self.reference.clone(),
+            documents,
+        }
+    }
 }
 
 fn limits(seed: u64) -> ScalarLimits {
@@ -272,9 +387,84 @@ fn document(reference: &DocumentRef, bytes: &[u8]) -> ProvidedDocument {
 impl Twin {
     /// Builds the twin.
     pub fn new() -> Self {
-        let domain = domain_document();
-        let unit = unit_source(&hex(&jcs_digest(&domain))).into_bytes();
+        Self::build(&model::GRANTED, &CLAUSES, 0)
+    }
+
+    /// A twin whose operations' frames modify `granted`, whose unit holds `clauses` and has
+    /// `blank_lines` empty lines before the first of them.
+    pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
+        let domain = domain_document(granted);
+        let unit = unit_source(&hex(&jcs_digest(&domain)), clauses, blank_lines).into_bytes();
         Self { unit, domain }
+    }
+
+    /// The `OperationSite` `qsl_replay::call_site` returns for `Bank::Account::<operation>`,
+    /// read directly and not through the crate under test.
+    pub fn operation_site(&self, operation: &str) -> Result<OperationSite, Box<CallSiteRefusal>> {
+        call_site(
+            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY,
+            &self.unit,
+            [self.domain.as_slice()],
+            &DependencyInput::default(),
+            &self.operation(operation),
+        )
+        .map(|located| located.site)
+    }
+
+    /// The checked package QSL compiles from the twin's unit and the node of the clause named
+    /// `clause`, both as `qsl_replay::call_site` returns them: the package bytes are read and
+    /// admitted by the model reader, with the twin's domain package as the evidence of its model
+    /// selection. Nothing here is hand-built, so a harness generated from it carries the node
+    /// ids QSL itself names.
+    pub fn emitted_package(&self, clause: &str) -> (CheckedPackageV2, CheckedNodeId) {
+        let name = ClauseName(Identifier::new(clause).expect("identifier"));
+        let located = call_site(
+            SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
+            IDENTITY,
+            &self.unit,
+            [self.domain.as_slice()],
+            &DependencyInput::default(),
+            &name,
+        )
+        .expect("the clause is located");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence
+            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone());
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            &located.package,
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("QSL's emitted package is admitted: {other:?}"),
+        };
+        let clause_node = serde_json::from_value(json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": located.site.node.to_string(),
+        }))
+        .expect("a node id");
+        (package, clause_node)
+    }
+
+    /// `harness` with the scope's anchor and frame the ones QSL names for `operation` in this
+    /// twin's unit.
+    pub fn aligned(&self, harness: &StateFrameIdentity, operation: &str) -> StateFrameIdentity {
+        let site = self
+            .operation_site(operation)
+            .expect("the twin's operation is located");
+        let node = |id: qsl_replay::WireNodeId| -> quire_contract_model::CheckedNodeId {
+            serde_json::from_value(json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": id.to_string(),
+            }))
+            .expect("a node id")
+        };
+        let mut aligned = harness.clone();
+        aligned.scope.anchor = node(site.anchor);
+        aligned.scope.frame = node(site.frame);
+        aligned
     }
 
     /// The invocation of `deposit` on `account` from `pre` to `post`, each `(balance, audit)`.
@@ -340,9 +530,15 @@ impl Twin {
     }
 
     /// The frame-replay request and envelope for `invocation` as a counterexample to the frame of
-    /// `deposit`, claiming `field` of `account` was written.
-    pub fn frame_replay(&self, invocation: &Invocation, account: &str, field: &str) -> FrameReplay {
-        self.try_frame_replay("deposit", invocation, account, field)
+    /// `deposit`, claiming `field` of `account` was written, from the falsified `run`.
+    pub fn frame_replay(
+        &self,
+        invocation: &Invocation,
+        account: &str,
+        field: &str,
+        run: &Run,
+    ) -> FrameReplay {
+        self.try_frame_replay("deposit", invocation, account, field, run)
             .expect("the twin's operation frame is located")
     }
 
@@ -353,6 +549,7 @@ impl Twin {
         invocation: &Invocation,
         account: &str,
         field: &str,
+        run: &Run,
     ) -> Result<FrameReplay, FrameReplayError> {
         FrameReplay::new(FrameReplayInputs {
             run: self.run(),
@@ -371,7 +568,8 @@ impl Twin {
                 },
                 field: field.to_owned(),
             },
-            obligation_identity: [1; 32],
+            harness: run.harness.clone(),
+            playback: run.playback.clone(),
         })
     }
 
@@ -480,8 +678,9 @@ impl Twin {
         invocation: &Invocation,
         account: &str,
         field: &str,
+        run: &Run,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        self.replay_tampered(invocation, account, field, Tamper::Nothing)
+        self.replay_tampered(invocation, account, field, run, Tamper::Nothing)
     }
 
     /// [`Self::replay`] with one envelope identity made to differ from the payload's.
@@ -490,9 +689,10 @@ impl Twin {
         invocation: &Invocation,
         account: &str,
         field: &str,
+        run: &Run,
         tamper: Tamper,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        let FrameReplay { wire, mut packet } = self.frame_replay(invocation, account, field);
+        let FrameReplay { wire, mut packet } = self.frame_replay(invocation, account, field, run);
         let payload = packet
             .family_payload
             .as_ref()

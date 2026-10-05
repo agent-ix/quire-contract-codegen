@@ -28,27 +28,32 @@ pub(crate) mod subject;
 
 use std::{fs, path::PathBuf, time::Duration};
 
-use native_twin::{Tamper, Twin};
+use native_twin::{
+    playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
+};
 use package::{
     application, code_id, corpus_package, key, literal, member, op, op_full, parameter_body,
     reference, Bound, PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
 };
 use qsl_replay::{
     CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    ReplayRefusal, ReplayResult, Verdict, WitnessSettlement,
+    OperationSite, ReplayRefusal, ReplayResult, ReplaySource, Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
-    BoundNotResolvedCause, FrameReplayError, InvalidObligationItem, KaniExecutionRequest,
-    KaniInstallation, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
-    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameLoweringRefusal,
+    BoundNotResolvedCause, FrameReplay, FrameReplayError, InvalidObligationItem,
+    KaniExecutionRequest, KaniInstallation, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniRunOutcome, ModuleSymbol, ObligationDisposition, ObligationItem,
+    ObligationKind, ObligationRecord, PreStateFault, ScopeMember, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameLoweringRefusal,
     StateFrameObligations, StateFrameProperty, StateFrameRefusal, StateFrameRequest,
     StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation, MAX_OBLIGATION_ITEMS,
     MAX_OBLIGATION_UNWIND,
 };
+use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
 use quire_contract_model::{CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 const OBJECT: u32 = 4001;
 const REFERENCE: u32 = 4002;
@@ -621,6 +626,70 @@ fn request<'a>(fixture: &'a Fixture, fields: &'a [&'a str]) -> StateFrameRequest
 fn generate(fixture: &Fixture) -> StateFrameObligations {
     generate_state_frame_obligations(&request(fixture, &STATE_FIELDS))
         .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
+}
+
+/// The check text of the frame harness's assertion over `audit`, as Kani prints it.
+const FORBIDDEN_CHECK: &str =
+    "operation `deposit` changed `audit`, which its frame does not modify";
+
+/// The healthy fixture's frame harness identity, with the scope's anchor and frame the ones QSL
+/// names for `deposit` in the twin's unit.
+fn frame_harness(twin: &Twin) -> StateFrameIdentity {
+    twin.aligned(
+        &generate(&fixture(&Shape::HEALTHY)).frame.identity,
+        "deposit",
+    )
+}
+
+/// The run of `harness` whose playback binds `values`, in the harness's draw order.
+fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
+    Run {
+        playback: playback_text(harness, FORBIDDEN_CHECK, &values),
+        harness: harness.clone(),
+    }
+}
+
+/// The forbidden-write run at the pre state `(balance, audit) = (5, 0)`.
+fn forbidden_run(twin: &Twin) -> Run {
+    run_of(&frame_harness(twin), [5, 0])
+}
+
+/// A run whose harness is scoped to `operation`, for a replay that names that operation. Its
+/// anchor and frame are the ones QSL names for the operation when the unit names it.
+fn run_for_operation(twin: &Twin, operation: &str) -> Run {
+    let mut harness = generate(&fixture(&Shape::HEALTHY)).frame.identity;
+    harness.scope.operation = operation.to_owned();
+    let harness = if twin.operation_site(operation).is_ok() {
+        twin.aligned(&harness, operation)
+    } else {
+        harness
+    };
+    run_of(&harness, [5, 0])
+}
+
+/// The identity the replay of `operation` over `run` puts in the request, the invocation at
+/// `(5, 0)` named for every operation.
+fn minted(twin: &Twin, operation: &str, run: &Run) -> [u8; 32] {
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    twin.try_frame_replay(operation, &invocation, "account", "audit", run)
+        .unwrap_or_else(|error| panic!("the replay of `{operation}` builds: {error}"))
+        .wire
+        .obligation_identity
+}
+
+/// The SHA-256 of the hand-written RFC 8785 text of the frame preimage of `site`: the frame node
+/// as `function`, its occurrence as `declaration`, the `frame` kind and no arguments.
+fn hand_written_identity(site: &OperationSite) -> [u8; 32] {
+    let origin = site.frame_occurrence.origin();
+    let text = format!(
+        "{{\"arguments\":[],\"declaration\":{{\"node\":\"{}\",\"ordinal\":{},\"role\":\"{}\"}},\
+         \"function\":\"{}\",\"kind\":\"frame\"}}",
+        site.frame_occurrence.node(),
+        origin.ordinal(),
+        origin.role(),
+        site.frame,
+    );
+    Sha256::digest(text.as_bytes()).into()
 }
 
 /// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
@@ -1967,18 +2036,20 @@ fn tc_025_the_kani_lanes_fixture_variant_is_not_shared_with_a_default_lane_varia
 #[test]
 fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
     let twin = Twin::new();
+    let run = forbidden_run(&twin);
     let invocation = twin.invocation("account", (5, 0), (6, 0));
     assert!(twin
-        .replay_tampered(&invocation, "account", "audit", Tamper::Nothing)
+        .replay_tampered(&invocation, "account", "audit", &run, Tamper::Nothing)
         .is_ok());
 
-    let clause = twin.replay_tampered(&invocation, "account", "audit", Tamper::ClauseNode);
+    let clause = twin.replay_tampered(&invocation, "account", "audit", &run, Tamper::ClauseNode);
     assert!(matches!(
         clause,
         Err(ReplayRefusal::FrameIdentity(mismatch))
             if matches!(*mismatch, FrameIdentityMismatch::EnvelopeFrame { .. })
     ));
-    let occurrence = twin.replay_tampered(&invocation, "account", "audit", Tamper::Occurrence);
+    let occurrence =
+        twin.replay_tampered(&invocation, "account", "audit", &run, Tamper::Occurrence);
     assert!(matches!(
         occurrence,
         Err(ReplayRefusal::FrameIdentity(mismatch))
@@ -1994,7 +2065,7 @@ fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
 fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 1));
-    let replay = twin.frame_replay(&invocation, "account", "audit");
+    let replay = twin.frame_replay(&invocation, "account", "audit", &forbidden_run(&twin));
     let payload = replay.packet.family_payload.as_ref().expect("a payload");
     assert_ne!(payload.anchor, payload.frame);
     assert_eq!(payload.occurrence.node(), payload.frame);
@@ -2005,19 +2076,6 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     );
 }
 
-/// The frame replay's request and envelope both carry the `obligation_identity` the caller
-/// supplied in `FrameReplayInputs` (the twin supplies `[1; 32]`), not a placeholder.
-///
-/// Trace: TC-025
-#[test]
-fn tc_025_the_frame_replay_request_and_envelope_carry_the_supplied_obligation_identity() {
-    let twin = Twin::new();
-    let invocation = twin.invocation("account", (5, 0), (6, 1));
-    let replay = twin.frame_replay(&invocation, "account", "audit");
-    assert_eq!(replay.wire.obligation_identity, [1; 32]);
-    assert_eq!(replay.packet.obligation_identity, Some([1; 32]));
-}
-
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
 ///
@@ -2025,9 +2083,10 @@ fn tc_025_the_frame_replay_request_and_envelope_carry_the_supplied_obligation_id
 #[test]
 fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
     let twin = Twin::new();
+    let run = forbidden_run(&twin);
     let forbidden = twin.invocation("account", (5, 0), (6, 1));
     let result = twin
-        .frame_replay(&forbidden, "account", "audit")
+        .frame_replay(&forbidden, "account", "audit", &run)
         .replay()
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
@@ -2047,7 +2106,7 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
 
     let granted = twin.invocation("account", (5, 0), (6, 0));
     let result = twin
-        .frame_replay(&granted, "account", "balance")
+        .frame_replay(&granted, "account", "balance", &run)
         .replay()
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
@@ -2074,8 +2133,9 @@ fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 0));
     for operation in ["transfer", "withdraw"] {
+        let run = run_for_operation(&twin, operation);
         let refusal = twin
-            .try_frame_replay(operation, &invocation, "account", "audit")
+            .try_frame_replay(operation, &invocation, "account", "audit", &run)
             .err()
             .unwrap_or_else(|| panic!("the unit names no frame for `{operation}`"));
         assert!(
@@ -2091,6 +2151,891 @@ fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
             "{operation}: {refusal}"
         );
     }
+}
+
+// ---- frame obligation identity, witness and ties (FR-024, IR-459) -------------
+
+/// The refusal of a replay that must be refused.
+fn refused(result: Result<FrameReplay, FrameReplayError>) -> FrameReplayError {
+    match result {
+        Ok(_) => panic!("the replay must be refused"),
+        Err(error) => error,
+    }
+}
+
+/// The frame replay of `operation` over `run` at the pre state `(5, 0)`.
+fn replay_of(twin: &Twin, operation: &str, run: &Run) -> Result<FrameReplay, FrameReplayError> {
+    let invocation = twin.invocation("account", (5, 0), (6, 1));
+    twin.try_frame_replay(operation, &invocation, "account", "audit", run)
+}
+
+/// The request's and the envelope's obligation identity equal the SHA-256 of the hand-written
+/// preimage of the site `qsl_replay::call_site` returns for the operation, and the envelope's
+/// `clause_node` and `occurrence_key` are the same `function` and `declaration` members.
+///
+/// Trace: FR-024-AC-22, FR-024-AC-24, TC-035
+#[test]
+fn tc_035_the_request_and_the_envelope_carry_the_identity_minted_from_the_site() {
+    let twin = Twin::new();
+    let site = twin
+        .operation_site("deposit")
+        .expect("the operation is located");
+    let replay = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
+    let expected = hand_written_identity(&site);
+    assert_eq!(replay.wire.obligation_identity, expected);
+    assert_eq!(replay.packet.obligation_identity, Some(expected));
+    assert_eq!(replay.packet.clause_node, Some(site.frame));
+    assert_eq!(
+        replay.packet.occurrence_key.as_ref(),
+        Some(&site.frame_occurrence)
+    );
+    assert_ne!(expected, [1; 32], "no stand-in digest reaches the request");
+}
+
+/// A harness whose frame grants nothing, replayed over a unit whose frame grants nothing, gives
+/// a different identity in the request and in the envelope; each is the minted identity of its
+/// own site.
+///
+/// Trace: FR-024-AC-24, TC-035
+#[test]
+fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope() {
+    let twin = Twin::new();
+    let base = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
+
+    let granting_nothing = Twin::build(&[], &CLAUSES, 0);
+    let emptied = fixture(&Shape {
+        variant: 1,
+        modifies: &[],
+        ..Shape::HEALTHY
+    });
+    let harness = granting_nothing.aligned(&generate(&emptied).frame.identity, "deposit");
+    let changed =
+        replay_of(&granting_nothing, "deposit", &run_of(&harness, [5, 0])).expect("builds");
+
+    assert_ne!(
+        changed.wire.obligation_identity,
+        base.wire.obligation_identity
+    );
+    assert_ne!(
+        changed.packet.obligation_identity,
+        base.packet.obligation_identity
+    );
+    let site = granting_nothing
+        .operation_site("deposit")
+        .expect("the operation is located");
+    assert_eq!(
+        changed.wire.obligation_identity,
+        hand_written_identity(&site)
+    );
+    assert_eq!(
+        changed.packet.obligation_identity,
+        Some(changed.wire.obligation_identity)
+    );
+}
+
+/// The identity is measured through `qsl_replay::call_site`: it changes with the frame's grants
+/// and between two operations of one object whose frames are equal text, and it does not change
+/// when the unit is shifted by blank lines or when a second clause names the same operation.
+///
+/// Trace: FR-024-AC-21, TC-035
+#[test]
+fn tc_035_the_frame_identity_follows_what_call_site_names() {
+    let identity =
+        |twin: &Twin, operation: &str| minted(twin, operation, &run_for_operation(twin, operation));
+    let twin = Twin::new();
+    let base = identity(&twin, "deposit");
+
+    // Two units that differ only in the frame's `modifies` grants.
+    let both = Twin::build(&["balance", "audit"], &CLAUSES, 0);
+    assert_ne!(base, identity(&both, "deposit"), "grants");
+
+    // Two operations of one object whose frames are equal text.
+    let two_operations = Twin::build(
+        &model::GRANTED,
+        &[CLAUSES[0], ("TransferKeepsBalance", "transfer", "balance")],
+        0,
+    );
+    assert_ne!(
+        identity(&two_operations, "deposit"),
+        identity(&two_operations, "transfer"),
+        "operations with equal frame text"
+    );
+
+    // The same operation in a unit shifted by blank lines.
+    let shifted = Twin::build(&model::GRANTED, &CLAUSES, 3);
+    assert_eq!(base, identity(&shifted, "deposit"), "blank lines");
+
+    // Two postcondition clauses of one operation: one frame, whatever the harness's clause.
+    let first = twin.clause_site("BalanceNeverDrops").expect("a clause");
+    let second = twin.clause_site("AuditNeverDrops").expect("a clause");
+    assert_ne!(first.node, second.node, "the clauses are two nodes");
+    let mut harness = frame_harness(&twin);
+    harness.clause = harness.scope.object.clone();
+    assert_eq!(base, minted(&twin, "deposit", &run_of(&harness, [5, 0])));
+
+    // A unit with one postcondition clause on `deposit` and the unit with two mint one identity.
+    let one_clause = Twin::build(&model::GRANTED, &[CLAUSES[0]], 0);
+    assert_eq!(
+        base,
+        identity(&one_clause, "deposit"),
+        "one clause against two on one operation"
+    );
+}
+
+/// The edge the spec states and does not hide: occurrence ordinals run over the operations the
+/// unit's clauses name, so a clause added on an operation that sorts earlier moves this
+/// operation's frame occurrence. The identity of `transfer` is read before and after a clause on
+/// `deposit` is added, and it differs.
+///
+/// Trace: FR-024-AC-21, TC-035
+#[test]
+fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
+    let identity = |twin: &Twin| minted(twin, "transfer", &run_for_operation(twin, "transfer"));
+    let transfer = ("TransferKeepsBalance", "transfer", "balance");
+    let alone = Twin::build(&model::GRANTED, &[transfer], 0);
+    let after = Twin::build(&model::GRANTED, &[CLAUSES[0], transfer], 0);
+    assert_ne!(identity(&alone), identity(&after));
+}
+
+/// The identity does not change when any one of the harness's own members changes: its clause
+/// node, module symbol, harness symbol, state path, subject path, unwind bound, options, the
+/// ranges of its fields or the order of its state fields. The solver is not edited: `KaniSolver`
+/// has one variant (`Cadical`), so no other solver can be built, and the identity function takes
+/// no solver.
+///
+/// Trace: FR-024-AC-21, TC-035
+#[test]
+fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
+    let twin = Twin::new();
+    let harness = frame_harness(&twin);
+    let base = minted(&twin, "deposit", &run_of(&harness, [5, 0]));
+    type Edit = Box<dyn Fn(&mut StateFrameIdentity)>;
+    let edits: Vec<(&str, Edit)> = vec![
+        (
+            "clause node",
+            Box::new(|h| h.clause = h.scope.object.clone()),
+        ),
+        (
+            "module symbol",
+            Box::new(|h| h.module_symbol = ModuleSymbol::try_from("renamed_module").unwrap()),
+        ),
+        (
+            "harness symbol",
+            Box::new(|h| h.harness_symbol = HarnessSymbol::try_from("renamed_check").unwrap()),
+        ),
+        (
+            "state path",
+            Box::new(|h| h.state_path = "crate::other::State".to_owned()),
+        ),
+        (
+            "subject path",
+            Box::new(|h| h.subject_path = "crate::other::operate".to_owned()),
+        ),
+        ("unwind", Box::new(|h| h.unwind += 3)),
+        (
+            "options",
+            Box::new(|h| h.options.push("--extra".to_owned())),
+        ),
+        (
+            "ranges",
+            Box::new(|h| {
+                for domain in &mut h.domains {
+                    domain.minimum -= 10;
+                    domain.maximum += 10;
+                }
+            }),
+        ),
+    ];
+    for (name, edit) in edits {
+        let mut edited = harness.clone();
+        edit(&mut edited);
+        assert_ne!(edited, harness, "{name} is an edit");
+        assert_eq!(
+            base,
+            minted(&twin, "deposit", &run_of(&edited, [5, 0])),
+            "{name}"
+        );
+    }
+    let mut reordered = harness.clone();
+    reordered.state_fields.reverse();
+    assert_eq!(
+        base,
+        minted(&twin, "deposit", &run_of(&reordered, [0, 5])),
+        "state field order"
+    );
+}
+
+/// A harness whose property is a postcondition is `NotAFrame`, and a frame whose granted and
+/// checked fields are not exactly the state fields is `FieldSetMismatch`, whether a field is
+/// neither granted nor checked, granted and checked, or no state field at all. Each is refused
+/// before the call site: the operation the unit does not name would otherwise be a
+/// `CallSite` refusal, as it is for the harness that passes the checks.
+///
+/// Trace: FR-024-AC-22, TC-035
+#[test]
+fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_site() {
+    let twin = Twin::new();
+    let mut base = frame_harness(&twin);
+    base.scope.operation = "withdraw".to_owned();
+    let refusal = |harness: &StateFrameIdentity| {
+        refused(replay_of(&twin, "withdraw", &run_of(harness, [5, 0])))
+    };
+    assert!(
+        matches!(refusal(&base), FrameReplayError::CallSite(_)),
+        "the control reaches the call site"
+    );
+
+    let mut postcondition = base.clone();
+    postcondition.property = generate(&fixture(&Shape::HEALTHY))
+        .postcondition
+        .identity
+        .property;
+    assert!(matches!(
+        refusal(&postcondition),
+        FrameReplayError::NotAFrame
+    ));
+
+    let frame = |granted: &[&str], checked: &[&str]| {
+        let mut harness = base.clone();
+        harness.property = StateFrameProperty::Frame {
+            granted: granted.iter().map(|field| (*field).to_owned()).collect(),
+            checked: checked.iter().map(|field| (*field).to_owned()).collect(),
+        };
+        harness
+    };
+    for (granted, checked) in [
+        (&["balance"][..], &[][..]),
+        (&["balance"], &["audit", "balance"]),
+        (&["balance"], &["audit", "other"]),
+        (&["balance", "audit"], &["audit"]),
+    ] {
+        let error = refusal(&frame(granted, checked));
+        let FrameReplayError::FieldSetMismatch {
+            state_fields,
+            granted: held,
+            checked: also,
+        } = error
+        else {
+            panic!("{granted:?} / {checked:?}: {error}");
+        };
+        assert_eq!(state_fields, ["balance", "audit"]);
+        assert_eq!(held, granted);
+        assert_eq!(also, checked);
+    }
+    assert!(
+        matches!(
+            refusal(&frame(&["audit"], &["balance"])),
+            FrameReplayError::CallSite(_)
+        ),
+        "the same fields in the other split are a frame over the state"
+    );
+}
+
+/// The harness record carries `state_fields` in the order the harness draws them, and the
+/// identity read back from the record equals the generated one. A harness regenerated from equal
+/// inputs has a byte-identical record, and a record without `state_fields` is not read as a
+/// frame identity.
+///
+/// Trace: FR-024-AC-23, TC-035
+#[test]
+fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read() {
+    let fixture = fixture(&Shape::HEALTHY);
+    let generated = generate(&fixture);
+    let record: Value = serde_json::from_str(&generated.frame.record.contents).expect("record");
+    assert_eq!(
+        record["identity"]["state_fields"],
+        json!(["balance", "audit"])
+    );
+    assert_eq!(generate(&fixture).frame.record, generated.frame.record);
+    assert_eq!(
+        StateFrameIdentity::from_record(&generated.frame.record.contents).expect("a frame record"),
+        generated.frame.identity
+    );
+
+    let reversed = generate_state_frame_obligations(&StateFrameRequest {
+        state_fields: &["audit", "balance"],
+        ..request(&fixture, &STATE_FIELDS)
+    })
+    .expect("the fields generate in either order");
+    let reversed_record: Value =
+        serde_json::from_str(&reversed.frame.record.contents).expect("record");
+    assert_eq!(
+        reversed_record["identity"]["state_fields"],
+        json!(["audit", "balance"])
+    );
+    assert_ne!(reversed.frame.record, generated.frame.record);
+
+    let mut without = record.clone();
+    without["identity"]
+        .as_object_mut()
+        .expect("an identity object")
+        .remove("state_fields");
+    assert!(StateFrameIdentity::from_record(&without.to_string()).is_err());
+    let mut extra = record;
+    extra["identity"]["unknown"] = json!(1);
+    assert!(StateFrameIdentity::from_record(&extra.to_string()).is_err());
+    assert!(StateFrameIdentity::from_record("{}").is_err());
+}
+
+/// The playback is decoded against the harness's draw order, not the order of its ranges or its
+/// grants: a harness that draws `audit` first reads the first playback value as `audit`, and the
+/// pre snapshot tie sees that.
+///
+/// Trace: FR-024-AC-23, FR-024-AC-25, TC-035
+#[test]
+fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
+    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::new();
+    let reversed = generate_state_frame_obligations(&StateFrameRequest {
+        state_fields: &["audit", "balance"],
+        ..request(&fixture, &STATE_FIELDS)
+    })
+    .expect("generates")
+    .frame
+    .identity;
+    let harness = twin.aligned(&reversed, "deposit");
+    // Draw order `audit`, `balance`: the playback `[0, 5]` is the pre state `balance = 5`,
+    // `audit = 0` the invocation holds.
+    let run = run_of(&harness, [0, 5]);
+    let replay = replay_of(&twin, "deposit", &run).expect("the playback ties to the pre state");
+    let ReplaySource::Witness(witness) = &replay.wire.source else {
+        panic!("a frame replay is a witness replay");
+    };
+    assert!(
+        witness.transcript().ends_with("|audit=0;balance=5>>>"),
+        "{}",
+        witness.transcript()
+    );
+    // The same values read in declaration order are the pre state `balance = 0`, `audit = 5`.
+    let swapped = refused(replay_of(&twin, "deposit", &run_of(&harness, [5, 0])));
+    assert!(
+        matches!(
+            swapped,
+            FrameReplayError::PreState(PreStateFault::Differs { ref field, decoded: 5, snapshot: 0 })
+                if field == "audit"
+        ),
+        "{swapped}"
+    );
+}
+
+/// A field with no declared range is listed in `state_fields`, has no entry in `domains`, is
+/// decoded and is neither range-checked nor refused: its value far outside any range the twin's
+/// package declares is carried into the transcript.
+///
+/// Trace: FR-024-AC-23, FR-024-AC-26, TC-035
+#[test]
+fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
+    let twin = Twin::new();
+    let unranged_audit = fixture(&Shape {
+        variant: 90,
+        audit_unbounded: true,
+        ..Shape::HEALTHY
+    });
+    let harness = twin.aligned(&generate(&unranged_audit).frame.identity, "deposit");
+    assert_eq!(harness.state_fields, ["balance", "audit"]);
+    assert_eq!(
+        harness
+            .domains
+            .iter()
+            .map(|domain| domain.field.as_str())
+            .collect::<Vec<_>>(),
+        ["balance"],
+        "only the ranged field has a domain"
+    );
+    let unranged = 5_000_000_000_i64;
+    let invocation = twin.invocation("account", (5, unranged), (5, unranged));
+    let replay = twin
+        .try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, unranged]),
+        )
+        .unwrap_or_else(|error| panic!("an unranged value is not refused: {error}"));
+    let ReplaySource::Witness(witness) = &replay.wire.source else {
+        panic!("a frame replay is a witness replay");
+    };
+    assert!(
+        witness
+            .transcript()
+            .ends_with("|balance=5;audit=5000000000>>>"),
+        "{}",
+        witness.transcript()
+    );
+}
+
+/// The transcript `Witness::parse` is given is the one rendering function's, over the decoded
+/// values, the harness path and the check text the decode names: it is not a fixed text, and a
+/// different playback gives a different transcript.
+///
+/// Trace: FR-024-AC-25, TC-035
+#[test]
+fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
+    let twin = Twin::new();
+    let harness = frame_harness(&twin);
+    for (balance, audit) in [(5, 0), (7, 3)] {
+        let invocation = twin.invocation("account", (balance, audit), (balance, audit + 1));
+        let replay = twin
+            .try_frame_replay(
+                "deposit",
+                &invocation,
+                "account",
+                "audit",
+                &run_of(&harness, [balance, audit]),
+            )
+            .expect("builds");
+        let expected = format!(
+            "<<<assertion|{}|{FORBIDDEN_CHECK}|balance={balance};audit={audit}>>>",
+            harness.harness_path()
+        );
+        let ReplaySource::Witness(witness) = &replay.wire.source else {
+            panic!("a frame replay is a witness replay");
+        };
+        assert_eq!(witness.transcript(), expected);
+        assert_eq!(replay.packet.source, Some(replay.wire.source.clone()));
+    }
+}
+
+/// The playback of another harness, a playback with the wrong number of values and one with a
+/// wrong-width value each return a typed decode refusal carrying the decoder's cause, and the
+/// call site is not reached: the operation the unit does not name would otherwise be a
+/// `CallSite` refusal, as it is for the playback that decodes.
+///
+/// Trace: FR-024-AC-25, TC-035
+#[test]
+fn tc_035_a_playback_that_does_not_decode_is_refused_before_the_call_site() {
+    let twin = Twin::new();
+    let mut harness = frame_harness(&twin);
+    harness.scope.operation = "withdraw".to_owned();
+    let good = run_of(&harness, [5, 0]);
+    assert!(
+        matches!(
+            refused(replay_of(&twin, "withdraw", &good)),
+            FrameReplayError::CallSite(_)
+        ),
+        "the control reaches the call site"
+    );
+
+    let mut sibling = harness.clone();
+    sibling.module_symbol = ModuleSymbol::try_from("sibling_module").unwrap();
+    let other_harness = Run {
+        playback: playback_text(&sibling, FORBIDDEN_CHECK, &[5, 0]),
+        harness: harness.clone(),
+    };
+    let short = Run {
+        playback: playback_text(&harness, FORBIDDEN_CHECK, &[5]),
+        harness: harness.clone(),
+    };
+    let wrong_width = Run {
+        playback: good
+            .playback
+            .replacen("vec![5, 0, 0, 0, 0, 0, 0, 0]", "vec![5, 0, 0, 0]", 1),
+        harness: harness.clone(),
+    };
+    assert_ne!(wrong_width.playback, good.playback);
+    for (run, code) in [
+        (&other_harness, "cg_witness_harness_identity_mismatch"),
+        (&short, "kani_witness_arity_mismatch"),
+        (&wrong_width, "kani_witness_width_mismatch"),
+    ] {
+        let error = refused(replay_of(&twin, "withdraw", run));
+        let FrameReplayError::Decode(cause) = &error else {
+            panic!("{code}: {error}");
+        };
+        assert_eq!(cause.code, code, "{error}");
+    }
+}
+
+/// A decoded value at either end of its field's declared range is admitted, and the values one
+/// below and one above are refused naming the field and the value, before the call site (the
+/// operation the unit does not name would otherwise be a `CallSite` refusal).
+///
+/// Trace: FR-024-AC-26, TC-035
+#[test]
+fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints() {
+    let twin = Twin::new();
+    let harness = frame_harness(&twin);
+    assert_eq!(
+        harness
+            .domains
+            .iter()
+            .map(|domain| domain.field.as_str())
+            .collect::<Vec<_>>(),
+        harness.state_fields,
+        "every field of the fixture has a range, in draw order"
+    );
+    let mut unlocatable = harness.clone();
+    unlocatable.scope.operation = "withdraw".to_owned();
+    for (position, domain) in harness.domains.iter().enumerate() {
+        let at = |value: i64| {
+            let mut values = [0, 0];
+            values[position] = value;
+            values
+        };
+        for admitted in [domain.minimum, domain.maximum] {
+            let values = at(admitted);
+            let invocation =
+                twin.invocation("account", (values[0], values[1]), (values[0], values[1]));
+            twin.try_frame_replay(
+                "deposit",
+                &invocation,
+                "account",
+                "audit",
+                &run_of(&harness, values),
+            )
+            .unwrap_or_else(|error| panic!("{} = {admitted} is admitted: {error}", domain.field));
+        }
+        for outside in [domain.minimum - 1, domain.maximum + 1] {
+            let error = refused(replay_of(
+                &twin,
+                "withdraw",
+                &run_of(&unlocatable, at(outside)),
+            ));
+            assert!(
+                matches!(
+                    &error,
+                    FrameReplayError::OutOfDomain { field, value }
+                        if *field == domain.field && *value == outside
+                ),
+                "{} = {outside}: {error}",
+                domain.field
+            );
+        }
+    }
+}
+
+/// The pre snapshot the invocation names must hold the decoded values. The invocation of the
+/// playback's own pre state settles `reproduced-with-evaluated-witness`, `violation`, naming the
+/// written field; the invocation of a different pre state, in either field, is refused naming the
+/// field and both values.
+///
+/// Trace: FR-024-AC-27, TC-035
+#[test]
+fn tc_035_the_invocation_of_the_playbacks_own_pre_state_replays_and_another_is_refused() {
+    let twin = Twin::new();
+    let run = forbidden_run(&twin);
+    let own = twin.invocation("account", (5, 0), (6, 1));
+    let result = twin
+        .frame_replay(&own, "account", "audit", &run)
+        .replay()
+        .expect("the replay settles");
+    let ReplayResult::Witness(arm) = result.result() else {
+        panic!("a witness-sourced replay settles on the witness arm");
+    };
+    assert_eq!(
+        arm.settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+    assert_eq!(arm.category(), Category::Violation);
+    let Some(FrameChange::FieldWrite { field, .. }) = result.found().map(|found| &found.change)
+    else {
+        panic!("the replay found a field write: {:?}", result.found());
+    };
+    assert_eq!(field.as_str(), "audit");
+
+    for (pre, field, snapshot) in [((6, 0), "balance", 6), ((5, 1), "audit", 1)] {
+        let other = twin.invocation("account", pre, (6, 1));
+        let error = refused(twin.try_frame_replay("deposit", &other, "account", "audit", &run));
+        assert!(
+            matches!(
+                &error,
+                FrameReplayError::PreState(PreStateFault::Differs {
+                    field: named,
+                    decoded,
+                    snapshot: held,
+                }) if named == field && *held == snapshot && *decoded == if field == "balance" { 5 } else { 0 }
+            ),
+            "{pre:?}: {error}"
+        );
+    }
+}
+
+/// An invocation or pre snapshot that is not provided, is not of the shape `state_clause`
+/// writes, lacks the object, or lacks a field or holds a non-integer for it is refused naming what
+/// is missing. Every provided document here hashes to its digest (`Invocation::edited`
+/// re-addresses it), so these refusals are the tie's own.
+///
+/// Trace: FR-024-AC-27, TC-035
+#[test]
+fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name() {
+    let twin = Twin::new();
+    let run = forbidden_run(&twin);
+    let base = twin.invocation("account", (5, 0), (6, 1));
+    let fault = |invocation: &Invocation| {
+        let error = refused(twin.try_frame_replay("deposit", invocation, "account", "audit", &run));
+        match error {
+            FrameReplayError::PreState(fault) => fault,
+            other => panic!("not a pre-state refusal: {other}"),
+        }
+    };
+    assert_eq!(
+        fault(&base.without(INVOCATION_DOCUMENT)),
+        PreStateFault::InvocationNotProvided
+    );
+    // An invocation that does not name its pre snapshot or address its object is not the
+    // document `state_clause` writes.
+    for member in ["pre", "self"] {
+        assert_eq!(
+            fault(&base.edited(INVOCATION_DOCUMENT, |document| {
+                document.as_object_mut().expect("object").remove(member);
+            })),
+            PreStateFault::InvocationUnreadable,
+            "{member}"
+        );
+    }
+    assert!(matches!(
+        fault(&base.without(PRE_DOCUMENT)),
+        PreStateFault::PreNotProvided { .. }
+    ));
+    assert_eq!(
+        fault(&base.edited(PRE_DOCUMENT, |document| {
+            document["populations"] = json!("none");
+        })),
+        PreStateFault::PreUnreadable
+    );
+    assert_eq!(
+        fault(&base.edited(PRE_DOCUMENT, |document| {
+            document["populations"][0]["objects"][0]["key"] = json!("another");
+        })),
+        PreStateFault::ObjectMissing {
+            population: "ix://test/bank/accounts".to_owned(),
+            key: "account".to_owned(),
+        }
+    );
+    assert_eq!(
+        fault(&base.edited(PRE_DOCUMENT, |document| {
+            document["populations"][0]["objects"][0]["fields"]
+                .as_object_mut()
+                .expect("fields")
+                .remove("audit");
+        })),
+        PreStateFault::FieldMissing {
+            field: "audit".to_owned()
+        }
+    );
+    assert_eq!(
+        fault(&base.edited(PRE_DOCUMENT, |document| {
+            document["populations"][0]["objects"][0]["fields"]["balance"] =
+                json!({"integer": "five"});
+        })),
+        PreStateFault::FieldNotInteger {
+            field: "balance".to_owned()
+        }
+    );
+}
+
+/// A provided document whose bytes do not match the digest it is addressed by is QSL's refusal,
+/// with its own code, and not a pre-state refusal: the tie reads the documents only after QSL's
+/// request decode has checked them. The same replay over documents that hash to their digests
+/// builds.
+///
+/// Trace: FR-024-AC-27, TC-035
+#[test]
+fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_state_one() {
+    let twin = Twin::new();
+    let run = forbidden_run(&twin);
+    let base = twin.invocation("account", (5, 0), (6, 1));
+    for index in [INVOCATION_DOCUMENT, PRE_DOCUMENT] {
+        let mismatched = base.replaced(index, br#"{"unrelated":true}"#);
+        let error =
+            refused(twin.try_frame_replay("deposit", &mismatched, "account", "audit", &run));
+        assert!(
+            matches!(
+                &error,
+                FrameReplayError::Refused(refusal)
+                    if matches!(**refusal, ReplayRefusal::Request(_))
+            ),
+            "{index}: {error}"
+        );
+    }
+    twin.try_frame_replay("deposit", &base, "account", "audit", &run)
+        .map(|_| ())
+        .unwrap_or_else(|error| panic!("the matching documents build: {error}"));
+}
+
+/// A state field listed twice is refused: the decoder refuses the schema, and a record that lists
+/// one is not read as a frame identity.
+///
+/// Trace: FR-024-AC-23, TC-035
+#[test]
+fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
+    let twin = Twin::new();
+    let mut harness = frame_harness(&twin);
+    harness.state_fields = vec!["balance".to_owned(), "balance".to_owned()];
+    harness.property = StateFrameProperty::Frame {
+        granted: vec!["balance".to_owned()],
+        checked: vec!["balance".to_owned()],
+    };
+    let error = refused(replay_of(&twin, "deposit", &run_of(&harness, [5, 0])));
+    assert!(
+        matches!(
+            &error,
+            FrameReplayError::Decode(cause)
+                if cause.code == "cg_witness_schema_duplicate_binding" && cause.context == "balance"
+        ),
+        "{error}"
+    );
+
+    let generated = generate(&fixture(&Shape::HEALTHY)).frame;
+    let mut record: Value = serde_json::from_str(&generated.record.contents).expect("record");
+    record["identity"]["state_fields"] = json!(["balance", "balance"]);
+    let error = StateFrameIdentity::from_record(&record.to_string())
+        .expect_err("a repeated field is not a draw order");
+    assert!(
+        matches!(&error, StateFrameRecordError::RepeatedField { field } if field == "balance"),
+        "{error}"
+    );
+}
+
+/// A harness scoped to another operation than the one requested is a `ScopeMismatch` naming
+/// `operation`, before the call site (the requested operation the unit does not name would
+/// otherwise be a `CallSite` refusal). A harness whose anchor or frame is not the one the call
+/// site names is a `ScopeMismatch` naming that member after it.
+///
+/// Trace: FR-024-AC-28, TC-035
+#[test]
+fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_member() {
+    let twin = Twin::new();
+    let fixture = fixture(&Shape::HEALTHY);
+    let site = twin.operation_site("deposit").expect("located");
+    let aligned = frame_harness(&twin);
+
+    let error = refused(replay_of(&twin, "withdraw", &run_of(&aligned, [5, 0])));
+    assert!(
+        matches!(
+            &error,
+            FrameReplayError::ScopeMismatch { member: ScopeMember::Operation, harness, named }
+                if harness == "deposit" && named == "withdraw"
+        ),
+        "{error}"
+    );
+
+    // The fixture's own node ids are not the ones QSL names for the twin's compiled unit.
+    let unaligned = generate(&fixture).frame.identity;
+    let error = refused(replay_of(&twin, "deposit", &run_of(&unaligned, [5, 0])));
+    assert!(
+        matches!(
+            &error,
+            FrameReplayError::ScopeMismatch { member: ScopeMember::Anchor, harness, named }
+                if *harness == *fixture.anchor.digest && *named == site.anchor.to_string()
+        ),
+        "{error}"
+    );
+
+    let mut other_frame = aligned.clone();
+    other_frame.scope.frame = fixture.frame.clone();
+    let error = refused(replay_of(&twin, "deposit", &run_of(&other_frame, [5, 0])));
+    assert!(
+        matches!(
+            &error,
+            FrameReplayError::ScopeMismatch { member: ScopeMember::Frame, harness, named }
+                if *harness == *fixture.frame.digest && *named == site.frame.to_string()
+        ),
+        "{error}"
+    );
+    replay_of(&twin, "deposit", &run_of(&aligned, [5, 0])).expect("the aligned scope builds");
+}
+
+/// The anchor and frame nodes of the package QSL itself emits from the twin's unit
+/// (`call_site`'s package bytes, admitted by the model reader) have, as `CheckedNodeId`s, exactly
+/// the ids `call_site` names as the site's `anchor` and `frame`, and the anchor binds that frame:
+/// the node ids the generator reads from a package and the wire ids the replay requires are one
+/// id, with no rebase. The frame harness itself cannot yet be generated from this package: see
+/// `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`.
+///
+/// Trace: FR-024-AC-28, FR-024-AC-30, TC-035
+#[test]
+fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
+    let twin = Twin::new();
+    let (package, _) = twin.emitted_package("BalanceNeverDrops");
+    let site = twin.operation_site("deposit").expect("located");
+    let node_of = |form: &str| {
+        let found = package
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| &*node.node_tag == "state" && &*node.semantic_form == form)
+            .collect::<Vec<_>>();
+        let [only] = found[..] else {
+            panic!("one `{form}` node in the package, found {}", found.len());
+        };
+        only
+    };
+    let anchor = node_of("operation_anchor");
+    let frame = node_of("frame");
+    assert_eq!(*anchor.node_id.digest, *site.anchor.to_string());
+    assert_eq!(*frame.node_id.digest, *site.frame.to_string());
+    let bound_frame = anchor
+        .body
+        .get("members")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|member| member.get("name").and_then(Value::as_str) == Some("frame"))
+        .and_then(|member| member.pointer("/value/target/digest"))
+        .and_then(Value::as_str);
+    assert_eq!(bound_frame, Some(&*frame.node_id.digest));
+    // The hand-built fixture's ids are its own, which is why the tests rebase its scope.
+    let fixture_scope = generate(&fixture(&Shape::HEALTHY)).frame.identity.scope;
+    assert_ne!(*fixture_scope.anchor.digest, *anchor.node_id.digest);
+}
+
+/// The measured limit that keeps the end-to-end harness out of reach: the object type node QSL
+/// emits has an empty body (`members: []`), so the field-range reader the harness generator and
+/// the state-clause replay share (`field_range`, FR-015-AC-27), which reads a field's range from
+/// the object body's members, finds no member and refuses with `MemberAbsent`. A harness is
+/// therefore generated from the hand-built fixture package, whose object body has the members.
+///
+/// Trace: FR-015-AC-27, TC-025
+#[test]
+fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("the package holds the object type");
+    assert_eq!(
+        object
+            .body
+            .get("members")
+            .and_then(Value::as_array)
+            .map(Vec::len),
+        Some(0),
+        "QSL emits the object type with no members in its body"
+    );
+    let refusal = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect_err("no range is readable from the emitted object type");
+    assert!(
+        matches!(
+            refusal,
+            StateFrameRefusal::BoundNotResolved {
+                cause: BoundNotResolvedCause::MemberAbsent,
+                ..
+            }
+        ),
+        "{refusal}"
+    );
+}
+
+/// The frame envelope declares no domain: `declared_domains` is present and empty.
+///
+/// Trace: FR-024-AC-29, TC-035
+#[test]
+fn tc_035_the_frame_envelope_declares_no_domain() {
+    let twin = Twin::new();
+    let replay = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
+    assert_eq!(replay.packet.declared_domains, Some(Vec::new()));
 }
 
 // ---- kani lane ---------------------------------------------------------------
@@ -2261,13 +3206,14 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 }
 
 /// The forbidden frame counterexample Kani finds is executed natively, then replayed through
-/// QSL's `replay_frame`, which reproduces the violation on the forbidden field; the allowed
-/// effect's run replays as a frame the invocation respects.
+/// `FrameReplay::new` and `replay` from its harness's identity and its real playback text alone:
+/// no obligation identity and no transcript are supplied, the decoded pre state is tied to the
+/// invocation of the native run, and QSL reproduces the violation on the written field.
 ///
-/// Trace: FR-015-AC-32, TC-025
+/// Trace: FR-015-AC-32, FR-024-AC-30, TC-025, TC-035
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
-fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
+fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
     let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
 
@@ -2288,8 +3234,13 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
         (balance, audit),
         (account.balance, account.audit),
     );
+    let run = Run {
+        harness: twin.aligned(&forbidden.frame.identity, "deposit"),
+        playback: counterexample,
+    };
     let result = twin
-        .replay(&invocation, "account", "audit")
+        .frame_replay(&invocation, "account", "audit", &run)
+        .replay()
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
         panic!("a witness-sourced replay settles on the witness arm");
@@ -2305,8 +3256,20 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
         panic!("the replay found a field write: {:?}", result.found());
     };
     assert_eq!((object.as_str(), field.as_str()), ("account", "audit"));
+}
 
-    // ALLOWED: the granted write proves, and its run is a frame the invocation respects.
+/// The allowed effect proves, and its run replays as a frame the invocation respects. A verified
+/// harness yields no playback, so the run carries a hand-built one at the pre state `(5, 0)`; the
+/// forbidden counterexample is replayed from its real playback by
+/// `tc_035_real_kani_frame_counterexample_replays_through_qsl`.
+///
+/// Trace: FR-015-AC-32, TC-025
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
+    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::new();
+
     let allowed = generate_over(&fixture, "deposit");
     assert_eq!(prove(&allowed.frame), KaniRunOutcome::Verified);
     let mut account = subject::Account {
@@ -2315,8 +3278,10 @@ fn tc_025_real_kani_frame_counterexamples_replay_natively_through_qsl() {
     };
     subject::deposit(&mut account);
     let invocation = twin.invocation("account", (5, 0), (account.balance, account.audit));
+    let harness = twin.aligned(&allowed.frame.identity, "deposit");
+    let run = run_of(&harness, [5, 0]);
     let result = twin
-        .replay(&invocation, "account", "balance")
+        .replay(&invocation, "account", "balance", &run)
         .expect("the replay settles");
     let ReplayResult::Witness(arm) = result.result() else {
         panic!("a witness-sourced replay settles on the witness arm");

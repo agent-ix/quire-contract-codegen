@@ -13,9 +13,9 @@ type: TestMatrix
 | FR-016 | FR-016-AC-1 through FR-016-AC-5, FR-016-AC-8 through FR-016-AC-11, FR-016-AC-13, FR-016-AC-14 through FR-016-AC-23 | TC-026 | ✅ Covered |
 | FR-016 | FR-016-AC-6, FR-016-AC-7, FR-016-AC-12 | TC-026 | 🚧 Planned |
 | FR-016 | FR-016-AC-24 | TC-026 | ✅ Covered (IR-611); `tc_026_a_lock_repeating_a_dependency_is_refused` asserts QSL's `DuplicateIdentity` refusal (`invalid_package`) arriving as `DependencyLockError::Input`, with no duplicate check of this crate's own |
-| FR-024 | FR-024-AC-1 through FR-024-AC-10 | TC-035 | 🚧 Planned; no test of its own: `quire coverage --strict` stops flagging them only because TC-035 has tagged tests for AC-11 to AC-19 |
+| FR-024 | FR-024-AC-1 through FR-024-AC-10 | TC-035 | 🚧 Planned; no test of its own: `quire coverage --strict` stops flagging them only because TC-035 has tagged tests for AC-11 to AC-30 |
 | FR-024 | FR-024-AC-11 through FR-024-AC-19 | TC-035 | ✅ Covered (IR-460); `StateClauseReplay` in `replay/state_clause.rs`, asserted over QSL's own `replay_state_clause` and `call_site` for the QSL twin of the state-frame fixture; FR-024-AC-18 is a real-Kani test of the `kani` lane (`make kani`) |
-| FR-024 | FR-024-AC-20 through FR-024-AC-30 | TC-035 | 🚧 Planned (IR-459); the frame path's obligation identity, decoded witness, pre-state tie and scope tie; no test yet; FR-024-AC-30 is a real-Kani test of the `kani` lane |
+| FR-024 | FR-024-AC-20 through FR-024-AC-30 | TC-035 | ✅ Covered (IR-459); the frame path's one obligation identity (`replay/obligation.rs`), `state_fields` record, decoded witness, domain, pre-state and scope ties, asserted over QSL's own `call_site` and `replay_frame` for the QSL twin of the state-frame fixture; FR-024-AC-30 is a real-Kani test of the `kani` lane (`make kani`) |
 
 ## Test Case Summary
 

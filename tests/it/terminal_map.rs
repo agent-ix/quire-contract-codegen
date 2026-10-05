@@ -19,9 +19,9 @@ use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
     DependencyLockError, DocumentError, EvidenceFailureCause, FrameReplayError,
     KaniInconclusiveReason, KaniRunOutcome, LockedSource, ModelError, ObligationIdentityError,
-    OperationDeclaration, ReplayInputs, ReplayPackage, ReplayPackageError, ReplaySettlement,
-    ReplayVerdict, SpineReplayError, StateClauseReplay, StateClauseReplayError, StateFrameRefusal,
-    TerminalPairError,
+    OperationDeclaration, PreStateFault, ReplayInputs, ReplayPackage, ReplayPackageError,
+    ReplaySettlement, ReplayVerdict, ScopeMember, SpineReplayError, StateClauseReplay,
+    StateClauseReplayError, StateFrameRefusal, TerminalPairError,
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -342,6 +342,30 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
         FrameReplayError::Transcript(malformed()),
         FrameReplayError::Envelope(envelope),
         FrameReplayError::Name(empty_name),
+        FrameReplayError::NotAFrame,
+        FrameReplayError::FieldSetMismatch {
+            state_fields: vec!["a".to_owned()],
+            granted: Vec::new(),
+            checked: Vec::new(),
+        },
+        FrameReplayError::Decode(DecodeFailure {
+            code: "kani_witness_arity_mismatch".to_owned(),
+            source_id: String::new(),
+            context: String::new(),
+        }),
+        FrameReplayError::OutOfDomain {
+            field: "a".to_owned(),
+            value: 1,
+        },
+        FrameReplayError::PreState(PreStateFault::InvocationUnreadable),
+        FrameReplayError::ScopeMismatch {
+            member: ScopeMember::Frame,
+            harness: "h".to_owned(),
+            named: "n".to_owned(),
+        },
+        FrameReplayError::Identity(ObligationIdentityError::UnboundArgument {
+            argument: "a".to_owned(),
+        }),
     ];
     for error in &frame {
         check(error.into());

@@ -157,15 +157,17 @@ pub use kani::identity::{
     EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
     ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
     StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
-    StateFrameScope,
+    StateFrameRecordError, StateFrameScope,
 };
 pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
-pub use replay::frame::{FrameReplay, FrameReplayError, FrameReplayInputs, ProvidedDocument};
+pub use replay::frame::{
+    FrameReplay, FrameReplayError, FrameReplayInputs, PreStateFault, ScopeMember,
+};
 pub use replay::function::{
     replay_counterexample, replay_counterexample_through, replay_falsification, DependencyLock,
-    DependencyLockError, EvidenceFailureCause, LockedSource, ReplayInputs, ReplayPackage,
-    ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
+    DependencyLockError, EvidenceFailureCause, LockedSource, ProvidedDocument, ReplayInputs,
+    ReplayPackage, ReplayPackageError, ReplayParameter, ReplayVerdict, SpineReplayError,
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::state_clause::{
