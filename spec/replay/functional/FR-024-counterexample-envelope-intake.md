@@ -17,6 +17,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/FR-116
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-122
+    type: references
   - target: ix://agent-ix/quire-specification/FR-197
     type: references
   - target: ix://agent-ix/quire-specification/FR-312
@@ -30,7 +32,8 @@ When a counterexample is to be replayed, the code generator shall carry it to QS
 counterexample envelope (`qsl_replay::WitnessEnvelope`), keyed by QSL's `ObligationIdentity` and
 holding exactly one `qsl_replay::ReplaySource` arm. It shall validate every value against its
 declared domain before any replay, and shall replay only through `qsl_replay::replay`, or through
-`qsl_replay::replay_frame` for a frame counterexample.
+`qsl_replay::replay_frame` for a frame counterexample, or through
+`qsl_replay::replay_state_clause` for a postcondition state-clause counterexample.
 
 The envelope, the witness, the replay source, the FR-331 terminal record and the obligation
 identity type are QSL's, as the `qsl-replay` API defines them.
@@ -86,6 +89,24 @@ the partition of replay outcomes. This requirement owns what reaches QSL.
   the `Input` arm, keyed by parameter node id, and shall never build a `Witness` for it.
 - When a counterexample is a frame counterexample, the generator shall submit a
   `WitnessEnvelope<FrameCounterexample>` through `qsl_replay::replay_frame`.
+- When a counterexample is a postcondition state-clause counterexample, the generator shall
+  submit a `WitnessEnvelope<StateClauseCounterexample>` through
+  `qsl_replay::replay_state_clause`. It is the falsification of the operation-contract harness of
+  one `postcondition` state clause (FR-015-AC-26).
+- The generator shall return the result of `replay_state_clause` unchanged.
+- The generator shall set the state-clause payload's `clause` to the clause's declared name and
+  its `observation` to `ClauseSelectionInput::Invocation`.
+- The generator shall set the envelope's `clause_node` and `occurrence_key` to the `ClauseSite`
+  node and occurrence `qsl_replay::call_site` names for that clause, and shall repeat neither in
+  the payload (QSL FR-122).
+- The generator shall build the invocation document's pre snapshot from the decoded playback, as
+  the symbolic state the harness drew, and its post snapshot from a native run of the operation
+  over that pre state.
+- The generator shall give each snapshot every declared field of every object it names.
+- If the generator cannot supply a declared field's value, then it shall report a typed
+  `Incomplete` result naming the field and shall supply no default.
+- If the generator reports `Incomplete`, then it shall not call `replay_state_clause`.
+- Preconditions (`PreCall`) and invariants (`Current`) are not specified by this requirement.
 - Where the generator derives reduced candidates from a `Witness`-arm counterexample, it shall
   retain a candidate only as a new envelope, after both a backend re-run and native replay preserve
   domain validity and the failure.
@@ -111,6 +132,13 @@ the partition of replay outcomes. This requirement owns what reaches QSL.
 | FR-024-AC-8 | A retained reduced `Witness`-arm envelope carries its own backend re-run's transcript, never the original counterexample's. | Test (TC-035) |
 | FR-024-AC-9 | A reduced `Input`-arm candidate is retained only when native replay preserves domain validity and the verdict, and it is itself an `Input`-arm envelope. | Test (TC-035) |
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
+| FR-024-AC-11 | A postcondition state-clause counterexample is submitted as a `WitnessEnvelope<StateClauseCounterexample>` through `qsl_replay::replay_state_clause`, and the result the generator returns equals the result `replay_state_clause` returns for the same request and envelope. A verdict the generator composes itself, or a stub in place of `replay_state_clause`, changes the result and fails the test. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-12 | The state-clause payload's `clause` is the clause's declared name and its `observation` is the `Invocation` arm. The envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for that clause name. A clause name the unit does not declare is refused by the call site when the request is built, and no replay runs. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-13 | The invocation document's pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and its post snapshot holds the field values after a native run of the operation over that pre state. Both are supplied to the replay by their `sha256-jcs` digests, and changing one playback value changes the pre snapshot's digest. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-14 | A playback that binds no value for a declared state field is reported as a typed `Incomplete` result naming that field, `replay_state_clause` is not called, and no default value is supplied. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-15 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-16 | A postcondition counterexample with a value outside its declared domain is reported out-of-domain and `replay_state_clause` is not called. The endpoints of each declared domain are admitted, and the values immediately outside it are not. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-17 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. PLANNED (IR-460). | Test (TC-035) |
 
 A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
@@ -124,6 +152,11 @@ At this revision the generator meets none of these criteria in full:
 - The bounded-Kani corpus retains no counterexample packet, so no corpus counterexample reaches
   QSL as the `Input` arm and FR-024-AC-5 is unbacked.
 - No domain check runs before replay, and no `WitnessEnvelope` is built.
+- No state-clause counterexample is replayed: `src` has no consumer of
+  `qsl_replay::replay_state_clause` or of the `ClauseSite` selection, so FR-024-AC-11 to
+  FR-024-AC-17 are unbacked (IR-460). `qsl-replay` at the locked revision exports
+  `replay_state_clause`, `StateClauseCounterexample`, `StateClauseReplayResult`,
+  `ClauseSelectionInput`, `ClauseSite` and `ClauseName`.
 - Only the skeleton spine renders a QSL transcript (`src/replay/function.rs`), and it builds the
   request without an envelope.
 

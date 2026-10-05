@@ -187,7 +187,7 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
 
 | Question | Owner | Recommendation | Cost of the alternative |
 | --- | --- | --- | --- |
-| `call_site` selection for state clauses (`ClauseSite`) has no CG consumer | CG | Leave until a state-clause harness needs it. | none now |
+| `call_site` selection for state clauses (`ClauseSite`) has no CG consumer | CG | The IR-412 postcondition harness is the consumer: FR-024-AC-11 to FR-024-AC-17 (planned, IR-460) specify it. | none now |
 | The domain check before replay exists on the function path only | CG with QSL | CG keeps its own pre-check: a playback outside the harness's proof bound is a CG harness defect, and a QSL-side check of admitted values against `DeclaredDomain`, if QSL adds one, would report it as an invalid input and hide the defect. Do not drop the CG check on QSL's account. | Without CG's check a QSL refusal would hide a CG defect. |
 
 No compatibility layer is proposed or needed. If QSL changes the facade, CG changes its calls.
