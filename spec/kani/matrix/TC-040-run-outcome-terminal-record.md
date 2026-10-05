@@ -65,8 +65,11 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     value (FR-029-AC-15).
 15. The reproduced result is `Refuted`, the inconclusive result is `Inconclusive(ReplayParity)`
     carrying its cause, `Refused` and `CallSite` read as their QSL refusals do, and `Name`,
-    `Transcript`, `Envelope`, `Document`, `MissingField` and `OutOfDomain` are `Failed`, none
-    `Incomplete` (FR-029-AC-16).
+    `Transcript`, `Envelope`, `Document`, `MissingField`, `OutOfDomain` and
+    `UnsupportedOperationShape` are `Failed`, none `Incomplete` and none
+    `Inconclusive(ReplayRefused)`, and a non-fault `CallSiteRefusal` or
+    `DependencyLockError::Input` wrapped in `StateClauseReplayError` is
+    `Inconclusive(ReplayRefused)` with its code (FR-029-AC-16, FR-029-AC-13).
 
 ## Status
 

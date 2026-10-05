@@ -52,11 +52,15 @@ observation. State preconditions (`PreCall`) and invariants (`Current`) have no 
 obligation of this kind and are not specified here.
 
 The frame path (FR-024-AC-6) and the state-clause path fill the same `WitnessPacket` members from
-the same proving-run members. IR-459's frame-envelope work owns the shared packet-assembly piece,
-a module `src/replay/envelope.rs`, and the state-clause code builds on it once it has merged. The
-state-clause code does not edit `src/replay/frame.rs`. If the state-clause code lands first, it
-fills the packet inside its own module, and IR-459 then replaces that fill with the shared one in
-the same change that adds the module. No second shared module is introduced.
+the same proving-run members. The state-clause code keeps its packet assembly inside its own
+module and does not edit `src/replay/frame.rs`. Whichever of the frame-envelope code and the
+state-clause code lands second extracts the shared packet-assembly piece, in its own change; the
+one that lands first leaves it local.
+
+The state-clause path supports an operation that declares no parameter and no result, the shape
+of the single-`self` operation-contract harness. An operation that declares either is refused up
+front (FR-024-AC-19), because QSL checks the invocation document's `parameters` and `result`
+members against the operation's declaration in the domain package.
 
 ## Inputs
 
@@ -83,7 +87,9 @@ the same change that adds the module. No second shared module is introduced.
   - the state object's address (population, object key and object type), the `OperationName`, and
     one identity label (authority, identity, revision namespace and revision) for each of the
     invocation and its two snapshots, all supplied by the caller;
-  - each state field's declared integer range (FR-015-AC-27), read from the admitted package.
+  - each state field's declared integer range (FR-015-AC-27), and the operation's declared
+    parameters and result, read from the admitted package and the clause's node, which the
+    caller supplies.
 
 ## Outputs
 
@@ -157,15 +163,20 @@ the same change that adds the module. No second shared module is introduced.
   the caller's identity label, the model header of the supplied domain package, `context` the
   object type, `operation` the operation's name, `self` the object's population and key, `pre` and
   `post` each the snapshot's identity and `sha256-jcs` digest, `parameters` empty, `result` null
-  and `created` and `deleted` empty. The subject ABI takes `self` alone and returns nothing
-  (FR-015-AC-26), and the frame of a supported clause creates and deletes nothing (FR-015-AC-29),
-  so each of those four members is a consequence of the harness and not a placeholder. Whether the
-  operation declares a result is QSL's admission check, and a refusal there settles as
-  FR-029-AC-16 states.
+  and `created` and `deleted` empty. `parameters` and `result` are empty and null because the
+  supported operation shape declares neither (the Scope paragraph); `created` and `deleted` are
+  empty because the frame of a supported clause creates and deletes nothing (FR-015-AC-29).
+- If the operation the clause anchors declares a parameter or a result, then the generator shall
+  return `StateClauseReplayError::UnsupportedOperationShape` naming the operation and what it
+  declares, before it builds any document.
+- If the generator returns `StateClauseReplayError::UnsupportedOperationShape`, then it shall not
+  call `replay_state_clause`.
 - The generator shall encode each document and compute its `sha256-jcs` digest only through
   `core::canonical` (AD-004), the one RFC 8785 encoder, which gains the function that returns the
-  encoded bytes beside `content_digest`. The generator shall add no second encoder and no hashing
-  dependency to `[dependencies]`.
+  encoded bytes beside `content_digest`.
+- The generator shall add no second encoder, no hand-written key sorting or string escaping and no
+  hashing outside `core::canonical` to the state-clause module, and no hashing dependency to
+  `[dependencies]`.
 - If the playback binds no value for a declared state field, then the generator shall return
   `StateClauseReplayError::MissingField` naming the field and shall supply no default value.
 - If the generator returns `StateClauseReplayError::MissingField`, then it shall not call
@@ -200,7 +211,8 @@ the same change that adds the module. No second shared module is introduced.
 | FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name, and the payload's `clause` is that name and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node and occurrence. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-13 | The pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and the post snapshot holds the post-state value the caller supplied for it; each is one `complete` population holding one object with each field as an integer. The invocation document holds the members the Behavior bullets state, with `parameters` empty, `result` null and `created` and `deleted` empty, and its `pre` and `post` carry each snapshot's identity and `sha256-jcs` digest. Changing one playback value changes the pre snapshot's bytes and digest, and changing one post-state value changes the post snapshot's. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-14 | The documents' bytes are RFC 8785 text and each digest is the SHA-256 of those bytes as `core::canonical` computes it: a snapshot with an integer above 2^53 and members in non-sorted source order equals the canonical encoding, the source of the new state-clause module names neither `quire_canonical`'s encoder functions nor `sha2`, and `sha2` stays out of `[dependencies]`. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-14 | For a document vector whose members are in non-sorted source order, whose text holds characters JSON escapes (a quote, a backslash, a control character, a non-ASCII letter) and whose numeric members include a large integer, a number with a fractional part and an exponent form, the bytes and the digest the state-clause builder returns equal what `core::canonical`'s bytes and digest functions return for the same value. The source of the new state-clause module names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a `sort` call over document members or a hand-written string-escaping routine, and `sha2` stays out of `[dependencies]`. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` naming the operation and the declaration, build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. PLANNED (IR-460). | Test (TC-035) |
@@ -221,7 +233,7 @@ At this revision the generator meets none of these criteria in full:
 - No state-clause counterexample is replayed: `src` has no consumer of
   `qsl_replay::replay_state_clause` or of the `ClauseSite` selection, and no code under `src`
   builds an invocation or snapshot document (only `tests/state_frame_support/native_twin.rs`
-  does, with its own encoder), so FR-024-AC-11 to FR-024-AC-18 are unbacked (IR-460). `qsl-replay` at the locked revision exports
+  does, with its own encoder), so FR-024-AC-11 to FR-024-AC-19 are unbacked (IR-460). `qsl-replay` at the locked revision exports
   `replay_state_clause`, `StateClauseCounterexample`, `StateClauseReplayResult`,
   `ClauseSelectionInput`, `ClauseSite` and `ClauseName`.
 - Only the skeleton spine renders a QSL transcript (`src/replay/function.rs`), and it builds the

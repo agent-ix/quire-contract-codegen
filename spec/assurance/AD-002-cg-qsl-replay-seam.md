@@ -83,8 +83,10 @@ anywhere on this seam, and none is proposed.
   or `witness` module and no QSL dependency.
 - CG depends on `qsl-replay` and on IR; `qsl-replay` depends on the model crate through
   `qsl-package`. No cycle.
-- CG calls `qsl_replay::replay` and `replay_frame` only. No path takes a caller-supplied
-  executor.
+- CG calls `qsl_replay::replay`, `replay_frame` and `replay_state_clause` only. The function path
+  (`replay_counterexample_through`) and the state-clause path (`StateClauseReplay::replay_through`,
+  planned, IR-460) take a caller-supplied executor, which ends in the matching QSL function so a
+  caller can observe the request QSL receives; the frame path takes none.
 - The replay verdict is QSL's evaluation. CG supplies no value that decides it.
 
 ### Failure outcomes and who reports them
@@ -96,6 +98,8 @@ anywhere on this seam, and none is proposed.
 | A qualified name built from the operation's identifiers is not admitted (`FrameReplayError::Name`) | CG | typed refusal, no replay |
 | The frame witness transcript or the envelope CG built is not admitted (`FrameReplayError::Transcript`, `FrameReplayError::Envelope`, from `WitnessEnvelope::reconstruct`) | CG | typed refusal, no replay; CG built a value its own contract says QSL admits, so AD-003 maps it to a failure |
 | `replay` / `replay_frame` refuses the request or envelope | QSL (`ReplayRefusal`) | CG carries it unchanged in `Refused`; it is not a verdict on the evidence |
+| State-clause replay (planned, IR-460): a playback binds no value for a declared state field (`StateClauseReplayError::MissingField`), a state field lies outside its declared range (`OutOfDomain`), the operation declares a parameter or a result (`UnsupportedOperationShape`), a document is not encodable (`Document`), a name, transcript or envelope is not admitted (`Name`, `Transcript`, `Envelope`) | CG | typed error before any replay and no executor call; each carries no QSL code, so FR-029-AC-16 maps each to `Failed`, never `Incomplete` and never `Inconclusive(ReplayRefused)` |
+| State-clause replay (planned, IR-460): dependency selections not admitted or the clause not located (`StateClauseReplayError::Dependencies`, `CallSite`), or `replay_state_clause` refuses (`Refused`) | CG wrapping QSL | typed error, no result; read as the function and frame paths read the same refusals (FR-029-AC-13, FR-029-AC-16) |
 | Decoded value outside its declared domain (function path) | CG (`EvidenceFailureCause::Domain`) before any request is built | evidence failure; AD-003 link 7 maps it to a failure value, since it is CG's own defect and not a `ReplayRefusal` |
 | Replay ran and did not settle `ReproducedWithEvaluatedWitness` in category `violation` | QSL settles; CG partitions (`verdict_of`) | evidence failure with QSL's settlement and category |
 | A witness-sourced request settles on the input arm | CG (`WrongArm`) | typed refusal |
@@ -183,7 +187,7 @@ repository at the IR-321 subsystem layout, against the `qsl-replay` crate CG's l
   (`src/replay/witness.rs:116`) and decodes to `qsl_replay::WitnessValue`.
 - QSL's `call_site` accepts a `ClauseSite` selection and QSL has a state-clause replay entry
   (`replay_state_clause`); CG has no clause-replay entry in `src` yet. The IR-412 postcondition
-  harness is its consumer, specified by FR-024-AC-11 to FR-024-AC-18 and planned (IR-460).
+  harness is its consumer, specified by FR-024-AC-11 to FR-024-AC-19 and planned (IR-460).
 - AD-001's Replay view and Current state describe the same function-path facts. AD-001 is not
   edited here.
 

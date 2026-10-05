@@ -39,9 +39,10 @@ The replay settlement is the result of replaying the falsified run's counterexam
 - refused: `qsl_replay::replay` returned a `ReplayRefusal` that is not a fault, carrying that
   refusal's QSL catalog code (`ReplayRefusal::code()`);
 - fault: an `InternalFault` anywhere in the error the replay path returned;
-- CG defect: exactly the errors FR-029-AC-11 lists, which this repository raised and which carry no
-  QSL catalog code, including `ReplayPackageError::InvalidFunction` and
-  `FrameReplayError::Name`, and a replay that settled `ReproducedWithEvaluatedWitness` in a
+- CG defect: exactly the errors FR-029-AC-11 and FR-029-AC-16 list, which this repository raised
+  and which carry no QSL catalog code, including `ReplayPackageError::InvalidFunction`,
+  `FrameReplayError::Name` and the `StateClauseReplayError` variants `Name`, `Transcript`,
+  `Envelope`, `Document`, `MissingField`, `OutOfDomain` and `UnsupportedOperationShape`, and a replay that settled `ReproducedWithEvaluatedWitness` in a
   category other than `violation`. QSL proves `violation` for every replay, so no QSL result is
   that state; only this repository's public `EvidenceFailureCause::Verdict` can state it, which
   makes it a CG defect (FR-016-AC-13: never a reproduced failure);
@@ -49,7 +50,7 @@ The replay settlement is the result of replaying the falsified run's counterexam
   was falsified, that is not a `ReplayRefusal` returned by `qsl_replay::replay`, and that carries
   a QSL catalog code: a `CallSiteRefusal` other than `Fault` (code from `CallSiteRefusal::code()`)
   and `DependencyLockError::Input` (code from `DependencyInputRefusal::code()`), each bare or
-  wrapped in `ReplayPackageError` or `FrameReplayError`. A lock that repeats a dependency identity
+  wrapped in `ReplayPackageError`, `FrameReplayError` or `StateClauseReplayError`. A lock that repeats a dependency identity
   is one of these: QSL's `DependencyInput::new` refuses it as `DuplicateIdentity`, code
   `invalid_package` with cause `conflicting-definition`, and it arrives as
   `DependencyLockError::Input`.
@@ -142,8 +143,8 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   `QualifiedName::new` call passes a non-empty list.
 - The Kani adapter shall read the result and errors of the state-clause replay path (FR-024) as
   FR-029-AC-16 states, by the same rules as the frame path's `FrameReplayError`, and shall map
-  `StateClauseReplayError::{Name, Transcript, Envelope, Document, MissingField, OutOfDomain}` to
-  `Failed`.
+  `StateClauseReplayError::{Name, Transcript, Envelope, Document, MissingField, OutOfDomain,
+  UnsupportedOperationShape}` to `Failed`.
 - The Kani adapter shall read a `ReplayRefusal` wrapped in `SpineReplayError::Refused` or
   `FrameReplayError::Refused` as the refused or fault reading by its walked content, not as a CG
   defect. [AD-001](../../assurance/AD-001-codegen-architecture.md)'s failure view keeps each a
@@ -177,10 +178,10 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 | FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of `ReplayRefusal::Fault`, `ReplayRefusal::Admission(AdmissionFailure::Fault)`, `CallSiteRefusal::Fault`, `CallSiteRefusal::Fault` wrapped in `ReplayPackageError::CallSite`, and `CallSiteRefusal::Fault` wrapped in `FrameReplayError::CallSite`. | Test (TC-040) |
 | FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope` and `Name`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; a decode failure; and a replay reproduced in a category other than `violation`. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
-| FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
+| FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError`, `FrameReplayError` and `StateClauseReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. The `StateClauseReplayError` wrapping is planned (IR-460) and not yet backed. | Test (TC-040) |
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
 | FR-029-AC-15 | A falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-040) |
-| FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do (fault `Failed`, any other refusal `Inconclusive(ReplayRefused)` with its catalog code), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField` and `OutOfDomain` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, not resource outcomes, so neither maps to `Incomplete`. PLANNED (IR-460). | Test (TC-040) |
+| FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do (fault `Failed`, any other refusal `Inconclusive(ReplayRefused)` with its catalog code), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. PLANNED (IR-460). | Test (TC-040) |
 
 ## Dependencies
 
