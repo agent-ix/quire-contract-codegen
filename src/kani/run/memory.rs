@@ -8,6 +8,7 @@
 use std::{
     collections::BTreeMap,
     fs, io,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -69,13 +70,20 @@ impl MemoryObserver {
         // Reading a directory alone is insufficient: verify both ancestry and resident bytes.
         let processes = observer.processes()?;
         let own = std::process::id();
-        if !processes.iter().any(|process| process.pid == own) {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "procfs does not expose the caller's process",
-            ));
-        }
-        observer.resident_bytes(own)?;
+        let own_process = processes
+            .iter()
+            .find(|process| process.pid == own)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "procfs does not expose the caller's process",
+                )
+            })?;
+        observer
+            .resident_bytes(own, own_process.start)?
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Unsupported, "procfs caller identity changed")
+            })?;
         #[cfg(target_os = "linux")]
         {
             let pid = i32::try_from(own)
@@ -118,13 +126,14 @@ impl MemoryObserver {
         }
         let mut total = 0u64;
         let mut observed = false;
-        for pid in self.known.keys() {
-            match self.resident_bytes(*pid) {
-                Ok(bytes) => {
+        for (pid, start) in &self.known {
+            match self.resident_bytes(*pid, *start) {
+                Ok(Some(bytes)) => {
                     total = total.saturating_add(bytes);
                     observed = true;
                 }
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Ok(None) => {}
+                Err(error) if process_disappeared(&error) => {}
                 Err(error) => return Err(error),
             }
         }
@@ -176,15 +185,24 @@ impl MemoryObserver {
             }
             match fs::read_to_string(entry.path().join("stat")) {
                 Ok(text) => processes.push(parse_process(&text)?),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) if process_disappeared(&error) => {}
                 Err(error) => return Err(error),
             }
         }
         Ok(processes)
     }
 
-    fn resident_bytes(&self, pid: u32) -> io::Result<u64> {
-        let status = fs::read_to_string(self.root.join(pid.to_string()).join("status"))?;
+    fn resident_bytes(&self, pid: u32, start: u64) -> io::Result<Option<u64>> {
+        let directory = self.root.join(pid.to_string());
+        // Pin the status file before rechecking identity. A later pid reuse cannot redirect
+        // this open file to the replacement process; an exited process may instead yield ESRCH.
+        let mut status_file = fs::File::open(directory.join("status"))?;
+        let process = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+        if process.start != start {
+            return Ok(None);
+        }
+        let mut status = String::new();
+        status_file.read_to_string(&mut status)?;
         for line in status.lines() {
             if let Some(rss) = line.strip_prefix("VmRSS:") {
                 let mut words = rss.split_whitespace();
@@ -200,7 +218,7 @@ impl MemoryObserver {
                         "invalid procfs resident-memory unit",
                     ));
                 }
-                return kib.checked_mul(1024).ok_or_else(|| {
+                return kib.checked_mul(1024).map(Some).ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::InvalidData,
                         "procfs resident memory overflows bytes",
@@ -213,13 +231,18 @@ impl MemoryObserver {
             .lines()
             .any(|line| line.starts_with("State:") && line.split_whitespace().nth(1) == Some("Z"))
         {
-            return Ok(0);
+            return Ok(Some(0));
         }
         Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "procfs has no resident-memory value",
         ))
     }
+}
+
+fn process_disappeared(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::NotFound
+        || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error())
 }
 
 fn parse_process(text: &str) -> io::Result<Process> {
@@ -257,6 +280,39 @@ fn parse_process(text: &str) -> io::Result<Process> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn resident_memory_of_a_reused_pid_is_excluded_from_the_backend_sample() {
+        let root = crate::kani::test_support::discover_scratch("memory-pid-reuse");
+        let directory = root.join("42");
+        fs::create_dir(&directory).unwrap();
+        let mut fields = ["0"; 20];
+        fields[0] = "S";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        fs::write(
+            directory.join("stat"),
+            format!("42 (replacement) {}", fields.join(" ")),
+        )
+        .unwrap();
+        fs::write(directory.join("status"), "VmRSS:\t65536 kB\n").unwrap();
+        let observer = MemoryObserver {
+            root: root.clone(),
+            known: BTreeMap::new(),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        assert_eq!(observer.resident_bytes(42, 100).unwrap(), None);
+        assert_eq!(
+            observer.resident_bytes(42, 200).unwrap(),
+            Some(64 * 1024 * 1024)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     /// Trace: FR-028-AC-21.
     #[test]

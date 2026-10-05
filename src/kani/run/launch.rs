@@ -40,8 +40,8 @@ pub enum LaunchOutcome {
         text: String,
     },
     /// The budget elapsed before the process exited. The launcher's whole process group has been
-    /// killed and the launcher reaped; a descendant that left the group is not killed, and this
-    /// call does not wait for it.
+    /// killed and the launcher reaped. A bounded launch also kills observed descendants that
+    /// left the group; the wall-clock-only helper does not track those descendants.
     TimedOut,
     /// Observed aggregate resident memory exceeded the identity ceiling; the tree was killed.
     MemoryExhausted,
@@ -306,9 +306,7 @@ struct CaptureFlags {
     failed: Arc<AtomicBool>,
 }
 
-/// Polls the unreaped launcher, with memory checked before its exit or deadline is accepted.
-/// An exited launcher remains unreaped until the group has been signalled: otherwise its pid,
-/// the group id, could be recycled and a later signal could reach an unrelated group.
+/// The settled reason for stopping the unreaped launcher.
 enum WaitConclusion {
     Completed,
     TimedOut,
@@ -316,6 +314,9 @@ enum WaitConclusion {
     MemoryUnobserved { detail: String },
 }
 
+/// Polls the unreaped launcher, with memory checked before its exit or deadline is accepted.
+/// An exited launcher remains unreaped until the group has been signalled: otherwise its pid,
+/// the group id, could be recycled and a later signal could reach an unrelated group.
 fn wait_until(
     child: &Child,
     deadline: Option<Instant>,
