@@ -39,7 +39,9 @@ contract and named harness-defect terminal cause.
    correct oracle replacing the proved arithmetic mutation.
 5. Call QSL's scalar arm in the public consumer, then pass its result to the CG converter.
    Compare generated/exact divergence, agreement despite retained Kani falsification, a QSL
-   non-fault refusal and an executor fault. Change the actual generated arithmetic, not the
+   non-fault refusal and an executor fault. Check all four supported integer operators and
+   refuse an undefined/incomplete generated outcome as agreement; those outcomes do not
+   satisfy the current harness assertion. Change the actual generated arithmetic, not the
    claimed replay verdict. Error-path seam observations may use a recording/failing executor;
    the positive evaluation must use QSL and the actual generated artifact.
 6. Bind another scalar result/run to the first binding and require no settlement; repeat by
@@ -56,7 +58,7 @@ contract and named harness-defect terminal cause.
 | FR-032-AC-2 | Ordered actual playback decodes or gives a distinct typed refusal | Decode in alphabetic order, ignore another harness name or discard extra bytes |
 | FR-032-AC-3 | Operand endpoints and request operator/ranges/limits agree with the persisted harness/package | Skip a bound check, replace operator/node, use result bounds for a literal or swap operands |
 | FR-032-AC-4 | Same-proved-artifact observation is required and tied to operands/limits/content | Treat playback as a generated result or accept fresh regeneration that removes the mutation |
-| FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict or add unproved refusal-cause/accounting-counter equality |
+| FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current four-operator completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict, accept `Undefined`/`Incomplete` as agreement or add unproved refusal-cause/accounting-counter equality |
 | FR-032-AC-6 | Another scalar result/run yields no settlement for this binding | Remove the result/run-to-scalar binding check or omit result range/limits from it |
 | FR-032-AC-7 | Lowering divergence is `Failed`, agreement is named harness-defect `Inconclusive`, QSL refusal retains its code and faults are `Failed`; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Real routed QSL emission, Kani playback and proved-oracle observation exercise the seam; absent settlement refuses; expected result-range refusal is not a violation | Use a hand-built function harness, relabel expected refusal as falsification or synthesize absent settlement |

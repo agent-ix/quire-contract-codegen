@@ -111,6 +111,15 @@ it. The assertion compares no refusal-cause equality, admitted-charge sequence o
 counters. Those are not new equality obligations of this replay slice. The recorded limits
 remain inputs so the driver and QSL execute the same unlimited harness context.
 
+The current profile comprises only `quire.op.integer.add`, `quire.op.integer.sub`,
+`quire.op.integer.mul` and `quire.op.integer.negate` over the persisted `i64` operands.
+These operations are mathematically defined for every admitted operand vector. An observed
+`Undefined` therefore cannot agree with this profile; like `Incomplete` or an execution fault,
+it does not conform to the current harness's `_ => false` assertion and cannot become
+harness-defect agreement. A generic upstream undefined-agreement rule for other operators
+does not expand this profile. Adding an operator or another parity projection requires its
+own generation and replay acceptance criteria.
+
 `run_terminal_value` remains the terminal map. Its refusal of a falsified run with no settlement
 is already [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. CG-only
 setup defects carrying no QSL catalog code keep its `CgDefect`/`Failed` reading. QSL non-fault
@@ -125,7 +134,7 @@ is manufactured to stand in for the missing harness-defect cause.
 | FR-032-AC-2 | The builder decodes actual routed-harness playback in persisted symbolic call order through the Kani output adapter; another harness name, missing/extra operand, wrong byte width, over-limit playback or malformed assertion block yields a distinct typed refusal before replay. | Test |
 | FR-032-AC-3 | Each operand at its own lower or upper bound is admitted and the adjacent out-of-domain value is refused before replay. The admitted QSL inputs preserve the catalogued operator, operands, operand ranges, result range and harness limits. Another node/operation or altered operand schema refuses; a recorded literal remains a singleton-range operator operand. | Test |
 | FR-032-AC-4 | The driver's actual native observation of the proved generated oracle is required and tied to this operand vector, limits and canonical proof-content identity; missing observation, another artifact's observation or fresh regeneration that removes the arithmetic mutation refuses before QSL evaluation. Playback bytes and Kani falsification alone cannot supply a generated outcome. | Test |
-| FR-032-AC-5 | The public consumer executes the same proved generated artifact and invokes QSL between the builder and converter. QSL compares its actual native observation with authoritative exact operator evaluation using the current harness's completed-value/refused-outside-range projection, without adding refusal-cause or accounting-counter equality; changing the generated arithmetic while keeping original node/operator identity changes the measured parity result. No CG-local evaluator or replay verdict replaces QSL. | Test |
+| FR-032-AC-5 | The public consumer executes the same proved generated artifact and invokes QSL between the builder and converter. QSL compares its actual native observation with authoritative exact operator evaluation using the current four-operator completed-value/refused-outside-range projection, without adding refusal-cause or accounting-counter equality; changing the generated arithmetic while keeping original node/operator identity changes the measured parity result. `Undefined`, `Incomplete` and execution faults cannot be agreeing outcomes of this profile. No CG-local evaluator or replay verdict replaces QSL. | Test |
 | FR-032-AC-6 | The converter refuses another scalar binding's result/run with no settlement; changing only the claimed node, operation, operands, result range or limits cannot yield a settlement for the original binding. | Test |
 | FR-032-AC-7 | QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive` with the upstream named harness-defect cause; QSL non-fault refusal retains its catalog code and executor fault remains `Failed`. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
 | FR-032-AC-8 | The real QSL-emitted `x + 1` over `Int[0,9]` routed case exercises `generate_routed`, its scalar identity, actual Kani playback and same-proved-artifact native observation. Expected exact result-range refusal is not reported as a source violation. Omitting settlement yields `TerminalPairError::MissingSettlement` and no terminal value. | Test |
