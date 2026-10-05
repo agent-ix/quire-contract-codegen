@@ -443,7 +443,8 @@ pub enum UnsupportedFrameEffect {
 /// The six refusal arms of Contract IR's lowering record, and not its `Lowered` arm: a value of
 /// this type cannot hold a lowered node, so the mapping to a record has no row for one. Built
 /// from IR's record by an exhaustive `match` with no wildcard arm. The fields are IR's own public
-/// field types; IR's refusal and limit details are carried for the caller and never serialized.
+/// field types; IR's own refusal and incomplete records are carried for the caller and never
+/// serialized, and the limit kind is serialized by name beside `limit` and `consumed`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "arm", rename_all = "snake_case")]
 pub enum StateFrameLoweringRefusal {
@@ -493,8 +494,9 @@ pub enum StateFrameLoweringRefusal {
     Failed {
         /// The requested node.
         node_id: CheckedNodeId,
-        /// The limit that failed.
-        #[serde(skip)]
+        /// The limit that failed, serialized by its snake_case name so `limit` and `consumed` say
+        /// what they count.
+        #[serde(serialize_with = "serialize_limit_kind")]
         limit_kind: CheckedPackageLimit,
         /// The ceiling.
         limit: u64,
@@ -508,6 +510,21 @@ fn serialize_node_tag<S: Serializer>(
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(tag.as_wire())
+}
+
+/// The snake_case name of a lowering limit. Exhaustive, so a kind IR adds fails to compile here.
+fn serialize_limit_kind<S: Serializer>(
+    limit: &CheckedPackageLimit,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(match limit {
+        CheckedPackageLimit::Bytes => "bytes",
+        CheckedPackageLimit::Nodes => "nodes",
+        CheckedPackageLimit::Edges => "edges",
+        CheckedPackageLimit::Occurrences => "occurrences",
+        CheckedPackageLimit::Diagnostics => "diagnostics",
+        CheckedPackageLimit::Work => "work",
+    })
 }
 
 /// Why the single-clause state and frame engine produced no harness.
@@ -1088,7 +1105,7 @@ mod tests {
     /// arm maps to the disposition and reason of the table; a mutant that moves any one to
     /// another disposition or reason fails its row. The mapping is one `match` with no wildcard
     /// arm: `deny(clippy::wildcard_enum_match_arm)` rejects one under `make lint`, and the
-    /// inspection below reads the function's text.
+    /// inspection that follows this test parses the function.
     ///
     /// Trace: FR-015-AC-66, TC-025.
     #[test]
@@ -1137,20 +1154,75 @@ mod tests {
                 "refusal": {
                     "arm": "failed",
                     "node_id": {"domain": "quire.checked-semantic-node/v1", "digest": node(1).digest},
+                    "limit_kind": "work",
                     "limit": 10,
                     "consumed": 11,
                 },
             })
         );
+    }
 
-        // Inspection: the mapping is a `match` over the refusal with no wildcard arm.
-        let source = include_str!("outcome.rs");
-        let start = source
-            .find("pub(crate) fn state_frame_disposition(")
+    /// Whether a pattern matches everything its scrutinee holds: `_`, a bare binding, or an
+    /// alternative holding either.
+    fn is_catch_all(pattern: &syn::Pat) -> bool {
+        match pattern {
+            syn::Pat::Wild(_) => true,
+            syn::Pat::Ident(ident) => ident.subpat.is_none(),
+            syn::Pat::Or(alternatives) => alternatives.cases.iter().any(is_catch_all),
+            _ => false,
+        }
+    }
+
+    /// The patterns of every match arm under a function, however nested.
+    #[derive(Default)]
+    struct ArmPatterns(Vec<syn::Pat>);
+
+    impl<'ast> syn::visit::Visit<'ast> for ArmPatterns {
+        fn visit_arm(&mut self, arm: &'ast syn::Arm) {
+            self.0.push(arm.pat.clone());
+            syn::visit::visit_arm(self, arm);
+        }
+    }
+
+    /// The mapping is a `match` with no wildcard arm: the function is parsed, carries
+    /// `deny(clippy::wildcard_enum_match_arm)`, and none of its arms, at any depth, is `_` or a
+    /// bare binding. A mutant that drops the `deny`, or that folds explicit patterns into
+    /// `other => ...`, fails here.
+    ///
+    /// Trace: FR-015-AC-66, TC-025.
+    #[test]
+    fn tc_025_the_state_frame_mapping_has_no_wildcard_or_binding_arm() {
+        use syn::visit::Visit;
+        let file = syn::parse_file(include_str!("outcome.rs")).expect("this file parses");
+        let function = file
+            .items
+            .iter()
+            .find_map(|item| match item {
+                syn::Item::Fn(function) if function.sig.ident == "state_frame_disposition" => {
+                    Some(function)
+                }
+                _ => None,
+            })
             .expect("the mapping is in this file");
-        let body = &source[start..];
-        let body = &body[..body.find("\n}\n").expect("the mapping ends")];
-        assert!(body.contains("match refusal {"));
-        assert!(!body.contains("_ =>"), "the mapping has a wildcard arm");
+        let denied = function
+            .attrs
+            .iter()
+            .filter(|attribute| attribute.path().is_ident("deny"))
+            .filter_map(|attribute| match &attribute.meta {
+                syn::Meta::List(list) => Some(list.tokens.to_string()),
+                syn::Meta::Path(_) | syn::Meta::NameValue(_) => None,
+            })
+            .collect::<String>();
+        assert!(
+            denied.contains("wildcard_enum_match_arm"),
+            "the mapping must deny a wildcard arm: {denied:?}"
+        );
+        let mut arms = ArmPatterns::default();
+        arms.visit_item_fn(function);
+        assert!(arms.0.len() >= 14, "the visitor must see the arms");
+        assert!(
+            !arms.0.iter().any(is_catch_all),
+            "the mapping has a wildcard or binding arm"
+        );
     }
 }
