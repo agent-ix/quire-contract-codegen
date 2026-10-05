@@ -190,18 +190,17 @@ unsatisfiable requires as `cover_unsatisfied`.
     order, with `generate_state_frame_role` for the same clause and role (and, for a clause
     whose roles both succeed, `generate_state_frame_obligations`), source byte
     for byte (FR-015-AC-60).
-21. Read `requires_bound` for a field whose read is typed by a plain integer type (that read's
-    `result_type` as `unbounded_type`, FR-015-AC-78) and for a request whose lowering is a
+21. Read `requires_bound` for a field whose member references a plain integer type (that
+    member's `value.target` as `unbounded_type`) and for a request whose lowering is a
     requires-bound record (FR-015-AC-61).
 22. Read `unsupported` `NoFiniteEncoding` for a lowering unsupported-family record and
     `UnknownNodeKind` for a node that is not a `state_clause` (FR-015-AC-62).
 23. Read `unsupported` `StateFrameRefused`, never `NoFiniteEncoding`, for a negation, a literal
     comparison, an operator outside the six comparisons, a read through another parameter, two
     fields, two reads of one side, a frame that creates, deletes or grants a relationship or a
-    foreign field (naming the effect), a field read typed by a bound that is not an
-    `integer_range` and one whose endpoint is outside `i64`, a field whose reads name two types
-    (`ConflictingFieldReads`), a field no read names (`FieldNotRead`, reached only through the
-    mapping), an invariant clause, a clause with a malformed shape, a
+    foreign field (naming the effect), a member whose bound is not an `integer_range` and one
+    whose endpoint is outside `i64`, a member absent from the object, a member whose value is
+    not a reference, an invariant clause, a clause with a malformed shape, a
     frame granting every field and an over-budget lowering (FR-015-AC-63).
 24. Read `invalid_request` for an unparsable state path, an unparsable item subject path, an
     invalid state field name, a state lacking the clause's field, an absent node, a repeated
@@ -287,29 +286,39 @@ set by the code change's measurement and recorded here.
 ## State field ranges from the package QSL emits (planned, IR-624)
 
 37. Read each state field's range with `field_range` over the package QSL emits for the twin's
-    unit (`Twin::emitted_package`, object body empty) and over the hand-built fixture, and read
-    0 to 1000 for `balance` and for `audit` from both; read the generator's `domains` and the
-    state-clause replay's declared ranges for one package and find them equal; repeat over a
-    fixture whose object body is emptied and over one whose object body declares another range,
-    and read the range of the field's read each time (FR-015-AC-77).
-38. Over the fixture, give a field no read, two reads of two types, a plain integer type, a bound
-    that is not an `integer_range` and an endpoint beyond `i64`, and read `FieldNotRead`,
-    `ConflictingFieldReads`, `UnboundedType`, `NotIntegerRange` and `EndpointOutsideI64`, each
-    refusing the item when it is the clause's own field and mapping to the table's disposition.
-    Generate from the package QSL emits for a unit whose clauses read only `balance`, and read
-    `audit` in `state_fields` with no `domains` entry (FR-015-AC-78).
+    unit (`Twin::emitted_package`, a model declaration node, body empty) from the reads'
+    `result_type`, and over the hand-built fixture (an object with body members) from its body
+    member, and read 0 to 1000 for `balance` and for `audit` from both; read the generator's
+    `domains` and the state-clause replay's declared ranges for one package and find them equal;
+    make the emitted object's body non-empty and read that the reads are not used in place of
+    it (FR-015-AC-77, GATED on IR-627 or IR-628).
+38. Over the fixture, give a member and a read two types (`Member::RationalBound`,
+    `Member::WideRange`, `Member::Literal` with reads typed `Int[0, 1000]`) and read
+    `MemberDisagreesWithRead`; over an emitted package, give a model declaration node's field no
+    read and two reads of two types and read `FieldNotRead` and `ConflictingFieldReads`; read the
+    existing causes unchanged; each refuses the item when it is the clause's own field, and each
+    new cause maps to `unsupported`, `StateFrameRefused`. Generate from the package QSL emits for
+    a unit whose clauses read only `balance`, and read `audit` in `state_fields` with no
+    `domains` entry (FR-015-AC-78).
 39. Generate both roles of each of the twin's two clauses from the emitted package with no
     `Twin::aligned`, and read `state_fields` equal to the request's list in its order, the
-    ranges of step 37, and the anchor and frame ids equal to `call_site`'s with no rebase;
-    submit a list that omits the clause's field and one that omits a granted field and read the
-    refusals of FR-015-AC-29 (FR-015-AC-79).
+    ranges of step 37, and the anchor and frame ids of the generated identity equal to
+    `call_site`'s before any replay; submit a list that omits the clause's field and one that
+    omits a granted field and read the refusals of FR-015-AC-29 (FR-015-AC-79, GATED on IR-627
+    or IR-628).
 40. With the installed backend, run the healthy, debiting, granted-write and ungranted-write
     subjects against harnesses generated from the emitted package and read the outcomes of
-    FR-015-AC-30 and FR-015-AC-31 (FR-015-AC-80).
+    FR-015-AC-30 and FR-015-AC-31 (FR-015-AC-80, GATED on IR-627 or IR-628).
+41. Generate a harness with a field no read names and one whose read type is a plain integer, and
+    read `NoRead` and `TypeNotRange` in the two identities and their records, byte-identical on
+    regeneration (FR-015-AC-81).
 
-Steps 37 to 40 are planned. The pre-IR-624 test
+Steps 37 to 41 are planned. The pre-IR-624 test
 `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits` measures the refusal
-that the code change retires; it is replaced by step 37's test, not kept beside it.
+that the code change retires; it is replaced by step 37's test, not kept beside it. The code
+change also owes the edits FR-015's IR-624 section lists: three added causes and mapping arms
+(`outcome.rs`), their AC-66 mapping-test rows, a fixture for the emitted-package path, and the
+public re-export of `BoundNotResolvedCause` (`lib.rs`), an API break for an exhaustive `match`.
 
 ## Blocked
 
