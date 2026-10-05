@@ -169,7 +169,7 @@ members against the operation's declaration in the domain package.
 - If the operation the clause anchors declares a parameter or a result, then the generator shall
   return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and what it
   declares, before it builds any document. The shape is read from the caller's admitted package,
-  which is the package whose documents the byte provision carries.
+  while QSL's admission reads the documents provided in the byte provision.
 - If the generator returns `StateClauseReplayError::UnsupportedOperationShape`, then it shall not
   call `replay_state_clause`.
 - The generator shall encode each document and compute its `sha256-jcs` digest only through
@@ -217,7 +217,7 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. PLANNED (IR-460). | Test (TC-035) |
 | FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape is read from the admitted package the caller supplies, and the domain package document in the byte provision is the same package: a caller whose admitted package and provided document differ is not a case this check detects, and QSL's recompile refuses the stale `package_id` (QSL FR-098). The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents provided in the byte provision; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. PLANNED (IR-460). | Test (TC-035) |
 
 A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
