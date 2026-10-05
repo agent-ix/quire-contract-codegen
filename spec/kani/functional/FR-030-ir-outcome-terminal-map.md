@@ -142,7 +142,7 @@ has `Inconclusive` with `ReplayParity` and `ReplayRefused(Code)`, and `Declined 
 DeclineCode }`, whose `DeclineCode` has only its QSL catalog arm, `Qsl(Code)`. The map must send
 `Refused`, `InvalidInput` and `IncompleteInput` to `Declined`, so it must supply a `DeclineCode`,
 and IR's cause (for example `kani_identity_invalid`) is not a QSL catalog code and must never be
-spelled as one. The IR arm arrives with IR-605 and QSL-351, so every row of the table, and with it
+spelled as one. IR's typed code (IR-605) is merged in IR; the IR arm arrives with QSL-351, so every row of the table, and with it
 every criterion, waits on it: a map over only the other kinds would not be one `match` with no
 wildcard arm over `KaniOutcomeKind` (FR-030-AC-1, AC-7). The replay-settlement half of the map is
 already built for FR-029 (`ReplaySettlement` and its conversions) and this map reuses it
@@ -158,11 +158,13 @@ therefore limited to a lock whose only defect is the repeated identity.
 The `Declined` code. QSL ruled, relayed (a QSL ruling recorded by the planner on IR-605), that
 `Declined { cause, code }` carries the code in the registry that issued it: `code` is a
 `DeclineCode`, either a QSL catalog `Code` or IR's own registry code type. The map's input,
-Contract IR's `KaniOutcome` at the revision CG locks, is a kind plus IR's own cause string (for
-example `kani_identity_invalid` or `kani_population_incomplete`), which is not a QSL catalog
-`Code`. QSL takes IR's type, since it already depends on `quire-contract-model`: IR exports a typed
-code for its STD-001 registry from `quire-contract-model`, and `KaniOutcome.code` becomes that type
-instead of `String` (IR-605, IR lane, spec first). QSL-351 lands `DeclineCode` and its IR arm after
-IR's type merges. IR's incomplete population is not the replay's missing byte-provision input; the
-codes are distinct. FR-030-AC-2 asserts the cause only and stays cause-only until both land; this
+Contract IR's `KaniOutcome` at the revision CG locks (IR `dec8ade`), is a kind plus a
+`quire_contract_model::Std001Code` (for example `kani_identity_invalid` or
+`kani_population_incomplete`), which is not a QSL catalog `Code`. QSL takes IR's type, since it
+already depends on `quire-contract-model`: IR exports `Std001Code` from `quire-contract-model`
+(IR FR-044) and `KaniOutcome.code` is that type, not `String` (IR-605, merged). `Std001Code`
+guarantees the STD-001 code form only, not the issuing registry, so a code CG itself mints
+(`kani_corpus_identity_collision`) is a valid `Std001Code` that STD-001 does not list.
+QSL-351 lands `DeclineCode` and its IR arm. IR's incomplete population is not the replay's missing byte-provision input; the
+codes are distinct. FR-030-AC-2 asserts the cause only and stays cause-only until QSL-351 lands; this
 spec adds no code assertion to it.

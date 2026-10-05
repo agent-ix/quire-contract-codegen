@@ -365,17 +365,22 @@ pub struct BoundedCorpusCase {
 
 /// Why [`generate_bounded_kani_corpus_case`] emitted no case.
 ///
-/// Every refusal is a typed Contract IR [`KaniOutcome`], whether Contract IR's own lowering raised
-/// it or this module did. The second variant exists because `KaniOutcome::non_success` is fallible
-/// for the two kinds that carry a Boolean claim: this module only ever asks for `Refused` and
-/// `InvalidInput`, so [`BoundedCorpusError::OutcomeConstruction`] is not reachable from the code
-/// below, but it is a typed value and not a panic or a silently substituted outcome.
+/// A refusal is almost always a typed Contract IR [`KaniOutcome`] ([`BoundedCorpusError::Outcome`]),
+/// whether Contract IR's own lowering raised it or this module did. The other variant exists
+/// because `KaniOutcome::non_success` is fallible for the two kinds that carry a Boolean claim:
+/// this module only ever asks for `Refused` and `InvalidInput`, so
+/// [`BoundedCorpusError::OutcomeConstruction`] is not reachable from the code below, but it is a
+/// typed value and not a panic or a silently substituted outcome.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BoundedCorpusError {
     /// A typed non-success outcome; no artifact was emitted.
     Outcome(KaniOutcome),
     /// Contract IR refused to build a non-success outcome (`kani_outcome_invalid`); no artifact
     /// was emitted.
+    ///
+    /// CG cannot produce this today: it asks `KaniOutcome::non_success` only for `Refused` and
+    /// `InvalidInput`, and Contract IR exposes no infallible per-kind constructor to a consumer.
+    /// A caller that receives it should treat it as a defect in this crate.
     OutcomeConstruction(KaniOutcomeError),
 }
 
@@ -414,13 +419,24 @@ impl From<KaniOutcomeError> for BoundedCorpusError {
 impl std::fmt::Display for BoundedCorpusError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Outcome(outcome) => write!(f, "{}: {:?}", outcome.code, outcome.kind),
+            Self::Outcome(outcome) => write!(
+                f,
+                "{}: {:?} for source {:?} in context {:?}",
+                outcome.code, outcome.kind, outcome.source_id, outcome.context
+            ),
             Self::OutcomeConstruction(error) => error.fmt(f),
         }
     }
 }
 
-impl std::error::Error for BoundedCorpusError {}
+impl std::error::Error for BoundedCorpusError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Outcome(_) => None,
+            Self::OutcomeConstruction(error) => Some(error),
+        }
+    }
+}
 
 /// The two non-success kinds this module raises. Naming only these keeps a `proved` or
 /// `counterexample` request, the one input `KaniOutcome::non_success` refuses, unwritable here.
@@ -452,6 +468,10 @@ impl CorpusRefusal {
 }
 
 /// Generates the complete codegen corpus case from one already validated Contract IR input.
+///
+/// A refusal is a [`BoundedCorpusError`]: [`BoundedCorpusError::Outcome`] wraps the typed
+/// [`KaniOutcome`] described below, and [`BoundedCorpusError::OutcomeConstruction`] is Contract
+/// IR's refusal to build a non-success outcome, which this function cannot produce today.
 ///
 /// Contract IR performs profile/dispatch/finite-population validation and semantic lowering first.
 /// Consequently a refused, invalid, incomplete, or exhausted case returns its original typed
@@ -1166,6 +1186,25 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.code(), Std001Code::KANI_OUTCOME_INVALID);
         assert_eq!(error.outcome(), None);
+        assert!(
+            std::error::Error::source(&error).is_some(),
+            "the wrapped KaniOutcomeError is the error's source"
+        );
+        assert!(error.to_string().starts_with("kani_outcome_invalid"));
+        let refusal = super::BoundedCorpusError::from(
+            KaniOutcome::non_success(
+                KaniOutcomeKind::Refused,
+                std001_code!("kani_corpus_serialization_failed"),
+                "case-7",
+                "rev-9",
+            )
+            .expect("a Refused non-success is buildable"),
+        );
+        assert!(std::error::Error::source(&refusal).is_none());
+        assert_eq!(
+            refusal.to_string(),
+            "kani_corpus_serialization_failed: Refused for source \"case-7\" in context \"rev-9\""
+        );
         let outcome = KaniOutcome::counterexample("source", "r1");
         assert_eq!(
             super::BoundedCorpusError::from(outcome.clone()).outcome(),
