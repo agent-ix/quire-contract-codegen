@@ -488,38 +488,33 @@ unlanded):
   extends the limit to a node a tamperer places on a cycle. Verifying them waits on IR-630 (in-group
   re-derivation, FR-038-AC-150), which is blocked by QSL-638 (the owner on the v2 wire).
 
-An in-group node, in this crate's rule below, is a node of one of those six shapes that carries a
-`recursion_group`. This crate does not compute the names graph, so it does not decide which labelled node
-IR skips; the label is the test.
+The in-group limit does not touch IR-624's reads and is not an IR-624 requirement. IR-624's reads (a state
+field's range, FR-015-AC-77 to AC-81, and FR-024's) read an `integer_range` node or the accessor, which
+IR-627 verifies whatever label a node carries or which reads no node body, so they stay governed by the
+gate above; a node retagged to a skippable shape is not an `integer_range` and gives no range. The reads
+the limit does affect exist today and belong to FR-018 (the composite equality oracle), whose behavior
+this change specifies as FR-018-AC-24, planned and not gated on IR-630. IR-630 is what later lifts the limit,
+and then retires FR-018-AC-24 by an amendment that names the shapes IR verifies; it is not a precondition
+of the rule. Measured in this repository's source:
 
-- The generator shall not trust a range, a count or any other bound that it reads from an in-group node,
-  nor one read through the body `reference` or the `semantic_type` of an in-group node (an element type of
-  an in-group `option` or collection, the `collection_bounds` of an in-group collection), nor treat that
-  bound as verified (FR-015-AC-82).
-- If a read of a bound reaches an in-group node, then the generator shall settle the item `unsupported`,
-  never `supported` and never `requires_bound`, with a typed refusal that names the node and its
-  `recursion_group` label and reuses the cause family of the reading path; it shall invent no third
-  disposition (FR-015-AC-82). `requires_bound` is not used: the bound exists and is unverified, and a caller
-  cannot supply a bound that closes the gap, so the existing request for a bound would mislead. The
-  generator shall emit no harness, oracle or `domains` entry from that read.
-- The generator shall keep this rule until IR-630 has landed and this repository's specification has been
-  amended to name the verified shapes; a merge of IR-627's code does not lift it (FR-015-AC-82).
-- A range read through an `integer_range`, `boolean`, `integer` or `reference` node is outside this rule: it
-  is governed by the gate above, because IR-627 verifies those shapes whatever label they carry, and a node
-  retagged to a skippable shape is not an `integer_range` and gives no range.
-
-CG reads affected by the rule, measured in this repository's specification and source: the
-`collection_bounds` `min` and `max` and the element and payload type nodes of `option`, `sequence`, `set`,
-`bag` and `ordered_set` that FR-018's composite equality oracle reads (FR-018-AC-14, the declaration
-encoding of FR-018 "Inputs"), and the `collection_bounds` limits the scalar derivation reads to detect an
-unsatisfiable bound (`unsatisfiable` in `src/kani/generate/scalar.rs`). Not affected: the state field
-ranges of FR-015-AC-77 to AC-81 and of FR-024 (they read an `integer_range` node, or the accessor), the
-`integer_range` operand bounds of FR-014 and FR-015's scalar route, and a declaration that reaches itself,
-which FR-015's unsupported-shape table already settles `requires_bound`, `unbounded_type` (FR-015-AC-73).
-IR's stated open routes that are not in-group (a `value` or `parameter` node's `semantic_type`, an alias,
-record, tuple or union composite over a range, and a declared `bounded_domain`) stay open until IR's
-FR-038-AC-131 gate lifts; this rule places no new obligation for them and the existing GATED criteria keep
-that gate.
+- Affected: FR-018's composite equality oracle reads the element and payload type nodes of an `option`,
+  `sequence`, `set`, `bag` and `ordered_set` composite and the `collection_bounds` `min` and `max` it names
+  (FR-018-AC-14; `resolve_type` in `src/oracle/equality/mod.rs`). A refused FR-018 item reaches the Kani
+  route as FR-018's own refusal (FR-015-AC-73), so the Kani composite-equality path inherits the behavior.
+- Not affected: the `collection_bounds` read of `unsatisfiable` (`src/kani/generate/scalar.rs`; its callers
+  in `negotiate.rs` use it only to refuse a bound whose minimum exceeds its maximum, so a forged count can
+  cost an item and can never prove one), the `integer_range` operand bounds of FR-014 and FR-015's scalar
+  route, and the state field ranges above.
+- Precedence with FR-015-AC-73: the unsupported-shape row for a declaration that reaches itself (a recursive
+  record or tuple) settles `requires_bound`, `unbounded_type` (planned, FR-015-AC-73), and it shall run first on the Kani path, so a
+  `Tree` or `List` package of IR's FR-038-AC-145 settles `requires_bound` there and never reaches
+  FR-018-AC-24. FR-018-AC-24 is what the direct FR-018 entry returns for such a package, and what any path
+  returns for an in-group node that no recursive declaration reaches, for example IR's forged group
+  (FR-038-AC-148).
+- IR's stated open routes that are not in-group (a `value` or `parameter` node's `semantic_type`, an alias,
+  record, tuple or union composite over a range, and a declared `bounded_domain`) stay open until IR's
+  FR-038-AC-131 gate lifts; this change places no new obligation for them and the existing GATED criteria
+  keep that gate.
 
 The shared reader `field_range` separates two kinds of framed object:
 
@@ -718,7 +713,6 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | PLANNED (IR-624), GATED on IR-627 or IR-628. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in the request's order, its `domains` are the ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names for the operation, asserted on the generated identity before any replay; a request whose list omits the clause's field or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
 | FR-015-AC-80 | PLANNED (IR-624), GATED on IR-627 or IR-628. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 | FR-015-AC-81 | PLANNED (IR-624), GATED on IR-627 or IR-628. A harness whose state field has no range records that field and its reason in `StateFrameIdentity` and its persisted record: `NoRead` for a model declaration node's field no read names, and `TypeNotRange` for a field whose type is known and is no `i64` `integer_range`; the two reasons give different records, a regenerated harness from equal inputs has a byte-identical record, and a record naming a field twice is not read as an identity. | Test (TC-025) |
-| FR-015-AC-82 | PLANNED (IR-624), GATED on IR-630 (in-group re-derivation; IR-630 is blocked by QSL-638). Over a package whose `option`, `set`, `bag`, `sequence`, `ordered_set` or `collection_bounds` node carries a `recursion_group` (the `Tree` and `List` shapes of IR's FR-038-AC-145), a read of a bound from that node, or through its body `reference` or `semantic_type`, settles the item `unsupported` with a typed refusal naming the node and its label, never `supported` and never `requires_bound`, and emits no harness, no oracle and no `domains` entry from the read; the same read over the same node with its `recursion_group` removed is read as before; a `collection_bounds` node whose `max` was changed with its `node_id` kept (IR's FR-038-AC-148 mutation, with IR-627's stage as merged) settles `unsupported` and never carries the changed `max` into a harness; and a range read through an `integer_range` node, with or without a label, is not refused by this rule. Merging IR-627's code leaves the criterion as written. | Test (TC-025) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 
@@ -733,7 +727,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-75 | Mutate only the production oracle or only the shadow; or accept an equivalent mutant as the test of a check (a permutation of member order, or swapping two descriptors of one type). |
 | FR-015-AC-76 | Record `backed` for a covering criterion the matrix lists planned, omit `declaration_reconstruction`, or leave the identity unchanged when a bound changes. |
 
-### Mutations FR-015-AC-77 to FR-015-AC-82 detect
+### Mutations FR-015-AC-77 to FR-015-AC-81 detect
 
 | ID | Mutation that breaks it |
 |----|-------------------------|
@@ -742,7 +736,6 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | Emit the hand-built fixture's anchor or frame id in the identity, reorder `state_fields` by name or by body position, or give an unread field a range of the whole `i64` in `domains`. |
 | FR-015-AC-80 | Generate the harness from the hand-built fixture and not from the emitted package, so the test never reads the emitted shape. |
 | FR-015-AC-81 | Record no reason, record `NoRead` for a field whose type is known and not a range, or record both reasons alike. |
-| FR-015-AC-82 | Trust the bound of a labelled node because IR admitted the package; test the label only on the node read and not on the collection or option it was reached through; settle the item `requires_bound`, or `supported` with a harness, instead of `unsupported`; refuse by name a labelled `integer_range` that IR-627 verifies; refuse by shape and ignore the label; or lift the rule when IR-627's code merges. |
 
 ## Dependencies
 

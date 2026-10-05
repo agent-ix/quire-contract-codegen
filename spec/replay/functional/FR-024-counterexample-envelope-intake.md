@@ -420,7 +420,8 @@ FR-024-AC-11 to FR-024-AC-30:
   `field_range` as the generator, which reads an `integer_range` node (IR-627's stage verifies that
   shape whatever label it carries) or IR-628's accessor, so FR-024's range reads are not among the
   reads IR's stated in-group limit affects. That limit, a `recursion_group` node IR-627 skips, is
-  FR-015's rule (FR-015-AC-82, GATED on IR-630, which is blocked by QSL-638); FR-024 reads no
+  FR-018's rule (FR-018-AC-24, planned and not gated on IR-630, which later lifts the limit and is blocked
+  by QSL-638); FR-024 reads no
   collection bound and adds no criterion for it.
 - `FR-024-AC-1` to `FR-024-AC-10` are planned and have no test of their own. `quire coverage
   --strict` does not count them as unbacked (66 unbacked rows on `main` before IR-460; 44 on

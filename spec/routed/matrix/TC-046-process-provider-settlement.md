@@ -19,8 +19,11 @@ pass-through, generation yielding `KindOutput::Process` with no artifact (QSL AD
 
 ## Test Procedure
 
-1. Settle an item whose one candidate converts to `Process(id)` for two different ids, and call
-   `BackendKind::from_identity` with `kani` and with a plugin's identity.
+1. Settle an item whose one candidate is a descriptor with origin `Process` for two different ids, and call
+   `BackendKind::from_identity` with `kani` and with a plugin's identity. Settle the same items, as a single
+   candidate and as the named backend, with origin `Linked` and the same unknown identities, with a
+   `Linked` identity that reads like a plugin (a path, an executable name), and with a `Linked` descriptor
+   `kani` (FR-019-AC-17).
 2. Settle one item against two process-provider descriptors with equal advertised pairs, domains and bounds
    and different identity text, manifest position and ambient state, and compare the dispositions apart
    from the backend each names. Settle an item whose domain the descriptor does not advertise, and an item
@@ -38,7 +41,8 @@ pass-through, generation yielding `KindOutput::Process` with no artifact (QSL AD
 ## Expected Results
 
 1. The two settlements name their own ids; `from_identity("kani")` is `Some(Kani)` and the plugin identity
-   gives `None` (FR-019-AC-11).
+   gives `None` (FR-019-AC-11); the `Linked` rows settle `unknown-backend` and the `Linked` `kani` settles
+   in the Kani arm, single and named alike (FR-019-AC-17).
 2. The two dispositions are identical apart from the named backend, which is each descriptor's own
    identity; the unadvertised domain and the uncovered bound each settle `unsupported`, warned, with the
    FR-290 cause, and settle `supported` against the descriptor that advertises them (FR-019-AC-12).
@@ -58,7 +62,8 @@ FR-019-AC-14 is verified by analysis of the arm's `Disposition` return type, not
 |---|---|
 | `from_identity` returns `Process` for an unknown identity | step 1 |
 | The variant drops its id, or the arm names a fixed identity | step 1 |
-| The arm treats `Process("kani")` as `Kani` | steps 1 and 5 |
+| Process is inferred from an unknown identity, or the origin is ignored, or the named backend is classified by `from_identity` while the single candidate is classified by origin | step 1 |
+| A `Process("kani")` generation item is accepted | step 5 |
 | The disposition or cause depends on the identity text beyond echoing it as the named backend | step 2 |
 | The arm ignores the domains, or ignores the bounds | step 2 |
 | The arm starts or resolves the descriptor's identity as a process | step 3 |
@@ -67,9 +72,12 @@ FR-019-AC-14 is verified by analysis of the arm's `Disposition` return type, not
 | Generation emits a harness or artifact for a `Process` item, drops it, or requires a context for it | step 5 |
 | A `Process` arm panics, calls `unreachable!`, or falls into a wildcard | step 5 |
 | The `BackendKindDisagrees` check accepts `Process("kani")` or compares nothing for `Process` | step 5 |
+| Generation groups by `ALL` alone and drops a `Process` item, lists `Process` in `rejected`, or sorts it by an `index` the variant lacks | step 5 |
 
 ## Status
 
-Planned. The variant does not exist at this revision. QSL-637 answers FR-019's open questions 1, 2, 3, 5
-and 6; the cause for an unadvertised domain or bound waits on QSpec FR-290 (step 2), and the variant's
+Planned. The variant and the origin do not exist at this revision, and the origin is in QSL-637's amendment
+and not yet in QSL's spec or `qsl_route`. QSL-637 answers FR-019's open questions 1, 2, 3, 5 and 6; the
+cause for an unadvertised domain or an uncovered bound waits on QSpec FR-290, steps 2 and 4's domain,
+bound and covering rows wait on FR-019 open question 7 (the inputs and the predicate), and the variant's
 serialized label (open question 4) is open and asserted by no step.

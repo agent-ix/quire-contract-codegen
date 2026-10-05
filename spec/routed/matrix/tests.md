@@ -16,7 +16,7 @@ type: TestMatrix
 | FR-022 | FR-022-AC-16 | TC-033 | ⚠️ Partially covered; asserted on the harness-pairing function (`index_harnesses`), not through `generate_routed`, because unique name assignment makes the duplicate unreachable from the public entry |
 | FR-022 | FR-022-AC-6 | TC-033 | ⚠️ Partially covered; the out-of-range unwind and unparsable subject path refusals are asserted; the criterion's first example has no test |
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
-| FR-019 | FR-019-AC-11 through FR-019-AC-13, FR-019-AC-15, FR-019-AC-16 | TC-046 | 🚧 Planned (IR-629; QSL-637 answers the open questions except the variant's serialized label, and the unadvertised domain and bound cause waits on QSpec FR-290) |
+| FR-019 | FR-019-AC-11 through FR-019-AC-13, FR-019-AC-15 through FR-019-AC-17 | TC-046 | 🚧 Planned (IR-629; QSL-637 answers the open questions except the variant's serialized label; the origin it adds is not yet in QSL's spec; the unadvertised domain and uncovered bound cause waits on QSpec FR-290; the domain, bound and covering clauses wait on FR-019 open question 7) |
 | FR-019 | FR-019-AC-14 | Analysis | 🚧 Planned |
 | FR-022 | FR-022-AC-17 | TC-046 | 🚧 Planned (IR-629; the process-provider generation arm, `KindOutput::Process` with no artifact) |
 | FR-026 | FR-026-AC-1, FR-026-AC-4 | TC-037 | 🚧 Planned |
@@ -46,4 +46,4 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-022-AC-16, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-4 | 🚧 Planned |
-| TC-046 | Verify the process-provider backend kind settles from its manifest alone | Integration | P0 | FR-019-AC-11, FR-019-AC-12, FR-019-AC-13, FR-019-AC-15, FR-019-AC-16, FR-022-AC-17 | 🚧 Planned |
+| TC-046 | Verify the process-provider backend kind settles from its manifest alone | Integration | P0 | FR-019-AC-11, FR-019-AC-12, FR-019-AC-13, FR-019-AC-15, FR-019-AC-16, FR-019-AC-17, FR-022-AC-17 | 🚧 Planned |

@@ -179,6 +179,15 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     member names, presence and each integer leaf's inclusive bounds with the claim-map closure;
     then hand the check a closure that dropped a member, one whose bound was narrowed by one, and
     one that read an optional member as required, and read each fail.
+16. In-group refusal (FR-018-AC-24, planned). Over the `List` and `Tree` packages of Contract IR's
+    FR-038-AC-145, over the same `Tree` package with its `collection_bounds` `max` changed and its
+    `node_id` kept, and over the forged acyclic `Set<Int[0, 1000]>[0, 3]` group (set and bounds nodes
+    labelled `"x"`), request an equality through the direct entry, once reaching the labelled node as an
+    operand type, as a record member, as an option payload and as a collection element or bounds; read
+    `BlockedOnUpstream` with the node's id and form and the IR-630 blocker, no symbol for the item and
+    each unlabelled sibling generated unchanged; then remove the label from each and read the item
+    generate as before, and request an equality over a labelled `integer_range` node and read it not
+    refused by this rule.
 
 ## Expected Results
 
@@ -210,6 +219,9 @@ schedule the claim map records, in step 2.
 No vector produces `Refusal::ForeignReference`: reference operands are excluded,
 so `CheckedInvariant` from step 6 is the only run-time `Refused` a generated
 oracle here can yield.
+
+Step 16 (FR-018-AC-24) is planned and changes the `E_SELF` vector's expectation from generated to
+refused once the option in its group carries the label (FR-018's behavior section states the cost).
 
 Steps 13 to 15 (FR-018-AC-21 to FR-018-AC-23, IR-264) are planned and narrow the paragraph above
 for the shapes they cover: for a record, tuple or option over Boolean and bounded-integer leaves

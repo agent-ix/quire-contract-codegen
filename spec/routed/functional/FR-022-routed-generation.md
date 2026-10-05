@@ -230,21 +230,33 @@ kinds. For a routed `Process(id)` (FR-019) this section is the rule:
 - When an item's routed kind is `Process(id)`, the generator shall run the process-provider generation arm,
   which returns `KindOutput::Process` for the item with no artifact, no harness and no oracle, because
   the plugin receives the v2 package bytes and not generated code.
-- The process-provider generation arm shall be a typed pass-through that never panics, calls
-  `unreachable!` or refuses the call for the item's kind.
+- The process-provider generation arm shall be a typed pass-through.
+- The process-provider generation arm shall never panic, call `unreachable!` or refuse the call for the
+  item's kind.
 - If an item's routed kind is `Process(id)` and `BackendKind::from_identity` returns a kind for its
   routed backend's identity, or the identity differs from `id`, then the generator shall refuse the whole
   call with `BackendKindDisagrees`, as for any disagreement. A `Process("kani")` item is therefore
-  refused.
+  refused; under the registry's rules it cannot arrive (FR-019 "How CG learns..."), so this is a
+  fail-closed check and not `kani` conflict logic.
 - If an item's routed kind is `Process(id)`, `from_identity` returns `None` for its backend's identity and
-  the identity equals `id`, then the check passes.
+  the identity equals `id`, then the check shall pass.
 - The generator shall report a `Process` item once, in ascending request index, under its routed backend
-  and `KindOutput::Process`, and shall not require a `GenerationContexts` field for it.
+  and `KindOutput::Process`.
+- The generator shall not require a `GenerationContexts` field for a `Process` item.
 - A `Process` item shall change no other item's output, `claim_map` or `oracle_artifacts`.
+- The generator shall group the routed items by kind without reading `BackendKind::ALL` for the
+  `Process` items, so that a `Process` item is never dropped for being absent from `ALL`: today the loop
+  `for kind in BackendKind::ALL` forms the groups, and the code change gives the `Process` items their own
+  group.
+- The process-provider arm shall never reject its group, so `RoutedGeneration.rejected` (documented in
+  `BackendKind::ALL` order) never lists a `Process` kind and its order is unchanged for the built-in kinds.
+- The generator shall order `Process` items by the same sort key as every item, request index first and
+  then the routed backend; `BackendKind::index` is a tiebreak for built-in kinds only and has no value for
+  `Process`, which sorts after the built-in kinds at an equal request index and backend.
 
 The adapter, execution evidence and terminal record of a process provider are the driver's plugin host
-and typed FR-331 reader (QSL ADR-029 PL-7), not this crate's. The driver's conversion from a plugin
-`hello` to `Process(id)` is the QSL and driver contract this crate relies on (FR-019 "What QSL decided").
+and typed FR-331 reader (QSL ADR-029 PL-7), not this crate's. That a descriptor is a process provider is the
+origin QSL's registry sets and the driver carries, which this crate reads (FR-019 "How CG learns...").
 
 ## Acceptance Criteria
 
@@ -266,7 +278,7 @@ and typed FR-331 reader (QSL ADR-029 PL-7), not this crate's. The driver's conve
 | FR-022-AC-14 | `RoutedGeneration.oracle_artifacts` is `Some` after a Kani group and `None` when nothing is routed. It equals, byte for byte, the artifacts `generate_exact_scalar_oracles` returns over the derived items, so a group with no derivable node returns that call's artifacts for an empty item set. For `x + 1` over a parameter `Int[0, 9]`, each `Generated` claim's oracle symbol is defined in the returned `src/lib.rs` and appears in the supported harness's Rust source. | Test (TC-033) |
 | FR-022-AC-15 | The Kani arm routes the packages QSL emits for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]`, `x + y` over `Int[0, 9]` and `Int[10, 20]` into `Int[10, 29]`, and `-z` over `Int[0, 9]` into `Int[-9, 0]` (a literal as a reference to its own `value` node, the declared bound on a narrowing `conversion` consuming the plain-typed arithmetic node) to supported harnesses with arguments `[0, 9]` and `[1, 1]`; `[0, 9]` and `[10, 20]`; and `[0, 9]`, each asserting the result against the conversion's bound (`[0, 10]`, `[10, 29]`, `[-9, 0]`). In that shape a plain-Integer parameter beside a bounded one, and a reference to a `value` node whose body is not a literal, settle `requires_bound`, and a node narrowed to two distinct bounds is `oracle_refused` `AmbiguousBound`, none with a harness. | Test (TC-033) |
 | FR-022-AC-16 | Two Kani harnesses with one `harness_symbol` refuse the call as `DuplicateHarness` naming the second harness's `module::harness` path, and no harness is overwritten or dropped. | Test (TC-033) |
-| FR-022-AC-17 | PLANNED (IR-629). A routed `Process(id)` item whose backend identity is `id` yields exactly one `RoutedItemOutput` under that backend with `KindOutput::Process` and no artifact, harness or oracle, in ascending request index, beside a Kani item whose record, harness, `claim_map` and `oracle_artifacts` equal those of the same Kani item alone and need no context for the process item; a `Process("kani")` item and a `Process(id)` item whose identity differs from `id` each refuse the call as `BackendKindDisagrees` with nothing generated. A mutant arm that emits a harness or artifact for the item, drops the item from `items`, panics or calls `unreachable!`, or requires a `GenerationContexts` field for it fails the first; a check that accepts `Process("kani")` or compares nothing for `Process` fails the second. | Test (TC-046) |
+| FR-022-AC-17 | PLANNED (IR-629). A routed `Process(id)` item whose backend identity is `id` yields exactly one `RoutedItemOutput` under that backend with `KindOutput::Process` and no artifact, harness or oracle, in ascending request index (a `Process` item at the lowest request index, one between two Kani items and one at the highest each appear in that position, and `rejected` lists no `Process` kind), beside a Kani item whose record, harness, `claim_map` and `oracle_artifacts` equal those of the same Kani item alone and need no context for the process item; a `Process("kani")` item and a `Process(id)` item whose identity differs from `id` each refuse the call as `BackendKindDisagrees` with nothing generated. A mutant arm that emits a harness or artifact for the item, drops the item from `items` (as a grouping that reads only `ALL` does), lists `Process` in `rejected`, sorts it by an `index` the variant lacks, panics or calls `unreachable!`, or requires a `GenerationContexts` field for it fails the first; a check that accepts `Process("kani")` or compares nothing for `Process` fails the second. | Test (TC-046) |
 
 ## Dependencies
 

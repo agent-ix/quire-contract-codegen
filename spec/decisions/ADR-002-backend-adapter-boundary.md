@@ -96,8 +96,10 @@ variant. The QSL planner answered the questions the first version of this amendm
 (QSL-637, answered 2026-10-05; its PV-4 amendment was not on QSL `origin/main` when this was written):
 
 - The variant is `BackendKind::Process(BackendId)`. The plugin's identity is data inside the variant, and
-  `from_identity` keeps mapping the built-in identities only. The driver's pre-negotiation conversion
-  builds `Process(id)` for every descriptor that came from a plugin `hello`.
+  `from_identity` keeps mapping the built-in identities only. A descriptor carries a typed origin
+  (`Linked` or `Process`, set by QSL's registry builder at the one conversion from a plugin `hello`;
+  QSL-637's amendment of 2026-10-05, not yet in QSL's spec), and this crate's settlement maps origin
+  `Process` to `Process(id)` and infers it from nothing else.
 - Only negotiation is this crate's. Its arm checks the advertised (kind, mode) pairs, domains and bounds.
   Generation gives `KindOutput::Process` with no artifact, because the plugin receives the v2 package
   bytes. The adapter, execution and terminal record are the driver's plugin host and its typed FR-331
@@ -107,8 +109,9 @@ variant. The QSL planner answered the questions the first version of this amendm
   withdraws both. That is decided at registration in QSL, independent of order, and this crate keeps no
   logic for it.
 
-FR-019 and FR-022 state the criteria. Still open: the variant's serialized label, and the QSpec FR-290
-cause for an unadvertised domain or bound.
+FR-019 and FR-022 state the criteria. Still open: the variant's serialized label, the QSpec FR-290
+cause for an unadvertised domain or an uncovered bound, what carries the item's and the descriptor's
+domains and bounds and what "covers" means (FR-019 open question 7), and the origin landing in QSL.
 
 ## Consequences
 

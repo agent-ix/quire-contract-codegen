@@ -175,6 +175,37 @@ in the `NODE_KEY_DOMAIN` domain.
 - If the node belongs to the function family, or is an expression of form `call`,
   then the generator shall refuse it as blocked on quire-contract-runtime#34; the
   state, temporal and protocol families as blocked on quire-spec-language#121.
+- If the generator reads an `option`, `sequence`, `set`, `bag` or `ordered_set` composite node, or the
+  `collection_bounds` node a collection names, and that node carries a `recursion_group`, then it shall
+  refuse the item as `CompositeEqualityRefusal::BlockedOnUpstream`, with `unsupported_node_id` the
+  node's id, `node_tag` its form, and `issue` a new `UpstreamBlocker` member naming Contract IR's
+  in-group re-derivation (IR-630), and emit no code for the item (FR-018-AC-24).
+- The generator shall apply that test to every such node it reads, whether it is reached as an operand's
+  type, as a member's type or as the element, payload or bounds named by another such node.
+- The generator shall leave the siblings of a refused item unchanged.
+
+The refusal is IR's stated soundness limit (FR-038, "Stated soundness limit", FR-038-AC-148, measured in
+Contract IR `origin/main`): IR's decided stage skips, and so does not verify the key or the body of, such a
+node when it carries a `recursion_group`, lies on a cycle of the names graph and sits in a component whose
+every node carries that label, so a count, an element type or a payload type read through it rests on the
+package's producer. This crate does not compute that cycle test, so the label alone triggers the refusal.
+IR-630 (in-group re-derivation, blocked by QSL-638) is what later lifts the limit; it is not a precondition
+of the refusal, which stands from now. A node of the four shapes IR always verifies (`integer`, `boolean`,
+`integer_range`, `reference`) is outside the rule. No disposition is new: the
+direct entry returns `CompositeEqualityRefusal`, which has no item disposition, and a path that wraps it
+(FR-015-AC-73) carries that refusal and settles the item `unsupported`, as it does for any
+`BlockedOnUpstream`. `UpstreamBlocker` is a public enum matched exhaustively by its consumers, so the new
+member is an API break for them, like the three causes FR-015's IR-624 section adds.
+
+Cost, stated and open for the owner: the corpus case `E_SELF` of FR-018-AC-2
+(`{ next: Option<R_SELF> }`, whose record and option the test support builds in one group) is an item this
+rule refuses once its option carries a `recursion_group`, and QSL mints that label for any recursive record
+that reaches itself through an option or a collection (QSL FR-092). So until IR-630 the generator refuses
+equality over a recursive record that QSL emits, and the code change edits the `E_SELF` vector of
+FR-018-AC-2 (a partially covered criterion whose test it replaces by a refusal check), because FR-018-AC-2's text
+states agreement on admitted shapes and that shape stops being admitted. The alternative, to keep
+generating over such a node and state the limit only, is a product choice this specification does not make
+for the owner: see the PR.
 - If a node is unlowered, invalid, over its work limit, of a form other than
   `binary`, or disagrees with its descriptor's arity or operand types, then the
   generator shall refuse the item with a typed reason.
@@ -308,6 +339,7 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-21 | Each generated item's claim-map entry records its declaration closure as every declaration's key, form (record, tuple or option), members in declaration order with each member's name, presence and type, and each leaf's family and declared bound, and the closure equals member by member (name, presence, value type, order) the declarations of the `TypeEnvironment` the item's generated environment constructor returns, for every item of the TC-029 corpus whose leaves are Boolean or bounded integers. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-22 | For every pair of operand values in the item's refinement domain (FR-028-AC-16: every case where the domain fits the case cap, the boundary and seeded cases otherwise; every presence state of an option and of an optional field included) of an item whose leaves are Boolean or bounded integers, the generated oracle called with its own environment and a `Meter` whose every limit is `u64::MAX` returns `Outcome::Completed` with the verdict of QSpec FR-149 for the item's operator and admits exactly `equality.plan-form`, `equality.plan`, one `equality.pair` per node of the occurrence-pair tree, then `equality.result-retain`; no such pair returns `Refused` or `Incomplete`. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-23 | For every item of the TC-029 corpus whose leaves are Boolean or bounded integers, the claim-map closure's member names, presence and each integer leaf's inclusive bounds equal those of an independent read of the checked package (the V2 composite and `bounded_domain` nodes read through Contract IR's reader, never through the generator's reconstruction); a closure that dropped a member, narrowed a bound by one or read an optional member as required fails the check. PLANNED (IR-264). | Test (TC-029) |
+| FR-018-AC-24 | PLANNED (IR-624 follow-up; IR's stated in-group limit; not gated on IR-630, which later lifts it). An item whose operand type reaches an `option`, `sequence`, `set`, `bag` or `ordered_set` composite node, or a `collection_bounds` node, that carries a `recursion_group` is refused as `CompositeEqualityRefusal::BlockedOnUpstream` with `unsupported_node_id` that node's id, `node_tag` its form and `issue` the IR-630 blocker, with no function, environment constructor or symbol emitted for it and its siblings generated unchanged. The refusal holds for the labelled node reached as an operand type, as a record member's type, as the payload of an option and as the element or bounds of a collection; for a labelled `collection_bounds` node whose `max` was changed with its `node_id` kept (IR's FR-038-AC-148 mutation); for IR's forged group (an acyclic `Set<Int[0, 1000]>[0, 3]` whose set and bounds nodes are labelled `"x"`); and for the `Tree` and `List` packages of IR's FR-038-AC-145 through the direct entry. The same nodes with the label removed generate as before, and a labelled `integer_range` node is not refused by this rule. A mutant that tests only the composite node and not the `collection_bounds` node it names, tests only the operand type and not a member, payload or element, refuses by form and ignores the label, refuses every labelled node including `integer_range`, or lifts the refusal when IR-627's code merges, fails this. | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -346,6 +378,7 @@ without one is not written.
 | FR-018-AC-21 | Record the closure from a second reading of the package (a second reader that reads presence differently), so the shadow of FR-015 and the production oracle disagree on presence and each is correct against its own reading. Member order is not a mutant: a permutation changes no compared observable. |
 | FR-018-AC-22 | Refuse or stop a legal pair (an `absent` against a `null` slot, two `none`, a nested option) as `Refused(CheckedInvariant)`, charge one pair too many for a `some`/`some` option or too few for an unequal pair that stops early, or complete with the verdict of the other operator. |
 | FR-018-AC-23 | Check the closure against the generator's own reconstruction (the check of AC-21 alone), so a reader that narrows a bound or reads `T?` as `T` shrinks the shadow's domain, the refinement domain and the oracle's declaration together and every check agrees. |
+| FR-018-AC-24 | Read a labelled `collection_bounds` count, option payload or collection element as verified because IR admitted the package; test the label on the composite and not on the `collection_bounds` node it names, or not on a member, payload or element; refuse by form and ignore the label; refuse a labelled `integer_range`; or lift the refusal when IR-627's code merges. |
 
 ## Dependencies
 
