@@ -97,6 +97,45 @@ nothing says so.
   disposition.
 - The generator shall never surface `requires-bound` as a verification result.
 
+### The process-provider kind (QSL ADR-029 PV-4)
+
+- The generator shall give the closed backend kind one variant for process providers, beside `Kani`,
+  and shall list it in `BackendKind::ALL`.
+- The generator shall settle an item whose candidate is a process-provider backend in that variant's
+  `negotiate_*` arm, and in no other place.
+- The process-provider arm shall settle an item from the candidate's descriptor in the envelope manifest
+  and the item's extent classification alone.
+- The process-provider arm shall apply the advertised-mode rules above to that descriptor's advertised
+  (kind, mode) pairs, with the same dispositions and causes as every other arm.
+- The process-provider arm shall never call, start, open or otherwise reach the plugin that
+  descriptor stands for.
+- The process-provider arm shall return a negotiation disposition only, and shall never return a
+  terminal value, a verification result or an artifact.
+- The generator shall leave the mapping from a plugin `BackendId` to the process-provider variant to
+  the driver's pre-negotiation conversion, and shall do no plugin discovery of its own.
+
+Adding the variant breaks the public `BackendKind` enum for every exhaustive match outside this crate. The
+quire-driver lane's pre-negotiation conversion is the paired adaptation (QSL ADR-029 Amendments, ADR-012
+§7.2); this repository edits no other repository.
+
+Open questions for the QSL owner (PV-4 does not settle them, and the criteria that depend on each stay planned):
+
+1. PV-4 says the arm settles "against the item's extent classification, under QSpec FR-290's rules" from
+   "the advertised (kind, mode) pairs, domains and bounds". `BackendDescriptor` carries only (kind, mode)
+   pairs, and no FR-290 cause names a domain or bound mismatch. Does the manifest carry domains and
+   bounds to CG, and if so which disposition and cause does a mismatch settle? Until answered the arm
+   reads (kind, mode) pairs only (FR-019-AC-12).
+2. PV-4 says "The driver's pre-negotiation conversion maps every plugin `BackendId` to that variant".
+   `BackendKind::from_identity` resolves an identity string through each variant's one static
+   `identity()`, which a plugin's arbitrary `BackendId` cannot equal. Does the variant carry the
+   `BackendId`, does the envelope carry the kind beside each descriptor, or does `from_identity` change?
+   Until answered no criterion states how a candidate reaches the arm (FR-019-AC-11).
+3. PV-4 states "its arm settles" and says nothing of the variant's generation arm (FR-022), adapter
+   (FR-026), execution evidence or terminal-record map (FR-029). ADR-002 Q4 makes each match a compile
+   error until it has an arm, so each needs a stated arm. What do they do for a process provider?
+4. PV-4 does not name the variant or its serialized label. The label is public (`BackendKind`
+   serializes kebab-case).
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -109,10 +148,16 @@ nothing says so.
 | FR-019-AC-7 | An envelope whose `capability_vocabulary` is not exactly `quire.capability-kind/v1`, or is absent, is refused as `invalid_capability`/`unsupported-version` with none of its kinds read. | Test (TC-030) |
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |
+| FR-019-AC-11 | `BackendKind` has the process-provider variant beside `Kani`, `BackendKind::ALL` lists both with `index` returning each position, and an item whose one candidate is a process-provider backend reaches that variant's arm and settles there. Planned: how a candidate reaches the arm waits on open question 2. | Test (TC-046) |
+| FR-019-AC-12 | The process-provider arm settles from the descriptor's advertised (kind, mode) pairs and the extent classification alone: a bounded extent settles `supported`; an unbounded extent settles `supported` against an advertised `unbounded`, `requires-bound` against `bounded`-only with a finite bound available, and `unsupported` with `unsupported_projection`/`unbounded-extent` against `bounded`-only with none; it never narrows an extent. A mutant that settles an unbounded extent `supported` against `bounded`-only, or that settles `requires-bound` without a finite bound, fails this. Domains and bounds wait on open question 1. | Test (TC-046) |
+| FR-019-AC-13 | Settling a process-provider item calls no plugin: a descriptor whose identity names an executable that records its own start leaves no record, and the arm takes no argument from which a plugin can be reached. A mutant arm that starts the descriptor's identity as a process leaves the record and fails this. | Test (TC-046) |
+| FR-019-AC-14 | A process-provider item settled `supported` is the disposition `supported` naming the backend and nothing more: no terminal value, no verification result and no artifact comes from settlement, and no non-`supported` process-provider settlement routes. A mutant arm that returns any other disposition for a `bounded` extent that the manifest advertises, or that routes an `unsupported` item, fails this. | Test (TC-046) |
 
 ## Dependencies
 
 - **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), and the
   `quire-spec-language` registry that computes `candidates`.
-- **Downstream**: [TC-030](../matrix/TC-030-capability-settlement.md);
+- **Downstream**: [TC-030](../matrix/TC-030-capability-settlement.md),
+  [TC-046](../matrix/TC-046-process-provider-settlement.md); quire-driver's pre-negotiation
+  conversion (IR-609), the paired adaptation to the new variant, filed by the driver lane at merge;
   [FR-022](./FR-022-routed-generation.md), the generation arm of the same seam.
