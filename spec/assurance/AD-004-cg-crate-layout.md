@@ -341,9 +341,9 @@ Rules, each checkable:
   and its source text.
 - Inside `kani/generate/` the order is `outcome`, `record`, `census_validation`, then the families
   (`scalar`, `clause`, then `precondition` and `contract`, `frame`, `lower`, `corpus`, `v1_bundle`),
-  then `negotiate`, which imports `outcome`, `record`, `scalar`, `clause`, `precondition` and
-  `contract` (none of `frame`, `lower`, `corpus`, `v1_bundle` or `census_validation`) and is
-  imported by none. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
+  then `negotiate`, which imports `outcome`, `record`, `scalar`, `clause`, `precondition`, `contract`
+  and `frame` (the `StateFrame` arm of step 4d calls the frame family's role function; none of
+  `lower`, `corpus`, `v1_bundle` or `census_validation`) and is imported by none. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
   renders one item is its family's. `corpus` imports `lower` and `census_validation`; `v1_bundle`
   imports `census_validation`; `frame` imports `outcome` only. `kani/test_support.rs` is
