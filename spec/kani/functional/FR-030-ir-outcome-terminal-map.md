@@ -154,7 +154,7 @@ terminal value, so neither map applies to them.
 
 ## Status
 
-Implemented except FR-030-AC-10 (Linear IR-465, IR-358). `ir_outcome_terminal_value` in
+Implemented (Linear IR-465, IR-358). `ir_outcome_terminal_value` in
 `kani/terminal.rs` is the one `match` over the pair (`KaniOutcomeKind`, replay settlement), with no
 wildcard arm, built on `qsl-replay` at QSL `main` (the commit is informational; the lock names it): `TerminalValue` has `Inconclusive` with
 `ReplayParity` and `ReplayRefused(Code)`, and `Declined { cause, code: DeclineCode }`, whose
@@ -167,12 +167,10 @@ planner), that vacuity stays `Proved { success_checks: 0 }` and that a setup ref
 refutation is `ReplayRefused`, as [FR-029](./FR-029-run-outcome-terminal-record.md)'s Status
 states.
 
-FR-030-AC-10 stays planned and unbacked, for the reason FR-029-AC-10 does: its fault half names QSL's
-`InternalFault` wrappers, whose tests are not yet written. `qsl-replay` now re-exports
-`InternalFault` and it is constructible (QSL `main` bcca433, QSL #635), so a follow-up code change
-can back it. The CG-raised failures (the other half) and the
-`ReplaySettlement::Fault` reading are asserted by a test traced to TC-041 only, and carry no
-FR-030-AC-10 tag, so the criterion does not read as backed. It follows FR-029-AC-10.
+FR-030-AC-10 is backed: `tc_041_a_counterexample_with_a_fault_or_a_cg_defect_is_failed` builds each
+fault wrapper FR-029-AC-10 lists from QSL's constructible `InternalFault` (re-exported by
+`qsl-replay`, QSL `main` bcca433, QSL #635) and each CG-raised failure FR-029-AC-11 lists, and
+asserts `Failed` for a `Counterexample`. It follows FR-029-AC-10.
 
 When a lock has several defects, QSL's `DependencyInput::new` reports the first by its own order
 (libraries in supply order; for each, an empty identity, then a repeated identity, then a shared

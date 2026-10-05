@@ -60,9 +60,7 @@ cause, and that the map is one match with no wildcard arm.
 
 ## Status
 
-Implemented in `tests/it/terminal_map.rs` except step 9's fault half. Steps 1 to 8 and 10 to 13 run,
-and step 7's inspection is a `syn` test over `kani/terminal.rs`. Step 9 maps each CG-raised failure
-and `ReplaySettlement::Fault` in a test traced to TC-041 only: the fault wrappers FR-029-AC-10 lists
-name QSL's `InternalFault`, which `qsl-replay` now re-exports and can construct (QSL bcca433); the
-tests are buildable but not yet written.
-FR-030-AC-10 stays planned and carries no tag, so TC-041's trace does not back it.
+Implemented in `tests/it/terminal_map.rs`. Steps 1 to 13 run, and step 7's inspection is a `syn`
+test over `kani/terminal.rs`. Step 9 maps a `Counterexample` with `ReplaySettlement::Fault`, with
+each fault wrapper FR-029-AC-10 lists (built from QSL's constructible `InternalFault`, QSL
+bcca433), and with each CG-raised failure FR-029-AC-11 lists, in one test traced to FR-030-AC-10.

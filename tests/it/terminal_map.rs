@@ -7,11 +7,11 @@
 //! re-exports, so the `Declined` code arm is built through `qsl-replay` alone.
 
 use qsl_replay::{
-    std001_code, CallSiteRefusal, Category, ClauseName, Code, DeclineCode, DependencyInput,
-    DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause, FieldName,
-    FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, MalformedTranscript,
-    OperationName, PopulationName, ProofRefusalCause, QualifiedName, ReplayRefusal,
-    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
+    std001_code, AdmissionFailure, CallSiteRefusal, Category, ClauseName, Code, DeclineCode,
+    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
+    FieldName, FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, InternalFault,
+    MalformedTranscript, OperationName, PopulationName, ProofRefusalCause, QualifiedName,
+    ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
     StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
     Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
 };
@@ -402,14 +402,56 @@ fn reproduced_without_violation() -> EvidenceFailureCause {
     }
 }
 
-/// The fault reading is `Failed`. The QSL `InternalFault` fault wrappers are not yet tested
-/// (it is now constructible; a follow-up backs FR-029-AC-10), so FR-029-AC-10 is not tagged; the
-/// reading this crate owns is asserted all the same.
+/// Hands `check` the settlement of each fault wrapper the run-outcome map's fault criterion names,
+/// built from QSL's constructible `InternalFault`, and returns how many it handed over: the
+/// call-site fault's own reading (`ReplaySettlement::Fault`), `ReplayRefusal::Fault` and
+/// `ReplayRefusal::Admission(AdmissionFailure::Fault)` bare and as the cause of each replay
+/// error that wraps a `ReplayRefusal`, and `CallSiteRefusal::Fault` bare and wrapped in
+/// `ReplayPackageError`, `FrameReplayError` and `StateClauseReplayError`.
+fn for_each_fault(check: impl Fn(ReplaySettlement<'_>)) -> usize {
+    let fault = || InternalFault::new("replay", "broken");
+    // `ReplayRefusal` is not `Clone`, so each wrapper gets a fresh one.
+    let replay_faults: [fn() -> ReplayRefusal; 2] = [
+        || ReplayRefusal::Fault(InternalFault::new("replay", "broken")),
+        || {
+            ReplayRefusal::Admission(AdmissionFailure::Fault(InternalFault::new(
+                "admission",
+                "broken",
+            )))
+        },
+    ];
+    let call_site = || CallSiteRefusal::Fault(fault());
+    let mut exercised = 0;
+    let mut check = |settlement: ReplaySettlement<'_>| {
+        exercised += 1;
+        check(settlement);
+    };
+
+    check(ReplaySettlement::Fault);
+    for refusal in replay_faults {
+        check(ReplaySettlement::Refused(&refusal()));
+        check((&SpineReplayError::Refused(Box::new(refusal()))).into());
+        check((&FrameReplayError::Refused(Box::new(refusal()))).into());
+        check((&StateClauseReplayError::Refused(Box::new(refusal()))).into());
+    }
+    let bare = call_site();
+    check((&bare).into());
+    check((&ReplayPackageError::CallSite(Box::new(call_site()))).into());
+    check((&FrameReplayError::CallSite(Box::new(call_site()))).into());
+    check((&StateClauseReplayError::CallSite(Box::new(call_site()))).into());
+    exercised
+}
+
+/// The fault reading is `Failed` for every fault wrapper the criterion names, walked through the
+/// whole error, and a fault is neither `Refuted` nor a refusal carrying a code.
 ///
-/// Trace: TC-040
+/// Trace: FR-029-AC-10, TC-040
 #[test]
-fn tc_040_a_fault_settlement_is_failed() {
-    assert_eq!(map_settled(ReplaySettlement::Fault), TerminalValue::Failed);
+fn tc_040_a_fault_in_any_replay_wrapper_is_failed() {
+    let exercised = for_each_fault(|settlement| {
+        assert_eq!(map_settled(settlement), TerminalValue::Failed);
+    });
+    assert_eq!(exercised, 1 + 2 * 4 + 4, "every named wrapper is exercised");
 }
 
 /// Across every replay settlement other than reproduced, a falsified run is not `Refuted`, and a
@@ -1086,24 +1128,26 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
     );
 }
 
-/// Each failure this repository raises that carries no QSL catalog code settles a counterexample
-/// as `Failed`. The QSL `InternalFault` fault half of FR-030-AC-10 is not yet tested
-/// (it is now constructible; a follow-up backs it), so it is not tagged and the criterion stays
-/// planned.
+/// A counterexample settles as `Failed` with a fault walked through every wrapper the run-outcome
+/// map's fault criterion lists and with each failure this repository raises that carries no QSL
+/// catalog code.
 ///
-/// Trace: TC-041
+/// Trace: FR-030-AC-10, TC-041
 #[test]
-fn tc_041_a_counterexample_with_a_cg_defect_is_failed() {
+fn tc_041_a_counterexample_with_a_fault_or_a_cg_defect_is_failed() {
+    let faults = for_each_fault(|settlement| {
+        assert_eq!(
+            ir_outcome_terminal_value(&counterexample(), 3, Some(settlement)),
+            Ok(TerminalValue::Failed)
+        );
+    });
+    assert_eq!(faults, 1 + 2 * 4 + 4, "every named wrapper is exercised");
     for_each_cg_failure(|settlement| {
         assert_eq!(
             ir_outcome_terminal_value(&counterexample(), 3, Some(settlement)),
             Ok(TerminalValue::Failed)
         );
     });
-    assert_eq!(
-        map_ir_settled(ReplaySettlement::Fault),
-        TerminalValue::Failed
-    );
 }
 
 /// Across every replay settlement other than reproduced, a counterexample is not `Refuted`.
