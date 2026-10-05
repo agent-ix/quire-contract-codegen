@@ -187,7 +187,8 @@ unsatisfiable requires as `cover_unsatisfied`.
     implementation that stops at the first refusal reads one record and fails
     (FR-015-AC-59).
 20. Compare the `supported` records' harnesses, read from `state_frame_harnesses` in request
-    order, with `generate_state_frame_obligations` for the same clause and role, source byte
+    order, with `generate_state_frame_role` for the same clause and role (and, for a clause
+    whose roles both succeed, `generate_state_frame_obligations`), source byte
     for byte (FR-015-AC-60).
 21. Read `requires_bound` for a field whose member references a plain integer type (that
     member's `value.target` as `unbounded_type`) and for a request whose lowering is a
@@ -198,7 +199,8 @@ unsatisfiable requires as `cover_unsatisfied`.
     comparison, an operator outside the six comparisons, a read through another parameter, two
     fields, two reads of one side, a frame that creates, deletes or grants a relationship or a
     foreign field (naming the effect), a member whose bound is not an `integer_range` and one
-    whose endpoint is outside `i64`, an invariant clause, a clause with a malformed shape, a
+    whose endpoint is outside `i64`, a member absent from the object, a member whose value is
+    not a reference, an invariant clause, a clause with a malformed shape, a
     frame granting every field and an over-budget lowering (FR-015-AC-63).
 24. Read `invalid_request` for an unparsable state path, an unparsable item subject path, an
     invalid state field name, a state lacking the clause's field, an absent node, a repeated
@@ -214,14 +216,15 @@ unsatisfiable requires as `cover_unsatisfied`.
     directly, and reach `ResourceLimitExceeded` with a state-field list that passes the 1 MiB
     ceiling or build it directly. Inspect that the mapping is a `match` with no wildcard arm
     (FR-015-AC-66).
-27. Call the single-clause engine on a clause whose graph field name is not a Rust identifier,
-    on one with an operand node absent from the graph, and on a request whose caller-supplied
-    field name is not an identifier: read `MalformedClause`, `MalformedClause` and
-    `InvalidField` (FR-015-AC-67).
+27. Call the single-clause engine on a clause whose graph field name is not a Rust identifier
+    and on a request whose caller-supplied field name is not an identifier: read
+    `MalformedClause` and `InvalidField` (FR-015-AC-67).
 28. Negotiate a clause whose frame grants every field in both roles, one whose condition is a
     negation in both roles, and one whose lowering is refused in both roles: read `frame`
     `unsupported` with `contract` `supported`, `contract` `unsupported` with `frame`
-    `supported`, and both alike (FR-015-AC-68).
+    `supported`, and both alike, comparing each `supported` harness with
+    `generate_state_frame_role` and reading `generate_state_frame_obligations` return the
+    refusal of the failing role (FR-015-AC-68).
 
 The first code change backs steps 26 and 27, the second steps 19 to 25 and 28.
 

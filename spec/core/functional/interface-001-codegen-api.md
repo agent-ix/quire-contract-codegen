@@ -106,6 +106,10 @@ operations:
     inputs: [StateFrameRequest]
     output: StateFrameObligations | StateFrameRefusal
     semantics: from one postcondition state_clause of an admitted CheckedPackageV2 over one integer field, returns one operation-contract harness and one frame-effect harness of the clause's operation, each with a scoped identity and one non-vacuity cover; every other shape is a typed refusal with no harness (FR-015-AC-26 to FR-015-AC-29); returns on the first refusal of its one clause, and the StateFrame item of negotiate_kani_obligations is how a package gets a disposition per clause (IR-461; AD-004 step 4d retires this entry as public)
+  - name: generate_state_frame_role
+    inputs: [StateFrameRequest, StateFrameRole (contract | frame)]
+    output: StateFrameHarness | StateFrameRefusal
+    semantics: planned (IR-461, FR-015-AC-60, FR-015-AC-68). Builds the harness of one role of the clause or returns that role's first refusal, so a clause whose roles differ gives one harness and one refusal; the StateFrame item of negotiate_kani_obligations calls it once per item, and generate_state_frame_obligations returns both roles' harnesses when both succeed and otherwise the first refusal
   - name: execute_kani_obligation
     inputs: [KaniExecutionRequest, whose harness is a KaniExecutableHarness: Contract, Scalar or StateFrame]
     output: KaniExecutionEvidence | KaniExecutionRefusal
