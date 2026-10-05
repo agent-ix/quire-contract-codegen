@@ -26,9 +26,9 @@ pub enum ReplaySettlement<'a> {
     Reproduced,
     /// The replay settled `Inconclusive`, with QSL's typed cause.
     Disagreement(&'a DisagreementCause),
-    /// `qsl_replay::replay` returned a refusal. The refusal is read by QSL's own rule
-    /// ([`TerminalValue::from_replay_refusal`]): a fault is `Failed`, any other refusal is
-    /// `Inconclusive` carrying the refusal's catalog code.
+    /// `qsl_replay::replay`, `replay_frame` or `replay_state_clause` returned a refusal. The
+    /// refusal is read by QSL's own rule ([`TerminalValue::from_replay_refusal`]): a fault is
+    /// `Failed`, any other refusal is `Inconclusive` carrying the refusal's catalog code.
     Refused(&'a ReplayRefusal),
     /// A refusal of the replay setup on data, reached after the run was falsified, that is not a
     /// `ReplayRefusal`: a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`. The code
@@ -37,7 +37,10 @@ pub enum ReplaySettlement<'a> {
     /// An internal fault of QSL's call-site facade (`CallSiteRefusal::Fault`).
     Fault,
     /// A failure this repository raised that carries no QSL catalog code: the replay could not
-    /// be built or read, or its result cannot be read as a reproduction or a disagreement.
+    /// be built or read, its result cannot be read as a reproduction or a disagreement, the
+    /// playback lacks a state field or lies outside its declared range, or the operation has a
+    /// shape the state-clause replay does not support (FR-029-AC-16). None is a QSL data refusal,
+    /// so none is `Incomplete` or `Inconclusive(ReplayRefused)`.
     CgDefect,
 }
 

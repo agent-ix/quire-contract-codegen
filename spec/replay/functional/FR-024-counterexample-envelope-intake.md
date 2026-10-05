@@ -178,10 +178,25 @@ members against the operation's declaration in the domain package.
 - The generator shall add no second encoder, no hand-written key sorting or string escaping and no
   hashing outside `core::canonical` to the state-clause module, and no hashing dependency to
   `[dependencies]`.
-- If the playback binds no value for a declared state field, then the generator shall return
-  `StateClauseReplayError::MissingField` naming the field and shall supply no default value.
-- If the generator returns `StateClauseReplayError::MissingField`, then it shall not call
-  `replay_state_clause`.
+- The generator shall take the state fields to be the members of the framed object type that the
+  clause's anchor names, read from the supplied admitted package by the reader the harness
+  generator uses (FR-015-AC-27), so the generator and the replay read one range per field. Where
+  a field's member declares no integer range, the generator shall carry the field as an integer in
+  both snapshots, shall not range-check it and shall give it no `DeclaredDomain`.
+- If the playback or the post state binds no value for a declared state field, then the generator
+  shall return `StateClauseReplayError::MissingField` naming the field and shall supply no
+  default value.
+- If the playback or the post state binds a name that is not a declared state field, then the
+  generator shall return `StateClauseReplayError::UndeclaredField`, and if either binds a state
+  field more than once, then the generator shall return `StateClauseReplayError::DuplicateField`,
+  each naming the field.
+- If the generator returns `StateClauseReplayError::MissingField`, `UndeclaredField` or
+  `DuplicateField`, then it shall not call `replay_state_clause`.
+- The generator shall take the model header from the one supplied domain package whose identity
+  owns the state object's type address (`ix://<identity>/<name>`) and which is addressed by a
+  `sha256-jcs` digest, and shall return `StateClauseReplayError::Document` with a distinct
+  `ModelError` for an unreadable package, a package under another digest domain, a type that is
+  no address, a type no package owns and a type more than one package owns.
 - When the generator returns a state-clause replay result or error, the Kani adapter shall read
   it as FR-029-AC-16 states.
 - Where the generator derives reduced candidates from a `Witness`-arm counterexample, it shall
@@ -209,36 +224,53 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-8 | A retained reduced `Witness`-arm envelope carries its own backend re-run's transcript, never the original counterexample's. | Test (TC-035) |
 | FR-024-AC-9 | A reduced `Input`-arm candidate is retained only when native replay preserves domain validity and the verdict, and it is itself an `Input`-arm envelope. | Test (TC-035) |
 | FR-024-AC-10 | No type named `Witness`, `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` or `ObligationIdentity` is defined under `src/`, and no source file under `src/` imports any of them from `quire_contract_ir`. | Test (TC-035) |
-| FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name, and the payload's `clause` is that name and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node and occurrence. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-13 | The pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and the post snapshot holds the post-state value the caller supplied for it; each is one `complete` population holding one object with each field as an integer. The invocation document holds the members the Behavior bullets state, with `parameters` empty, `result` null and `created` and `deleted` empty, and its `pre` and `post` carry each snapshot's identity and `sha256-jcs` digest. Changing one playback value changes the pre snapshot's bytes and digest, and changing one post-state value changes the post snapshot's. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-14 | For a document vector whose members are in non-sorted source order, whose text holds characters JSON escapes (a quote, a backslash, a control character, a non-ASCII letter) and whose numeric members include a large integer, a number with a fractional part and an exponent form, the bytes and the digest the state-clause builder returns equal what `core::canonical`'s bytes and digest functions return for the same value. The source of the new state-clause module names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a `sort` call over document members or a hand-written string-escaping routine, and `sha2` stays out of `[dependencies]`. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. PLANNED (IR-460). | Test (TC-035) |
-| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents provided in the byte provision; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. PLANNED (IR-460). | Test (TC-035) |
+| FR-024-AC-11 | `StateClauseReplay::replay` returns exactly the `StateClauseReplayResult` that `qsl_replay::replay_state_clause` returns when a test calls it directly with the same request and envelope, for a violating run and for a respecting run, and the two results differ from each other. `StateClauseReplay::replay_through` hands the executor the request and envelope it built and returns the executor's value as it is: an executor returning a sentinel result changes the returned result to that sentinel. | Test (TC-035) |
+| FR-024-AC-12 | The state-clause envelope's `clause_node` equals the `ClauseSite` node, and its `occurrence_key` the `ClauseSite` occurrence, that `qsl_replay::call_site` returns for the clause name, and the payload's `clause` is that name and its `observation` is the `Invocation` arm. For a unit with two postcondition clauses, each clause's envelope carries its own node and occurrence. A clause name the unit does not declare returns `StateClauseReplayError::CallSite` holding the call site's refusal when the request is built, and the executor is not called. | Test (TC-035) |
+| FR-024-AC-13 | The pre snapshot holds, for every declared field of the state object, the value the Kani playback bound to that field, and the post snapshot holds the post-state value the caller supplied for it; each is one `complete` population holding one object with each field as an integer. The invocation document holds the members the Behavior bullets state, with `parameters` empty, `result` null and `created` and `deleted` empty, and its `pre` and `post` carry each snapshot's identity and `sha256-jcs` digest. Changing one playback value changes the pre snapshot's bytes and digest, and changing one post-state value changes the post snapshot's. | Test (TC-035) |
+| FR-024-AC-14 | For a document vector whose members are in non-sorted source order, whose text holds characters JSON escapes (a quote, a backslash, a control character, a non-ASCII letter) and whose numeric members include a large integer, a number with a fractional part and an exponent form, the bytes and the digest the state-clause builder returns equal what `core::canonical`'s bytes and digest functions return for the same value. The source of the new state-clause module names none of `quire_canonical`'s encoder functions, `sha2`, `ByteDigest::of`, a `sort` call over document members or a hand-written string-escaping routine, and `sha2` stays out of `[dependencies]`. | Test (TC-035) |
+| FR-024-AC-15 | A playback that binds no value for a declared state field returns `StateClauseReplayError::MissingField` naming that field, the executor is not called, and no snapshot holds a default for it. A name the framed object does not declare returns `StateClauseReplayError::UndeclaredField` and a field bound twice returns `DuplicateField`, each naming the field, in the playback and in the post state alike. | Test (TC-035) |
+| FR-024-AC-16 | For a subject mutated to violate the postcondition, the replay settles `reproduced-with-evaluated-witness` with category `violation` and an evaluated `false`. For the unmutated subject's run over the same pre state it settles `inconclusive` with cause `Verdicts` (`violation` proved, `success` replayed). The envelope is on the `Witness` arm with a payload `witness` of none in both cases. | Test (TC-035) |
+| FR-024-AC-17 | A state field value outside its declared integer range returns `StateClauseReplayError::OutOfDomain` naming the field and the executor is not called. The range's two endpoints are admitted and the values one below and one above are not. | Test (TC-035) |
+| FR-024-AC-18 | With the installed backend, the falsified operation-contract harness of a postcondition state clause over a subject mutated to debit is replayed from its real Kani playback through `replay_state_clause` and settles `reproduced-with-evaluated-witness`, `violation`. The test is `tc_035_real_kani_state_clause_counterexample_replays_through_qsl` in the module `kani_obligations_state_clause_replay`, so the `kani_obligations` filter of `make kani` selects it. | Test (TC-035) |
+| FR-024-AC-19 | An operation that declares a parameter, and one that declares a result, each return `StateClauseReplayError::UnsupportedOperationShape` carrying the operation and the declaration (its parameters and result), build no document, and do not call the executor; an operation that declares neither is not refused for its shape. The shape check reads the admitted package the caller supplies, and QSL's admission reads the documents provided in the byte provision; where the two disagree, the disagreement surfaces as a QSL refusal and not as this error. The error is not read as a QSL refusal: FR-029-AC-16 maps it to `Failed`. | Test (TC-035) |
 
 A transcript `Witness::parse` refuses is an adapter
 refusal under FR-016-AC-11.
 
 ## Current state
 
-At this revision the generator meets none of these criteria in full:
+At this revision the generator meets none of FR-024-AC-1 to FR-024-AC-10 in full, and meets
+FR-024-AC-11 to FR-024-AC-19:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no
   Contract IR witness type.
 - The bounded-Kani corpus retains no counterexample packet, so no corpus counterexample reaches
   QSL as the `Input` arm and FR-024-AC-5 is unbacked.
 - No domain check runs before replay, and no `WitnessEnvelope` is built.
-- No state-clause counterexample is replayed: `src` has no consumer of
-  `qsl_replay::replay_state_clause` or of the `ClauseSite` selection, and no code under `src`
-  builds an invocation or snapshot document (only `tests/state_frame_support/native_twin.rs`
-  does, with its own encoder), so FR-024-AC-11 to FR-024-AC-19 are unbacked (IR-460). `qsl-replay` at the locked revision exports
-  `replay_state_clause`, `StateClauseCounterexample`, `StateClauseReplayResult`,
-  `ClauseSelectionInput`, `ClauseSite` and `ClauseName`.
-- Only the skeleton spine renders a QSL transcript (`src/replay/function.rs`), and it builds the
-  request without an envelope.
+- A postcondition state-clause counterexample is replayed (IR-460): `src/replay/state_clause.rs`
+  builds the invocation and snapshot documents through `core::canonical` and replays through
+  `qsl_replay::replay_state_clause`, so FR-024-AC-11 to FR-024-AC-19 are backed by tagged tests
+  (FR-024-AC-18 in the `kani` lane; its test uses the fixture subject that debits to the floor of
+  the range, `deposit_debiting_within_range`).
+- Known gap, open: the post-state values are not range-checked, and a post state outside a
+  field's declared range is refused by QSL admission and reads as `Inconclusive(ReplayRefused)`
+  (FR-029-AC-16). The wrapping debit subject `deposit_debiting` reaches such a post state at the
+  floor of `balance`'s range. How a violation that yields an inadmissible post state should
+  settle is open and not decided here.
+- Unbuilt, with no owner yet: nothing in `src` decodes a state-clause harness's Kani playback into
+  the named `i64` values `StateClauseReplayInputs::playback` takes. FR-016's decoder works from
+  obligation bindings, which the state harness has not. The tests read the playback with a
+  test-only helper (`playback_state`), so a Kani run cannot yet drive this path from `src` alone.
+- The frame path's own hand-built invocation document and encoder remain in
+  `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
+  operations declare no result.
+- `FR-024-AC-1` to `FR-024-AC-10` are planned and have no test. `quire coverage --strict` does not
+  count them as unbacked now (66 unbacked rows on `main`, 44 at the head that added the state-clause
+  replay) only because TC-035 now has tagged tests; that is a property of the tool's AC to TC to
+  code walk, accepted here, and the criteria stay planned.
+- The one adapter transcript rendering function is `render_witness` in `src/replay/function.rs`,
+  used by the skeleton spine and the state-clause path; the frame path still renders its own
+  transcript (`src/replay/frame.rs`, not edited by IR-460).
 
 ## Dependencies
 

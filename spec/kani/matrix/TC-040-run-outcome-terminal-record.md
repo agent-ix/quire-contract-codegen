@@ -65,7 +65,8 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     value (FR-029-AC-15).
 15. The reproduced result is `Refuted`, the inconclusive result is `Inconclusive(ReplayParity)`
     carrying its cause, `Refused` and `CallSite` read as their QSL refusals do, and `Name`,
-    `Transcript`, `Envelope`, `Document`, `MissingField`, `OutOfDomain` and
+    `Transcript`, `Envelope`, `Document`, `MissingField`, `UndeclaredField`, `DuplicateField`,
+    `OutOfDomain` and
     `UnsupportedOperationShape` are `Failed`, none `Incomplete` and none
     `Inconclusive(ReplayRefused)`, and a non-fault `CallSiteRefusal` or
     `DependencyLockError::Input` wrapped in `StateClauseReplayError` is
@@ -73,9 +74,10 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 
 ## Status
 
-Partly covered. Steps 1, 2, 4 to 8 and 10 to 14 are tests of `tests/it/terminal_map.rs`. Step 3
+Partly covered. Steps 1, 2, 4 to 8 and 10 to 15 are tests of `tests/it/terminal_map.rs`. Step 3
 asserts the timed-out and exhausted-unwind-bound reasons only, because no memory-exhausted reason
 exists until FR-028-AC-3 adds it. Step 9 is not tested: it needs a QSL `InternalFault`, which
 `qsl-replay` does not re-export, so a fault value cannot be built in this repository. FR-029-AC-3
-and FR-029-AC-10 stay planned for those two reasons. Step 15 (FR-029-AC-16, IR-460) is planned:
-the state-clause replay path is not built.
+and FR-029-AC-10 stay planned for those two reasons. Step 15 (FR-029-AC-16, IR-460) is covered:
+the reproduced and the inconclusive results are real `StateClauseReplayResult`s of the QSL twin.
+The state-clause fault readings are step 9's (FR-029-AC-10) and are not asserted.

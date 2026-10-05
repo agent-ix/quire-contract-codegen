@@ -15,16 +15,16 @@
 //! mutated package turns a green proof red.
 
 #[path = "../state_frame_support/model.rs"]
-mod model;
+pub(crate) mod model;
 #[path = "../state_frame_support/native_twin.rs"]
-mod native_twin;
+pub(crate) mod native_twin;
 #[path = "../exact_scalar_support/package.rs"]
 #[allow(clippy::duplicate_mod)]
 mod package;
 #[path = "../state_frame_support/subject.rs"]
 // The Kani crates run every subject variant; the test binary executes only some natively.
 #[allow(dead_code)]
-mod subject;
+pub(crate) mod subject;
 
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -55,6 +55,7 @@ const DEREF: u32 = 4006;
 const OTHER: u32 = 4011;
 const OTHER_OBJECT: u32 = 4012;
 const RELATIONSHIP: u32 = 4013;
+const RESULT: u32 = 4014;
 
 const STATE_FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
@@ -72,10 +73,25 @@ struct Shape {
     /// The range the object's `balance` member declares; `None` types it by the plain integer.
     balance_bound: Option<(i64, i64)>,
     audit_bound: (i64, i64),
+    /// Whether the clause binds a `result` parameter, as FR-341 binds one exactly when the
+    /// operation declares a result.
+    result: bool,
     /// The name of the object's `balance` member, which the clause's reads carry in the graph.
     condition_field: &'static str,
     /// What the object's `balance` member holds, when it is not the `balance_bound` reference.
     member: Member,
+}
+
+/// What the operation a fixture's clause anchors declares beyond `self`, for the state-clause
+/// replay, which supports only an operation that declares neither.
+#[derive(Clone, Copy)]
+pub(crate) enum Declares {
+    /// No parameter and no result.
+    Nothing,
+    /// One parameter, `other`.
+    Parameter,
+    /// A result.
+    Result,
 }
 
 /// The object's `balance` member, for the grounds on which it gives the clause no `i64` range.
@@ -128,6 +144,7 @@ impl Shape {
         condition: Condition::PostGePre,
         balance_bound: Some(model::FIELDS[0].1),
         audit_bound: model::FIELDS[1].1,
+        result: false,
         condition_field: "balance",
         member: Member::Declared,
     };
@@ -270,6 +287,13 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         &key(REFERENCE),
         parameter_body("other", 1),
     );
+    builder.code(
+        RESULT,
+        "value",
+        "parameter",
+        &key(T_BOOLEAN),
+        parameter_body("result", 1),
+    );
     let field_entry = |declaration: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name});
     let mut modifies = shape
         .modifies
@@ -407,11 +431,14 @@ fn package_for(shape: &Shape) -> PackageBuilder {
         );
         condition = code_id(shape.code(210)).digest.to_string();
     }
-    let parameters = if matches!(shape.condition, Condition::BalanceAgainstOther) {
-        vec![reference(&key(SELF)), reference(&key(OTHER))]
-    } else {
-        vec![reference(&key(SELF))]
-    };
+    // FR-341 binder order: `self`, then `result` when present, then the operation's parameters.
+    let mut parameters = vec![reference(&key(SELF))];
+    if shape.result {
+        parameters.push(reference(&key(RESULT)));
+    }
+    if matches!(shape.condition, Condition::BalanceAgainstOther) {
+        parameters.push(reference(&key(OTHER)));
+    }
     builder.application_bounded(
         shape.code(300),
         "state",
@@ -437,9 +464,9 @@ fn package_for(shape: &Shape) -> PackageBuilder {
     builder
 }
 
-struct Fixture {
-    package: CheckedPackageV2,
-    clause: CheckedNodeId,
+pub(crate) struct Fixture {
+    pub(crate) package: CheckedPackageV2,
+    pub(crate) clause: CheckedNodeId,
     object: CheckedNodeId,
     anchor: CheckedNodeId,
     frame: CheckedNodeId,
@@ -457,6 +484,37 @@ fn fixture(shape: &Shape) -> Fixture {
         anchor: id(key(ANCHOR)),
         frame: id(key(FRAME)),
     }
+}
+
+/// The healthy fixture with `balance` typed by the plain integer: its member declares no range.
+pub(crate) fn fixture_with_unbounded_balance() -> Fixture {
+    fixture(&Shape {
+        variant: 32,
+        balance_bound: None,
+        ..Shape::HEALTHY
+    })
+}
+
+/// The node of the clause's `self` parameter, the node a state field's domain is declared on.
+pub(crate) fn self_parameter() -> CheckedNodeId {
+    code_id(SELF)
+}
+
+/// The healthy fixture, or one whose clause's operation declares `declares`.
+pub(crate) fn fixture_declaring(declares: Declares) -> Fixture {
+    fixture(&match declares {
+        Declares::Nothing => Shape::HEALTHY,
+        Declares::Parameter => Shape {
+            variant: 30,
+            condition: Condition::BalanceAgainstOther,
+            ..Shape::HEALTHY
+        },
+        Declares::Result => Shape {
+            variant: 31,
+            result: true,
+            ..Shape::HEALTHY
+        },
+    })
 }
 
 fn request<'a>(fixture: &'a Fixture, fields: &'a [&'a str]) -> StateFrameRequest<'a> {
@@ -1102,7 +1160,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 /// The obligations of `fixture` over the subject function named `subject` in `subject.rs`.
-fn generate_over(fixture: &Fixture, subject: &str) -> StateFrameObligations {
+pub(crate) fn generate_over(fixture: &Fixture, subject: &str) -> StateFrameObligations {
     let subject_path = format!("crate::subject::{subject}");
     generate_state_frame_obligations(&StateFrameRequest {
         subject_path: &subject_path,
@@ -1112,7 +1170,7 @@ fn generate_over(fixture: &Fixture, subject: &str) -> StateFrameObligations {
 }
 
 /// Runs `harness` with the real prover over the subject module every generated harness names.
-fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
+pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = scratch("crate");
     fs::write(
@@ -1146,7 +1204,7 @@ fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
 }
 
 /// The counterexample of a falsified proof, which must name `reason`.
-fn falsified(outcome: KaniRunOutcome, reason: &str) -> String {
+pub(crate) fn falsified(outcome: KaniRunOutcome, reason: &str) -> String {
     let KaniRunOutcome::Falsified { counterexample } = outcome else {
         panic!("expected a falsified proof for `{reason}`, got {outcome:?}");
     };
@@ -1159,7 +1217,7 @@ fn falsified(outcome: KaniRunOutcome, reason: &str) -> String {
 
 /// The `(balance, audit)` values Kani's concrete playback assigns the harness's two symbolic
 /// `i64` fields, in the order the harness declares them.
-fn playback_state(counterexample: &str) -> (i64, i64) {
+pub(crate) fn playback_state(counterexample: &str) -> (i64, i64) {
     let values = counterexample
         .lines()
         .map(str::trim)

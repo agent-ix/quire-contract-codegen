@@ -241,6 +241,7 @@ src/
     witness.rs                types extracted playback entries against persisted bindings
     function.rs               was spine_replay
     frame.rs                  was frame_replay
+    state_clause.rs           StateClauseReplay: the postcondition state-clause replay (FR-024-AC-11 to AC-19, IR-460)
   routed/                     FR-019, FR-022, FR-026
     capability.rs             was capability
     generate.rs               was routed_generation
@@ -297,6 +298,7 @@ Migration order, not moved.
 | `kani_witness_join` | replay | `kani/output/playback.rs` (the block scan and `DecodeFailure`, step 2f); `replay/witness.rs` (the decode, step 2g) | split across two steps; the item map says which item goes where |
 | `spine_replay` | replay | `replay/function.rs` | moved; `backend_manifest` deleted (IR-465) |
 | `frame_replay` | replay | `replay/frame.rs` | moved |
+| (new, IR-460) | replay | `replay/state_clause.rs` | the state-clause replay; no earlier file |
 | `capability` | routed | `routed/capability.rs` | moved |
 | `routed_generation` | routed | `routed/generate.rs` | moved |
 
