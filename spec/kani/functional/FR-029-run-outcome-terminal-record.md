@@ -158,10 +158,22 @@ The two refusals above are interim and are an exception to "every run item has e
 record": no QSL terminal value says "proved over a bounded shadow", and this repository invents none.
 Which value a shadow-proved or shadow-falsified composite equality settles to is an open question for
 QSL, below.
+- Planned (pending QSL-634, IR-460): the Kani adapter shall read a post-state value outside its
+  field's declared range as the subject's output and so as the witness, not as a refused input: QSL
+  ruled (QSL-634, filed, not merged) that inputs are refused and outputs are evidence, so an
+  out-of-range pre state or argument stays refused (`invalid_runtime_input`), and QSL will admit an
+  out-of-range post state as an exact observation, never clamped, and settle the replay as
+  reproduced or violated naming the field, the range and the observed value. The map then reads it
+  as any settled replay: a reproduced `violation` is `Refuted`, not
+  `Inconclusive(ReplayRefused)` (FR-029-AC-18). Until QSL-634 lands this repository keeps today's
+  behaviour, and builds nothing against it.
 - The Kani adapter shall classify a fault by walking the whole error the replay path returned, not
   by its top variant. A fault is `ReplayRefusal::Fault`, `ReplayRefusal::Admission` carrying
   `AdmissionFailure::Fault`, and `CallSiteRefusal::Fault`, which reaches the map directly and wrapped
-  in `ReplayPackageError::CallSite` and in `FrameReplayError::CallSite`. Each maps to `Failed`.
+  in `ReplayPackageError::CallSite`, in `FrameReplayError::CallSite` and in
+  `StateClauseReplayError::CallSite`. Each maps to `Failed`, and so does a `ReplayRefusal` fault
+  wrapped in `SpineReplayError::Refused`, `FrameReplayError::Refused` or
+  `StateClauseReplayError::Refused` (FR-029-AC-10).
 - The Kani adapter shall put only a code from QSL's closed catalog inside
   `Inconclusive(InconclusiveCause::ReplayRefused)`, and shall define no code of its own for it.
 - The Kani adapter shall map a failed replay setup to `Inconclusive(ReplayRefused)` carrying the
@@ -213,7 +225,7 @@ QSL, below.
 | FR-029-AC-6 | No outcome maps to `Tested`. | Test (TC-040) |
 | FR-029-AC-8 | `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness` and `NoValue`) maps to `Inconclusive(ReplayParity)` carrying that `DisagreementCause`. | Test (TC-040) |
 | FR-029-AC-9 | `falsified` with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-040) |
-| FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of `ReplayRefusal::Fault`, `ReplayRefusal::Admission(AdmissionFailure::Fault)`, `CallSiteRefusal::Fault`, `CallSiteRefusal::Fault` wrapped in `ReplayPackageError::CallSite`, `CallSiteRefusal::Fault` wrapped in `FrameReplayError::CallSite`, `ReplayRefusal::Fault` wrapped in `StateClauseReplayError::Refused`, and `CallSiteRefusal::Fault` wrapped in `StateClauseReplayError::CallSite`. | Test (TC-040) |
+| FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of: the replay-result fault (`ReplaySettlement::Fault`); `ReplayRefusal::Fault` and `ReplayRefusal::Admission(AdmissionFailure::Fault)`, each bare and as the cause of `SpineReplayError::Refused`, `FrameReplayError::Refused` and `StateClauseReplayError::Refused`; and `CallSiteRefusal::Fault` bare and wrapped in `ReplayPackageError::CallSite`, `FrameReplayError::CallSite` and `StateClauseReplayError::CallSite`. | Test (TC-040) |
 | FR-029-AC-11 | `falsified` with each CG-raised failure that carries no QSL code maps to `Failed`: `SpineReplayError::UnboundArgument`, `FieldDelimiter`, `Transcript`, `WrongArm` and `Identity`; `FrameReplayError::Transcript`, `Envelope`, `Name`, `NotAFrame`, `FieldSetMismatch`, `Decode`, `OutOfDomain`, `PreState` (a pre state the generator cannot read from the driver's documents, or one that differs from the playback; a document whose bytes do not match its digest is QSL's `Refused`, read by its code), `ScopeMismatch` and `Identity`; `ReplayPackageError::InvalidFunction`; a playback outside the harness proof bound; a decode failure; and a replay reproduced in a category other than `violation`. No `Inconclusive(ReplayRefused)` value carries a code that no QSL refusal value supplied. | Test (TC-040) |
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
 | FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
@@ -221,6 +233,7 @@ QSL, below.
 | FR-029-AC-15 | A falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-040) |
 | FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do for a non-fault refusal (`Inconclusive(ReplayRefused)` with its catalog code; their fault reading is FR-029-AC-10's), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `UndeclaredField`, `DuplicateField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. | Test (TC-040) |
 | FR-029-AC-17 | A verified outcome with proof strength `production_proved` maps to `Proved { success_checks: n }`; a verified outcome with each other strength of the strength table (the four `shadow_proved_*` strengths, `exhaustive`, `sampled`, `not_run` and `inconclusive`, and `refinement_failed`: every strength FR-028-AC-17 names) is refused with `TerminalPairError::NonProductionProof` carrying that strength and yields no terminal value, never `Proved`; a falsified outcome of a `bounded_shadow` harness is refused with `TerminalPairError::ShadowCounterexample` and yields no terminal value, never `Refuted`; and an inconclusive outcome of a `bounded_shadow` harness maps as FR-029's other inconclusive rows do; and the strength map is total: the set of strengths the test enumerates equals the set FR-028-AC-17 names, and a strength with no row fails the build or the test. PLANNED (IR-241). | Test (TC-040) |
+| FR-029-AC-18 | A `falsified` state-clause run whose post-state value lies outside its field's declared range, and whose replay QSL settles as a reproduced `violation` over the exact out-of-range observation, maps to `Refuted`, the ordinary violated terminal, and not to `Inconclusive(ReplayRefused)`. PLANNED, pending QSL-634 (IR-460): QSL admission refuses such a post snapshot today, so the run reads `Inconclusive(ReplayRefused(InvalidRuntimeInput))` until QSL-634 lands. | Test (TC-040) |
 
 ### Mutation FR-029-AC-17 detects
 
@@ -250,15 +263,25 @@ QSL, below.
 
 Built (Linear IR-465) in `kani/terminal.rs` as `run_terminal_value`, with the typed
 `ReplaySettlement` it reads and, in `replay/`, the `From` conversions from every error the replay
-path returns, and for the state-clause path (FR-029-AC-16, IR-460). Every criterion is backed by a tagged test except two. FR-029-AC-3 is backed for the
+path returns, and for the state-clause path (FR-029-AC-16, IR-460). Every built criterion is backed by a tagged test except one. FR-029-AC-3 is backed for the
 timed-out and exhausted-unwind-bound reasons only: `KaniInconclusiveReason` has no memory-exhausted
 reason until FR-028-AC-3 adds one, and the map's `match` fails to compile there until that arm is
-written. FR-029-AC-10 is not backed: the map and the conversions read each fault as `Failed`, but a
-test has not yet been written. QSL's `InternalFault` is now re-exported by `qsl-replay` and
-constructible (`InternalFault::new`, QSL `main` bcca433, QSL #635), so the criterion is buildable;
-it stays planned and untagged until a follow-up code change adds its tests. The fault readings of
-`StateClauseReplayError::Refused` and `CallSite` are listed under FR-029-AC-10 for that reason, so
-FR-029-AC-16 holds only clauses a test asserts.
+written. FR-029-AC-10 is backed: `tc_040_a_fault_in_any_replay_wrapper_is_failed` builds each fault
+wrapper the criterion names from QSL's constructible `InternalFault` (re-exported by `qsl-replay`,
+`InternalFault::new`, QSL `main` bcca433, QSL #635) and asserts `Failed` through the whole error.
+The fault readings of `StateClauseReplayError::Refused` and `CallSite` are listed under
+FR-029-AC-10, so FR-029-AC-16 holds only clauses a test asserts. FR-029-AC-17 (IR-241) and
+FR-029-AC-18 (QSL-634) are planned and unbuilt.
+
+Post state outside its range (pending QSL-634, IR-460). QSL ruled (cited as QSL-634, filed, not
+merged) that inputs are refused and outputs are evidence. An out-of-range pre state or argument
+stays refused (`invalid_runtime_input`). An out-of-range post-state value is the subject's output
+and so the witness: QSL will admit it as an exact out-of-range observation, never clamped, and
+replay will settle reproduced or violated naming the field, the range and the observed value. CG
+will map it to its ordinary violated terminal, not to `Inconclusive(ReplayRefused)`. Until QSL-634
+lands, CG keeps today's behaviour: QSL admission refuses an out-of-range post snapshot and the run
+reads `Inconclusive(ReplayRefused(InvalidRuntimeInput))`. FR-029-AC-18 states the target and is
+planned; nothing is built against it.
 
 Two points the map decides, now stated in the Description, Outputs, Behavior and criteria above
 (FR-029-AC-11 and FR-029-AC-15). A pair the driver mis-builds is a typed `TerminalPairError`, not a
