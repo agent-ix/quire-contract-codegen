@@ -257,9 +257,13 @@ retains bounded outer cancellation, without resetting the deadline.
 - While backend code runs, the installed policy shall exclude syscall/ABI/io_uring bypasses.
 - The backend execution boundary shall preserve the positively owned PID and original recipe.
 - If backend-only installation fails, then C shall refuse before Dispatch with owned cleanup.
+- Before child/control descriptor allocation, C shall capture and pin original stdin ownership.
+- The trusted installer shall start without the arbitrary backend's loader environment.
+- After policy installation and positive Dispatch, the boundary shall restore original backend environment.
+- If actual backend recipe exec fails after Dispatch, then I shall use existing bounded failure handling.
 - Before Dispatch, C shall reject socket-backed OriginalStdin::Open through typed unavailable admission.
 - If OriginalStdin::Open type inspection fails, then C shall refuse admission with the original cause.
-- Where OriginalStdin::Closed is explicitly supplied, I shall preserve its closed representation.
+- When C captures OriginalStdin::Closed at entry, I shall preserve its closed representation.
 - While arbitrary backend code runs, I shall prevent acquisition or export of trusted owner endpoints.
 - While awaiting or supervising Dispatch, I shall retain its exclusive guardian lease.
 - After original lease closure, O shall retain the separate final-report delivery channel.
@@ -579,14 +583,33 @@ retain the same positively owned PID/identity under I, with no extra surviving p
 set or deadline. Actual argv0, non-report argv, environment, cwd and stdio shall remain unchanged.
 No temporary trusted transport descriptor shall survive into arbitrary backend execution. If
 installation fails, then C shall return typed pre-Dispatch unavailable refusal with owned cleanup;
-there shall be no unfiltered Dispatch. Installation/exec failure shall be known as typed refusal
-before positive Dispatch; initial helper spawn success or early control EOF shall never prove
-successful backend exec/handoff. Startup transport shall remain CLOEXEC until successful exec;
-partial exec failure shall settle/refuse without retry or fallback. The boundary shall retain the
-unchanged requirement that arbitrary backend creation/execution needs positive Dispatch. The
+there shall be no unfiltered Dispatch. The boundary shall separate trusted startup admission from
+actual recipe exec, with these two transitions:
+
+| Boundary | Required behavior |
+| --- | --- |
+| Before positive Dispatch | Safe policy/filter/privilege installation failure travels over the bounded authenticated startup channel as typed unavailable admission; C confirms owned cleanup. Initial trusted-helper spawn success or early channel EOF is not installation success. No arbitrary backend recipe executes. |
+| After positive Dispatch | Installed policy permits execution of the exact original backend recipe. Its actual exec failure is handled by existing bounded backend-failure rules, including FR-034 AC-10 owned teardown and original deadline/capture settlement, without unfiltered retry, synthetic report/status/KaniExecutionEvidence or a new kind. It is not retroactively classified as pre-Dispatch policy installation failure. |
+
+Startup transport shall remain CLOEXEC through the successful exec boundary; partial actual recipe
+exec failure shall settle/refuse through that existing post-Dispatch path without retry or fallback.
+Initial trusted-helper spawn success or early EOF shall never prove successful recipe exec/handoff.
+Positive Dispatch remains required before arbitrary backend creation/execution. The
 mechanism is deliberately unspecified: a matched helper
 exec-entry is a CODE-plan candidate only. A source-grounded safe-boundary feasibility audit is the
-first CODE gate; inability to meet these properties stops CODE for SPEC revision. The policy shall prevent `socket(AF_UNIX, ...)` creation and
+first CODE gate; inability to meet these properties stops CODE for SPEC revision.
+
+The trusted installer shall start in a separate sanitized environment that cannot activate the
+arbitrary backend's loader inputs (including LD_PRELOAD, LD_LIBRARY_PATH and equivalent loader
+configuration). C shall carry the original raw backend environment only as authenticated bounded
+recipe metadata; no trusted startup role shall activate those values before policy installation.
+Only the safe recipe exec after installation and positive Dispatch shall restore the exact original
+environment alongside original argv0, argv, cwd and stdio. Safe capture/transfer/restoration shall
+retain existing resource/deadline bounds. Neither untrusted loader code before installation nor
+rewriting the backend's final environment is permitted. This is a mechanism-neutral required
+property, not a selected helper entry or implemented environment transport.
+
+The policy shall prevent `socket(AF_UNIX, ...)` creation and
 AF_UNIX datagram socketpairs. It shall allow anonymous connected SOCK_STREAM socketpairs for
 contained-local IPC and shall not blanket-deny sendmsg. It shall cover legacy socketcall and every
 supported syscall/ABI alias; incompatible or unsupported execution ABIs shall refuse admission.
@@ -617,16 +640,30 @@ arbitrary backend/descendants/sibling exec, with existing bounded SCM_RIGHTS and
 The AC-27 opt-in reporter is separately trusted, excluded from every production child; it supplies
 no backend host-peer endpoint. First-party controls shall not be closed early to satisfy admission.
 
-C shall establish the actual backend fd0/fd1/fd2 admission inventory before Dispatch. C shall inspect
-fstat type for OriginalStdin::Open. Production fd1/fd2 are owned capture pipes, established by actual
-mapping/inventory and Analysis, not caller-selectable socket test positions. C-only reporter/control
-sockets are not backend stdio. If an admitted stdio descriptor has S_IFSOCK, then C shall refuse
-before arbitrary backend creation regardless of socket family or peer state. Pipe, regular-file,
-terminal and /dev/null inputs shall keep original descriptor semantics. OriginalStdin::Closed is
-an explicit capability tag captured before controls exist; I shall preserve it without fstat on an
-absent descriptor. If type inspection of OriginalStdin::Open fails, including EBADF, then C shall
-refuse; errno alone shall not manufacture Closed admission. C/I shall not substitute, reopen or
-rewrite original input, raw non-report argv, environment or cwd to obtain admission.
+OriginalStdin is a planned internal bootstrap ownership value captured by C, not a new public
+KaniExecutionRequest field or a caller-supplied request parameter. Its variants are Open(OwnedFd)
+and Closed. Current CG's request has no stdin field and BackendCommand preserves inherited stdin. At C's authoritative ordinary-exec boundary,
+before child/control descriptor allocation or fd0 reuse, C shall capture original descriptor/exec
+flags and pin the actual open file description using safe owned-descriptor APIs. OriginalStdin::Open
+owns that pin when the original stdin is open for inherited exec; OriginalStdin::Closed records an
+originally absent fd0 or an original CLOEXEC source that ordinary exec would leave closed. The
+transport pin's own CLOEXEC flag shall not turn an originally Open input into Closed. Initial
+absence established authoritatively at that C boundary may use EBADF as Closed; failed capture for
+any other cause shall refuse. C shall require stable original descriptor/flag ownership through
+capture; inability to establish stability or safe absent-fd handling refuses, never guesses from
+later child descriptor numbers. This internal capture/pin is planned CODE; actual safe C-side capture is a required implementation
+gate, not a claim of current support.
+
+C shall establish actual backend fd0/fd1/fd2 inventory before Dispatch. It shall inspect fstat type
+on the captured OriginalStdin::Open pin. Production fd1/fd2 are owned capture pipes, verified by
+mapping/inventory Analysis, not caller-selectable socket positions. C-only reporter/control sockets
+are not backend stdio. If an admitted descriptor has S_IFSOCK, then C shall refuse before arbitrary
+backend creation regardless of socket family/peer state. Pipe, regular-file, terminal and /dev/null
+inputs shall retain original semantics. I shall preserve the captured Closed tag without fstat on
+an absent descriptor. If later inspection of an already captured Open pin fails, including EBADF,
+then C shall refuse; neither C nor a descendant shall reinterpret that failure as Closed or re-probe
+a reused fd0. C/I shall not substitute, reopen or rewrite original input, raw non-report argv,
+environment or cwd to obtain admission.
 
 Socket stdin, private network isolation and loss of addressable AF_UNIX rendezvous are explicit
 caller availability limits. Anonymous local stream socketpair IPC remains admitted. Cargo builds
@@ -759,8 +796,8 @@ waives kernel descendant cancellation.
 | FR-034-AC-32 | The bounded O event loop collects anonymous report pipe into memfd without a backend/collector completion wait cycle. A hard 16 MiB plus one detection-byte retention bound and the defined owned_RSS + caller_run_buffers + page-rounded F_GETPIPE_SZ + page-rounded pre-reserved memfd maximum comparison applies while writing against the original ceiling; unmapped shmem is not zero. Beyond cap yields owned cancellation and single-run KaniRunOutcome::Inconclusive with MemoryExhausted; batches keep whole-batch memory-exhausted refusal, with no member classified. Evidence names the report cap separately; FR-029 maps ResourceExhausted, never Failed or truncated acceptance. Slow/over-cap writers finish or refuse within the original deadline. Genuine installed cargo/Kani 0.68 roundtrip validates mapped FD inheritance and no seek/reread dependency; failure stops CODE pending measured spec revision, with no runtime fallback. | Test |
 | FR-034-AC-33 | Authenticated Completed precedes original-lease close, confirmed inner teardown and M termination/reap closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS verification and stable actual OwnedFd reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are required before CODE delivery. | Test |
 | FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks the sealed AC-24 pre-escalation EOF oracle; ignored-EOF still fails its named raw predicate before cleanup. Missing conservative backing accounting or immutable sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
-| FR-034-AC-35 | PLANNED/UNRUN. L creates private network/root before O, O validates before M, and nested bind / / refers to confined O root. Safe backend-only seccomp/privilege installation before Dispatch preserves the same positively owned PID and original recipe, with no unfiltered Dispatch or extra surviving process/ownership/deadline; I/O/M remain outside that filter. Continuous AF_UNIX socket/datagram-socketpair, legacy syscall/ABI/io_uring and inherited-endpoint exclusion prevents host-peer acquisition/export throughout writable shared source/target/cwd paths, including listeners created after Dispatch. AC authority requires the same real backend unconfined positive control to connect/export at that visible shared prefix; confined real attempts and a genuine omission mutant distinguish protection from absent listeners. Anonymous local stream socketpair IPC remains admitted. Safe-boundary feasibility and genuine installed Cargo/Kani under the actual filter are decisive UNRUN gates; incompatibility stops CODE for SPEC revision, no relaxation. Required capabilities fail through typed pre-Dispatch unavailable admission regardless errno with confirmed owned cleanup; successful admission followed by missing cache/denied rendezvous build failure retains FR-017 NoVerdict and resource precedence. All old contained-death/writer/EOF/seal/deadline/lease obligations remain mandatory. | Test, Analysis |
-| FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Explicit OriginalStdin::Closed remains closed; Open inspection EBADF refuses, never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
+| FR-034-AC-35 | PLANNED/UNRUN. L creates private network/root before O, O validates before M, and nested bind / / refers to confined O root. Safe backend-only seccomp/privilege installation before Dispatch preserves the same positively owned PID and original recipe, with no unfiltered Dispatch or extra surviving process/ownership/deadline; policy installation failure is pre-Dispatch, actual recipe exec/failure is post-Dispatch with existing bounded handling/no fabricated evidence; trusted installer starts in sanitized loader environment and restores original backend environment only at filtered recipe exec; I/O/M remain outside that filter. Continuous AF_UNIX socket/datagram-socketpair, legacy syscall/ABI/io_uring and inherited-endpoint exclusion prevents host-peer acquisition/export throughout writable shared source/target/cwd paths, including listeners created after Dispatch. AC authority requires the same real backend unconfined positive control to connect/export at that visible shared prefix; confined real attempts and a genuine omission mutant distinguish protection from absent listeners. Anonymous local stream socketpair IPC remains admitted. Safe-boundary feasibility and genuine installed Cargo/Kani under the actual filter are decisive UNRUN gates; incompatibility stops CODE for SPEC revision, no relaxation. Required capabilities fail through typed pre-Dispatch unavailable admission regardless errno with confirmed owned cleanup; successful admission followed by missing cache/denied rendezvous build failure retains FR-017 NoVerdict and resource precedence. All old contained-death/writer/EOF/seal/deadline/lease obligations remain mandatory. | Test, Analysis |
+| FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
 
 ## Dependencies

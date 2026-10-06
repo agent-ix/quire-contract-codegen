@@ -428,18 +428,25 @@ merged before fixture CODE. No new DTO/rights/hook/cap is allocated here. Mixed 
 remain untagged until all assertions are actual, alongside the unchanged independent AC-24 EOF
 oracle and one-CODE-PR gate.
 
-22. PLANNED/UNRUN (FR-034 AC-35). First source-audit the safe backend-only execution boundary:
-    installation precedes Dispatch and the arbitrary recipe, with no unsafe/pre_exec, unfiltered
-    release, temporary trusted FD inheritance or supervisor-wide filter. Verify the same positively
-    owned PID under I, exact argv0/argv/environment/cwd/stdio and unchanged ownership/deadline.
-    Force installation/exec failure and require typed refusal before positive Dispatch; initial
-    helper spawn and early EOF cannot stand for successful backend exec/handoff. Record CLOEXEC
-    startup transport and confirmed partial-failure settlement without retry/fallback, preserving
-    positive Dispatch as arbitrary backend authorization. A matched helper entry is a candidate
-    only, not a normative selector; inability to implement this boundary stops CODE for SPEC
-    revision. Require L NEWNET/private-root before O and actual O validation before M; nested bind /
-    / must name the confined O root, not host root. Own positively live host pathname and abstract
-    listeners. Place the pathname listener inside the actual shared cwd/crate/target prefix visible
+22. PLANNED/UNRUN (FR-034 AC-35). First source-audit safe backend-only installation before
+    Dispatch and the arbitrary recipe, with no unsafe/pre_exec, unfiltered release, temporary trusted
+    FD inheritance or supervisor-wide filter. Verify same owned PID under I and exact original
+    argv0/argv/environment/cwd/stdio and ownership/deadline. Force policy/filter/privilege installation
+    failure before positive Dispatch: require typed unavailable refusal over authenticated bounded
+    startup channel, no arbitrary recipe exec and confirmed owned cleanup. Separately allow positive
+    Dispatch then force actual original recipe exec failure (missing/non-executable recipe program);
+    require existing bounded backend-failure handling, teardown/deadline/capture settlement, no
+    synthetic report/status/evidence and no unfiltered retry/fallback. Initial trusted-helper spawn
+    or early EOF proves neither installation nor recipe exec. Startup transport remains CLOEXEC
+    through successful recipe exec. Run trusted installer with separate sanitized loader environment;
+    carry original raw backend environment as authenticated bounded metadata and restore it only
+    at filtered recipe exec after Dispatch. Controlled original LD_PRELOAD/LD_LIBRARY_PATH inputs
+    must distinguish trusted startup (no loader activation) from actual filtered backend exec
+    (original environment preserved), with positive observations and an early-loader activation
+    mutant before cleanup. These tests remain PLANNED/UNRUN and choose no entry mechanism. A matched
+    helper entry remains CODE-plan candidate only; infeasibility stops CODE for SPEC revision.
+    Require L NEWNET/private-root before O and O validation before M; nested bind / / names confined
+    O root, not host root. Own positively live host pathname/abstract listeners. Place the pathname listener inside the actual shared cwd/crate/target prefix visible
     to the backend, not an absent or unbound host directory. Run the same real backend
     listener/client workload as an unconfined owned host control and require a successful connection
     and descriptor transfer; a merely listening server or generic host client is insufficient. Under
@@ -466,27 +473,26 @@ oracle and one-CODE-PR gate.
     prefetch, recipe rewrite or weaker network mode. Independently stolen host authority is outside
     the uniform channel fault domain; peer-created shared-path listeners and contained export remain
     in scope.
-23. PLANNED/UNRUN (FR-034 AC-36). Present real OriginalStdin::Open socket input, including
-    socketpair input and a socket without a usable peer. Require actual fstat S_IFSOCK rejection
-    before Dispatch. Inspect the actual production fd1/fd2 mapping and owned descriptor inventory:
-    both are executor-created capture pipes, not caller-selectable socket positions. Analysis shall
-    establish that there is no ordinary caller path replacing either capture with a socket; do not
-    invent a public fixture hook or unreachable stdout/stderr socket case. Exercise failed type
-    inspection through the actual permitted private syscall boundary, retaining original errno; the
-    production admission function and refusal mapping remain the unit under test. Use pipes, regular
-    files, a terminal and /dev/null as admitted stdin controls. OriginalStdin::Closed is the
-    explicit capability tag captured before controls, and remains closed; an inspection error for
-    OriginalStdin::Open, including EBADF, is not reclassified as Closed. Echo raw non-report argv,
-    environment, cwd and original input bytes through normal matched artifacts to detect rewriting
-    or reopening. Assert admission-site BoundedLaunchError::Unavailable regardless original errno.
-    Preserve the original io::Error cause in MemoryMechanismUnavailable and require mandatory typed
-    KaniStartupAdmissionCause: BackendStdioSocket { descriptor: Stdin },
-    BackendStdioInspectionFailed { descriptor }, CapabilityUnavailable { capability }, or
-    MemoryEnforcement for existing memory checks. Verify exact capability metadata and broadened
-    docs/Display semantics; no Option/None/default or error-message discrimination. These API
-    changes remain planned CODE; tests are UNRUN. No execution evidence, kind, outcome or fabricated
-    terminal/Failed; code()==None. Separately expire the original deadline and preserve its existing
-    classification.
+23. PLANNED/UNRUN (FR-034 AC-36). Drive actual original C stdin before ordinary execution,
+    not a new public request field. Verify internal capture/pin before child/control fd allocation
+    or reuse. Real socketpair input and a socket without a usable peer must be captured Open and
+    rejected by actual S_IFSOCK inspection before Dispatch. Inspect actual production fd1/fd2 mapping
+    and owned inventory: both are capture pipes, not caller-selectable socket positions. Analysis
+    establishes no ordinary path replaces them with sockets; no public hook or unreachable output
+    socket case. Exercise inspection failure through the allowed private syscall boundary, retaining
+    original errno and the actual production admission function. Pipes, regular files, terminal and
+    /dev/null are admitted stdin controls. Initial authoritative absent fd0 (EBADF) or original
+    exec-CLOEXEC gives internal Closed and is preserved; transport clone CLOEXEC does not reclassify
+    original Open. Failed/stale capture refuses when safe stable ownership cannot be established.
+    Later captured-Open inspection EBADF/error refuses, never becomes Closed or probes child fd0.
+    Echo raw original argv0/non-report argv/environment/cwd/input bytes through normal matched
+    artifacts to detect rewriting/reopening. Admission-site Unavailable is independent of errno;
+    MemoryMechanismUnavailable retains original io::Error and mandatory KaniStartupAdmissionCause:
+    BackendStdioSocket { descriptor: Stdin }, BackendStdioInspectionFailed { descriptor },
+    CapabilityUnavailable { capability }, or MemoryEnforcement for existing checks. Verify capability
+    metadata/broadened docs/Display, no Option/None/default/message discriminant. Planned API changes
+    and tests remain UNRUN; no fabricated evidence/kind/outcome/terminal/Failed, code()==None. Expire
+    original deadline separately and preserve classification.
 24. PLANNED/UNRUN (FR-034 AC-37). Positively validate the actual trusted channel owners/mappings: I
     receives its exclusive lease through Dispatch; O/C final report/control remains usable after
     that lease closes. Test backend/descendant/sibling-exec inherited descriptor identities and
