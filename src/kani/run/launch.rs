@@ -186,8 +186,15 @@ pub(super) fn run_bounded_launcher(
     command: BackendCommand,
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
+    deadline: Option<Instant>,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
-    run_bounded_launcher_at(command, ceilings, harnesses, std::path::Path::new("/proc"))
+    run_bounded_launcher_at(
+        command,
+        ceilings,
+        harnesses,
+        std::path::Path::new("/proc"),
+        deadline,
+    )
 }
 
 fn run_bounded_launcher_at(
@@ -195,8 +202,8 @@ fn run_bounded_launcher_at(
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     procfs: &std::path::Path,
+    deadline: Option<Instant>,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
-    let deadline = Instant::now().checked_add(ceilings.wall_clock);
     let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         return Ok(BoundedLaunch {
@@ -660,6 +667,7 @@ mod tests {
             },
             NonZeroUsize::MIN,
             &directory.join("unavailable-procfs"),
+            Instant::now().checked_add(Duration::from_secs(5)),
         );
         assert!(matches!(result, Err(BoundedLaunchError::Unavailable(_))));
         assert!(

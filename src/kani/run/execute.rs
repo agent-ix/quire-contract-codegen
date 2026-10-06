@@ -10,7 +10,12 @@
 //! harness. A harness is found in the report by the `module::harness` path the launch passed to
 //! `--harness`, and its playback in the console by the path its block is headed for.
 
-use std::{fmt, fs, num::NonZeroUsize, path::Path, time::Duration};
+use std::{
+    fmt, fs,
+    num::NonZeroUsize,
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use serde::Serialize;
 
@@ -306,18 +311,21 @@ fn start(
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> Result<BoundedLaunch, KaniExecutionRefusal> {
-    // The namespace helper's successful spawn cannot establish that its backend exists.
-    // Refuse an absent launcher before helper dispatch, retaining the launcher's typed fault.
-    fs::metadata(&request.installation.launcher).map_err(|error| {
-        KaniExecutionRefusal::Tool(KaniToolError::Io {
-            tool: KaniTool::Launcher,
-            path: request.installation.launcher.clone(),
-            error,
-        })
-    })?;
+    let deadline = Instant::now().checked_add(timeout);
+    if !deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        // The namespace helper's successful spawn cannot establish that its backend exists.
+        // Refuse an absent launcher before helper dispatch, retaining the launcher's typed fault.
+        fs::metadata(&request.installation.launcher).map_err(|error| {
+            KaniExecutionRefusal::Tool(KaniToolError::Io {
+                tool: KaniTool::Launcher,
+                path: request.installation.launcher.clone(),
+                error,
+            })
+        })?;
+    }
     let mut ceilings = request.harness.view().ceilings;
     ceilings.wall_clock = timeout;
-    run_bounded_launcher(command, ceilings, harnesses).map_err(|error| match error {
+    run_bounded_launcher(command, ceilings, harnesses, deadline).map_err(|error| match error {
         BoundedLaunchError::Unavailable(cause) => {
             KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
         }
