@@ -158,6 +158,80 @@ struct InitClaim {
     namespace: PathBuf,
 }
 
+/// O's retained actual monitor custody. Every post-spawn failure leaves the same unreaped Child
+/// and any acquired pin in this owner; M/group exit never attests outer or unclaimed I teardown.
+#[cfg(target_os = "linux")]
+pub(super) struct OuterMonitorOwner {
+    command: Option<Command>,
+    child: Option<Child>,
+    pin: Option<OwnedFd>,
+    namespace: NamespaceOwner,
+}
+
+#[cfg(target_os = "linux")]
+impl OuterMonitorOwner {
+    pub(super) fn prepare(
+        outer: &super::outer_setup::PreparedOuter<'_>,
+        helper: &Path,
+        bootstrap: super::control::RoleEndpoint,
+        collector: &mut super::report_storage::ReportCollector,
+        ledger: &super::resource_ledger::ResourceLedger,
+    ) -> io::Result<Self> {
+        let (command, namespace) =
+            NamespaceOwner::prepare_outer(outer, helper, bootstrap, collector, ledger)?;
+        Ok(Self {
+            command: Some(command),
+            child: None,
+            pin: None,
+            namespace,
+        })
+    }
+
+    /// Original O authority/deadline are checked again immediately before the sole spawn attempt.
+    /// No failure authorizes replacement, and no successful signal or Drop supplies settlement.
+    pub(super) fn spawn(
+        &mut self,
+        outer: &super::outer_setup::PreparedOuter<'_>,
+        deadline: Instant,
+    ) -> io::Result<()> {
+        outer.require_creator_live().map_err(io::Error::other)?;
+        if Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "nested monitor spawn deadline elapsed",
+            ));
+        }
+        let mut command = self
+            .command
+            .take()
+            .ok_or_else(|| unavailable("nested monitor spawn already attempted"))?;
+        self.child = Some(command.spawn()?);
+        // Actual Child custody precedes dropping the Command's intended-only report writer copy.
+        drop(command);
+        let child = self
+            .child
+            .as_ref()
+            .ok_or_else(|| unavailable("nested monitor Child is absent"))?;
+        let pid = valid_pid(child.id())?;
+        self.pin = Some(pidfd_open(pid, PidfdFlags::NONBLOCK)?);
+        self.namespace.attach(child)?;
+        super::creator::require_live(
+            self.pin
+                .as_ref()
+                .ok_or_else(|| unavailable("nested monitor pin is absent"))?,
+        )?;
+        outer.require_creator_live().map_err(io::Error::other)
+    }
+
+    pub(super) fn namespace(&mut self) -> &mut NamespaceOwner {
+        &mut self.namespace
+    }
+
+    pub(super) fn child(&mut self) -> Option<&mut Child> {
+        self.child.as_mut()
+    }
+}
+
 /// Produced only after INIT identity and memory-root binding both succeed with the gate retained.
 #[cfg(target_os = "linux")]
 pub(super) struct GatedClaim {
@@ -258,6 +332,86 @@ impl NamespaceOwner {
     }
 
     /// Attach while the monitor is still unreaped; gated init cannot yet change its group.
+    /// Prepare nested M only inside the actual armed O, after the collector's checked writer
+    /// exposure. The returned Command owns its child-only writer copy until actual spawn; O's
+    /// retained monitor owner must drop that Command after storing its actual Child. This method
+    /// supplies no teardown conclusion: C separately requires actual outer INIT termination.
+    pub(super) fn prepare_outer(
+        outer: &super::outer_setup::PreparedOuter<'_>,
+        helper: &Path,
+        bootstrap: super::control::RoleEndpoint,
+        collector: &mut super::report_storage::ReportCollector,
+        ledger: &super::resource_ledger::ResourceLedger,
+    ) -> io::Result<(Command, Self)> {
+        use std::os::unix::process::CommandExt;
+
+        outer.require_creator_live().map_err(io::Error::other)?;
+        if !helper.is_absolute() {
+            return Err(unavailable("nested helper path is not absolute"));
+        }
+        let (gate_read, gate_write) = pipe_with(PipeFlags::CLOEXEC)?;
+        let (info_read, info_write) = pipe_with(PipeFlags::CLOEXEC)?;
+        // Only this ledger-authorized take transfers O's actual original report writer. Neither
+        // C nor L has a writer, and the separate I lease arrives later over authenticated bootstrap.
+        let writer = collector
+            .take_spawn_writer(ledger)
+            .map_err(io::Error::other)?;
+        let mut command = Command::new("bwrap");
+        command
+            .args([
+                "--unshare-user",
+                "--unshare-pid",
+                "--as-pid-1",
+                "--new-session",
+                "--bind",
+                "/",
+                "/",
+                "--dev-bind",
+                "/dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--info-fd",
+                "3",
+                "--block-fd",
+                "4",
+                "--",
+            ])
+            .arg(helper)
+            .process_group(0);
+        command
+            .fd_mappings(vec![
+                FdMapping {
+                    parent_fd: bootstrap.into_child_mapping(),
+                    child_fd: 0,
+                },
+                FdMapping {
+                    parent_fd: info_write,
+                    child_fd: 3,
+                },
+                FdMapping {
+                    parent_fd: gate_read,
+                    child_fd: 4,
+                },
+                FdMapping {
+                    parent_fd: writer,
+                    child_fd: super::report_storage::REPORT_SLOT,
+                },
+            ])
+            .map_err(|error| unavailable(format!("nested control mapping failed: {error}")))?;
+        outer.require_creator_live().map_err(io::Error::other)?;
+        Ok((
+            command,
+            Self {
+                gate: Some(File::from(gate_write)),
+                info: File::from(info_read),
+                wrapper: None,
+                init: None,
+                cleaned: false,
+            },
+        ))
+    }
+
     pub(super) fn attach(&mut self, child: &Child) -> io::Result<()> {
         self.wrapper = Some(valid_pid(child.id())?);
         Ok(())
