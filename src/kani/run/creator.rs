@@ -198,13 +198,28 @@ impl PreparedIdentity {
         &mut self,
         pid: i32,
     ) -> io::Result<super::outer_setup::NamespaceIdentity> {
+        self.child_named_namespace(pid, "pid")
+    }
+
+    pub(super) fn child_network_namespace(
+        &mut self,
+        pid: i32,
+    ) -> io::Result<super::outer_setup::NamespaceIdentity> {
+        self.child_named_namespace(pid, "net")
+    }
+
+    fn child_named_namespace(
+        &mut self,
+        pid: i32,
+        name: &str,
+    ) -> io::Result<super::outer_setup::NamespaceIdentity> {
         if pid <= 0 {
             return Err(io::Error::other(
                 "namespace child identity must be positive",
             ));
         }
         self.path.clear();
-        write!(&mut self.path, "/proc/{pid}/ns/pid").map_err(io::Error::other)?;
+        write!(&mut self.path, "/proc/{pid}/ns/{name}").map_err(io::Error::other)?;
         super::outer_setup::NamespaceIdentity::read(&self.path)
     }
 

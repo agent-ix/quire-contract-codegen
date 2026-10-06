@@ -47,6 +47,7 @@ impl NamespaceIdentity {
 pub(super) struct LauncherNamespace {
     pub(super) original_mount: NamespaceIdentity,
     pub(super) original_pid: NamespaceIdentity,
+    pub(super) original_network: NamespaceIdentity,
     pub(super) launcher_pin: OwnedFd,
     pub(super) launcher_stat: File,
     pub(super) launcher_status: File,
@@ -78,9 +79,17 @@ impl LauncherNamespace {
 
     /// Look up only the positively retained Child's PID namespace through the original proc root.
     pub(super) fn child_pid_namespace(&self, child: u32) -> io::Result<NamespaceIdentity> {
+        self.child_namespace(child, "pid")
+    }
+
+    pub(super) fn child_network_namespace(&self, child: u32) -> io::Result<NamespaceIdentity> {
+        self.child_namespace(child, "net")
+    }
+
+    fn child_namespace(&self, child: u32, name: &str) -> io::Result<NamespaceIdentity> {
         let descriptor = rustix::fs::openat(
             &self.original_proc,
-            format!("{child}/ns/pid"),
+            format!("{child}/ns/{name}"),
             rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::CLOEXEC,
             rustix::fs::Mode::empty(),
         )?;
@@ -95,6 +104,7 @@ impl LauncherNamespace {
 /// Minted only after actual outer-PID1, mapped identity, arm and private-proc verification.
 pub(super) struct PreparedOuter<'bootstrap> {
     namespace: NamespaceIdentity,
+    network: NamespaceIdentity,
     launcher: OwnedFd,
     outer: OwnedFd,
     bootstrap: &'bootstrap RoleEndpoint,
@@ -103,6 +113,10 @@ pub(super) struct PreparedOuter<'bootstrap> {
 impl PreparedOuter<'_> {
     pub(super) fn namespace(&self) -> NamespaceIdentity {
         self.namespace
+    }
+
+    pub(super) fn network(&self) -> NamespaceIdentity {
+        self.network
     }
 
     pub(super) fn descriptor(&self) -> BorrowedFd<'_> {
@@ -131,6 +145,8 @@ pub(super) enum SetupError {
     NamespaceIdentity(io::Error),
     LauncherIdentity(io::Error),
     Unshare(nix::errno::Errno),
+    UnshareNetwork(nix::errno::Errno),
+    NetworkNamespaceUnchanged,
     Setgroups(io::Error),
     UidMap(io::Error),
     GidMap(io::Error),
@@ -164,6 +180,7 @@ impl std::error::Error for SetupError {
             | Self::ProcIdentity(error) => Some(error),
             Self::Bootstrap(error) => Some(error),
             Self::Unshare(error)
+            | Self::UnshareNetwork(error)
             | Self::Session(error)
             | Self::MakeMountsPrivate(error)
             | Self::MountProc(error) => Some(error),
@@ -172,6 +189,7 @@ impl std::error::Error for SetupError {
             | Self::MountNamespaceUnchanged
             | Self::NotOuterInit
             | Self::PidNamespaceUnchanged
+            | Self::NetworkNamespaceUnchanged
             | Self::ProcNamespaceMismatch => None,
         }
     }
@@ -220,6 +238,8 @@ pub(super) fn prepare_launcher(
         NamespaceIdentity::read("/proc/self/ns/mnt").map_err(SetupError::NamespaceIdentity)?;
     let original_pid =
         NamespaceIdentity::read("/proc/self/ns/pid").map_err(SetupError::NamespaceIdentity)?;
+    let original_network =
+        NamespaceIdentity::read("/proc/self/ns/net").map_err(SetupError::NamespaceIdentity)?;
     let launcher_pin = pidfd_open(rustix::process::getpid(), PidfdFlags::NONBLOCK)
         .map_err(|error| SetupError::LauncherIdentity(error.into()))?;
     let launcher_stat = File::open("/proc/self/stat").map_err(SetupError::LauncherIdentity)?;
@@ -258,9 +278,23 @@ pub(super) fn prepare_launcher(
         .transport()
         .refuse_observable_eof()
         .map_err(SetupError::Bootstrap)?;
+    // Network isolation is a distinct mandatory capability, with its original syscall cause.
+    // Mapping and creating-thread rearming have completed; O does not exist at this boundary.
+    unshare(CloneFlags::CLONE_NEWNET).map_err(SetupError::UnshareNetwork)?;
+    let current_network =
+        NamespaceIdentity::read("/proc/self/ns/net").map_err(SetupError::NamespaceIdentity)?;
+    if current_network == original_network {
+        return Err(SetupError::NetworkNamespaceUnchanged);
+    }
+    creator::require_live(creator_pin).map_err(SetupError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(SetupError::Bootstrap)?;
     Ok(LauncherNamespace {
         original_mount,
         original_pid,
+        original_network,
         launcher_pin,
         launcher_stat,
         launcher_status,
@@ -275,6 +309,7 @@ pub(super) fn prepare_outer<'bootstrap>(
     bootstrap: &'bootstrap RoleEndpoint,
     original_mount: NamespaceIdentity,
     original_pid: NamespaceIdentity,
+    original_network: NamespaceIdentity,
 ) -> Result<PreparedOuter<'bootstrap>, SetupError> {
     require_single_thread()?;
     if rustix::process::getpid().as_raw_nonzero().get() != 1
@@ -300,6 +335,11 @@ pub(super) fn prepare_outer<'bootstrap>(
         NamespaceIdentity::read("/proc/self/ns/pid").map_err(SetupError::NamespaceIdentity)?;
     if current_pid == original_pid {
         return Err(SetupError::PidNamespaceUnchanged);
+    }
+    let current_network =
+        NamespaceIdentity::read("/proc/self/ns/net").map_err(SetupError::NamespaceIdentity)?;
+    if current_network == original_network {
+        return Err(SetupError::NetworkNamespaceUnchanged);
     }
     nix::unistd::setsid().map_err(SetupError::Session)?;
     mount(
@@ -349,6 +389,7 @@ pub(super) fn prepare_outer<'bootstrap>(
         .map_err(|error| SetupError::LauncherIdentity(error.into()))?;
     Ok(PreparedOuter {
         namespace: current_pid,
+        network: current_network,
         launcher: launcher_pin,
         outer,
         bootstrap,

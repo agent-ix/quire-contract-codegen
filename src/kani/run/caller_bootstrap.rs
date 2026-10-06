@@ -122,8 +122,10 @@ pub(super) struct CallerBootstrap {
     caller_uid: u32,
     caller_gid: u32,
     original_namespace: NamespaceIdentity,
+    original_network: NamespaceIdentity,
     outer_pin: Option<OwnedFd>,
     outer_namespace: Option<NamespaceIdentity>,
+    outer_network: Option<NamespaceIdentity>,
     outer_pid: Option<i32>,
     monitor_pin: Option<OwnedFd>,
     inner_pin: Option<OwnedFd>,
@@ -185,6 +187,8 @@ impl CallerBootstrap {
         let caller_gid = settings.caller_gid;
         let original_namespace =
             NamespaceIdentity::read("/proc/self/ns/pid").map_err(CallerBootstrapError::Io)?;
+        let original_network =
+            NamespaceIdentity::read("/proc/self/ns/net").map_err(CallerBootstrapError::Io)?;
         let (launcher_control, launcher_endpoint) =
             role_pair().map_err(CallerBootstrapError::Control)?;
         let (outer_control, outer_endpoint) = role_pair().map_err(CallerBootstrapError::Control)?;
@@ -288,8 +292,10 @@ impl CallerBootstrap {
             caller_uid,
             caller_gid,
             original_namespace,
+            original_network,
             outer_pin: None,
             outer_namespace: None,
+            outer_network: None,
             outer_pid: None,
             monitor_pin: None,
             inner_pin: None,
@@ -417,6 +423,7 @@ impl CallerBootstrap {
             identity,
             authority,
             namespace,
+            network,
             mapped_uid,
             mapped_gid,
         } = received.control;
@@ -427,6 +434,7 @@ impl CallerBootstrap {
             || sender.uid != self.caller_uid
             || sender.gid != self.caller_gid
             || namespace == self.original_namespace
+            || network == self.original_network
         {
             return Err(CallerBootstrapError::ArmMismatch);
         }
@@ -442,6 +450,12 @@ impl CallerBootstrap {
                 .child_namespace(pid)
                 .map_err(CallerBootstrapError::Io)?
                 != namespace
+            || self
+                .identity_records
+                .get_mut()
+                .child_network_namespace(pid)
+                .map_err(CallerBootstrapError::Io)?
+                != network
         {
             return Err(CallerBootstrapError::CapabilityMismatch);
         }
@@ -451,6 +465,7 @@ impl CallerBootstrap {
             return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
         }
         self.outer_namespace = Some(namespace);
+        self.outer_network = Some(network);
         self.outer_pid = Some(pid);
         self.phase = CallerPhase::BeforeMonitor;
         Ok(namespace)
@@ -581,6 +596,12 @@ impl CallerBootstrap {
                         != namespace
                     || Some(namespace) == self.outer_namespace
                     || namespace == self.original_namespace
+                    || Some(
+                        self.identity_records
+                            .get_mut()
+                            .child_network_namespace(pid)
+                            .map_err(CallerBootstrapError::Io)?,
+                    ) != self.outer_network
                 {
                     return Err(CallerBootstrapError::CapabilityMismatch);
                 }
