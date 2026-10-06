@@ -139,7 +139,8 @@ hash or new observation API is invented here.
   `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused`.
   Equality of the obligation digest alone, or identity present only on agreement, is insufficient.
   A missing or different report claim yields a typed binding refusal with no settlement.
-  The required upstream report `claim()` contract remains unverified and CODE-gated.
+  The report `claim()` contract is measured on unmerged QSL change #650; CODE remains
+  gated on its merge and actual CG consumer conformance.
 - The converter shall read QSL's typed result/refusal discriminants and catalog codes rather
   than infer a verdict or refusal code from message text.
 - The converter shall preserve QSL's distinction between generated/native-exact divergence
@@ -178,10 +179,11 @@ preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Ver
 ## Scalar Obligation Identity
 
 CG owns and mints the scalar `ObligationIdentity`; QSL carries it as opaque. The scalar
-operation-application allocation below is the QSL-stated owning rule supplied through planning,
-**pending measurement of pushed upstream normative text**. The inspected ADR-013 O-09 still
-only delegates the scalar item's preimage to its owner. This document does not claim the
-positional amendment has already landed there; CODE waits for the actual amended owning spec.
+operation-application allocation below is measured in the pushed ADR-013 O-09 and FR-357
+amendment on **unmerged [QSL change #650](https://github.com/agent-ix/quire-spec-language/pull/650)**. Its spec and source still carry the obligation digest
+without recomputing or checking it; no scalar digest-verification API or exact encoded-member
+spelling is established by that branch. CODE waits for the merged owning contract and actual
+CG conformance; the announced recomputation change remains unresolved against the pushed text.
 
 The scalar subject is the claimed operator's FR-322 application node id and its authentic
 O-07 occurrence key: that node id with the selected `CheckedOccurrence`'s role `expression`
@@ -189,8 +191,8 @@ and ordinal. The preimage contains only that subject, occurrence, the existing o
 and `arguments`. There is **one argument per operand position**, in operand/harness draw order.
 Each argument contains its position ordinal, typed `OperandIdentity` and actual operand range
 used by the harness. The identity is a tagged representation: `GraphChild { node_id }` for an
-actual graph reference (including a parameter or subterm), or `InlineLiteral { application,
-occurrence, position }` for an inline literal, using the authentic application node id,
+actual graph reference (including a parameter or subterm), or `InlineLiteral { node_id,
+occurrence_key, position }` for an inline literal, using the authentic application node id,
 selected occurrence key and operand position ordinal. An inline literal's singleton range
 carries its value (FR-015 AC-16); QSL emits no extra literal node for it. A reference to an
 existing literal node is a graph child. Neither tag fabricates a checked node id.
@@ -204,8 +206,7 @@ from the authoritative checked/emitted proving package and retain them through g
 proving. No generated symbol, operand index used as a node id, chosen occurrence ordinal or
 application id mislabeled as `GraphChild` substitutes for that metadata. Position is an argument
 member; the typed operand identifier holds the valid tagged representation above. The persisted
-draw order
-and operator operand order must correspond exactly to the retained positional arguments.
+draw order and operator operand order must correspond exactly to the retained positional arguments.
 
 CG shall encode this owning scalar shape through its existing one canonical place
 (`core::canonical`, RFC 8785 via `quire-canonical`); the scalar positional member encoding must
@@ -259,7 +260,7 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-6 | PLANNED (IR-631) / GATED (QSL-641). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained sent claim before conversion; a missing claim, another result/run, or changing only the obligation, node, canonical generated-content identity, operator, operand value/range, result range or limits yields typed binding refusal and no settlement. Obligation-digest equality alone and agreement-only identity cannot pass. | Test |
 | FR-032-AC-7 | PLANNED (IR-631) / GATED (QSL-641). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive(ScalarAgrees)`; native `Incomplete`/execution fault becomes `GeneratedFault` and `Failed`, while exact `Incomplete` becomes `Incomplete(ResourceExhausted)`. `RefusedInput` preserves `invalid_runtime_input`; other typed QSL refusals follow the existing refusal map and non-fault refusals retain their code. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
 | FR-032-AC-8 | PLANNED (IR-631) / GATED (QSL-641). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` exercises an admitted operand pair whose exact result is outside the result range. The expected exact result is derived from the actual retained playback, and its correct refusal is never labelled a source violation. The fixture ranges and witness domain/result-range relation are asserted before that observation; no unreachable case or assumed solver choice counts as coverage. | Test |
-| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (pushed owning scalar rule and authoritative metadata access). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, existing kind and one argument per operand position in actual draw order, each with position ordinal, typed `OperandIdentity` and harness operand range. Actual graph references use `GraphChild { node_id }`; inline literals use `InlineLiteral { application, occurrence, position }` from the authentic application/occurrence and position, with their value in the singleton range. QSL emits no extra literal node. A referenced existing literal, parameter or subterm uses its graph node id. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Missing occurrence, operand metadata or kind refuses with no identity. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
+| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (merged owning scalar rule and authoritative metadata access). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, existing kind and one argument per operand position in actual draw order, each with position ordinal, typed `OperandIdentity` and harness operand range. Actual graph references use `GraphChild { node_id }`; inline literals use `InlineLiteral { node_id, occurrence_key, position }` from the authentic application/occurrence and position, with their value in the singleton range. QSL emits no extra literal node. A referenced existing literal, parameter or subterm uses its graph node id. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Missing occurrence, operand metadata or kind refuses with no identity. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
 
 ## Intent and Existing Coverage
 
@@ -297,16 +298,19 @@ scalar result/terminal readings above. The operator entry recompiles the origina
 checks `package_id`, and validates scalar-node/operator membership in the selected enclosing
 function; it does not replay that function as a predicate. `OperatorClaim.identity` carries a
 canonical generated-content `DigestRecord`, expressly never recomputed or checked by QSL.
-`OperatorParityReport` currently exposes `obligation()`, `result()` and `terminal_value()`,
-with no full report claim; `claim()` exists only on `ScalarAgreement`. Thus the existing report cannot establish full-claim equality on
-refusal, exact `Incomplete`, generated fault or divergence. The upstream full-claim fix is
-required, not inferred from an announcement or agreement coverage.
+On the measured unmerged QSL change #650, `OperatorParityReport::claim()` exposes
+`OperatorIdentity` on every outcome and `ValueParityReport::claim()` exposes `ValueIdentity`;
+FR-357 AC-13/14 specify full-claim retention and carry-and-bind observation identity. The
+operator report retains the obligation, node, operator, operands/ranges, result range, limits
+and observation digest even when request decoding or context validation refuses. The prior
+merged report carried only the obligation digest outside agreement. This is source inspection,
+not a passing-test claim; no QSL or CG scalar tests were run for this SPEC change.
 
 The positive operator-level route has these explicit **CODE gates**:
 
-1. QSL-641's amended spec and implemented report API must carry the full claim on every outcome,
-   exposed as `claim()` for both parity reports; measure the actual upstream spec/source before
-   relying on it. For this operator slice the full claim is the retained obligation identity,
+1. QSL-641's amended full-claim spec and report API, measured on unmerged change #650,
+   must merge before CG CODE relies on `claim()` for both parity reports; verify the actual
+   merged spec/source and CG consumer conformance. For this operator slice the full claim is the retained obligation identity,
    scalar node, canonical generated-content `DigestRecord`, operator, ordered operands with
    their ranges, result range and retained limits. The function-parity report requirement is an
    upstream consistency gate and authorizes no CG function-parity implementation here.

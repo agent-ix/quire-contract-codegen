@@ -80,19 +80,19 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    repeat by changing only obligation identity, node, canonical generated-content identity,
    operator, operand value/range, result range and limits. Keep the obligation digest equal
    for the other mutations to prove digest-only checking cannot pass. A missing report claim
-   refuses too; agreement-only identity is insufficient. These tests await the actual upstream
+   refuses too; agreement-only identity is insufficient. These tests await the merge of the measured upstream
    amended spec/API; do not fabricate a full report or substitute agreement for other outcomes. Pass
    valid converter
    settlements to `run_terminal_value`; repeat with no settlement to reuse
    [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace executable
    tests to each criterion they actually assert; this document alone provides no coverage.
-7. Once the QSL-stated positional rule is measured in the pushed owning normative spec and
+7. Once the positional rule measured in unmerged QSL change #650 has merged and
    IR-648's authoritative typed `CheckedPackageV2` operand access is available, independently
    inspect the scalar preimage through CG's one canonical encoder. Use the claimed operator application node and its actual selected
    expression occurrence. Retain one argument per operand/harness draw position, each with its
    position ordinal, typed `OperandIdentity` and actual range. An actual graph reference uses
    `GraphChild { node_id }`, including parameters, subterms or referenced existing literal nodes.
-   An inline literal uses `InlineLiteral { application, occurrence, position }` from the authentic
+   An inline literal uses `InlineLiteral { node_id, occurrence_key, position }` from the authentic
    application node/selected occurrence and position ordinal; its singleton range carries the
    literal value. Assert no extra literal node is required or fabricated. Draw one parameter
    independently at two positions and assert two distinct
@@ -116,7 +116,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 | FR-032-AC-6 | Full report claim and run match the retained sent claim on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/content/operator/operand range/result range/limits on a refusal, exact Incomplete, generated fault or divergence |
 | FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
-| FR-032-AC-9 | QSL-stated scalar positional shape, pending pushed owning spec: actual application/expression occurrence/kind and one ordinal/tagged-identity/range entry per draw; `GraphChild` for graph references, `InlineLiteral` for application/occurrence/position, literal value in singleton range, repeated parameter draws distinct | Invent occurrence/operand ids or extra literal nodes, omit or swap identity tags, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |
+| FR-032-AC-9 | Scalar positional shape measured on unmerged QSL change #650: actual application/expression occurrence/kind and one ordinal/tagged-identity/range entry per draw; `GraphChild` for graph references, `InlineLiteral` for application/occurrence/position, literal value in singleton range, repeated parameter draws distinct | Invent occurrence/operand ids or extra literal nodes, omit or swap identity tags, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |
 
 All checks are planned; completed-route observations have the same explicit upstream gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never

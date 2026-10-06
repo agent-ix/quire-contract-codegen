@@ -190,15 +190,16 @@ authored).
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
 - E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
-  operation-application preimage; QSL carries it as opaque. The following is the QSL-stated
-  owning rule supplied through planning, pending measurement of pushed upstream normative
-  text; the inspected ADR-013 O-09 currently delegates the scalar item's preimage to its owner.
+  operation-application preimage; QSL carries it as opaque. The following owning rule is measured in pushed ADR-013 O-09/FR-357 on unmerged QSL change #650; that
+  branch's spec and source still carry the obligation digest without recomputing or checking it.
+  No scalar digest-verification API or exact encoded-member spelling is established there;
+  CODE waits for the merged owning contract and actual CG conformance.
   The subject is the claimed operator's FR-322 application node id with its authentic O-07
   `CheckedOccurrence` key (node, `expression` role, ordinal), the existing obligation kind and
   one argument per operand position in operand/harness draw order. Each entry is its position
   ordinal, typed `OperandIdentity` and actual harness operand range. Its tagged representation
   is `GraphChild { node_id }` for an actual graph reference (parameter, subterm or an existing
-  literal node), or `InlineLiteral { application, occurrence, position }` using the authentic
+  literal node), or `InlineLiteral { node_id, occurrence_key, position }` using the authentic
   application node id, selected occurrence key and position ordinal. The inline literal's value
   is carried by its singleton range (FR-015 AC-16); QSL emits no extra literal node for it.
   The typed identifier member holds this representation without fabricating a checked node id.
@@ -229,8 +230,8 @@ authored).
   artifact and does not authenticate it: it carries the `DigestRecord` and evaluates exact
   semantics. Before any scalar settlement, CG compares every member of the report's full claim
   with the retained sent claim, plus the retained run tie, including refusal, exact `Incomplete`,
-  generated fault and divergence. Report `claim()` on every outcome remains an upstream CODE
-  gate; agreement-only claim identity and opaque obligation-digest equality are insufficient.
+  generated fault and divergence. Report `claim()` on every outcome is measured in unmerged
+  change #650; its merge and actual CG conformance remain CODE gates; agreement-only claim identity and opaque obligation-digest equality are insufficient.
 - E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
   only the exact claimed equality/inequality node, its occurrence key obtained from the recompiled
   original package, the obligation kind and one argument per distinct parameter-operand node ID
