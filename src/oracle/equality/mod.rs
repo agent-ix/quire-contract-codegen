@@ -1975,7 +1975,7 @@ mod tests {
         let mut records = Vec::new();
         let mut items = Vec::new();
         for ((left, right), (left_digit, right_digit, expression_digit)) in
-            operands.iter().zip([('8', 'a', '9'), ('6', 'b', '7')])
+            operands.iter().zip([('8', '0', '9'), ('6', '1', '7')])
         {
             let left_id = node_id(left_digit);
             let right_id = node_id(right_digit);
