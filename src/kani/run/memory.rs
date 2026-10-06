@@ -12,9 +12,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rustix::process::Pid;
 #[cfg(target_os = "linux")]
-use rustix::process::{pidfd_open, PidfdFlags};
+use rustix::process::{pidfd_open, Pid, PidfdFlags};
 use serde::Serialize;
 
 /// The mechanism that actually enforced the run's memory ceiling.
@@ -54,13 +53,16 @@ pub(super) struct MemoryObserver {
 
 impl MemoryObserver {
     /// Check mechanism availability before the backend is spawned.
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn prepare(_root: &Path) -> io::Result<Self> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "tree resident-memory observation requires Linux procfs",
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
     pub(super) fn prepare(root: &Path) -> io::Result<Self> {
-        if !cfg!(target_os = "linux") {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "tree resident-memory observation requires Linux procfs",
-            ));
-        }
         let observer = Self {
             root: root.to_path_buf(),
             known: BTreeMap::new(),
@@ -97,6 +99,7 @@ impl MemoryObserver {
         Ok(observer)
     }
 
+    #[cfg(target_os = "linux")]
     pub(super) fn bind_root(&mut self, pid: u32, start: u64) -> io::Result<()> {
         let process = parse_process(&fs::read_to_string(
             self.root.join(pid.to_string()).join("stat"),
@@ -504,6 +507,8 @@ mod tests {
     }
 
     /// Trace: FR-028-AC-21.
+    // Requires actual Linux procfs/pidfd/namespace mechanism availability.
+    #[cfg(target_os = "linux")]
     #[test]
     fn unavailable_children_observation_refuses_and_only_disappeared_tasks_are_skipped() {
         use std::os::unix::fs::symlink;
@@ -604,6 +609,8 @@ mod tests {
     }
 
     /// Trace: FR-028-AC-21.
+    // Requires actual Linux procfs/pidfd/namespace mechanism availability.
+    #[cfg(target_os = "linux")]
     #[test]
     fn available_observer_does_not_invent_a_peak_before_observing_a_tree() {
         let observer = MemoryObserver::prepare(Path::new("/proc")).unwrap();
