@@ -494,6 +494,17 @@ mod tests {
             .collect()
     }
 
+    fn child_with_nspid(children: &[u32], local_pid: &str) -> Option<u32> {
+        children.iter().copied().find(|pid| {
+            fs::read_to_string(format!("/proc/{pid}/status")).is_ok_and(|status| {
+                status
+                    .lines()
+                    .find_map(|line| line.strip_prefix("NSpid:"))
+                    .is_some_and(|ids| ids.split_whitespace().last() == Some(local_pid))
+            })
+        })
+    }
+
     /// Trace: FR-028-AC-2, FR-028-AC-21.
     #[test]
     fn startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed() {
@@ -559,6 +570,7 @@ mod tests {
     fn completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample() {
         let directory = discover_scratch("namespace-late-fork");
         let ready_file = directory.join("orphan-ready");
+        let adopt = directory.join("adopt-now");
         let release = directory.join("fork-now");
         let forked = directory.join("forked");
         let script = r#"import os,pathlib,signal,sys
@@ -570,11 +582,15 @@ if intermediate:
         os.sched_yield()
     os._exit(0)
 if os.fork():
+    # Keep the orphan attached to this parent until the caller has seen its ready file.
+    while not (root/'adopt-now').exists():
+        os.sched_yield()
     os._exit(0)
 os.setsid()
+(root/'orphan-ready.tmp').write_text(str(os.getpid()))
+(root/'orphan-ready.tmp').replace(root/'orphan-ready')
 while os.getppid()!=1:
     os.sched_yield()
-(root/'orphan-ready').write_text(str(os.getpid()))
 while not (root/'fork-now').exists():
     os.sched_yield()
 if not os.fork():
@@ -604,19 +620,25 @@ signal.pause()
         wait_for(&ready_file);
         observer.observe(init).unwrap(); // The later fork is deliberately not sampled.
         let local_orphan = fs::read_to_string(&ready_file).unwrap();
-        let orphan = children(init)
-            .into_iter()
-            .find(|pid| {
-                fs::read_to_string(format!("/proc/{pid}/status")).is_ok_and(|status| {
-                    status
-                        .lines()
-                        .find_map(|line| line.strip_prefix("NSpid:"))
-                        .is_some_and(|ids| {
-                            ids.split_whitespace().last() == Some(local_orphan.trim())
-                        })
-                })
-            })
-            .unwrap();
+        let local_orphan = local_orphan.trim();
+        // The held parent makes the previously raced direct-child lookup fail here.
+        assert!(
+            child_with_nspid(&children(init), local_orphan).is_none(),
+            "held orphan parent must prevent adoption before release"
+        );
+        fs::write(adopt, []).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let orphan = loop {
+            let observed = children(init);
+            if let Some(orphan) = child_with_nspid(&observed, local_orphan) {
+                break orphan;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "orphan NSpid {local_orphan} was not adopted by INIT {init}; observed children: {observed:?}"
+            );
+            std::thread::yield_now();
+        };
         let orphan_handle = pidfd_open(valid_pid(orphan).unwrap(), PidfdFlags::empty()).unwrap();
         fs::write(release, []).unwrap();
         wait_for(&forked);
