@@ -445,8 +445,13 @@ oracle and one-CODE-PR gate.
     Source: execute.rs::start calls run/tool.rs::require_executable (regular-file/execute-bit check);
     Linux [execve](https://man7.org/linux/man-pages/man2/execve.2.html) names absent script interpreter
     as ENOENT. The authored fixture and actual positive barriers remain PLANNED/UNRUN. Require
-    existing bounded backend-failure handling, teardown/deadline/capture settlement, no
-    synthetic report/status/evidence and no unfiltered retry/fallback. Initial trusted-helper spawn
+    confirmed owned teardown and original deadline/capture settlement, then the one existing public
+    result: KaniRunOutcome::Inconclusive { reason: KaniInconclusiveReason::NoVerdict } for the single
+    run and every compatible batch member. Actual observed unsuccessful backend exit with no report
+    supports this result; it is not synthetic evidence, Tool Io, pre-Dispatch admission or Failed.
+    Preserve resource/deadline and CleanupUnconfirmed precedence. Separately exercise C/launcher
+    boundary I/O as the existing Tool refusal, never conflate it with the backend exec exit. Require
+    no fabricated report/status/evidence, shell substitution or unfiltered retry/fallback. Initial trusted-helper spawn
     or early EOF proves neither installation nor recipe exec. Startup transport remains CLOEXEC
     through successful recipe exec. Run trusted installer with separate sanitized loader environment;
     carry original raw backend environment as authenticated bounded metadata and restore it only
@@ -634,19 +639,16 @@ whole-tree settlement must be remeasured before CODE delivery; this result is no
 roundtrip, matched production helper/protocol evidence, runtime acceptance or proof for arbitrary
 or kernel-unkillable tasks. No probe script, binary, schema or foreign artifact is copied here.
 
-On luna, one replacement measurement ran 200 trials (100 baseline and 100 with a single CPU burner),
-with controller/trees/burner pinned to CPU0, nice10 and a nonblocking machinewide flock. The
-representative topology used nested bwrap PID namespaces and Python outer/inner INIT roles, a
-backend-like child, workers, grandchild, detached session worker and adopted orphan. Positive
+The measurement used 200 trials (100 baseline and 100 with a single CPU burner), with controller,
+trees and burner sharing one CPU, reduced scheduling priority and a nonblocking machinewide lock.
+The representative topology used nested bwrap PID namespaces and Python outer/inner INIT roles,
+a backend-like child, workers, grandchild, detached session worker and adopted orphan. Positive
 readiness/parent/start/namespace checks retained owned host pidfds before signalling only the actual
 outer INIT pidfd with SIGKILL. Monotonic timing ran from just before that signal until every retained
 pidfd exited, its original host/proc identity was gone and the direct launcher was reaped.
-
-The run completed exit0 in 28.755899541 seconds, within its separate 60-second research bound, from
-2026-10-06T18:43:42.199978Z to 18:44:10.955860Z. Observed versions were Linux
-6.17.0-20-generic (x86_64), bubblewrap 0.9.0, Python 3.12.3, GNU nice 9.4 and util-linux flock 2.39.3.
-The separate research runner bound is neither R nor a production timeout. Nearest-rank quantiles
-were independently recomputed from raw monotonic rows; combined P99 is sorted rank198 of200.
+Nearest-rank quantiles were independently recomputed from raw monotonic samples; combined P99 is
+sorted rank198 of200. This method measures representative kernel-topology settlement, not actual
+product helper/protocol or Cargo/Kani behavior.
 
 | Group | Trials | P50 nanoseconds | P99 nanoseconds | Maximum nanoseconds |
 |---|---:|---:|---:|---:|
@@ -667,21 +669,10 @@ was confirmed by waitpid of the original unreaped fork child, but its PID/start/
 serialized; no independent raw burner-identity witness is claimed. The trees' raw per-identity
 confirmations and burner control-flow/waitpid confirmation have different evidence scopes.
 
-The first separate measurement attempt failed preflight at nested-membership comparison before
-measurement SIGKILL: 0/200 trials, no burner, no latency quantiles and no derived R. The NSpid
-numeric-prefix oracle was wrong, not evidence of failed kernel teardown. Its retained-owner cleanup
-completed, but individual failed-trial PID/start facts were not serialized. A separately released
-known-good/known-bad replacement preflight then passed in 2.063187376 seconds via normal two-second
-payload alarm exit: nine retained identities exited/disappeared and launcher reaped, no measurement
-or emergency SIGKILL and no derived R. Neither preliminary attempt counts among the 200 measurement
-samples or supplies product acceptance.
-
-Primary retained research receipts are
-[/tmp/ix-handoff/ir639-settlement-reserve-probe-replacement/measurement-receipt.md](/tmp/ix-handoff/ir639-settlement-reserve-probe-replacement/measurement-receipt.md),
-its measurement-receipt.json, rawlaunch.json, measurement-trials.jsonl,
-measurement-ownership-cleanup.jsonl and root-measurement-audit.json in that same directory;
-[replacement preflight](</tmp/ix-handoff/ir639-settlement-reserve-probe-replacement/preflight-receipt.md>)
-and [first failed attempt](</tmp/ix-handoff/ir639-settlement-reserve-probe/receipt.md>) retain provenance
-and limitations. The method, measured values, unsuccessful first attempt and limits above remain
-durable here independently of those scratch files. No additional execution or new assurance claim
-follows from this receipt.
+One earlier attempt failed its own preflight and is recorded privately. It produced no measurement
+samples or derived reserve; its failed membership oracle is not evidence of failed kernel teardown.
+A separate known-good/known-bad preflight confirmed nine retained identities exited/disappeared and
+launcher reaped via normal payload exit, without measurement or emergency SIGKILL. Neither
+preliminary attempt counts among the 200 measurement samples or supplies product acceptance.
+Full receipts and provenance are retained privately; this public note carries only the method,
+quantile values, derivation and limits. No additional execution or assurance claim follows from it.

@@ -589,10 +589,13 @@ actual recipe exec, with these two transitions:
 | Boundary | Required behavior |
 | --- | --- |
 | Before positive Dispatch | Safe policy/filter/privilege installation failure travels over the bounded authenticated startup channel as typed unavailable admission; C confirms owned cleanup. Initial trusted-helper spawn success or early channel EOF is not installation success. No arbitrary backend recipe executes. |
-| After positive Dispatch | Installed policy permits execution of the exact original backend recipe. Its actual exec failure is handled by existing bounded backend-failure rules, including FR-034 AC-10 owned teardown and original deadline/capture settlement, without unfiltered retry, synthetic report/status/KaniExecutionEvidence or a new kind. It is not retroactively classified as pre-Dispatch policy installation failure. |
+| After positive Dispatch | Installed policy permits execution of the exact original backend recipe. Its actual unsuccessful exec exit with no report, after confirmed owned teardown and original deadline/capture settlement, produces existing Inconclusive NoVerdict. No unfiltered retry, fabricated report/status/evidence, synthetic Failed or new kind is permitted. It is not retroactively classified as pre-Dispatch policy installation failure. |
 
 Startup transport shall remain CLOEXEC through the successful exec boundary; partial actual recipe
-exec failure shall settle/refuse through that existing post-Dispatch path without retry or fallback.
+exec failure shall settle through that existing post-Dispatch path without retry or fallback. An
+actually unsuccessful backend exit with no report after confirmed owned settlement shall produce
+the existing Inconclusive NoVerdict result; C/launcher boundary I/O failure retains its Tool Io
+refusal. These conditions shall not be conflated or inferred from early transport EOF.
 Initial trusted-helper spawn success or early EOF shall never prove successful recipe exec/handoff.
 Positive Dispatch remains required before arbitrary backend creation/execution. The
 mechanism is deliberately unspecified: a matched helper
@@ -879,7 +882,7 @@ After positive settlement, every other guardian failure retains its existing ref
 
 | Failure or candidate | Existing public mapping retained by this amendment |
 |---|---|
-| Tool executable precheck or ordinary launcher I/O, including post-Dispatch backend exec/observation I/O | Tool(KaniToolError::Io { tool: KaniTool::Launcher, path, error }); execute.rs::start retains BoundedLaunchError::Io mapping. No synthetic Kani evidence. |
+| Tool executable precheck or I/O at the C/launcher boundary (not an unsuccessful backend exec exit) | Tool(KaniToolError::Io { tool: KaniTool::Launcher, path, error }); execute.rs::start retains BoundedLaunchError::Io mapping. No synthetic Kani evidence. |
 | Unavailable setup/memory mechanism, namespace/proc capability, authenticated owner protection or confinement admission | MemoryMechanismUnavailable with original io::Error and mandatory KaniStartupAdmissionCause: existing MemoryEnforcement or the separately allocated BackendStdioSocket, BackendStdioInspectionFailed, CapabilityUnavailable. Admission Unavailable is independent of errno; existing run-stage Unsupported/NotFound unavailable mapping is retained for non-admission I/O. |
 | Authenticated startup/identity/protocol failure before Dispatch | Existing unavailable startup path when ownership/protection cannot be established; otherwise ordinary I/O Tool refusal. No additional Guardian kind or Dispatch. |
 | Actual memory observation unavailable after admission | MemoryObservationFailed { detail }; no classified report/evidence. |
@@ -889,7 +892,7 @@ After positive settlement, every other guardian failure retains its existing ref
 | Admitted workdeadline expiry | Single-run Inconclusive with TimedOut; compatible batch BatchTimedOut { members, timeout }, naming original request ceiling. |
 | Capture overflow or failed capture | OutputOverLimit { stream, limit, harnesses } or OutputUnread { stream, detail }, retaining existing stable codes and no outcome. |
 | Unusable exported report, nonmember playback or crate/harness mismatch | Report(KaniReportRefusal), PlaybackForNonMember { harness } or HarnessNotInCrate { harness_path }, respectively. |
-| Admitted backend unsuccessful/no-report completion, including unavailable cache or denied rendezvous | Existing FR-017 Inconclusive NoVerdict path, with existing memory/deadline precedence; no fabricated setup failure or report. |
+| Admitted backend unsuccessful/no-report completion, including original recipe exec failure after Dispatch, unavailable cache or denied rendezvous | After confirmed owned settlement, existing single-run and batch-member KaniRunOutcome::Inconclusive { reason: KaniInconclusiveReason::NoVerdict }, as classify_kani_run and execute.rs batch classification define. Actual unsuccessful exit/no report supports that observed result; it is not Tool Io, a synthetic Failed/evidence or a pre-Dispatch admission error. Existing memory/deadline and CleanupUnconfirmed precedence remains. |
 
 The diagnostic detail shall contain at most 4096 UTF-8 bytes, charged to existing caller run buffers
 and whole-run ceilings. This small bound permits fixed known L/O/M/I and creator/capture role labels,
@@ -1000,8 +1003,8 @@ Primary source grounding (Analysis, not production Test): Linux
 [PID namespaces](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html) defines INIT-death
 namespace teardown; [parent-death signals](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
 and [user namespaces](https://man7.org/linux/man-pages/man7/user_namespaces.7.html) define arming and
-mapping constraints. Installed bwrap 0.9.0's
-[launch implementation](https://github.com/containers/bubblewrap/blob/v0.9.0/bubblewrap.c) places
+mapping constraints. Bubblewrap's
+[launch implementation](https://github.com/containers/bubblewrap/blob/main/bubblewrap.c) places
 monitor setup/info output before internal child_wait release and inner exec. Kani 0.68.0's
 [JSON export](https://github.com/model-checking/kani/blob/kani-0.68.0/kani-driver/src/frontend/json_handler.rs)
 uses std::fs::write of the argument-selected path; safe descriptor plumbing and the genuine pipe
