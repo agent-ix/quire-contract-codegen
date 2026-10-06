@@ -580,7 +580,7 @@ fn capture<R: Read + AsFd>(
 /// does not leave its descendants behind: Kani's launcher
 /// forks `kani-driver`, which forks CBMC, and CBMC is the solver a budget most needs to stop. A
 /// `child.kill()` alone would leave it running after the launcher is gone. The launcher is started
-/// as the leader of its own process group ([`run_launcher_with_timeout`]), every descendant
+/// as the leader of its own process group ([`run_monitored`]), every descendant
 /// inherits that group, and one signal to the group reaches them all, however deep, with no
 /// snapshot of the process tree that could miss a process forked a moment later.
 ///

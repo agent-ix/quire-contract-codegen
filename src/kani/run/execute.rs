@@ -510,7 +510,8 @@ fn outer_bound(timeout: Duration, members: usize) -> Duration {
         .unwrap_or(Duration::MAX)
 }
 
-/// The argument vector and [`Command`] of one process that runs every harness of `selections`.
+/// The argument vector and [`super::namespace::BackendCommand`] recipe for one process that
+/// runs every harness of `selections`.
 fn batch_launch_command(
     first: &KaniExecutionRequest<'_>,
     selections: &[String],
