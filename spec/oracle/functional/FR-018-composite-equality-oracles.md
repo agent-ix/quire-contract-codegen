@@ -147,6 +147,27 @@ in the `NODE_KEY_DOMAIN` domain.
   recursion pass — then the generator shall refuse the item with that
   `DeclarationCause` and emit no code for it, without changing any other item's
   output.
+- The generator shall reconstruct each item's operand types with a separate
+  `COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT` of 65,536 units. Entering the root type node or
+  following one member, option-payload, or collection-element reference to a
+  type node consumes one unit; the counter is shared by that item's two operands
+  and conversion targets, and resets for the next item. A repeated reference
+  consumes a new unit even when its node was previously resolved or memoized;
+  an in-progress record back-edge also consumes its reference-entry unit before
+  closing to the key. Before an entry that
+  would consume unit 65,537, it shall refuse only that item as
+  `CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit: 65_536,
+  consumed: 65_537 }`, with no emitted symbols. This budget is independent of
+  `COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT`, which governs Contract IR lowering;
+  neither is a nesting-depth limit.
+- Type resolution shall terminate without Rust call-stack exhaustion. An edge
+  back to a record or tuple declaration already in progress shall close as
+  that declaration's `NodeKey`, including a record field reached through an
+  `option` payload or `sequence` element. An edge back to an unclosed `option`
+  or collection type shall instead refuse only the item as
+  `CompositeEqualityRefusal::TypeResolutionCycle { type_node_id }`, naming the
+  repeated node. A long acyclic chain shall reach the work refusal above without
+  a panic or process abort.
 - When a member's type node is a `bounded_domain` node, the generator shall read
   the member as the type of that node's base `scalar_type`, bounded by that
   node's own `binding` members and by no sibling bound over the same base.
@@ -308,6 +329,8 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-21 | Each generated item's claim-map entry records its declaration closure as every declaration's key, form (record, tuple or option), members in declaration order with each member's name, presence and type, and each leaf's family and declared bound, and the closure equals member by member (name, presence, value type, order) the declarations of the `TypeEnvironment` the item's generated environment constructor returns, for every item of the TC-029 corpus whose leaves are Boolean or bounded integers. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-22 | For every pair of operand values in the item's refinement domain (FR-028-AC-16: every case where the domain fits the case cap, the boundary and seeded cases otherwise; every presence state of an option and of an optional field included) of an item whose leaves are Boolean or bounded integers, the generated oracle called with its own environment and a `Meter` whose every limit is `u64::MAX` returns `Outcome::Completed` with the verdict of QSpec FR-149 for the item's operator and admits exactly `equality.plan-form`, `equality.plan`, one `equality.pair` per node of the occurrence-pair tree, then `equality.result-retain`; no such pair returns `Refused` or `Incomplete`. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-23 | For every item of the TC-029 corpus whose leaves are Boolean or bounded integers, the claim-map closure's member names, presence and each integer leaf's inclusive bounds equal those of an independent read of the checked package (the V2 composite and `bounded_domain` nodes read through Contract IR's reader, never through the generator's reconstruction); a closure that dropped a member, narrowed a bound by one or read an optional member as required fails the check. PLANNED (IR-264). | Test (TC-029) |
+| FR-018-AC-24 | Type reconstruction of QSpec's `positive-recursive-records.json` List (through `Option<List>`) and Tree (through `Sequence<Tree>` bounded `[0,3]`) closes each back-edge at the in-progress record key, generates equality items built over both record types, and terminates; a synthetic unclosed `Option` self-cycle and a `Sequence` self-cycle each refuse as `TypeResolutionCycle` naming the repeated type node, without a panic, stack overflow or generated symbol. PLANNED (IR-643). | Test (TC-029) |
+| FR-018-AC-25 | The per-item type-resolution counter charges one unit for each root type-node entry or followed type-node reference, including a repeated or memoized reference, across both operands and conversion targets, independently of Contract IR lowering; an acyclic chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack exhaustion or generated symbols, while a sibling needing at most 65,536 entries still generates. PLANNED (IR-643). | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -346,6 +369,8 @@ without one is not written.
 | FR-018-AC-21 | Record the closure from a second reading of the package (a second reader that reads presence differently), so the shadow of FR-015 and the production oracle disagree on presence and each is correct against its own reading. Member order is not a mutant: a permutation changes no compared observable. |
 | FR-018-AC-22 | Refuse or stop a legal pair (an `absent` against a `null` slot, two `none`, a nested option) as `Refused(CheckedInvariant)`, charge one pair too many for a `some`/`some` option or too few for an unequal pair that stops early, or complete with the verdict of the other operator. |
 | FR-018-AC-23 | Check the closure against the generator's own reconstruction (the check of AC-21 alone), so a reader that narrows a bound or reads `T?` as `T` shrinks the shadow's domain, the refinement domain and the oracle's declaration together and every check agrees. |
+| FR-018-AC-24 | Recurse from `Option` into itself without tracking an unclosed type, or reject every repeated node including the List and Tree record back-edges; the former overflows the stack and the latter refuses valid recursive records. |
+| FR-018-AC-25 | Reuse the Contract IR lowering counter for reconstruction, charge only record declarations while skipping option and sequence edges, or recurse through 65,537 acyclic entries before checking the budget; a large item then completes or overflows the stack instead of yielding the named per-item refusal. |
 
 ## Dependencies
 

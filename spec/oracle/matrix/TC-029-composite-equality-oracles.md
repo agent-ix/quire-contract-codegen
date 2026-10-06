@@ -179,6 +179,29 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     member names, presence and each integer leaf's inclusive bounds with the claim-map closure;
     then hand the check a closure that dropped a member, one whose bound was narrowed by one, and
     one that read an optional member as required, and read each fail.
+16. Recursive records (FR-018-AC-24, planned, IR-643). Read the authoritative QSpec
+    `proposals/checked-package-v2/fixtures/positive-recursive-records.json` through Contract IR's
+    strict reader, without copying it into this repository. Build equality expression items over
+    the fixture's List (`Option<List>`) and Tree (`Sequence<Tree>[0,3]`) record declarations in a
+    valid test package; the fixture itself supplies type nodes, not equality expressions. Assert
+    both items generate, their back-edges resolve to each record's `NodeKey`, and the call
+    terminates. At the
+    equality module's type-resolution seam, supply separate synthetic graphs with `Option`
+    referring to itself and `Sequence` referring to itself, so earlier package admission cannot
+    mask the resolver behavior. Assert each returns `TypeResolutionCycle` with the repeated node
+    id, emits no symbol, and leaves a healthy sibling generated; run these cases in a subprocess
+    so a stack overflow or abort is observed as a failed test rather than killing the test runner.
+17. Type-resolution work (FR-018-AC-25, planned, IR-643). At that same seam, use an acyclic
+    chain of 65,537 type-node entries with a valid terminating leaf and a healthy sibling. Assert
+    the first item refuses `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }`,
+    emits no symbol and leaves the sibling generated; an exactly 65,536-entry chain does not
+    receive the work refusal. Count root entries and followed member, option and collection
+    references, including both operands and conversion targets and a repeated reference to a
+    previously resolved node, in a short mixed-shape case
+    against a counter observed at the seam. Confirm the over-limit case uses the type-resolution
+    refusal, never `LoweringWorkExhausted`. Run the long
+    chain in a subprocess to detect stack exhaustion. The seam supplies a synthetic lowered graph,
+    so Contract IR's separate lowering ceiling does not preempt this check.
 
 ## Expected Results
 
@@ -196,6 +219,11 @@ the emitted `check_type` calls; the two operators generate under distinct
 symbols with complementary results and one `caller_declared`
 mark; and the generated crate
 compiles with `publish = false` and no charge or pair-count literal.
+
+The recursive List and Tree items generate; unclosed option and sequence cycles
+return the typed cycle refusal, and an over-budget acyclic type walk returns the
+typed work refusal with the failed-entry count. Neither case aborts or starves a
+healthy sibling. Steps 16 and 17 remain planned until their executable tests land.
 
 Operand construction is the corpus's work, not the generator's: the composite
 and collection values compared are built by the runtime's own FR-008
