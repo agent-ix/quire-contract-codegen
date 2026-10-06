@@ -11,6 +11,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-018
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-034
+    type: references
   - target: ix://agent-ix/quire-contract-codegen/ADR-003
     type: references
   - target: ix://agent-ix/quire-spec-language/ADR-011
@@ -171,6 +173,15 @@ other.
   `KaniInconclusiveReason` distinct from every existing reason (FR-028-AC-3, FR-028-AC-21).
 - The generator shall record in the execution evidence of every run the Kani, Rust and solver
   versions the run used, and every option of the run's option vector (FR-028-AC-23).
+
+### Native refinement lifecycle ownership (planned IR-639)
+
+The typed native refinement entry shall use FR-034's guardian ownership path for each run.
+[FR-034](./FR-034-caller-death-ownership.md) supplies AC-24's caller-death lifecycle authority;
+all existing AC-24 memory/wall ceilings, evidence fields and refinement classes remain intact.
+Criterion-level implementation order is FR-017 launcher, AC-21's preceding containment code
+slice (PR #295), FR-034 ownership, then AC-24 native refinement. The FR-034 specification may
+merge before containment code; completing all parent IR-241 is not a prerequisite.
 
 ### Parity settlement projection (planned IR-635)
 
