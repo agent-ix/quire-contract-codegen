@@ -17,9 +17,9 @@ use std::{
 use super::{
     control::{CallerLease, ControlError},
     launch::{
-        finish_capture, reap_stopped_launcher, stream_bytes, try_spawn_capture, BoundedLaunch,
-        BoundedLaunchError, CaptureFlags, CaptureStream, Captured, GuardianFailureKind,
-        LaunchOutcome, CAPTURE_LIMIT,
+        finish_capture, reap_stopped_launcher, stream_bytes, BoundedLaunch, BoundedLaunchError,
+        CaptureFlags, CaptureStream, Captured, GuardianFailureKind, LaunchOutcome, PreparedCapture,
+        CAPTURE_LIMIT,
     },
     memory::MemoryObserver,
     namespace::{BackendCommand, GatedClaim, NamespaceOwner, ReadyIdentityError},
@@ -42,6 +42,7 @@ struct RunOwner {
     flags: CaptureFlags,
     deadline: Option<Instant>,
     publication: Arc<Publication>,
+    capture_reserved_bytes: u64,
 }
 
 /// Recorded before independent INIT cancellation, with the live RunOwner still retained.
@@ -66,6 +67,12 @@ impl RunOwner {
         limit: usize,
         publication: Arc<Publication>,
     ) -> io::Result<Self> {
+        let prepared_stdout = PreparedCapture::prepare(limit)?;
+        let prepared_stderr = PreparedCapture::prepare(limit)?;
+        let capture_reserved_bytes = prepared_stdout
+            .reserved_bytes()?
+            .checked_add(prepared_stderr.reserved_bytes()?)
+            .ok_or_else(|| io::Error::other("capture reservation cannot be represented"))?;
         command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -79,6 +86,7 @@ impl RunOwner {
             stderr: None,
             deadline,
             publication,
+            capture_reserved_bytes,
             flags: CaptureFlags {
                 stop: Arc::new(AtomicBool::new(false)),
                 failed: Arc::new(AtomicBool::new(false)),
@@ -98,8 +106,8 @@ impl RunOwner {
             ));
         };
         let readers = (|| {
-            owner.stdout = Some(try_spawn_capture(stdout, &owner.flags, limit)?);
-            owner.stderr = Some(try_spawn_capture(stderr, &owner.flags, limit)?);
+            owner.stdout = Some(prepared_stdout.spawn(stdout, &owner.flags)?);
+            owner.stderr = Some(prepared_stderr.spawn(stderr, &owner.flags)?);
             Ok::<(), io::Error>(())
         })();
         if let Err(error) = readers {

@@ -320,30 +320,33 @@ impl<'fd> Transport<'fd> {
         if rights.len() > RECEIVED_RIGHTS {
             return Err(ControlError::ExcessRights);
         }
-        let mut encoded = BoundedEncoding(Vec::new());
-        if let Err(error) = serde_json::to_writer(&mut encoded, control) {
-            return if error.is_io() && encoded.0.len() == CONTROL_BYTES {
-                Err(ControlError::EncodedBytesExceeded)
-            } else {
-                Err(ControlError::InvalidEncoding(error))
-            };
+        let frame = PreparedFrame::encode(control)?;
+        self.send_prepared(&frame, rights, deadline)
+    }
+
+    /// Send an already bounded/encoded frame without copying another whole control buffer.
+    /// The run owner may prepare and charge this allocation before its first child is created.
+    pub(super) fn send_prepared(
+        &self,
+        frame: &PreparedFrame,
+        rights: &[BorrowedFd<'_>],
+        deadline: Instant,
+    ) -> Result<(), ControlError> {
+        if rights.len() > RECEIVED_RIGHTS {
+            return Err(ControlError::ExcessRights);
         }
-        let length =
-            u32::try_from(encoded.0.len()).map_err(|_| ControlError::EncodedBytesExceeded)?;
-        let mut frame = Vec::with_capacity(encoded.0.len() + 4);
-        frame.extend_from_slice(&length.to_be_bytes());
-        frame.extend_from_slice(&encoded.0);
+        let bytes = &frame.bytes;
         let mut offset = 0;
         let mut storage = [MaybeUninit::uninit(); ANCILLARY_BYTES];
         let mut ancillary = SendAncillaryBuffer::new(&mut storage);
         if !rights.is_empty() && !ancillary.push(SendAncillaryMessage::ScmRights(rights)) {
             return Err(ControlError::ExcessRights);
         }
-        while offset < frame.len() {
+        while offset < bytes.len() {
             self.wait(PollFlags::OUT, deadline)?;
             match sendmsg(
                 self.0,
-                &[IoSlice::new(&frame[offset..])],
+                &[IoSlice::new(&bytes[offset..])],
                 &mut ancillary,
                 SendFlags::DONTWAIT | SendFlags::NOSIGNAL,
             ) {
@@ -508,13 +511,64 @@ pub(super) struct Received<T> {
     pub(super) rights: Vec<OwnedFd>,
 }
 
-struct BoundedEncoding(Vec<u8>);
+/// Encoded controls have one finite owned buffer, including their existing four-byte framing.
+/// No caller can mutate the encoded bytes or manufacture an unbounded prepared frame.
+pub(super) struct PreparedFrame {
+    bytes: Vec<u8>,
+}
+
+impl PreparedFrame {
+    pub(super) fn encode<T: Serialize>(control: &T) -> Result<Self, ControlError> {
+        let limit = CONTROL_BYTES
+            .checked_add(4)
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(limit)
+            .map_err(|error| ControlError::Io(io::Error::other(error)))?;
+        bytes.extend_from_slice(&[0; 4]);
+        let mut encoded = BoundedEncoding { bytes, limit };
+        if let Err(error) = serde_json::to_writer(&mut encoded, control) {
+            return if error.is_io() && encoded.bytes.len() == limit {
+                Err(ControlError::EncodedBytesExceeded)
+            } else {
+                Err(ControlError::InvalidEncoding(error))
+            };
+        }
+        let length = encoded
+            .bytes
+            .len()
+            .checked_sub(4)
+            .and_then(|length| u32::try_from(length).ok())
+            .filter(|length| *length != 0)
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+        encoded
+            .bytes
+            .get_mut(..4)
+            .ok_or(ControlError::EncodedBytesExceeded)?
+            .copy_from_slice(&length.to_be_bytes());
+        Ok(Self {
+            bytes: encoded.bytes,
+        })
+    }
+
+    /// Actual heap capacity, even if the frame's payload is small. The owner additionally charges
+    /// its fixed control/ancillary/descriptor state and any decoded command metadata.
+    pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
+        u64::try_from(self.bytes.capacity()).map_err(|_| ControlError::EncodedBytesExceeded)
+    }
+}
+
+struct BoundedEncoding {
+    bytes: Vec<u8>,
+    limit: usize,
+}
 
 impl Write for BoundedEncoding {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let remaining = CONTROL_BYTES.saturating_sub(self.0.len());
+        let remaining = self.limit.saturating_sub(self.bytes.len());
         let count = remaining.min(bytes.len());
-        self.0.extend_from_slice(&bytes[..count]);
+        self.bytes.extend_from_slice(&bytes[..count]);
         if count == 0 && !bytes.is_empty() {
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
