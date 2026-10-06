@@ -109,6 +109,7 @@ pub(super) enum GuardianControl {
     Completed {
         authority: RunAuthority,
         outcome: BackendExit,
+        stop: super::role_deadline::StopStamp,
     },
     Refused {
         reason: GuardianRefusal,

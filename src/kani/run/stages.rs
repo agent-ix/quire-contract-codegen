@@ -14,6 +14,7 @@ use super::{
         current_build_identity, BackendExit, CallerControl, GuardianControl, GuardianRefusal,
         RunAuthority, StdinControl,
     },
+    role_deadline::StopStamp,
     stdin::OriginalStdin,
 };
 
@@ -315,13 +316,20 @@ impl PendingDispatch {
     }
 }
 
+/// Authenticated actual I completion retains its original trigger for C's whole-owner clock.
+/// This record is private and provisional; it grants neither report nor settlement acceptance.
+pub(super) struct BackendCompletion {
+    pub(super) outcome: BackendExit,
+    pub(super) stop: StopStamp,
+}
+
 impl Dispatched {
     /// Bounded authenticated completion; control EOF never stands for backend completion.
     pub(super) fn completion(
         &self,
         owner: &impl GuardianIdentity,
         deadline: Option<Instant>,
-    ) -> Result<Option<BackendExit>, StageError> {
+    ) -> Result<Option<BackendCompletion>, StageError> {
         let transport = self.ready.bootstrap.lease.transport();
         if !transport.pending_control(Duration::ZERO)? {
             return Ok(None);
@@ -331,10 +339,12 @@ impl Dispatched {
         let received = transport.receive::<GuardianControl>(|_| 0, deadline)?;
         verify_sender(owner, &received, self.ready.mapped_uid)?;
         match received.control {
-            GuardianControl::Completed { authority, outcome }
-                if authority == self.ready.bootstrap.authority =>
-            {
-                Ok(Some(outcome))
+            GuardianControl::Completed {
+                authority,
+                outcome,
+                stop,
+            } if authority == self.ready.bootstrap.authority => {
+                Ok(Some(BackendCompletion { outcome, stop }))
             }
             GuardianControl::Completed { .. } => Err(StageError::AuthorityMismatch),
             GuardianControl::Refused { reason } => Err(StageError::GuardianRefused(reason)),

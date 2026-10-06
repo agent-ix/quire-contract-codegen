@@ -322,6 +322,8 @@ impl CallerBootstrap {
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            u64::try_from(std::mem::size_of::<ExecutionClock>())
+                .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             terminal_receive
                 .reserved_bytes()
                 .map_err(CallerBootstrapError::Control)?,
@@ -805,6 +807,7 @@ impl CallerBootstrap {
             .encode(&CallerTerminalControl::CompletedClose {
                 authority: self.authority,
                 deadline,
+                stop: clock.stop_stamp().map_err(CallerBootstrapError::Deadline)?,
             })
             .map_err(CallerBootstrapError::Control)?;
         self.outer_control
@@ -872,7 +875,7 @@ impl CallerBootstrap {
     /// and normal child wait/reap are authenticated. Partial/malformed frames never supply peaks.
     pub(super) fn receive_terminal_commit(
         &mut self,
-        clock: &ExecutionClock,
+        clock: &mut ExecutionClock,
     ) -> Result<bool, CallerBootstrapError> {
         if !matches!(self.terminal_phase, CallerTerminalPhase::AwaitCommit)
             || clock.original_deadline() != self.identity_deadline
@@ -892,7 +895,12 @@ impl CallerBootstrap {
         let sender = received
             .credentials
             .ok_or(CallerBootstrapError::MissingSender)?;
-        let OuterTerminalReply::Committed { authority, peaks } = received.control else {
+        let OuterTerminalReply::Committed {
+            authority,
+            peaks,
+            stop,
+        } = received.control
+        else {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         };
         if sender.pid
@@ -905,6 +913,9 @@ impl CallerBootstrap {
         {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         }
+        clock
+            .adopt_stop(stop, self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)?;
         // The authenticated L owns its unreaped actual O Child while this commit is decoded.
         // O may already have exited; original sender binding is not replaced by PID reopening.
         creator::require_live(&self.launcher_identity()?.launcher_pin)
@@ -1051,19 +1062,18 @@ impl CallerBootstrap {
         let cutoff = clock
             .settlement_deadline()
             .map_err(CallerBootstrapError::Deadline)?;
-        if let Some((retained, deadline)) = self.settlement_transfer {
-            return if cutoff == retained {
-                Ok((retained, deadline))
-            } else {
-                Err(CallerBootstrapError::SettingsMismatch)
-            };
-        }
-        let deadline = match self.identity_clock {
-            IdentityDeadline::Finite { deadline } => deadline,
-            IdentityDeadline::NeverElapses => {
-                RoleDeadline::from_original(cutoff).map_err(CallerBootstrapError::Deadline)?
+        let deadline = clock
+            .stop_deadline(self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)?;
+        if let Some((retained, previous)) = self.settlement_transfer {
+            if cutoff > retained
+                || !deadline
+                    .no_later_than(previous)
+                    .map_err(CallerBootstrapError::Deadline)?
+            {
+                return Err(CallerBootstrapError::SettingsMismatch);
             }
-        };
+        }
         self.settlement_transfer = Some((cutoff, deadline));
         Ok((cutoff, deadline))
     }
