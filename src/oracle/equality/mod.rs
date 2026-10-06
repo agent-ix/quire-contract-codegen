@@ -1946,73 +1946,97 @@ record Tree {
         Ok(closure)
     }
 
-    fn check_synthetic_item(
+    fn check_synthetic_items(
         mut nodes: Vec<CheckedSemanticNodeV2>,
+        type_ids: &[CheckedNodeId],
+    ) -> (Vec<Result<(), CompositeEqualityRefusal>>, String) {
+        assert!(type_ids.len() <= 2, "fixture has two distinct item ids");
+        let mut records = Vec::new();
+        let mut items = Vec::new();
+        for (type_id, (parameter_digit, expression_digit)) in
+            type_ids.iter().zip([('8', '9'), ('6', '7')])
+        {
+            let parameter_id = node_id(parameter_digit);
+            let expression_id = node_id(expression_digit);
+            let parameter: CheckedSemanticNodeV2 = serde_json::from_value(json!({
+                "node_id": parameter_id,
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "value",
+                "semantic_form": "parameter",
+                "semantic_type": type_id,
+                "dependencies": [],
+                "occurrences": [],
+                "body": {"term": "aggregate", "members": []},
+            }))
+            .unwrap();
+            let expression: CheckedSemanticNodeV2 = serde_json::from_value(json!({
+                "node_id": expression_id,
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "expression",
+                "semantic_form": "binary",
+                "semantic_type": type_id,
+                "dependencies": [],
+                "occurrences": [],
+                "body": {"term": "application", "operator": "binary", "arguments": [
+                    {"term": "reference", "target": parameter_id},
+                    {"term": "reference", "target": parameter_id}
+                ]},
+            }))
+            .unwrap();
+            records.push(CompleteLoweringRecordV2::Lowered {
+                node: Box::new(quire_contract_model::CompleteContractNodeV2 {
+                    node: expression.clone(),
+                    node_tag: CheckedNodeTag::Expression,
+                    source_map: Vec::new(),
+                    semantic_type: type_id.clone(),
+                    dependencies: Vec::new(),
+                    bounds: Vec::new(),
+                    claims: Vec::new(),
+                    ir_id: CheckedSemanticId {
+                        domain: "quire.contract-ir.semantic/v1".into(),
+                        algorithm: "sha256".into(),
+                        digest: "0".repeat(64).into(),
+                    },
+                }),
+            });
+            items.push(CompositeEqualityItem {
+                node_id: expression_id,
+                operator: EqualityOperatorKind::Equal,
+                left: EqualityOperandDescriptor::typed(type_id.clone()),
+                right: EqualityOperandDescriptor::typed(type_id.clone()),
+            });
+            nodes.push(parameter);
+            nodes.push(expression);
+        }
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let mut source = SourceBuilder::default();
+        let outcomes = records
+            .iter()
+            .zip(&items)
+            .enumerate()
+            .map(|(index, (record, item))| {
+                match check_item(&graph, &BTreeMap::new(), record, item) {
+                    Ok(checked) => {
+                        let rendered = render_item(&checked).expect("healthy item renders");
+                        source.item(&format!("test{index}"), item, &rendered);
+                        Ok(())
+                    }
+                    Err(ItemCheckError::Refusal(refusal)) => Err(refusal),
+                    Err(ItemCheckError::Generation(error)) => {
+                        panic!("unexpected generation failure: {error:?}")
+                    }
+                }
+            })
+            .collect();
+        (outcomes, source.finish())
+    }
+
+    fn check_synthetic_item(
+        nodes: Vec<CheckedSemanticNodeV2>,
         type_id: CheckedNodeId,
     ) -> Result<(), CompositeEqualityRefusal> {
-        let parameter_id = node_id('8');
-        let expression_id = node_id('9');
-        let parameter: CheckedSemanticNodeV2 = serde_json::from_value(json!({
-            "node_id": parameter_id,
-            "schema_version": "quire.checked-semantic-graph/v2",
-            "node_tag": "value",
-            "semantic_form": "parameter",
-            "semantic_type": type_id,
-            "dependencies": [],
-            "occurrences": [],
-            "body": {"term": "aggregate", "members": []},
-        }))
-        .unwrap();
-        let expression: CheckedSemanticNodeV2 = serde_json::from_value(json!({
-            "node_id": expression_id,
-            "schema_version": "quire.checked-semantic-graph/v2",
-            "node_tag": "expression",
-            "semantic_form": "binary",
-            "semantic_type": type_id,
-            "dependencies": [],
-            "occurrences": [],
-            "body": {"term": "application", "operator": "binary", "arguments": [
-                {"term": "reference", "target": parameter_id},
-                {"term": "reference", "target": parameter_id}
-            ]},
-        }))
-        .unwrap();
-        let lowered = CompleteLoweringRecordV2::Lowered {
-            node: Box::new(quire_contract_model::CompleteContractNodeV2 {
-                node: expression.clone(),
-                node_tag: CheckedNodeTag::Expression,
-                source_map: Vec::new(),
-                semantic_type: type_id.clone(),
-                dependencies: Vec::new(),
-                bounds: Vec::new(),
-                claims: Vec::new(),
-                ir_id: CheckedSemanticId {
-                    domain: "quire.contract-ir.semantic/v1".into(),
-                    algorithm: "sha256".into(),
-                    digest: "0".repeat(64).into(),
-                },
-            }),
-        };
-        nodes.push(parameter);
-        nodes.push(expression);
-        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
-        let item = CompositeEqualityItem {
-            node_id: expression_id,
-            operator: EqualityOperatorKind::Equal,
-            left: EqualityOperandDescriptor::typed(type_id.clone()),
-            right: EqualityOperandDescriptor::typed(type_id),
-        };
-        match check_item(&graph, &BTreeMap::new(), &lowered, &item) {
-            Ok(checked) => {
-                let rendered = render_item(&checked).expect("healthy item renders");
-                assert!(!rendered.left_source.is_empty());
-                Ok(())
-            }
-            Err(ItemCheckError::Refusal(refusal)) => Err(refusal),
-            Err(ItemCheckError::Generation(error)) => {
-                panic!("unexpected generation failure: {error:?}")
-            }
-        }
+        let (mut outcomes, _) = check_synthetic_items(nodes, &[type_id]);
+        outcomes.remove(0)
     }
 
     /// Trace: FR-018-AC-24, TC-029.
@@ -2073,6 +2097,22 @@ record Tree {
     /// Trace: FR-018-AC-25, TC-029.
     #[test]
     fn tc_029_type_resolution_charges_each_entry_and_the_first_over_limit_entry() {
+        const TEST_NAME: &str = "oracle::equality::tests::tc_029_type_resolution_charges_each_entry_and_the_first_over_limit_entry";
+        if std::env::var_os("QUIRE_CG_TC029_WORK_CHILD").is_none() {
+            let outcome = std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--exact")
+                .arg(TEST_NAME)
+                .env("QUIRE_CG_TC029_WORK_CHILD", "1")
+                .output()
+                .expect("work-bound subprocess starts");
+            assert!(
+                outcome.status.success(),
+                "work-bound subprocess failed or aborted: {} {}",
+                String::from_utf8_lossy(&outcome.stdout),
+                String::from_utf8_lossy(&outcome.stderr)
+            );
+            return;
+        }
         let nodes = recursive_shape_nodes();
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let bounds = BTreeMap::from([(&nodes[4].semantic_type, vec![&nodes[4]])]);
@@ -2150,16 +2190,56 @@ record Tree {
             Ok(ValueType::Boolean)
         );
 
-        // The same root at the item boundary is refused before rendering.
-        let sibling_node = chain[count].clone();
+        // Both items share one synthetic lowered graph and emission pass.
+        let (outcomes, emitted) =
+            check_synthetic_items(chain, &[ids[0].clone(), ids[count].clone()]);
         assert_eq!(
-            check_synthetic_item(chain, ids[0].clone()).err(),
-            Some(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+            outcomes[0],
+            Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
                 limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
                 consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT + 1,
             })
         );
-        assert!(check_synthetic_item(vec![sibling_node], ids[count].clone()).is_ok());
+        assert!(outcomes[1].is_ok());
+        assert_eq!(emitted.matches("pub fn oracle_").count(), 1);
+        assert!(!emitted.contains("pub fn oracle_test0"));
+        assert!(emitted.contains("pub fn oracle_test1"));
+    }
+
+    /// Trace: FR-018-AC-25, TC-029.
+    #[test]
+    fn tc_029_inline_collection_bound_is_charged_before_lookup() {
+        let mut nodes = recursive_shape_nodes();
+        nodes[3].body = json!({"term": "aggregate", "members": [
+            {"term": "reference", "target": node_id('f')},
+            {"term": "reference", "target": node_id('7')}
+        ]});
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let mut at_limit = TypeClosure {
+            work_consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT - 2,
+            ..TypeClosure::default()
+        };
+        assert_eq!(
+            resolve_type(&graph, &BTreeMap::new(), &mut at_limit, &node_id('d')),
+            Err(CompositeEqualityRefusal::UnknownTypeNode {
+                type_node_id: node_id('7'),
+            })
+        );
+        assert_eq!(
+            at_limit.work_consumed,
+            COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT
+        );
+        let mut over_limit = TypeClosure {
+            work_consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT - 1,
+            ..TypeClosure::default()
+        };
+        assert_eq!(
+            resolve_type(&graph, &BTreeMap::new(), &mut over_limit, &node_id('d')),
+            Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+                consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT + 1,
+            })
+        );
     }
 
     /// Trace: FR-018-AC-26, FR-018-AC-27, TC-029.

@@ -21,7 +21,6 @@ enum Frame {
         id: CheckedNodeId,
         kind: CollectionKind,
         cardinality: CardinalityBound,
-        inline_bound: bool,
     },
     FinishRecord {
         id: CheckedNodeId,
@@ -62,19 +61,21 @@ fn entered(
 
 fn collection_parts(
     graph: &Graph<'_>,
+    closure: &mut TypeClosure,
     id: &CheckedNodeId,
     node: &CheckedSemanticNodeV2,
     external_bound: Option<&CheckedSemanticNodeV2>,
-) -> Result<(CheckedNodeId, CollectionKind, CardinalityBound, bool), CompositeEqualityRefusal> {
+) -> Result<(CheckedNodeId, CollectionKind, CardinalityBound), CompositeEqualityRefusal> {
     let malformed = || CompositeEqualityRefusal::MalformedComposite {
         composite: id.clone(),
     };
     let members = aggregate_members(&node.body).ok_or_else(malformed)?;
-    let (element_term, bound, inline_bound) = match (members, external_bound) {
-        ([element], Some(bound)) if &*node.semantic_form == "sequence" => (element, bound, false),
+    let (element_term, bound) = match (members, external_bound) {
+        ([element], Some(bound)) if &*node.semantic_form == "sequence" => (element, bound),
         ([element, bound], None) => {
+            closure.charge()?; // charge the followed bound before reading or descending
             let target = read_reference(bound).ok_or_else(malformed)?;
-            (element, lookup(graph, &target)?, true)
+            (element, lookup(graph, &target)?)
         }
         _ => return Err(malformed()),
     };
@@ -102,7 +103,7 @@ fn collection_parts(
         "ordered_set" => CollectionKind::OrderedSet,
         _ => return Err(malformed()),
     };
-    Ok((element, kind, cardinality, inline_bound))
+    Ok((element, kind, cardinality))
 }
 
 /// Resolve a root within the item's shared closure and work counter.
@@ -249,13 +250,12 @@ pub(super) fn resolve_type(
                                 .as_ref()
                                 .map(|target| lookup(graph, target))
                                 .transpose()?;
-                            let (element, kind, cardinality, inline_bound) =
-                                collection_parts(graph, &id, node, bound)?;
+                            let (element, kind, cardinality) =
+                                collection_parts(graph, closure, &id, node, bound)?;
                             frames.push(Frame::FinishCollection {
                                 id,
                                 kind,
                                 cardinality,
-                                inline_bound,
                             });
                             frames.push(Frame::Enter {
                                 id: element,
@@ -301,11 +301,7 @@ pub(super) fn resolve_type(
                 id,
                 kind,
                 cardinality,
-                inline_bound,
             } => {
-                if inline_bound {
-                    closure.charge()?;
-                }
                 let element =
                     values
                         .pop()

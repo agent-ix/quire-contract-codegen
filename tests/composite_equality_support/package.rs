@@ -461,6 +461,12 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    /// Extend an authoritative checked-package document in memory for a
+    /// reader-to-oracle test; the source document remains in its own repo.
+    pub fn from_wire(value: Value) -> Self {
+        Self { value }
+    }
+
     pub fn node(
         &mut self,
         digest: &str,
@@ -1417,6 +1423,65 @@ pub fn item(
         left,
         right,
     }
+}
+
+/// Add only equality items to an authoritative QSpec recursive-type package.
+pub fn qspec_recursive_items_package(
+    wire: Value,
+) -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
+    let named_record = |name: &str| {
+        wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("QSpec graph nodes")
+            .iter()
+            .find(|node| node["declaration"]["qualified_name"] == json!([name]))
+            .and_then(|node| node["node_id"]["digest"].as_str())
+            .expect("QSpec named record")
+            .to_owned()
+    };
+    let list = named_record("List");
+    let tree = named_record("Tree");
+    let mut builder = PackageBuilder::from_wire(wire);
+    builder
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(Vec::new()),
+        )
+        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(Vec::new()));
+    builder.code(
+        T_QSPEC_BOOLEAN,
+        "scalar_type",
+        "boolean",
+        T_QSPEC_BOOLEAN,
+        aggregate(Vec::new()),
+    );
+    for (code, type_digest, name) in [(E_QSPEC_LIST, &list, "list"), (E_QSPEC_TREE, &tree, "tree")]
+    {
+        let parameter = key(3_000 + code);
+        builder.node(
+            &parameter,
+            "value",
+            "parameter",
+            type_digest,
+            parameter_body(name),
+        );
+        builder.application_node(
+            code,
+            "binary",
+            &key(T_QSPEC_BOOLEAN),
+            json!({
+                "term": "application",
+                "operator": "binary",
+                "operation": equality_operation("structural"),
+                "result_type": node_ref(&key(T_QSPEC_BOOLEAN)),
+                "arguments": [reference_to(&parameter), reference_to(&parameter)],
+            }),
+        );
+    }
+    (builder, id(&list), id(&tree))
 }
 
 /// A CG-owned recursive Tree whose bounded sequence points back to the record.

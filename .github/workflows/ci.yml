@@ -27,8 +27,13 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Check out authoritative QSpec fixture source
+        run: git clone --no-checkout https://github.com/agent-ix/quire-specification.git "$RUNNER_TEMP/quire-specification"
+
       - name: Test
         run: cargo test
+        env:
+          QSPEC_REPO: ${{ runner.temp }}/quire-specification
 
       - name: Rust 1.98.1 compatibility
         run: cargo +1.98.1 check --locked --all-targets --message-format=json

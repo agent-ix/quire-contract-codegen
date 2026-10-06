@@ -134,3 +134,6 @@ pub const R_TREE_CYCLE: u32 = 180;
 pub const SEQ_TREE_CYCLE: u32 = 181;
 pub const CB_TREE_CYCLE: u32 = 182;
 pub const E_TREE_CYCLE: u32 = 183;
+pub const T_QSPEC_BOOLEAN: u32 = 190;
+pub const E_QSPEC_LIST: u32 = 191;
+pub const E_QSPEC_TREE: u32 = 192;

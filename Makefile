@@ -52,7 +52,7 @@ lint:
 
 .PHONY: test
 test:
-	$(CARGO) test $(LOCKED)
+	QSPEC_REPO="$(QSPEC_REPO)" $(CARGO) test $(LOCKED)
 
 # The Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the lane
 # holds a host-wide lock, runs one harness at a time, and builds in its own
@@ -91,7 +91,7 @@ build:
 
 .PHONY: msrv
 msrv:
-	$(CARGO) +$(MSRV) test $(LOCKED)
+	QSPEC_REPO="$(QSPEC_REPO)" $(CARGO) +$(MSRV) test $(LOCKED)
 
 .PHONY: spec
 spec:
@@ -151,6 +151,7 @@ rustdoc:
 # =============================================================================
 
 SIBLINGS ?= $(abspath $(shell git rev-parse --path-format=absolute --git-common-dir)/../..)
+QSPEC_REPO ?= $(SIBLINGS)/quire-specification
 LOCAL_PATCHES ?= quire-contract-ir:quire-contract-ir:. quire-contract-ir:quire-contract-model:crates/quire-contract-model \
 	quire-contract-runtime:quire-contract-runtime:. \
 	quire-verification-contracts:quire-verification-contracts:. \
