@@ -101,6 +101,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-35 | PLANNED/UNRUN: independent host pathname/abstract listener and host proc-alias exclusion, actual confinement capability refusal and no contained writer export (step 22). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; no generic namespace label or prior death test supplies this new criterion. |
 | FR-034-AC-36 | PLANNED/UNRUN: independent real socket-stdin admission, actual production capture-pipe inventory and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
 | FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
+| FR-034-AC-38 | PLANNED/UNRUN: independent normal settlement/join, original-window unavailable confirmation, typed diagnostic-only refusal and no new post-return custody (step 25). Untagged until actual complete Tests. | Any unavailable ordinary-seam observation is explicitly owed; prior death tests or source-only fault discussion do not supply this new criterion. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -493,9 +494,16 @@ oracle and one-CODE-PR gate.
     /dev/null are admitted stdin controls. Initial authoritative absent fd0 (EBADF) or original
     exec-CLOEXEC gives internal Closed and is preserved; transport clone CLOEXEC does not reclassify
     original Open. Keep caller fd0/fd1/fd2 stable throughout setup as the trusted-caller precondition.
-    Require typed refusal for actually observed inconsistent lstat/fstat metadata, unexpected EBADF
-    after Open or nonmatching expected type. Concurrent caller close/rebind/replacement is caller
-    contract breach outside backend fault domain; no assertion requires detecting every ambient
+    Inspect public execute_kani_obligation and bounded batch rustdoc for the fd0..2 stability
+    precondition, exact setup window and observed-only refusal limit. Treat authenticated self-proc
+    lstat as a link-presence probe, never compare its symlink inode/type/mode with the target pin.
+    Require followed stat and pin fstat agreement on target S_IFMT type/st_dev/st_ino and separate
+    agreement of original F_GETFL/F_GETFD observations; exclude intentional pin CLOEXEC from the
+    original exec flags. Positive unchanged Open input must admit despite different link metadata.
+    Through the existing private capture boundary, exercise observed absence/Open mismatch, target
+    identity/type mismatch, original flag change and unexpected EBADF after Open: require typed
+    refusal. No public hook, atomicity or same-inode open-file-description identity claim.
+    Concurrent caller close/rebind/replacement is caller contract breach outside backend fault domain; no assertion requires detecting every ambient
     mutation or preventing such a race. Authenticated self-proc/safe absent capture remains UNRUN;
     unavailable safe capture refuses, with no raw descriptor adoption or public request field.
     Later captured-Open inspection EBADF/error refuses, never becomes Closed or probes child fd0.
@@ -523,7 +531,31 @@ oracle and one-CODE-PR gate.
     all-writer EOF, four seals and final delivery. Early channel close, outer kill or blanket
     sendmsg denial cannot repair the predicate.
 
-Steps 22–24 allocate independent new confinement/admission Tests, all PLANNED/UNRUN. They add no
+25. PLANNED/UNRUN (FR-034 AC-38). Exercise normal completion, startup refusal and cancellation
+    through production entry: independently confirm actual L/O/M/I termination/reaping, captures and
+    existing creator-thread join before any conclusion. Through an already permitted private
+    settlement-observation boundary, make confirmation unavailable at the original deadline without
+    fabricating kernel D-state or creating an unkillable task. Require Err(KaniExecutionRefusal::Guardian
+    { kind: GuardianFailureKind::CleanupUnconfirmed, detail }), code()==None, absent execution
+    evidence/verdict/outcome/cleanup claim even beside valid report bytes. Detail must fit 4096 UTF-8
+    bytes under existing accounting and contain only bounded already-observed role/identity/stage
+    data, no handles/authority or inferred kernel cause. Exercise omission at a UTF-8 boundary and
+    prove it cannot change kind or manufacture settlement. Restore the observation and positively
+    confirm settlement; absence of a residual witness alone is not a positive control.
+    Exercise Drop/join error paths through their actual allowed private boundary: settle or report
+    inside the call, every allowance clamped to original remaining T; no added 250 ms/five-second
+    grace, reset or post-return observation. Source/ownership Analysis must establish no new cleanup
+    thread/daemon/custodian and no io::Error/Result-owned authority or dependence on error Drop.
+    Exceptional existing unjoined creator-role observations must remain explicitly unconfirmed;
+    never claim join/retirement or diagnose kernel failure from timeout. No public hook is allocated
+    and no real kernel-stuck task is required. If a required ordinary seam is absent, record owed
+    evidence under the existing fixture SPEC gate, never claim this criterion backed.
+    Inspect single/batch public rustdoc for both caller-stdio and kernel-settlement preconditions,
+    exact setup/original settlement windows, typed error and diagnostic-only residual/no cleanup
+    guarantee outside the kernel precondition. Keep ordinary caller/group death and contained
+    writer/death/EOF/seal adverse gates mandatory; this fault boundary cannot repair their failure.
+
+Steps 22–25 allocate independent new confinement/admission/settlement Tests, all PLANNED/UNRUN. They add no
 fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
 record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
 criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
@@ -549,6 +581,7 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
 | FR-034-AC-35 | PLANNED/UNRUN: safe same-PID backend-only installation, L/O/M allocation, real unconfined shared-prefix control and dynamic listener exclusion; actual Cargo/Kani compatibility; typed unavailable refusal and original build/resource classes | Policy bypass or inherited ring; peer socket created after Dispatch; unbound vacuous listener; unfiltered release or compatibility relaxation |
 | FR-034-AC-36 | PLANNED/UNRUN: real socket stdin refuses, production fd1/fd2 capture inventory verified; explicit Closed and Open inspection error distinguished; mandatory typed cause and no fabricated result | Unreachable stdout socket test claimed; Open EBADF admitted as Closed; caller-fixable socket misreported as memory-only failure |
 | FR-034-AC-37 | PLANNED/UNRUN: I non-dumpability/backend privilege exclusion block proc1fd/pidfd_getfd/ptrace; trusted channel lifetimes and unchanged EOF mutant retained; uniform authority fault domain | Ambient Yama masks absent protection; contained export excused as outside peer; final delivery closed early |
+| FR-034-AC-38 | PLANNED/UNRUN: actual normal role/capture/spawner settlement; original-window typed CleanupUnconfirmed error with bounded diagnostic-only residuals, no new post-return custody; public precondition docs | Error carries authority; hidden cleanup worker; false joined/retired or kernel-cause claim; valid bytes accepted after unconfirmed settlement; grace resets T |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable

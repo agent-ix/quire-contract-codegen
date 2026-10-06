@@ -645,11 +645,30 @@ While C performs launch setup, the embedding caller and its other threads shall 
 close, rebind or replace the caller process's fd0/fd1/fd2. Setup here runs from the ordinary C entry
 through positive Dispatch or settled setup refusal. Violating this precondition is a caller contract
 breach, not a guardian containment fault. C shall refuse through existing typed admission handling
-when capture actually observes inconsistent lstat/fstat metadata, an unexpected EBADF after an Open
-observation, or a nonmatching expected file type. No obligation claims detection of every ambient
-mutation, atomicity across separate observations or prevention of caller-induced races. Authoritative
+when capture actually observes inconsistent presence, followed-target identity or original flags, an
+unexpected EBADF after an Open observation, or a nonmatching expected file type. No obligation
+claims detection of every ambient mutation, atomicity across separate observations or prevention of caller-induced races. Authoritative
 initial absence remains the distinct Closed case below; this clarification waives no contained
 backend/owned-writer/death obligation.
+
+Public rustdoc for execute_kani_obligation, execute_kani_obligations and any other public bounded
+entry shall document this trusted-caller fd0..2 stability precondition, its
+entry-through-positive-Dispatch-or-settled-refusal
+setup window, and that violation is a caller contract breach. Documentation shall state that only
+observed inconsistency refuses; it shall not promise atomic capture or detection of every mutation.
+
+An authenticated self-proc lstat of /proc/self/fd/N is only a presence/magic-link probe: its symlink
+type, proc inode and mode are not the target's metadata and shall not be compared with fstat of the
+owned pin. For an Open capture, followed stat of that same self-proc entry and fstat of the captured
+pin shall agree on target file type (st_mode & S_IFMT), st_dev and st_ino at the capture observations.
+Original F_GETFL access/status flags and F_GETFD exec flags shall be checked for observed changes
+across original-descriptor capture observations; the pin's intentionally set CLOEXEC is excluded
+from original exec-flag comparison. Link absence followed by an Open observation, differing target
+identity/type, differing original flags or unexpected EBADF after Open is observed inconsistency
+and shall refuse. Initial authoritative absence retains the Closed rule below. These separate
+observations are not atomic and do not prove identity of an open file description from inode alone.
+Linux [stat](https://man7.org/linux/man-pages/man2/stat.2.html) distinguishes link and target
+metadata; [fcntl](https://man7.org/linux/man-pages/man2/fcntl.2.html) defines the separate flag queries.
 
 OriginalStdin is a planned internal bootstrap ownership value captured by C, not a new public
 KaniExecutionRequest field or a caller-supplied request parameter. Its variants are Open(OwnedFd)
@@ -770,6 +789,60 @@ backing without any dead actor executing Drop/unlink. Other temporary artifacts 
 surviving-owner cleanup; all-owner death may leave those files, never this unnamed report, and never
 waives kernel descendant cancellation.
 
+### Settlement confirmation and kernel fault boundary
+
+Normal returns, including ordinary startup refusal, completion and cancellation, shall positively
+confirm actual owned L/O/M/I role termination/reaping, capture settlement and the existing creator
+thread's required join before a conclusion. The spawning-thread retention/join rule remains
+mandatory for these returns. Explicit cleanup, guard Drop and join-error handling shall settle or
+report inside the execution call. No returned io::Error, refusal or other Result payload shall own
+cleanup authority; dropping an error or guard after return shall not be a cleanup mechanism. CODE
+shall introduce no post-return cleanup thread, daemon or hidden custodian to achieve bounded return.
+
+The lifecycle guarantee has the explicit kernel fault precondition that SIGKILL is delivered and
+PID-namespace teardown completes within the original bounded settlement window. Every settlement,
+Drop and join observation allowance shall be clamped to the remaining original monotonic deadline;
+existing lease-close/cleanup caps are ceilings inside that window, not an additional 250 ms or five
+seconds of grace. No reset, extra timeout or post-return observation extends T. If actual owned-role
+or creator-thread settlement cannot be confirmed in that window, then execution shall return only a
+typed settlement-unconfirmed Err, with no KaniExecutionEvidence, verdict, outcome or confirmed-cleanup
+claim, even beside retained valid report bytes. This is an unavailable-confirmation observation,
+not a positive diagnosis of D-state, a kernel bug or any particular cause.
+
+This amendment allocates a new public variant in KaniExecutionRefusal, which merged source does not
+yet provide: `Guardian { kind: GuardianFailureKind, detail: String }`. Planned public
+GuardianFailureKind shall include `CleanupUnconfirmed` for the observation above; callers shall
+select meaning from that typed value, never parse detail. This follows the existing public refusal
+enum/typed-context conventions and adds no compatibility layer, public Result handle or authority
+inside io::Error. It is a CODE API delta, not adoption of unmerged WIP as normative authority.
+CleanupUnconfirmed has code()==None and remains an execution error, never a serialized execution
+evidence kind or synthetic Failed/inconclusive verdict.
+
+The diagnostic detail shall contain at most 4096 UTF-8 bytes, charged to existing caller run buffers
+and whole-run ceilings. This small bound permits fixed known L/O/M/I and creator/capture role labels,
+already observed PID/start/namespace identity values, the last observed stage and missing
+confirmation facts; it does not authorize an unbounded descendant list, host scan, after-death
+identity reopen or raised resource budget. It contains data only: no pidfd, Child, JoinHandle,
+namespace/control descriptor or other authority. Formatting shall enforce the byte bound at UTF-8
+boundaries, mark omitted diagnostic facts explicitly and never use omission/truncation to select
+the kind or claim settlement. The fixed role inventory and scalar identity fields justify this
+finite diagnostic bound independently of backend output size.
+
+An exceptional existing creator role itself stuck in the kernel may remain unjoined at error return.
+The guardian shall truthfully report that observed residual and relinquishes its in-call ownership
+at return; it shall not claim the role joined, retired or returned to a pool. This unavoidable
+residual lies outside the kernel fault precondition, is not guaranteed cleaned up, and supplies no
+new post-return custody mechanism. Ordinary missing confirmation must not be relabelled as a
+positively diagnosed kernel failure. Caller/group death and all killable contained descendants
+remain guaranteed under the fault precondition; no exception excuses ordinary teardown defects,
+contained writer export, report/lease lifetime failure or lost ownership.
+
+Public rustdoc for execute_kani_obligation, execute_kani_obligations and any other public bounded
+entry shall document both the trusted-caller stdio stability precondition/setup window and this
+kernel settlement precondition, the typed unconfirmed error, diagnostic-only residuals and absence
+of a cleanup guarantee outside that kernel precondition. All new implementation/oracle checks are
+PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests accepted.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -809,8 +882,9 @@ waives kernel descendant cancellation.
 | FR-034-AC-33 | Authenticated Completed precedes original-lease close, confirmed inner teardown and M termination/reap closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS verification and stable actual OwnedFd reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are required before CODE delivery. | Test |
 | FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks the sealed AC-24 pre-escalation EOF oracle; ignored-EOF still fails its named raw predicate before cleanup. Missing conservative backing accounting or immutable sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
 | FR-034-AC-35 | PLANNED/UNRUN. L creates private network/root before O, O validates before M, and nested bind / / refers to confined O root. Safe backend-only seccomp/privilege installation before Dispatch preserves the same positively owned PID and original recipe, with no unfiltered Dispatch or extra surviving process/ownership/deadline; policy installation failure is pre-Dispatch, actual recipe exec/failure is post-Dispatch with existing bounded handling/no fabricated evidence; trusted installer starts in sanitized loader environment and restores original backend environment only at filtered recipe exec; I/O/M remain outside that filter. Continuous AF_UNIX socket/datagram-socketpair, legacy syscall/ABI/io_uring and inherited-endpoint exclusion prevents host-peer acquisition/export throughout writable shared source/target/cwd paths, including listeners created after Dispatch. AC authority requires the same real backend unconfined positive control to connect/export at that visible shared prefix; confined real attempts and a genuine omission mutant distinguish protection from absent listeners. Anonymous local stream socketpair IPC remains admitted. Safe-boundary feasibility and genuine installed Cargo/Kani under the actual filter are decisive UNRUN gates; incompatibility stops CODE for SPEC revision, no relaxation. Required capabilities fail through typed pre-Dispatch unavailable admission regardless errno with confirmed owned cleanup; successful admission followed by missing cache/denied rendezvous build failure retains FR-017 NoVerdict and resource precedence. All old contained-death/writer/EOF/seal/deadline/lease obligations remain mandatory. | Test, Analysis |
-| FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Caller fd0..2 stability throughout setup is a trusted precondition; observed capture inconsistency refuses, with no claim to detect every ambient mutation. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
+| FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Caller fd0..2 stability throughout setup is a trusted precondition; observed capture inconsistency refuses, with no claim to detect every ambient mutation. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned public rustdoc documents the caller stability precondition/setup window and observed-only capture refusal; target type/device/inode and original flags are compared separately from proc-link presence. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
+| FR-034-AC-38 | PLANNED/UNRUN. Normal returns positively settle/reap actual owned roles, captures and the existing creator thread before conclusions. Settlement/Drop/join observations use only remaining original T, with no reset or added lease/cleanup grace. If confirmation is unavailable within that window, execution returns only Err(Guardian { kind: CleanupUnconfirmed, detail }) with code()==None, no evidence/verdict/outcome/cleanup claim and at most 4096 UTF-8 diagnostic bytes charged to existing ceilings. Detail is never parsed to select kind and holds no authority. No new post-return cleanup thread/daemon/custodian or error-owned cleanup is introduced. An exceptional existing kernel-stuck unjoined creator role is truthfully reported and relinquished, never claimed joined/retired; kernel SIGKILL delivery/namespace teardown within the window is an explicit fault precondition, not a diagnosis from timeout. Public bounded API rustdoc documents this and the stdio precondition. Positive settled controls and unavailable-confirmation adverse checks are independent UNRUN gates. | Test, Analysis |
 
 ## Dependencies
 
