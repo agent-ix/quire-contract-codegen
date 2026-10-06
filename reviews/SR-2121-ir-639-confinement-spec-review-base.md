@@ -35,3 +35,20 @@ Read the full base..head diff (+110/-0 lines; git diff --numstat shows 66 and 44
 | --- | --- | --- | --- |
 | FND-001 | medium | AC-36 requires 'each stdin/stdout/stderr socket case' to refuse, and TC-049 step 23 presents 'a real socket separately at each backend stdio admission position'. But FR-034 states that normal backend stdout/stderr remain capture pipes (line 558) and the original bounded captures (line 284), and the executor creates them itself (launch.rs:245-247, Stdio::piped). No ordinary caller input can place a socket at backend fd 1 or fd 2, and steps 22-24 forbid a new fixture hook. So the stdout and stderr cases cannot be produced, and the AC cannot be fully tagged. Restrict the Test clause to stdin, or state that the fd 1/fd 2 check is an internal assertion verified by Analysis. | spec/kani/functional/FR-034-caller-death-ownership.md:673 |
 | FND-002 | low | On a closed stdin, fstat(0) fails with EBADF, which is also what a failed type inspection looks like. The spec requires closed stdin to be admitted unchanged and a failed inspection to refuse, but does not say how the executor tells them apart (the caller's explicit closed-stdin request representation, or a specific errno). Two implementers could choose differently: one refuses every closed-stdin run, the other admits every EBADF. Define the discriminator. | spec/kani/functional/FR-034-caller-death-ownership.md:560-561 |
+
+## New findings (disposition pass 1)
+
+Reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The fix for FND-002 introduces OriginalStdin::{Open, Closed}, but no artifact defines the type or its source. Line 262 says Closed is 'explicitly supplied', while lines 625-626 say it is 'captured before controls exist'. The current public KaniExecutionRequest (src/kani/run/execute.rs:52-61) has no stdin field, so a caller cannot supply it today, and no API amendment is planned for it the way one is for KaniStartupAdmissionCause. If instead C captures it by probing fd 0 at entry, that probe is itself an errno observation (EBADF), which line 628 ('errno alone shall not manufacture Closed admission') appears to forbid. State whether the tag is a planned public request field or C's entry-time capture, and how the capture is made. | spec/kani/functional/FR-034-caller-death-ownership.md:260-262 |
+
+## Dispositions
+
+Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 4ade9999-807a-4f26-9625-9b01e9be076f, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: AC-36 and TC-049 step 23 no longer require caller stdout/stderr socket cases; fd1/fd2 are verified as executor-created capture pipes by mapping/inventory Analysis, and AC-36's verification method is now Test, Analysis. |
+| FND-002 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: Closed stdin is an explicit OriginalStdin::Closed tag captured before controls exist, and an inspection error on OriginalStdin::Open (EBADF included) refuses; the two cases no longer share one observable. The definition of the tag itself is raised separately as FND-003. |

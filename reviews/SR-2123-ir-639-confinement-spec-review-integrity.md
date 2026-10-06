@@ -34,3 +34,19 @@ Read the full base..head diff (+110/-0 lines; git diff --numstat shows 66 and 44
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | high | The new IPC profile is mandatory, but no role is assigned to establish it, and it contradicts recipe text that is still normative. Lines 108-109 still require M to run bwrap with exactly '--unshare-user --unshare-pid --as-pid-1 --new-session --bind / / --dev-bind /dev /dev --proc /proc ...': no network namespace, and the whole host root bound. Line 61 has L create only user, PID and mount namespaces, and line 90 lists only NEWUSER/NEWPID/NEWNS as setup capabilities. A host-root bind exposes every host pathname socket (for example /run/user/<uid>/bus and /tmp/.X11-unix) unless some layer curates the view, and no layer is named. Line 540 concedes that the recipe does not establish the profile. But the change neither amends the argv and capability lists nor says which role (L, O or M) creates the network namespace and curates the mount view. It also does not say which capability check produces AC-35's refusal. Allocate both to a named role and update the argv and capability text in the same change. | spec/kani/functional/FR-034-caller-death-ownership.md:535-540 |
+
+## New findings (disposition pass 1)
+
+Reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The fix requires that 'Installation/exec failure shall be known as typed refusal before positive Dispatch', and in the same paragraph keeps 'arbitrary backend creation/execution needs positive Dispatch'. Exec of the arbitrary backend recipe can only happen after positive Dispatch, so its failure (for example ENOENT or EACCES on the recipe program) cannot be known before Dispatch. The text is only consistent if 'exec' means exec into the filtered boundary/helper entry, which then waits for Dispatch before executing the recipe. TC-049 step 22 ('Force installation/exec failure and require typed refusal before positive Dispatch') inherits the same ambiguity. Say which exec is meant, and state how a post-Dispatch recipe exec failure is classified. | spec/kani/functional/FR-034-caller-death-ownership.md:582-586 |
+
+## Dispositions
+
+Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 4ade9999-807a-4f26-9625-9b01e9be076f, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: L now creates NEWNET and the confined private root before O; O validates both before M; the setup capability list (line 90) adds NEWNET; the unchanged exact inner argv's --bind / / is defined to bind O's confined root, never the host root. Continuous pathname exclusion is assigned to the backend-only seccomp policy. |

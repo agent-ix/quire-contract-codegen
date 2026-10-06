@@ -34,3 +34,11 @@ Read the full base..head diff (+110/-0 lines; git diff --numstat shows 66 and 44
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | AC-35 requires connects to 'positively live host pathname/abstract listeners' to fail, but does not require the pathname listener to sit at a path present in the backend's mount view. A listener in a host directory that is not bound into the view fails to connect even with no mount curation at all, so the AC text alone can pass vacuously. TC-049 step 22 adds 'cwd/shared binds', but the criterion is the authority. Require at least one listener at a path that exists in the backend's view (cwd, crate or target directory, or a host-root-bound path). | spec/kani/functional/FR-034-caller-death-ownership.md:672 |
+
+## Dispositions
+
+Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 4ade9999-807a-4f26-9625-9b01e9be076f, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: AC-35 now requires the pathname listener at a backend-visible shared prefix and an unconfined positive control of the same real backend connecting there, plus a genuine omission mutant, so an unbound listener can no longer pass vacuously (manual, non-calibrated judgment; Jev unavailable). |

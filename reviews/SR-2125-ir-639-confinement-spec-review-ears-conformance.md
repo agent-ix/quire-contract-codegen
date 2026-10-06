@@ -34,3 +34,11 @@ Read the full base..head diff (+110/-0 lines; git diff --numstat shows 66 and 44
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The new obligations (establish isolation before Dispatch, refuse S_IFSOCK stdio, prevent writer export, retain trusted channel lifetimes) appear only as compound prose sentences. None is added to FR-034's atomic EARS statement list (lines 163-238), which earlier amendments, such as the fixture section, did extend. Most use 'the executor', which is not a defined role (the defined actors are the bounded executor C, L, O, M and the guardian I), even though stdin is C's descriptor and the guardian restores it at fd 0 (line 193). Add one atomic EARS bullet per obligation, each naming its defined actor. | spec/kani/functional/FR-034-caller-death-ownership.md:556-559 |
+
+## Dispositions
+
+Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 4ade9999-807a-4f26-9625-9b01e9be076f, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: Eighteen atomic EARS bullets are added to FR-034's statement list, naming the defined actors C, L, O and I. The new section no longer uses the undefined actor 'the executor'. |
