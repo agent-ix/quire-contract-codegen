@@ -634,9 +634,17 @@ fn generate(fixture: &Fixture) -> StateFrameObligations {
 /// Trace: FR-028-AC-1.
 #[test]
 fn both_state_obligation_identities_change_with_either_required_ceiling() {
-    let fixture = fixture(&Shape::HEALTHY);
-    let fields = ["balance", "audit"];
-    let mut requested = request(&fixture, &fields);
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let mut requested = StateFrameRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    };
     let baseline = generate_state_frame_obligations(&requested).unwrap();
     for memory in [true, false] {
         requested.ceilings = baseline.frame.identity.ceilings;
