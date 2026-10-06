@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use rustix::time::{clock_gettime, ClockId};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RoleDeadline {
     seconds: u64,
@@ -336,7 +336,11 @@ impl ExecutionClock {
         stamp: StopStamp,
         original: IdentityDeadline,
     ) -> Result<Instant, DeadlineError> {
-        self.stops.observe(stamp)?;
+        let previous = self.stops.earliest;
+        let earliest = self.stops.observe(stamp)?;
+        if previous == Some(earliest) {
+            return self.settlement_deadline();
+        }
         let deadline = self.stops.deadline(self.reserve, original)?.local()?;
         let deadline = self
             .settlement
@@ -351,7 +355,13 @@ impl ExecutionClock {
         &mut self,
         original: IdentityDeadline,
     ) -> Result<Instant, DeadlineError> {
-        let stamp = self.stops.capture_once(StopOrigin::Caller)?;
+        let stamp = match self.stops.last.first().copied().flatten() {
+            Some(instant) => StopStamp {
+                origin: StopOrigin::Caller,
+                instant,
+            },
+            None => StopStamp::capture(StopOrigin::Caller)?,
+        };
         self.adopt_stop(stamp, original)
     }
 
@@ -382,19 +392,6 @@ impl ExecutionClock {
         self.work.is_some_and(|deadline| now >= deadline)
     }
 
-    /// Call at the FIRST actual stop trigger, including completion. Repeated triggers retain
-    /// exactly the same settlement deadline; they cannot restart a never-elapsing run's allowance.
-    pub(super) fn begin_settlement(&mut self, trigger: Instant) -> Result<Instant, DeadlineError> {
-        if let Some(deadline) = self.settlement {
-            return Ok(deadline);
-        }
-        let deadline = trigger
-            .checked_add(SETTLE_RESERVE)
-            .ok_or(DeadlineError::Unrepresentable)?;
-        self.settlement = Some(deadline);
-        Ok(deadline)
-    }
-
     pub(super) fn settlement_deadline(&self) -> Result<Instant, DeadlineError> {
         self.settlement.ok_or(DeadlineError::StopNotStarted)
     }
@@ -416,39 +413,44 @@ mod tests {
 
     /// Trace: FR-034-AC-38.
     #[test]
-    fn delayed_outer_trigger_shortens_caller_bound_without_restart() {
-        let mut timeline = StopTimeline::prepare(stamp(StopOrigin::Caller, 10).instant).unwrap();
-        timeline
-            .observe_at(
-                stamp(StopOrigin::Caller, 20),
-                stamp(StopOrigin::Caller, 22).instant,
-            )
-            .unwrap();
-        let original = IdentityDeadline::NeverElapses;
-        assert_eq!(
-            timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
-            21
-        );
-        timeline
-            .observe_at(
-                stamp(StopOrigin::Outer, 12),
-                stamp(StopOrigin::Caller, 22).instant,
-            )
-            .unwrap();
-        assert_eq!(
-            timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
-            13
-        );
-        timeline
-            .observe_at(
-                stamp(StopOrigin::Caller, 23),
-                stamp(StopOrigin::Caller, 24).instant,
-            )
-            .unwrap();
-        assert_eq!(
-            timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
-            13
-        );
+    fn delayed_producer_trigger_shortens_caller_bound_without_restart() {
+        for origin in [
+            StopOrigin::Launcher,
+            StopOrigin::Outer,
+            StopOrigin::Inner,
+            StopOrigin::Backend,
+        ] {
+            let mut timeline =
+                StopTimeline::prepare(stamp(StopOrigin::Caller, 10).instant).unwrap();
+            timeline
+                .observe_at(
+                    stamp(StopOrigin::Caller, 20),
+                    stamp(StopOrigin::Caller, 22).instant,
+                )
+                .unwrap();
+            let original = IdentityDeadline::NeverElapses;
+            assert_eq!(
+                timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
+                21
+            );
+            timeline
+                .observe_at(stamp(origin, 12), stamp(StopOrigin::Caller, 22).instant)
+                .unwrap();
+            assert_eq!(
+                timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
+                13
+            );
+            timeline
+                .observe_at(
+                    stamp(StopOrigin::Caller, 23),
+                    stamp(StopOrigin::Caller, 24).instant,
+                )
+                .unwrap();
+            assert_eq!(
+                timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
+                13
+            );
+        }
     }
 
     /// Trace: FR-034-AC-15, FR-034-AC-38.
@@ -511,12 +513,12 @@ mod tests {
             Duration::from_secs(10),
         ] {
             let original = start.checked_add(bound).unwrap();
-            let mut clock = ExecutionClock::prepare(Some(original), bound).unwrap();
+            let clock = ExecutionClock::prepare(Some(original), bound).unwrap();
             let reserve = SETTLE_RESERVE.min(bound / 2);
             assert_eq!(clock.work_deadline(), original.checked_sub(reserve));
             assert_eq!(clock.original_deadline(), Some(original));
-            assert_eq!(clock.begin_settlement(start).unwrap(), original);
-            assert_eq!(clock.begin_settlement(original).unwrap(), original);
+            assert_eq!(clock.settlement_deadline().unwrap(), original);
+            assert_eq!(clock.reserve(), reserve);
             assert!(clock.work_expired(original));
         }
     }
@@ -532,9 +534,28 @@ mod tests {
             clock.settlement_deadline(),
             Err(DeadlineError::StopNotStarted)
         );
-        let first = clock.begin_settlement(start).unwrap();
-        assert_eq!(first, start.checked_add(SETTLE_RESERVE).unwrap());
-        assert_eq!(clock.begin_settlement(first).unwrap(), first);
+        let trigger = StopStamp::capture(StopOrigin::Caller).unwrap();
+        let first = clock
+            .adopt_stop(trigger, IdentityDeadline::NeverElapses)
+            .unwrap();
+        let absolute = trigger.instant.deadline_after(SETTLE_RESERVE).unwrap();
+        assert_eq!(
+            clock.stop_deadline(IdentityDeadline::NeverElapses).unwrap(),
+            absolute
+        );
+        assert_eq!(
+            clock
+                .adopt_stop(trigger, IdentityDeadline::NeverElapses)
+                .unwrap(),
+            first
+        );
+        assert_eq!(
+            clock
+                .capture_caller_stop(IdentityDeadline::NeverElapses)
+                .unwrap(),
+            first
+        );
+        assert_eq!(clock.stop_stamp().unwrap(), trigger);
         assert_eq!(clock.settlement_deadline().unwrap(), first);
     }
 }
