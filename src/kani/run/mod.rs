@@ -30,6 +30,12 @@ mod stages;
 #[cfg(target_os = "linux")]
 mod owned;
 
+#[cfg(target_os = "linux")]
+mod publication;
+
+#[cfg(feature = "guardian-test-support")]
+pub(crate) mod fixture;
+
 pub(crate) fn guardian_entry() -> std::process::ExitCode {
     #[cfg(target_os = "linux")]
     {

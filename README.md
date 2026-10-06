@@ -41,6 +41,29 @@ feature in this command. Dependency compilation alone does not deliver the helpe
 Rebuild both after changing those inputs; Cargo may reuse the existing library artifact when the
 inputs are unchanged. Supply the resulting helper path directly in `KaniExecutionRequest`.
 
+`guardian-test-support` is test-only, off by default, and exposes one operation,
+`observe_guardian_fixture`. It selects the shared executor's exact startup prefixes or records
+live-caller lease-close facts before immediate ordinary cleanup. It exports no lease, process
+handle, cancellation API or cleanup-deferring callback. The packaged
+`quire-kani-caller-fixture` uses the ordinary public execution API without that feature; explicitly
+enabling it additionally permits the single observation operation. The harness judges immutable
+raw facts; eventual emergency cleanup cannot make an earlier observation pass.
+
+Keep verification invocations separate: **guardian-feature-off** builds the normal library,
+helper and caller without default features; **guardian-feature-on** explicitly selects
+`guardian-test-support` for all three. These names describe invocations, not Cargo profiles or
+additional target directories. Build all participating packages and binaries from the consumer
+manifest as above, forwarding the feature through the consumer. A self dev-dependency must not
+unify the feature into the feature-off configuration. Mismatched feature builds refuse Dispatch.
+The feature-off configuration must also verify that the operation is unavailable at compile time.
+
+QSL production-driver dependency-edge exclusion belongs to
+[IR-649](https://linear.app/agent-ix/issue/IR-649): every production build profile must reject
+direct or transitively unified `guardian-test-support`. Publishing this CG contract does not verify
+that downstream gate. The known unclaimed Bootstrap and inherited parent-death artifact-unlink
+gaps remain gated on [IR-652](https://linear.app/agent-ix/issue/IR-652); process-only fixture
+observations establish neither complete Bootstrap cleanup nor report removal.
+
 ## Generated artifacts
 
 Every generated artifact is a path and its contents. The documents under `schemas/` are domain

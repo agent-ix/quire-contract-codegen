@@ -197,6 +197,11 @@ impl InitReady {
 }
 
 impl PendingDispatch {
+    #[cfg(feature = "guardian-test-support")]
+    pub(super) fn into_lease(self) -> CallerLease {
+        self.ready.into_lease()
+    }
+
     pub(super) fn acknowledge(self, owner: &NamespaceOwner) -> Result<Dispatched, StageError> {
         let received = self
             .ready

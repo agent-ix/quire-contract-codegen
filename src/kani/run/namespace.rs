@@ -141,6 +141,20 @@ pub(super) struct NamespaceOwner {
 
 #[cfg(target_os = "linux")]
 impl NamespaceOwner {
+    #[cfg(feature = "guardian-test-support")]
+    pub(super) fn fixture_claim(&self) -> io::Result<(u32, u64, &OwnedFd, &Path)> {
+        let claim = self
+            .init
+            .as_ref()
+            .ok_or_else(|| unavailable("fixture INIT is unclaimed"))?;
+        Ok((claim.pid, claim.start, &claim.handle, &claim.namespace))
+    }
+
+    #[cfg(feature = "guardian-test-support")]
+    pub(super) fn fixture_gate_retained(&self) -> bool {
+        self.gate.is_some()
+    }
+
     pub(super) fn prepare(
         helper: &Path,
         #[cfg(target_os = "linux")] endpoint: super::control::GuardianEndpoint,

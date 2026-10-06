@@ -74,7 +74,30 @@ pub(super) fn run(identity: BuildIdentity) -> Result<(), GuardianError> {
     let result = supervise(&transport, identity, deadline);
     if let Err(GuardianError::Refusal(reason)) = &result {
         // Typed control is the sole diagnostic channel. A closed peer needs no diagnostic.
-        let _ = transport.send(&GuardianControl::Refused { reason: *reason }, &[], deadline);
+        let delivered = transport
+            .send(&GuardianControl::Refused { reason: *reason }, &[], deadline)
+            .is_ok();
+        if delivered && *reason == GuardianRefusal::BuildIdentityMismatch {
+            // Do not race the refusal frame with our own EOF. The live caller can consume its
+            // typed refusal and close its exclusive lease; no refused path can authorize work.
+            // Both the original bootstrap cap and the finite pending-control work remain in force.
+            let mut refused_records = 0;
+            while refused_records < 8 && Instant::now() < deadline {
+                match transport.pending_control(SUPERVISION_TICK) {
+                    Ok(false) => continue,
+                    Ok(true) => {
+                        refused_records += 1;
+                        if transport
+                            .receive::<CallerControl>(CallerControl::rights_count, deadline)
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
     }
     result
 }

@@ -129,6 +129,14 @@ pub use kani::run::execute::{
     KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun, OUTPUT_OVER_LIMIT_CODE,
     OUTPUT_UNREAD_CODE,
 };
+#[cfg(feature = "guardian-test-support")]
+pub use kani::run::fixture::{
+    observe_guardian_fixture, GuardianFixtureCleanup, GuardianFixtureDeath,
+    GuardianFixtureDeathWitness, GuardianFixtureDescriptor, GuardianFixtureError,
+    GuardianFixtureFailure, GuardianFixtureIdentity, GuardianFixtureLeaseObservation,
+    GuardianFixtureObservation, GuardianFixturePin, GuardianFixturePrefix, GuardianFixtureRequest,
+    GuardianFixtureScenario,
+};
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::{CaptureStream, GuardianFailureKind};
 pub use kani::run::stdin::OriginalStdin;
