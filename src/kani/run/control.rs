@@ -62,6 +62,8 @@ pub(super) enum ControlError {
     UnexpectedCredentials,
     CreatorMismatch,
     ProgressPoisoned,
+    PartialTerminalSend { written: usize, expected: usize },
+    TrailingTerminalBytes,
     RightsCount { expected: usize, received: usize },
 }
 
@@ -233,6 +235,14 @@ fn validate_endpoint(descriptor: impl AsFd) -> Result<(), ControlError> {
 /// Safe borrowed helper control. Its only production inputs are the private pair's endpoints.
 pub(super) struct Transport<'fd>(BorrowedFd<'fd>, CredentialsPolicy);
 
+/// Only the final transaction may drain already-emitted bytes after O's expected normal exit.
+/// Decoding under this policy proves neither that exit was normal nor whole-chain settlement.
+#[derive(Clone, Copy)]
+enum ReceiveEof {
+    Refuse,
+    DrainTerminal,
+}
+
 #[derive(Clone, Copy)]
 enum CredentialsPolicy {
     ActualSender,
@@ -360,6 +370,29 @@ impl<'fd> Transport<'fd> {
         Ok(())
     }
 
+    /// Exactly one nonblocking syscall for the final metrics commit. No partial frame can resume
+    /// with an earlier peak: the owner must refuse and exit abnormally after any partial write.
+    /// A zero-progress AGAIN/INTR lets the owner run fresh accounting and refill the same storage.
+    /// Checking a due tick and the original cutoff immediately before calling this method does
+    /// not bound scheduler preemption or kernel execution time.
+    pub(super) fn send_terminal_once(
+        &self,
+        frame: &PreparedFrame,
+        deadline: Instant,
+    ) -> Result<bool, ControlError> {
+        if Instant::now() >= deadline {
+            return Err(ControlError::Deadline);
+        }
+        match self.send_chunk(&frame.bytes, &[])? {
+            None => Ok(false),
+            Some(written) if written == frame.bytes.len() => Ok(true),
+            Some(written) => Err(ControlError::PartialTerminalSend {
+                written,
+                expected: frame.bytes.len(),
+            }),
+        }
+    }
+
     /// One actual nonblocking send. Both blocking and actor send modes share this ancillary
     /// encoding and syscall; rights accompany only the first positively written byte.
     fn send_chunk(
@@ -441,7 +474,17 @@ impl<'fd> Transport<'fd> {
         credentials: Option<PeerCredentials>,
         expected_rights: impl FnOnce(&T) -> usize,
     ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
-        self.refuse_observable_eof()?;
+        self.finish_receive_mode(buffer, credentials, expected_rights, ReceiveEof::Refuse)
+    }
+
+    fn finish_receive_mode<'buffer, T: DeserializeOwned>(
+        &self,
+        buffer: &'buffer mut PreparedReceive,
+        credentials: Option<PeerCredentials>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        eof: ReceiveEof,
+    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
+        self.check_receive_state(eof)?;
         let control =
             serde_json::from_slice(&buffer.payload).map_err(ControlError::InvalidEncoding)?;
         let expected = expected_rights(&control);
@@ -488,7 +531,17 @@ impl<'fd> Transport<'fd> {
         credentials: &mut Option<PeerCredentials>,
         rights: &mut Vec<OwnedFd>,
     ) -> Result<Option<usize>, ControlError> {
-        self.refuse_observable_eof()?;
+        self.read_chunk_mode(bytes, credentials, rights, ReceiveEof::Refuse)
+    }
+
+    fn read_chunk_mode(
+        &self,
+        bytes: &mut [u8],
+        credentials: &mut Option<PeerCredentials>,
+        rights: &mut Vec<OwnedFd>,
+        eof: ReceiveEof,
+    ) -> Result<Option<usize>, ControlError> {
+        self.check_receive_state(eof)?;
         let mut storage = [MaybeUninit::uninit(); ANCILLARY_BYTES];
         let mut ancillary = RecvAncillaryBuffer::new(&mut storage);
         let received = match recvmsg(
@@ -558,8 +611,31 @@ impl<'fd> Transport<'fd> {
         if received.bytes > bytes.len() {
             return Err(ControlError::Truncated);
         }
-        self.refuse_observable_eof()?;
+        self.check_receive_state(eof)?;
         Ok(Some(received.bytes))
+    }
+
+    fn check_receive_state(&self, eof: ReceiveEof) -> Result<(), ControlError> {
+        if matches!(eof, ReceiveEof::Refuse) {
+            return self.refuse_observable_eof();
+        }
+        let mut events = [PollFd::from_borrowed_fd(
+            self.0,
+            PollFlags::IN | PollFlags::RDHUP,
+        )];
+        poll(&mut events, Some(&Timespec::default()))?;
+        if events[0]
+            .revents()
+            .intersects(PollFlags::ERR | PollFlags::NVAL)
+        {
+            return Err(ControlError::Io(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "terminal control socket failed",
+            )));
+        }
+        // HUP/RDHUP is tolerated only to read a previously emitted final frame. recvmsg returning
+        // zero before its declared length still refuses; normal O wait/reap is a separate gate.
+        Ok(())
     }
 
     fn wait(&self, interest: PollFlags, deadline: Instant) -> Result<(), ControlError> {
@@ -666,6 +742,12 @@ impl PreparedFrame {
     pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
         u64::try_from(self.bytes.capacity()).map_err(|_| ControlError::EncodedBytesExceeded)
     }
+
+    /// Refill after zero-progress terminal send without allocating a second metrics frame.
+    pub(super) fn into_storage(mut self) -> FrameStorage {
+        self.bytes.clear();
+        FrameStorage { bytes: self.bytes }
+    }
 }
 
 /// An O-owned encoded reply with finite send progress. The actual role owner retains the
@@ -734,6 +816,78 @@ pub(super) struct IncrementalReceive {
     poisoned: bool,
 }
 
+/// State-specific decoder for the one final metrics frame. Startup, Dispatch and descriptor
+/// delivery continue using the strict decoder. The caller still authenticates the actual O
+/// sender/run and requires its normal owned child exit before classification.
+pub(super) struct TerminalReceive {
+    receive: IncrementalReceive,
+    completed: bool,
+}
+
+impl TerminalReceive {
+    pub(super) fn prepare() -> Result<Self, ControlError> {
+        Ok(Self {
+            receive: IncrementalReceive::prepare()?,
+            completed: false,
+        })
+    }
+
+    pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
+        let fixed = std::mem::size_of::<Self>()
+            .checked_sub(std::mem::size_of::<PreparedReceive>())
+            .and_then(|bytes| u64::try_from(bytes).ok())
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+        self.receive
+            .buffer
+            .reserved_bytes()?
+            .checked_add(fixed)
+            .ok_or(ControlError::EncodedBytesExceeded)
+    }
+
+    pub(super) fn advance<'buffer, T: DeserializeOwned>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        deadline: Instant,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        if self.completed {
+            return Err(ControlError::ProgressPoisoned);
+        }
+        let result =
+            self.receive
+                .advance_mode(transport, |_| 0, deadline, ReceiveEof::DrainTerminal)?;
+        self.completed = result.is_some();
+        Ok(result)
+    }
+
+    /// After separate actual normal O settlement, require stream EOF with no second frame/tail.
+    /// This socket observation alone never proves O exited or that an owned child was reaped.
+    pub(super) fn confirm_end(
+        &mut self,
+        transport: &Transport<'_>,
+        deadline: Instant,
+    ) -> Result<bool, ControlError> {
+        if !self.completed || Instant::now() >= deadline {
+            return Err(if self.completed {
+                ControlError::Deadline
+            } else {
+                ControlError::ProgressPoisoned
+            });
+        }
+        let mut byte = [0];
+        match transport.read_chunk_mode(
+            &mut byte,
+            &mut self.receive.credentials,
+            &mut self.receive.buffer.rights,
+            ReceiveEof::DrainTerminal,
+        ) {
+            Err(ControlError::Eof) => Ok(true),
+            Ok(None) => Ok(false),
+            Ok(Some(_)) => Err(ControlError::TrailingTerminalBytes),
+            Err(error) => Err(error),
+        }
+    }
+}
+
 impl IncrementalReceive {
     pub(super) fn prepare() -> Result<Self, ControlError> {
         Ok(Self {
@@ -760,6 +914,16 @@ impl IncrementalReceive {
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Instant,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        self.advance_mode(transport, expected_rights, deadline, ReceiveEof::Refuse)
+    }
+
+    fn advance_mode<'buffer, T: DeserializeOwned>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+        eof: ReceiveEof,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         if self.poisoned {
             return Err(ControlError::ProgressPoisoned);
         }
@@ -776,10 +940,11 @@ impl IncrementalReceive {
             self.active = true;
         }
         if self.header_read < self.header.len() {
-            if let Some(count) = transport.read_chunk(
+            if let Some(count) = transport.read_chunk_mode(
                 &mut self.header[self.header_read..],
                 &mut self.credentials,
                 &mut self.buffer.rights,
+                eof,
             )? {
                 self.header_read = self
                     .header_read
@@ -799,10 +964,11 @@ impl IncrementalReceive {
             return Ok(None);
         }
         let length = self.length.ok_or(ControlError::ProgressPoisoned)?;
-        if let Some(count) = transport.read_chunk(
+        if let Some(count) = transport.read_chunk_mode(
             &mut self.buffer.payload[self.payload_read..],
             &mut self.credentials,
             &mut self.buffer.rights,
+            eof,
         )? {
             self.payload_read = self
                 .payload_read
@@ -815,8 +981,12 @@ impl IncrementalReceive {
         }
         // Set successful progress before lending the owned rights. A decoding/validation failure
         // permanently poisons this owner, while a caller may explicitly take valid rights.
-        let received =
-            transport.finish_receive(&mut self.buffer, self.credentials, expected_rights)?;
+        let received = transport.finish_receive_mode(
+            &mut self.buffer,
+            self.credentials,
+            expected_rights,
+            eof,
+        )?;
         self.active = false;
         self.poisoned = false;
         Ok(Some(received))
@@ -902,6 +1072,93 @@ mod tests {
     #[serde(deny_unknown_fields)]
     struct Message {
         authorized: bool,
+    }
+
+    /// Trace: FR-034-AC-11, FR-034-AC-15, FR-034-AC-33.
+    #[test]
+    fn only_terminal_receiver_drains_a_complete_frame_after_peer_close() {
+        let (caller, endpoint) = private_pair().unwrap();
+        guardian(&endpoint)
+            .send(&Message { authorized: true }, &[], deadline())
+            .unwrap();
+        drop(endpoint);
+        let mut strict = IncrementalReceive::prepare().unwrap();
+        assert!(matches!(
+            strict.advance::<Message>(&caller.transport(), |_| 0, deadline()),
+            Err(ControlError::Eof)
+        ));
+        let mut terminal = TerminalReceive::prepare().unwrap();
+        assert!(terminal
+            .advance::<Message>(&caller.transport(), deadline())
+            .unwrap()
+            .is_none());
+        let received = terminal
+            .advance::<Message>(&caller.transport(), deadline())
+            .unwrap()
+            .expect("positively emitted complete terminal frame");
+        assert_eq!(received.control, Message { authorized: true });
+        assert!(received.credentials.is_some());
+        assert!(received.rights.is_empty());
+        assert!(terminal
+            .confirm_end(&caller.transport(), deadline())
+            .unwrap());
+        assert!(matches!(
+            terminal.advance::<Message>(&caller.transport(), deadline()),
+            Err(ControlError::ProgressPoisoned)
+        ));
+        // This is transport coverage only: no normal O Child exit/reap is inferred from EOF.
+    }
+
+    /// Trace: FR-034-AC-11, FR-034-AC-15, FR-034-AC-33.
+    #[test]
+    fn terminal_receiver_refuses_peer_exit_during_an_incomplete_frame() {
+        let (caller, endpoint) = private_pair().unwrap();
+        let frame = PreparedFrame::encode(&Message { authorized: true }).unwrap();
+        assert_eq!(
+            guardian(&endpoint)
+                .send_chunk(&frame.bytes[..4], &[])
+                .unwrap(),
+            Some(4)
+        );
+        drop(endpoint);
+        let mut terminal = TerminalReceive::prepare().unwrap();
+        assert!(terminal
+            .advance::<Message>(&caller.transport(), deadline())
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            terminal.advance::<Message>(&caller.transport(), deadline()),
+            Err(ControlError::Eof)
+        ));
+    }
+
+    /// Trace: FR-034-AC-11, FR-034-AC-15, FR-034-AC-33.
+    #[test]
+    fn terminal_receiver_refuses_a_second_frame_after_the_commit() {
+        let (caller, endpoint) = private_pair().unwrap();
+        for authorized in [true, false] {
+            guardian(&endpoint)
+                .send(&Message { authorized }, &[], deadline())
+                .unwrap();
+        }
+        drop(endpoint);
+        let mut terminal = TerminalReceive::prepare().unwrap();
+        assert!(terminal
+            .advance::<Message>(&caller.transport(), deadline())
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            terminal
+                .advance::<Message>(&caller.transport(), deadline())
+                .unwrap()
+                .expect("first complete frame")
+                .control,
+            Message { authorized: true }
+        );
+        assert!(matches!(
+            terminal.confirm_end(&caller.transport(), deadline()),
+            Err(ControlError::TrailingTerminalBytes)
+        ));
     }
 
     /// Trace: FR-034-AC-4, FR-034-AC-15, FR-034-AC-16.
