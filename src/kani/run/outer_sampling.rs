@@ -91,6 +91,210 @@ pub(super) struct OuterSampling {
     settings: RunSettings,
 }
 
+/// One actual O actor composes the existing production phases, I completion and terminal
+/// transaction. All child custody remains in this same owner across a failed step; no automatic
+/// progression replaces C's BeginMonitor/ClaimInner/ReleaseGate controls.
+pub(super) struct OuterRunOwner {
+    sampling: Option<OuterSampling>,
+    monitor: InnerMonitor,
+    phases: OuterPhases,
+    completion: InnerCompletion,
+    terminal_prepared: Option<TerminalPreparation>,
+    terminal: Option<TerminalDelivery>,
+    inner_settlement: Option<InnerSettlement>,
+    startup_deadline: Instant,
+    state: OuterRunState,
+    poisoned: bool,
+}
+
+enum OuterRunState {
+    Startup,
+    Backend,
+    AwaitCompletedClose,
+    AwaitInnerSettlement,
+    AwaitReportEof,
+    Terminal,
+    Committed,
+}
+
+/// Private production progress only; none of these variants grants C evidence or cleanup credit.
+pub(super) enum OuterRunProgress {
+    Pending,
+    Startup(PhaseProgress),
+    BackendDispatched,
+    BackendCompleted,
+    ResourceExhausted,
+    TerminalCommitted,
+}
+
+impl OuterRunOwner {
+    /// Prepare every actor buffer before M, then sample the actual L/O tree before acquiring the
+    /// report writer for its one prepared monitor recipe. No child is created in this operation.
+    pub(super) fn prepare(
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+        caller_pin: &OwnedFd,
+        inner_endpoint: GuardianEndpoint,
+        launcher: LauncherMemory,
+        settings: RunSettings,
+    ) -> Result<Self, SamplingError> {
+        let startup_deadline = settings
+            .startup_deadline()
+            .map_err(SamplingError::Deadline)?;
+        let phases = OuterPhases::prepare()?;
+        let completion = InnerCompletion::prepare()?;
+        let terminal_prepared = TerminalPreparation::prepare()?;
+        let mut sampling = OuterSampling::prepare(outer, launcher, settings)?;
+        if matches!(sampling.tick(outer, caller)?, MemoryTick::Exhausted(_)) {
+            return Err(SamplingError::Charge(ChargeError::ResourceExhausted));
+        }
+        let monitor = sampling.prepare_inner_monitor(outer, caller_pin, inner_endpoint)?;
+        Ok(Self {
+            sampling: Some(sampling),
+            monitor,
+            phases,
+            completion,
+            terminal_prepared: Some(terminal_prepared),
+            terminal: None,
+            inner_settlement: None,
+            startup_deadline,
+            state: OuterRunState::Startup,
+            poisoned: false,
+        })
+    }
+
+    /// Errors retain this same actor/actual monitor owner for whole-chain cancellation. The helper
+    /// executor cannot turn a failed/partial terminal step into normal O exit or classification.
+    pub(super) fn tick(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<OuterRunProgress, SamplingError> {
+        if self.poisoned || matches!(self.state, OuterRunState::Committed) {
+            return Err(SamplingError::InvalidMonitorTransition);
+        }
+        self.poisoned = true;
+        let result = self.advance(outer, caller);
+        if result.is_ok() {
+            self.poisoned = false;
+        }
+        result
+    }
+
+    fn advance(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<OuterRunProgress, SamplingError> {
+        if matches!(self.state, OuterRunState::Terminal) {
+            return match self
+                .terminal
+                .as_mut()
+                .ok_or(SamplingError::InvalidTerminalTransition)?
+                .tick(outer, caller)?
+            {
+                TerminalProgress::Pending => Ok(OuterRunProgress::Pending),
+                TerminalProgress::Exhausted => Ok(OuterRunProgress::ResourceExhausted),
+                TerminalProgress::Committed => {
+                    self.state = OuterRunState::Committed;
+                    Ok(OuterRunProgress::TerminalCommitted)
+                }
+            };
+        }
+        let sampling = self
+            .sampling
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        match self.state {
+            OuterRunState::Startup => {
+                let progress = self.phases.tick(
+                    sampling,
+                    outer,
+                    caller,
+                    &mut self.monitor,
+                    self.startup_deadline,
+                )?;
+                if matches!(progress, PhaseProgress::GateReleased) {
+                    self.state = OuterRunState::Backend;
+                }
+                Ok(OuterRunProgress::Startup(progress))
+            }
+            OuterRunState::Backend => {
+                match self
+                    .completion
+                    .tick(sampling, outer, caller, &self.monitor)?
+                {
+                    CompletionProgress::Pending => Ok(OuterRunProgress::Pending),
+                    CompletionProgress::Dispatched => Ok(OuterRunProgress::BackendDispatched),
+                    CompletionProgress::Exhausted => Ok(OuterRunProgress::ResourceExhausted),
+                    CompletionProgress::Completed(_) => {
+                        self.state = OuterRunState::AwaitCompletedClose;
+                        Ok(OuterRunProgress::BackendCompleted)
+                    }
+                }
+            }
+            OuterRunState::AwaitCompletedClose => {
+                let (tick, closed) = self
+                    .terminal_prepared
+                    .as_mut()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+                    .receive_completed_close(sampling, &self.completion, outer, caller)?;
+                if matches!(tick, MemoryTick::Exhausted(_)) {
+                    return Ok(OuterRunProgress::ResourceExhausted);
+                }
+                if closed {
+                    self.state = OuterRunState::AwaitInnerSettlement;
+                }
+                Ok(OuterRunProgress::Pending)
+            }
+            OuterRunState::AwaitInnerSettlement | OuterRunState::AwaitReportEof => {
+                let cutoff = self
+                    .terminal_prepared
+                    .as_ref()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+                    .settlement_deadline()?;
+                if Instant::now() >= cutoff {
+                    return Err(SamplingError::Deadline(DeadlineError::Expired));
+                }
+                if matches!(sampling.tick(outer, caller)?, MemoryTick::Exhausted(_)) {
+                    return Ok(OuterRunProgress::ResourceExhausted);
+                }
+                if matches!(self.state, OuterRunState::AwaitInnerSettlement) {
+                    self.inner_settlement = self.monitor.poll_settled()?;
+                    if self.inner_settlement.is_none() {
+                        return Ok(OuterRunProgress::Pending);
+                    }
+                    self.state = OuterRunState::AwaitReportEof;
+                }
+                if !sampling.report_eof() {
+                    return Ok(OuterRunProgress::Pending);
+                }
+                let sampling = self
+                    .sampling
+                    .take()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?;
+                let settlement = self
+                    .inner_settlement
+                    .take()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?;
+                let (report, sampling) =
+                    sampling.seal_after_inner_settlement(settlement, outer, caller)?;
+                self.terminal = Some(
+                    self.terminal_prepared
+                        .take()
+                        .ok_or(SamplingError::InvalidTerminalTransition)?
+                        .begin(report, sampling)?,
+                );
+                self.state = OuterRunState::Terminal;
+                Ok(OuterRunProgress::Pending)
+            }
+            OuterRunState::Terminal | OuterRunState::Committed => {
+                Err(SamplingError::InvalidTerminalTransition)
+            }
+        }
+    }
+}
+
 /// O's actual accounting survives collector sealing and descriptor delivery. This owner grants
 /// no writer exposure or child creation, and its latest complete sample is not cleanup evidence.
 pub(super) struct TerminalSampling {
