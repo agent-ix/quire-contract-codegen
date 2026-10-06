@@ -190,18 +190,14 @@ authored).
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
 - E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
-  operation-application preimage. The planned operator-parity contract requires QSL to
-  recompute and verify that digest and refuse a mismatch. The positional owning rule below is
-  measured in pushed ADR-013 O-09/FR-357 on unmerged QSL change #650; that
-  branch's spec and source still carry the obligation digest without recomputing or checking it.
-  No scalar digest-verification API or exact encoded-member spelling is established there.
-  The newer QSL-stated owning decision requires operator digest recomputation/refusal, but is
-  QSL-STATED until new pushed normative text and implementation are measured. CODE waits for
-  that merged owning contract and actual CG/QSL conformance: the scalar bytes must exactly match
-  QSL O-09's application preimage through ADR-013 section 2's one `quire-canonical` encoder;
-  actual QSL must accept a CG-minted matching identity and refuse a mismatched digest. Exact
-  scalar JSON member/tag/domain spelling remains unavailable, so no local recipe is invented.
-  Function/clause carry-only contracts and existing function/frame encoding remain unchanged.
+  operation-application preimage; QSL recomputes it and refuses a mismatch under measured,
+  unmerged change #650's ADR-013 O-09 and FR-357 AC-15/16. Its
+  `qsl-replay/src/execute/operator_obligation.rs` uses ADR-013 section 2's one `quire-canonical`
+  encoder; `operator_parity.rs` refuses a mismatched digest after application-node/operator/
+  enclosing-function checks as `ScalarIdentity::Obligation`, naming claimed and recomputed
+  digests (`stale_dependency`/`revision-mismatch`). This is source inspection, not passing-test
+  evidence. CODE waits for the owning spec/API merge and actual CG/QSL conformance. Function/
+  clause carry-only contracts and existing function/frame encoding remain unchanged.
   The subject is the claimed operator's FR-322 application node id with its authentic O-07
   `CheckedOccurrence` key (node, `expression` role, ordinal), the existing obligation kind and
   one argument per operand position in operand/harness draw order. Each entry is its position
@@ -214,8 +210,14 @@ authored).
   Repeated independent draws of one parameter remain distinct positional
   entries. Scalar entries are neither identifier-sorted nor deduplicated by node id; unrelated
   enclosing-function parameters are absent. Function/frame preimages and identifier ordering
-  remain unchanged. The scalar positional encoding uses `core::canonical` and waits for the
-  actual amended owning contract; no additional CG member enters it. Source spans, native
+  remain unchanged. The exact scalar preimage, encoded through `core::canonical`, is
+  `{arguments, node, obligation_kind, occurrence_key}`; occurrence is `{ordinal, role}`, and
+  ordered arguments are `{operand, position, range}` with range `{lower, upper}` as decimal
+  strings. Operand is `{node_id, tag: "graph_child"}` or
+  `{node_id, occurrence_key, position, tag: "inline_literal"}` using the application id/key in
+  the inline arm. Node ids are lowercase hex; ordinals/positions numeric; SHA-256 hashes the
+  RFC 8785 bytes with no added digest-label preimage member. CG must byte-match that QSL
+  encoding; no copied encoder or additional CG member enters it. Source spans, native
   outcomes, transcript, generated-content identity, operator label, renderer counters and
   build/tool/version fields remain excluded.
   [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns acceptance criteria
@@ -228,7 +230,10 @@ authored).
   expression occurrence and authentic operand metadata. IR-648 must expose that same tagged
   identity; the inline arm names application/occurrence/position and needs no literal node.
   Missing or ambiguous metadata/kind refuses without minting an identity.
-  Literal and repeated-parameter semantics are resolved by the positional rule; its normative
+  The measured QSL verifier recomputes from supplied metadata without yet checking the
+  occurrence/operand child/tag/range against the recompiled package; that authentic membership
+  check remains an upstream CODE gate. Literal and repeated-parameter semantics are resolved
+  by the positional rule; its normative
   upstream merge and actual metadata access remain CODE gates. Decoder/context work is independent.
   The same-artifact content identity is a separate canonical proof-content tie. The driver
   executes the same proved generated artifact at decoded operands and retained renderer limits,

@@ -78,7 +78,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    other `Refused` report, compare its full `claim()` to the exact retained sent claim before
    terminal conversion. Bind another result/run to the first binding and require no settlement;
    repeat by changing only obligation identity, node, canonical generated-content identity,
-   operator, operand value/range, result range and limits. Keep the obligation digest equal
+   occurrence, kind, operator, operand identity/value/range, result range and limits. Keep the obligation digest equal
    for the other mutations to prove digest-only checking cannot pass. A missing report claim
    refuses too; agreement-only identity is insufficient. These tests await the merge of the measured upstream
    amended spec/API; do not fabricate a full report or substitute agreement for other outcomes. Pass
@@ -104,13 +104,17 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    an invented literal node does not close the typed scalar accessor CODE gate; IR-648 must
    expose the same tagged operand identity.
 
-8. After the newer QSL-stated operator digest-verification contract is measured in pushed spec
-   and code and merged, verify CG's canonical preimage bytes conform exactly to the owning QSL
+8. After the measured unmerged QSL operator digest-verification spec/API has merged, verify CG's canonical preimage bytes conform exactly to the owning QSL
    O-09 application preimage through ADR-013 section 2's one encoder. Send the CG-minted identity
    to the actual QSL operator entry and require acceptance; mutate the obligation digest alone
-   and require typed mismatch refusal before comparison. A carry-only report or stand-in
-   verifier cannot pass. The exact scalar JSON member/tag/domain spelling must come from that
-   upstream owning contract; do not invent it. Check function/clause carry-only behavior and
+   and require `ScalarIdentity::Obligation` with claimed/recomputed digests and
+   `stale_dependency`/`revision-mismatch` before comparison. Repeat by changing positional
+   operand identity/range, occurrence or kind with the original digest retained. A carry-only report or stand-in
+   verifier cannot pass. Verify the exact closed object members,
+   tags, lowercase node hex, numeric ordinals/positions and decimal-string bounds specified in
+   FR-032 against the owning canonical text; CG uses its one canonical encoder. Authentic
+   occurrence/operand child/tag/range membership checks remain an upstream CODE gate and must
+   reject metadata that is self-consistent with its digest but is not the proving package's. Check function/clause carry-only behavior and
    existing function/frame encodings remain unchanged.
 
 ## Expected Results
@@ -126,7 +130,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 | FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
 | FR-032-AC-9 | Scalar positional shape measured on unmerged QSL change #650: actual application/expression occurrence/kind and one ordinal/tagged-identity/range entry per draw; `GraphChild` for graph references, `InlineLiteral` for application/occurrence/position, literal value in singleton range, repeated parameter draws distinct | Invent occurrence/operand ids or extra literal nodes, omit or swap identity tags, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |
-| FR-032-AC-10 | Actual QSL accepts a CG-minted byte-conformant scalar identity and refuses a mismatched digest after the new owning verification contract merges | Accept carry-only echo or a synthetic/stand-in verifier; invent scalar JSON spelling, skip mismatch validation or change existing function/frame encodings |
+| FR-032-AC-10 | Actual QSL accepts a CG-minted byte-conformant scalar identity and refuses a mismatched digest after the new owning verification contract merges | Accept carry-only echo or a synthetic/stand-in verifier; change the specified object/tag/decimal-string encoding, skip mismatch or authentic-membership validation or change existing function/frame encodings |
 
 All checks are planned; completed-route observations have the same explicit upstream gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never
