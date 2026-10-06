@@ -25,7 +25,7 @@ use super::{
     protocol::{BackendExit, GuardianControl},
     report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
-    role_deadline::DeadlineError,
+    role_deadline::{DeadlineError, IdentityDeadline},
     role_protocol::{
         CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
         OuterPhaseReply, OuterTerminalReply, RunSettings,
@@ -50,6 +50,7 @@ pub(super) enum SamplingError {
     InvalidTerminalTransition,
     TerminalAuthority,
     TerminalSize,
+    TerminalDeadlineMismatch,
 }
 
 impl std::fmt::Display for SamplingError {
@@ -76,7 +77,8 @@ impl std::error::Error for SamplingError {
             | Self::UnexpectedInnerEvent
             | Self::InvalidTerminalTransition
             | Self::TerminalAuthority
-            | Self::TerminalSize => None,
+            | Self::TerminalSize
+            | Self::TerminalDeadlineMismatch => None,
         }
     }
 }
@@ -154,6 +156,9 @@ pub(super) struct TerminalPreparation {
     descriptor: FrameStorage,
     commit: FrameStorage,
     read_ack: IncrementalReceive,
+    close_deadline: Option<Instant>,
+    frame_deadline: Option<Instant>,
+    poisoned: bool,
 }
 
 impl TerminalPreparation {
@@ -162,17 +167,101 @@ impl TerminalPreparation {
             descriptor: FrameStorage::prepare().map_err(SamplingError::Control)?,
             commit: FrameStorage::prepare().map_err(SamplingError::Control)?,
             read_ack: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
+            close_deadline: None,
+            frame_deadline: None,
+            poisoned: false,
         })
     }
 
-    /// The cutoff is the retained whole owner's ALREADY started settlement deadline. This method
+    /// Receive C's settlement clock only with O's real authenticated I completion retained.
+    /// Every partial frame attempt still observes L/tree and drains the report. Original None
+    /// remains never-elapsing work; partial-control caps cannot mint/reset a settlement allowance.
+    pub(super) fn receive_completed_close(
+        &mut self,
+        sampling: &mut OuterSampling,
+        completion: &InnerCompletion,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<(MemoryTick, bool), SamplingError> {
+        if self.poisoned
+            || self.close_deadline.is_some()
+            || !matches!(completion.state, InnerCompletionState::Completed(_))
+        {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        self.poisoned = true;
+        let tick = sampling.tick(outer, caller)?;
+        if matches!(tick, MemoryTick::Exhausted(_)) {
+            self.poisoned = false;
+            return Ok((tick, false));
+        }
+        let cap = Instant::now()
+            .checked_add(std::time::Duration::from_secs(3))
+            .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
+        let cap = self.frame_deadline.unwrap_or(cap);
+        let frame_deadline = sampling
+            .settings
+            .identity_deadline()
+            .map_err(SamplingError::Deadline)?
+            .map_or(cap, |original| cap.min(original));
+        let Some(received) = self
+            .read_ack
+            .advance::<CallerTerminalControl>(&caller.transport(), |_| 0, frame_deadline)
+            .map_err(SamplingError::Control)?
+        else {
+            if self.frame_deadline.is_none() && self.read_ack.has_partial_frame() {
+                self.frame_deadline = Some(frame_deadline);
+            }
+            self.poisoned = false;
+            return Ok((tick, false));
+        };
+        let CallerTerminalControl::CompletedClose {
+            authority,
+            deadline,
+        } = received.control
+        else {
+            return Err(SamplingError::InvalidTerminalTransition);
+        };
+        if authority != sampling.settings.authority {
+            return Err(SamplingError::TerminalAuthority);
+        }
+        let original = sampling.settings.deadline;
+        if let IdentityDeadline::Finite { deadline: bound } = original {
+            if !deadline
+                .no_later_than(bound)
+                .map_err(SamplingError::Deadline)?
+            {
+                return Err(SamplingError::TerminalDeadlineMismatch);
+            }
+        }
+        let deadline = deadline.local().map_err(SamplingError::Deadline)?;
+        if matches!(original, IdentityDeadline::NeverElapses)
+            && deadline.saturating_duration_since(Instant::now())
+                > super::role_deadline::SETTLE_RESERVE
+        {
+            return Err(SamplingError::TerminalDeadlineMismatch);
+        }
+        self.close_deadline = Some(deadline);
+        self.poisoned = false;
+        Ok((tick, true))
+    }
+
+    pub(super) fn settlement_deadline(&self) -> Result<Instant, SamplingError> {
+        self.close_deadline
+            .ok_or(SamplingError::InvalidTerminalTransition)
+    }
+
+    /// The cutoff is C's already authenticated original settlement deadline. This method
     /// creates no phase allowance; finite original T may only shorten that same cutoff.
     pub(super) fn begin(
         self,
         report: SealedReport,
         sampling: TerminalSampling,
-        cutoff: Instant,
     ) -> Result<TerminalDelivery, SamplingError> {
+        let cutoff = self.settlement_deadline()?;
+        if self.poisoned {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
         let bytes = u64::try_from(report.bytes).map_err(|_| SamplingError::TerminalSize)?;
         if bytes > super::REPORT_CONTENT_BYTES {
             return Err(SamplingError::TerminalSize);
@@ -289,7 +378,10 @@ impl TerminalDelivery {
                 else {
                     return Ok(TerminalProgress::Pending);
                 };
-                let CallerTerminalControl::ReadCompleted { authority, bytes } = received.control;
+                let CallerTerminalControl::ReadCompleted { authority, bytes } = received.control
+                else {
+                    return Err(SamplingError::InvalidTerminalTransition);
+                };
                 if authority != self.sampling.settings.authority {
                     return Err(SamplingError::TerminalAuthority);
                 }

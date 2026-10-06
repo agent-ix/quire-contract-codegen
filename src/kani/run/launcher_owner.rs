@@ -24,7 +24,7 @@ use super::{
     protocol::BackendExit,
     role_bootstrap::{BootstrapError, PreparedLauncher},
     role_command::HelperRole,
-    role_deadline::DeadlineError,
+    role_deadline::{DeadlineError, IdentityDeadline},
     role_protocol::{
         LauncherControl, LauncherReply, LauncherSettlementMode, OuterArmReply, OuterBootstrap,
         OuterChildSettlement, RunSettings,
@@ -280,22 +280,21 @@ impl LauncherOwner {
         if authority != self.input.settings.authority {
             return Err(LauncherError::SettlementAuthorityMismatch);
         }
-        let deadline = deadline.local().map_err(LauncherError::Deadline)?;
-        match self
-            .input
-            .settings
-            .identity_deadline()
-            .map_err(LauncherError::Deadline)?
-        {
-            Some(original) if deadline > original => {
-                return Err(LauncherError::SettlementDeadlineMismatch);
-            }
-            None if deadline.saturating_duration_since(Instant::now())
-                > super::role_deadline::SETTLE_RESERVE =>
+        let original = self.input.settings.deadline;
+        if let IdentityDeadline::Finite { deadline: bound } = original {
+            if !deadline
+                .no_later_than(bound)
+                .map_err(LauncherError::Deadline)?
             {
                 return Err(LauncherError::SettlementDeadlineMismatch);
             }
-            Some(_) | None => {}
+        }
+        let deadline = deadline.local().map_err(LauncherError::Deadline)?;
+        if matches!(original, IdentityDeadline::NeverElapses)
+            && deadline.saturating_duration_since(Instant::now())
+                > super::role_deadline::SETTLE_RESERVE
+        {
+            return Err(LauncherError::SettlementDeadlineMismatch);
         }
         // The executor decoded this command on the authenticated original C endpoint, under
         // its existing finite per-frame cap. Only the transferred original/first-stop cutoff

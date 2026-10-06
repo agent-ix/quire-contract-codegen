@@ -30,7 +30,7 @@ use super::{
     report_storage::{PreparedReportRead, ReportError},
     resource_ledger::MeasuredPeaks,
     role_command::HelperRole,
-    role_deadline::{DeadlineError, ExecutionClock, RoleDeadline},
+    role_deadline::{DeadlineError, ExecutionClock, IdentityDeadline, RoleDeadline},
     role_protocol::{
         CallerTerminalControl, LauncherControl, LauncherReply, LauncherSettlementMode,
         OuterArmReply, OuterChildSettlement, OuterPhaseCommand, OuterPhaseReply,
@@ -139,6 +139,8 @@ pub(super) struct CallerBootstrap {
     identity: Option<SpawnIdentity>,
     deadline: Instant,
     identity_deadline: Option<Instant>,
+    identity_clock: IdentityDeadline,
+    settlement_transfer: Option<(Instant, RoleDeadline)>,
     build_identity: BuildIdentity,
     authority: RunAuthority,
     caller_uid: u32,
@@ -259,12 +261,12 @@ impl CallerBootstrap {
         settings
             .bind_clock(clock)
             .map_err(CallerBootstrapError::Deadline)?;
-        let identity_deadline = settings
-            .identity_deadline()
-            .map_err(CallerBootstrapError::Deadline)?;
-        let deadline = settings
+        // C retains its actual original Instant; decoding its own role wire clock would round
+        // it and make subsequent comparisons with the original ExecutionClock invalid.
+        let identity_deadline = clock.original_deadline();
+        let identity_clock = settings.deadline;
+        let deadline = clock
             .work_deadline()
-            .map_err(CallerBootstrapError::Deadline)?
             .map_or(bootstrap.setup_deadline(), |deadline| {
                 deadline.min(bootstrap.setup_deadline())
             });
@@ -401,6 +403,8 @@ impl CallerBootstrap {
             identity: None,
             deadline,
             identity_deadline,
+            identity_clock,
+            settlement_transfer: None,
             build_identity,
             authority,
             caller_uid,
@@ -793,9 +797,21 @@ impl CallerBootstrap {
             return Err(CallerBootstrapError::TerminalTransition);
         }
         self.terminal_phase = CallerTerminalPhase::Refused;
-        let cutoff = clock
-            .settlement_deadline()
-            .map_err(CallerBootstrapError::Deadline)?;
+        let (cutoff, deadline) = self.settlement_clock(clock)?;
+        let start = self
+            .read_ack_storage
+            .take()
+            .ok_or(CallerBootstrapError::TerminalTransition)?
+            .encode(&CallerTerminalControl::CompletedClose {
+                authority: self.authority,
+                deadline,
+            })
+            .map_err(CallerBootstrapError::Control)?;
+        self.outer_control
+            .transport()
+            .send_prepared(&start, &[], cutoff)
+            .map_err(CallerBootstrapError::Control)?;
+        let ack_storage = start.into_storage();
         let received = self
             .outer_control
             .transport()
@@ -840,10 +856,7 @@ impl CallerBootstrap {
         let report = read
             .read_received(descriptor, expected_bytes, Some(cutoff))
             .map_err(CallerBootstrapError::Report)?;
-        let ack = self
-            .read_ack_storage
-            .take()
-            .ok_or(CallerBootstrapError::TerminalTransition)?
+        let ack = ack_storage
             .encode(&CallerTerminalControl::ReadCompleted { authority, bytes })
             .map_err(CallerBootstrapError::Control)?;
         self.outer_control
@@ -866,9 +879,7 @@ impl CallerBootstrap {
         {
             return Err(CallerBootstrapError::TerminalTransition);
         }
-        let cutoff = clock
-            .settlement_deadline()
-            .map_err(CallerBootstrapError::Deadline)?;
+        let (cutoff, _) = self.settlement_clock(clock)?;
         self.terminal_phase = CallerTerminalPhase::Refused;
         let Some(received) = self
             .terminal_receive
@@ -945,15 +956,11 @@ impl CallerBootstrap {
         if clock.original_deadline() != self.identity_deadline {
             return Err(CallerBootstrapError::SettingsMismatch);
         }
-        let cutoff = clock
-            .settlement_deadline()
-            .map_err(CallerBootstrapError::Deadline)?;
+        let (cutoff, deadline) = self.settlement_clock(clock)?;
         let storage = self
             .settlement_storage
             .take()
             .ok_or(CallerBootstrapError::SettlementAlreadyAttempted)?;
-        let deadline =
-            RoleDeadline::from_original(cutoff).map_err(CallerBootstrapError::Deadline)?;
         let frame = storage
             .encode(&LauncherControl::Settle {
                 authority: self.authority,
@@ -1030,6 +1037,35 @@ impl CallerBootstrap {
             cutoff,
             authority: self.authority,
         })
+    }
+
+    /// Preserve the one encoded finite bound, or encode the original None first-stop cutoff
+    /// once. Neither later read acknowledgment nor L settlement may recompute/reset that clock.
+    fn settlement_clock(
+        &mut self,
+        clock: &ExecutionClock,
+    ) -> Result<(Instant, RoleDeadline), CallerBootstrapError> {
+        if clock.original_deadline() != self.identity_deadline {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        }
+        let cutoff = clock
+            .settlement_deadline()
+            .map_err(CallerBootstrapError::Deadline)?;
+        if let Some((retained, deadline)) = self.settlement_transfer {
+            return if cutoff == retained {
+                Ok((retained, deadline))
+            } else {
+                Err(CallerBootstrapError::SettingsMismatch)
+            };
+        }
+        let deadline = match self.identity_clock {
+            IdentityDeadline::Finite { deadline } => deadline,
+            IdentityDeadline::NeverElapses => {
+                RoleDeadline::from_original(cutoff).map_err(CallerBootstrapError::Deadline)?
+            }
+        };
+        self.settlement_transfer = Some((cutoff, deadline));
+        Ok((cutoff, deadline))
     }
 
     /// The original identity clock is independent from the finite startup cap. None has its

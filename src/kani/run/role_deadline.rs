@@ -32,6 +32,15 @@ impl std::fmt::Display for DeadlineError {
 impl std::error::Error for DeadlineError {}
 
 impl RoleDeadline {
+    /// Compare authenticated absolute bounds in their shared kernel monotonic domain. Two
+    /// separate local() conversions conservatively round differently and cannot test equality.
+    pub(super) fn no_later_than(self, bound: Self) -> Result<bool, DeadlineError> {
+        if self.nanoseconds >= 1_000_000_000 || bound.nanoseconds >= 1_000_000_000 {
+            return Err(DeadlineError::InvalidClock);
+        }
+        Ok((self.seconds, self.nanoseconds) <= (bound.seconds, bound.nanoseconds))
+    }
+
     /// Kernel clock is sampled first: any intervening work subtracts rather than adds time.
     pub(super) fn from_original(original: Instant) -> Result<Self, DeadlineError> {
         let kernel = monotonic()?;
