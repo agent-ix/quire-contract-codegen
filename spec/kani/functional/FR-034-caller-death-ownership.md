@@ -492,7 +492,7 @@ surrogate of it. The downstream dependency-edge assertion remains a separate pla
 
 FR-017's internal named report allocation is replaced explicitly by a child-only anonymous pipe
 writer and trusted O collector into initially empty sealing-capable memfd. The actual backend argv
-ends with `-Z unstable-options --export-json /proc/self/fd/N`; N is its actual mapped writer >=3.
+ends with `-Z unstable-options --export-json /proc/self/fd/N`; N is its actual mapped writer >=5.
 The consumer holds actual descriptor authority, never reopens a proc symlink with pathname-based
 NOFOLLOW rules. Original non-report argv bytes, stdin/environment/cwd and captures are preserved.
 Kani 0.68's export uses `std::fs::write`; this source fact makes the pipe plausible but does not
@@ -510,9 +510,10 @@ ceiling, including unmapped shmem that process RSS misses. Over-limit input canc
 and yields single-run `KaniRunOutcome::Inconclusive` with `KaniInconclusiveReason::MemoryExhausted`;
 evidence names the report cap independently of the identity ceiling. Batches keep whole-batch
 memory-exhausted refusal with no member classification. FR-029 maps the reason to
-`Incomplete(ResourceExhausted)`, never `Failed`; malformed content remains refusal, never truncated
-acceptance. Slow collection and backpressure must terminate within the original deadline, not
-deadlock.
+`Incomplete(ResourceExhausted)`, never `Failed`. Independently established resource/deadline stops
+take precedence over malformed partial content with existing single-run or whole-batch behavior;
+otherwise malformed content remains refusal, never truncated acceptance. Slow collection and
+backpressure must terminate within the original deadline, not deadlock.
 
 The conservative charge oracle is `owned_RSS + caller_run_buffers + pipe_reserve + memfd_reserve`.
 `owned_RSS` sums positively observed RSS of L/O/M/I and every owned backend descendant without
@@ -565,7 +566,7 @@ waives kernel descendant cancellation.
 | FR-034-AC-14 | Setup docs require the matched package helper roles, safe caller-context user/PID/private-mount permissions, verified mapping/setgroups/private proc, nested installed bwrap and pidfd/observer facilities. The compiled caller security profile is checked, not inferred from binary mode. Caller-profile restriction can refuse runs formerly available through bwrap-only permission; ordinary-caller availability requires actual measurement. Missing capability gives typed pre-Dispatch refusal without host-policy mutation or weaker mode. Added L/O roles and bounded controls/storage are charged to existing ceilings. | Test, Inspection |
 | FR-034-AC-15 | Typed private controls reject malformed and unknown fields and enforce finite encoded-byte, pending-message and startup-work bounds. Ancillary descriptor count/type is exact, received descriptors are CLOEXEC, and unknown/extra/truncated ancillary data refuses while closing all received descriptors. Invalid/overlimit control or EOF cancels or refuses rather than authorizing Dispatch. | Test |
 | FR-034-AC-16 | Only the original caller holds the pair's executor endpoint. Guardian receives only its control end as fd0 through safe CLOEXEC child-only mapping, borrows it with a safe descriptor API and receives actual backend stdin separately as OwnedFd through safe ancillary rights. Backend fd0 restores that original stdin or closed state, while the control/lease descriptor is excluded from backend and unrelated exec inheritance. No arbitrary raw-fd adoption or unsafe exception occurs. | Test |
-| FR-034-AC-17 | Backend receives unchanged raw argument bytes except the explicitly allocated internal report locator: harness options then -Z unstable-options --export-json /proc/self/fd/N with actual mapped N >=3. Evidence records that exact argv. Inherited stdin, inherited/overridden environment and cwd remain unchanged. | Test |
+| FR-034-AC-17 | Backend receives unchanged raw argument bytes except the explicitly allocated internal report locator: harness options then -Z unstable-options --export-json /proc/self/fd/N with actual mapped N >=5. Evidence records that exact argv. Inherited stdin, inherited/overridden environment and cwd remain unchanged. | Test |
 | FR-034-AC-18 | Guardian diagnostics and control use separate channels from backend stdout/stderr captures and cannot contaminate reports; existing bounded capture and capture-failure behavior remain authoritative. | Test |
 | FR-034-AC-19 | Original identity ceilings and existing outcome classifications remain authoritative after confirmed cleanup: memory excess and wall expiry stay distinct, ambiguous live-worker RSS refuses, and ordinary completed/refused/falsified reports retain their meanings. Native refinement uses this ownership path when its FR-028 AC-24 typed entry is implemented, with unchanged refinement class/evidence rules. | Test |
 | FR-034-AC-20 | Guardian connection, startup, identity verification and Dispatch use the original monotonic identity deadline without resetting it. An already expired deadline causes no Dispatch and settles inconclusive with the timed-out reason as FR-028 AC-2 states; actual identity-deadline expiry during setup or execution uses the same classification. | Test |

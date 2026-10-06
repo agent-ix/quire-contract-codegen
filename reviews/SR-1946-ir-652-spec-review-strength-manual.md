@@ -43,3 +43,12 @@ Scope units examined: FR-017-AC-19, FR-034-AC-2, 5, 7, 12, 17 and 31 to 34. Clea
 | --- | --- | --- | --- |
 | FND-001 | medium | The resource-charge oracle is undefined. FR-034-AC-32 requires "actual pipe-capacity/kernel-backing charge ... against the original ceiling", and AC-34 refuses on "missing conservative backing accounting". Neither says what quantity is measured: memfd i_size, st_blocks or shmem pages, and F_GETPIPE_SZ for the pipe. Nor do they give the comparison (RSS plus pipe capacity plus backing against the ceiling?) or say when accounting counts as "missing". Two implementers would build different checks, and a test cannot tell a correct charge from an undercount. | spec/kani/functional/FR-034-caller-death-ownership.md:535, spec/kani/functional/FR-034-caller-death-ownership.md:537, spec/kani/functional/FR-034-caller-death-ownership.md:479-484 |
 | FND-002 | low | FR-034-AC-31, 32 and 33 put delivery status inside the criterion ("presently UNRUN", "These gates are UNRUN"). The criterion becomes false prose the moment CODE lands, and forces a criterion edit to record evidence. Status belongs in TC-049 and the computed matrix. | spec/kani/functional/FR-034-caller-death-ownership.md:534-536 |
+
+## Dispositions
+
+Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db16abc6e6f777f11a372b689c9080; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 9a4f4275-0799-4c05-867e-b01504c3095c.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Charge oracle defined: owned_RSS + caller_run_buffers + page-rounded F_GETPIPE_SZ reserve (resize authority excluded or maximum pre-reserved) + page-rounded 16 MiB+1 memfd reserve, checked arithmetic, refusal on missing quantity. |
+| FND-002 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Status words removed from the criteria; UNRUN status kept in TC-049/TC-027 and the computed untagged matrix. |

@@ -40,7 +40,7 @@ check's id, class, file, line and status; a line of `unknown` is absent and a no
 `id`, `class`, `location { file, line }` and `status`.
 
 Unnamed report storage (FR-017-AC-19): verify exact actual argv order and descriptor locator
-`-Z unstable-options --export-json /proc/self/fd/N`, with actual N >= 3. Concurrent launches sharing
+`-Z unstable-options --export-json /proc/self/fd/N`, with actual N >= 5. Concurrent launches sharing
 one target directory retain distinct descriptor authority; stale named files are untouched and
 never read. Run genuine installed Kani 0.68 export through cargo inheritance into the mapped pipe,
 including normal compiler outputs, proving the export neither seeks nor rereads its destination.
@@ -67,7 +67,10 @@ pathname residue and is reclaimed after the last actual descriptor closes. Concu
 seal races, inheritance/EOF and all-owner-death assertions are mandatory UNRUN CODE gates. Test
 zero-byte EOF with successful and unsuccessful exits: missing-report refusal and NoVerdict
 respectively, retaining independently established resource stops. Test partial/malformed nonempty
-bytes before backend death: typed report refusal, never NoVerdict merely from nonzero exit. Test
+bytes before backend death without an established resource/deadline stop: typed report refusal,
+never NoVerdict merely from nonzero exit. Repeat partial writes with independently established
+memory/resource and deadline stops: preserve the existing single-run source outcomes and
+whole-batch memory-exhausted/timed-out refusal without member classification. Test
 valid nonempty report with normal/nonzero exits against existing classification rules. Reject a
 received descriptor missing each seal independently before any consumer read. Compare actual owned
 RSS plus finite caller-run buffers, reserved page-rounded pipe capacity and maximum memfd backing to

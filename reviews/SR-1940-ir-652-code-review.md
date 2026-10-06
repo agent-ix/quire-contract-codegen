@@ -45,3 +45,11 @@ file, hash or pin is introduced.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | high | FR-017-AC-19 was rewritten to require pipe-to-memfd storage, a 16 MiB writer bound, concurrent kernel-backing charge, seals and all-owner-death reclamation. `quire matrix` still computes it `tagged`, through four tests that prove the superseded named-file allocation: a unique report file name, removal of the run's own file, and a read-bound refusal. So the computed matrix reports the new obligation as covered by tests that cannot fail on it. The disclaimer prose at TC-027:167 does not reach the computed matrix. Give the new obligation its own criterion id (leaving AC-19 for what those tests prove, or retiring it), or drop those tags in the same PR, so the new storage criterion computes `untagged`. | spec/kani/functional/FR-017-kani-execution-evidence.md:278, src/kani/run/execute.rs:1158, src/kani/run/execute.rs:1188, src/kani/run/execute.rs:1231, src/kani/run/report_file.rs:85, spec/kani/matrix/TC-027-kani-execution-evidence.md:167 |
+
+## Dispositions
+
+Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db16abc6e6f777f11a372b689c9080; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 9a4f4275-0799-4c05-867e-b01504c3095c.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Four stale FR-017-AC-19 Trace ids removed (execute.rs:1158/1188/1231, report_file.rs:85), test bodies and other ids unchanged; quire matrix at the fix head computes FR-017-AC-19 untagged. |

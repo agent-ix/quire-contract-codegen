@@ -46,3 +46,20 @@ criteria do not exist as criteria in the computed model.
 | FND-002 | medium | The TC-049 Expected Results table has no row naming FR-034-AC-31, 32, 33 or 34, although steps 15 and 16 exercise them. So the matrix entry states no required observation or caught regression for the four new criteria. | spec/kani/matrix/TC-049-caller-death-ownership.md:282-293, spec/kani/matrix/TC-049-caller-death-ownership.md:265-277 |
 | FND-003 | low | FR-017-AC-19 restates FR-034-AC-32 and AC-33 almost word for word: the 16 MiB+1 retention, concurrent pipe and backing charge, the Completed, lease-close, teardown, EOF, seal, read ordering, and all-owner reclamation. It packs about seven obligations into one row, so the same norm has two owners that can drift apart. Keep the argv locator and "no named report" in FR-017-AC-19, and reference FR-034-AC-32 and AC-33 for the collector. | spec/kani/functional/FR-017-kani-execution-evidence.md:278, spec/kani/functional/FR-034-caller-death-ownership.md:535-536 |
 | FND-004 | low | Hard line breaks leave sentence fragments on their own lines: FR-034 lines 66 to 68 ("All roles,", "startup,", "collection ..."), FR-034 lines 234 to 239 ("pins,", "captures", "nor", "production"), TC-027 line 63 ("Concurrent-accounting,") and TC-049 lines 271 and 272 ("original" / unindented "caller-exclusive"). These are wrap artifacts, not content. Reflow them to the 100-column style. | spec/kani/functional/FR-034-caller-death-ownership.md:66-68, spec/kani/functional/FR-034-caller-death-ownership.md:234-239, spec/kani/matrix/TC-027-kani-execution-evidence.md:62-63, spec/kani/matrix/TC-049-caller-death-ownership.md:271-272 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Wrap fragments introduced by this branch remain in TC-049: line 20 ("claimed. Use the real"), line 47 ("INIT before spawning monitor,"), line 128 ("failure. The") and line 275 ("lease liveness immediately before"). The file also now ends without a final newline. Reflow them and restore the newline. | spec/kani/matrix/TC-049-caller-death-ownership.md:20, spec/kani/matrix/TC-049-caller-death-ownership.md:47, spec/kani/matrix/TC-049-caller-death-ownership.md:128, spec/kani/matrix/TC-049-caller-death-ownership.md:275 |
+
+## Dispositions
+
+Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db16abc6e6f777f11a372b689c9080; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 9a4f4275-0799-4c05-867e-b01504c3095c.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Blank line removed; quire matrix at the fix head lists FR-034-AC-31..34 untagged. |
+| FND-002 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Expected Results rows added for FR-034-AC-31, 32, 33 and 34. |
+| FND-003 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: FR-017-AC-19 keeps argv, unnamed authority and absence semantics and references FR-034-AC-32/33 for the collector. |
+| FND-004 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: The cited fragments in FR-034, TC-027 and TC-049 step 16 are reflowed; other TC-049 fragments are recorded as new FND-005. |

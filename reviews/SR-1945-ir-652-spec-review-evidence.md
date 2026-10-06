@@ -40,3 +40,12 @@ counts as Test; reading documentation counts as Inspection. All of these were ex
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-034-AC-14 declares Inspection only, but it now carries runtime behaviour: "The compiled caller security profile is checked ... Missing capability gives typed pre-Dispatch refusal without host-policy mutation or weaker mode." TC-049 step 5 exercises that refusal at runtime. Inspection of the setup docs cannot fail on it. Declare Test and Inspection, or move the runtime clauses into a Test criterion. | spec/kani/functional/FR-034-caller-death-ownership.md:516, spec/kani/matrix/TC-049-caller-death-ownership.md:104-108 |
 | FND-002 | low | FR-034-AC-31, 32 and 33 declare "Test, Analysis" without naming what the Analysis is or where it is recorded. The only Analysis text is the primary-source grounding paragraph in Dependencies, which says it is not production evidence. Name the Analysis artifact, or drop the method. | spec/kani/functional/FR-034-caller-death-ownership.md:534-536, spec/kani/functional/FR-034-caller-death-ownership.md:557-567 |
+
+## Dispositions
+
+Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db16abc6e6f777f11a372b689c9080; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 9a4f4275-0799-4c05-867e-b01504c3095c.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: FR-034-AC-14 declares Test, Inspection. |
+| FND-002 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: FR-034-AC-31, 32 and 33 declare Test only. |
