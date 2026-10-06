@@ -98,6 +98,12 @@ impl ResourceLedger {
         })
     }
 
+    /// Revoke writer permission before upstream creator/proc/control checks begin. A failed
+    /// observation before `observe` itself is called cannot leave an earlier setup tick usable.
+    pub(super) fn begin_observation(&mut self) {
+        self.last_sample = None;
+    }
+
     /// Called at setup and EVERY original observer tick, before accepting backend completion.
     /// None means unavailable observation, not zero RSS. Actual zero must be established by the
     /// observer's unchanged fresh-identity/MM-release rules. A successful ledger call itself
@@ -108,7 +114,7 @@ impl ResourceLedger {
         outer_tree_rss: Option<u64>,
     ) -> Result<MemoryTick, ChargeError> {
         // An unavailable later tick invalidates earlier exposure permission.
-        self.last_sample = None;
+        self.begin_observation();
         let tree_rss_bytes = launcher_rss
             .ok_or(ChargeError::MissingLauncherRss)?
             .checked_add(outer_tree_rss.ok_or(ChargeError::MissingOuterTreeRss)?)
