@@ -23,11 +23,14 @@ use super::{
     creator,
     outer_setup::NamespaceIdentity,
     protocol::{current_build_identity, BuildIdentity, GuardianRefusal, RunAuthority},
-    publication::Publication,
+    publication::{Publication, Stage},
     report_storage::PreparedReportRead,
     role_command::HelperRole,
     role_deadline::DeadlineError,
-    role_protocol::{LauncherControl, LauncherReply, OuterArmReply, RunSettings},
+    role_protocol::{
+        LauncherControl, LauncherReply, OuterArmReply, OuterPhaseCommand, OuterPhaseReply,
+        RunSettings,
+    },
     spawner::{RetainedSpawner, SpawnIdentity},
     stages::{Bootstrap, PreparedDispatch},
     stdin::OriginalStdin,
@@ -50,6 +53,10 @@ pub(super) enum CallerBootstrapError {
     CapabilityMismatch,
     LauncherRefused(GuardianRefusal),
     LauncherReplyMismatch,
+    UnexpectedPhase,
+    PhaseReplyMismatch,
+    MissingMonitorPin,
+    MissingInnerPin,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -75,7 +82,11 @@ impl std::error::Error for CallerBootstrapError {
             | Self::MissingOuterPin
             | Self::CapabilityMismatch
             | Self::LauncherRefused(_)
-            | Self::LauncherReplyMismatch => None,
+            | Self::LauncherReplyMismatch
+            | Self::UnexpectedPhase
+            | Self::PhaseReplyMismatch
+            | Self::MissingMonitorPin
+            | Self::MissingInnerPin => None,
         }
     }
 }
@@ -108,6 +119,23 @@ pub(super) struct CallerBootstrap {
     original_namespace: NamespaceIdentity,
     outer_pin: Option<OwnedFd>,
     outer_namespace: Option<NamespaceIdentity>,
+    outer_pid: Option<i32>,
+    monitor_pin: Option<OwnedFd>,
+    inner_pin: Option<OwnedFd>,
+    phase_frames: [PreparedFrame; 3],
+    phase: CallerPhase,
+    inner_identity: Option<(i32, u64, NamespaceIdentity)>,
+}
+
+enum CallerPhase {
+    AwaitArm,
+    BeforeMonitor,
+    AwaitMonitor,
+    Bootstrap,
+    AwaitClaim,
+    ClaimedGated,
+    AwaitGate,
+    ClaimedBootstrap,
 }
 
 impl CallerBootstrap {
@@ -152,6 +180,17 @@ impl CallerBootstrap {
         let receive = PreparedReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let identity_records =
             creator::PreparedIdentity::prepare().map_err(CallerBootstrapError::Io)?;
+        let phase_frames = [
+            PreparedFrame::encode(&OuterPhaseCommand::BeginMonitor { authority }),
+            PreparedFrame::encode(&OuterPhaseCommand::ClaimInner { authority }),
+            PreparedFrame::encode(&OuterPhaseCommand::ReleaseGate { authority }),
+        ];
+        let [begin, claim, release] = phase_frames;
+        let phase_frames = [
+            begin.map_err(CallerBootstrapError::Control)?,
+            claim.map_err(CallerBootstrapError::Control)?,
+            release.map_err(CallerBootstrapError::Control)?,
+        ];
         let frame_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let helper_capacity = u64::try_from(settings.helper.capacity())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
@@ -193,6 +232,15 @@ impl CallerBootstrap {
                 .checked_add(bytes)
                 .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         }
+        for frame in &phase_frames {
+            named_buffers = named_buffers
+                .checked_add(
+                    frame
+                        .reserved_bytes()
+                        .map_err(CallerBootstrapError::Control)?,
+                )
+                .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
+        }
         settings.caller_run_buffers = named_buffers;
         let start_frame = frame_storage
             .encode(&LauncherControl::Start { settings })
@@ -224,6 +272,12 @@ impl CallerBootstrap {
             original_namespace,
             outer_pin: None,
             outer_namespace: None,
+            outer_pid: None,
+            monitor_pin: None,
+            inner_pin: None,
+            phase_frames,
+            phase: CallerPhase::AwaitArm,
+            inner_identity: None,
         })
     }
 
@@ -377,7 +431,164 @@ impl CallerBootstrap {
             return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
         }
         self.outer_namespace = Some(namespace);
+        self.outer_pid = Some(pid);
+        self.phase = CallerPhase::BeforeMonitor;
         Ok(namespace)
+    }
+
+    pub(super) fn begin_monitor(&mut self) -> Result<(), CallerBootstrapError> {
+        if !matches!(self.phase, CallerPhase::BeforeMonitor) {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.phase = CallerPhase::AwaitMonitor;
+        self.outer_control
+            .transport()
+            .send_prepared(&self.phase_frames[0], &[], self.deadline)
+            .map_err(CallerBootstrapError::Control)
+    }
+
+    pub(super) fn claim_inner(&mut self) -> Result<(), CallerBootstrapError> {
+        if !matches!(self.phase, CallerPhase::Bootstrap) {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.phase = CallerPhase::AwaitClaim;
+        self.outer_control
+            .transport()
+            .send_prepared(&self.phase_frames[1], &[], self.deadline)
+            .map_err(CallerBootstrapError::Control)
+    }
+
+    pub(super) fn release_gate(&mut self) -> Result<(), CallerBootstrapError> {
+        if !matches!(self.phase, CallerPhase::ClaimedGated) {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.phase = CallerPhase::AwaitGate;
+        self.outer_control
+            .transport()
+            .send_prepared(&self.phase_frames[2], &[], self.deadline)
+            .map_err(CallerBootstrapError::Control)
+    }
+
+    /// Receive the reply into the already charged buffers. Every received process capability is
+    /// installed in this owner BEFORE any fallible identity check, so errors cannot discard custody.
+    pub(super) fn confirm_phase(&mut self) -> Result<(), CallerBootstrapError> {
+        if !matches!(
+            self.phase,
+            CallerPhase::AwaitMonitor | CallerPhase::AwaitClaim | CallerPhase::AwaitGate
+        ) {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        let received = self
+            .outer_control
+            .transport()
+            .receive_prepared::<OuterPhaseReply>(
+                &mut self.receive,
+                OuterPhaseReply::rights_count,
+                self.deadline,
+            )
+            .map_err(CallerBootstrapError::Control)?;
+        // Select only the expected typed reply; a reordered frame never authorizes a transition.
+        let next = match (&self.phase, &received.control) {
+            (CallerPhase::AwaitMonitor, OuterPhaseReply::MonitorSpawned { .. }) => {
+                self.monitor_pin = received.rights.pop();
+                CallerPhase::Bootstrap
+            }
+            (CallerPhase::AwaitClaim, OuterPhaseReply::InnerClaimed { .. }) => {
+                self.inner_pin = received.rights.pop();
+                CallerPhase::ClaimedGated
+            }
+            (CallerPhase::AwaitGate, OuterPhaseReply::GateReleased { .. }) => {
+                CallerPhase::ClaimedBootstrap
+            }
+            _ => return Err(CallerBootstrapError::UnexpectedPhase),
+        };
+        let sender = received
+            .credentials
+            .ok_or(CallerBootstrapError::MissingSender)?;
+        if sender.pid
+            != self
+                .outer_pid
+                .ok_or(CallerBootstrapError::MissingOuterPin)?
+            || sender.uid != self.caller_uid
+            || sender.gid != self.caller_gid
+            || received.control.authority() != self.authority
+        {
+            return Err(CallerBootstrapError::PhaseReplyMismatch);
+        }
+        let outer = self
+            .outer_pin
+            .as_ref()
+            .ok_or(CallerBootstrapError::MissingOuterPin)?;
+        creator::require_live(outer).map_err(CallerBootstrapError::Io)?;
+        match received.control {
+            OuterPhaseReply::MonitorSpawned { .. } => {
+                let monitor = self
+                    .monitor_pin
+                    .as_ref()
+                    .ok_or(CallerBootstrapError::MissingMonitorPin)?;
+                self.identity_records
+                    .validate_child_process(monitor, outer)
+                    .map_err(CallerBootstrapError::Io)?;
+            }
+            OuterPhaseReply::InnerClaimed {
+                start, namespace, ..
+            } => {
+                let monitor = self
+                    .monitor_pin
+                    .as_ref()
+                    .ok_or(CallerBootstrapError::MissingMonitorPin)?;
+                let inner = self
+                    .inner_pin
+                    .as_ref()
+                    .ok_or(CallerBootstrapError::MissingInnerPin)?;
+                let pid = self
+                    .identity_records
+                    .validate_child_process(inner, monitor)
+                    .map_err(CallerBootstrapError::Io)?;
+                if self
+                    .identity_records
+                    .child_start(pid)
+                    .map_err(CallerBootstrapError::Io)?
+                    != start
+                    || self
+                        .identity_records
+                        .child_namespace(pid)
+                        .map_err(CallerBootstrapError::Io)?
+                        != namespace
+                    || Some(namespace) == self.outer_namespace
+                    || namespace == self.original_namespace
+                {
+                    return Err(CallerBootstrapError::CapabilityMismatch);
+                }
+                creator::require_live(inner).map_err(CallerBootstrapError::Io)?;
+                self.inner_identity = Some((pid, start, namespace));
+            }
+            OuterPhaseReply::GateReleased { .. } => {
+                creator::require_live(
+                    self.inner_pin
+                        .as_ref()
+                        .ok_or(CallerBootstrapError::MissingInnerPin)?,
+                )
+                .map_err(CallerBootstrapError::Io)?;
+            }
+        }
+        creator::require_live(outer).map_err(CallerBootstrapError::Io)?;
+        if Instant::now() >= self.deadline {
+            return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+        }
+        let stage = match &next {
+            CallerPhase::Bootstrap => Stage::Bootstrap,
+            CallerPhase::ClaimedGated => Stage::ClaimedGated,
+            CallerPhase::ClaimedBootstrap => Stage::ClaimedBootstrap,
+            CallerPhase::AwaitArm
+            | CallerPhase::BeforeMonitor
+            | CallerPhase::AwaitMonitor
+            | CallerPhase::AwaitClaim
+            | CallerPhase::AwaitGate => return Err(CallerBootstrapError::UnexpectedPhase),
+        };
+        self.phase = next;
+        self.publication.publish(stage);
+        Ok(())
     }
 
     pub(super) fn named_buffer_reservation(&self) -> u64 {

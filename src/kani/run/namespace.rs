@@ -289,6 +289,35 @@ impl OuterMonitorOwner {
         outer.require_creator_live().map_err(io::Error::other)
     }
 
+    /// Clone only this retained direct Child's actual capability for an authenticated O reply.
+    pub(super) fn monitor_capability(&self) -> io::Result<OwnedFd> {
+        let pin = self
+            .pin
+            .as_ref()
+            .ok_or_else(|| unavailable("nested monitor pin is absent"))?;
+        super::creator::require_live(pin)?;
+        pin.try_clone()
+    }
+
+    pub(super) fn inner_capability(
+        &self,
+    ) -> io::Result<(u64, super::outer_setup::NamespaceIdentity, OwnedFd)> {
+        let claim = self
+            .namespace
+            .init
+            .as_ref()
+            .ok_or_else(|| unavailable("inner INIT is unclaimed"))?;
+        super::creator::require_live(&claim.handle)?;
+        let namespace =
+            super::outer_setup::NamespaceIdentity::read(&format!("/proc/{}/ns/pid", claim.pid))?;
+        if fs::read_link(format!("/proc/{}/ns/pid", claim.pid))? != claim.namespace {
+            return Err(unavailable("claimed inner namespace changed"));
+        }
+        let pin = claim.handle.try_clone()?;
+        super::creator::require_live(&claim.handle)?;
+        Ok((claim.start, namespace, pin))
+    }
+
     pub(super) fn namespace(&mut self) -> &mut NamespaceOwner {
         &mut self.namespace
     }
