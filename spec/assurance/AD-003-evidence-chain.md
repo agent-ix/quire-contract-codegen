@@ -191,7 +191,9 @@ authored).
   follows in a follow-up; until then the spelling is CG's own and interim.
 - E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
   operation-application preimage; QSL recomputes it and refuses a mismatch under measured,
-  unmerged change #650's ADR-013 O-09 and FR-357 AC-15/16. Its
+  unmerged change #650. Its owning ADR-013 O-09 now uses tagged `domain` entries for
+  both parity arms, but FR-357 and the measured scalar encoder still describe/use the earlier
+  untagged `range` member; their alignment remains a CODE gate. Its
   `qsl-replay/src/execute/operator_obligation.rs` uses ADR-013 section 2's one `quire-canonical`
   encoder; `operator_parity.rs` refuses a mismatched digest after application-node/operator/
   enclosing-function checks as `ScalarIdentity::Obligation`, naming claimed and recomputed
@@ -212,8 +214,9 @@ authored).
   enclosing-function parameters are absent. Function/frame preimages and identifier ordering
   remain unchanged. The exact scalar preimage, encoded through `core::canonical`, is
   `{arguments, node, obligation_kind, occurrence_key}`; occurrence is `{ordinal, role}`, and
-  ordered arguments are `{operand, position, range}` with range `{lower, upper}` as decimal
-  strings. Operand is `{node_id, tag: "graph_child"}` or
+  ordered arguments are `{domain, operand, position}` with scalar domain
+  `{lower, tag: "range", upper}`, both inclusive bounds as decimal strings.
+  Operand is `{node_id, tag: "graph_child"}` or
   `{node_id, occurrence_key, position, tag: "inline_literal"}` using the application id/key in
   the inline arm. Node ids are lowercase hex; ordinals/positions numeric; SHA-256 hashes the
   RFC 8785 bytes with no added digest-label preimage member. CG must byte-match that QSL
@@ -232,7 +235,10 @@ authored).
   Missing or ambiguous metadata/kind refuses without minting an identity.
   The measured QSL verifier recomputes from supplied metadata without yet checking the
   occurrence/operand child/tag/range against the recompiled package; that authentic membership
-  check remains an upstream CODE gate. Literal and repeated-parameter semantics are resolved
+  check remains an upstream CODE gate. The measured encoder still substitutes an all-zero
+  digest on encoding failure; O-09 instead requires typed refusal with no identity, so that
+  error-path fix is also CODE-gated, with no tested exploit claimed. Literal and repeated-parameter
+  semantics are resolved
   by the positional rule; its normative
   upstream merge and actual metadata access remain CODE gates. Decoder/context work is independent.
   The same-artifact content identity is a separate canonical proof-content tie. The driver

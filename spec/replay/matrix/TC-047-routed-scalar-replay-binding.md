@@ -104,7 +104,8 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    an invented literal node does not close the typed scalar accessor CODE gate; IR-648 must
    expose the same tagged operand identity.
 
-8. After the measured unmerged QSL operator digest-verification spec/API has merged, verify CG's canonical preimage bytes conform exactly to the owning QSL
+8. After the unmerged QSL operator digest-verification spec/API has aligned with owning
+   O-09 and merged, verify CG's canonical preimage bytes conform exactly to the owning QSL
    O-09 application preimage through ADR-013 section 2's one encoder. Send the CG-minted identity
    to the actual QSL operator entry and require acceptance; mutate the obligation digest alone
    and require `ScalarIdentity::Obligation` with claimed/recomputed digests and
@@ -112,7 +113,10 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    operand identity/range, occurrence or kind with the original digest retained. A carry-only report or stand-in
    verifier cannot pass. Verify the exact closed object members,
    tags, lowercase node hex, numeric ordinals/positions and decimal-string bounds specified in
-   FR-032 against the owning canonical text; CG uses its one canonical encoder. Authentic
+   FR-032 against the owning canonical text, including arguments `{domain, operand, position}`
+   and scalar domain `{lower, tag: "range", upper}`. The measured QSL encoder still writes
+   untagged `range`, and FR-357 still describes the previous contract; alignment is CODE-gated.
+   CG uses its one canonical encoder. Authentic
    occurrence/operand child/tag/range membership checks remain an upstream CODE gate and must
    reject metadata that is self-consistent with its digest but is not the proving package's. Check function/clause carry-only behavior and
    existing function/frame encodings remain unchanged. Encoder failure must yield typed refusal

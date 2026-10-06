@@ -180,9 +180,11 @@ preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Ver
 
 CG owns and mints the scalar `ObligationIdentity`; QSL recomputes it and refuses a mismatch
 under the measured operator-parity contract in **unmerged
-[QSL change #650](https://github.com/agent-ix/quire-spec-language/pull/650)**. ADR-013 O-09,
-FR-357 AC-15/16 and `qsl-replay/src/execute/operator_obligation.rs` now define the same scalar
-preimage and canonical encoder. `operator_parity.rs` compares the recomputed digest with the
+[QSL change #650](https://github.com/agent-ix/quire-spec-language/pull/650)**. ADR-013 O-09
+now defines a unified parity preimage with tagged `domain` entries. The measured
+`qsl-replay/src/execute/operator_obligation.rs` still encodes the previous untagged `range`
+member; FR-357 still describes that earlier range-entry contract. Their alignment with the
+new owning O-09 contract remains a CODE gate. `operator_parity.rs` compares its old-range recomputed digest with the
 request after application-node/operator/enclosing-function checks and before scalar comparison;
 a mismatch refuses `ScalarIdentity` with cause `Obligation`, naming claimed and recomputed
 digests (`stale_dependency`/`revision-mismatch`). This is measured source behavior on the
@@ -222,8 +224,9 @@ preimage. Its closed object members are `arguments`, `node`, `obligation_kind` a
 `occurrence_key`. `node` is the application node id in lowercase hex;
 `occurrence_key` is `{ordinal, role}`, with numeric ordinal and the authentic `expression`
 role string; `obligation_kind` is the existing CG kind's wire string. Each ordered argument is
-`{operand, position, range}`: `position` is its zero-based numeric operand ordinal and `range`
-is `{lower, upper}` with both bounds as decimal strings. A graph operand is
+`{domain, operand, position}`: `position` is its zero-based numeric operand ordinal and
+`domain` is `{lower, tag: "range", upper}`, the inclusive harness integer range with both
+bounds as decimal strings. This is the scalar arm of O-09's unified parity-domain representation. A graph operand is
 `{node_id, tag: "graph_child"}`; an inline literal is
 `{node_id, occurrence_key, position, tag: "inline_literal"}`, with `node_id` the application
 node id, the application's same occurrence key and this operand's position. All node ids are
@@ -347,7 +350,8 @@ The positive operator-level route has these explicit **CODE gates**:
    preimage and original renderer-limit/proving record. The selected occurrence, typed positional
    operand identity/range access (IR-648) and existing kind retention gaps remain explicit.
    The measured unmerged QSL digest-verification spec/API must merge; CG must byte-match
-   its exact O-09 application preimage through ADR-013 section 2's encoder, and prove matching
+   the owning tagged-domain O-09 application preimage through ADR-013 section 2's encoder,
+   after FR-357 and the measured old-range encoder are aligned, and prove matching
    CG-minted identity acceptance and mismatch refusal with actual QSL. The recompiled package
    must also authenticate the supplied occurrence and operand identities/tags/ranges; those
    checks are not present in the measured verifier and remain an upstream CODE gate. A digest
