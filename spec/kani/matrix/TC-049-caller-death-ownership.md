@@ -99,7 +99,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-33 | Actual pipe writers/EOF, O spawn-copy closure/M settlement where observable, four seals/consumer refusal/bounded OwnedFd read, independent lease/report channels, stable identity and unnamed backing lifetime through normal seams. | Independent all-owner role/tree termination authority or O-origin immutable EOF/confirmation/reap order if unavailable to ordinary seams; existing one M/I pin cannot establish O death. Whole AC stays untagged while any such assertion is owed. |
 | FR-034-AC-34 | Existing real live-C lease-close observation keeps outer ownership/final controls, ignored-EOF mutant fails before escalation; ordinary accounting/deadline failures retain classifications. | O/C integrated sampling/confirmation/reap facts needed for literal final-sample and ownership ordering; source schedule alone supplies no runtime parity. Whole AC stays untagged while required facts are owed. |
 | FR-034-AC-35 | PLANNED/UNRUN: independent host pathname/abstract listener and host proc-alias exclusion, actual confinement capability refusal and no contained writer export (step 22). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; no generic namespace label or prior death test supplies this new criterion. |
-| FR-034-AC-36 | PLANNED/UNRUN: independent actual backend fd0/fd1/fd2 socket admission and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
+| FR-034-AC-36 | PLANNED/UNRUN: independent real socket-stdin admission, actual production capture-pipe inventory and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
 | FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
 
 External evidence is limited to positively owned live chain observations before death and retained
@@ -428,38 +428,80 @@ merged before fixture CODE. No new DTO/rights/hook/cap is allocated here. Mixed 
 remain untagged until all assertions are actual, alongside the unchanged independent AC-24 EOF
 oracle and one-CODE-PR gate.
 
-22. PLANNED/UNRUN (FR-034 AC-35). Own two live host AF_UNIX listeners outside the contained tree:
-    a pathname listener and an abstract listener. Positively prove both listen and accept an owned
-    host control before the real backend attempts either address. The backend attempts ordinary
-    connect and an SCM_RIGHTS report-writer transfer over each; require failed host connect, no
-    accepted backend channel and no exported writer. Record actual mount/net/PID namespace facts
-    and refusal causes. Exercise cwd/shared binds, alternate host proc/root paths and retained
-    directory aliases; no host socket or host process fd is reachable from the backend. Prove
-    contained-local IPC still operates, rather than passing because sendmsg is blanket-disabled.
-    Deny or make unavailable the actual required network/mount/proc facility separately and require
-    typed pre-Dispatch unavailable refusal, no backend marker and confirmed owned cleanup. Host-side
-    independent peer descriptor access is explicitly outside the guaranteed fault domain; this
-    does not excuse contained-code export or downgrade any existing death/EOF/resource assertion.
-23. PLANNED/UNRUN (FR-034 AC-36). Present a real socket separately at each backend stdio admission
-    position, including a socketpair and a socket without a usable peer. Require actual fstat
-    S_IFSOCK rejection before Dispatch; unavailable type inspection also refuses. Use pipes,
-    regular files, a terminal and /dev/null as positive admitted controls; closed stdin remains
-    closed. Echo raw non-report argv, environment, cwd and observable original stdin bytes through
-    actual normal matched artifacts, detecting substitution, reopening or recipe rewriting. The
-    normal stdout/stderr captures remain their owned non-socket pipes. Assert the existing typed
-    KaniExecutionRefusal::MemoryMechanismUnavailable with no code string, execution evidence/kind
-    or run outcome; run_terminal_value has no execution-refusal input, so synthesize no terminal
-    value. Separately expire the original deadline and preserve its existing classification.
-24. PLANNED/UNRUN (FR-034 AC-37). Positively validate the actual trusted channel owners/mappings:
-    I receives its exclusive lease through Dispatch; O/C final report/control remains usable after
+22. PLANNED/UNRUN (FR-034 AC-35). First source-audit the safe backend-only execution boundary:
+    installation precedes Dispatch and the arbitrary recipe, with no unsafe/pre_exec, unfiltered
+    release, temporary trusted FD inheritance or supervisor-wide filter. Verify the same positively
+    owned PID under I, exact argv0/argv/environment/cwd/stdio and unchanged ownership/deadline.
+    Force installation/exec failure and require typed refusal before positive Dispatch; initial
+    helper spawn and early EOF cannot stand for successful backend exec/handoff. Record CLOEXEC
+    startup transport and confirmed partial-failure settlement without retry/fallback, preserving
+    positive Dispatch as arbitrary backend authorization. A matched helper entry is a candidate
+    only, not a normative selector; inability to implement this boundary stops CODE for SPEC
+    revision. Require L NEWNET/private-root before O and actual O validation before M; nested bind /
+    / must name the confined O root, not host root. Own positively live host pathname and abstract
+    listeners. Place the pathname listener inside the actual shared cwd/crate/target prefix visible
+    to the backend, not an absent or unbound host directory. Run the same real backend
+    listener/client workload as an unconfined owned host control and require a successful connection
+    and descriptor transfer; a merely listening server or generic host client is insufficient. Under
+    the confined production path, positively release the real backend attempt and require failed
+    socket acquisition/connection/send-to-address, no accepted backend channel and no writer export.
+    After Dispatch, create another host listener in a still-writable, backend-visible shared prefix;
+    repeat the actual backend attempt and require continuous exclusion, not a startup socket scan.
+    Verify actual backend denial of AF_UNIX socket creation and datagram socketpairs, including
+    legacy socketcall/ABI and io_uring alternatives, and absence of inherited
+    sockets/listeners/rings. Exercise pathname stream and datagram recipients, explicit-address
+    sendto/sendmsg where sockets are admitted, alternate proc/root and retained-directory aliases.
+    Anonymous connected stream socketpairs shall exchange real local data/SCM_RIGHTS, proving
+    sendmsg is not blanket-denied. A mutation disabling the actual continuous IPC enforcement must
+    fail its raw export/reachability predicate before emergency cleanup; restored enforcement
+    passes. Positively verify permitted contained-local IPC and named original trusted owner
+    channels. Record actual mount/net/PID identities and enforcement facts. Deny each actual
+    network/root/proc/IPC protection capability separately; require typed pre-Dispatch unavailable
+    admission with original cause, no backend marker and confirmed owned cleanup. Run genuine
+    installed Cargo plus Kani 0.68 through the actual filter using cached inputs as the decisive
+    PLANNED/UNRUN compatibility gate. If incompatible, stop CODE for SPEC revision, never
+    relax/filter-fallback. Missing registry/git inputs or unavailable host Unix rendezvous after
+    successful admission produce the existing unsuccessful-no-report Inconclusive NoVerdict
+    classification, not a made-up setup error. Preserve deadline/memory classifications; no
+    prefetch, recipe rewrite or weaker network mode. Independently stolen host authority is outside
+    the uniform channel fault domain; peer-created shared-path listeners and contained export remain
+    in scope.
+23. PLANNED/UNRUN (FR-034 AC-36). Present real OriginalStdin::Open socket input, including
+    socketpair input and a socket without a usable peer. Require actual fstat S_IFSOCK rejection
+    before Dispatch. Inspect the actual production fd1/fd2 mapping and owned descriptor inventory:
+    both are executor-created capture pipes, not caller-selectable socket positions. Analysis shall
+    establish that there is no ordinary caller path replacing either capture with a socket; do not
+    invent a public fixture hook or unreachable stdout/stderr socket case. Exercise failed type
+    inspection through the actual permitted private syscall boundary, retaining original errno; the
+    production admission function and refusal mapping remain the unit under test. Use pipes, regular
+    files, a terminal and /dev/null as admitted stdin controls. OriginalStdin::Closed is the
+    explicit capability tag captured before controls, and remains closed; an inspection error for
+    OriginalStdin::Open, including EBADF, is not reclassified as Closed. Echo raw non-report argv,
+    environment, cwd and original input bytes through normal matched artifacts to detect rewriting
+    or reopening. Assert admission-site BoundedLaunchError::Unavailable regardless original errno.
+    Preserve the original io::Error cause in MemoryMechanismUnavailable and require mandatory typed
+    KaniStartupAdmissionCause: BackendStdioSocket { descriptor: Stdin },
+    BackendStdioInspectionFailed { descriptor }, CapabilityUnavailable { capability }, or
+    MemoryEnforcement for existing memory checks. Verify exact capability metadata and broadened
+    docs/Display semantics; no Option/None/default or error-message discrimination. These API
+    changes remain planned CODE; tests are UNRUN. No execution evidence, kind, outcome or fabricated
+    terminal/Failed; code()==None. Separately expire the original deadline and preserve its existing
+    classification.
+24. PLANNED/UNRUN (FR-034 AC-37). Positively validate the actual trusted channel owners/mappings: I
+    receives its exclusive lease through Dispatch; O/C final report/control remains usable after
     that lease closes. Test backend/descendant/sibling-exec inherited descriptor identities and
-    attempts to reach those channels through their actual proc/mount view; neither controls nor
-    fixture reporter are reachable by arbitrary code. Trusted O/I retain their intended endpoints;
-    no assertion requires trusted owners themselves to lose access. A leaked-control/inheritance
-    mutant fails the named arbitrary-code access predicate before owned emergency cleanup;
-    restored controls pass. Preserve the ignored-EOF mutant's pre-escalation failure with live C and
-    retained outer ownership, actual all-writer EOF, four seals and final delivery. Early channel
-    close, outer kill or blanket sendmsg denial cannot repair the predicate.
+    attempts to reach those channels through their actual proc/mount view, including the same-UID
+    trusted I at /proc/1/fd, pidfd_getfd and ptrace. Record I non-dumpability and the enforced
+    absence of backend ptrace-equivalent privilege, including across exec/nested-userns attempts;
+    ambient Yama/profile denial is not the protection proof. A protection omission mutant exposes
+    the actual I endpoint through at least one named route and fails before cleanup; restored
+    protection passes. Throughout this test, neither controls nor fixture reporter are reachable by
+    arbitrary code. Trusted O/I retain their intended endpoints; no assertion requires trusted
+    owners themselves to lose access. A leaked-control/inheritance mutant fails the named
+    arbitrary-code access predicate before owned emergency cleanup; restored controls pass. Preserve
+    the ignored-EOF mutant's pre-escalation failure with live C and retained outer ownership, actual
+    all-writer EOF, four seals and final delivery. Early channel close, outer kill or blanket
+    sendmsg denial cannot repair the predicate.
 
 Steps 22–24 allocate independent new confinement/admission Tests, all PLANNED/UNRUN. They add no
 fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
@@ -484,9 +526,9 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
 | FR-034-AC-32 | Hard writer retention bound and defined conservative charge; actual Kani pipe roundtrip; slow/overflow cases stop under original deadline | Unmapped backing counted as zero; resizable pipe exceeds reservation; backend/collector deadlock; report cap becomes Failed or truncated pass |
 | FR-034-AC-33 | O spawn writer closed, M and inner writers terminated, actual EOF, verified four seals and final descriptor read; final-close backing reclamation | Extra monitor writer prevents EOF; forged seal claim; report residue after all owners die |
 | FR-034-AC-34 | Separate lease/report controls and live C retained outer ownership; ignored-EOF fails before outer escalation | Outer kill masks mandatory EOF mutant; deadline/ceiling reset or missing charge accepted |
-| FR-034-AC-35 | PLANNED/UNRUN: positively live host listeners remain unreachable from real backend; private proc/PID view and absent host-peer inheritance; unavailable capability refuses | Private net label beside reachable pathname socket; contained writer exported to host; host proc alias accepted |
-| FR-034-AC-36 | PLANNED/UNRUN: actual socket stdio admission refuses; accepted non-socket inputs and closed stdin/recipe remain unchanged; no fabricated evidence/terminal | Socket input silently replaced; inspection failure admitted; unavailable refusal coerced into a run result |
-| FR-034-AC-37 | PLANNED/UNRUN: trusted I/O channels retain required lifetimes and arbitrary code cannot inherit/reach them; unchanged EOF mutant fails before escalation | Final delivery closed early; arbitrary backend obtains lease/report control; sendmsg denied to fake confinement |
+| FR-034-AC-35 | PLANNED/UNRUN: safe same-PID backend-only installation, L/O/M allocation, real unconfined shared-prefix control and dynamic listener exclusion; actual Cargo/Kani compatibility; typed unavailable refusal and original build/resource classes | Policy bypass or inherited ring; peer socket created after Dispatch; unbound vacuous listener; unfiltered release or compatibility relaxation |
+| FR-034-AC-36 | PLANNED/UNRUN: real socket stdin refuses, production fd1/fd2 capture inventory verified; explicit Closed and Open inspection error distinguished; mandatory typed cause and no fabricated result | Unreachable stdout socket test claimed; Open EBADF admitted as Closed; caller-fixable socket misreported as memory-only failure |
+| FR-034-AC-37 | PLANNED/UNRUN: I non-dumpability/backend privilege exclusion block proc1fd/pidfd_getfd/ptrace; trusted channel lifetimes and unchanged EOF mutant retained; uniform authority fault domain | Ambient Yama masks absent protection; contained export excused as outside peer; final delivery closed early |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable

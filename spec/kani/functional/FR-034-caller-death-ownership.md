@@ -58,8 +58,8 @@ research success is not executable requirement coverage.
 ## Behavior
 
 The **bounded executor C** is the original caller. Its actual unreaped Child is the dedicated
-single-thread **launcher L**. L creates the outer user/PID/private-mount namespaces and spawns the
-trusted **outer supervisor O**, actual outer PID 1. O owns the actual unreaped bubblewrap **monitor
+single-thread **launcher L**. L creates the outer user/PID/private-mount/private-network namespaces
+and spawns the trusted **outer supervisor O**, actual outer PID 1. O owns the actual unreaped bubblewrap **monitor
 M**; bubblewrap creates **guardian I**, actual inner namespace PID 1. C retains positively
 authenticated host pidfds/identities through this C→L→O→M→I chain; I remains M's inner child, not
 C's fictional direct Child. One ownership set covers the entire FR-017 batch, with two additional
@@ -87,13 +87,13 @@ inner descendants. A live C confirms positively owned pinned termination before 
 unavailable confirmation refuses. No reused PID, host scan, monitor exit, signal success or inner
 gate EOF supplies authority or teardown proof.
 
-Setup requires caller-context permission for safe NEWUSER/NEWPID/NEWNS, verified UID/GID mappings
-and setgroups policy, private mount identity, private propagation and fresh outer proc view, nested
+Setup requires caller-context permission for safe NEWUSER/NEWPID/NEWNS/NEWNET, verified UID/GID
+mappings and setgroups policy, private mount identity, private propagation and fresh outer proc view, nested
 installed bwrap, safe pidfds/descriptor mapping, and original resource-observer readiness. L/O/I
 are first-party role entries of the explicitly supplied matching package helper; each role uses
 that same verified source/build identity, with no extra PATH executable or copied helper. Before
-ANY mount, verify NEWNS succeeded and mount identity differs from the original host namespace; only
-that private namespace may change propagation or mount proc. O's proc PID view must agree with its
+ANY mount, L shall verify NEWNS succeeded and mount identity differs from the original host
+namespace; only that private namespace may change propagation or mount proc. O's proc PID view must agree with its
 namespace and bwrap's identity lookups. Namespace/mapping/profile or identity failure gives typed
 pre-Dispatch refusal without host-policy/service/configuration mutations or weaker mode. The
 compiled caller's inherited security profile is a capability prerequisite, not permission inferred
@@ -104,6 +104,15 @@ caller availability on hosts with restricted unprivileged user namespaces. A rea
 permission measurement is required before CODE, with actual inherited label and errno, no profile
 workaround or policy mutation. All creator/L/O deaths and mapping/arm races require exact positive
 barriers and bounded owned cleanup; no timing-only assertion proves liveness.
+
+Before O or M creation, L shall establish the private network namespace and the confined outer root.
+O shall verify the actual private network and root/mount allocation before spawning M; failed setup
+or validation shall refuse before Dispatch and confirm owned cleanup. These are required startup
+capabilities, not permission inferred from an executable or a namespace pathname. The nested
+`--bind / /` below binds O's already-confined root into the inner namespace; it shall never bind the
+original host root. The exact inner flags inherit L's private network and do not create a host
+network connection. Continuous backend IPC enforcement on writable shared inputs is specified in
+the report threat-boundary section; an initial socket scan cannot establish that enforcement.
 
 Nested M shall execute installed bwrap with `--unshare-user --unshare-pid --as-pid-1` `--new-session
 --bind / / --dev-bind /dev /dev --proc /proc --info-fd 3 --block-fd 4 --` followed by the actual
@@ -237,6 +246,24 @@ retains bounded outer cancellation, without resetting the deadline.
 - The CG verification harness shall build feature-off and feature-on configurations separately.
 - If helper and library feature identities differ, then the bounded executor shall refuse Dispatch.
 - CG documentation shall identify the downstream production-feature exclusion owned by IR-649.
+- Before O creation, L shall establish the private network namespace.
+- Before O creation, L shall establish the confined private root.
+- Before M creation, O shall validate the allocated network isolation.
+- Before M creation, O shall validate the allocated private root and IPC enforcement.
+- Before Dispatch, I shall require safe backend-only IPC policy installation.
+- Before arbitrary backend recipe execution, I shall require backend-only privilege restriction.
+- While backend code runs, the installed policy shall exclude addressable AF_UNIX socket creation.
+- While backend code runs, the installed policy shall exclude AF_UNIX datagram socketpairs.
+- While backend code runs, the installed policy shall exclude syscall/ABI/io_uring bypasses.
+- The backend execution boundary shall preserve the positively owned PID and original recipe.
+- If backend-only installation fails, then C shall refuse before Dispatch with owned cleanup.
+- Before Dispatch, C shall reject socket-backed OriginalStdin::Open through typed unavailable admission.
+- If OriginalStdin::Open type inspection fails, then C shall refuse admission with the original cause.
+- Where OriginalStdin::Closed is explicitly supplied, I shall preserve its closed representation.
+- While arbitrary backend code runs, I shall prevent acquisition or export of trusted owner endpoints.
+- While awaiting or supervising Dispatch, I shall retain its exclusive guardian lease.
+- After original lease closure, O shall retain the separate final-report delivery channel.
+- If IPC admission capability is unavailable, then C shall confirm owned cleanup before refusal.
 
 ### Startup and termination observations
 
@@ -522,56 +549,119 @@ surrogate of it. The downstream dependency-edge assertion remains a separate pla
 ### Report threat boundary and backend IPC confinement
 
 The guaranteed ownership domain includes every contained L/O/M/I role and backend descendant,
-including duplicated, reopened, reparented and late-born report writers. This requirement makes no
-report or lifecycle guarantee against a hostile or cooperating same-UID host peer outside that
-contained tree independently obtaining report authority through host-side descriptor access or
-SCM_RIGHTS. That fault-domain exclusion does not assert that every host peer can perform those
-operations: actual mapping, credentials, dumpability and kernel security policy can restrict them.
-It does not excuse a contained backend exporting a writer to such a peer. The executor shall prevent
-that export through the backend IPC admission profile below. All existing contained-death, owned
-writer closure, actual EOF, immutable seals, ceiling, deadline and exclusive-lease obligations remain
-mandatory; this boundary is not evidence that an existing containment defect is fixed.
+including duplicated, reopened, reparented and late-born report writers. One fault domain applies to
+report, original lease, bootstrap, ownership and final-control authority. This requirement makes no
+channel exclusivity/authentication, report or lifecycle guarantee against a hostile or cooperating
+same-UID host peer outside that tree independently obtaining such authority through host-side
+access or SCM_RIGHTS. This does not assert that every host peer can perform those operations:
+credentials, mappings, dumpability and kernel security policy can restrict them. Ordinary foreign
+actors without independently stolen authority remain subject to the unchanged rejection criteria.
+The exclusion does not excuse a contained backend obtaining or exporting any writer, lease or
+trusted endpoint. I shall prevent that acquisition/export. Every existing contained-death, owned
+writer closure, actual EOF, immutable seal, ceiling, deadline and exclusive-lease obligation remains
+mandatory; no fault-domain clause repairs an existing contained-tree defect.
 
-Before Dispatch, the bounded executor shall establish the arbitrary backend's actual IPC isolation.
-Its mount view shall expose no connectable host AF_UNIX pathname socket, including through retained
-directory descriptors, shared bind paths or alternate proc/root aliases. Its private network
-namespace shall exclude the host abstract AF_UNIX address scope. Its private proc/PID view shall
-exclude host process descriptor access; host-view ownership pidfds shall remain with trusted owners,
-never arbitrary backend code. The existing host-root bind recipe alone does not establish this
-profile. Namespace creation alone does not close inherited endpoints or make host socket pathnames
-unreachable. The executor shall admit no inherited host-peer endpoint into the backend beyond its
-explicitly allocated non-socket stdio, bounded captures and report writer. All other owner-held
-descriptors shall be CLOEXEC outside their intended trusted role mappings and absent from arbitrary
-backend, sibling exec and backend descendant inheritance.
+L shall allocate NEWNET and a private root before O creation, using the verified private mount
+namespace and propagation. Required original cwd, crate/source, target, cached build inputs,
+helper/backend/toolchain and loader paths shall retain their admitted path/byte semantics; required
+shared writable paths shall remain writable. L shall exclude original host proc/root aliases,
+retained host-directory/namespace descriptor escapes and unrelated host IPC rendezvous paths from
+the root mapping. O shall validate actual network/root/proc identities and the admitted mapping
+before M creation. The nested `--bind / /` binds this already-confined O root, never original host
+root; inner M/I inherit the private network. Neither an initial socket scan nor a namespace label
+proves continuous host-peer exclusion on writable shared paths.
 
-The allowlisted trusted channels are the original exclusive C/I guardian lease, C/L/O bootstrap and
-authenticated ownership controls, and O/C final report/control delivery. Trusted I retains its lease
-through Dispatch; trusted O retains final report delivery after original lease close. Those endpoints
-shall remain owned and unreachable from arbitrary backend code, sibling exec and backend descendants;
-they shall not be closed early to satisfy confinement. Their existing bounded SCM_RIGHTS transfer
-and EOF meanings remain unchanged. A blanket sendmsg denial is not this profile. The opt-in fixture
-reporter remains a separately allocated trusted reporter, excluded from every production child under
-the existing reporter rules; it grants no backend host-peer endpoint.
+I shall require the backend execution boundary to establish kernel seccomp IPC and privilege
+restrictions before Dispatch and before executing any arbitrary backend recipe. That boundary shall
+use safe code without unsafe or pre_exec, apply the restrictions only to the backend and descendants,
+and keep INIT/I, O and M supervisors outside the backend-only filter. The eventual backend shall
+retain the same positively owned PID/identity under I, with no extra surviving process, ownership
+set or deadline. Actual argv0, non-report argv, environment, cwd and stdio shall remain unchanged.
+No temporary trusted transport descriptor shall survive into arbitrary backend execution. If
+installation fails, then C shall return typed pre-Dispatch unavailable refusal with owned cleanup;
+there shall be no unfiltered Dispatch. Installation/exec failure shall be known as typed refusal
+before positive Dispatch; initial helper spawn success or early control EOF shall never prove
+successful backend exec/handoff. Startup transport shall remain CLOEXEC until successful exec;
+partial exec failure shall settle/refuse without retry or fallback. The boundary shall retain the
+unchanged requirement that arbitrary backend creation/execution needs positive Dispatch. The
+mechanism is deliberately unspecified: a matched helper
+exec-entry is a CODE-plan candidate only. A source-grounded safe-boundary feasibility audit is the
+first CODE gate; inability to meet these properties stops CODE for SPEC revision. The policy shall prevent `socket(AF_UNIX, ...)` creation and
+AF_UNIX datagram socketpairs. It shall allow anonymous connected SOCK_STREAM socketpairs for
+contained-local IPC and shall not blanket-deny sendmsg. It shall cover legacy socketcall and every
+supported syscall/ABI alias; incompatible or unsupported execution ABIs shall refuse admission.
+No inherited socket/listener or io_uring descriptor shall reach arbitrary backend code. The policy
+shall close io_uring socket/operation bypasses by excluding backend io_uring creation/control and
+shall persist across fork, exec, reparenting and nested namespaces without a privilege-based escape.
+C/L/O/M and intended trusted owner endpoints shall retain their separately allocated controls; no
+backend IPC restriction shall close I's lease or O's final-delivery channel early. Dynamic host
+pathname listeners created after Dispatch in admitted shared source/target/cwd paths remain
+unconnectable throughout execution; explicit-address datagram export is also excluded. Private
+network isolation excludes the host abstract address scope. I shall admit no arbitrary backend
+host-peer endpoint; private proc/PID view shall exclude host descriptor/root aliases. Host ownership
+pidfds and all other trusted descriptors shall remain CLOEXEC outside intended role mappings and
+unavailable to arbitrary backend, sibling exec and backend descendants.
 
-For actual backend fd 0, 1 and 2 proposed for inheritance, including original stdin, the executor
-shall inspect actual fstat type before Dispatch. C-only reporter/control descriptors are not backend
-stdio; normal backend stdout/stderr remain capture pipes. If any such descriptor has S_IFSOCK type, then the executor shall refuse
-admission before backend creation, even if its peer is presently disconnected or its socket family
-is unknown. Pipes, regular files, terminals and /dev/null shall retain their original admitted
-descriptor semantics. Closed stdin shall retain its existing closed representation. The executor
-shall not substitute, reopen or rewrite stdin, raw non-report argv, environment or cwd to pass
-admission. This is an explicit availability limit: socket-backed input or an unavailable isolation
-capability can refuse a previously runnable request.
+Before backend creation, I shall set and positively confirm PR_SET_DUMPABLE 0 after final
+credential/mapping transitions. I shall remove backend CAP_SYS_PTRACE authority in I's owning user
+namespace and prevent regain through exec, file capabilities, credentials or nested user namespaces.
+I shall retain non-dumpability while it owns its endpoints. These restrictions shall prevent real
+backend /proc/1/fd reopening, pidfd_getfd and ptrace acquisition of I's report/lease/control endpoints
+independently of ambient Yama. If safe protection setup or verification fails, then C shall refuse
+admission with confirmed owned cleanup; a host profile denying an attack is not the protection proof.
 
-If stdio type inspection, private network/proc/mount isolation or endpoint exclusion cannot be
-established, then the executor shall use the existing typed pre-Dispatch unavailable route with its
-actual cause and confirm owned cleanup. In CG, BoundedLaunchError::Unavailable maps to
-KaniExecutionRefusal::MemoryMechanismUnavailable; this refusal has no stable code string and returns
-no KaniExecutionEvidence, evidence kind or KaniRunOutcome. The existing run_terminal_value function
-accepts a KaniRunOutcome, not this execution refusal; no terminal value is fabricated from it.
-Original deadline expiry retains its existing precedence and classification. No profile change,
-weaker isolation, outcome coercion or new refusal-kind string supplies admission. All mechanisms and
-Tests in this confinement allocation remain PLANNED/UNRUN.
+The allowlisted trusted channels are C/I's exclusive original lease, C/L/O bootstrap and authenticated
+ownership controls, and O/C final report/control delivery. I shall retain its lease through Dispatch;
+O shall retain final delivery after original lease close. They remain owned and unavailable to
+arbitrary backend/descendants/sibling exec, with existing bounded SCM_RIGHTS and EOF meanings.
+The AC-27 opt-in reporter is separately trusted, excluded from every production child; it supplies
+no backend host-peer endpoint. First-party controls shall not be closed early to satisfy admission.
+
+C shall establish the actual backend fd0/fd1/fd2 admission inventory before Dispatch. C shall inspect
+fstat type for OriginalStdin::Open. Production fd1/fd2 are owned capture pipes, established by actual
+mapping/inventory and Analysis, not caller-selectable socket test positions. C-only reporter/control
+sockets are not backend stdio. If an admitted stdio descriptor has S_IFSOCK, then C shall refuse
+before arbitrary backend creation regardless of socket family or peer state. Pipe, regular-file,
+terminal and /dev/null inputs shall keep original descriptor semantics. OriginalStdin::Closed is
+an explicit capability tag captured before controls exist; I shall preserve it without fstat on an
+absent descriptor. If type inspection of OriginalStdin::Open fails, including EBADF, then C shall
+refuse; errno alone shall not manufacture Closed admission. C/I shall not substitute, reopen or
+rewrite original input, raw non-report argv, environment or cwd to obtain admission.
+
+Socket stdin, private network isolation and loss of addressable AF_UNIX rendezvous are explicit
+caller availability limits. Anonymous local stream socketpair IPC remains admitted. Cargo builds
+with locally present source/toolchain/cache inputs may run; host registry/git fetches and host Unix
+services are unavailable. C shall supply no prefetch, unmetered external resolution, recipe rewrite
+or weaker network/IPC mode. If missing inputs or denied rendezvous cause an unsuccessful build
+without a report after admitted Dispatch, then C shall preserve FR-017 Inconclusive NoVerdict for
+single runs and every compatible batch member. Existing memory/deadline classifications take their
+existing precedence; build incompatibility does not become a fabricated setup failure. Genuine
+installed Cargo plus Kani 0.68 under the actual filter is a decisive PLANNED/UNRUN gate. If that
+roundtrip is incompatible, then CODE delivery shall stop for measured SPEC revision, never relax
+this policy or supply fallback.
+
+If stdio inspection, private network/root/proc, IPC enforcement or owner protection cannot be
+established, then C shall classify the admission failure as BoundedLaunchError::Unavailable at its
+site regardless of original errno/io::ErrorKind, retain the original cause and confirm owned cleanup.
+The generic run-stage Unsupported/NotFound classifier is insufficient for PermissionDenied, EIO
+or EOVERFLOW admission failure. The public top-level refusal remains
+KaniExecutionRefusal::MemoryMechanismUnavailable with its original `cause: std::io::Error`; planned
+CODE shall broaden its documentation and Display from memory-only enforcement to bounded startup
+prerequisites. Planned CODE shall attach mandatory `admission: KaniStartupAdmissionCause` typed
+context alongside that unchanged cause. Its exact variants are `MemoryEnforcement` for existing
+memory checks, `BackendStdioSocket { descriptor }`, `BackendStdioInspectionFailed { descriptor }`,
+and `CapabilityUnavailable { capability: KaniStartupCapability }`. BackendStdioDescriptor names
+Stdin, Stdout and Stderr; ordinary caller socket rejection identifies Stdin. KaniStartupCapability
+names PrivateNetwork, PrivateRoot, PrivateProc, BackendIpcExclusion and TrustedOwnerProtection.
+Original syscall errno/error remains in cause; input-type rejection retains actual descriptor/type
+facts in admission context, not message parsing. Every unavailable site shall select its mandatory
+variant, with no optional None, default, string discriminant, compatibility layer or new top-level
+refusal. This is a planned API amendment, not a claim about current code.
+
+MemoryMechanismUnavailable has code()==None and returns no KaniExecutionEvidence, evidence kind or
+KaniRunOutcome. Existing run_terminal_value accepts KaniRunOutcome, not an execution refusal; C shall
+fabricate no terminal value or Failed outcome. Original deadline expiry retains its classification
+precedence. All mechanisms, compatibility, capability and confinement Tests here remain PLANNED/UNRUN.
 
 ### Run artifact and report lifetime
 
@@ -669,9 +759,9 @@ waives kernel descendant cancellation.
 | FR-034-AC-32 | The bounded O event loop collects anonymous report pipe into memfd without a backend/collector completion wait cycle. A hard 16 MiB plus one detection-byte retention bound and the defined owned_RSS + caller_run_buffers + page-rounded F_GETPIPE_SZ + page-rounded pre-reserved memfd maximum comparison applies while writing against the original ceiling; unmapped shmem is not zero. Beyond cap yields owned cancellation and single-run KaniRunOutcome::Inconclusive with MemoryExhausted; batches keep whole-batch memory-exhausted refusal, with no member classified. Evidence names the report cap separately; FR-029 maps ResourceExhausted, never Failed or truncated acceptance. Slow/over-cap writers finish or refuse within the original deadline. Genuine installed cargo/Kani 0.68 roundtrip validates mapped FD inheritance and no seek/reread dependency; failure stops CODE pending measured spec revision, with no runtime fallback. | Test |
 | FR-034-AC-33 | Authenticated Completed precedes original-lease close, confirmed inner teardown and M termination/reap closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS verification and stable actual OwnedFd reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are required before CODE delivery. | Test |
 | FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks the sealed AC-24 pre-escalation EOF oracle; ignored-EOF still fails its named raw predicate before cleanup. Missing conservative backing accounting or immutable sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
-| FR-034-AC-35 | PLANNED/UNRUN. Before Dispatch, actual arbitrary-backend mount/network/proc/PID confinement excludes host AF_UNIX pathname and abstract peers, host proc descriptor/root aliases and inherited host-peer endpoints. Attempts from the real backend to connect to positively live host pathname/abstract listeners or access host procfd fail; namespace identity alone is insufficient. Missing or denied capability/exclusion gives typed pre-Dispatch unavailable refusal with no backend creation and confirmed owned cleanup, never weaker admission. Contained writer export to an outside peer is prevented; the separate hostile/cooperating host-peer fault-domain exclusion waives none of the contained tree, owned-writer, EOF, seal, ceiling, deadline or lease guarantees. | Test, Analysis |
-| FR-034-AC-36 | PLANNED/UNRUN. Actual fstat S_IFSOCK on any descriptor proposed for backend stdio inheritance refuses before Dispatch. Each stdin/stdout/stderr socket case and failed type inspection refuses through BoundedLaunchError::Unavailable and KaniExecutionRefusal::MemoryMechanismUnavailable with no stable refusal code, execution evidence, evidence kind, run outcome or fabricated terminal value. Admitted pipe/regular-file/terminal/devnull stdio and closed stdin retain their original descriptors/closed representation; raw non-report argv, environment and cwd are unchanged. Actual deadline expiry retains the existing resource classification. | Test |
-| FR-034-AC-37 | PLANNED/UNRUN. Trusted I's exclusive guardian lease remains live through Dispatch, and trusted O's separate final report/control channel remains live after original lease close. Bootstrap/ownership/final-report and opt-in reporter endpoints remain owned, CLOEXEC outside intended trusted mappings and unavailable to arbitrary backend, sibling exec and backend descendants. Actual inheritance/reachability assertions fail a leaked-control mutant before emergency cleanup; restored controls pass. No early trusted-channel closure or blanket sendmsg denial substitutes for confinement, final report EOF/seals/delivery or the unchanged pre-escalation lease-EOF oracle. | Test |
+| FR-034-AC-35 | PLANNED/UNRUN. L creates private network/root before O, O validates before M, and nested bind / / refers to confined O root. Safe backend-only seccomp/privilege installation before Dispatch preserves the same positively owned PID and original recipe, with no unfiltered Dispatch or extra surviving process/ownership/deadline; I/O/M remain outside that filter. Continuous AF_UNIX socket/datagram-socketpair, legacy syscall/ABI/io_uring and inherited-endpoint exclusion prevents host-peer acquisition/export throughout writable shared source/target/cwd paths, including listeners created after Dispatch. AC authority requires the same real backend unconfined positive control to connect/export at that visible shared prefix; confined real attempts and a genuine omission mutant distinguish protection from absent listeners. Anonymous local stream socketpair IPC remains admitted. Safe-boundary feasibility and genuine installed Cargo/Kani under the actual filter are decisive UNRUN gates; incompatibility stops CODE for SPEC revision, no relaxation. Required capabilities fail through typed pre-Dispatch unavailable admission regardless errno with confirmed owned cleanup; successful admission followed by missing cache/denied rendezvous build failure retains FR-017 NoVerdict and resource precedence. All old contained-death/writer/EOF/seal/deadline/lease obligations remain mandatory. | Test, Analysis |
+| FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Explicit OriginalStdin::Closed remains closed; Open inspection EBADF refuses, never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
+| FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
 
 ## Dependencies
 
@@ -739,6 +829,13 @@ requires actual absence of host aliases, not a pathname label. CG's existing typ
 is in src/kani/run/execute.rs::start and KaniExecutionRefusal::code; its terminal API is
 src/kani/terminal.rs::run_terminal_value. These are source-grounded allocation facts, not executed
 confinement/admission Tests or a new serialized kind.
+
+Linux [seccomp](https://man7.org/linux/man-pages/man2/seccomp.2.html) defines inherited syscall
+filters, while [non-dumpability](https://man7.org/linux/man-pages/man2/PR_SET_DUMPABLE.2const.html)
+and [ptrace access checks](https://man7.org/linux/man-pages/man2/ptrace.2.html) ground the required
+trusted-I protection independently of ambient Yama. These Analysis references select no helper
+entry mechanism and supply no runtime evidence. Safe-boundary installation/exec feasibility,
+architecture/alias/io_uring closure and the actual filtered Cargo/Kani roundtrip remain UNRUN.
 
 The lifecycle claim includes signals directed to the original caller's process group/session and
 direct guardian death. Host failure or loss of the kernel's namespace facilities cannot be turned
