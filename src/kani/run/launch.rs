@@ -1341,6 +1341,8 @@ mod tests {
         ));
     }
     /// Trace: FR-028-AC-21.
+    // Requires actual Linux procfs/pidfd/namespace mechanism availability.
+    #[cfg(target_os = "linux")]
     #[test]
     fn observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run() {
         use std::os::unix::fs::symlink;

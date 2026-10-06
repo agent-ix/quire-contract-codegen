@@ -12,9 +12,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rustix::process::Pid;
 #[cfg(target_os = "linux")]
-use rustix::process::{pidfd_open, PidfdFlags};
+use rustix::process::{pidfd_open, Pid, PidfdFlags};
 use serde::Serialize;
 
 /// The mechanism that actually enforced the run's memory ceiling.
@@ -508,6 +507,8 @@ mod tests {
     }
 
     /// Trace: FR-028-AC-21.
+    // Requires actual Linux procfs/pidfd/namespace mechanism availability.
+    #[cfg(target_os = "linux")]
     #[test]
     fn unavailable_children_observation_refuses_and_only_disappeared_tasks_are_skipped() {
         use std::os::unix::fs::symlink;
@@ -608,6 +609,8 @@ mod tests {
     }
 
     /// Trace: FR-028-AC-21.
+    // Requires actual Linux procfs/pidfd/namespace mechanism availability.
+    #[cfg(target_os = "linux")]
     #[test]
     fn available_observer_does_not_invent_a_peak_before_observing_a_tree() {
         let observer = MemoryObserver::prepare(Path::new("/proc")).unwrap();

@@ -257,6 +257,48 @@ pub struct KaniExecutionEvidence {
     pub batch: Option<KaniBatchInvocation>,
 }
 
+/// A backend report and its invocation metadata, without an attestation of resource enforcement.
+/// Production attaches its actual observation only after the bounded launcher concludes.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReportedExecution {
+    ceilings: crate::kani::identity::ProofCeilings,
+    symbolic_arguments: Vec<crate::kani::identity::SymbolicArgumentBounds>,
+    kind: Option<ObligationKind>,
+    harness_path: String,
+    launcher_path: String,
+    arguments: Vec<String>,
+    unwind: u32,
+    solver: KaniSolver,
+    exit_code: Option<i32>,
+    outcome: KaniRunOutcome,
+    success_checks: u32,
+    checks: Vec<KaniCheckResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    batch: Option<KaniBatchInvocation>,
+}
+
+impl ReportedExecution {
+    fn with_memory(self, memory: MemoryObservation) -> KaniExecutionEvidence {
+        KaniExecutionEvidence {
+            memory,
+            ceilings: self.ceilings,
+            symbolic_arguments: self.symbolic_arguments,
+            kind: self.kind,
+            harness_path: self.harness_path,
+            launcher_path: self.launcher_path,
+            arguments: self.arguments,
+            unwind: self.unwind,
+            solver: self.solver,
+            exit_code: self.exit_code,
+            outcome: self.outcome,
+            success_checks: self.success_checks,
+            checks: self.checks,
+            batch: self.batch,
+        }
+    }
+}
+
 /// The statement, on a harness's evidence, that its invocation was shared (FR-017-AC-22).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -356,12 +398,10 @@ fn evidence_of(
     exit_code: Option<i32>,
     run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
-    memory: MemoryObservation,
-) -> KaniExecutionEvidence {
-    KaniExecutionEvidence {
+) -> ReportedExecution {
+    ReportedExecution {
         ceilings: harness.ceilings,
         symbolic_arguments: request.harness.symbolic_arguments(),
-        memory,
         kind: harness.kind,
         harness_path: harness.rust.path.clone(),
         launcher_path: request.installation.launcher.display().to_string(),
@@ -380,7 +420,6 @@ fn evidence_of(
 fn run_single(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    let harness = request.harness.view();
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
     let (arguments, command) = launch_command(request, &report_path);
@@ -391,15 +430,21 @@ fn run_single(
         NonZeroUsize::MIN,
     )?;
     let report = take_report(&launch.outcome, &report_path);
-    let (run, exit_code) = launch_evidence(launch.outcome, report?.as_deref(), harness.kind)?;
+    finish_single(request, arguments, launch.outcome, report?)
+        .map(|reported| reported.with_memory(launch.memory))
+}
+
+/// Classify one captured launch and its own report, without asserting memory enforcement.
+fn finish_single(
+    request: &KaniExecutionRequest<'_>,
+    arguments: Vec<String>,
+    outcome: LaunchOutcome,
+    report: Option<Vec<u8>>,
+) -> Result<ReportedExecution, KaniExecutionRefusal> {
+    let harness = request.harness.view();
+    let (run, exit_code) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
     Ok(evidence_of(
-        request,
-        &harness,
-        arguments,
-        exit_code,
-        run,
-        None,
-        launch.memory,
+        request, &harness, arguments, exit_code, run, None,
     ))
 }
 
@@ -443,6 +488,22 @@ pub fn execute_kani_obligations(
     for request in requests {
         require_in_crate(request)?;
     }
+    Ok(plan_groups(requests)
+        .into_iter()
+        .map(|group| KaniGroupRun {
+            members: group.iter().map(|(position, _)| *position).collect(),
+            evidence: match group.as_slice() {
+                [(_, only)] => run_single(only).map(|evidence| vec![evidence]),
+                _ => run_group(&group),
+            },
+        })
+        .collect())
+}
+
+/// Stable groups in first-member order, each retaining request order.
+fn plan_groups<'a, 'b>(
+    requests: &'a [KaniExecutionRequest<'b>],
+) -> Vec<Vec<(usize, &'a KaniExecutionRequest<'b>)>> {
     let mut groups: Vec<Vec<(usize, &KaniExecutionRequest<'_>)>> = Vec::new();
     for member in requests.iter().enumerate() {
         match groups.iter_mut().find(|group| {
@@ -454,16 +515,7 @@ pub fn execute_kani_obligations(
             None => groups.push(vec![member]),
         }
     }
-    Ok(groups
-        .into_iter()
-        .map(|group| KaniGroupRun {
-            members: group.iter().map(|(position, _)| *position).collect(),
-            evidence: match group.as_slice() {
-                [(_, only)] => run_single(only).map(|evidence| vec![evidence]),
-                _ => run_group(&group),
-            },
-        })
-        .collect())
+    groups
 }
 
 /// Whether two requests can be run by one launcher process: the same option vector once the
@@ -587,11 +639,44 @@ fn run_group(
             })
         }
     };
+    finish_group(
+        group,
+        arguments,
+        exited_successfully,
+        exit_code,
+        &text,
+        report?,
+    )
+    .map(|reported| {
+        reported
+            .into_iter()
+            .map(|run| run.with_memory(launch.memory.clone()))
+            .collect()
+    })
+}
+
+/// Interpret only a completed group's report and console; no resource-enforcement claim.
+fn finish_group(
+    group: &[(usize, &KaniExecutionRequest<'_>)],
+    arguments: Vec<String>,
+    exited_successfully: bool,
+    exit_code: Option<i32>,
+    text: &str,
+    report: Option<Vec<u8>>,
+) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
+    let Some((_, first)) = group.first() else {
+        return Ok(Vec::new());
+    };
+    let views: Vec<_> = group
+        .iter()
+        .map(|(_, request)| request.harness.view())
+        .collect();
+    let selections: Vec<_> = views.iter().map(|view| view.selection.clone()).collect();
     let invocation = KaniBatchInvocation {
         members: selections.clone(),
         timeout_seconds: whole_seconds(first.harness.view().ceilings.wall_clock),
     };
-    let evidence = |run: Vec<ClassifiedRun>| -> Vec<KaniExecutionEvidence> {
+    let evidence = |run: Vec<ClassifiedRun>| -> Vec<ReportedExecution> {
         group
             .iter()
             .zip(&views)
@@ -604,12 +689,11 @@ fn run_group(
                     exit_code,
                     run,
                     Some(invocation.clone()),
-                    launch.memory.clone(),
                 )
             })
             .collect()
     };
-    let Some(report) = report? else {
+    let Some(report) = report else {
         return if exited_successfully {
             Err(KaniReportRefusal::Missing.into())
         } else {
@@ -629,7 +713,7 @@ fn run_group(
         };
     };
     let members = members_in_request_order(&selections, &KaniHarnessReport::parse_batch(&report)?)?;
-    let blocks = playback_blocks(&text);
+    let blocks = playback_blocks(text);
     if let Some(block) = blocks
         .iter()
         .find(|block| !selections.contains(&block.harness.to_owned()))
@@ -656,7 +740,7 @@ fn run_group(
                 classify_member(
                     process_succeeded,
                     member,
-                    || counterexample_playback(&text, Some(&view.selection)),
+                    || counterexample_playback(text, Some(&view.selection)),
                     view.kind,
                 )
             })
@@ -800,6 +884,97 @@ fn read_file(tool: KaniTool, path: &Path) -> Result<Vec<u8>, KaniToolError> {
 }
 
 #[cfg(test)]
+mod report_fixture {
+    use super::*;
+    use crate::kani::run::launch::run_launcher;
+
+    /// Report-only test results deliberately cannot assert a resource-enforcement mechanism.
+    pub(super) struct ReportGroup {
+        pub(super) members: Vec<usize>,
+        pub(super) reports: Result<Vec<ReportedExecution>, KaniExecutionRefusal>,
+    }
+
+    pub(super) fn single(
+        request: &KaniExecutionRequest<'_>,
+    ) -> Result<ReportedExecution, KaniExecutionRefusal> {
+        require_in_crate(request)?;
+        let report_path = fresh_report_path(request.target_directory);
+        remove_stale_report(&report_path)?;
+        let (arguments, recipe) = launch_command(request, &report_path);
+        let outcome = run_launcher(
+            recipe.report_test_command(),
+            request.harness.view().ceilings.wall_clock,
+            NonZeroUsize::MIN,
+        )
+        .map_err(|error| KaniToolError::Io {
+            tool: KaniTool::Launcher,
+            path: request.installation.launcher.clone(),
+            error,
+        })?;
+        let report = take_report(&outcome, &report_path);
+        finish_single(request, arguments, outcome, report?)
+    }
+
+    pub(super) fn groups(
+        requests: &[KaniExecutionRequest<'_>],
+    ) -> Result<Vec<ReportGroup>, KaniExecutionRefusal> {
+        for request in requests {
+            require_in_crate(request)?;
+        }
+        Ok(plan_groups(requests)
+            .into_iter()
+            .map(|group| ReportGroup {
+                members: group.iter().map(|(position, _)| *position).collect(),
+                reports: match group.as_slice() {
+                    [(_, only)] => single(only).map(|report| vec![report]),
+                    _ => completed_group(&group),
+                },
+            })
+            .collect())
+    }
+
+    fn completed_group(
+        group: &[(usize, &KaniExecutionRequest<'_>)],
+    ) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
+        let first = group[0].1;
+        let selections: Vec<_> = group
+            .iter()
+            .map(|(_, request)| request.harness.view().selection.clone())
+            .collect();
+        let report_path = fresh_report_path(first.target_directory);
+        remove_stale_report(&report_path)?;
+        let (arguments, recipe) = batch_launch_command(first, &selections, &report_path);
+        let outcome = run_launcher(
+            recipe.report_test_command(),
+            outer_bound(first.harness.view().ceilings.wall_clock, group.len()),
+            NonZeroUsize::new(group.len()).unwrap(),
+        )
+        .map_err(|error| KaniToolError::Io {
+            tool: KaniTool::Launcher,
+            path: first.installation.launcher.clone(),
+            error,
+        })?;
+        let report = take_report(&outcome, &report_path);
+        let Concluded::Completed {
+            exited_successfully,
+            exit_code,
+            text,
+        } = settle(outcome)?
+        else {
+            panic!("report fixture must complete; bounded lifecycle is tested separately");
+        };
+        finish_group(
+            group,
+            arguments,
+            exited_successfully,
+            exit_code,
+            &text,
+            report?,
+        )
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
@@ -858,7 +1033,7 @@ mod tests {
         );
     }
 
-    /// Drives `execute_kani_obligation` against a launcher stand-in that exits with `status` and,
+    /// Drives the shared command/report pipeline against a launcher stand-in that exits with `status` and,
     /// when given a report, writes it where `--export-json` names. `stale` is left in the target
     /// directory beforehand, as an earlier run would leave it.
     fn run_stand_in(
@@ -866,7 +1041,7 @@ mod tests {
         status: i32,
         exported: Option<&str>,
         stale: Option<&str>,
-    ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    ) -> Result<ReportedExecution, KaniExecutionRefusal> {
         run_stand_in_into(name, status, exported, stale, None)
     }
 
@@ -878,7 +1053,7 @@ mod tests {
         exported: Option<&str>,
         stale: Option<&str>,
         shared_target: Option<&Path>,
-    ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    ) -> Result<ReportedExecution, KaniExecutionRefusal> {
         let directory = discover_scratch(name);
         let crate_directory = directory.join("crate");
         let target_directory =
@@ -921,7 +1096,7 @@ mod tests {
             },
             Vec::new(),
         );
-        let result = execute_kani_obligation(&KaniExecutionRequest {
+        let result = report_fixture::single(&KaniExecutionRequest {
             installation: &KaniInstallation { launcher },
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: &crate_directory,
@@ -1166,6 +1341,7 @@ mod batch_tests {
     ];
 
     /// A small shell launcher with two children, one of which allocates resident bytes.
+    #[cfg(target_os = "linux")]
     const CHILD_MEMORY_OVERAGE: &str = r#"sleep 45 &
 echo $! > "$CALLS.sibling"
 python3 -c 'import os, pathlib, signal, sys
@@ -1188,6 +1364,7 @@ signal.pause()
 wait
 "#;
 
+    #[cfg(target_os = "linux")]
     fn recorded_process_gone(path: &Path) {
         let pid = fs::read_to_string(path).expect("a child must have started before the overage");
         let namespace_path = path.with_file_name("calls.namespace");
@@ -1231,6 +1408,8 @@ wait
     }
 
     /// Trace: FR-028-AC-3, FR-028-AC-21.
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree() {
         let ceiling = 32 * 1024 * 1024;
@@ -1279,6 +1458,8 @@ wait
     }
 
     /// Trace: FR-028-AC-21.
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn batch_memory_overage_refuses_every_member_without_classifying_a_partial_report() {
         let ceiling = 32 * 1024 * 1024;
@@ -1307,6 +1488,8 @@ wait
     }
 
     /// Trace: FR-028-AC-2, FR-028-AC-4, FR-028-AC-21.
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory() {
         let mut harness = memory_member("a", 128 * 1024 * 1024);
@@ -1362,6 +1545,8 @@ wait
     }
 
     /// Trace: FR-028-AC-21.
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn unequal_identity_memory_ceilings_run_in_separate_backend_processes() {
         let harnesses = [
@@ -1382,6 +1567,44 @@ wait
             assert_eq!(evidence[0].ceilings, harness.identity.ceilings);
             assert!(evidence[0].batch.is_none());
         }
+    }
+
+    /// Unequal identity memory ceilings plan separate groups; each planned selection and argv
+    /// retains its member, without executing an unsupported platform's bounded runner.
+    /// Trace: FR-028-AC-21, FR-017-AC-21.
+    #[test]
+    fn unequal_memory_ceilings_plan_separate_groups_with_their_own_selections() {
+        let harnesses = [
+            memory_member("a", 128 * 1024 * 1024),
+            memory_member("b", 256 * 1024 * 1024),
+        ];
+        let stand_in = StandIn::verifying("memory-group-plan");
+        let requests: Vec<_> = harnesses
+            .iter()
+            .map(|harness| stand_in.request(harness, T))
+            .collect();
+        let groups = plan_groups(&requests);
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group
+                    .iter()
+                    .map(|(position, _)| *position)
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            [vec![0], vec![1]]
+        );
+        for (group, expected) in groups.iter().zip(["a::check", "b::check"]) {
+            let request = group[0].1;
+            let (arguments, _) = launch_command(request, &PathBuf::from("report.json"));
+            assert!(arguments
+                .windows(3)
+                .any(|selection| selection == ["--harness", expected, "--exact"]));
+        }
+        assert!(
+            !stand_in.directory.join("calls").exists(),
+            "planning never dispatches a backend"
+        );
     }
 
     /// What a launcher stand-in does before anything else: it records that it ran and what it was
@@ -1534,6 +1757,28 @@ exit 0
             execute_kani_obligations(&requests)
         }
 
+        /// Run real POSIX commands through shared planning/report classification only.
+        /// These records make no claim of memory enforcement or production platform support.
+        fn reported_batch(
+            &self,
+            harnesses: &[StateFrameHarness],
+            timeout: Duration,
+        ) -> Result<Vec<report_fixture::ReportGroup>, KaniExecutionRefusal> {
+            let harnesses: Vec<_> = harnesses
+                .iter()
+                .cloned()
+                .map(|mut harness| {
+                    harness.identity.ceilings.wall_clock = timeout;
+                    harness
+                })
+                .collect();
+            let requests: Vec<_> = harnesses
+                .iter()
+                .map(|harness| self.request(harness, timeout))
+                .collect();
+            report_fixture::groups(&requests)
+        }
+
         /// The argument vector of each process the stand-in ran, as it received them.
         fn calls(&self) -> Vec<Vec<String>> {
             let recorded = fs::read_to_string(self.directory.join("calls")).unwrap_or_default();
@@ -1556,6 +1801,7 @@ exit 0
     }
 
     /// The evidence of the one process of a batch that ran as one group, or its refusal.
+    #[cfg(target_os = "linux")]
     fn only_group(
         runs: Result<Vec<KaniGroupRun>, KaniExecutionRefusal>,
     ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
@@ -1564,10 +1810,26 @@ exit 0
         runs.remove(0).evidence
     }
 
+    #[cfg(target_os = "linux")]
     fn outcomes(evidence: &[KaniExecutionEvidence]) -> Vec<KaniRunOutcome> {
         evidence
             .iter()
             .map(|evidence| evidence.outcome.clone())
+            .collect()
+    }
+
+    fn only_report_group(
+        runs: Result<Vec<report_fixture::ReportGroup>, KaniExecutionRefusal>,
+    ) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
+        let mut runs = runs.expect("no harness is missing from the crate");
+        assert_eq!(runs.len(), 1, "the harnesses share one process");
+        runs.remove(0).reports
+    }
+
+    fn reported_outcomes(reports: &[ReportedExecution]) -> Vec<KaniRunOutcome> {
+        reports
+            .iter()
+            .map(|reported| reported.outcome.clone())
             .collect()
     }
 
@@ -1630,6 +1892,8 @@ exit 0
     /// N and 1 for N = 1, 10 and 50.
     ///
     /// Trace: FR-017-AC-21, TC-043
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_compatible_harnesses_start_one_process_with_one_selection_each_in_request_order() {
         for count in [1_usize, 10, 50] {
@@ -1723,7 +1987,7 @@ exit 0
                 stand_in.request(harness, Duration::from_secs(cells[index % 4].1))
             })
             .collect();
-        let runs = execute_kani_obligations(&requests).unwrap();
+        let runs = report_fixture::groups(&requests).unwrap();
         assert_eq!(stand_in.calls().len(), 4, "eight harnesses in four groups");
         assert_eq!(
             runs.iter()
@@ -1733,7 +1997,7 @@ exit 0
         );
         for run in runs {
             assert!(run
-                .evidence
+                .reports
                 .unwrap()
                 .iter()
                 .all(|evidence| evidence.batch.is_some()));
@@ -1742,10 +2006,10 @@ exit 0
         // one crate, one harness of each shape is two single runs, not a batch.
         let separate = StandIn::verifying("grouping-separate");
         let pair = [member("x", "check", 4), member("y", "check", 5)];
-        let runs = separate.batch(&pair, T).unwrap();
+        let runs = separate.reported_batch(&pair, T).unwrap();
         assert_eq!(separate.calls().len(), 2);
         assert!(runs.iter().all(|run| run
-            .evidence
+            .reports
             .as_ref()
             .is_ok_and(|evidence| evidence.len() == 1 && evidence[0].batch.is_none())));
     }
@@ -1812,7 +2076,7 @@ exit 0
                 ..first.request(&b, T)
             },
         ];
-        let runs = execute_kani_obligations(&requests).unwrap();
+        let runs = report_fixture::groups(&requests).unwrap();
         assert_eq!(runs.len(), 2);
         assert_eq!((first.calls().len(), second.calls().len()), (1, 1));
 
@@ -1825,7 +2089,7 @@ exit 0
                 ..first.request(&b, T)
             },
         ];
-        let runs = execute_kani_obligations(&requests).unwrap();
+        let runs = report_fixture::groups(&requests).unwrap();
         assert_eq!(runs.len(), 2);
         assert_eq!(first.calls().len(), 2);
 
@@ -1838,7 +2102,7 @@ exit 0
                 ..first.request(&b, T)
             },
         ];
-        let runs = execute_kani_obligations(&requests).unwrap();
+        let runs = report_fixture::groups(&requests).unwrap();
         assert_eq!(runs.len(), 2);
         assert_eq!(first.calls().len(), 2);
     }
@@ -1852,6 +2116,8 @@ exit 0
     /// loaded host (an earlier 1 s / 2 s / 4 s version left 2 s and flaked on a loaded runner).
     ///
     /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
         let stand_in = StandIn::running(
@@ -1907,6 +2173,8 @@ exit 0
     /// classified: the stand-in sleeps far past the bound and writes no report.
     ///
     /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
+    // Exercises the real Linux namespace/procfs bounded execution API.
+    #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_batch_still_running_at_its_outer_bound_is_refused_as_timed_out() {
         let stand_in = StandIn::running("outer-bound", "sleep 45");
@@ -1933,7 +2201,7 @@ exit 0
     #[test]
     fn tc_043_a_duration_max_batch_runs_without_a_member_timeout_and_the_maximum_runs_with_one() {
         let without = StandIn::verifying("duration-max");
-        let evidence = only_group(without.batch(&pair(), Duration::MAX)).unwrap();
+        let evidence = only_report_group(without.reported_batch(&pair(), Duration::MAX)).unwrap();
         assert!(evidence
             .iter()
             .all(|evidence| evidence.outcome == KaniRunOutcome::Verified));
@@ -1945,7 +2213,9 @@ exit 0
 
         let maximum = StandIn::verifying("kani-maximum");
         let seconds = u64::from(u32::MAX);
-        let evidence = only_group(maximum.batch(&pair(), Duration::from_secs(seconds))).unwrap();
+        let evidence =
+            only_report_group(maximum.reported_batch(&pair(), Duration::from_secs(seconds)))
+                .unwrap();
         assert!(evidence
             .iter()
             .all(|evidence| evidence.outcome == KaniRunOutcome::Verified));
@@ -1967,13 +2237,13 @@ exit 0
     ) {
         let clean = StandIn::replaying("no-report-clean", None, "", 0);
         assert!(matches!(
-            only_group(clean.batch(&pair(), T)),
+            only_report_group(clean.reported_batch(&pair(), T)),
             Err(KaniExecutionRefusal::Report(KaniReportRefusal::Missing))
         ));
         let failed = StandIn::replaying("no-report-failed", None, "error: bad argument", 2);
-        let evidence = only_group(failed.batch(&pair(), T)).unwrap();
+        let evidence = only_report_group(failed.reported_batch(&pair(), T)).unwrap();
         assert_eq!(
-            outcomes(&evidence),
+            reported_outcomes(&evidence),
             vec![
                 KaniRunOutcome::Inconclusive {
                     reason: KaniInconclusiveReason::NoVerdict
@@ -2010,7 +2280,7 @@ exit 0
             block("b::check", "assertion", "falsify_b")
         );
         let stand_in = StandIn::replaying("by-path", Some(&report), &console, 1);
-        let evidence = only_group(stand_in.batch(&pair(), T)).unwrap();
+        let evidence = only_report_group(stand_in.reported_batch(&pair(), T)).unwrap();
         assert_eq!(evidence[0].harness_path, "src/generated/a.rs");
         assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
         assert_eq!(evidence[0].success_checks, 2);
@@ -2041,7 +2311,7 @@ exit 0
         let mut second = member("b", "check", 4);
         second.identity.unwind = 7;
         let harnesses = [member("a", "check", 4), second];
-        let evidence = only_group(stand_in.batch(&harnesses, T)).unwrap();
+        let evidence = only_report_group(stand_in.reported_batch(&harnesses, T)).unwrap();
         let received = stand_in.calls().remove(0);
         for (evidence, expected_unwind, module) in [(&evidence[0], 4, "a"), (&evidence[1], 7, "b")]
         {
@@ -2070,7 +2340,7 @@ exit 0
         assert_eq!(wire["batch"]["timeoutSeconds"], 30);
         // A single run's evidence has no `batch` member at all.
         let single = StandIn::verifying("evidence-single");
-        let alone = execute_kani_obligation(&single.request(&harnesses[0], T)).unwrap();
+        let alone = report_fixture::single(&single.request(&harnesses[0], T)).unwrap();
         assert!(serde_json::to_value(&alone).unwrap().get("batch").is_none());
     }
 
@@ -2090,7 +2360,7 @@ exit 0
         ]);
         let unexplained = StandIn::replaying("exit-unexplained", Some(&all_success), "", 1);
         assert_eq!(
-            outcomes(&only_group(unexplained.batch(&pair(), T)).unwrap()),
+            reported_outcomes(&only_report_group(unexplained.reported_batch(&pair(), T)).unwrap()),
             vec![no_verdict.clone(); 2]
         );
         let explained_report = batch_report(&[
@@ -2099,7 +2369,7 @@ exit 0
         ]);
         let console = block("b::check", "assertion", "falsify_b");
         let explained = StandIn::replaying("exit-explained", Some(&explained_report), &console, 1);
-        let evidence = only_group(explained.batch(&pair(), T)).unwrap();
+        let evidence = only_report_group(explained.reported_batch(&pair(), T)).unwrap();
         assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
         assert!(matches!(
             evidence[1].outcome,
@@ -2108,7 +2378,7 @@ exit 0
         // The same two entries and a zero exit are the same results: the exit only withholds.
         let clean = StandIn::replaying("exit-zero", Some(&all_success), "", 0);
         assert_eq!(
-            outcomes(&only_group(clean.batch(&pair(), T)).unwrap()),
+            reported_outcomes(&only_report_group(clean.reported_batch(&pair(), T)).unwrap()),
             vec![KaniRunOutcome::Verified; 2]
         );
     }
@@ -2147,7 +2417,8 @@ exit 0
         ];
         // 90.5 s: Kani is told 91 whole seconds and the evidence names 91, rounded up.
         let evidence =
-            only_group(stand_in.batch(&harnesses, Duration::from_millis(90_500))).unwrap();
+            only_report_group(stand_in.reported_batch(&harnesses, Duration::from_millis(90_500)))
+                .unwrap();
         assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
         assert_eq!(
             evidence[1].outcome,
@@ -2190,7 +2461,7 @@ exit 0
         let verified = [PASSED, COVER_OK];
         let refusal = |name: &str, entries: &[BatchEntry<'_>]| {
             let stand_in = StandIn::replaying(name, Some(&batch_report(entries)), "", 0);
-            only_group(stand_in.batch(&pair(), T)).unwrap_err()
+            only_report_group(stand_in.reported_batch(&pair(), T)).unwrap_err()
         };
         assert!(matches!(
             refusal("lacks", &[entry("a::check", "Success", &verified)]),
@@ -2271,7 +2542,7 @@ exit 0
             member("c", "check", 4),
             member("d", "check", 4),
         ];
-        let evidence = only_group(stand_in.batch(&harnesses, T)).unwrap();
+        let evidence = only_report_group(stand_in.reported_batch(&harnesses, T)).unwrap();
         assert!(matches!(
             &evidence[0].outcome,
             KaniRunOutcome::Falsified { counterexample } if counterexample.contains("fn from_falsify_a")
@@ -2390,7 +2661,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
             1,
         );
         let harnesses = [member("two", "check", 4), member("ok", "check", 4)];
-        let evidence = only_group(stand_in.batch(&harnesses, T)).unwrap();
+        let evidence = only_report_group(stand_in.reported_batch(&harnesses, T)).unwrap();
         let KaniRunOutcome::Falsified { counterexample } = &evidence[0].outcome else {
             panic!("two::check is falsified: {:?}", evidence[0].outcome);
         };
@@ -2435,7 +2706,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
         );
         let stand_in = StandIn::replaying("playback-stranger", Some(&report), &stranger, 1);
         assert!(matches!(
-            only_group(stand_in.batch(&pair(), T)),
+            only_report_group(stand_in.reported_batch(&pair(), T)),
             Err(KaniExecutionRefusal::PlaybackForNonMember { harness }) if harness == "z::check"
         ));
     }
@@ -2450,7 +2721,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
         let flood = |bytes: usize, exit: i32| format!("head -c {bytes} /dev/zero; exit {exit}");
         let one = StandIn::running("flood-one", &flood(CAPTURE_LIMIT + 1, 0));
         let harness = member("a", "check", 4);
-        let single = execute_kani_obligation(&one.request(&harness, T)).unwrap_err();
+        let single = report_fixture::single(&one.request(&harness, T)).unwrap_err();
         assert!(matches!(
             single,
             KaniExecutionRefusal::OutputOverLimit {
@@ -2462,7 +2733,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
         assert_eq!(single.code(), Some("kani_output_over_limit"));
 
         let two = StandIn::running("flood-two", &flood(2 * CAPTURE_LIMIT + 1, 0));
-        let batch = only_group(two.batch(&pair(), T)).unwrap_err();
+        let batch = only_report_group(two.reported_batch(&pair(), T)).unwrap_err();
         assert!(matches!(
             batch,
             KaniExecutionRefusal::OutputOverLimit {
@@ -2473,12 +2744,12 @@ fn kani_concrete_playback_check_1077496887511954657() {
         ));
 
         let exact = StandIn::running("flood-exact", &flood(2 * CAPTURE_LIMIT, 1));
-        let evidence = only_group(exact.batch(&pair(), T)).unwrap();
+        let evidence = only_report_group(exact.reported_batch(&pair(), T)).unwrap();
         assert!(evidence
             .iter()
             .all(|evidence| evidence.exit_code == Some(1)));
         assert_eq!(
-            outcomes(&evidence),
+            reported_outcomes(&evidence),
             vec![
                 KaniRunOutcome::Inconclusive {
                     reason: KaniInconclusiveReason::NoVerdict

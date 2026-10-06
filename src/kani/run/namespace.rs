@@ -76,6 +76,22 @@ impl BackendCommand {
         self.directory = Some(directory.as_ref().to_owned());
         self
     }
+    /// Apply the same argv, working directory and inherited-environment additions to a command.
+    fn configure(&self, command: &mut Command) {
+        command.args(&self.arguments);
+        if let Some(directory) = &self.directory {
+            command.current_dir(directory);
+        }
+        command.envs(self.environment.iter().map(|(name, value)| (name, value)));
+    }
+
+    /// Real POSIX command capture for report tests, with no resource-enforcement attestation.
+    #[cfg(test)]
+    pub(super) fn report_test_command(&self) -> Command {
+        let mut command = Command::new(&self.program);
+        self.configure(&mut command);
+        command
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -127,12 +143,8 @@ impl NamespaceOwner {
             .arg("--block-fd")
             .arg("4")
             .arg("--")
-            .arg(recipe.program)
-            .args(recipe.arguments);
-        if let Some(directory) = recipe.directory {
-            command.current_dir(directory);
-        }
-        command.envs(recipe.environment);
+            .arg(&recipe.program);
+        recipe.configure(&mut command);
         #[cfg(target_os = "linux")]
         {
             command
