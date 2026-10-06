@@ -51,6 +51,12 @@ Round 6, reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567
 | --- | --- | --- |
 | FND-003 | fixed | 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4: GuardianFailureKind is now #[non_exhaustive] with exactly one current variant, CleanupUnconfirmed, and no WIP kind catalog. A table maps every other guardian failure or candidate to its existing public variant. The variant set and mapping are no longer open; the table's post-Dispatch exec row is raised separately as FND-004. |
 
+Round 7, reviewed at b9a794ac71e2e705682f86b7bd2c7884ff3bc0da (prior 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run eb03be3f-301d-4976-be88-27b4c17e17b5, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | b9a794ac71e2e705682f86b7bd2c7884ff3bc0da: The two mapping rows no longer overlap. The Tool row now covers only executable precheck and I/O at the C/launcher boundary, 'not an unsuccessful backend exec exit'. A post-Dispatch recipe exec failure (unsuccessful exit, no report) maps after confirmed settlement to the existing single-run and batch-member Inconclusive NoVerdict, as classify_kani_run (src/kani/classify.rs:100-136) and the batch path (src/kani/run/execute.rs:694-711) define. Memory/deadline and CleanupUnconfirmed precedence is kept. The After-Dispatch boundary row (line 592) and TC-049 step 22 select that one result and separately exercise launcher-boundary Tool I/O. |
+
 ## New findings (disposition pass 5)
 
 Scoped round 5 on the stdio-capture fix and the new settlement/kernel-fault/API delta only; reviewed at 0696d1bc567f1d5717b9a54cdda828664211f9d5 (prior 412f056e814882eb94b9e9e65977d6993326f3aa, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 7533286d-299c-4811-af95-031c491e2c1e, model claude-opus-5-5.

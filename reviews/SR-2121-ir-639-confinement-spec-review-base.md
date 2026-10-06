@@ -72,6 +72,12 @@ Round 6, reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567
 | --- | --- | --- |
 | FND-006 | fixed | 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4: Only F_GETFL & O_ACCMODE and F_GETFD & FD_CLOEXEC are compared now. Shared-description status flags such as O_NONBLOCK and O_APPEND are explicitly excluded from instability refusal and are neither rewritten nor restored. TC-049 step 23 adds a positive control in which a real separate process sharing the description changes them and the input is still admitted. |
 
+Round 7, reviewed at b9a794ac71e2e705682f86b7bd2c7884ff3bc0da (prior 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run eb03be3f-301d-4976-be88-27b4c17e17b5, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-007 | fixed | b9a794ac71e2e705682f86b7bd2c7884ff3bc0da: The public receipt no longer has /tmp/ix-handoff links, a scratch file list, a host name, tool or kernel versions, or run timestamps. The earlier 'Installed bwrap 0.9.0' version record in FR-034's grounding is also removed. Measured against the cd9fdaa..b9a794a FR-034/TC-049 delta, no added line matches those patterns. The method, quantile table, R derivation and limitations stay public; full receipts are stated to be held privately. |
+
 ## New findings (disposition pass 4)
 
 Scoped round 4 on the caller-stdio-stability delta only; reviewed at 412f056e814882eb94b9e9e65977d6993326f3aa (prior 3368df1392c87f255772af1c1f7511fa3240a506, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run f4448661-73ba-448f-98c0-0a990c619cce, model claude-opus-5-5. All earlier findings keep their latest outcome (fixed).
