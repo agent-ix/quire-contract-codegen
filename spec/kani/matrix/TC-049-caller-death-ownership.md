@@ -98,6 +98,9 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-32 | Actual kernel collector/accounting units and normal-library cargo/Kani pipe roundtrip; hard cap, resize reservation, unmapped backing, slow/over-cap no-deadlock, original deadline and single/batch resource classifications. | Integrated O/C schedule must be source-grounded before any final-whole-run-sample temporal witness; that witness stays owed, never inferred from collector units. Any unavailable ordinary-seam predicate is explicitly transferred, not waived. |
 | FR-034-AC-33 | Actual pipe writers/EOF, O spawn-copy closure/M settlement where observable, four seals/consumer refusal/bounded OwnedFd read, independent lease/report channels, stable identity and unnamed backing lifetime through normal seams. | Independent all-owner role/tree termination authority or O-origin immutable EOF/confirmation/reap order if unavailable to ordinary seams; existing one M/I pin cannot establish O death. Whole AC stays untagged while any such assertion is owed. |
 | FR-034-AC-34 | Existing real live-C lease-close observation keeps outer ownership/final controls, ignored-EOF mutant fails before escalation; ordinary accounting/deadline failures retain classifications. | O/C integrated sampling/confirmation/reap facts needed for literal final-sample and ownership ordering; source schedule alone supplies no runtime parity. Whole AC stays untagged while required facts are owed. |
+| FR-034-AC-35 | PLANNED/UNRUN: independent host pathname/abstract listener and host proc-alias exclusion, actual confinement capability refusal and no contained writer export (step 22). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; no generic namespace label or prior death test supplies this new criterion. |
+| FR-034-AC-36 | PLANNED/UNRUN: independent actual backend fd0/fd1/fd2 socket admission and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
+| FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -425,6 +428,44 @@ merged before fixture CODE. No new DTO/rights/hook/cap is allocated here. Mixed 
 remain untagged until all assertions are actual, alongside the unchanged independent AC-24 EOF
 oracle and one-CODE-PR gate.
 
+22. PLANNED/UNRUN (FR-034 AC-35). Own two live host AF_UNIX listeners outside the contained tree:
+    a pathname listener and an abstract listener. Positively prove both listen and accept an owned
+    host control before the real backend attempts either address. The backend attempts ordinary
+    connect and an SCM_RIGHTS report-writer transfer over each; require failed host connect, no
+    accepted backend channel and no exported writer. Record actual mount/net/PID namespace facts
+    and refusal causes. Exercise cwd/shared binds, alternate host proc/root paths and retained
+    directory aliases; no host socket or host process fd is reachable from the backend. Prove
+    contained-local IPC still operates, rather than passing because sendmsg is blanket-disabled.
+    Deny or make unavailable the actual required network/mount/proc facility separately and require
+    typed pre-Dispatch unavailable refusal, no backend marker and confirmed owned cleanup. Host-side
+    independent peer descriptor access is explicitly outside the guaranteed fault domain; this
+    does not excuse contained-code export or downgrade any existing death/EOF/resource assertion.
+23. PLANNED/UNRUN (FR-034 AC-36). Present a real socket separately at each backend stdio admission
+    position, including a socketpair and a socket without a usable peer. Require actual fstat
+    S_IFSOCK rejection before Dispatch; unavailable type inspection also refuses. Use pipes,
+    regular files, a terminal and /dev/null as positive admitted controls; closed stdin remains
+    closed. Echo raw non-report argv, environment, cwd and observable original stdin bytes through
+    actual normal matched artifacts, detecting substitution, reopening or recipe rewriting. The
+    normal stdout/stderr captures remain their owned non-socket pipes. Assert the existing typed
+    KaniExecutionRefusal::MemoryMechanismUnavailable with no code string, execution evidence/kind
+    or run outcome; run_terminal_value has no execution-refusal input, so synthesize no terminal
+    value. Separately expire the original deadline and preserve its existing classification.
+24. PLANNED/UNRUN (FR-034 AC-37). Positively validate the actual trusted channel owners/mappings:
+    I receives its exclusive lease through Dispatch; O/C final report/control remains usable after
+    that lease closes. Test backend/descendant/sibling-exec inherited descriptor identities and
+    attempts to reach those channels through their actual proc/mount view; neither controls nor
+    fixture reporter are reachable by arbitrary code. Trusted O/I retain their intended endpoints;
+    no assertion requires trusted owners themselves to lose access. A leaked-control/inheritance
+    mutant fails the named arbitrary-code access predicate before owned emergency cleanup;
+    restored controls pass. Preserve the ignored-EOF mutant's pre-escalation failure with live C and
+    retained outer ownership, actual all-writer EOF, four seals and final delivery. Early channel
+    close, outer kill or blanket sendmsg denial cannot repair the predicate.
+
+Steps 22–24 allocate independent new confinement/admission Tests, all PLANNED/UNRUN. They add no
+fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
+record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
+criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -443,6 +484,9 @@ oracle and one-CODE-PR gate.
 | FR-034-AC-32 | Hard writer retention bound and defined conservative charge; actual Kani pipe roundtrip; slow/overflow cases stop under original deadline | Unmapped backing counted as zero; resizable pipe exceeds reservation; backend/collector deadlock; report cap becomes Failed or truncated pass |
 | FR-034-AC-33 | O spawn writer closed, M and inner writers terminated, actual EOF, verified four seals and final descriptor read; final-close backing reclamation | Extra monitor writer prevents EOF; forged seal claim; report residue after all owners die |
 | FR-034-AC-34 | Separate lease/report controls and live C retained outer ownership; ignored-EOF fails before outer escalation | Outer kill masks mandatory EOF mutant; deadline/ceiling reset or missing charge accepted |
+| FR-034-AC-35 | PLANNED/UNRUN: positively live host listeners remain unreachable from real backend; private proc/PID view and absent host-peer inheritance; unavailable capability refuses | Private net label beside reachable pathname socket; contained writer exported to host; host proc alias accepted |
+| FR-034-AC-36 | PLANNED/UNRUN: actual socket stdio admission refuses; accepted non-socket inputs and closed stdin/recipe remain unchanged; no fabricated evidence/terminal | Socket input silently replaced; inspection failure admitted; unavailable refusal coerced into a run result |
+| FR-034-AC-37 | PLANNED/UNRUN: trusted I/O channels retain required lifetimes and arbitrary code cannot inherit/reach them; unchanged EOF mutant fails before escalation | Final delivery closed early; arbitrary backend obtains lease/report control; sendmsg denied to fake confinement |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable

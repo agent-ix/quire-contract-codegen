@@ -519,6 +519,60 @@ that work; its downstream delivery is not a prerequisite for delivering the CG o
 CG inspection checks publication of this contract, not the driver's implementation or a CG-only
 surrogate of it. The downstream dependency-edge assertion remains a separate planned gate.
 
+### Report threat boundary and backend IPC confinement
+
+The guaranteed ownership domain includes every contained L/O/M/I role and backend descendant,
+including duplicated, reopened, reparented and late-born report writers. This requirement makes no
+report or lifecycle guarantee against a hostile or cooperating same-UID host peer outside that
+contained tree independently obtaining report authority through host-side descriptor access or
+SCM_RIGHTS. That fault-domain exclusion does not assert that every host peer can perform those
+operations: actual mapping, credentials, dumpability and kernel security policy can restrict them.
+It does not excuse a contained backend exporting a writer to such a peer. The executor shall prevent
+that export through the backend IPC admission profile below. All existing contained-death, owned
+writer closure, actual EOF, immutable seals, ceiling, deadline and exclusive-lease obligations remain
+mandatory; this boundary is not evidence that an existing containment defect is fixed.
+
+Before Dispatch, the bounded executor shall establish the arbitrary backend's actual IPC isolation.
+Its mount view shall expose no connectable host AF_UNIX pathname socket, including through retained
+directory descriptors, shared bind paths or alternate proc/root aliases. Its private network
+namespace shall exclude the host abstract AF_UNIX address scope. Its private proc/PID view shall
+exclude host process descriptor access; host-view ownership pidfds shall remain with trusted owners,
+never arbitrary backend code. The existing host-root bind recipe alone does not establish this
+profile. Namespace creation alone does not close inherited endpoints or make host socket pathnames
+unreachable. The executor shall admit no inherited host-peer endpoint into the backend beyond its
+explicitly allocated non-socket stdio, bounded captures and report writer. All other owner-held
+descriptors shall be CLOEXEC outside their intended trusted role mappings and absent from arbitrary
+backend, sibling exec and backend descendant inheritance.
+
+The allowlisted trusted channels are the original exclusive C/I guardian lease, C/L/O bootstrap and
+authenticated ownership controls, and O/C final report/control delivery. Trusted I retains its lease
+through Dispatch; trusted O retains final report delivery after original lease close. Those endpoints
+shall remain owned and unreachable from arbitrary backend code, sibling exec and backend descendants;
+they shall not be closed early to satisfy confinement. Their existing bounded SCM_RIGHTS transfer
+and EOF meanings remain unchanged. A blanket sendmsg denial is not this profile. The opt-in fixture
+reporter remains a separately allocated trusted reporter, excluded from every production child under
+the existing reporter rules; it grants no backend host-peer endpoint.
+
+For actual backend fd 0, 1 and 2 proposed for inheritance, including original stdin, the executor
+shall inspect actual fstat type before Dispatch. C-only reporter/control descriptors are not backend
+stdio; normal backend stdout/stderr remain capture pipes. If any such descriptor has S_IFSOCK type, then the executor shall refuse
+admission before backend creation, even if its peer is presently disconnected or its socket family
+is unknown. Pipes, regular files, terminals and /dev/null shall retain their original admitted
+descriptor semantics. Closed stdin shall retain its existing closed representation. The executor
+shall not substitute, reopen or rewrite stdin, raw non-report argv, environment or cwd to pass
+admission. This is an explicit availability limit: socket-backed input or an unavailable isolation
+capability can refuse a previously runnable request.
+
+If stdio type inspection, private network/proc/mount isolation or endpoint exclusion cannot be
+established, then the executor shall use the existing typed pre-Dispatch unavailable route with its
+actual cause and confirm owned cleanup. In CG, BoundedLaunchError::Unavailable maps to
+KaniExecutionRefusal::MemoryMechanismUnavailable; this refusal has no stable code string and returns
+no KaniExecutionEvidence, evidence kind or KaniRunOutcome. The existing run_terminal_value function
+accepts a KaniRunOutcome, not this execution refusal; no terminal value is fabricated from it.
+Original deadline expiry retains its existing precedence and classification. No profile change,
+weaker isolation, outcome coercion or new refusal-kind string supplies admission. All mechanisms and
+Tests in this confinement allocation remain PLANNED/UNRUN.
+
 ### Run artifact and report lifetime
 
 FR-017's internal named report allocation is replaced explicitly by a child-only anonymous pipe
@@ -615,6 +669,9 @@ waives kernel descendant cancellation.
 | FR-034-AC-32 | The bounded O event loop collects anonymous report pipe into memfd without a backend/collector completion wait cycle. A hard 16 MiB plus one detection-byte retention bound and the defined owned_RSS + caller_run_buffers + page-rounded F_GETPIPE_SZ + page-rounded pre-reserved memfd maximum comparison applies while writing against the original ceiling; unmapped shmem is not zero. Beyond cap yields owned cancellation and single-run KaniRunOutcome::Inconclusive with MemoryExhausted; batches keep whole-batch memory-exhausted refusal, with no member classified. Evidence names the report cap separately; FR-029 maps ResourceExhausted, never Failed or truncated acceptance. Slow/over-cap writers finish or refuse within the original deadline. Genuine installed cargo/Kani 0.68 roundtrip validates mapped FD inheritance and no seek/reread dependency; failure stops CODE pending measured spec revision, with no runtime fallback. | Test |
 | FR-034-AC-33 | Authenticated Completed precedes original-lease close, confirmed inner teardown and M termination/reap closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS verification and stable actual OwnedFd reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are required before CODE delivery. | Test |
 | FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks the sealed AC-24 pre-escalation EOF oracle; ignored-EOF still fails its named raw predicate before cleanup. Missing conservative backing accounting or immutable sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
+| FR-034-AC-35 | PLANNED/UNRUN. Before Dispatch, actual arbitrary-backend mount/network/proc/PID confinement excludes host AF_UNIX pathname and abstract peers, host proc descriptor/root aliases and inherited host-peer endpoints. Attempts from the real backend to connect to positively live host pathname/abstract listeners or access host procfd fail; namespace identity alone is insufficient. Missing or denied capability/exclusion gives typed pre-Dispatch unavailable refusal with no backend creation and confirmed owned cleanup, never weaker admission. Contained writer export to an outside peer is prevented; the separate hostile/cooperating host-peer fault-domain exclusion waives none of the contained tree, owned-writer, EOF, seal, ceiling, deadline or lease guarantees. | Test, Analysis |
+| FR-034-AC-36 | PLANNED/UNRUN. Actual fstat S_IFSOCK on any descriptor proposed for backend stdio inheritance refuses before Dispatch. Each stdin/stdout/stderr socket case and failed type inspection refuses through BoundedLaunchError::Unavailable and KaniExecutionRefusal::MemoryMechanismUnavailable with no stable refusal code, execution evidence, evidence kind, run outcome or fabricated terminal value. Admitted pipe/regular-file/terminal/devnull stdio and closed stdin retain their original descriptors/closed representation; raw non-report argv, environment and cwd are unchanged. Actual deadline expiry retains the existing resource classification. | Test |
+| FR-034-AC-37 | PLANNED/UNRUN. Trusted I's exclusive guardian lease remains live through Dispatch, and trusted O's separate final report/control channel remains live after original lease close. Bootstrap/ownership/final-report and opt-in reporter endpoints remain owned, CLOEXEC outside intended trusted mappings and unavailable to arbitrary backend, sibling exec and backend descendants. Actual inheritance/reachability assertions fail a leaked-control mutant before emergency cleanup; restored controls pass. No early trusted-channel closure or blanket sendmsg denial substitutes for confinement, final report EOF/seals/delivery or the unchanged pre-escalation lease-EOF oracle. | Test |
 
 ## Dependencies
 
@@ -673,6 +730,15 @@ separate pipe-inode access checks on reopen; inherited descriptor possession doe
 UID reopen permission. Safe std File ownership and the existing nix close signature supply source
 prerequisites only; unsafe command-fds inherited initialization remains excluded. These sources
 establish no actual helper/backend roundtrip or executable coverage.
+
+Linux [AF_UNIX](https://man7.org/linux/man-pages/man7/unix.7.html) distinguishes pathname and
+abstract sockets and SCM_RIGHTS descriptor transfer;
+[network namespaces](https://man7.org/linux/man-pages/man7/network_namespaces.7.html) isolate the
+abstract address scope, not inherited socket references. The private proc/PID-view allocation
+requires actual absence of host aliases, not a pathname label. CG's existing typed unavailable map
+is in src/kani/run/execute.rs::start and KaniExecutionRefusal::code; its terminal API is
+src/kani/terminal.rs::run_terminal_value. These are source-grounded allocation facts, not executed
+confinement/admission Tests or a new serialized kind.
 
 The lifecycle claim includes signals directed to the original caller's process group/session and
 direct guardian death. Host failure or loss of the kernel's namespace facilities cannot be turned
