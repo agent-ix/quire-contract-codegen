@@ -594,6 +594,11 @@ waives kernel descendant cancellation.
 - Downstream [IR-649](https://linear.app/agent-ix/issue/IR-649) owns QSL production-driver
   dependency-edge exclusion after IR-639 delivers this contract; it is not a CG acceptance test or
   an upstream prerequisite for the observation export.
+- [IR-655](https://linear.app/agent-ix/issue/IR-655) owns the fixture SPEC gate: it may be grounded
+  on actual unmerged integrated O source, but must merge before its fixture CODE and before the
+  single lifecycle CODE PR merges. Final frozen CODE source must revalidate schedule/cap evidence;
+  relevant source divergence requires reassessment and any amended SPEC before changed fixture
+  implementation. This is a SPEC-before-fixture-CODE edge, not a separate stage-1 CODE merge gate.
 - [IR-652](https://linear.app/agent-ix/issue/IR-652) owns this outer containment/unnamed storage
   specification and subsequent CODE repair.
   Stage-only fixture evidence does not complete the mandatory AC-31 through AC-34 gates.
@@ -604,18 +609,18 @@ waives kernel descendant cancellation.
   refinement; no whole-requirement or parent-ticket cycle is introduced.
 
 Evidence is staged explicitly in [TC-049](../matrix/TC-049-caller-death-ownership.md)'s evidence
-delivery allocation: ordinary production seams without fixture extension first, IR-655's owed
-exact O-origin/internal-bwrap/final-whole-run-sample and independent role witnesses second. This is
-an internal evidence/commit-order delta in ONE lifecycle CODE PR, not separate CODE merges or a
+delivery allocation: ordinary production seams without fixture extension first, IR-655's owed exact
+O-origin/internal-bwrap/final-whole-run-sample and independent role witnesses second. This is an
+internal evidence/commit-order delta in ONE lifecycle CODE PR, not separate CODE merges or a
 guarantee reduction. IR-655 fixture SPEC may use real integrated O source on the unmerged first
 stage, but shall merge before fixture CODE and before that single CODE PR merges. All internal
 stages, genuine old-test adaptation or explicit stronger-guarantee retirement, and full gates are
 required before CODE acceptance; pre-PR gates must pass before opening the CODE PR. Mixed whole
-criteria remain untagged until all
-obligations have actual Test evidence; partial first-slice readiness is not complete IR-639 or
-Kani MVP acceptance. Unavailable ordinary-seam predicates are explicitly transferred as owed,
-never waived. Original compile/adaptation gaps, assertion and mutant-retirement rules remain
-mandatory, alongside the unchanged independent AC-24 pre-escalation EOF oracle.
+criteria remain untagged until all obligations have actual Test evidence; partial first-slice
+readiness is not complete IR-639 or Kani MVP acceptance. Unavailable ordinary-seam predicates are
+explicitly transferred as owed, never waived. Original compile/adaptation gaps, assertion and
+mutant-retirement rules remain mandatory, alongside the unchanged independent AC-24 pre-escalation
+EOF oracle.
 
 Primary source grounding (Analysis, not production Test): Linux
 [PID namespaces](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html) defines INIT-death

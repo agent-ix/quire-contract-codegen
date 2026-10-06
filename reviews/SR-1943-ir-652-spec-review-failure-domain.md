@@ -57,3 +57,15 @@ Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db
 | FND-001 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Creating thread must outlive L settlement; async adapter keeps a joined dedicated spawner; violation is typed ownership failure after cleanup. |
 | FND-002 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: O closes its spawn writer, C/L hold none, M termination/reap precedes the EOF drain (also FR-034-AC-33). |
 | FND-003 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: O applies WRITE/GROW/SHRINK/SEAL; C checks F_GET_SEALS on the received descriptor and refuses before read. |
+
+## Round 3 scoped delta
+
+Round 3 scoped delta reviewed 0de3e8823f0cae6382fd8d465fd0a787d5109b35 on branch ir652-lifecycle-spec (fresh main fcf7f6a415a31a80824eafbe95b64bf977555c38; normative rebased equivalent a54cd1c1b880947487bee7c2e29382366318a03b of 6f552cd97c8a6915d999e03d49129ebc3c198195, the four normative files byte-identical across the rebase; PR not open). Scope: only the evidence-allocation and one-PR sequencing delta a54cd1c1b880947487bee7c2e29382366318a03b..0de3e8823f0cae6382fd8d465fd0a787d5109b35 in FR-034 (Dependencies-adjacent staging paragraph), TC-027 (staging paragraph) and TC-049 (Evidence delivery allocation); no criterion row, id, Trace, Rust, test or review artifact changed. Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 0f55a2f0-235f-4999-b03a-1a17c640a3df. Earlier interrupted attempt at 1f81f04 produced no verdict and no records. All prior findings keep their latest outcome; no disposition row is added.
+
+**Round 3 verdict: one medium new finding.** Unavailable ordinary-seam predicates move to stage 2 rather than being waived, and a single M or I pin is explicitly not O-death authority.
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | IR-655 SPEC may be grounded, and its coordination cap measured, on O source from the unmerged stage-1 branch, then merged before the CODE PR. Nothing requires that schedule proof and cap to be re-established against the final CODE PR head before it merges. Stage-1 source will change through review fixes and rebases (this branch was just rebased), so a merged IR-655 could rest on a sample schedule the shipped O no longer has. Require the source grounding and cap measurement to be re-verified at the exact CODE PR head, refusing merge on any divergence. | spec/kani/matrix/TC-049-caller-death-ownership.md:54-59, spec/kani/functional/FR-034-caller-death-ownership.md:609-611 |

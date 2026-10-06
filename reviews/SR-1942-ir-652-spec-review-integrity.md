@@ -69,3 +69,16 @@ Round 2 reviewed 6f552cd97c8a6915d999e03d49129ebc3c198195 (previous a661f2f297f5
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-005 | fixed | 6f552cd97c8a6915d999e03d49129ebc3c198195: TC-049 is whitespace-normalized identical to a661f2f, has no short wrap fragments left in steps or description, and ends with a newline again. |
+
+## Round 3 scoped delta
+
+Round 3 scoped delta reviewed 0de3e8823f0cae6382fd8d465fd0a787d5109b35 on branch ir652-lifecycle-spec (fresh main fcf7f6a415a31a80824eafbe95b64bf977555c38; normative rebased equivalent a54cd1c1b880947487bee7c2e29382366318a03b of 6f552cd97c8a6915d999e03d49129ebc3c198195, the four normative files byte-identical across the rebase; PR not open). Scope: only the evidence-allocation and one-PR sequencing delta a54cd1c1b880947487bee7c2e29382366318a03b..0de3e8823f0cae6382fd8d465fd0a787d5109b35 in FR-034 (Dependencies-adjacent staging paragraph), TC-027 (staging paragraph) and TC-049 (Evidence delivery allocation); no criterion row, id, Trace, Rust, test or review artifact changed. Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 0f55a2f0-235f-4999-b03a-1a17c640a3df. Earlier interrupted attempt at 1f81f04 produced no verdict and no records. All prior findings keep their latest outcome; no disposition row is added.
+
+**Round 3 verdict: two low new findings.** The table rows match the criterion ids, no criterion row changed, and TC-027 mirrors TC-049.
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | IR-655 is now a merge gate for the lifecycle CODE PR and its fixture CODE ("shall merge before fixture CODE and before that single CODE PR merges"), but the FR-034 Dependencies list (lines 588-604) names IR-649 and IR-652 with links and never lists IR-655, and no IR-655 mention in FR-034 or TC-049 carries a link. Add an IR-655 Dependencies entry with its link and the edge it imposes. | spec/kani/functional/FR-034-caller-death-ownership.md:588-604, spec/kani/functional/FR-034-caller-death-ownership.md:609-611 |
+| FND-007 | low | Hard-wrap fragments in the new delta: FR-034 line 614 ("criteria remain untagged until all") and TC-049 lines 38 ("internal stage backs.") and 91 ("The original unit tests"). Reflow them. | spec/kani/functional/FR-034-caller-death-ownership.md:614, spec/kani/matrix/TC-049-caller-death-ownership.md:38, spec/kani/matrix/TC-049-caller-death-ownership.md:91 |

@@ -32,16 +32,14 @@ AC-31 through AC-34 remain mandatory UNRUN CODE gates, with no implementation co
 
 ## Evidence delivery allocation
 
-IR-639 lifecycle CODE is one PR. Slice 1 (ordinary production seams without fixture extension)
-and slice 2 (IR-655's still-owed exact-boundary evidence) are internal commit stages and review
-scopes of that PR, not separate merge deliveries. The table allocates which obligations each
-internal stage backs.
-The rationale is the new O-owned gate/reap/accounting schedule: current single-M/I witnesses and
-C-origin observations cannot prove O's exact transition or final whole-run sample. This changes
-implementation/evidence order only; every existing guarantee remains required before complete
-IR-639 delivery or Kani MVP acceptance. Slice 1 preparation/readiness is not either acceptance.
-No new atomic criterion, fixture DTO, rights, scenario, scheduling pause or numeric cap is
-allocated.
+IR-639 lifecycle CODE is one PR. Slice 1 (ordinary production seams without fixture extension) and
+slice 2 (IR-655's still-owed exact-boundary evidence) are internal commit stages and review scopes
+of that PR, not separate merge deliveries. The table allocates which obligations each internal stage
+backs. The rationale is the new O-owned gate/reap/accounting schedule: current single-M/I witnesses
+and C-origin observations cannot prove O's exact transition or final whole-run sample. This changes
+implementation/evidence order only; every existing guarantee remains required before complete IR-639
+delivery or Kani MVP acceptance. Slice 1 preparation/readiness is not either acceptance. No new
+atomic criterion, fixture DTO, rights, scenario, scheduling pause or numeric cap is allocated.
 
 Both slices are PLANNED/UNRUN. The table allocates Test assertions, not coverage. A mixed criterion
 must remain untagged until ALL its obligations have actual evidence; partial slice 1 assertions
@@ -50,6 +48,11 @@ be tagged only after actual complete assertions exist. Inspection, source schedu
 scratch facilities cannot stand in for required Test evidence. If measurement shows an ordinary
 seam cannot expose its allocated predicate without fixture extension, record that measured gap
 explicitly and move the owed evidence to slice 2; do not weaken the criterion or fabricate coverage.
+For ANY unlisted criterion, retain every existing obligation and verification method. Ordinary-seam
+assertions belong to stage 1 only where they genuinely expose the required predicate; any remaining
+topology/temporal/authority predicate belongs to stage 2 as explicitly recorded owed evidence.
+No omission implies unaffected coverage or waived evidence. Every mixed whole criterion stays
+untagged until both stages provide ALL required assertions, even if its stage-1 checks pass.
 
 IR-655 fixture SPEC may be authored from actual integrated O production source on the UNMERGED
 stage-1 branch. Its source grounding shall establish the real O/C whole-run sample schedule before
@@ -57,6 +60,16 @@ measuring a numeric coordination cap; the cap remains unselected/unmeasured unti
 measurement exist. IR-655 SPEC shall merge before any fixture CODE implementing its new allocation,
 and before the single lifecycle CODE PR merges. This permits source-grounded specification without
 a stage-1 merge prerequisite; it allocates no fixture DTO/design or cap now.
+
+Before the single CODE PR merges, the integrated O/C schedule proof and coordination-cap evidence
+shall be re-grounded against its exact FINAL frozen source, including rebases and review fixes.
+Relevant scheduling, coordination, ownership or executable-path/bound changes invalidate earlier
+proof applicability: reassess the real path and re-measure the cap when that path or bound changes.
+Any required amended IR-655 SPEC shall merge BEFORE implementing its changed fixture allocation;
+the final CODE source must agree with that merged SPEC before merge. Divergence blocks merge,
+not merely a note attached to stale unmerged-source evidence. Metadata-only review custody changes
+require source-correspondence confirmation, not pointless repeated runtime measurements. No cap
+is selected or measured here; actual source/proof/cap correspondence is a final merge gate.
 
 The single CODE PR may open only after all required pre-PR gates pass. It may merge only after both
 internal stages are complete and every old test is genuinely adapted, or consciously retired by an
@@ -68,15 +81,19 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | Criterion | Slice 1: ordinary-seam Test evidence, without fixture extension | Slice 2: IR-655 owed Test evidence; PLANNED/untagged in slice 1 |
 |---|---|---|
 | FR-017-AC-19 | Real normal-library cargo/Kani export, actual N >= 5 argv, isolated unnamed descriptor authority, zero/partial/valid EOF and independent resource-stop classifications; no named report or fallback. | Any predicate actually found unavailable through ordinary seams is explicitly owed; collector/lifetime dependencies retain the AC-32/33 allocation below. |
+| FR-034-AC-1 | Normal-helper startup/authority and observable C/group death refuse production creation; absent lease, failed setup and creator-thread death produce no backend marker. | Exact pre-handoff/O-origin initialization windows, missing role/independent termination authority and bounded-bootstrap/no-production assertions at those exact boundaries. Whole AC stays untagged while any predicate is owed. |
 | FR-034-AC-2 | External harness retains actual C Child; bounded live procfs parent/start/namespace validation and pidfds observe O/M and death at positively observable production boundaries; no after-death PID reopen/host scan. Typed missing-authority refusal before M is tested. | O-origin immutable arm/gate/confirmation facts at EXACT installed bwrap internal child_wait/eventfd window; independent actual O and unclaimed-I whole-tree termination AT THAT WINDOW. Generic M-spawn observation is insufficient; whole AC stays untagged. |
+| FR-034-AC-3 | Actual claimed-I pin and positive escaped-worker evidence at observable ClaimedBootstrap/InitReady/Dispatched caller-lease EOF; no fabricated dead-caller result. | Any initialized-boundary role/termination facts unavailable through ordinary seams remain explicitly owed; existing I pin never supplies independent O authority. Whole AC is tagged only after every required stage assertion. |
 | FR-034-AC-5 | Actual live C→L→O→M→I identity translations and ordinary setup refusal tests where observable; real normal-helper authentication, not helper identity override. | Needed role-labelled chain and independent termination witness beyond existing single M/I pin; unavailable inner/unclaimed/outer facts cannot be inferred. Whole AC stays untagged where these facts are owed. |
 | FR-034-AC-7 | Ordinary malformed/missing info, observable M failure and owned O cancellation/refusal; confirm positively pinned external O/tree termination where observable. | Exact internal-handoff failure/recovery and O-origin immutable gate/inner-confirm/M-reap order; no later C timestamp reconstructs it. Whole AC stays untagged. |
 | FR-034-AC-8/10/22 | Positive escaped-worker acknowledgement/live pins, observable C/O/I death, ordinary completion/refusal/deadline and independent-run protection; record dead pins before emergency cleanup. | Literal child birth AFTER actual FINAL whole-run sample, authenticated Completed ordering and distinct O-origin inner-confirm/M-reap/outer-confirm observations. No earlier C-only sample or sample-membership absence proves that temporal witness. Whole mixed criteria stay untagged. |
+| FR-034-AC-11 | Positively pinned guardian death at observable startup/Ready/post-Dispatch boundaries; live-C typed guardian failure even beside success output, with dead acknowledged worker before emergency cleanup. | Exact pre-peer/Ready or bootstrap windows and independent role/tree witnesses not observable through stage-1 seams. No later outer cleanup masks missing boundary evidence; whole AC stays untagged while owed. |
 | FR-034-AC-12 | Real unnamed report final-close/no-named-artifact lifetime, ordinary opposite-owner failures, bounded role settlement and honest other-artifact limits. | Exact startup refusal/retained-gate cleanup order and all-owner independent role/tree witness unavailable through current operation. Whole AC stays untagged. |
 | FR-034-AC-14 | Actual ordinary-caller inherited profile/errno and mapping/private-proc/pidfd capability refusals before Dispatch, no policy mutation/weaker mode; setup docs and role/storage costs. | No exact-window fixture allocation required for these predicates; any measured unavailable Test predicate remains expressly owed. |
 | FR-034-AC-17 | Real backend raw argv/stdin/environment/cwd echo through normal artifacts with only exact allocated report locator changed. | No exact-window extension required for this recipe predicate. |
 | FR-034-AC-23/26 | Existing authorized shared-prefix stage facts and normal feature-off positive post-Dispatch caller/group death controls; positively pinned externally observable processes/SID/PGID, reporter exclusion across L/O/M/I. | Exact early-boundary O/unclaimed-I teardown, needed role chain/independent termination witness, no fabricated outer death from existing single M/I pin. Whole mixed criteria stay untagged. |
 | FR-034-AC-24/27/28 | Existing single observation operation and immutable live-C pre-escalation lease-EOF raw oracle/mutants, unchanged normal feature-off/on artifact identity and unchanged single-right DTO meaning; separate final report controls remain live. | Any additional O-origin order/role/termination facts need IR-655 allocation; no surface extension is authorized here. Outer teardown must never rescue ignored-inner-EOF. Whole criterion is tagged only on complete assertions. |
+| FR-034-AC-4/6/9/13/15/16/18/19/20/21/25/29/30 | Existing authority/observer/independent-run, matched-helper, protocol/rights/raw capture, classification/deadline/setup-cap, build-feature and documentation predicates use ordinary normal-artifact or exact declared inspection seams. Existing method/classification obligations stay intact. | Any topology-sensitive authority/death/order predicate ordinary seams cannot expose is explicitly recorded as stage-2 owed; no whole criterion is tagged from a partial seam assertion or unaffected-status assumption. |
 | FR-034-AC-31 | Actual ordinary caller/profile, creating-thread lifetime, mapping/private-proc/identity and original-deadline refusal tests; external owned live pins after C/O/M death at OBSERVABLE boundaries. | Exact bwrap internal eventfd window, O-origin immutable gate/confirmation/reap and actual unclaimed-I whole-tree termination there; required expanded role/independent authority evidence. Whole AC remains untagged. |
 | FR-034-AC-32 | Actual kernel collector/accounting units and normal-library cargo/Kani pipe roundtrip; hard cap, resize reservation, unmapped backing, slow/over-cap no-deadlock, original deadline and single/batch resource classifications. | Integrated O/C schedule must be source-grounded before any final-whole-run-sample temporal witness; that witness stays owed, never inferred from collector units. Any unavailable ordinary-seam predicate is explicitly transferred, not waived. |
 | FR-034-AC-33 | Actual pipe writers/EOF, O spawn-copy closure/M settlement where observable, four seals/consumer refusal/bounded OwnedFd read, independent lease/report channels, stable identity and unnamed backing lifetime through normal seams. | Independent all-owner role/tree termination authority or O-origin immutable EOF/confirmation/reap order if unavailable to ordinary seams; existing one M/I pin cannot establish O death. Whole AC stays untagged while any such assertion is owed. |
@@ -88,9 +105,10 @@ host-wide scan, exact internal bwrap eventfd timing, or inferred O death. A sing
 pin does not prove outer teardown. The numeric fixture cap remains unselected/unmeasured; no
 extension design or cap selection is authorized by this allocation.
 
-The original unit tests
-`gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend` and
-`completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample` remain required.
+The original retained-gate unit test remains required:
+`gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend`.
+The original after-final-sample unit test also remains required:
+`completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample`.
 Their obsolete direct-M invocation may leave the unit-test target uncompilable during slice 1;
 record that compile gap explicitly. Independently compiling normal-library integration tests do
 not settle it or permit skip/deletion. There is no separate slice-1 merge: the compile gap remains
