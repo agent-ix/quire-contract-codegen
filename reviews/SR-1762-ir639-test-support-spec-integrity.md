@@ -68,3 +68,9 @@ Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
 | FND-001 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: AC-14 now attributes PID-1/new-session to the planned guardian and lists the merged #295 flags as user/PID namespace, die-with-parent, info-fd and block-fd. That matches src/kani/run/namespace.rs. |
 | FND-002 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: AC-23 now requires a normal library built with the feature off. FR-034 and TC-049 steps 1/12 define separate named guardian-feature-off/on Cargo invocations with no self dev-dependency unification. |
 | FND-003 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: Step 12 now begins by building the feature-on library, caller and helper before it uses the operation. |
+
+Round 5, reviewed at beb9d5a298d7aa466bc6687cd3b8812cb2d4c1da.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | beb9d5a298d7aa466bc6687cd3b8812cb2d4c1da: The Kani matrix FR-034 row, the TC-049 index row and the spec/tests.md Kani row now gate AC-12 and the AC-23/26 startup-cleanup/Analysis obligations on IR-652 (Bootstrap INIT leak and inherited PDEATH artifact-unlink race), and forbid marking them Covered from IR-639 process-only fixtures. The new FR-034 artifact paragraph and TC-049 step 7/Expected Results keep surviving-owner cleanup a future gated obligation, with no pass claim. All 30 AC rows are byte-identical to c1a8764, and the later process/EOF/resource/identity guarantees are unchanged. |
