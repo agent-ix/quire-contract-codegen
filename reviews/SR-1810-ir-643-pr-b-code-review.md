@@ -42,3 +42,14 @@ Plan completion: not assessed. Review is scoped to the PR diff; existing reposit
 | --- | --- | --- | --- |
 | FND-001 | high | A valid acyclic chain of up to 65,536 Option nodes is admitted by the iterative resolver and builds a Box-linked ValueType, but check_item clones that type and render_value_type recursively descends it (mod.rs:849-858, 1662-1668). Either path can exhaust the call stack before the item is generated, contradicting AC-25’s no-stack-exhaustion and at-limit generation contract. Bound the complete downstream representation/processing without rejecting allowed work, and exercise a deep admitted Option chain in a subprocess. | src/oracle/equality/resolution.rs:290-317 |
 | FND-002 | medium | An inline collection bound is looked up and validated in collection_parts, then charged only in FinishCollection after descending its element. With a 65,536th collection entry and a malformed bound, the item returns UnreadableBound rather than charging the followed bounds reference as entry 65,537 and returning TypeResolutionWorkExhausted before descent. Charge the bound reference before dereference/validation and before scheduling the element. | src/oracle/equality/resolution.rs:73-78 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5cddd07119e33633d8edf3670f93ac23db289f3c — `render_value_type` now walks nested types with an explicit task stack; the RT revision adds iterative `ValueType` clone, equality and drop. The 2,048-deep Option case resolves, clones, compares, renders and drops on a 64 KiB worker stack. |
+| FND-002 | fixed | a3f99c4 — the inline bound is charged before its reference is read or looked up, and the focused malformed-bound boundary test asserts the refusal precedence. |
+
+## Post-disposition recheck
+
+Reviewed PR head `5763404d70f544830f76f34c9f95ed1c1472b8c4` after the native-coverage test toolchain change. The two tests now select Cargo.toml's `rust-version` for both `rustc --print sysroot` and `cargo llvm-cov`; `make tools` installs `llvm-tools-preview` for that same `$(MSRV)`. `make -n tools` selected 1.98.1, and both affected focused tests passed under `cargo +1.98.1 test --locked --test it`. No new code or Rust findings.

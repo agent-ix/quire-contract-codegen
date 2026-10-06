@@ -42,3 +42,14 @@ Plan completion: not assessed. Review is scoped to the PR diff; existing reposit
 | --- | --- | --- | --- |
 | FND-001 | medium | The tagged public item test generates from hand-built corpus_package and recursive_tree_package, while the QSL-compiled package test only calls resolve_shape. No equality item is generated over the QSL-produced List/Tree package or the cited authoritative QSpec fixture, so the required end-to-end reader-to-oracle path and exact fixture encoding are unverified. | tests/it/composite_equality_generation.rs:114-146 |
 | FND-002 | medium | The tagged 65,537-entry test checks one resolver root and a separately refused synthetic item; its exactly-65,536 case calls only resolve_type. It never asserts item generation at the limit, combined charges across left/right and conversion targets, a healthy sibling in the same call, or no stack abort in a subprocess as TC-029 step 17 requires. The green matrix tag therefore overstates AC-25 coverage. | src/oracle/equality/mod.rs:2073-2163 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5cddd07119e33633d8edf3670f93ac23db289f3c — public QSL and authoritative QSpec packages now pass the strict reader and generate List and Tree equality items. The final test asserts each named field, presence, record key and Tree cardinality in its own generated declaration block. |
+| FND-002 | fixed | 1be0477571fe05751c18cecaa87eb10a30284519 — the subprocess boundary test generates an item with exactly 65,536 total charges across both source and conversion-target roots, and its 65,537 case refuses only the first item while emitting the healthy sibling. |
+
+## Post-disposition recheck
+
+Reviewed PR head `5763404d70f544830f76f34c9f95ed1c1472b8c4`. The delta changes only the two native-coverage integration tests and their `make tools` prerequisite; it does not change the FR-018/TC-029 implementation or bindings examined above. Both affected focused tests passed under the declared 1.98.1 toolchain. No new acceptance-criteria coverage finding.
