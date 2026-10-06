@@ -1,5 +1,8 @@
 // One execution: the request, refusal and evidence types and `execute_kani_obligation`.
 pub(crate) mod execute;
+
+// One content cap shared by collection, consumers and serialized production evidence.
+pub(super) const REPORT_CONTENT_BYTES: u64 = 16 * 1_048_576;
 // The harness of any kind this crate can run.
 pub(crate) mod harness;
 // Spawn, bounded capture, timeout and process-group kill.
@@ -58,5 +61,5 @@ pub(crate) fn guardian_entry() -> std::process::ExitCode {
     std::process::ExitCode::FAILURE
 }
 
-// Original backend stdin is explicit and precedes control-descriptor creation.
+// Internal original backend stdin capture precedes control-descriptor creation.
 pub(crate) mod stdin;

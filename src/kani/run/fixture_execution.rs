@@ -76,6 +76,7 @@ impl Reporter {
 pub(super) fn run(
     request: GuardianFixtureRequest<'_>,
 ) -> Result<GuardianFixtureObservation, GuardianFixtureError> {
+    let original_stdin = super::stdin::OriginalStdin::capture_original().map_err(io_error)?;
     // Standard stdout is the sole safe inherited entry. No reporter mapping reaches any child.
     let reporter = Reporter::prepare()?;
     let helper = resolve_helper(request.guardian_path).map_err(production_error)?;
@@ -95,7 +96,7 @@ pub(super) fn run(
     let started = start_sequence(
         recipe,
         &helper,
-        request.original_stdin,
+        &original_stdin,
         request.report_path,
         Some(request.deadline),
         &mut observer,
@@ -129,6 +130,7 @@ pub(super) fn run(
         Arc::clone(&publication),
         pending_recipe,
         &request,
+        &original_stdin,
         &mut observer,
         reporter.descriptor,
     );
@@ -338,6 +340,7 @@ fn live(
     publication: Arc<Publication>,
     pending_recipe: Option<BackendCommand>,
     request: &GuardianFixtureRequest<'_>,
+    original_stdin: &super::stdin::OriginalStdin,
     observer: &mut MemoryObserver,
     reporter: GuardianFixtureDescriptor,
 ) -> Result<RawObservation, GuardianFixtureError> {
@@ -357,7 +360,7 @@ fn live(
             let resume = continuation(Arc::clone(&publication), pin, request.deadline)?;
             let pending = match ready.send_dispatch(
                 recipe,
-                request.original_stdin,
+                original_stdin,
                 vec![request.report_path.as_os_str().to_owned()],
             ) {
                 Ok(pending) => pending,

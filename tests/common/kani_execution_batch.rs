@@ -29,17 +29,6 @@ fn guardian_path() -> &'static std::path::Path {
         std::path::Path::new("/unavailable-native-guardian")
     }
 }
-fn original_stdin() -> &'static OriginalStdin {
-    #[cfg(target_os = "linux")]
-    {
-        crate::common::original_stdin()
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        static CLOSED: OriginalStdin = OriginalStdin::Closed;
-        &CLOSED
-    }
-}
 
 #[cfg(target_os = "linux")]
 mod report_fixture {
@@ -455,7 +444,6 @@ impl StandIn {
         assert_eq!(harness.identity.ceilings.wall_clock, timeout);
         KaniExecutionRequest {
             guardian_path: guardian_path(),
-            original_stdin: original_stdin(),
             installation: &self.installation,
             harness: harness.into(),
             crate_directory: &self.crate_directory,
@@ -767,7 +755,6 @@ fn tc_043_requests_naming_another_launcher_crate_or_target_directory_are_not_gro
         first.request(&a, T),
         KaniExecutionRequest {
             guardian_path: guardian_path(),
-            original_stdin: original_stdin(),
             installation: &second.installation,
             ..first.request(&b, T)
         },
@@ -782,7 +769,6 @@ fn tc_043_requests_naming_another_launcher_crate_or_target_directory_are_not_gro
         first.request(&a, T),
         KaniExecutionRequest {
             guardian_path: guardian_path(),
-            original_stdin: original_stdin(),
             crate_directory: &second.crate_directory,
             ..first.request(&b, T)
         },
@@ -797,7 +783,6 @@ fn tc_043_requests_naming_another_launcher_crate_or_target_directory_are_not_gro
         first.request(&a, T),
         KaniExecutionRequest {
             guardian_path: guardian_path(),
-            original_stdin: original_stdin(),
             target_directory: &second.target_directory,
             ..first.request(&b, T)
         },

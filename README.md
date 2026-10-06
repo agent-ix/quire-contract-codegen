@@ -21,7 +21,8 @@ build. CI workflows are manual-only.
 ## Bounded Kani execution
 
 Linux bounded execution requires an explicit `guardian_path` naming this package's
-`quire-kani-guardian` executable and an `OriginalStdin` captured before creating controls or pipes.
+`quire-kani-guardian` executable. C internally captures original inherited stdin before any per-run
+descriptor creation; callers supply no stdin request field.
 The helper authenticates the actual compiled library artifact. A separately compiled or stale
 helper is refused even when its source is identical.
 

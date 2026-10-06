@@ -22,7 +22,7 @@ static REPORT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 /// Most bytes of the exported report this module reads. A report larger than this is refused,
 /// never truncated: a truncated report is not JSON, and reading part of one would invent a
 /// verdict.
-const REPORT_LIMIT: usize = 16 * 1024 * 1024;
+const REPORT_LIMIT: u64 = super::REPORT_CONTENT_BYTES;
 
 pub(super) fn fresh_report_path(target_directory: &Path) -> PathBuf {
     let sequence = REPORT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
@@ -55,6 +55,8 @@ pub(super) fn read_report(
     let unreadable = |error: io::Error| KaniReportRefusal::Unreadable {
         detail: error.to_string(),
     };
+    let limit = usize::try_from(REPORT_LIMIT)
+        .map_err(|_| unreadable(io::Error::other("report cap exceeds platform range")))?;
     let check_deadline = || {
         if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             Err(unreadable(io::Error::new(
@@ -96,11 +98,10 @@ pub(super) fn read_report(
         )));
     }
     let mut bytes = Vec::new();
-    let mut bounded = file.take(
-        u64::try_from(REPORT_LIMIT)
-            .unwrap_or(u64::MAX)
-            .saturating_add(1),
-    );
+    let detection = REPORT_LIMIT
+        .checked_add(1)
+        .ok_or_else(|| unreadable(io::Error::other("report detection bound overflow")))?;
+    let mut bounded = file.take(detection);
     let mut chunk = [0; 65_536];
     loop {
         check_deadline()?;
@@ -110,10 +111,8 @@ pub(super) fn read_report(
         }
         bytes.extend_from_slice(&chunk[..count]);
     }
-    if bytes.len() > REPORT_LIMIT {
-        return Err(KaniReportRefusal::TooLarge {
-            limit: REPORT_LIMIT,
-        });
+    if bytes.len() > limit {
+        return Err(KaniReportRefusal::TooLarge { limit });
     }
     let retained = bounded.get_ref().metadata().map_err(unreadable)?;
     let current = fs::symlink_metadata(path).map_err(unreadable)?;
@@ -172,20 +171,19 @@ mod tests {
     /// Trace: TC-027
     #[test]
     fn tc_027_the_report_is_read_bounded_and_refused_not_truncated() {
+        let limit = usize::try_from(REPORT_LIMIT).unwrap();
         let directory = discover_scratch("report-bound");
         let path = directory.join("report.json");
         assert_eq!(read_report(&path, None), Ok(None));
-        fs::write(&path, vec![b' '; REPORT_LIMIT]).unwrap();
+        fs::write(&path, vec![b' '; limit]).unwrap();
         assert_eq!(
             read_report(&path, None).map(|r| r.map(|b| b.len())),
-            Ok(Some(REPORT_LIMIT))
+            Ok(Some(limit))
         );
-        fs::write(&path, vec![b' '; REPORT_LIMIT + 1]).unwrap();
+        fs::write(&path, vec![b' '; limit + 1]).unwrap();
         assert_eq!(
             read_report(&path, None),
-            Err(KaniReportRefusal::TooLarge {
-                limit: REPORT_LIMIT
-            })
+            Err(KaniReportRefusal::TooLarge { limit })
         );
         remove_stale_report(&path).unwrap();
         assert_eq!(read_report(&path, None), Ok(None));

@@ -23,17 +23,6 @@ fn guardian_path() -> &'static std::path::Path {
         std::path::Path::new("/unavailable-native-guardian")
     }
 }
-fn original_stdin() -> &'static OriginalStdin {
-    #[cfg(target_os = "linux")]
-    {
-        crate::common::original_stdin()
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        static CLOSED: OriginalStdin = OriginalStdin::Closed;
-        &CLOSED
-    }
-}
 #[cfg(target_os = "linux")]
 mod report_fixture {
     use super::*;
@@ -110,7 +99,6 @@ fn run_stand_in_into(
     );
     let result = report_fixture::single(&KaniExecutionRequest {
         guardian_path: guardian_path(),
-        original_stdin: original_stdin(),
         installation: &KaniInstallation { launcher },
         harness: KaniExecutableHarness::from(&harness),
         crate_directory: &crate_directory,
@@ -145,6 +133,15 @@ fn tc_027_execution_reads_only_the_report_its_own_run_exported() {
     let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
     let evidence = run_stand_in("exported", 0, Some(&verified), None).unwrap();
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+    #[cfg(target_os = "linux")]
+    {
+        // Native report-only fixtures carry no production resource attestation.
+        assert_eq!(evidence.report_cap_bytes, 16 * 1_048_576);
+        assert_eq!(
+            serde_json::to_value(&evidence).unwrap()["reportCapBytes"],
+            16 * 1_048_576
+        );
+    }
     assert_eq!(evidence.success_checks, 1);
     assert_eq!(evidence.exit_code, Some(0));
     let unreached = String::from_utf8(report("Success", &[PASSED, COVER_NO])).unwrap();
@@ -212,7 +209,6 @@ fn normal_guardian_preserves_non_utf8_program_cwd_environment_and_report_argumen
     );
     let result = execute_kani_obligation(&KaniExecutionRequest {
         guardian_path: guardian_path(),
-        original_stdin: original_stdin(),
         installation: &KaniInstallation { launcher },
         harness: KaniExecutableHarness::from(&harness),
         crate_directory: &crate_directory,

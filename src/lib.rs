@@ -139,7 +139,6 @@ pub use kani::run::fixture::{
 };
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::{CaptureStream, GuardianFailureKind};
-pub use kani::run::stdin::OriginalStdin;
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,

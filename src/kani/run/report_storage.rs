@@ -23,8 +23,6 @@ use serde::{Deserialize, Serialize};
 use super::{outer_setup::PreparedOuter, pipe_policy};
 
 pub(super) const REPORT_SLOT: i32 = 5;
-pub(super) const REPORT_BYTES: usize = 16 * 1_048_576;
-const DETECTION_BYTES: usize = REPORT_BYTES + 1;
 const READ_BYTES: usize = 65_536;
 const READS_PER_TICK: usize = 4;
 
@@ -170,13 +168,18 @@ pub(super) struct ReportCollector {
     capacity: usize,
     reserve: BackingReserve,
     collected: usize,
+    limit: usize,
+    detection: usize,
     eof: bool,
 }
 
 impl ReportCollector {
     /// Called only by prepared single-thread O, before ANY child or writer exposure.
-    pub(super) fn prepare(outer: &PreparedOuter) -> Result<Self, ReportError> {
+    pub(super) fn prepare(outer: &PreparedOuter<'_>) -> Result<Self, ReportError> {
         outer.require_creator_live().map_err(io::Error::other)?;
+        let limit = usize::try_from(super::REPORT_CONTENT_BYTES)
+            .map_err(|_| io::Error::other("report cap exceeds platform range"))?;
+        let detection = limit.checked_add(1).ok_or(ReportError::ReportCapExceeded)?;
         let (reader, writer) = pipe_with(PipeFlags::CLOEXEC | PipeFlags::NONBLOCK)?;
         let identity = PipeIdentity::original(&writer)?;
         identity.verify(&reader)?;
@@ -196,7 +199,7 @@ impl ReportCollector {
                 page,
             )?,
             memfd_bytes: round_pages(
-                u64::try_from(DETECTION_BYTES)
+                u64::try_from(detection)
                     .map_err(|_| io::Error::other("report cap exceeds platform range"))?,
                 page,
             )?,
@@ -226,6 +229,8 @@ impl ReportCollector {
             capacity,
             reserve,
             collected: 0,
+            limit,
+            detection,
             eof: false,
         })
     }
@@ -253,7 +258,8 @@ impl ReportCollector {
             if self.eof {
                 return Ok(());
             }
-            let remaining = DETECTION_BYTES
+            let remaining = self
+                .detection
                 .checked_sub(self.collected)
                 .ok_or(ReportError::ReportCapExceeded)?;
             if remaining == 0 {
@@ -287,7 +293,7 @@ impl ReportCollector {
                             Err(error) => return Err(error.into()),
                         }
                     }
-                    if self.collected > REPORT_BYTES {
+                    if self.collected > self.limit {
                         return Err(ReportError::ReportCapExceeded);
                     }
                 }
@@ -347,7 +353,9 @@ pub(super) fn read_received(
     deadline: Option<Instant>,
 ) -> Result<Option<Vec<u8>>, ReportError> {
     check_deadline(deadline)?;
-    if expected_bytes > REPORT_BYTES {
+    let limit = usize::try_from(super::REPORT_CONTENT_BYTES)
+        .map_err(|_| io::Error::other("report cap exceeds platform range"))?;
+    if expected_bytes > limit {
         return Err(ReportError::ReportCapExceeded);
     }
     if !rustix::io::fcntl_getfd(&descriptor)?.contains(rustix::io::FdFlags::CLOEXEC)
