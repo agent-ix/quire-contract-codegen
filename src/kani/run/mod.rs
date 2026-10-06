@@ -25,6 +25,25 @@ mod control;
 #[cfg(target_os = "linux")]
 mod creator;
 
+// Linux role/setup/storage primitives are compiled with the actual helper library artifact.
+// Registration alone does not replace the existing production launch orchestration.
+#[cfg(target_os = "linux")]
+mod outer_setup;
+#[cfg(target_os = "linux")]
+mod pipe_policy;
+#[cfg(target_os = "linux")]
+mod report_storage;
+#[cfg(target_os = "linux")]
+mod resource_ledger;
+#[cfg(target_os = "linux")]
+mod role_bootstrap;
+#[cfg(target_os = "linux")]
+mod role_deadline;
+#[cfg(target_os = "linux")]
+mod role_protocol;
+#[cfg(target_os = "linux")]
+mod spawner;
+
 #[cfg(target_os = "linux")]
 mod protocol;
 
