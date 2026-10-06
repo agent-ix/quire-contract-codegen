@@ -2525,7 +2525,7 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
             ),
         }
         let generated = generate_state_frame_obligations(&StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
             package: &package,
             clause: &clause,
             state_path: STATE_PATH,
@@ -3356,7 +3356,7 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
         state_fields: &["balance", "ghost", "audit"],
         ..StateFrameRequest {
-        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+            ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
             package: &package,
             clause: &clause,
             state_path: STATE_PATH,
