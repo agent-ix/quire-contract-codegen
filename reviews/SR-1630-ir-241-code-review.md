@@ -244,3 +244,28 @@ Round-3 regression verdict:
   TC-039.
 - The focused run, full CI and the second Kani run are all pending; no runtime receipt exists for
   this head. Not mergeable until FND-014 is fixed and those gates pass.
+
+## Dispositions (round 4)
+
+Round 4. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-014 | fixed | PR #295 rebase correction: the #297 `StateFrameRequest` literal in `tests/it/kani_obligations_state_clause_replay.rs` now takes `ceilings` from the single fixture source (`proof_ceilings()`). A tree-wide audit finds all 36 request literals with `ceilings` and no `KaniExecutionRequest` still passing `timeout`. The focused receipt shows the `it` binary, which includes this module, compiling and running. |
+
+Round-4 verdict:
+
+- FND-014 is fixed. The correction touches only tests: no production source, spec, schema,
+  manifest or lockfile changed.
+- The ceiling-identity test `both_state_obligation_identities_change_with_either_required_ceiling`
+  now builds its request from the real QSL-emitted `BalanceNeverDrops` package, exactly as the
+  existing `generated_from_twin` helper does, rather than the synthetic fixture that #297's
+  fail-closed model-field rule no longer admits. Its memory and wall-clock identity and record
+  assertions are unchanged, and #297's own fixtures and semantics are untouched.
+- FND-001 to FND-010, FND-012 and FND-013 show no regression. FND-011 stays deferred to IR-639,
+  which is a child of IR-241 and blocks it; the guardian is not implemented, so IR-241 remains
+  incomplete.
+- Actual runtime evidence for this head: the focused job's 61 runner unit tests, 49 state-frame
+  integration tests (5 Kani tests ignored) and 9 ceiling integration tests passed. The narrow
+  clippy step finished with exit 0. Full rebased CI and the second Linux Kani run are still
+  pending and required before merge.
