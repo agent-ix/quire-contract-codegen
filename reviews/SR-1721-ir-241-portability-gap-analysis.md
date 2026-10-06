@@ -86,3 +86,14 @@ does not say that the 15 migrated tests no longer exercise the bounded runner on
   same stand-ins through `execute_kani_obligation(s)` as well, for example with a
   `cfg`-selected `StandIn` entry or Linux-only twins. At minimum, cover the single and batch
   over-limit case and the `Duration::MAX` case, and state the split in the PR body.
+
+## Dispositions
+
+Disposition pass 1, reviewed at `7b805a059a6281b8144cbe5cdaa1d888640d76ea` (fix commit `7b805a0`). Each outcome was checked
+against the source at that head, not taken from the coder's handoff. No new findings in this
+round. No cargo, Kani or build was run by the reviewer.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 7b805a0: On Linux the member-evidence test serializes the public evidence returned by execute_kani_obligations and asserts launcherPath, harnessPath, kind, solver, checks and batch. |
+| FND-002 | fixed | 7b805a0: On Linux report_fixture::single/groups call execute_kani_obligation(s), so all 15 moved tests (over-limit, exact-limit, Duration::MAX, own/stale/concurrent report, no-report) run through the namespace-owned bounded launcher again; the flood test also asserts its namespace descendant is gone after the over-limit stops and the exact-limit completion. |

@@ -100,3 +100,15 @@ in SR-1721 (gap-analysis), and the PR's overall review outcome depends on those.
   `with_memory` output built from an observation the test owns), or drop `Serialize` from
   `ReportedExecution` and move the wire assertions to the public type on the Linux path. See
   SR-1721 FND-001.
+
+## Dispositions
+
+Disposition pass 1, reviewed at `7b805a059a6281b8144cbe5cdaa1d888640d76ea` (fix commit `7b805a0`). Each outcome was checked
+against the source at that head, not taken from the coder's handoff. No new findings in this
+round. No cargo, Kani or build was run by the reviewer.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 7b805a0: Linux dispatch takes named deadline/observer; a separate cfg(not linux) dispatch with `_` parameters refuses (namespace.rs:189-260). Linux body is otherwise byte-identical. |
+| FND-002 | fixed | 7b805a0: The tautological !calls.exists() assertion is replaced by !shares_process(...), which fails if shares_process stops comparing identity ceilings. |
+| FND-003 | fixed | 7b805a0: Serialize derive and serde attributes removed from ReportedExecution; public KaniExecutionEvidence is the only wire definition, asserted on Linux only. |
