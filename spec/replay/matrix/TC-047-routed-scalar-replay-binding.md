@@ -115,7 +115,9 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    FR-032 against the owning canonical text; CG uses its one canonical encoder. Authentic
    occurrence/operand child/tag/range membership checks remain an upstream CODE gate and must
    reject metadata that is self-consistent with its digest but is not the proving package's. Check function/clause carry-only behavior and
-   existing function/frame encodings remain unchanged.
+   existing function/frame encodings remain unchanged. Encoder failure must yield typed refusal
+   with no usable identity; QSL's measured all-zero sentinel behavior remains CODE-gated pending
+   its fix. No tested exploit or completed error-path coverage is claimed here.
 
 ## Expected Results
 

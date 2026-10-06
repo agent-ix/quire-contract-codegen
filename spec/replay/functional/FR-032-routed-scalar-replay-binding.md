@@ -254,7 +254,10 @@ The measured QSL verifier checks equality with a digest recomputed from the supp
 it does not yet validate that supplied occurrence or operand child/tag/range against the
 recompiled package. That authoritative membership validation remains an upstream CODE gate,
 alongside IR-648's authentic metadata access and CG retention; digest conformance alone cannot
-close it. Decoder and original-limits context work can proceed independently.
+close it. Encoder failure must return a typed refusal, with no usable identity. The measured
+QSL encoder currently substitutes an all-zero digest on failure; that sentinel behavior remains
+CODE-gated pending an upstream fix and is an untested source concern, not a demonstrated exploit.
+Decoder and original-limits context work can proceed independently.
 
 ## Setup Refusal Precedence
 
