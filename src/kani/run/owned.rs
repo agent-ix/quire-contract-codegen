@@ -656,7 +656,8 @@ fn stage_refusal(error: StageError) -> BoundedLaunchError {
             ControlError::MissingCredentials
             | ControlError::RepeatedCredentials
             | ControlError::ChangedCredentials
-            | ControlError::UnexpectedCredentials => GuardianFailureKind::SenderMismatch,
+            | ControlError::UnexpectedCredentials
+            | ControlError::CreatorMismatch => GuardianFailureKind::SenderMismatch,
             ControlError::ExcessRights
             | ControlError::RightsNotCloexec
             | ControlError::RightsCount { .. } => GuardianFailureKind::InvalidDescriptors,

@@ -35,6 +35,12 @@ pub(super) struct CallerLease(OwnedFd);
 /// Guardian endpoint, mapped into only the intended child; never given to a backend.
 pub(super) struct GuardianEndpoint(OwnedFd);
 
+/// Separate role/control owner; it is never the original guardian lease writer.
+pub(super) struct RoleCaller(OwnedFd);
+
+/// Child side of an anonymous role pair, either mapped into entry stdin or safely received.
+pub(super) struct RoleEndpoint(OwnedFd);
+
 /// A refusal at the bounded framing/descriptor boundary.
 #[derive(Debug)]
 pub(super) enum ControlError {
@@ -51,6 +57,7 @@ pub(super) enum ControlError {
     ExcessRights,
     RightsNotCloexec,
     UnexpectedCredentials,
+    CreatorMismatch,
     RightsCount { expected: usize, received: usize },
 }
 
@@ -92,6 +99,17 @@ impl std::error::Error for ControlError {
 
 /// Creates both endpoints before spawning. No listener, address or option-setting escape exists.
 pub(super) fn private_pair() -> Result<(CallerLease, GuardianEndpoint), ControlError> {
+    let (caller, guardian) = fresh_pair()?;
+    Ok((CallerLease(caller), GuardianEndpoint(guardian)))
+}
+
+/// Fresh role pairs have the same closed option authority, independently of the original lease.
+pub(super) fn role_pair() -> Result<(RoleCaller, RoleEndpoint), ControlError> {
+    let (caller, endpoint) = fresh_pair()?;
+    Ok((RoleCaller(caller), RoleEndpoint(endpoint)))
+}
+
+fn fresh_pair() -> Result<(OwnedFd, OwnedFd), ControlError> {
     let (caller, guardian) = socketpair(
         AddressFamily::UNIX,
         SocketType::STREAM,
@@ -99,7 +117,7 @@ pub(super) fn private_pair() -> Result<(CallerLease, GuardianEndpoint), ControlE
         None,
     )?;
     rustix::net::sockopt::set_socket_passcred(&caller, true)?;
-    Ok((CallerLease(caller), GuardianEndpoint(guardian)))
+    Ok((caller, guardian))
 }
 
 impl CallerLease {
@@ -112,6 +130,59 @@ impl GuardianEndpoint {
     pub(super) fn into_child_mapping(self) -> OwnedFd {
         self.0
     }
+
+    pub(super) fn from_received(
+        descriptor: OwnedFd,
+        actual_creator: &OwnedFd,
+    ) -> Result<Self, ControlError> {
+        validate_endpoint(&descriptor)?;
+        Transport(descriptor.as_fd(), CredentialsPolicy::ExclusiveCreator)
+            .authenticate_creator(actual_creator)?;
+        Ok(Self(descriptor))
+    }
+
+    pub(super) fn transport(&self) -> Transport<'_> {
+        Transport(self.0.as_fd(), CredentialsPolicy::ExclusiveCreator)
+    }
+}
+
+impl RoleCaller {
+    pub(super) fn transport(&self) -> Transport<'_> {
+        Transport(self.0.as_fd(), CredentialsPolicy::ActualSender)
+    }
+}
+
+impl RoleEndpoint {
+    pub(super) fn into_child_mapping(self) -> OwnedFd {
+        self.0
+    }
+
+    pub(super) fn from_received(
+        descriptor: OwnedFd,
+        actual_creator: &OwnedFd,
+    ) -> Result<Self, ControlError> {
+        validate_endpoint(&descriptor)?;
+        Transport(descriptor.as_fd(), CredentialsPolicy::ExclusiveCreator)
+            .authenticate_creator(actual_creator)?;
+        Ok(Self(descriptor))
+    }
+
+    pub(super) fn transport(&self) -> Transport<'_> {
+        Transport(self.0.as_fd(), CredentialsPolicy::ExclusiveCreator)
+    }
+}
+
+fn validate_endpoint(descriptor: &OwnedFd) -> Result<(), ControlError> {
+    if rustix::net::sockopt::socket_domain(descriptor)? != AddressFamily::UNIX
+        || rustix::net::sockopt::socket_type(descriptor)? != SocketType::STREAM
+        || rustix::net::sockopt::socket_passcred(descriptor)?
+    {
+        return Err(ControlError::UnexpectedCredentials);
+    }
+    if !rustix::io::fcntl_getfd(descriptor)?.contains(rustix::io::FdFlags::CLOEXEC) {
+        return Err(ControlError::RightsNotCloexec);
+    }
+    Ok(())
 }
 
 /// Safe borrowed helper control. Its only production inputs are the private pair's endpoints.
@@ -157,6 +228,21 @@ impl<'fd> Transport<'fd> {
         })
     }
 
+    /// Kernel-minted peer authority works across namespaces even when peer PID is displayed as0.
+    pub(super) fn authenticate_creator(
+        &self,
+        actual_creator: &OwnedFd,
+    ) -> Result<(), ControlError> {
+        let peer = nix::sys::socket::getsockopt(&self.0, nix::sys::socket::sockopt::PeerPidfd)
+            .map_err(|error| ControlError::Io(io::Error::from(error)))?;
+        let peer_identity = rustix::fs::fstat(&peer)?;
+        let expected = rustix::fs::fstat(actual_creator)?;
+        if peer_identity.st_dev != expected.st_dev || peer_identity.st_ino != expected.st_ino {
+            return Err(ControlError::CreatorMismatch);
+        }
+        Ok(())
+    }
+
     /// A finite supervision tick, with EOF checked before pending bytes.
     pub(super) fn pending_control(&self, interval: Duration) -> Result<bool, ControlError> {
         let mut events = [PollFd::from_borrowed_fd(
@@ -199,7 +285,7 @@ impl<'fd> Transport<'fd> {
         rights: &[BorrowedFd<'_>],
         deadline: Instant,
     ) -> Result<(), ControlError> {
-        if rights.len() > 1 {
+        if rights.len() > RECEIVED_RIGHTS {
             return Err(ControlError::ExcessRights);
         }
         let mut encoded = BoundedEncoding(Vec::new());
@@ -261,7 +347,7 @@ impl<'fd> Transport<'fd> {
         self.refuse_observable_eof()?;
         let control = serde_json::from_slice(&payload).map_err(ControlError::InvalidEncoding)?;
         let expected_rights = expected_rights(&control);
-        if expected_rights > 1 {
+        if expected_rights > RECEIVED_RIGHTS {
             return Err(ControlError::ExcessRights);
         }
         if rights.len() != expected_rights {
