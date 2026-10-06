@@ -57,6 +57,12 @@ Round 2, reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8
 | --- | --- | --- |
 | FND-002 | fixed | 004c864626720341f3e06994f3d17494bbd6aa44: A two-row boundary table now separates the two failures. Policy/filter/privilege installation failure happens before positive Dispatch and is reported over the authenticated startup channel as typed unavailable admission. Exec failure of the actual recipe happens after Dispatch and is handled by the existing bounded backend-failure rules (AC-10 already lists backend exec failure), with no synthetic evidence, no new kind and no retroactive pre-Dispatch reclassification. TC-049 step 22 now tests the two cases separately. |
 
+Round 3, reviewed at a210dc10310e77499d14cbc9f172524a80194a85 (prior 004c864626720341f3e06994f3d17494bbd6aa44, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run aeb596e2-83a8-4867-a9ef-6170edca8002, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | a210dc10310e77499d14cbc9f172524a80194a85: Step 22's post-Dispatch exec failure now uses an authored regular executable script whose shebang names a deliberately absent absolute interpreter. KaniInstallation::require_executable (src/kani/run/tool.rs:66-84) checks only regular-file kind and execute bits, so it passes. KaniInstallation's only field is the public launcher (tool.rs:58-61), so an ordinary caller can name the script. The launcher is the recipe program (execute.rs:822 BackendCommand::new). execve then fails with ENOENT for the absent interpreter after positive Dispatch. That avoids the execvp ENOEXEC shell fallback, and closing the writing handle avoids ETXTBSY. Missing and non-executable launchers stay pre-Dispatch Tool refusals. No race, sleep, copied ELF or public hook is used. The fixture is still PLANNED/UNRUN. |
+
 ## New findings (disposition pass 2)
 
 Reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee).
