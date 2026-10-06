@@ -16,13 +16,14 @@ use std::{
     os::fd::OwnedFd,
     path::{Path, PathBuf},
     process::{Child, Command},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[cfg(target_os = "linux")]
 use std::{
     fs,
     io::{Read, Write},
+    time::Duration,
 };
 
 #[cfg(target_os = "linux")]
