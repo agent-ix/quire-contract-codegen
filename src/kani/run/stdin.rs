@@ -38,6 +38,15 @@ impl OriginalStdin {
                 "original stdin presence requires real procfs",
             ));
         }
+        // A real self link must identify this caller in the proc view. These path-only checks
+        // precede descriptor creation; a foreign proc view is a missing capture capability.
+        let self_link = std::fs::read_link("/proc/self")?;
+        if self_link != std::path::PathBuf::from(std::process::id().to_string()) {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "procfs self link does not identify the caller",
+            ));
+        }
         match std::fs::symlink_metadata("/proc/self/fd/0") {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::Closed),
             Err(error) => return Err(error),
@@ -49,9 +58,56 @@ impl OriginalStdin {
             }
             Ok(_) => {}
         }
-        use std::os::fd::AsFd;
+        // Absence after the positive original entry is instability, never Closed. Following
+        // the proc link uses stat, not opening a new description or reserving a descriptor slot.
+        let expected = std::fs::metadata("/proc/self/fd/0")?;
+        use std::os::{fd::AsFd, unix::fs::MetadataExt};
         let stdin = std::io::stdin();
-        Self::capture(stdin.as_fd())
+        let before = rustix::fs::fstat(&stdin)?;
+        let expected_type = rustix::fs::FileType::from_raw_mode(expected.mode());
+        if before.st_dev != expected.dev()
+            || before.st_ino != expected.ino()
+            || rustix::fs::FileType::from_raw_mode(before.st_mode) != expected_type
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "original stdin identity changed during capture",
+            ));
+        }
+        let original_flags = rustix::io::fcntl_getfd(&stdin)?;
+        let captured = Self::capture(stdin.as_fd())?;
+        let after = rustix::fs::fstat(&stdin)?;
+        if rustix::io::fcntl_getfd(&stdin)? != original_flags
+            || before.st_dev != after.st_dev
+            || before.st_ino != after.st_ino
+            || rustix::fs::FileType::from_raw_mode(after.st_mode) != expected_type
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "original stdin identity changed after capture",
+            ));
+        }
+        if matches!(&captured, Self::Closed)
+            != original_flags.contains(rustix::io::FdFlags::CLOEXEC)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "original stdin exec visibility changed during capture",
+            ));
+        }
+        if let Self::Open(descriptor) = &captured {
+            let cloned = rustix::fs::fstat(descriptor)?;
+            if before.st_dev != cloned.st_dev
+                || before.st_ino != cloned.st_ino
+                || rustix::fs::FileType::from_raw_mode(cloned.st_mode) != expected_type
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "captured stdin description identity changed",
+                ));
+            }
+        }
+        Ok(captured)
     }
 
     #[cfg(not(target_os = "linux"))]
