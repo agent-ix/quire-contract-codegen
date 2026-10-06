@@ -47,8 +47,14 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-semantic-value" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-walk" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-rs" },
+    # quire-rs 0.50.1 reaches this first-party AGPL crate through its extraction stack.
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-rust-extraction" },
+    # The extraction stack resolves this first-party AGPL parser from quire-code-rs.
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-code-parse" },
     { allow = ["AGPL-3.0-or-later"], crate = "agent-ix-extraction-frontend" },
     { allow = ["AGPL-3.0-or-later"], crate = "agent-ix-semantic-ir" },
+    # quire-rs 0.50.1 resolves this first-party AGPL schema from filament-core-data.
+    { allow = ["AGPL-3.0-or-later"], crate = "agent-ix-semantic-schema" },
 ]
 
 [bans]
@@ -73,6 +79,8 @@ unknown-git = "deny"
 allow-git = [
     "https://github.com/agent-ix/filament-core-data",
     "https://github.com/agent-ix/quire-canonical",
+    # quire-rs 0.50.1 reaches the first-party parser through quire-rust-extraction.
+    "https://github.com/agent-ix/quire-code-rs",
     "https://github.com/agent-ix/quire-contract-ir",
     "https://github.com/agent-ix/quire-contract-runtime",
     "https://github.com/agent-ix/quire-exact",
