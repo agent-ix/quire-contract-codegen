@@ -200,8 +200,8 @@ sampled/not_run evidence. No terminal settlement promotes the shadow to `product
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-028-AC-1 | Every harness identity records the request's memory ceiling and wall-clock ceiling, and changing either ceiling changes the identity. | Test (TC-039) |
-| FR-028-AC-2 | A run that exceeds its wall-clock ceiling is stopped and classified `inconclusive` with the timed-out reason naming the ceiling, and never verified or falsified. | Test (TC-039) |
-| FR-028-AC-3 | A run that exceeds its memory ceiling is stopped and classified `inconclusive` with the memory-exhausted reason naming the ceiling, distinct from the timed-out reason, and never verified or falsified. | Test (TC-039) |
+| FR-028-AC-2 | A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to final QSL Incomplete(TimedOut); the backend classification is not the terminal category. | Test (TC-039) |
+| FR-028-AC-3 | A backend Kani run that exceeds its memory ceiling is stopped and classified KaniRunOutcome::Inconclusive with the memory-exhausted reason naming the ceiling, distinct from timed-out and never verified or falsified. FR-029 maps it to final QSL Incomplete(ResourceExhausted); FR-028-AC-24 governs the separate refinement run. | Test (TC-039) |
 | FR-028-AC-4 | Every execution evidence records the bounds of each symbolic argument and the two ceilings the run was held to. | Test (TC-039) |
 | FR-028-AC-5 | Every harness identity, generation refusal and execution evidence names its family. | Test (TC-039) |
 | FR-028-AC-6 | A harness of a family with no supplied shadow records proof subject `production`. | Test (TC-039) |
