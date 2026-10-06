@@ -283,7 +283,29 @@ authored).
   Same-artifact canonical content identity is independently checked and retained; changing
   artifact/context cannot pass merely because the O-09 claim digest is equal.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
-  regeneration is byte-identical (NFR-001).
+  regeneration is byte-identical (NFR-001). For the planned scalar and composite routes,
+  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) and
+  [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md) own the respective
+  positional O-09 preimages and full-claim consumer checks. Equality of the O-09 digest binds
+  those claim members; it does not authenticate generated content, a native observation or
+  every member of the retained proving/evidence record. Repeated operand positions remain
+  separate entries even when they name the same node; literal operands retain the owning
+  route's authentic graph-child or inline-literal identity and domain. Existing function/frame
+  preimages and ordering remain unchanged.
+  On every scalar or composite outcome, including refusal, fault and incomplete outcomes,
+  the CG converter shall compare the report's full corresponding typed claim with the actual
+  retained claim sent by the driver, before settlement. A changed or missing report claim
+  shall refuse binding with no settlement. The original sent replay wire/context and proving
+  limits shall remain retained for the independent original-package/source/proved-content
+  checks; comparing an echo with a later-mutated request does not establish those checks.
+  The driver shall authenticate the actual typed native observation of the same proved artifact
+  against that retained record where the route requires one. QSL carries the supplied content
+  identity and checks semantic claim membership; carried content equality is not artifact
+  authentication. Public transport `ReplayLimits` remains a separate final facade argument,
+  distinct from the claim's exact-evaluation limits, and is not invented as a claim-identity
+  member. These scalar/composite producer, metadata, observation and consumer obligations remain
+  PLANNED / UNRUN and CODE-gated under their owning requirements. API availability, identity
+  echo equality and deterministic regeneration alone close none of those gates.
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
   `KaniRunOutcome` and from `KaniOutcomeKind` is one `match` with no wildcard arm, over the pair
   with the replay settlement (FR-030-AC-7; FR-029-AC-1 and FR-029-AC-12 state `Refuted` only with a
