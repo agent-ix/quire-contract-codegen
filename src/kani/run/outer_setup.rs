@@ -69,6 +69,10 @@ impl PreparedOuter<'_> {
         self.outer.as_fd()
     }
 
+    pub(super) fn bootstrap(&self) -> &RoleEndpoint {
+        self.bootstrap
+    }
+
     pub(super) fn require_creator_live(&self) -> Result<(), SetupError> {
         creator::require_live(&self.launcher).map_err(SetupError::Creator)?;
         self.bootstrap

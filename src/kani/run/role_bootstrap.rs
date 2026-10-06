@@ -24,8 +24,8 @@ pub(super) struct PreparedLauncher {
     pub(super) bootstrap: RoleEndpoint,
     pub(super) caller_pin: OwnedFd,
     pub(super) creator_pin: OwnedFd,
-    pub(super) inner_endpoint: GuardianEndpoint,
-    pub(super) outer_endpoint: RoleEndpoint,
+    pub(super) inner_endpoint: Option<GuardianEndpoint>,
+    pub(super) outer_endpoint: Option<RoleEndpoint>,
 }
 
 #[derive(Debug)]
@@ -135,8 +135,8 @@ pub(super) fn prepare_launcher(
         bootstrap,
         caller_pin,
         creator_pin,
-        inner_endpoint,
-        outer_endpoint,
+        inner_endpoint: Some(inner_endpoint),
+        outer_endpoint: Some(outer_endpoint),
     })
 }
 
