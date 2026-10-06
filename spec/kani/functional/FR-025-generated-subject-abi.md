@@ -69,6 +69,24 @@ gets a row in the table only when its witness decodes into the complete-V1 value
 - If an obligation is a frame obligation, then the generator shall account it `unsupported` with a
   typed reason and emit no harness.
 
+### Composite leaf bindings (planned IR-635)
+
+For a composite shadow, the drawn primitive leaves are arguments; the composite is not itself a
+machine argument. This preserves AC-7 and FR-015 AC-70. When such a harness is emitted, the
+generator shall persist each drawn leaf's original operand/parameter node identity, typed path,
+declared leaf domain and primitive draw type, together with the owning composite declaration and
+presence/member/slot controls needed to reconstruct it. Paths distinguish record fields, tuple
+positions, union members, option presence/payload and collection element occurrences. Binding
+order is original parameter node id then leaf path, matching actual symbolic calls. Literal
+operands retain their original node/value and singleton domain and have no unconstrained draw.
+No fabricated parameter binding stands in for a literal-only claim.
+
+If a path names no declared leaf, repeats a draw position, omits a required drawn leaf or conflicts
+with its original domain/type/presence control, then the generator shall refuse with a distinct
+typed reason and emit no harness. Reconstruction and canonical admission are owned by
+[FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md). This binding contract
+adds no unsupported-family machine ABI or implicit integer narrowing.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -81,6 +99,8 @@ gets a row in the table only when its witness decodes into the complete-V1 value
 | FR-025-AC-6 | A binding that names no parameter of the selected function, and a parameter of that function with no binding, are each refused at generation with a typed reason and no harness. | Test (TC-036) |
 | FR-025-AC-7 | An argument of a family with no row in the Rust-type table (rational, decimal, IEEE, text, enum, composite, collection or function) is accounted `unsupported` with a typed reason naming the family, and no harness is emitted. | Test (TC-036) |
 | FR-025-AC-8 | A harness over a state-reading obligation passes each state value to the subject as `&mut` to a harness-owned value and copies it before the call; the pre-state the harness asserts over is the copy, and the post-state is the value after the call. | Test (TC-036) |
+
+| FR-025-AC-9 | PLANNED (IR-635). Every emitted composite shadow leaf binding retains its original operand/parameter node, typed path, declared domain and primitive draw type in symbolic call order; controls distinguish absent/null/present slots and option/union members. A missing, duplicate, unknown or domain/type-conflicting leaf refuses with a typed reason and no harness; parameter/literal and literal/literal operands retain their literal singleton identity/value with no unconstrained draw. Public reconstruction preserves these facts through FR-033. | Test |
 
 ## Dependencies
 

@@ -172,6 +172,16 @@ other.
 - The generator shall record in the execution evidence of every run the Kani, Rust and solver
   versions the run used, and every option of the run's option vector (FR-028-AC-23).
 
+### Parity settlement projection (planned IR-635)
+
+The strength names, independent comparison, domain-containment checks and native resource
+classification above remain authoritative. [FR-029](./FR-029-run-outcome-terminal-record.md)
+AC-17 owns their projection into QSL's closed parity evidence and terminal precedence. In
+particular a native run stopped at either recorded ceiling remains
+`shadow_proved_refinement_inconclusive`, whose parity projection is `CeilingReached`, rather
+than the completed `NotExhausted` projection of sampled/not_run evidence. No terminal settlement
+promotes the shadow to `production_proved`.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -285,8 +295,7 @@ None of these is decided here, and none is guessed.
   is ever acceptable; (d) whether `requires_bound` on an unbounded integer leaf is an accepted end
   state (ADR-003 Q2 says an item with no finite bound gets no harness). The strengths are reported
   as they are and the owner's answer decides which of them closes a row.
-- **Which QSL terminal value a shadow result settles to (QSL).** FR-029 Open Questions carries it;
-  FR-029-AC-17 gives a shadow result no terminal value and invents none, so it is never `Proved`.
+- **Delivery of QSL composite parity settlement.** FR-029 AC-17 specifies the planned QSL-640-gated parity settlement; until actual API delivery the interim shadow refusals still yield no terminal value.
 - **The refinement subject after the evaluation seam moves (QSL, IR-583; Contract Runtime and
   `quire-exact`, IR-349).** The refinement obligation targets the generated oracle's signature and
   isolates the abstraction function in one module (FR-028-AC-14), so only that module changes if the
@@ -301,10 +310,7 @@ None of these is decided here, and none is guessed.
   tuples including equality. FR-015-AC-69 supports parameter and literal operands; whether the QSL
   case needs a record constructed in the expression or a field projected as an operand is the QSL
   corpus lane's to say, and either would be an `OperandNotSupported` refusal until it is.
-- **FR-025's binding for a leaf of a composite parameter.** FR-015-AC-70 binds each drawn leaf to
-  its parameter node id and a leaf path; FR-025-AC-1 and FR-025-AC-2 bind by parameter node id and
-  declared domain alone, and FR-025-AC-7 refuses a composite as an argument. Adding the leaf path
-  to FR-025 is not done here.
+- **Delivery of composite leaf binding.** FR-025 AC-9 specifies the planned original-node/path/domain binding for FR-015 AC-70, while AC-7 still refuses the composite itself as a machine argument. FR-033 reconstruction remains gated on its implementation and the owning QSL APIs.
 - **Which memory mechanism, and which platforms (code change, owner for platform support).**
   FR-028-AC-21 is mechanism-neutral: any mechanism that observes or limits the tree's memory
   (polling resident memory, an address-space limit, a control group) meets it, the evidence names
@@ -348,8 +354,8 @@ change.
 - Backing the native criteria that cover what the shadow proof does not exercise: FR-018-AC-7,
   AC-8 and AC-9 are planned and FR-018-AC-2 is partly covered, so FR-015-AC-76 records each as
   unbacked until the matrix lists it covered.
-- A terminal value for a verified shadow result: FR-029-AC-17 interim-refuses it
-  (`NonProductionProof`, no terminal value), which is not an end state and waits on QSL's answer.
+- A terminal value for a verified shadow result: FR-029-AC-17 specifies the planned QSL-640-gated parity map and interim-refuses it until actual API delivery
+  (`NonProductionProof`, no terminal value), which is not an end state and waits on QSL's actual parity API delivery.
 - A replay path for a shadow counterexample, which needs FR-025's binding for a composite leaf;
   until then a falsified shadow harness has no terminal value (FR-029-AC-17).
 - Renaming ADR-003's Q1 sentence on co-ownership once the question above is answered.
