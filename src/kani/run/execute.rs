@@ -49,6 +49,55 @@ pub const OUTPUT_OVER_LIMIT_CODE: &str = "kani_output_over_limit";
 /// The stable code of a run refused because a stream could not be read to its end.
 pub const OUTPUT_UNREAD_CODE: &str = "kani_output_unread";
 
+/// Original backend stdio position whose inventory prevented bounded startup admission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BackendStdioDescriptor {
+    /// The original inherited-exec input captured before C allocates controls.
+    Stdin,
+    /// The owned stdout capture mapping.
+    Stdout,
+    /// The owned stderr capture mapping.
+    Stderr,
+}
+
+/// Required bounded startup capability, selected at the actual failing admission site.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KaniStartupCapability {
+    /// Private network isolation inherited by the contained backend.
+    PrivateNetwork,
+    /// Private root with the admitted original build paths.
+    PrivateRoot,
+    /// Authenticated private proc view without original host aliases.
+    PrivateProc,
+    /// Continuous backend-only IPC exclusion installed before arbitrary execution.
+    BackendIpcExclusion,
+    /// Descriptor ownership protection of the trusted supervisor roles.
+    TrustedOwnerProtection,
+}
+
+/// Typed context for an unavailable bounded startup prerequisite. The original I/O cause
+/// remains separate; errno or human-readable diagnostic text never selects this variant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KaniStartupAdmissionCause {
+    /// Existing memory-observation and enforcement prerequisite checks.
+    MemoryEnforcement,
+    /// Actual backend stdio has socket type, which is outside admitted input inventory.
+    BackendStdioSocket {
+        /// The actual backend position with socket type.
+        descriptor: BackendStdioDescriptor,
+    },
+    /// Original capture or later owned stdio inspection could not establish the inventory.
+    BackendStdioInspectionFailed {
+        /// The position whose actual inspection failed.
+        descriptor: BackendStdioDescriptor,
+    },
+    /// A required isolation/protection capability could not be positively established.
+    CapabilityUnavailable {
+        /// The actual missing capability.
+        capability: KaniStartupCapability,
+    },
+}
+
 /// One execution of one harness in a crate the caller wrote.
 pub struct KaniExecutionRequest<'a> {
     /// Backend to invoke.
@@ -81,9 +130,11 @@ pub enum KaniExecutionRefusal {
         /// Diagnostic context; this text does not select the failure kind.
         detail: String,
     },
-    /// No memory-enforcement mechanism is available; the backend was never spawned.
+    /// A bounded startup prerequisite is unavailable; arbitrary backend code was not dispatched.
     MemoryMechanismUnavailable {
-        /// The failed mechanism check.
+        /// Typed context selected by the actual admission check.
+        admission: KaniStartupAdmissionCause,
+        /// The original failed prerequisite check, including its original syscall error.
         cause: std::io::Error,
     },
     /// Memory observation failed during a launch, so the backend tree was killed.
@@ -172,9 +223,9 @@ impl fmt::Display for KaniExecutionRefusal {
         match self {
             Self::Tool(error) => write!(formatter, "{error}"),
             Self::Guardian { kind, detail } => write!(formatter, "guardian {kind:?}: {detail}"),
-            Self::MemoryMechanismUnavailable { cause } => write!(
+            Self::MemoryMechanismUnavailable { admission, cause } => write!(
                 formatter,
-                "backend tree memory enforcement is unavailable: {cause}"
+                "bounded startup prerequisite {admission:?} is unavailable: {cause}"
             ),
             Self::MemoryObservationFailed { detail } => write!(
                 formatter,
@@ -342,8 +393,14 @@ pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let deadline = Instant::now().checked_add(request.harness.view().ceilings.wall_clock);
-    let stdin = super::stdin::OriginalStdin::capture_original()
-        .map_err(|cause| KaniExecutionRefusal::MemoryMechanismUnavailable { cause })?;
+    let stdin = super::stdin::OriginalStdin::capture_original().map_err(|cause| {
+        KaniExecutionRefusal::MemoryMechanismUnavailable {
+            admission: KaniStartupAdmissionCause::BackendStdioInspectionFailed {
+                descriptor: BackendStdioDescriptor::Stdin,
+            },
+            cause,
+        }
+    })?;
     require_in_crate(request)?;
     run_single(request, &stdin, deadline)
 }
@@ -393,8 +450,8 @@ fn start(
         deadline,
     )
     .map_err(|error| match error {
-        BoundedLaunchError::Unavailable(cause) => {
-            KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
+        BoundedLaunchError::Unavailable { admission, cause } => {
+            KaniExecutionRefusal::MemoryMechanismUnavailable { admission, cause }
         }
         BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
             tool: KaniTool::Launcher,
@@ -539,8 +596,14 @@ pub fn execute_kani_obligations(
         return Ok(Vec::new());
     }
     let preparation_started = Instant::now();
-    let stdin = super::stdin::OriginalStdin::capture_original()
-        .map_err(|cause| KaniExecutionRefusal::MemoryMechanismUnavailable { cause })?;
+    let stdin = super::stdin::OriginalStdin::capture_original().map_err(|cause| {
+        KaniExecutionRefusal::MemoryMechanismUnavailable {
+            admission: KaniStartupAdmissionCause::BackendStdioInspectionFailed {
+                descriptor: BackendStdioDescriptor::Stdin,
+            },
+            cause,
+        }
+    })?;
     for request in requests {
         require_in_crate(request)?;
     }

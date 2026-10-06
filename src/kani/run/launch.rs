@@ -199,7 +199,10 @@ pub(super) struct BoundedLaunch {
 
 /// Refuse unavailable memory enforcement before starting a backend.
 pub(super) enum BoundedLaunchError {
-    Unavailable(io::Error),
+    Unavailable {
+        admission: super::execute::KaniStartupAdmissionCause,
+        cause: io::Error,
+    },
     Io(io::Error),
     Guardian {
         kind: GuardianFailureKind,
@@ -280,7 +283,11 @@ fn run_bounded_launcher_at(
     procfs: &std::path::Path,
     deadline: Option<Instant>,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
-    let observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
+    let observer =
+        MemoryObserver::prepare(procfs).map_err(|cause| BoundedLaunchError::Unavailable {
+            admission: super::execute::KaniStartupAdmissionCause::MemoryEnforcement,
+            cause,
+        })?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         return Ok(BoundedLaunch {
             outcome: LaunchOutcome::TimedOut,
@@ -288,6 +295,29 @@ fn run_bounded_launcher_at(
             report: Ok(None),
         });
     }
+    // Preserve original zero/expiry capability ordering. An eligible launch inspects only its
+    // already captured actual input before controls/children; no later EBADF becomes Closed.
+    stdin.inspect_backend().map_err(|error| {
+        use super::{
+            execute::{BackendStdioDescriptor, KaniStartupAdmissionCause},
+            stdin::StdinInventoryError,
+        };
+        let (admission, cause) = match error {
+            StdinInventoryError::Socket => (
+                KaniStartupAdmissionCause::BackendStdioSocket {
+                    descriptor: BackendStdioDescriptor::Stdin,
+                },
+                io::Error::new(io::ErrorKind::InvalidInput, StdinInventoryError::Socket),
+            ),
+            StdinInventoryError::Inspection(cause) => (
+                KaniStartupAdmissionCause::BackendStdioInspectionFailed {
+                    descriptor: BackendStdioDescriptor::Stdin,
+                },
+                cause,
+            ),
+        };
+        BoundedLaunchError::Unavailable { admission, cause }
+    })?;
     #[cfg(target_os = "linux")]
     {
         let mut observer = observer;
@@ -305,10 +335,13 @@ fn run_bounded_launcher_at(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (command, helper, stdin, report_path, ceilings, harnesses);
-        Err(BoundedLaunchError::Unavailable(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "PID-namespace guardian requires Linux",
-        )))
+        Err(BoundedLaunchError::Unavailable {
+            admission: super::execute::KaniStartupAdmissionCause::MemoryEnforcement,
+            cause: io::Error::new(
+                io::ErrorKind::Unsupported,
+                "PID-namespace guardian requires Linux",
+            ),
+        })
     }
 }
 
@@ -786,7 +819,10 @@ mod tests {
             &directory.join("unavailable-procfs"),
             Instant::now().checked_add(Duration::from_secs(5)),
         );
-        assert!(matches!(result, Err(BoundedLaunchError::Unavailable(_))));
+        assert!(matches!(
+            result,
+            Err(BoundedLaunchError::Unavailable { .. })
+        ));
         assert!(
             !marker.exists(),
             "a backend without memory enforcement must never start"
