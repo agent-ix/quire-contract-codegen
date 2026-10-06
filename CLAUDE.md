@@ -37,6 +37,18 @@ make ci               # every local gate above except build and clean
 targets that resolve dependencies (`lint`, `test`, `build`, `msrv`, `kani`, `rustdoc`); override
 it, e.g. `make lint LOCKED=`, when a patch or a deliberate lock change makes `--locked` wrong.
 
+## Bounded Kani execution prerequisites
+
+The bounded execution API requires Linux, readable procfs RSS and task `children` files
+(`CONFIG_PROC_CHILDREN`), pidfd support, and bubblewrap (`bwrap`) supporting `--unshare-user`,
+`--unshare-pid`, `--info-fd` and `--block-fd`. The host must permit creation of user and PID
+namespaces; AppArmor restrictions can deny this even when bubblewrap is present. `make tools`
+installs the Rust/Kani tools; it does not install bubblewrap or alter host namespace policy.
+Missing or denied support returns `MemoryMechanismUnavailable` before backend dispatch;
+unsupported setup never dispatches the backend. In-process conclusions and startup errors
+confirm owned teardown. Caller SIGKILL/abort/OOM before the startup gate/PDEATH chain is fully
+armed can still release an unowned backend; IR-639 owns the deferred caller-death supervisor.
+
 ## Safety scaffolding
 
 - `clippy.toml` caps cognitive complexity / arg count

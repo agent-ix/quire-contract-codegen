@@ -146,6 +146,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     let (profile, dispatch, input) = fixture();
     let mut emitted = EmittedCorpusIdentities::new();
     let arithmetic = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -174,6 +175,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         .contains("kani::assume"));
 
     let exhausted = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -194,6 +196,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     assert_eq!(exhausted.boolean_claim(), None);
 
     let counterexample = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -216,6 +219,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
 fn tc_023_kani_executes_the_generated_arithmetic_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -243,6 +247,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
 fn tc_023_kani_executes_the_generated_graph_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -272,6 +277,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
 fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() {
     let (profile, dispatch, input) = fixture();
     let true_collection = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -290,6 +296,7 @@ fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() 
         KaniRunOutcome::Verified
     );
     let false_graph = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -317,6 +324,7 @@ fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() 
 fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_summary() {
     let (profile, dispatch, input) = fixture();
     let mut generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -354,6 +362,7 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
 fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
     let (profile, dispatch, input) = fixture();
     let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,
@@ -503,6 +512,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
         .into_iter()
         .map(|(family, request)| {
             let generated = generate_bounded_kani_corpus_case(
+                crate::common::proof_ceilings::proof_ceilings(),
                 &profile,
                 &dispatch,
                 &input,
@@ -522,7 +532,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 /// `tests/it/kani_generation.rs` validates `quire.kani-proof-graph/v2` graphs against
 /// `schemas/kani-proof-graph-v2.schema.json`.
 ///
-/// Trace: TC-023.
+/// Trace: TC-023, FR-028-AC-1.
 #[test]
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
@@ -551,6 +561,7 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     ];
     for request in cases {
         let generated = generate_bounded_kani_corpus_case(
+            crate::common::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -579,7 +590,7 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
 /// A declared `Required` dependency's edge must also validate against the published schema, not
 /// only the empty-census shape the test above exercises.
 ///
-/// Trace: TC-023.
+/// Trace: TC-023, FR-028-AC-1.
 #[test]
 fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
@@ -591,6 +602,7 @@ fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published
         replacement_path: None,
     };
     let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
         &profile,
         &dispatch,
         &input,

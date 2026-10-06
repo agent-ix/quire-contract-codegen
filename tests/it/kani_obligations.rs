@@ -54,10 +54,36 @@ const ASSERTION: &str = "amount-nonnegative";
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
-/// Placeholder budget for tests that refuse before any process is spawned (a
-/// missing backend component, or a harness the crate does not contain): the value is never
-/// consulted, since `execute_kani_obligation` returns before reaching the launcher.
-const UNUSED_TIMEOUT: Duration = Duration::from_secs(60);
+/// Trace: FR-028-AC-1.
+#[test]
+fn changing_either_request_ceiling_changes_the_generated_proof_identity() {
+    let package = bound_package(1000);
+    let clause = clause(PRECONDITION);
+    let items = [ObligationItem::BoundClause {
+        package: &package,
+        clause: &clause,
+    }];
+    let mut requested = request(&items, "crate::withdraw");
+    let original = emitted(negotiate_kani_obligations(&requested).unwrap())
+        .1
+        .remove(0);
+    requested.ceilings.memory_bytes =
+        std::num::NonZeroU64::new(requested.ceilings.memory_bytes.get() / 2).unwrap();
+    let memory_changed = emitted(negotiate_kani_obligations(&requested).unwrap())
+        .1
+        .remove(0);
+    assert_ne!(original.identity, memory_changed.identity);
+    assert_ne!(original.record.contents, memory_changed.record.contents);
+    assert_eq!(memory_changed.identity.ceilings, requested.ceilings);
+    requested.ceilings = original.identity.ceilings;
+    requested.ceilings.wall_clock /= 2;
+    let wall_changed = emitted(negotiate_kani_obligations(&requested).unwrap())
+        .1
+        .remove(0);
+    assert_ne!(original.identity, wall_changed.identity);
+    assert_ne!(original.record.contents, wall_changed.record.contents);
+    assert_eq!(wall_changed.identity.ceilings, requested.ceilings);
+}
 
 // ---- V1 fixture --------------------------------------------------------------
 
@@ -331,6 +357,7 @@ fn request<'a>(
     subject_path: &'a str,
 ) -> KaniObligationRequest<'a> {
     KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(REAL_KANI_TIMEOUT),
         items,
         subject_path,
         unwind: 4,
@@ -1748,7 +1775,6 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
         harness: (&harness).into(),
         crate_directory: &directory,
         target_directory: &directory.join("target"),
-        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(
@@ -1760,6 +1786,49 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     ));
     assert!(!directory.join("target").exists(), "nothing ran");
     let _ = fs::remove_dir_all(directory);
+}
+
+/// Invalid launcher file kinds and execute permissions are typed faults before dispatch.
+///
+/// Trace: TC-027
+#[cfg(unix)]
+#[test]
+fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let package = bound_package(1000);
+    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    for directory_launcher in [false, true] {
+        let directory = write_crate(&harness, HEALTHY_SUBJECT);
+        let launcher = directory.join("cargo-kani");
+        if directory_launcher {
+            fs::create_dir(&launcher).unwrap();
+        } else {
+            fs::write(&launcher, "#!/bin/sh\nexit 0\n").unwrap();
+            fs::set_permissions(&launcher, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let installation = KaniInstallation { launcher };
+        let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &installation,
+            harness: (&harness).into(),
+            crate_directory: &directory,
+            target_directory: &directory.join("target"),
+        })
+        .unwrap_err();
+        match refusal {
+            KaniExecutionRefusal::Tool(KaniToolError::Io {
+                tool: KaniTool::Launcher,
+                path,
+                error,
+            }) => {
+                assert_eq!(path, installation.launcher);
+                assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            }
+            other => panic!("expected a typed launcher permission fault, got {other:?}"),
+        }
+        assert!(!directory.join("target").exists(), "nothing ran");
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 // ---- kani lane ---------------------------------------------------------------
@@ -1819,7 +1888,6 @@ fn run(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
-        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
     fs::write(
@@ -1916,14 +1984,15 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     // verifies. This call's own wall-clock elapsed time is not that proof — a real run that
     // happened to finish quickly would satisfy an elapsed-time bound too — so none is asserted
     // here.
-    let harness = &harnesses[0];
+    let mut harness = harnesses[0].clone();
+    harness.identity.ceilings.wall_clock = Duration::from_millis(1);
+    let harness = &harness;
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         installation: &installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
-        timeout: Duration::from_millis(1),
     })
     .unwrap_or_else(|refusal| {
         panic!("a run that started must not surface as a refusal: {refusal}")
@@ -1950,7 +2019,6 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
-        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(
@@ -1981,6 +2049,9 @@ fn routed_scalar_increment() -> (
         }],
         &GenerationContexts {
             kani: Some(KaniGenerationContext {
+                ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+                    REAL_KANI_TIMEOUT,
+                ),
                 subject_path: "crate::subject",
                 unwind: 3,
             }),
@@ -2093,7 +2164,6 @@ fn run_scalar_under_real_kani(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar"),
-        timeout: REAL_KANI_TIMEOUT,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(&crate_directory);
@@ -2127,7 +2197,6 @@ fn tc_027_a_routed_scalar_harness_verifies() {
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
-        timeout: UNUSED_TIMEOUT,
     })
     .unwrap_err();
     assert!(matches!(

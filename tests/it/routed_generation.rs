@@ -79,10 +79,42 @@ fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem 
 fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
     GenerationContexts {
         kani: Some(KaniGenerationContext {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
             subject_path,
             unwind,
         }),
     }
+}
+
+/// Trace: FR-028-AC-1.
+#[test]
+fn routed_scalar_identity_records_both_required_ceilings() {
+    let fixture = fixture();
+    let routed = [route(0, &fixture.rendered[0])];
+    let mut context = kani_context("crate::subject", 1);
+    let generate = |context: &GenerationContexts<'_>| {
+        let generated = generate_routed(&fixture.package, &routed, context).unwrap();
+        kani_parts(&generated.items[0].output).1.unwrap().clone()
+    };
+    let baseline = generate(&context);
+    context.kani.as_mut().unwrap().ceilings.memory_bytes =
+        std::num::NonZeroU64::new(128 * 1024 * 1024).unwrap();
+    let changed_memory = generate(&context);
+    assert_ne!(baseline.identity, changed_memory.identity);
+    assert_ne!(baseline.record.contents, changed_memory.record.contents);
+    assert_eq!(
+        changed_memory.identity.ceilings,
+        context.kani.unwrap().ceilings
+    );
+    context.kani.as_mut().unwrap().ceilings = baseline.identity.ceilings;
+    context.kani.as_mut().unwrap().ceilings.wall_clock /= 2;
+    let changed_wall = generate(&context);
+    assert_ne!(baseline.identity, changed_wall.identity);
+    assert_ne!(baseline.record.contents, changed_wall.record.contents);
+    assert_eq!(
+        changed_wall.identity.ceilings,
+        context.kani.unwrap().ceilings
+    );
 }
 
 /// What FR-015 returns for `nodes` in the given (ascending) order over `claim_map`, which names
@@ -101,6 +133,7 @@ fn fr015(
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
         items: &items,
         subject_path: "crate::subject",
         unwind: 1,

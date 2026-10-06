@@ -28,13 +28,14 @@ use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
 
 /// Every inconclusive reason the classifier has today.
-const REASONS: [KaniInconclusiveReason; 6] = [
+const REASONS: [KaniInconclusiveReason; 7] = [
     KaniInconclusiveReason::FailedWithoutCounterexample,
     KaniInconclusiveReason::NoVerdict,
     KaniInconclusiveReason::MissingCoverSummary,
     KaniInconclusiveReason::VacuousProof,
     KaniInconclusiveReason::UnwindBoundExhausted,
     KaniInconclusiveReason::TimedOut,
+    KaniInconclusiveReason::MemoryExhausted,
 ];
 
 fn falsified() -> KaniRunOutcome {
@@ -151,6 +152,15 @@ fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks()
             Some(ReportedInconclusiveCause::KaniVacuousProof)
         );
     }
+}
+
+/// Trace: FR-029-AC-3.
+#[test]
+fn observed_memory_exhaustion_maps_to_incomplete_resource_exhausted() {
+    assert_eq!(
+        map_run(&inconclusive(KaniInconclusiveReason::MemoryExhausted), None),
+        TerminalValue::Incomplete(IncompleteCause::ResourceExhausted),
+    );
 }
 
 /// The timed-out reason maps to `Incomplete(TimedOut)` and the exhausted-unwind-bound reason to

@@ -76,6 +76,8 @@ const STATE_FRAME_LOWERING_TAGS: [CheckedNodeTag; 8] = [
 /// field is bounded, by the integer range the IR carries for it.
 #[derive(Clone, Copy, Debug)]
 pub struct StateFrameRequest<'a> {
+    /// Resource ceilings recorded by every generated harness.
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// The admitted package.
     pub package: &'a CheckedPackageV2,
     /// The `state`/`state_clause` node of a `postcondition` clause.
@@ -954,6 +956,7 @@ fn render(
         }
     };
     let identity = StateFrameIdentity {
+        ceilings: request.ceilings,
         clause: request.clause.clone(),
         scope: scope.clone(),
         property,

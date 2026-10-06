@@ -100,7 +100,7 @@ pub fn negotiate_kani_obligations(
     let mut states = request
         .items
         .iter()
-        .map(|item| classify(item, request.unwind))
+        .map(|item| classify(item, request.unwind, request.ceilings))
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
     assign_names(&mut states);
@@ -275,7 +275,11 @@ fn supported_without_harness(harness: &str) -> ObligationDisposition {
 
 /// Classifies one request item. Its generated names are its readable stems until
 /// [`assign_names`] settles them across the request.
-fn classify<'a>(item: &ObligationItem<'a>, unwind: u32) -> ItemState<'a> {
+fn classify<'a>(
+    item: &ObligationItem<'a>,
+    unwind: u32,
+    ceilings: crate::kani::identity::ProofCeilings,
+) -> ItemState<'a> {
     match *item {
         ObligationItem::BoundClause { package, clause } => classify_clause(package, clause),
         ObligationItem::ScalarClaim {
@@ -292,6 +296,7 @@ fn classify<'a>(item: &ObligationItem<'a>, unwind: u32) -> ItemState<'a> {
             subject_path,
         } => classify_state_frame(
             &StateFrameRequest {
+                ceilings,
                 package,
                 clause,
                 state_path,
@@ -973,6 +978,7 @@ fn render(
         .collect::<Vec<_>>();
     let is_contract = lowered.kind != ObligationKind::Precondition;
     let identity = KaniObligationIdentity {
+        ceilings: request.ceilings,
         kind: lowered.kind,
         clause: lowered.clause.identity().clone(),
         source_span: lowered.clause.source().clone(),
@@ -1107,6 +1113,7 @@ mod tests {
 
     fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
             items,
             subject_path: "render_probe::subject",
             unwind: 4,
@@ -1116,7 +1123,9 @@ mod tests {
     /// Real, legitimately-lowered `LoweredClause` for the probe package's one precondition, with
     /// its embedded oracle source intact for the caller to mutate.
     fn render_probe_lowered<'a>(item: &ObligationItem<'a>) -> Box<LoweredClause<'a>> {
-        let Outcome::Lowered(lowered) = classify(item, 4).outcome else {
+        let Outcome::Lowered(lowered) =
+            classify(item, 4, render_probe_request(&[]).ceilings).outcome
+        else {
             panic!("render-probe precondition must lower to a harness");
         };
         lowered

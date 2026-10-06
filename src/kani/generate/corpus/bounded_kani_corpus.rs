@@ -126,6 +126,8 @@ pub struct BoundedCorpusArtifacts {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CorpusProofDependencyGraph {
+    /// Required resource ceilings of this concrete-case proof.
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Stable graph schema identity ([`CORPUS_PROOF_GRAPH_SCHEMA`]).
     pub schema_version: String,
     /// The corpus case's own `#[kani::proof]` symbol; identical to the suffix-bearing function
@@ -174,6 +176,7 @@ impl EmittedCorpusIdentities {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CaseIdentity<'a> {
+    ceilings: crate::kani::identity::ProofCeilings,
     construct: &'static str,
     profile: &'a ProfileSelection,
     input: InputIdentity<'a>,
@@ -499,6 +502,7 @@ impl CorpusRefusal {
 /// to serialize the case's proof-dependency graph returns `Refused`
 /// `kani_corpus_serialization_failed`, emits nothing and records no identity.
 pub fn generate_bounded_kani_corpus_case(
+    ceilings: crate::kani::identity::ProofCeilings,
     profile: &KaniProfile,
     dispatch: &DispatchIndex,
     input: &ValidatedFiniteInput,
@@ -559,6 +563,7 @@ pub fn generate_bounded_kani_corpus_case(
     let normalized_dependencies = normalize_dependencies(dependencies);
     // Computed before lowering consumes the request; recorded only after lowering succeeds.
     let identity = CaseIdentity {
+        ceilings,
         construct: family.construct(),
         profile: profile.selection(),
         input: InputIdentity::from(input.input()),
@@ -614,9 +619,14 @@ pub fn generate_bounded_kani_corpus_case(
     };
     // Rendered before the identity is claimed, so a refused rendering records nothing.
     let name = format!("{}_{identity}", family.label());
-    let Ok(artifacts) =
-        render_artifacts(family, &name, value, &oracle_body, &normalized_dependencies)
-    else {
+    let Ok(artifacts) = render_artifacts(
+        ceilings,
+        family,
+        &name,
+        value,
+        &oracle_body,
+        &normalized_dependencies,
+    ) else {
         // The caller's input is not at fault, so this is `Refused` and not `InvalidInput`.
         return Err(CorpusRefusal::Refused.raise(
             std001_code!("kani_corpus_serialization_failed"),
@@ -692,6 +702,7 @@ fn render_graph_oracle(
 /// `dependencies` is the already-validated, already-normalized declared census (see
 /// [`normalize_dependencies`]).
 fn render_artifacts(
+    ceilings: crate::kani::identity::ProofCeilings,
     family: BoundedCorpusFamily,
     name: &str,
     value: bool,
@@ -721,6 +732,7 @@ fn render_artifacts(
     );
     let _ = writeln!(harness, "}}");
     let proof_graph_value = CorpusProofDependencyGraph {
+        ceilings,
         schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),
         proof_id,
         family: label.to_owned(),
@@ -763,6 +775,48 @@ mod tests {
         DispatchIndex,
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
+
+    /// Trace: FR-028-AC-1.
+    #[test]
+    fn either_ceiling_changes_the_canonical_corpus_identity() {
+        let (profile, dispatch, input) = fixture();
+        let original = crate::kani::identity::ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(128 * 1024 * 1024).unwrap(),
+            wall_clock: std::time::Duration::from_secs(30),
+        };
+        let generate = |ceilings| {
+            generate_bounded_kani_corpus_case(
+                ceilings,
+                &profile,
+                &dispatch,
+                &input,
+                arithmetic("source", 1, 1),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap()
+        };
+        let baseline = generate(original);
+        for ceilings in [
+            crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(64 * 1024 * 1024).unwrap(),
+                ..original
+            },
+            crate::kani::identity::ProofCeilings {
+                wall_clock: std::time::Duration::from_secs(15),
+                ..original
+            },
+        ] {
+            let changed = generate(ceilings);
+            assert_ne!(
+                baseline.artifacts.kani_harness.path,
+                changed.artifacts.kani_harness.path
+            );
+            let graph: CorpusProofDependencyGraph =
+                serde_json::from_str(&changed.artifacts.proof_graph.contents).unwrap();
+            assert_eq!(graph.ceilings, ceilings);
+        }
+    }
 
     fn fixture() -> Fixture {
         fixture_with(|_| {}, |_| {})
@@ -892,6 +946,7 @@ mod tests {
         for request in cases {
             // A fresh counter per call: an identical request yields identical output.
             let first = generate_bounded_kani_corpus_case(
+                crate::kani::test_support::proof_ceilings::proof_ceilings(),
                 &profile,
                 &dispatch,
                 &input,
@@ -901,6 +956,7 @@ mod tests {
             )
             .unwrap();
             let second = generate_bounded_kani_corpus_case(
+                crate::kani::test_support::proof_ceilings::proof_ceilings(),
                 &profile,
                 &dispatch,
                 &input,
@@ -950,6 +1006,7 @@ mod tests {
             replacement_path: None,
         };
         let with_dependency = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -983,6 +1040,7 @@ mod tests {
             replacement_path: None,
         };
         let generated = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1013,6 +1071,7 @@ mod tests {
             replacement_path: None,
         };
         let error = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1025,6 +1084,7 @@ mod tests {
         assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
         assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
         let retry = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1051,6 +1111,7 @@ mod tests {
             fixture_with(|selection| selection.revision = "r2".to_owned(), |_| {});
         let mut emitted = EmittedCorpusIdentities::new();
         let error = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &other_input,
@@ -1079,6 +1140,7 @@ mod tests {
         let (profile, dispatch, input) =
             fixture_with(|selection| selection.revision = "rev-7".to_owned(), |_| {});
         let proved = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1090,6 +1152,7 @@ mod tests {
         assert_eq!(proved.outcome.kind, KaniOutcomeKind::Proved);
         assert_eq!(proved.outcome.context, "rev-7");
         let falsified = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1113,6 +1176,7 @@ mod tests {
             replacement_path: None,
         };
         let refused = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1143,6 +1207,7 @@ mod tests {
             replacement_path: None,
         };
         let error = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1155,6 +1220,7 @@ mod tests {
         assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
         assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
         let retry = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1217,6 +1283,7 @@ mod tests {
     fn tc_023_non_success_emits_no_partial_artifacts_or_boolean_claim() {
         let (profile, dispatch, input) = fixture();
         let error = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1244,6 +1311,7 @@ mod tests {
     fn tc_023_unreachable_graph_request_classifies_as_false() {
         let (profile, dispatch, input) = fixture();
         let generated = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1267,6 +1335,7 @@ mod tests {
     fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
         let (profile, dispatch, input) = fixture();
         let generated = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1294,6 +1363,7 @@ mod tests {
         let (profile, dispatch, input) = fixture();
         let left = i64::MAX as i128 + 1;
         let generated = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1318,6 +1388,7 @@ mod tests {
     fn tc_023_collection_oracle_evaluates_the_selected_ordered_population() {
         let (profile, dispatch, input) = fixture();
         let generated = generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
@@ -1361,7 +1432,15 @@ mod tests {
         emitted: &mut EmittedCorpusIdentities,
     ) -> Result<super::BoundedCorpusCase, super::BoundedCorpusError> {
         let (profile, dispatch, input) = fixture;
-        generate_bounded_kani_corpus_case(profile, dispatch, input, request, dependencies, emitted)
+        generate_bounded_kani_corpus_case(
+            crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            profile,
+            dispatch,
+            input,
+            request,
+            dependencies,
+            emitted,
+        )
     }
 
     /// The typed outcome of a refusal. A refusal that carries no outcome fails the test, which

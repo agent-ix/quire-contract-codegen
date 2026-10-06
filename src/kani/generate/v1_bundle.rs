@@ -51,6 +51,8 @@ pub struct KaniSubjectBinding {
 
 /// Explicit inputs for one bounded Boolean Kani proof bundle.
 pub struct KaniRequest<'a> {
+    /// Resource ceilings recorded by this proof bundle.
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Requirement identity and revision retained by every artifact.
     pub requirement: &'a RequirementRef,
     /// Boolean precondition clause.
@@ -77,6 +79,8 @@ pub struct KaniRequest<'a> {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProofDependencyGraph {
+    /// Resource ceilings required when running the generated proof.
+    pub ceilings: crate::kani::identity::ProofCeilings,
     /// Stable graph schema identity.
     pub schema_version: String,
     /// Root proof identity.
@@ -257,6 +261,7 @@ pub fn generate_kani_bundle(
     })?;
     let rust = artifact(format!("src/generated/{symbol}.rs"), source);
     let graph_value = ProofDependencyGraph {
+        ceilings: request.ceilings,
         schema_version: "quire.kani-proof-graph/v2".to_owned(),
         proof_id: request.proof_id.to_owned(),
         requirement_id: requirement.to_owned(),

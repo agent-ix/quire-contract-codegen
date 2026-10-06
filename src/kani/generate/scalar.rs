@@ -441,6 +441,7 @@ mod {module} {{\n\
         operation = lowered.operation_identity,
     );
     let identity = ScalarObligationIdentity {
+        ceilings: request.ceilings,
         node_id: lowered.node_id.clone(),
         operation_identity: lowered.operation_identity.clone(),
         oracle_symbol: lowered.oracle_symbol.clone(),

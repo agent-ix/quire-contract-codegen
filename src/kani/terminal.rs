@@ -103,7 +103,7 @@ pub fn run_terminal_value(
         ) => TerminalValue::Incomplete(IncompleteCause::TimedOut),
         (
             Inconclusive {
-                reason: Reason::UnwindBoundExhausted,
+                reason: Reason::UnwindBoundExhausted | Reason::MemoryExhausted,
             },
             None,
         ) => TerminalValue::Incomplete(IncompleteCause::ResourceExhausted),

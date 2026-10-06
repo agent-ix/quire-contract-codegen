@@ -141,13 +141,75 @@ generator. The composite family's own run is TC-025 steps 29 to 36.
 
 ## Status
 
-Planned, except step 10 (FR-028-AC-12, the batch wall-clock rule), which is implemented (IR-277)
-and run by the `tc_043_*` batch tests listed in TC-043, tagged to both cases. At this revision the
-run is held to a caller-declared wall-clock budget, no memory ceiling is set, and no identity
-records a ceiling, a family or a proof subject.
+Partially implemented. Steps 1 to 4 (FR-028-AC-1 to FR-028-AC-4) have required request ceilings
+on the generated contract, scalar and state-frame identities. The runner reads those identity
+ceilings, and its evidence records them together with each symbolic argument's bounds. The V1
+bundle proof graph and the canonical corpus identity also record required ceilings; this does not
+claim execution coverage for the bundle and corpus tests that invoke Kani directly.
 
-Steps 11 to 22 (FR-028-AC-13 to FR-028-AC-24, IR-241) are planned: no shadow, refinement obligation,
-proof strength or `MemoryExhausted` reason exists in `src/`, and the evidence records no tool
-version (measured: no `--version` read and no version field in `src/kani`). They are
-asserted against a stand-in family and a stand-in production subject, so the machinery is tested
-before the first real family (TC-025 steps 29 to 36).
+The focused tests backing the ceiling slice are:
+
+- `changing_either_request_ceiling_changes_the_generated_proof_identity`
+- `routed_scalar_identity_records_both_required_ceilings`
+- `both_state_obligation_identities_change_with_either_required_ceiling`
+- `bundle_proof_record_requires_and_records_each_request_ceiling`
+- `either_ceiling_changes_the_canonical_corpus_identity`
+- `identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory`
+- `zero_wall_ceiling_cannot_accept_an_already_exited_launcher`
+- `expired_dispatch_deadline_starts_no_helper`
+- `child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree`
+- `batch_memory_overage_refuses_every_member_without_classifying_a_partial_report`
+- `unequal_identity_memory_ceilings_run_in_separate_backend_processes`
+- `unavailable_tree_memory_observation_refuses_before_spawn`
+- `available_observer_does_not_invent_a_peak_before_observing_a_tree`
+- `resident_memory_of_a_reused_pid_is_excluded_from_the_backend_sample`
+- `released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused`
+- `released_leader_mm_uses_live_worker_rss_or_refuses_observation`
+- `missing_task_ancestry_refuses_a_zombie_leader_with_live_workers`
+- `unavailable_children_observation_refuses_and_only_disappeared_tasks_are_skipped`
+- `startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed`
+- `unranged_state_draws_record_the_full_i64_domain`
+- `gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend`
+- `completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample`
+- `observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run`
+
+Step 10 (FR-028-AC-12, the batch wall-clock rule) remains implemented (IR-277), backed by the
+`tc_043_*` batch tests listed in TC-043. Batching now also requires equal identity memory and
+wall-clock ceilings.
+
+The process-tree part of step 19 (FR-028-AC-21) is implemented for the current execution entries
+with mandatory Linux PID-namespace ownership and a procfs resident-memory observer. Bubblewrap,
+permission to create the namespaces, and readable owned-process procfs observations are required;
+an unavailable mechanism refuses before backend dispatch. Gated startup claims the namespace init
+by pidfd and start identity. Startup abort kills the owned, still-pinned process group before the
+gate closes. Every run conclusion kills and confirms namespace-init teardown, including a completed
+backend whose orphaned descendants remain alive. The focused fixtures exercise double-forked and
+session-escaped children, and a descendant forked after the final memory sample.
+
+The observer follows the owned processes' task-child lists rather than scanning every host process
+on each sample. Evidence names `linux_pid_namespace_procfs_tree_rss` and records the largest observed
+sum of per-process RSS. Shared resident pages can appear in more than one process's RSS, so this is
+a conservative aggregate metric, not an instantaneous physical-memory footprint. Memory between
+samples is not claimed. A released thread-group leader's address space uses a live worker's RSS
+when available; ambiguous live-worker observation is refused rather than recorded as zero.
+
+AC-21's obligation to hold every run to its ceiling continues throughout execution. Losing memory
+observation or descendant ownership therefore stops the owned run and yields the typed
+`MemoryObservationFailed` refusal, even beside a valid success report. The real procfs-failure
+fixture backs this interpretation of the existing criterion; it adds no new normative obligation.
+The namespace startup allowance is a separate setup bound: its expiry refuses setup rather than
+attributing a timeout to an identity wall-clock ceiling that has not elapsed. All threads having
+released their address spaces permits an observed zero RSS; a live mm without readable RSS still
+refuses observation. Missing task `children` support is refused before dispatch, and a missing
+live task's `children` file is refused during execution.
+
+The ownership/teardown claim covers in-process conclusions and startup error/unwind paths.
+Abrupt caller SIGKILL, abort or OOM before the gate/PDEATH chain is fully armed can close the
+gate and release an unowned backend. That startup caller-death guarantee remains deferred to
+IR-639; it is not claimed by this partial delivery. No limit-only mechanism or bounded
+native-refinement execution is implemented or claimed here.
+
+Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
+refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In
+particular, process-tree memory enforcement does not complete the shadow contract or IR-241's
+stand-in refinement and seeded-mutant obligations.

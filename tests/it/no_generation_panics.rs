@@ -431,6 +431,7 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
             node_id: &target,
         }];
         let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
             items: &items,
             subject_path: "crate::subject",
             unwind: 1,

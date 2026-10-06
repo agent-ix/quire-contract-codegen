@@ -195,6 +195,7 @@ pub fn withdraw_harnesses() -> Vec<KaniObligationHarness> {
         })
         .collect::<Vec<_>>();
     let request = KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings(),
         items: &items,
         subject_path: "crate::withdraw",
         unwind: 4,
