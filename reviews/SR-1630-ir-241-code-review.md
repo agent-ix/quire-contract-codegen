@@ -191,3 +191,21 @@ FND-013 (low) are open and go back to the coder. This was a static disposition: 
 run by the reviewer. The final rebased full CI, `cargo deny` over the new `command-fds` and `nix`
 dependencies, and the second Kani run (the first run of real Kani inside the namespace) are
 still required.
+
+Round 2. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-008 | fixed | PR #295 fix round 2: when no task reports `VmRSS`, each task's `stat` is read. Every task showing a released address space (vsize 0, rss 0), together with a fresh, identity-matched leader `stat` and a released count at least the fresh `Threads:`, yields `Some(0)`. A task with a live mm but no readable RSS is still refused. The live-worker RSS and pid/start checks are kept, and the released-mm mutant is killed. |
+| FND-009 | fixed | PR #295 fix round 2: startup-cap expiry is `TimedOut` only when the identity deadline has itself elapsed. Otherwise it is a typed startup refusal (`MemoryMechanismUnavailable`), backed by `startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed`. |
+| FND-010 | fixed | PR #295 fix round 2: `prepare` requires readable `children` files for the caller's tasks before dispatch. During traversal, a missing `children` file is skipped only once the task's own directory is confirmed gone; a live task without one is refused. The children mutant is killed. |
+| FND-011 | deferred | Too large for this PR: a safe caller-death supervisor needs a first-party guardian (about 500-700 lines of guardian and control code plus caller, test and packaging work). Deferred to IR-639, a child of IR-241 that blocks it (relations verified in Linear). `CLAUDE.md`, both public entry docs, the namespace module doc, FR-028-AC-21's marker and TC-039 Status all state the startup caller-death non-guarantee, and in-process ownership and teardown claims are unchanged. IR-241 cannot complete until IR-639 delivers. |
+| FND-012 | fixed | PR #295 fix round 2: the Linux, procfs `children` and RSS, pidfd, bubblewrap and namespace-permission prerequisites (including AppArmor) are now stated on `execute_kani_obligation`, on `execute_kani_obligations` and in `CLAUDE.md`, which also says `make tools` installs neither. No CI workflow change. |
+| FND-013 | fixed | PR #295 fix round 2: the `memory.rs` module doc now describes owned-init task-child traversal with start identities, says the observer signals no process and `NamespaceOwner` owns teardown, and states the conservative RSS-sum semantics. The source has no signal call. |
+
+Round-2 verdict: FND-008, -009, -010, -012 and -013 are fixed, and FND-011 is deferred to IR-639,
+transparently. None of FND-001 to FND-007 regressed on the paths round 2 changed. No new
+findings. With every SR-1630 to SR-1633 finding now at a non-open outcome, the PR is
+review-mergeable. Merge still waits on the final rebase (with a same-session regression
+disposition if owned semantics change), full CI and the second Linux Kani run, none of which has
+run yet. IR-241 itself stays incomplete: IR-639 blocks it.
