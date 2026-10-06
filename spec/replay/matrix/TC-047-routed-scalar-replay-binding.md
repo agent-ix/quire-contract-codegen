@@ -87,8 +87,8 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace executable
    tests to each criterion they actually assert; this document alone provides no coverage.
 7. Once the QSL-stated positional rule is measured in the pushed owning normative spec and
-   authoritative metadata access is available, independently inspect the scalar preimage through
-   CG's one canonical encoder. Use the claimed operator application node and its actual selected
+   IR-648's authoritative typed `CheckedPackageV2` operand access is available, independently
+   inspect the scalar preimage through CG's one canonical encoder. Use the claimed operator application node and its actual selected
    expression occurrence. Retain one argument per operand/harness draw position, each with its
    position ordinal, authentic operand node id and actual range. A literal uses its own literal
    node and singleton range; a parameter reference uses its parameter node; a subterm uses its

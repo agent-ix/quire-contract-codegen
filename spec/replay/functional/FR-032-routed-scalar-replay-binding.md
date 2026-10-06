@@ -218,8 +218,8 @@ or operand node ids. IR's public node `body` is still a JSON value; no public ty
 for the scalar application's ordered operands, their identities and ranges was measured.
 The model-field accessor and wrapped optional operation-leaf walk do not supply that scalar
 accessor. In particular, an inline literal term does not by itself establish a literal node id.
-CODE remains gated on the actual authoritative metadata/accessor contract and on retaining the
-occurrence selected for the proved item. Missing or ambiguous occurrence, operand identity/range
+CODE remains gated on [IR-648](https://linear.app/agent-ix/issue/IR-648), the typed scalar
+operand accessor on `CheckedPackageV2`, and on retaining the occurrence selected for the proved item. Missing or ambiguous occurrence, operand identity/range
 or existing kind yields typed setup refusal and no minted identity. The positional rule resolves
 literal and repeated-parameter semantics; no ambiguity gate for those semantics remains.
 Decoder and original-limits context work can proceed independently.
@@ -306,7 +306,7 @@ The positive operator-level route has these explicit **CODE gates**:
    upstream consistency gate and authorizes no CG function-parity implementation here.
 2. CG generation must retain the authoritative scalar metadata needed by the owning positional O-09
    preimage and original renderer-limit/proving record. The selected occurrence, typed positional
-   operand identity/range access and existing kind retention gaps remain explicit;
+   operand identity/range access (IR-648) and existing kind retention gaps remain explicit;
    QSL-641 does not supply a CG-owned preimage by naming an opaque digest.
 3. The driver must implement same-proved-artifact execution and observation authentication;
    CG must supply the retained generation/proving record and checked completion/conversion seam.
@@ -347,7 +347,9 @@ scalar route is gated.
   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) owns terminal readings;
   CG owns the scalar preimage and retained producer/converter contracts; the driver owns observation
   authentication; QSL-641 owns the amended full-report claim API. Measured QSL FR-357 owns exact
-  evaluation, original-package validation and scalar terminal causes.
+  evaluation, original-package validation and scalar terminal causes. IR-648 in Contract IR
+  owns the typed `CheckedPackageV2` scalar operand accessor and blocks IR-631 CODE admission;
+  its spec and implementation must be measured before that accessor gate is closed.
 - **Related**: [FR-016](./FR-016-witness-native-replay.md) owns existing playback/function replay
   rules; [AD-002](../../assurance/AD-002-cg-qsl-replay-seam.md) retains QSL evaluation ownership.
 - **Downstream**: [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md), planned public

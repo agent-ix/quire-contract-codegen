@@ -208,7 +208,9 @@ authored).
   [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns acceptance criteria
   and the metadata/accessor gate. IR's `CheckedPackageV2::graph()` exposes authentic node ids
   and occurrences, and `source_map()` the source map, but the public node body remains JSON;
-  no public typed scalar ordered-operand identity/range accessor was measured. The model-field
+  no public typed scalar ordered-operand identity/range accessor was measured. IR-648 in
+  Contract IR owns that `CheckedPackageV2` accessor and blocks IR-631 CODE admission; its
+  specification and implementation remain to be measured. The model-field
   accessor and wrapped optional leaf walk do not provide one. CG must retain the actual selected
   expression occurrence and authentic operand metadata; an inline literal term alone establishes
   no literal node id. Missing or ambiguous metadata/kind refuses without minting an identity.
