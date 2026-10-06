@@ -1,18 +1,14 @@
-//! The hand-mirrored QSL twin of the state-frame fixture: the `test/bank` domain package, the
-//! native unit whose `post` clause and operation frame mirror the checked package the harnesses
-//! are generated from, and the invocation documents of one concrete run.
+//! The QSL twin of the state-frame fixture: the `test/bank` domain package, the native unit
+//! whose `post` clause and operation frame produce the checked package used for harnesses, and
+//! the invocation documents of one concrete run.
 //!
 //! The twin's fields, their ranges and the fields its frame grants come from `model`, the same
 //! source the Rust fixture's checked package is built from. The rest is tied to the Rust side only
 //! by names: the model `Bank`, its object `Account` and its operation `deposit`. The request and
 //! envelope that put a run before QSL are built by the crate under test
 //! (`quire_contract_codegen::FrameReplay`), which asks QSL for the node identities a
-//! counterexample names; they are not the fixture package's node ids. The frame replay is given
-//! the falsified harness's identity and its playback and mints the obligation identity itself, so
-//! the twin supplies none. The fixture's checked package is hand-built and its node ids are its
-//! own, while QSL names the nodes of the package it compiles from the twin's unit, so
-//! [`Twin::aligned`] gives a harness identity QSL's anchor and frame, as the identity of a harness
-//! generated from QSL's own emitted package carries them.
+//! counterexample names. The frame replay is given the falsified harness's identity and its
+//! playback and mints the obligation identity itself, so the twin supplies none.
 
 use super::model;
 
@@ -390,6 +386,150 @@ impl Twin {
         Self::build(&model::GRANTED, &CLAUSES, 0)
     }
 
+    fn with_field_native_type(name: &str, type_ref: &str) -> Self {
+        let mut twin = Self::new();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let types = domain["types"].as_array_mut().expect("types");
+        types.retain(|ty| ty["identity"] != range_type(name));
+        let account = types
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let field = account["fields"]
+            .as_array_mut()
+            .expect("fields")
+            .iter_mut()
+            .find(|field| field["name"] == name)
+            .expect("field");
+        field["typeRef"] = json!(type_ref);
+        twin.domain = domain.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin
+    }
+
+    /// A twin whose present, unread `audit` field is Boolean, with no `i64` range.
+    pub fn without_audit_range() -> Self {
+        Self::with_field_native_type("audit", "ix://quire/native/Boolean")
+    }
+
+    /// A selected model whose `balance` field is an unbounded integer.
+    pub fn without_balance_range() -> Self {
+        Self::with_field_native_type("balance", "ix://quire/native/Integer")
+    }
+
+    /// Both clauses over a selected model whose `audit` field is an unbounded integer.
+    pub fn with_unbounded_audit_clause() -> Self {
+        let mut twin = Self::with_field_native_type("audit", "ix://quire/native/Integer");
+        twin.unit = unit_source(
+            &hex(&jcs_digest(&twin.domain)),
+            &[
+                CLAUSES[0],
+                CLAUSES[1],
+                ("BalanceAlso", "deposit", "balance"),
+            ],
+            0,
+        )
+        .into_bytes();
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        let changed = source.replace(
+            "post BalanceAlso using v on Bank::Account::deposit { self.balance >= pre(self.balance) }",
+            "post BalanceAlso using v on Bank::Account::deposit { self.balance > pre(self.balance) }",
+        );
+        assert_ne!(changed, source, "the third clause has a distinct operator");
+        twin.unit = changed.into_bytes();
+        twin
+    }
+
+    /// A selected frame whose one postcondition has an unsupported negated comparison.
+    pub fn with_negated_balance_clause() -> Self {
+        let mut twin = Self::build(&model::GRANTED, &[CLAUSES[0]], 0);
+        let source = String::from_utf8(twin.unit).expect("native unit");
+        twin.unit = source
+            .replace(
+                "self.balance >= pre(self.balance)",
+                "not (self.balance >= pre(self.balance))",
+            )
+            .into_bytes();
+        twin
+    }
+
+    /// Four clauses of one operation with distinct checked node identities for item validation.
+    pub fn with_distinct_balance_clauses() -> Self {
+        let mut twin = Self::build(
+            &model::GRANTED,
+            &[
+                CLAUSES[0],
+                ("SpareA", "deposit", "balance"),
+                ("SpareB", "deposit", "balance"),
+                ("SpareC", "deposit", "balance"),
+            ],
+            0,
+        );
+        let mut source = String::from_utf8(twin.unit).expect("native unit");
+        for (name, operator) in [("SpareA", ">"), ("SpareB", "<"), ("SpareC", "<=")] {
+            let original = format!(
+                "post {name} using v on Bank::Account::deposit {{ self.balance >= pre(self.balance) }}"
+            );
+            let changed = format!(
+                "post {name} using v on Bank::Account::deposit {{ self.balance {operator} pre(self.balance) }}"
+            );
+            let updated = source.replace(&original, &changed);
+            assert_ne!(updated, source, "{name} is a distinct clause");
+            source = updated;
+        }
+        twin.unit = source.into_bytes();
+        twin
+    }
+
+    /// One selected model whose two declared fields have deliberately different bounds.
+    pub fn with_field_ranges(balance: (i64, i64), audit: (i64, i64)) -> Self {
+        let mut twin = Self::build(&["balance"], &[CLAUSES[0]], 0);
+        let mut document: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        for (name, (lower, upper)) in [("balance", balance), ("audit", audit)] {
+            let value_type = document["types"]
+                .as_array_mut()
+                .expect("types")
+                .iter_mut()
+                .find(|ty| ty["identity"] == range_type(name))
+                .expect("field value type");
+            for (keyword, value) in [("min", lower), ("max", upper)] {
+                let bound = value_type["constraints"]
+                    .as_array_mut()
+                    .expect("constraints")
+                    .iter_mut()
+                    .find(|constraint| constraint["keyword"] == keyword)
+                    .expect("bound");
+                bound["operands"]["value"] = json!(value);
+            }
+        }
+        twin.domain = document.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &[CLAUSES[0]], 0).into_bytes();
+        twin
+    }
+
+    /// Admit QSL's emitted graph against an unread model range outside `i64`. QSL itself
+    /// refuses an integer operand past 2^53 before it can emit the package.
+    pub fn emitted_package_with_wide_audit_range(
+        &self,
+        clause: &str,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
+        let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let audit = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type");
+        let maximum = audit["constraints"]
+            .as_array_mut()
+            .expect("constraints")
+            .iter_mut()
+            .find(|constraint| constraint["keyword"] == "max")
+            .expect("maximum bound");
+        maximum["operands"]["value"] = json!("9223372036854775808");
+        self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
+    }
+
     /// A twin whose operations' frames modify `granted`, whose unit holds `clauses` and has
     /// `blank_lines` empty lines before the first of them.
     pub fn build(granted: &[&str], clauses: &[(&str, &str, &str)], blank_lines: usize) -> Self {
@@ -418,6 +558,33 @@ impl Twin {
     /// selection. Nothing here is hand-built, so a harness generated from it carries the node
     /// ids QSL itself names.
     pub fn emitted_package(&self, clause: &str) -> (CheckedPackageV2, CheckedNodeId) {
+        self.emitted_package_with_model(clause, None)
+    }
+
+    /// Admit QSL's emitted graph against a deliberately changed selected model document. The
+    /// graph and clause identity still come from QSL; this negative fixture reaches an IR field
+    /// type that QSL's current model reader cannot emit.
+    pub fn emitted_package_with_unread_string_audit(
+        &self,
+        clause: &str,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
+        let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let audit = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type");
+        audit["scalar"] = json!("string");
+        audit["constraints"] = json!([]);
+        self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
+    }
+
+    fn emitted_package_with_model(
+        &self,
+        clause: &str,
+        model_override: Option<Vec<u8>>,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
         let name = ClauseName(Identifier::new(clause).expect("identifier"));
         let located = call_site(
             SourceIdentity::new(AUTHORITY, IDENTITY, "git", "1"),
@@ -428,43 +595,31 @@ impl Twin {
             &name,
         )
         .expect("the clause is located");
+        let document = model_override.unwrap_or_else(|| self.domain.clone());
+        let mut wire: Value = serde_json::from_slice(&located.package).expect("emitted package");
+        if document != self.domain {
+            let digest = hex(&jcs_digest(&document));
+            wire["lock"]["model_selections"][0]["digest"] = json!(digest);
+            wire["identity_preimage"]["model_selections"] =
+                wire["lock"]["model_selections"].clone();
+            let preimage = serde_json::to_vec(&wire["identity_preimage"]).expect("preimage");
+            wire["package_id"]["digest"] = json!(hex(&jcs_digest(&preimage)));
+        }
+        let bytes = wire.to_string().into_bytes();
         let mut evidence = CheckedPackageEvidence::new();
-        evidence
-            .insert_domain_package_document(hex(&jcs_digest(&self.domain)), self.domain.clone());
+        evidence.insert_domain_package_document(hex(&jcs_digest(&document)), document);
         evidence.support_feature("quire.value.complete/v1");
-        let package = match CheckedPackageV2::read(
-            &located.package,
-            CheckedPackageReadLimits::bounded(),
-            &evidence,
-        ) {
-            CheckedPackageV2ReadResult::Admitted(package) => *package,
-            other => panic!("QSL's emitted package is admitted: {other:?}"),
-        };
+        let package =
+            match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence) {
+                CheckedPackageV2ReadResult::Admitted(package) => *package,
+                other => panic!("QSL's emitted package is admitted: {other:?}"),
+            };
         let clause_node = serde_json::from_value(json!({
             "domain": "quire.checked-semantic-node/v1",
             "digest": located.site.node.to_string(),
         }))
         .expect("a node id");
         (package, clause_node)
-    }
-
-    /// `harness` with the scope's anchor and frame the ones QSL names for `operation` in this
-    /// twin's unit.
-    pub fn aligned(&self, harness: &StateFrameIdentity, operation: &str) -> StateFrameIdentity {
-        let site = self
-            .operation_site(operation)
-            .expect("the twin's operation is located");
-        let node = |id: qsl_replay::WireNodeId| -> quire_contract_model::CheckedNodeId {
-            serde_json::from_value(json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": id.to_string(),
-            }))
-            .expect("a node id")
-        };
-        let mut aligned = harness.clone();
-        aligned.scope.anchor = node(site.anchor);
-        aligned.scope.frame = node(site.frame);
-        aligned
     }
 
     /// The invocation of `deposit` on `account` from `pre` to `post`, each `(balance, audit)`.
@@ -655,6 +810,7 @@ impl Twin {
             packages: self.packages(),
             package,
             clause_node,
+            state_fields: model::FIELDS.map(|(name, _)| name.to_owned()).to_vec(),
             operation: self.operation("deposit"),
             clause: ClauseName(Identifier::new(clause).expect("identifier")),
             object: StateObjectAddress {
@@ -692,7 +848,9 @@ impl Twin {
         run: &Run,
         tamper: Tamper,
     ) -> Result<FrameReplayResult, ReplayRefusal> {
-        let FrameReplay { wire, mut packet } = self.frame_replay(invocation, account, field, run);
+        let FrameReplay {
+            wire, mut packet, ..
+        } = self.frame_replay(invocation, account, field, run);
         let payload = packet
             .family_payload
             .as_ref()

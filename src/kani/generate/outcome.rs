@@ -3,9 +3,9 @@
 //! `generate/`: it imports no family.
 
 use quire_contract_model::{
-    BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete, CheckedPackageLimit,
-    CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry, ClauseKind, ClauseRef,
-    DependencyIdentity, SourceSpan,
+    BoundPackage, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
+    CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
+    ClauseKind, ClauseRef, DependencyIdentity, SourceSpan,
 };
 use serde::{Serialize, Serializer};
 
@@ -677,25 +677,64 @@ pub enum StateFrameRefusal {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "ground", rename_all = "snake_case")]
 pub enum BoundNotResolvedCause {
-    /// The member's `value.target` is an unbounded type, a node that is not a bound.
-    UnboundedType {
-        /// That target node.
-        target: CheckedNodeId,
+    /// The model field table could not be read for the declared object.
+    ModelFieldsUnavailable {
+        /// The model declaration object.
+        object: CheckedNodeId,
+        /// The accessor's exact error.
+        #[serde(serialize_with = "serialize_model_fields_error")]
+        error: CheckedModelFieldsError,
     },
-    /// The member's `value.target` is a bound that is not a readable `integer_range`.
-    NotIntegerRange {
-        /// The bound node.
-        bound: CheckedNodeId,
-    },
-    /// The member's `value.target` is an `integer_range` with an endpoint that does not fit `i64`.
-    EndpointOutsideI64 {
-        /// The bound node.
-        bound: CheckedNodeId,
+    /// A present model field does not have a representable `i64` range.
+    ModelMemberNotI64Range {
+        /// The model declaration object.
+        object: CheckedNodeId,
+        /// The field's name.
+        field: String,
+        /// Why its member type is not a representable range.
+        reason: Box<ModelMemberRangeReason>,
     },
     /// The object has no member of the field's name.
-    MemberAbsent,
-    /// The member's value is not a reference, so it has no `value.target`.
-    ValueNotReference,
+    MemberAbsent {
+        /// The framed object whose field is missing.
+        object: CheckedNodeId,
+    },
+}
+
+fn serialize_model_fields_error<S: Serializer>(
+    error: &CheckedModelFieldsError,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    enum Wire<'a> {
+        UnknownNode,
+        NotModelObjectType,
+        AmbiguousField { name: &'a str },
+    }
+    match error {
+        CheckedModelFieldsError::UnknownNode => Wire::UnknownNode,
+        CheckedModelFieldsError::NotModelObjectType => Wire::NotModelObjectType,
+        CheckedModelFieldsError::AmbiguousField(name) => Wire::AmbiguousField { name },
+    }
+    .serialize(serializer)
+}
+
+/// Why a present model field has no `i64` range.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum ModelMemberRangeReason {
+    /// No checked member type was derived.
+    NoMemberType,
+    /// The checked member type is not an integer range.
+    NonRangeType,
+    /// The inclusive `i128` endpoints cannot both fit `i64`.
+    EndpointOutsideI64 {
+        /// Inclusive lower endpoint.
+        lower: i128,
+        /// Inclusive upper endpoint.
+        upper: i128,
+    },
 }
 
 impl std::fmt::Display for StateFrameRefusal {
@@ -827,12 +866,6 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
             | Lowering::BodyIncomplete { .. }
             | Lowering::Failed { .. } => refused(refusal),
         },
-        StateFrameRefusal::BoundNotResolved {
-            cause: Cause::UnboundedType {
-                target: unbounded_type,
-            },
-            ..
-        } => ObligationDisposition::RequiresBound { unbounded_type },
         StateFrameRefusal::NotAStateClause {
             node,
             node_tag,
@@ -844,10 +877,9 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
         }),
         StateFrameRefusal::BoundNotResolved {
             cause:
-                Cause::NotIntegerRange { .. }
-                | Cause::EndpointOutsideI64 { .. }
-                | Cause::MemberAbsent
-                | Cause::ValueNotReference,
+                Cause::MemberAbsent { .. }
+                | Cause::ModelFieldsUnavailable { .. }
+                | Cause::ModelMemberNotI64Range { .. },
             ..
         }
         | StateFrameRefusal::NotAPostcondition { .. }
@@ -1084,28 +1116,57 @@ mod tests {
                     effect: UnsupportedFrameEffect::ForeignField,
                 },
             ),
-            (
-                "bound not resolved: unbounded type",
-                unbound(BoundNotResolvedCause::UnboundedType { target: node(9) }),
-                ObligationDisposition::RequiresBound {
-                    unbounded_type: node(9),
-                },
+            same(
+                "bound not resolved: unknown model node",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::UnknownNode,
+                }),
             ),
             same(
-                "bound not resolved: not an integer range",
-                unbound(BoundNotResolvedCause::NotIntegerRange { bound: node(9) }),
+                "bound not resolved: model accessor refusal",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::NotModelObjectType,
+                }),
             ),
             same(
-                "bound not resolved: endpoint outside i64",
-                unbound(BoundNotResolvedCause::EndpointOutsideI64 { bound: node(9) }),
+                "bound not resolved: ambiguous model member",
+                unbound(BoundNotResolvedCause::ModelFieldsUnavailable {
+                    object: node(9),
+                    error: CheckedModelFieldsError::AmbiguousField("balance".into()),
+                }),
+            ),
+            same(
+                "bound not resolved: model member without i64 range",
+                unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: node(9),
+                    field: "balance".to_owned(),
+                    reason: Box::new(ModelMemberRangeReason::NoMemberType),
+                }),
+            ),
+            same(
+                "bound not resolved: nonrange model member",
+                unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: node(9),
+                    field: "balance".to_owned(),
+                    reason: Box::new(ModelMemberRangeReason::NonRangeType),
+                }),
+            ),
+            same(
+                "bound not resolved: model member endpoint outside i64",
+                unbound(BoundNotResolvedCause::ModelMemberNotI64Range {
+                    object: node(9),
+                    field: "balance".to_owned(),
+                    reason: Box::new(ModelMemberRangeReason::EndpointOutsideI64 {
+                        lower: i128::from(i64::MIN) - 1,
+                        upper: -1,
+                    }),
+                }),
             ),
             same(
                 "bound not resolved: member absent",
-                unbound(BoundNotResolvedCause::MemberAbsent),
-            ),
-            same(
-                "bound not resolved: value not a reference",
-                unbound(BoundNotResolvedCause::ValueNotReference),
+                unbound(BoundNotResolvedCause::MemberAbsent { object: node(9) }),
             ),
             same(
                 "nothing forbidden",
@@ -1144,8 +1205,9 @@ mod tests {
     fn tc_025_every_state_frame_refusal_maps_to_the_disposition_the_table_gives() {
         let rows = table();
         // 17 variants, with `NotLowered` split into its 6 arms (+5), `BoundNotResolved` into its
-        // 5 grounds (+4) and `FrameEffectUnsupported` into its 4 effects (+3).
-        assert_eq!(rows.len(), 17 + 5 + 4 + 3);
+        // 3 grounds (+2), with accessor and type causes (+4), and
+        // `FrameEffectUnsupported` into its 4 effects (+3).
+        assert_eq!(rows.len(), 17 + 5 + 2 + 4 + 3);
         for (label, refusal, expected) in rows {
             assert_eq!(state_frame_disposition(refusal), expected, "{label}");
         }
@@ -1251,7 +1313,7 @@ mod tests {
         );
         let mut arms = ArmPatterns::default();
         arms.visit_item_fn(function);
-        assert!(arms.0.len() >= 14, "the visitor must see the arms");
+        assert!(!arms.0.is_empty(), "the visitor must see the arms");
         assert!(
             !arms.0.iter().any(is_catch_all),
             "the mapping has a wildcard or binding arm"

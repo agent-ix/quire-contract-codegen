@@ -25,7 +25,7 @@ use quire_contract_codegen::{
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
-use crate::kani_obligations_state_frame::{fixture_declaring, native_twin::Twin, Declares};
+use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
 
 /// Every inconclusive reason the classifier has today.
 const REASONS: [KaniInconclusiveReason; 6] = [
@@ -284,7 +284,10 @@ fn tc_040_a_replay_refusal_carries_its_code() {
     );
     let spine = SpineReplayError::Refused(Box::new(non_fault_refusal()));
     assert_eq!(map_settled(&spine), expected);
-    let frame = FrameReplayError::Refused(Box::new(non_fault_refusal()));
+    let frame = FrameReplayError::Refused {
+        refusal: Box::new(non_fault_refusal()),
+        unranged: Vec::new(),
+    };
     assert_eq!(map_settled(&frame), expected);
 }
 
@@ -431,7 +434,13 @@ fn for_each_fault(check: impl Fn(ReplaySettlement<'_>)) -> usize {
     for refusal in replay_faults {
         check(ReplaySettlement::Refused(&refusal()));
         check((&SpineReplayError::Refused(Box::new(refusal()))).into());
-        check((&FrameReplayError::Refused(Box::new(refusal()))).into());
+        check(
+            (&FrameReplayError::Refused {
+                refusal: Box::new(refusal()),
+                unranged: Vec::new(),
+            })
+                .into(),
+        );
         check((&StateClauseReplayError::Refused(Box::new(refusal()))).into());
     }
     let bare = call_site();
@@ -661,7 +670,8 @@ fn repeated_identity_refusal() -> ReplayPackageError {
 /// Trace: FR-029-AC-16, TC-040
 #[test]
 fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
-    let (twin, fixture) = (Twin::new(), fixture_declaring(Declares::Nothing));
+    let twin = Twin::new();
+    let fixture = emitted_fixture(&twin, "BalanceNeverDrops");
     let run = |pre, post| {
         StateClauseReplay::new(twin.state_clause_inputs(
             &fixture.package,

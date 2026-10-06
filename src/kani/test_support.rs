@@ -47,6 +47,7 @@ pub(crate) fn named_state_frame_harness(
             property,
             state_fields: Vec::new(),
             domains: Vec::new(),
+            unranged: Vec::new(),
             state_path: "crate::State".to_owned(),
             subject_path: "crate::operate".to_owned(),
             module_symbol: ModuleSymbol::try_from(module).unwrap(),

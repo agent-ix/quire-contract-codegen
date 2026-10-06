@@ -37,7 +37,8 @@ use package::{
 };
 use qsl_replay::{
     CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
-    OperationSite, ReplayRefusal, ReplayResult, ReplaySource, Verdict, WitnessSettlement,
+    InconclusiveCause, OperationSite, ReplayRefusal, ReplayResult, ReplaySource, TerminalValue,
+    Verdict, WitnessSettlement,
 };
 use quire_contract_codegen::{
     execute_kani_obligation, generate_state_frame_obligations, negotiate_kani_obligations,
@@ -51,7 +52,9 @@ use quire_contract_codegen::{
     MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_codegen::{HarnessSymbol, StateFrameRecordError};
-use quire_contract_model::{CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2};
+use quire_contract_model::{
+    CheckedMemberType, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -105,8 +108,6 @@ struct Shape {
 /// replay, which supports only an operation that declares neither.
 #[derive(Clone, Copy)]
 pub(crate) enum Declares {
-    /// No parameter and no result.
-    Nothing,
     /// One parameter, `other`.
     Parameter,
     /// A result.
@@ -148,8 +149,6 @@ enum Condition {
     BalanceAgainstOther,
     /// `post(self.balance) >= 0`.
     BalanceAgainstLiteral,
-    /// `post(self.balance) <= pre(self.balance)`.
-    PostLePre,
     /// `not (post(self.balance) >= pre(self.balance))`.
     Negated,
     /// `(post(self.balance) >= pre(self.balance)) and (post(self.balance) >= pre(self.balance))`:
@@ -445,10 +444,9 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
     let pre_other = pre_read(builder, shape.code(422), &post_other, &read_key);
     let zero = literal("integer", "0");
     let (left, right) = match shape.condition {
-        Condition::PostGePre
-        | Condition::PostLePre
-        | Condition::Negated
-        | Condition::Conjunction => (reference(&post_balance), reference(&pre_balance)),
+        Condition::PostGePre | Condition::Negated | Condition::Conjunction => {
+            (reference(&post_balance), reference(&pre_balance))
+        }
         Condition::PostGePost => (reference(&post_balance), reference(&post_balance)),
         Condition::BalanceAgainstAudit => (reference(&post_balance), reference(&pre_audit)),
         Condition::BalanceAgainstOther => (reference(&post_balance), reference(&pre_other)),
@@ -461,11 +459,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         &key(T_BOOLEAN),
         application(
             "binary",
-            op(if matches!(shape.condition, Condition::PostLePre) {
-                "quire.op.integer.le"
-            } else {
-                "quire.op.integer.ge"
-            }),
+            op("quire.op.integer.ge"),
             &key(T_BOOLEAN),
             vec![left, right],
         ),
@@ -581,24 +575,32 @@ fn fixture(shape: &Shape) -> Fixture {
     }
 }
 
-/// The healthy fixture with `balance` typed by the plain integer: its member declares no range.
-pub(crate) fn fixture_with_unbounded_balance() -> Fixture {
-    fixture(&Shape {
-        variant: 32,
-        balance_bound: None,
-        ..Shape::HEALTHY
-    })
+/// The selected model fixture, with graph identities taken from QSL's emitted package.
+pub(crate) fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
+    let (package, clause) = twin.emitted_package(clause_name);
+    let node = |form: &str| {
+        package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.semantic_form.as_ref() == form)
+            .unwrap_or_else(|| panic!("emitted package has no {form} node"))
+            .node_id
+            .clone()
+    };
+    let (object, anchor, frame) = (node("object_type"), node("operation_anchor"), node("frame"));
+    Fixture {
+        package,
+        clause,
+        object,
+        anchor,
+        frame,
+    }
 }
 
-/// The node of the clause's `self` parameter, the node a state field's domain is declared on.
-pub(crate) fn self_parameter() -> CheckedNodeId {
-    code_id(SELF)
-}
-
-/// The healthy fixture, or one whose clause's operation declares `declares`.
+/// A fixture whose clause's operation declares `declares`.
 pub(crate) fn fixture_declaring(declares: Declares) -> Fixture {
     fixture(&match declares {
-        Declares::Nothing => Shape::HEALTHY,
         Declares::Parameter => Shape {
             variant: 30,
             condition: Condition::BalanceAgainstOther,
@@ -632,13 +634,30 @@ fn generate(fixture: &Fixture) -> StateFrameObligations {
 const FORBIDDEN_CHECK: &str =
     "operation `deposit` changed `audit`, which its frame does not modify";
 
-/// The healthy fixture's frame harness identity, with the scope's anchor and frame the ones QSL
-/// names for `deposit` in the twin's unit.
+/// Generate both roles directly from the checked package QSL emits for the twin's clause.
+fn generated_from_twin(
+    twin: &Twin,
+    clause_name: &str,
+    fields: &[&str],
+    subject_path: &str,
+) -> StateFrameObligations {
+    let (package, clause) = twin.emitted_package(clause_name);
+    generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: fields,
+        subject_path,
+        unwind: 4,
+    })
+    .expect("the emitted clause generates both roles")
+}
+
+/// The healthy twin's frame identity from QSL's emitted checked package.
 fn frame_harness(twin: &Twin) -> StateFrameIdentity {
-    twin.aligned(
-        &generate(&fixture(&Shape::HEALTHY)).frame.identity,
-        "deposit",
-    )
+    generated_from_twin(twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+        .frame
+        .identity
 }
 
 /// The run of `harness` whose playback binds `values`, in the harness's draw order.
@@ -652,19 +671,6 @@ fn run_of(harness: &StateFrameIdentity, values: [i64; 2]) -> Run {
 /// The forbidden-write run at the pre state `(balance, audit) = (5, 0)`.
 fn forbidden_run(twin: &Twin) -> Run {
     run_of(&frame_harness(twin), [5, 0])
-}
-
-/// A run whose harness is scoped to `operation`, for a replay that names that operation. Its
-/// anchor and frame are the ones QSL names for the operation when the unit names it.
-fn run_for_operation(twin: &Twin, operation: &str) -> Run {
-    let mut harness = generate(&fixture(&Shape::HEALTHY)).frame.identity;
-    harness.scope.operation = operation.to_owned();
-    let harness = if twin.operation_site(operation).is_ok() {
-        twin.aligned(&harness, operation)
-    } else {
-        harness
-    };
-    run_of(&harness, [5, 0])
 }
 
 /// The identity the replay of `operation` over `run` puts in the request, the invocation at
@@ -694,7 +700,7 @@ fn hand_written_identity(site: &OperationSite) -> [u8; 32] {
 
 /// The state-clause and frame-effect harness sources, for the cover-last guard (FR-015-AC-58).
 pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
-    let generated = generate(&fixture(&Shape::HEALTHY));
+    let generated = generate(&emitted_fixture(&Twin::new(), "BalanceNeverDrops"));
     vec![
         ("state clause", generated.postcondition.rust.contents),
         ("frame effect", generated.frame.rust.contents),
@@ -716,7 +722,7 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
 /// Trace: FR-015-AC-7, FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, TC-025
 #[test]
 fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness() {
-    let fixture = fixture(&Shape::HEALTHY);
+    let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
     let generated = generate(&fixture);
     let scope = &generated.postcondition.identity.scope;
     assert_eq!(scope.operation, "deposit");
@@ -806,12 +812,10 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
 /// Trace: FR-015-AC-28, TC-025
 #[test]
 fn tc_025_the_frame_harness_follows_the_frame_node_not_the_caller() {
-    let emptied = Shape {
-        variant: 1,
-        modifies: &[],
-        ..Shape::HEALTHY
-    };
-    let generated = generate(&fixture(&emptied));
+    let generated = generate(&emitted_fixture(
+        &Twin::build(&[], &CLAUSES, 0),
+        "BalanceNeverDrops",
+    ));
     assert_eq!(
         generated.frame.identity.property,
         StateFrameProperty::Frame {
@@ -913,20 +917,6 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
         }),
         UnsupportedFrameEffect::ForeignField
     ));
-    // The clause's own field is typed by a plain integer type, no bound: the target is the
-    // unbounded type.
-    assert_eq!(
-        with(13, |shape| Shape {
-            balance_bound: None,
-            ..shape
-        }),
-        StateFrameRefusal::BoundNotResolved {
-            field: "balance".to_owned(),
-            cause: BoundNotResolvedCause::UnboundedType {
-                target: package::id(&key(T_INTEGER))
-            },
-        }
-    );
     // A field the frame grants or the clause reads that the caller's state lacks.
     assert_eq!(
         refusal(&Shape::HEALTHY, &["audit"]),
@@ -947,13 +937,10 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
 /// Trace: FR-015-AC-27, TC-025
 #[test]
 fn tc_025_each_field_is_assumed_in_its_own_declared_range() {
-    let shape = Shape {
-        variant: 6,
-        balance_bound: Some((5, 900)),
-        audit_bound: (0, 50),
-        ..Shape::HEALTHY
-    };
-    let generated = generate(&fixture(&shape));
+    let generated = generate(&emitted_fixture(
+        &Twin::with_field_ranges((5, 900), (0, 50)),
+        "BalanceNeverDrops",
+    ));
     let domain = |field: &str, minimum, maximum| StateFieldDomain {
         field: field.to_owned(),
         minimum,
@@ -973,12 +960,9 @@ fn tc_025_each_field_is_assumed_in_its_own_declared_range() {
 /// Trace: FR-015-AC-26, TC-025
 #[test]
 fn tc_025_two_clauses_of_one_operation_never_share_a_frame_record_path() {
-    let first = generate(&fixture(&Shape::HEALTHY));
-    let second = generate(&fixture(&Shape {
-        variant: 14,
-        condition: Condition::PostLePre,
-        ..Shape::HEALTHY
-    }));
+    let twin = Twin::new();
+    let first = generate(&emitted_fixture(&twin, "BalanceNeverDrops"));
+    let second = generate(&emitted_fixture(&twin, "AuditNeverDrops"));
     assert_eq!(first.frame.identity.scope, second.frame.identity.scope);
     assert_ne!(first.frame.identity.clause, second.frame.identity.clause);
     assert_ne!(first.frame.record.path, second.frame.record.path);
@@ -1091,59 +1075,24 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
     );
 }
 
-/// The engine names the exact ground on which the object gives the clause's field no `i64`
-/// range, with the member's `value.target` node when it has one: the record carries the cause,
-/// so a swapped ground ships in it. Each assertion fails if its ground is reported as another.
+/// A hand-built model/object_type body cannot supply a range after the model accessor refuses
+/// that object. Its apparent bounded members are irrelevant to the typed refusal.
 ///
-/// Trace: FR-015-AC-66, TC-025
+/// Trace: FR-015-AC-66, FR-015-AC-78, TC-025
 #[test]
-fn tc_025_the_engine_names_the_ground_a_field_has_no_integer_range() {
-    let cause = |variant, member, balance_bound| {
-        let shape = Shape {
-            variant,
-            member,
-            balance_bound,
-            ..Shape::HEALTHY
-        };
-        match refusal(&shape, &STATE_FIELDS) {
-            StateFrameRefusal::BoundNotResolved { field, cause } => (field, cause),
-            other => panic!("expected BoundNotResolved, got {other:?}"),
+fn tc_025_an_unselected_model_body_never_supplies_a_range() {
+    let fixture = fixture(&Shape::HEALTHY);
+    assert_eq!(
+        generate_state_frame_obligations(&request(&fixture, &STATE_FIELDS))
+            .expect_err("the model accessor refuses the body"),
+        StateFrameRefusal::BoundNotResolved {
+            field: "balance".to_owned(),
+            cause: BoundNotResolvedCause::ModelFieldsUnavailable {
+                object: fixture.object,
+                error: quire_contract_model::CheckedModelFieldsError::NotModelObjectType,
+            },
         }
-    };
-    let bound_of = |bound: Bound| package::id(&bound.key());
-    let field = "balance".to_owned();
-    assert_eq!(
-        cause(18, Member::RationalBound, None),
-        (
-            field.clone(),
-            BoundNotResolvedCause::NotIntegerRange {
-                bound: bound_of(Bound::Rational(1, 2, 1, 2))
-            }
-        )
     );
-    assert_eq!(
-        cause(19, Member::WideRange, None),
-        (
-            field.clone(),
-            BoundNotResolvedCause::EndpointOutsideI64 {
-                bound: bound_of(Bound::Raw {
-                    form: "integer_range",
-                    bounded: "integer",
-                    body: json!({"term": "aggregate", "members": [
-                        member("min", literal("integer", "0")),
-                        member("max", literal("integer", "9223372036854775808")),
-                    ]}),
-                    foreign: vec![],
-                })
-            }
-        )
-    );
-    assert_eq!(
-        cause(21, Member::Literal, None),
-        (field, BoundNotResolvedCause::ValueNotReference)
-    );
-    // `MemberAbsent` has no engine-level case: IR refuses a read of a name its object does not
-    // declare when it admits the package, so the mapping test builds it directly.
 }
 
 // ---- the StateFrame arm of negotiation (IR-461) -----------------------------
@@ -1152,12 +1101,9 @@ fn tc_025_the_engine_names_the_ground_a_field_has_no_integer_range() {
 /// The index of a shape in this list is its `const` below.
 const PRE: usize = 0;
 const OK: usize = 1;
-const LITERAL_MEMBER: usize = 2;
 const TWO_FIELDS: usize = 3;
 const RELATIONSHIP_FRAME: usize = 4;
 const GRANTS_ALL: usize = 5;
-const UNBOUNDED_MEMBER: usize = 6;
-const NO_BOUND_REACHABLE: usize = 7;
 const REACHES_FUNCTION: usize = 8;
 const NEGATION: usize = 9;
 const LITERAL_OPERAND: usize = 10;
@@ -1167,12 +1113,7 @@ const SAME_SIDE: usize = 13;
 const CREATES: usize = 14;
 const DELETES: usize = 15;
 const FOREIGN_FIELD: usize = 16;
-const RATIONAL_BOUND: usize = 17;
-const WIDE_RANGE: usize = 18;
 const KEYWORD_READ: usize = 19;
-const SPARE_A: usize = 20;
-const SPARE_B: usize = 21;
-const SPARE_C: usize = 22;
 const NEGATION_GRANTS_ALL: usize = 23;
 
 fn arm_shapes() -> Vec<Shape> {
@@ -1305,12 +1246,6 @@ fn world() -> &'static World {
     WORLD.get_or_init(|| world_of(&arm_shapes()))
 }
 
-/// A second admitted package, holding one shape the first also holds.
-fn other_world() -> &'static World {
-    static WORLD: std::sync::OnceLock<World> = std::sync::OnceLock::new();
-    WORLD.get_or_init(|| world_of(&arm_shapes()[OK..=OK]))
-}
-
 /// The subject the request's own `subject_path` names, which no `StateFrame` item reads.
 const REQUEST_SUBJECT: &str = "crate::request::unrelated";
 
@@ -1335,6 +1270,22 @@ impl<'a> Spec<'a> {
             state_fields: self.state_fields,
             subject_path: self.subject_path,
         }
+    }
+}
+
+fn selected_spec<'a>(
+    package: &'a CheckedPackageV2,
+    clause: &'a CheckedNodeId,
+    role: StateFrameRole,
+    state_fields: &'a [&'a str],
+) -> Spec<'a> {
+    Spec {
+        package,
+        clause,
+        role,
+        state_path: STATE_PATH,
+        state_fields,
+        subject_path: SUBJECT_PATH,
     }
 }
 
@@ -1406,16 +1357,18 @@ fn emitted_state_frame(
 #[test]
 fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused() {
     use StateFrameRole::{Contract, Frame};
+    let twin = Twin::with_unbounded_audit_clause();
+    let (package, balance) = twin.emitted_package("BalanceNeverDrops");
+    let (audit_package, audit) = twin.emitted_package("AuditNeverDrops");
+    let (also_package, also) = twin.emitted_package("BalanceAlso");
+    assert_eq!(package.package_id(), audit_package.package_id());
+    assert_eq!(package.package_id(), also_package.package_id());
     let items = [
-        item(PRE, Contract),
-        item(OK, Contract),
-        item(OK, Frame),
-        item(UNBOUNDED_MEMBER, Contract),
-        item(LITERAL_MEMBER, Contract),
-        item(TWO_FIELDS, Contract),
-        item(RELATIONSHIP_FRAME, Frame),
-        item(GRANTS_ALL, Frame),
-        item(GRANTS_ALL, Contract),
+        selected_spec(&package, &audit, Contract, &STATE_FIELDS).item(),
+        selected_spec(&package, &balance, Contract, &STATE_FIELDS).item(),
+        selected_spec(&package, &balance, Frame, &STATE_FIELDS).item(),
+        selected_spec(&package, &also, Frame, &["balance"]).item(),
+        selected_spec(&package, &audit, Frame, &STATE_FIELDS).item(),
     ];
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
     assert_eq!(records.len(), items.len(), "one record per item");
@@ -1431,46 +1384,44 @@ fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused()
         Some(ObligationKind::Postcondition),
         Some(ObligationKind::Frame),
     );
-    assert_eq!(
-        kinds,
-        [post, post, frame, post, post, post, frame, frame, post]
-    );
+    assert_eq!(kinds, [post, post, frame, frame, frame]);
     assert!(matches!(
-        refusal_of(&records[0]),
-        StateFrameRefusal::NotAPostcondition { clause } if clause == "precondition"
-    ));
-    let supported = records.iter().map(is_supported).collect::<Vec<_>>();
-    assert_eq!(
-        supported,
-        [false, true, true, false, false, false, false, false, true]
-    );
-    assert!(matches!(
-        records[3].disposition,
+        records[0].disposition,
         ObligationDisposition::RequiresBound { .. }
     ));
-    assert_eq!(harnesses.len(), 3, "one harness per supported record");
+    let supported = records.iter().map(is_supported).collect::<Vec<_>>();
+    assert_eq!(supported, [false, true, true, false, false]);
+    assert!(matches!(
+        refusal_of(&records[3]),
+        StateFrameRefusal::NothingForbidden { .. }
+    ));
+    assert!(matches!(
+        records[4].disposition,
+        ObligationDisposition::RequiresBound { .. }
+    ));
+    assert_eq!(harnesses.len(), 2, "one harness per supported record");
     // Each later item's record is the record it has alone.
     for (index, item) in items.iter().enumerate().skip(1) {
         assert_eq!(records[index], alone(*item, index), "item {index}");
     }
 
     // Three refused items are three records.
-    let refused = [
-        item(PRE, Contract),
-        item(LITERAL_MEMBER, Contract),
-        item(TWO_FIELDS, Contract),
-    ];
+    let refused = [items[0], items[3], items[4]];
     let outcome = negotiate(&refused);
     assert_eq!(outcome.records().len(), 3);
     assert!(outcome.records().iter().all(|record| !is_supported(record)));
 
     // A later invalid item is a record too, and the request is rejected with every record.
     let bad_path = Spec {
+        package: &package,
+        clause: &also,
+        role: Contract,
         state_path: "not a path",
-        ..spec(OK, Contract)
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
     }
     .item();
-    let outcome = negotiate(&[item(PRE, Contract), bad_path]);
+    let outcome = negotiate(&[items[0], bad_path]);
     let KaniObligationOutcome::Rejected { records } = outcome else {
         panic!("an invalid item rejects the request");
     };
@@ -1493,23 +1444,32 @@ fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused()
 #[test]
 fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates() {
     use StateFrameRole::{Contract, Frame};
-    let items = [item(OK, Frame), item(PRE, Contract), item(OK, Contract)];
+    let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
+    let selected = |role| ObligationItem::StateFrame {
+        package: &fixture.package,
+        clause: &fixture.clause,
+        role,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+    };
+    let items = [selected(Frame), selected(Contract)];
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
     let engine = generate_state_frame_obligations(&StateFrameRequest {
-        package: &world().package,
-        clause: &world().ids[OK].clause,
+        package: &fixture.package,
+        clause: &fixture.clause,
         state_path: STATE_PATH,
         state_fields: &STATE_FIELDS,
         subject_path: SUBJECT_PATH,
         unwind: 4,
     })
-    .expect("the OK shape generates");
+    .expect("the selected clause generates");
     // Request order: the frame item came first.
     assert_eq!(
         harnesses,
         vec![engine.frame.clone(), engine.postcondition.clone()]
     );
-    for (record, harness) in [&records[0], &records[2]].into_iter().zip(&harnesses) {
+    for (record, harness) in records.iter().zip(&harnesses) {
         assert_eq!(
             record.disposition,
             ObligationDisposition::Supported {
@@ -1517,15 +1477,14 @@ fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates(
             }
         );
     }
-    assert!(
-        !is_supported(&records[1]),
-        "the refused item has no harness"
-    );
-
     // The harness calls the item's own subject, never the request's.
     let own_subject = Spec {
+        package: &fixture.package,
+        clause: &fixture.clause,
+        role: Contract,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
         subject_path: "crate::subject::withdraw",
-        ..spec(OK, Contract)
     }
     .item();
     let (_, harnesses) = emitted_state_frame(negotiate(&[own_subject]));
@@ -1538,37 +1497,47 @@ fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates(
     );
 }
 
-/// A clause whose field's member is typed by a plain integer is `requires_bound` with that
-/// member's `value.target`; a clause whose lowering is a requires-bound record is
-/// `requires_bound` with the record's type. Neither emits a harness, and the other role of the
-/// first, whose frame needs no bound, still does.
+/// An unbounded integer read gives IR's lowering `RequiresBound` record. Both roles carry its
+/// exact type identity, while a bounded sibling clause in the same selected package still emits.
 ///
 /// Trace: FR-015-AC-61, TC-025
 #[test]
 fn tc_025_a_state_frame_item_with_no_bound_is_requires_bound() {
     use StateFrameRole::{Contract, Frame};
-    let unbounded_integer = package::id(&key(T_INTEGER));
+    let twin = Twin::with_unbounded_audit_clause();
+    let (package, audit) = twin.emitted_package("AuditNeverDrops");
+    let balance = twin.emitted_package("BalanceNeverDrops").1;
+    let expected = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &audit,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect_err("the unbounded audit read does not lower");
+    let unbounded_type = match expected {
+        StateFrameRefusal::NotLowered { refusal } => match *refusal {
+            StateFrameLoweringRefusal::RequiresBound { unbounded_type, .. } => unbounded_type,
+            other => panic!("expected RequiresBound, got {other:?}"),
+        },
+        other => panic!("expected a lowering refusal, got {other:?}"),
+    };
     let items = [
-        item(UNBOUNDED_MEMBER, Contract),
-        item(NO_BOUND_REACHABLE, Contract),
-        item(NO_BOUND_REACHABLE, Frame),
-        item(UNBOUNDED_MEMBER, Frame),
+        selected_spec(&package, &audit, Contract, &STATE_FIELDS).item(),
+        selected_spec(&package, &audit, Frame, &STATE_FIELDS).item(),
+        selected_spec(&package, &balance, Frame, &STATE_FIELDS).item(),
     ];
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
     let requires_bound = |record: &ObligationRecord| match &record.disposition {
         ObligationDisposition::RequiresBound { unbounded_type } => unbounded_type.clone(),
         other => panic!("expected requires_bound, got {other:?}"),
     };
-    assert_eq!(requires_bound(&records[0]), unbounded_integer);
-    assert_eq!(requires_bound(&records[1]), unbounded_integer);
-    assert_eq!(requires_bound(&records[2]), unbounded_integer);
-    assert!(is_supported(&records[3]));
-    // Only the frame of the clause whose member alone is unbounded has a harness.
+    assert_eq!(requires_bound(&records[0]), unbounded_type);
+    assert_eq!(requires_bound(&records[1]), unbounded_type);
+    assert!(is_supported(&records[2]));
     assert_eq!(harnesses.len(), 1);
-    assert_eq!(
-        harnesses[0].identity.clause,
-        world().ids[UNBOUNDED_MEMBER].clause
-    );
+    assert_eq!(harnesses[0].identity.clause, balance);
 }
 
 /// A lowering record for an unsupported family is `unsupported` `NoFiniteEncoding` naming the
@@ -1647,43 +1616,6 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
         ("one side twice", SAME_SIDE, Contract, |refusal| {
             matches!(refusal, StateFrameRefusal::ObservationsSameSide)
         }),
-        (
-            "member bound not an integer range",
-            RATIONAL_BOUND,
-            Contract,
-            |refusal| {
-                matches!(
-                    refusal,
-                    StateFrameRefusal::BoundNotResolved {
-                        cause: BoundNotResolvedCause::NotIntegerRange { .. },
-                        ..
-                    }
-                )
-            },
-        ),
-        ("endpoint outside i64", WIDE_RANGE, Contract, |refusal| {
-            matches!(
-                refusal,
-                StateFrameRefusal::BoundNotResolved {
-                    cause: BoundNotResolvedCause::EndpointOutsideI64 { .. },
-                    ..
-                }
-            )
-        }),
-        (
-            "member value not a reference",
-            LITERAL_MEMBER,
-            Contract,
-            |refusal| {
-                matches!(
-                    refusal,
-                    StateFrameRefusal::BoundNotResolved {
-                        cause: BoundNotResolvedCause::ValueNotReference,
-                        ..
-                    }
-                )
-            },
-        ),
         ("frame creates", CREATES, Frame, |refusal| {
             matches!(
                 refusal,
@@ -1765,7 +1697,12 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
     }
     assert!(harnesses.is_empty(), "no refused item has a harness");
     // The effect a frame refusal names is the frame's own node.
-    let StateFrameRefusal::FrameEffectUnsupported { frame, .. } = refusal_of(&records[9]) else {
+    let creates = rows
+        .iter()
+        .position(|(label, ..)| *label == "frame creates")
+        .expect("the frame-creates row");
+    let StateFrameRefusal::FrameEffectUnsupported { frame, .. } = refusal_of(&records[creates])
+    else {
         panic!("a frame effect");
     };
     assert_eq!(frame, &world().ids[CREATES].frame);
@@ -1778,39 +1715,45 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
 #[test]
 fn tc_025_an_invalid_state_frame_item_rejects_the_request_with_every_record() {
     use StateFrameRole::{Contract, Frame};
+    let twin = Twin::with_distinct_balance_clauses();
+    let fixture = emitted_fixture(&twin, "BalanceNeverDrops");
+    let spare_a = twin.emitted_package("SpareA").1;
+    let spare_b = twin.emitted_package("SpareB").1;
+    let spare_c = twin.emitted_package("SpareC").1;
+    let other = emitted_fixture(&Twin::build(&[], &CLAUSES, 0), "BalanceNeverDrops");
     let absent = package::id(&key(9999));
     let items = [
-        item(OK, Contract),
+        selected_spec(&fixture.package, &fixture.clause, Contract, &STATE_FIELDS).item(),
         Spec {
             state_path: "not a path",
-            ..spec(SPARE_A, Contract)
+            ..selected_spec(&fixture.package, &spare_a, Contract, &STATE_FIELDS)
         }
         .item(),
         Spec {
             subject_path: "not a path",
-            ..spec(SPARE_A, Frame)
+            ..selected_spec(&fixture.package, &spare_a, Frame, &STATE_FIELDS)
         }
         .item(),
         Spec {
             state_fields: &["balance", "bad-name"],
-            ..spec(SPARE_B, Contract)
+            ..selected_spec(&fixture.package, &spare_b, Contract, &STATE_FIELDS)
         }
         .item(),
         Spec {
             state_fields: &["audit"],
-            ..spec(SPARE_C, Contract)
+            ..selected_spec(&fixture.package, &spare_c, Contract, &STATE_FIELDS)
         }
         .item(),
         Spec {
             clause: &absent,
-            ..spec(OK, Frame)
+            ..selected_spec(&fixture.package, &fixture.clause, Frame, &STATE_FIELDS)
         }
         .item(),
-        item(OK, Contract),
+        selected_spec(&fixture.package, &fixture.clause, Contract, &STATE_FIELDS).item(),
         Spec {
-            package: &other_world().package,
-            clause: &other_world().ids[0].clause,
-            ..spec(OK, Frame)
+            package: &other.package,
+            clause: &other.clause,
+            ..selected_spec(&fixture.package, &fixture.clause, Frame, &STATE_FIELDS)
         }
         .item(),
     ];
@@ -1825,7 +1768,7 @@ fn tc_025_an_invalid_state_frame_item_rejects_the_request_with_every_record() {
     // Each engine-invalid item alone, beside a supported one, rejects the request: the engine's
     // invalid grounds are not only the arm's duplicate and mixed-package grounds.
     for engine_invalid in &items[1..=5] {
-        let outcome = negotiate(&[item(OK, Contract), *engine_invalid]);
+        let outcome = negotiate(&[items[0], *engine_invalid]);
         assert!(
             matches!(outcome, KaniObligationOutcome::Rejected { .. }),
             "{:?}",
@@ -1958,10 +1901,10 @@ fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse
 #[test]
 fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
     use StateFrameRole::{Contract, Frame};
-    let engine = |shape: usize| {
+    let engine = |fixture: &Fixture| {
         generate_state_frame_obligations(&StateFrameRequest {
-            package: &world().package,
-            clause: &world().ids[shape].clause,
+            package: &fixture.package,
+            clause: &fixture.clause,
             state_path: STATE_PATH,
             state_fields: &STATE_FIELDS,
             subject_path: SUBJECT_PATH,
@@ -1969,63 +1912,57 @@ fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
         })
         .expect_err("the clause has a role the engine refuses")
     };
-    let items = [
-        item(GRANTS_ALL, Contract),
-        item(GRANTS_ALL, Frame),
-        item(NEGATION, Contract),
-        item(NEGATION, Frame),
-        item(REACHES_FUNCTION, Contract),
-        item(REACHES_FUNCTION, Frame),
-    ];
-    let (records, harnesses) = emitted_state_frame(negotiate(&items));
+    let roles = |fixture: &Fixture| {
+        let items = [
+            selected_spec(&fixture.package, &fixture.clause, Contract, &STATE_FIELDS).item(),
+            selected_spec(&fixture.package, &fixture.clause, Frame, &STATE_FIELDS).item(),
+        ];
+        emitted_state_frame(negotiate(&items))
+    };
+    let all = emitted_fixture(
+        &Twin::build(&["balance", "audit"], &[CLAUSES[0]], 0),
+        "BalanceNeverDrops",
+    );
+    let (records, harnesses) = roles(&all);
     assert_eq!(
         records.iter().map(is_supported).collect::<Vec<_>>(),
-        [true, false, false, true, false, false]
+        [true, false]
     );
-    // Each supported role's harness is its role's, for its own clause.
-    assert_eq!(harnesses.len(), 2);
+    assert_eq!(harnesses.len(), 1);
     assert!(matches!(
         harnesses[0].identity.property,
         StateFrameProperty::Postcondition { .. }
     ));
-    assert_eq!(harnesses[0].identity.clause, world().ids[GRANTS_ALL].clause);
+    assert_eq!(harnesses[0].identity.clause, all.clause);
+    assert_eq!(&engine(&all), refusal_of(&records[1]));
+
+    let negated = emitted_fixture(&Twin::with_negated_balance_clause(), "BalanceNeverDrops");
+    let (records, harnesses) = roles(&negated);
+    assert_eq!(
+        records.iter().map(is_supported).collect::<Vec<_>>(),
+        [false, true]
+    );
+    assert_eq!(harnesses.len(), 1);
     assert!(matches!(
-        harnesses[1].identity.property,
+        harnesses[0].identity.property,
         StateFrameProperty::Frame { .. }
     ));
-    assert_eq!(harnesses[1].identity.clause, world().ids[NEGATION].clause);
-    // The engine's single entry returns the refusal of the role that fails.
-    assert_eq!(&engine(GRANTS_ALL), refusal_of(&records[1]));
-    assert_eq!(&engine(NEGATION), refusal_of(&records[2]));
+    assert_eq!(harnesses[0].identity.clause, negated.clause);
+    assert_eq!(&engine(&negated), refusal_of(&records[0]));
+
+    let unbounded = emitted_fixture(&Twin::with_unbounded_audit_clause(), "AuditNeverDrops");
+    let (records, harnesses) = roles(&unbounded);
+    assert_eq!(
+        records.iter().map(is_supported).collect::<Vec<_>>(),
+        [false, false]
+    );
+    assert!(harnesses.is_empty());
     // A refused lowering refuses both items alike.
-    assert_eq!(records[4].disposition, records[5].disposition);
+    assert_eq!(records[0].disposition, records[1].disposition);
     assert!(matches!(
-        engine(REACHES_FUNCTION),
+        engine(&unbounded),
         StateFrameRefusal::NotLowered { .. }
     ));
-}
-
-/// The shape of the real-Kani test whose only valuation falsifies the contract. It owns fixture
-/// variant 20.
-fn single_valuation_shape() -> Shape {
-    Shape {
-        variant: 20,
-        balance_bound: Some((0, 0)),
-        audit_bound: (0, 0),
-        ..Shape::HEALTHY
-    }
-}
-
-/// Each variant owns its node codes, and the fixture registry panics when one code is bound to
-/// two bodies in a process. The ignored real-Kani test's fixture is built here with the default
-/// lane's, so a default-lane variant that reuses its variant fails every run, not only
-/// `--include-ignored`.
-///
-/// Trace: TC-025
-#[test]
-fn tc_025_the_kani_lanes_fixture_variant_is_not_shared_with_a_default_lane_variant() {
-    let single = fixture(&single_valuation_shape());
-    assert_eq!(single.clause, code_id(single_valuation_shape().code(300)));
 }
 
 /// `replay_frame` refuses an envelope whose `clause_node` or `occurrence_key` is not its
@@ -2133,7 +2070,9 @@ fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
     let twin = Twin::new();
     let invocation = twin.invocation("account", (5, 0), (6, 0));
     for operation in ["transfer", "withdraw"] {
-        let run = run_for_operation(&twin, operation);
+        let mut harness = frame_harness(&twin);
+        harness.scope.operation = operation.to_owned();
+        let run = run_of(&harness, [5, 0]);
         let refusal = twin
             .try_frame_replay(operation, &invocation, "account", "audit", &run)
             .err()
@@ -2203,12 +2142,14 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
     let base = replay_of(&twin, "deposit", &forbidden_run(&twin)).expect("builds");
 
     let granting_nothing = Twin::build(&[], &CLAUSES, 0);
-    let emptied = fixture(&Shape {
-        variant: 1,
-        modifies: &[],
-        ..Shape::HEALTHY
-    });
-    let harness = granting_nothing.aligned(&generate(&emptied).frame.identity, "deposit");
+    let harness = generated_from_twin(
+        &granting_nothing,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        SUBJECT_PATH,
+    )
+    .frame
+    .identity;
     let changed =
         replay_of(&granting_nothing, "deposit", &run_of(&harness, [5, 0])).expect("builds");
 
@@ -2240,8 +2181,9 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
 /// Trace: FR-024-AC-21, TC-035
 #[test]
 fn tc_035_the_frame_identity_follows_what_call_site_names() {
-    let identity =
-        |twin: &Twin, operation: &str| minted(twin, operation, &run_for_operation(twin, operation));
+    let identity = |twin: &Twin, operation: &str| {
+        hand_written_identity(&twin.operation_site(operation).expect("operation site"))
+    };
     let twin = Twin::new();
     let base = identity(&twin, "deposit");
 
@@ -2290,7 +2232,9 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
 /// Trace: FR-024-AC-21, TC-035
 #[test]
 fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
-    let identity = |twin: &Twin| minted(twin, "transfer", &run_for_operation(twin, "transfer"));
+    let identity = |twin: &Twin| {
+        hand_written_identity(&twin.operation_site("transfer").expect("operation site"))
+    };
     let transfer = ("TransferKeepsBalance", "transfer", "balance");
     let alone = Twin::build(&model::GRANTED, &[transfer], 0);
     let after = Twin::build(&model::GRANTED, &[CLAUSES[0], transfer], 0);
@@ -2386,10 +2330,11 @@ fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_sit
     );
 
     let mut postcondition = base.clone();
-    postcondition.property = generate(&fixture(&Shape::HEALTHY))
-        .postcondition
-        .identity
-        .property;
+    postcondition.property =
+        generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+            .postcondition
+            .identity
+            .property;
     assert!(matches!(
         refusal(&postcondition),
         FrameReplayError::NotAFrame
@@ -2439,7 +2384,7 @@ fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_sit
 /// Trace: FR-024-AC-23, TC-035
 #[test]
 fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read() {
-    let fixture = fixture(&Shape::HEALTHY);
+    let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
     let generated = generate(&fixture);
     let record: Value = serde_json::from_str(&generated.frame.record.contents).expect("record");
     assert_eq!(
@@ -2477,6 +2422,93 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
     assert!(StateFrameIdentity::from_record("{}").is_err());
 }
 
+/// A persisted unranged field records its type reason, and duplicate names cannot be decoded.
+///
+/// Trace: FR-015-AC-81
+#[test]
+fn tc_025_unranged_fields_have_a_reason_and_no_duplicate_record_names() {
+    let twin = Twin::without_audit_range();
+    let generated = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
+    assert_eq!(generated.frame.identity.unranged.len(), 1);
+    assert_eq!(generated.frame.identity.unranged[0].field, "audit");
+    assert_eq!(
+        generated.frame.identity.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+    let mut record: Value = serde_json::from_str(&generated.frame.record.contents).expect("record");
+    let first = record["identity"]["unranged"][0].clone();
+    record["identity"]["unranged"]
+        .as_array_mut()
+        .expect("unranged list")
+        .push(first);
+    assert!(matches!(
+        StateFrameIdentity::from_record(&record.to_string()),
+        Err(StateFrameRecordError::RepeatedField { field }) if field == "audit"
+    ));
+}
+
+/// A present text field has no checked member type; a bounded integer field wider than `i64`
+/// retains its exact `i128` endpoint. Neither becomes an `i64` assumption or disappears from the
+/// persisted draw list.
+///
+/// Trace: FR-015-AC-78, FR-015-AC-81
+#[test]
+fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
+    let cases = [
+        (
+            Twin::build(&["balance"], &[CLAUSES[0]], 0)
+                .emitted_package_with_unread_string_audit("BalanceNeverDrops"),
+            None,
+        ),
+        (
+            Twin::build(&["balance"], &[CLAUSES[0]], 0)
+                .emitted_package_with_wide_audit_range("BalanceNeverDrops"),
+            Some((0_i128, 9_223_372_036_854_775_808_i128)),
+        ),
+    ];
+    for ((package, clause), check) in cases {
+        let object = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &*node.semantic_form == "object_type")
+            .expect("object declaration");
+        let fields = package
+            .model_object_fields(&object.node_id)
+            .expect("model table");
+        let member_type = fields.field("audit").expect("present audit").member_type();
+        match check {
+            None => assert!(member_type.is_none()),
+            Some((lower, upper)) => assert_eq!(
+                member_type,
+                Some(&CheckedMemberType::IntRange { lower, upper })
+            ),
+        }
+        let generated = generate_state_frame_obligations(&StateFrameRequest {
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &STATE_FIELDS,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        })
+        .expect("balance clause still generates");
+        assert_eq!(generated.frame.identity.domains.len(), 1);
+        assert_eq!(generated.frame.identity.domains[0].field, "balance");
+        assert_eq!(generated.frame.identity.unranged.len(), 1);
+        assert_eq!(generated.frame.identity.unranged[0].field, "audit");
+        assert_eq!(
+            generated.frame.identity.unranged[0].reason,
+            quire_contract_codegen::StateUnrangedReason::TypeNotRange
+        );
+        assert_eq!(
+            StateFrameIdentity::from_record(&generated.frame.record.contents)
+                .expect("record decodes"),
+            generated.frame.identity
+        );
+    }
+}
+
 /// The playback is decoded against the harness's draw order, not the order of its ranges or its
 /// grants: a harness that draws `audit` first reads the first playback value as `audit`, and the
 /// pre snapshot tie sees that.
@@ -2484,16 +2516,15 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
 /// Trace: FR-024-AC-23, FR-024-AC-25, TC-035
 #[test]
 fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
-    let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
-    let reversed = generate_state_frame_obligations(&StateFrameRequest {
-        state_fields: &["audit", "balance"],
-        ..request(&fixture, &STATE_FIELDS)
-    })
-    .expect("generates")
+    let harness = generated_from_twin(
+        &twin,
+        "BalanceNeverDrops",
+        &["audit", "balance"],
+        SUBJECT_PATH,
+    )
     .frame
     .identity;
-    let harness = twin.aligned(&reversed, "deposit");
     // Draw order `audit`, `balance`: the playback `[0, 5]` is the pre state `balance = 5`,
     // `audit = 0` the invocation holds.
     let run = run_of(&harness, [0, 5]);
@@ -2518,20 +2549,167 @@ fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
     );
 }
 
-/// A field with no declared range is listed in `state_fields`, has no entry in `domains`, is
-/// decoded and is neither range-checked nor refused: its value far outside any range the twin's
-/// package declares is carried into the transcript.
+/// An emitted Boolean model field is drawn without an integer domain. QSL refuses an integer
+/// playback against that same source model; CG retains the field and persisted reason as context.
 ///
-/// Trace: FR-024-AC-23, FR-024-AC-26, TC-035
+/// Trace: FR-015-AC-81, TC-035
 #[test]
 fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
-    let twin = Twin::new();
-    let unranged_audit = fixture(&Shape {
-        variant: 90,
-        audit_unbounded: true,
-        ..Shape::HEALTHY
-    });
-    let harness = twin.aligned(&generate(&unranged_audit).frame.identity, "deposit");
+    let twin = Twin::without_audit_range();
+    let harness = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+        .frame
+        .identity;
+    assert_eq!(harness.state_fields, ["balance", "audit"]);
+    assert_eq!(harness.domains.len(), 1);
+    assert_eq!(harness.domains[0].field, "balance");
+    assert_eq!(harness.unranged.len(), 1);
+    assert_eq!(harness.unranged[0].field, "audit");
+    assert_eq!(
+        harness.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+    let audit = 5_000_000_000_i64;
+    let invocation = twin.invocation("account", (5, audit), (5, audit));
+    let replay = twin
+        .try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, audit]),
+        )
+        .expect("the unranged playback builds");
+    let error = replay
+        .replay()
+        .expect_err("QSL refuses an integer for the selected Boolean field");
+    let FrameReplayError::Refused { refusal, unranged } = &error else {
+        panic!("expected QSL refusal: {error}")
+    };
+    assert_eq!(unranged, &harness.unranged);
+    let terminal = quire_contract_codegen::run_terminal_value(
+        &KaniRunOutcome::Falsified {
+            counterexample: "model-type mismatch".to_owned(),
+        },
+        0,
+        Some((&error).into()),
+    )
+    .expect("a falsified run has a settlement");
+    assert_eq!(
+        terminal,
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(refusal.code()))
+    );
+}
+
+/// The same QSL source model supplies CG's selected field range and QSL replay within the
+/// integer range its current source representation can express. The out-of-range playback is
+/// stopped by CG's declared-domain check before QSL replay.
+///
+/// Trace: FR-015-AC-77, FR-024-AC-32, TC-035
+#[test]
+fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override() {
+    let twin = Twin::with_field_ranges((0, 1000), (0, 1_000_000));
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("selected object declaration");
+    assert_eq!(
+        package
+            .model_object_fields(&object.node_id)
+            .expect("selected fields")
+            .field("audit")
+            .expect("present audit")
+            .member_type(),
+        Some(&CheckedMemberType::IntRange {
+            lower: 0,
+            upper: 1_000_000,
+        })
+    );
+    let harness = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("the source model generates")
+    .frame
+    .identity;
+    assert_eq!(
+        harness
+            .domains
+            .iter()
+            .find(|domain| domain.field == "audit")
+            .map(|domain| (domain.minimum, domain.maximum)),
+        Some((0, 1_000_000))
+    );
+    let invocation = twin.invocation("account", (5, 999_999), (5, 999_999));
+    twin.try_frame_replay(
+        "deposit",
+        &invocation,
+        "account",
+        "audit",
+        &run_of(&harness, [5, 999_999]),
+    )
+    .expect("matching source-model replay builds")
+    .replay()
+    .expect("QSL admits the source-model pre state");
+    let outside = 1_000_001;
+    let invocation = twin.invocation("account", (5, outside), (5, outside));
+    assert!(matches!(
+        twin.try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, outside]),
+        ),
+        Err(FrameReplayError::OutOfDomain { field, value })
+            if field == "audit" && value == outside
+    ));
+}
+
+/// A checked package admitted against a selected wide model records `TypeNotRange` and keeps
+/// that context on refusal. QSL replay recompiles the original 0..1000 source model in this
+/// fixture, so this test does not establish same-model replay of the wide override.
+///
+/// Trace: FR-015-AC-81, TC-025
+#[test]
+fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim() {
+    let twin = Twin::build(&["balance"], &[CLAUSES[0]], 0);
+    let (package, clause) = twin.emitted_package_with_wide_audit_range("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("selected object declaration");
+    assert_eq!(
+        package
+            .model_object_fields(&object.node_id)
+            .expect("selected fields")
+            .field("audit")
+            .expect("present audit")
+            .member_type(),
+        Some(&CheckedMemberType::IntRange {
+            lower: 0,
+            upper: i128::from(i64::MAX) + 1,
+        })
+    );
+    let harness = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("the selected clause generates")
+    .frame
+    .identity;
     assert_eq!(harness.state_fields, ["balance", "audit"]);
     assert_eq!(
         harness
@@ -2542,7 +2720,13 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
         ["balance"],
         "only the ranged field has a domain"
     );
-    let unranged = 5_000_000_000_i64;
+    assert_eq!(harness.unranged.len(), 1);
+    assert_eq!(harness.unranged[0].field, "audit");
+    assert_eq!(
+        harness.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+    let unranged = -1_i64;
     let invocation = twin.invocation("account", (5, unranged), (5, unranged));
     let replay = twin
         .try_frame_replay(
@@ -2557,12 +2741,51 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
         panic!("a frame replay is a witness replay");
     };
     assert!(
-        witness
-            .transcript()
-            .ends_with("|balance=5;audit=5000000000>>>"),
+        witness.transcript().ends_with("|balance=5;audit=-1>>>"),
         "{}",
         witness.transcript()
     );
+    let error = replay
+        .replay()
+        .expect_err("QSL refuses the pre state outside the original source model range");
+    assert!(
+        matches!(
+            &error,
+            FrameReplayError::Refused { unranged, .. }
+                if unranged == &harness.unranged
+                    && unranged.len() == 1
+                    && unranged[0].field == "audit"
+                    && unranged[0].reason == quire_contract_codegen::StateUnrangedReason::TypeNotRange
+        ),
+        "{error}"
+    );
+    let FrameReplayError::Refused { refusal, .. } = &error else {
+        unreachable!("the QSL refusal was checked above")
+    };
+    let terminal = quire_contract_codegen::run_terminal_value(
+        &KaniRunOutcome::Falsified {
+            counterexample: "model-type mismatch".to_owned(),
+        },
+        0,
+        Some((&error).into()),
+    )
+    .expect("a falsified run has a settlement");
+    assert_eq!(
+        terminal,
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(refusal.code()))
+    );
+    let inside = 5_i64;
+    let invocation = twin.invocation("account", (5, inside), (5, inside));
+    let replay = twin
+        .try_frame_replay(
+            "deposit",
+            &invocation,
+            "account",
+            "audit",
+            &run_of(&harness, [5, inside]),
+        )
+        .expect("an in-range playback builds");
+    replay.replay().expect("the in-range pre state is admitted");
 }
 
 /// The transcript `Witness::parse` is given is the one rendering function's, over the decoded
@@ -2843,7 +3066,7 @@ fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_st
         assert!(
             matches!(
                 &error,
-                FrameReplayError::Refused(refusal)
+                FrameReplayError::Refused { refusal, .. }
                     if matches!(**refusal, ReplayRefusal::Request(_))
             ),
             "{index}: {error}"
@@ -2877,7 +3100,8 @@ fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
         "{error}"
     );
 
-    let generated = generate(&fixture(&Shape::HEALTHY)).frame;
+    let generated =
+        generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame;
     let mut record: Value = serde_json::from_str(&generated.record.contents).expect("record");
     record["identity"]["state_fields"] = json!(["balance", "balance"]);
     let error = StateFrameIdentity::from_record(&record.to_string())
@@ -2897,7 +3121,7 @@ fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
 #[test]
 fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_member() {
     let twin = Twin::new();
-    let fixture = fixture(&Shape::HEALTHY);
+    let fixture = emitted_fixture(&Twin::build(&[], &CLAUSES, 0), "BalanceNeverDrops");
     let site = twin.operation_site("deposit").expect("located");
     let aligned = frame_harness(&twin);
 
@@ -2911,7 +3135,7 @@ fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_memb
         "{error}"
     );
 
-    // The fixture's own node ids are not the ones QSL names for the twin's compiled unit.
+    // A second QSL-selected model with a different frame has different node ids.
     let unaligned = generate(&fixture).frame.identity;
     let error = refused(replay_of(&twin, "deposit", &run_of(&unaligned, [5, 0])));
     assert!(
@@ -2941,8 +3165,7 @@ fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_memb
 /// (`call_site`'s package bytes, admitted by the model reader) have, as `CheckedNodeId`s, exactly
 /// the ids `call_site` names as the site's `anchor` and `frame`, and the anchor binds that frame:
 /// the node ids the generator reads from a package and the wire ids the replay requires are one
-/// id, with no rebase. The frame harness itself cannot yet be generated from this package: see
-/// `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits`.
+/// id, with no rebase.
 ///
 /// Trace: FR-024-AC-28, FR-024-AC-30, TC-035
 #[test]
@@ -2976,20 +3199,21 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
         .and_then(|member| member.pointer("/value/target/digest"))
         .and_then(Value::as_str);
     assert_eq!(bound_frame, Some(&*frame.node_id.digest));
-    // The hand-built fixture's ids are its own, which is why the tests rebase its scope.
-    let fixture_scope = generate(&fixture(&Shape::HEALTHY)).frame.identity.scope;
-    assert_ne!(*fixture_scope.anchor.digest, *anchor.node_id.digest);
+    let fixture_scope =
+        generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+            .frame
+            .identity
+            .scope;
+    assert_eq!(*fixture_scope.anchor.digest, *anchor.node_id.digest);
+    assert_eq!(*fixture_scope.frame.digest, *frame.node_id.digest);
 }
 
-/// The measured limit that keeps the end-to-end harness out of reach: the object type node QSL
-/// emits has an empty body (`members: []`), so the field-range reader the harness generator and
-/// the state-clause replay share (`field_range`, FR-015-AC-27), which reads a field's range from
-/// the object body's members, finds no member and refuses with `MemberAbsent`. A harness is
-/// therefore generated from the hand-built fixture package, whose object body has the members.
+/// QSL's emitted object body is empty; the admitted model's accessor supplies both ranges,
+/// including the unread `audit` field.
 ///
-/// Trace: FR-015-AC-27, TC-025
+/// Trace: FR-015-AC-77, FR-015-AC-79
 #[test]
-fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
+fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     let twin = Twin::new();
     let (package, clause) = twin.emitted_package("BalanceNeverDrops");
     let object = package
@@ -3007,7 +3231,7 @@ fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
         Some(0),
         "QSL emits the object type with no members in its body"
     );
-    let refusal = generate_state_frame_obligations(&StateFrameRequest {
+    let generated = generate_state_frame_obligations(&StateFrameRequest {
         package: &package,
         clause: &clause,
         state_path: STATE_PATH,
@@ -3015,17 +3239,93 @@ fn tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_emits() {
         subject_path: SUBJECT_PATH,
         unwind: 4,
     })
-    .expect_err("no range is readable from the emitted object type");
-    assert!(
-        matches!(
-            refusal,
-            StateFrameRefusal::BoundNotResolved {
-                cause: BoundNotResolvedCause::MemberAbsent,
-                ..
-            }
-        ),
-        "{refusal}"
+    .expect("the accessor supplies both ranges");
+    let expected = model::FIELDS
+        .map(|(field, (minimum, maximum))| StateFieldDomain {
+            field: field.to_owned(),
+            minimum,
+            maximum,
+        })
+        .to_vec();
+    assert_eq!(generated.frame.identity.domains, expected);
+    assert_eq!(generated.postcondition.identity.domains, expected);
+    assert_eq!(generated.frame.identity.state_fields, STATE_FIELDS);
+    assert_eq!(generated.frame.identity.scope.object, object.node_id);
+    assert!(generated.frame.identity.unranged.is_empty());
+    let site = twin.operation_site("deposit").expect("located");
+    assert_eq!(
+        *generated.frame.identity.scope.anchor.digest,
+        site.anchor.to_string()
     );
+    assert_eq!(
+        *generated.frame.identity.scope.frame.digest,
+        site.frame.to_string()
+    );
+
+    let balance_only = Twin::build(&model::GRANTED, &[CLAUSES[0]], 0);
+    let unread = generated_from_twin(
+        &balance_only,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        SUBJECT_PATH,
+    );
+    assert_eq!(unread.frame.identity.domains, expected);
+    assert_eq!(unread.postcondition.identity.domains, expected);
+
+    let audit = generated_from_twin(&twin, "AuditNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
+    assert_eq!(audit.frame.identity.domains, expected);
+    assert_eq!(audit.postcondition.identity.domains, expected);
+    assert_eq!(audit.frame.identity.state_fields, STATE_FIELDS);
+}
+
+/// The accessor's sorted table validates names but never changes the caller's draw order.
+///
+/// Trace: FR-015-AC-77, FR-015-AC-79
+#[test]
+fn tc_025_model_field_table_preserves_the_requested_draw_order() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package("BalanceNeverDrops");
+    let fields = ["audit", "balance"];
+    let generated = generate_state_frame_obligations(&StateFrameRequest {
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &fields,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("both named fields resolve");
+    assert_eq!(generated.frame.identity.state_fields, fields);
+    assert_eq!(
+        generated
+            .frame
+            .identity
+            .domains
+            .iter()
+            .map(|domain| domain.field.as_str())
+            .collect::<Vec<_>>(),
+        fields
+    );
+
+    let absent = generate_state_frame_obligations(&StateFrameRequest {
+        state_fields: &["balance", "ghost", "audit"],
+        ..StateFrameRequest {
+            package: &package,
+            clause: &clause,
+            state_path: STATE_PATH,
+            state_fields: &fields,
+            subject_path: SUBJECT_PATH,
+            unwind: 4,
+        }
+    })
+    .expect_err("a requested name absent from the accessor refuses");
+    assert!(matches!(
+        absent,
+        StateFrameRefusal::BoundNotResolved {
+            field,
+            cause: BoundNotResolvedCause::MemberAbsent { .. },
+        } if field == "ghost"
+    ));
 }
 
 /// The frame envelope declares no domain: `declared_domains` is present and empty.
@@ -3051,16 +3351,6 @@ fn scratch(name: &str) -> PathBuf {
         .join(format!("state-frame-{name}-{}-{nonce}", std::process::id()));
     fs::create_dir_all(path.join("src")).expect("scratch");
     path
-}
-
-/// The obligations of `fixture` over the subject function named `subject` in `subject.rs`.
-pub(crate) fn generate_over(fixture: &Fixture, subject: &str) -> StateFrameObligations {
-    let subject_path = format!("crate::subject::{subject}");
-    generate_state_frame_obligations(&StateFrameRequest {
-        subject_path: &subject_path,
-        ..request(fixture, &STATE_FIELDS)
-    })
-    .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
 }
 
 /// Runs `harness` with the real prover over the subject module every generated harness names.
@@ -3135,17 +3425,28 @@ pub(crate) fn playback_state(counterexample: &str) -> (i64, i64) {
 /// The operation contract verifies for a healthy subject and is falsified, for the postcondition
 /// and no other reason, when the subject is mutated to debit.
 ///
-/// Trace: FR-015-AC-30, TC-025
+/// Trace: FR-015-AC-30, FR-015-AC-80, TC-025
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifies_it() {
-    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::new();
     assert_eq!(
-        prove(&generate_over(&fixture, "deposit").postcondition),
+        prove(
+            &generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH)
+                .postcondition
+        ),
         KaniRunOutcome::Verified
     );
     falsified(
-        prove(&generate_over(&fixture, "deposit_debiting").postcondition),
+        prove(
+            &generated_from_twin(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                "crate::subject::deposit_debiting",
+            )
+            .postcondition,
+        ),
         "postcondition `post.balance >= pre.balance` failed",
     );
 }
@@ -3161,14 +3462,30 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_the_covers_playback()
 {
-    let single = fixture(&single_valuation_shape());
+    let single = Twin::with_field_ranges((0, 0), (0, 0));
     let counterexample = falsified(
-        prove(&generate_over(&single, "deposit_debiting").postcondition),
+        prove(
+            &generated_from_twin(
+                &single,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                "crate::subject::deposit_debiting",
+            )
+            .postcondition,
+        ),
         "postcondition `post.balance >= pre.balance` failed",
     );
     assert_eq!(playback_state(&counterexample), (0, 0));
     let counterexample = falsified(
-        prove(&generate_over(&single, "deposit_touching_audit").frame),
+        prove(
+            &generated_from_twin(
+                &single,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                "crate::subject::deposit_touching_audit",
+            )
+            .frame,
+        ),
         "changed `audit`, which its frame does not modify",
     );
     assert_eq!(playback_state(&counterexample), (0, 0));
@@ -3178,29 +3495,35 @@ fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_th
 /// field, and regenerating the frame from a package whose `modifies` is mutated to grant nothing
 /// turns the allowed proof red.
 ///
-/// Trace: FR-015-AC-31, TC-025
+/// Trace: FR-015-AC-31, FR-015-AC-80, TC-025
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_frame_falsifies() {
-    let fixture = fixture(&Shape::HEALTHY);
+    let twin = Twin::new();
     // ALLOWED: only `balance` changes, and the frame grants it.
     assert_eq!(
-        prove(&generate_over(&fixture, "deposit").frame),
+        prove(&generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame),
         KaniRunOutcome::Verified
     );
     // FORBIDDEN: `audit` changes too.
     falsified(
-        prove(&generate_over(&fixture, "deposit_touching_audit").frame),
+        prove(
+            &generated_from_twin(
+                &twin,
+                "BalanceNeverDrops",
+                &STATE_FIELDS,
+                "crate::subject::deposit_touching_audit",
+            )
+            .frame,
+        ),
         "changed `audit`, which its frame does not modify",
     );
     // MUTATION CONTROL: the same allowed subject against a frame that grants nothing.
-    let emptied = self::fixture(&Shape {
-        variant: 1,
-        modifies: &[],
-        ..Shape::HEALTHY
-    });
+    let emptied = Twin::build(&[], &CLAUSES, 0);
     falsified(
-        prove(&generate_over(&emptied, "deposit").frame),
+        prove(
+            &generated_from_twin(&emptied, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH).frame,
+        ),
         "changed `balance`, which its frame does not modify",
     );
 }
@@ -3210,14 +3533,17 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 /// no obligation identity and no transcript are supplied, the decoded pre state is tied to the
 /// invocation of the native run, and QSL reproduces the violation on the written field.
 ///
-/// Trace: FR-015-AC-32, FR-024-AC-30, TC-025, TC-035
+/// Trace: FR-015-AC-32, FR-024-AC-30, FR-024-AC-32, FR-024-AC-34, TC-025, TC-035
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
-    let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
-
-    let forbidden = generate_over(&fixture, "deposit_touching_audit");
+    let forbidden = generated_from_twin(
+        &twin,
+        "BalanceNeverDrops",
+        &STATE_FIELDS,
+        "crate::subject::deposit_touching_audit",
+    );
     let counterexample = falsified(
         prove(&forbidden.frame),
         "changed `audit`, which its frame does not modify",
@@ -3235,7 +3561,7 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
         (account.balance, account.audit),
     );
     let run = Run {
-        harness: twin.aligned(&forbidden.frame.identity, "deposit"),
+        harness: forbidden.frame.identity,
         playback: counterexample,
     };
     let result = twin
@@ -3267,10 +3593,8 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
-    let fixture = fixture(&Shape::HEALTHY);
     let twin = Twin::new();
-
-    let allowed = generate_over(&fixture, "deposit");
+    let allowed = generated_from_twin(&twin, "BalanceNeverDrops", &STATE_FIELDS, SUBJECT_PATH);
     assert_eq!(prove(&allowed.frame), KaniRunOutcome::Verified);
     let mut account = subject::Account {
         balance: 5,
@@ -3278,7 +3602,7 @@ fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {
     };
     subject::deposit(&mut account);
     let invocation = twin.invocation("account", (5, 0), (account.balance, account.audit));
-    let harness = twin.aligned(&allowed.frame.identity, "deposit");
+    let harness = allowed.frame.identity;
     let run = run_of(&harness, [5, 0]);
     let result = twin
         .replay(&invocation, "account", "balance", &run)

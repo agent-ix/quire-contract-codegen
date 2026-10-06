@@ -1,9 +1,8 @@
 //! FR-024 (IR-460): a postcondition state-clause counterexample is put before QSL's
 //! `replay_state_clause` as a request and a witness-arm envelope built by `StateClauseReplay`.
 //!
-//! The admitted package is the state-frame fixture of `kani_obligations_state_frame`, the same one
-//! the operation-contract harness is generated from; the QSL twin is its hand-mirrored native
-//! unit, here with two postcondition clauses on `deposit`. The invocation and snapshot documents
+//! The admitted package is emitted by QSL from the native twin of the state-frame fixture,
+//! with two postcondition clauses on `deposit`. The invocation and snapshot documents
 //! are built by the crate under test and read back from the request's byte provision, so each
 //! assertion is about the bytes QSL receives.
 //!
@@ -20,15 +19,15 @@ use qsl_replay::{
     WitnessEnvelope, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    DocumentLabel, OperationDeclaration, StateClauseReplay, StateClauseReplayError,
-    StateClauseReplayInputs, StateObjectAddress,
+    DocumentLabel, OperationDeclaration, StateClauseModelFieldsCause, StateClauseReplay,
+    StateClauseReplayError, StateClauseReplayInputs, StateObjectAddress,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
-    falsified, fixture_declaring, fixture_with_unbounded_balance, generate_over, model,
-    native_twin::Twin, playback_state, prove, self_parameter, subject, Declares, Fixture,
+    emitted_fixture, falsified, fixture_declaring, model, native_twin::Twin, playback_state, prove,
+    subject, Declares, Fixture,
 };
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
@@ -36,8 +35,74 @@ const BALANCE: &str = "BalanceNeverDrops";
 /// The second postcondition clause on `deposit`: `audit` never drops.
 const AUDIT: &str = "AuditNeverDrops";
 
+/// QSL's emitted checked package has an empty model body, yet replay takes the caller's field
+/// order and both inclusive ranges from the admitted model declaration's accessor.
+///
+/// Trace: FR-024-AC-31, FR-024-AC-33
+#[test]
+fn tc_035_emitted_model_fields_bind_replay_before_playback() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package(BALANCE);
+    let input = twin.state_clause_inputs(&package, &clause, BALANCE, (5, 7), (4, 7));
+    let replay = StateClauseReplay::new(input.clone()).expect("model fields resolve");
+    let domains = replay.packet.declared_domains.as_ref().expect("domains");
+    assert_eq!(domains.len(), model::FIELDS.len());
+    for (position, (domain, (_, (lower, upper)))) in domains.iter().zip(model::FIELDS).enumerate() {
+        assert!(matches!(
+            domain.domain(),
+            DomainKey::Node { path, .. } if path == &[u32::try_from(position).expect("small")]
+        ));
+        assert_eq!(
+            domain.bound(),
+            &FiniteBound::integer_range(Integer::from(lower), Integer::from(upper)).expect("range")
+        );
+    }
+    let result = replay.replay().expect("the debit replays");
+    assert_eq!(
+        witness_arm(&result).settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+    let respecting = StateClauseReplay::new(twin.state_clause_inputs(
+        &package,
+        &clause,
+        BALANCE,
+        (5, 7),
+        (6, 7),
+    ))
+    .expect("the same emitted package builds a respecting replay");
+    let result = respecting.replay().expect("the respecting run replays");
+    assert_eq!(
+        witness_arm(&result).settlement(),
+        WitnessSettlement::Inconclusive
+    );
+    assert!(matches!(
+        witness_arm(&result).disagreement(),
+        Some(DisagreementCause::Verdicts { .. })
+    ));
+
+    let mut absent = input.clone();
+    absent.state_fields.push("ghost".to_owned());
+    absent.playback.clear();
+    let error = StateClauseReplay::new(absent)
+        .err()
+        .expect("model absence precedes binding");
+    assert!(matches!(
+        error,
+        StateClauseReplayError::ModelFields {
+            cause: StateClauseModelFieldsCause::Absent { field }, ..
+        } if field == "ghost"
+    ));
+
+    let mut outside = input;
+    outside.playback[1].1 = 1001;
+    assert!(matches!(
+        StateClauseReplay::new(outside),
+        Err(StateClauseReplayError::OutOfDomain { field }) if field == "audit"
+    ));
+}
+
 fn healthy() -> Fixture {
-    fixture_declaring(Declares::Nothing)
+    emitted_fixture(&Twin::new(), BALANCE)
 }
 
 fn built(
@@ -467,7 +532,17 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
         format!("<<<assertion|{operation}|{BALANCE}|balance=5;audit=7>>>")
     );
 
-    let parameter = WireNodeId::from_hex(&self_parameter().digest).expect("a node id");
+    let parameters = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .filter(|node| node.semantic_form.as_ref() == "parameter")
+        .collect::<Vec<_>>();
+    let [parameter] = parameters.as_slice() else {
+        panic!("the emitted clause has one self parameter");
+    };
+    let parameter = WireNodeId::from_hex(&parameter.node_id.digest).expect("a node id");
     let domains = replay.packet.declared_domains.as_ref().expect("domains");
     assert_eq!(domains.len(), model::FIELDS.len());
     for (position, (domain, (_, (minimum, maximum)))) in
@@ -488,8 +563,9 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     }
 
     // `balance` declares no range: any playback value is carried, and only `audit` has a domain.
-    let unbounded = fixture_with_unbounded_balance();
-    let mut candidate = inputs(&twin, &unbounded, (5, 7), (4, 8));
+    let unbounded_twin = Twin::without_balance_range();
+    let unbounded = emitted_fixture(&unbounded_twin, BALANCE);
+    let mut candidate = inputs(&unbounded_twin, &unbounded, (5, 7), (4, 8));
     candidate.playback[0].1 = 1_000_000;
     let replay = StateClauseReplay::new(candidate).expect("an unranged field is not checked");
     let domains = replay.packet.declared_domains.as_ref().expect("domains");
@@ -672,13 +748,25 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 /// How a violation that yields such a post state should settle is a pending QSL ruling and is not
 /// decided here (see the replay spec's Current state).
 ///
-/// Trace: FR-024-AC-18, TC-035
+/// Trace: FR-024-AC-18, FR-024-AC-34, TC-035
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
-    let (twin, fixture) = (Twin::new(), healthy());
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package(BALANCE);
+    let generated = quire_contract_codegen::generate_state_frame_obligations(
+        &quire_contract_codegen::StateFrameRequest {
+            package: &package,
+            clause: &clause,
+            state_path: "crate::subject::Account",
+            state_fields: &["balance", "audit"],
+            subject_path: "crate::subject::deposit_debiting_within_range",
+            unwind: 4,
+        },
+    )
+    .expect("emitted package generates");
     let counterexample = falsified(
-        prove(&generate_over(&fixture, "deposit_debiting_within_range").postcondition),
+        prove(&generated.postcondition),
         "postcondition `post.balance >= pre.balance` failed",
     );
     let (balance, audit) = playback_state(&counterexample);
@@ -688,13 +776,14 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         account.balance, balance,
         "the native run reproduces the debit"
     );
-    let replay = built(
-        &twin,
-        &fixture,
+    let replay = StateClauseReplay::new(twin.state_clause_inputs(
+        &package,
+        &clause,
         BALANCE,
         (balance, audit),
         (account.balance, account.audit),
-    );
+    ))
+    .expect("emitted package replays");
     assert!(matches!(
         replay.packet.source,
         Some(ReplaySource::Witness(_))
