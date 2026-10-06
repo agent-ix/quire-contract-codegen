@@ -135,6 +135,11 @@ const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 #[cfg(any(test, target_os = "linux"))]
 pub(super) const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
 
+/// Explicit reservation for each retained stdout/stderr capture thread. Whole-run accounting
+/// must charge both stacks independently of how much output the backend eventually produces.
+#[cfg(any(test, target_os = "linux"))]
+pub(super) const CAPTURE_STACK_BYTES: usize = 2 * 1024 * 1024;
+
 /// Longest a capture thread keeps reading after it is told to stop. Whatever the launcher wrote
 /// before it ended is already in the pipe and is read in microseconds; the limit only bounds a
 /// straggler that keeps writing.
@@ -519,14 +524,16 @@ where
         flag: Arc::clone(&flags.failed),
         failed: true,
     };
-    thread::Builder::new().spawn(move || {
-        // The whole guard moves into the thread: a closure naming only `failure.failed` would
-        // capture that field and drop the guard, and set the flag, here.
-        let mut failure = failure;
-        let captured = capture(pipe, &stop, limit, STOP_DRAIN_LIMIT, poll);
-        failure.failed = captured.is_err();
-        captured
-    })
+    thread::Builder::new()
+        .stack_size(CAPTURE_STACK_BYTES)
+        .spawn(move || {
+            // The whole guard moves into the thread: a closure naming only `failure.failed` would
+            // capture that field and drop the guard, and set the flag, here.
+            let mut failure = failure;
+            let captured = capture(pipe, &stop, limit, STOP_DRAIN_LIMIT, poll);
+            failure.failed = captured.is_err();
+            captured
+        })
 }
 
 #[cfg(test)]
