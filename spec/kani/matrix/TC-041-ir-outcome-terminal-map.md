@@ -5,6 +5,8 @@ type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-030
     type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/FR-029
+    type: verifies
 ---
 # TC-041: Verify the total map from a Contract IR Kani outcome to QSL's terminal value
 

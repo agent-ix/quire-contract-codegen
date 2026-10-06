@@ -98,8 +98,10 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   This is the widened interim case; IR-635 does not reassign ownership of the variants.
   Neither interim refusal returns a terminal value while CG has not consumed QSL's parity facade.
 - Planned (IR-635): the admitted composite route preserves QSL's terminal record/category/cause
-  under AC-17 and AC-19 to AC-28; its typed binding refuses missing or another claim's settlement
+  under AC-17 and AC-19 to AC-27; its typed binding refuses missing or another claim's settlement
   without a value.
+- Planned CG consumer (IR-666): AC-28 preserves the terminal value of a binding-valid QSL
+  `Refused` report, including the non-fault/fault split, without inventing a report.
 
 ## Behavior
 
@@ -329,7 +331,7 @@ AC-15 cannot reject that input as an ordinary unexpected replay settlement.
 | FR-029-AC-25 | PLANNED (IR-635). With no retained refinement disagreement, every bounded_shadow inconclusive reason maps through the ordinary rows: vacuous proof and cover-unsatisfied are Proved0; timeout is Incomplete(TimedOut); memory and unwind exhaustion are Incomplete(ResourceExhausted); no-verdict, failure-without-counterexample and missing-summary are Failed. No vacuous outcome is coerced into verified evidence. | Test |
 | FR-029-AC-26 | PLANNED/GATED (IR-635/QSL-640). The converter preserves the actual QSL record category/cause: Proved0 remains inconclusive/KaniVacuousProof and is never promoted by its payload. Zero-count backend cases use AC-25, not an unreachable verified-count-zero row. | Test |
 | FR-029-AC-27 | PLANNED/GATED (IR-635/QSL-640). The distinct typed composite settlement input refuses a missing settlement or another claim's node/run/operation/operand/domain/limits/content binding with no value; ordinary source-predicate AC-15 does not consume or reject a valid verified-parity settlement as UnexpectedSettlement. | Test |
-| FR-029-AC-28 | PLANNED CG CONSUMER (IR-666; QSL FR-358 delivered). For any full-identity-bound QSL `CompositeParityResult::Refused` report, CG preserves `report.terminal_value()`: non-fault refusal is Inconclusive(ReplayRefused) with QSL's code, while `Fault` and `Admission(Fault)` are Failed. QSL `prepare` refusal precedes F-1; operand-admission and exact-comparison refusals follow F-1, so Disagreed wins over those later faults. CG verifies a reachable non-fault report by invoking QSL's public facade with a valid wire request and a replay input-byte limit below that request's size, then passing the actual report through its public converter. It inspects the public QSL terminal mapping and CG pass-through for invariant fault cases; it neither fabricates a report nor claims a public input that induces an invariant fault. | Inspection |
+| FR-029-AC-28 | PLANNED CG CONSUMER (IR-666; QSL FR-358 delivered). For any full-identity-bound QSL `CompositeParityResult::Refused` report, CG preserves `report.terminal_value()`: non-fault refusal is Inconclusive(ReplayRefused) with QSL's code, while `Fault` and `Admission(Fault)` are Failed. QSL `prepare` refusal precedes F-1; operand-admission and exact-comparison refusals follow F-1, so Disagreed wins over those later faults. CG verifies a reachable non-fault report by invoking QSL's public facade with a valid wire request and a replay input-byte limit below that request's size, then passing the actual report through its public converter. It inspects the public QSL terminal mapping and CG pass-through for invariant fault cases; it neither fabricates a report nor claims a public input that induces an invariant fault. | Test |
 
 ### Mutation FR-029-AC-17 detects
 
