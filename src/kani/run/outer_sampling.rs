@@ -14,8 +14,8 @@ use std::{
 
 use super::{
     control::{
-        role_pair, ControlError, GuardianEndpoint, IncrementalReceive, PreparedFrame, RoleCaller,
-        RoleEndpoint,
+        role_pair, ControlError, GuardianEndpoint, IncrementalReceive, IncrementalSend,
+        PreparedFrame, RoleCaller, RoleEndpoint,
     },
     memory::{LauncherMemory, MemoryObserver},
     namespace::{GatedClaim, OuterMonitorOwner},
@@ -23,7 +23,7 @@ use super::{
     report_storage::{ReportCollector, ReportError},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
     role_deadline::DeadlineError,
-    role_protocol::{InnerBootstrap, OuterPhaseCommand, RunSettings},
+    role_protocol::{InnerBootstrap, OuterPhaseCommand, OuterPhaseReply, RunSettings},
 };
 
 #[derive(Debug)]
@@ -74,7 +74,7 @@ pub(super) struct OuterSampling {
 pub(super) struct InnerMonitor {
     monitor: OuterMonitorOwner,
     control: RoleCaller,
-    frame: PreparedFrame,
+    frame: IncrementalSend,
     outer_pin: OwnedFd,
     caller_pin: OwnedFd,
     caller_lease: Option<GuardianEndpoint>,
@@ -87,6 +87,7 @@ enum InnerMonitorState {
     Spawned,
     Gated(GatedClaim),
     ReleaseAttempted,
+    GateReleased,
     Bootstrapped,
 }
 
@@ -130,10 +131,9 @@ impl InnerMonitor {
         Ok((tick, claimed))
     }
 
-    /// Consume the genuine gated claim once. Only after the normal gate release does O deliver
-    /// its authenticated actual process capabilities and original C lease to I. Failed delivery
-    /// retains this owner; neither an attempted release nor a successful send proves I settlement.
-    pub(super) fn release_and_bootstrap(
+    /// Consume the genuine gated claim once. Authenticated bootstrap delivery uses subsequent
+    /// finite normal actor ticks; attempted release or later sending proves no I settlement.
+    pub(super) fn release_gate(
         &mut self,
         sampling: &mut OuterSampling,
         outer: &PreparedOuter<'_>,
@@ -161,14 +161,39 @@ impl InnerMonitor {
             .namespace()
             .release_bootstrap_gate(claim, Some(deadline), startup_deadline)
             .map_err(SamplingError::Observation)?;
+        self.state = InnerMonitorState::GateReleased;
+        Ok(tick)
+    }
+    /// One finite bootstrap send step after the real gate release, with normal complete accounting
+    /// before each attempt. I's temporarily unread socket cannot suspend RSS or collector progress.
+    fn bootstrap_tick(
+        &mut self,
+        sampling: &mut OuterSampling,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+        startup_deadline: Instant,
+    ) -> Result<(MemoryTick, bool), SamplingError> {
+        if !matches!(self.state, InnerMonitorState::GateReleased) {
+            return Err(SamplingError::InvalidMonitorTransition);
+        }
+        let tick = sampling.tick(outer, caller)?;
+        if matches!(tick, MemoryTick::Exhausted(_)) {
+            return Ok((tick, false));
+        }
+        let deadline = sampling
+            .settings
+            .deadline
+            .local()
+            .map_err(SamplingError::Deadline)?
+            .min(startup_deadline);
         let lease = self
             .caller_lease
             .as_ref()
             .ok_or(SamplingError::InnerLeaseConsumed)?;
-        self.control
-            .transport()
-            .send_prepared(
-                &self.frame,
+        let sent = self
+            .frame
+            .advance(
+                &self.control.transport(),
                 &[
                     self.outer_pin.as_fd(),
                     self.caller_pin.as_fd(),
@@ -177,10 +202,11 @@ impl InnerMonitor {
                 deadline,
             )
             .map_err(SamplingError::Control)?;
-        // No O-held copy of the original I lease endpoint survives its one intended delivery.
-        self.caller_lease.take();
-        self.state = InnerMonitorState::Bootstrapped;
-        Ok(tick)
+        if sent {
+            self.caller_lease.take();
+            self.state = InnerMonitorState::Bootstrapped;
+        }
+        Ok((tick, sent))
     }
 }
 
@@ -189,6 +215,14 @@ impl InnerMonitor {
 pub(super) struct OuterPhases {
     receive: IncrementalReceive,
     phase: OuterPhase,
+    pending_reply: Option<PhaseReply>,
+}
+
+struct PhaseReply {
+    send: IncrementalSend,
+    pin: Option<OwnedFd>,
+    next: OuterPhase,
+    progress: PhaseProgress,
 }
 
 enum OuterPhase {
@@ -196,6 +230,7 @@ enum OuterPhase {
     Bootstrap,
     Claiming,
     ClaimedGated,
+    Bootstrapping,
     ClaimedBootstrap,
 }
 
@@ -213,6 +248,7 @@ impl OuterPhases {
         Ok(Self {
             receive: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
             phase: OuterPhase::BeforeMonitor,
+            pending_reply: None,
         })
     }
 
@@ -226,14 +262,74 @@ impl OuterPhases {
         monitor: &mut InnerMonitor,
         startup_deadline: Instant,
     ) -> Result<PhaseProgress, SamplingError> {
+        if let Some(reply) = self.pending_reply.as_mut() {
+            let tick = sampling.tick(outer, caller)?;
+            if matches!(tick, MemoryTick::Exhausted(_)) {
+                return Ok(PhaseProgress::Exhausted);
+            }
+            let deadline = sampling
+                .settings
+                .deadline
+                .local()
+                .map_err(SamplingError::Deadline)?
+                .min(startup_deadline);
+            let rights = reply.pin.as_ref().map(|pin| [pin.as_fd()]);
+            if reply
+                .send
+                .advance(
+                    &caller.transport(),
+                    rights.as_ref().map_or(&[], |rights| &rights[..]),
+                    deadline,
+                )
+                .map_err(SamplingError::Control)?
+            {
+                let reply = self
+                    .pending_reply
+                    .take()
+                    .ok_or(SamplingError::UnexpectedPhase)?;
+                self.phase = reply.next;
+                return Ok(reply.progress);
+            }
+            return Ok(PhaseProgress::Pending);
+        }
+        if matches!(self.phase, OuterPhase::Bootstrapping) {
+            let (tick, sent) = monitor.bootstrap_tick(sampling, outer, caller, startup_deadline)?;
+            if matches!(tick, MemoryTick::Exhausted(_)) {
+                return Ok(PhaseProgress::Exhausted);
+            }
+            if sent {
+                self.queue_reply(
+                    OuterPhaseReply::GateReleased {
+                        authority: sampling.settings.authority,
+                    },
+                    None,
+                    OuterPhase::ClaimedBootstrap,
+                    PhaseProgress::GateReleased,
+                )?;
+            }
+            return Ok(PhaseProgress::Pending);
+        }
         if matches!(self.phase, OuterPhase::Claiming) {
             let (tick, claimed) = monitor.claim_tick(sampling, outer, caller, startup_deadline)?;
             if matches!(tick, MemoryTick::Exhausted(_)) {
                 return Ok(PhaseProgress::Exhausted);
             }
             if claimed {
-                self.phase = OuterPhase::ClaimedGated;
-                return Ok(PhaseProgress::InnerClaimed);
+                let (start, namespace, pin) = monitor
+                    .monitor
+                    .inner_capability()
+                    .map_err(SamplingError::Observation)?;
+                self.queue_reply(
+                    OuterPhaseReply::InnerClaimed {
+                        authority: sampling.settings.authority,
+                        start,
+                        namespace,
+                    },
+                    Some(pin),
+                    OuterPhase::ClaimedGated,
+                    PhaseProgress::InnerClaimed,
+                )?;
+                return Ok(PhaseProgress::Pending);
             }
             return Ok(PhaseProgress::Pending);
         }
@@ -264,31 +360,58 @@ impl OuterPhases {
         match (&self.phase, received.control) {
             (OuterPhase::BeforeMonitor, OuterPhaseCommand::BeginMonitor { .. }) => {
                 monitor.spawn(outer, deadline)?;
-                self.phase = OuterPhase::Bootstrap;
-                Ok(PhaseProgress::MonitorSpawned)
+                let pin = monitor
+                    .monitor
+                    .monitor_capability()
+                    .map_err(SamplingError::Observation)?;
+                self.queue_reply(
+                    OuterPhaseReply::MonitorSpawned {
+                        authority: sampling.settings.authority,
+                    },
+                    Some(pin),
+                    OuterPhase::Bootstrap,
+                    PhaseProgress::MonitorSpawned,
+                )?;
+                Ok(PhaseProgress::Pending)
             }
             (OuterPhase::Bootstrap, OuterPhaseCommand::ClaimInner { .. }) => {
                 self.phase = OuterPhase::Claiming;
                 Ok(PhaseProgress::Pending)
             }
             (OuterPhase::ClaimedGated, OuterPhaseCommand::ReleaseGate { .. }) => {
-                let tick =
-                    monitor.release_and_bootstrap(sampling, outer, caller, startup_deadline)?;
+                let tick = monitor.release_gate(sampling, outer, caller, startup_deadline)?;
                 if matches!(tick, MemoryTick::Exhausted(_)) {
                     return Ok(PhaseProgress::Exhausted);
                 }
-                self.phase = OuterPhase::ClaimedBootstrap;
-                Ok(PhaseProgress::GateReleased)
+                self.phase = OuterPhase::Bootstrapping;
+                Ok(PhaseProgress::Pending)
             }
             (
                 OuterPhase::BeforeMonitor
                 | OuterPhase::Bootstrap
                 | OuterPhase::Claiming
                 | OuterPhase::ClaimedGated
+                | OuterPhase::Bootstrapping
                 | OuterPhase::ClaimedBootstrap,
                 _,
             ) => Err(SamplingError::UnexpectedPhase),
         }
+    }
+    fn queue_reply(
+        &mut self,
+        control: OuterPhaseReply,
+        pin: Option<OwnedFd>,
+        next: OuterPhase,
+        progress: PhaseProgress,
+    ) -> Result<(), SamplingError> {
+        let frame = PreparedFrame::encode(&control).map_err(SamplingError::Control)?;
+        self.pending_reply = Some(PhaseReply {
+            send: IncrementalSend::new(frame),
+            pin,
+            next,
+            progress,
+        });
+        Ok(())
     }
 }
 
@@ -429,7 +552,7 @@ impl OuterSampling {
         Ok(InnerMonitor {
             monitor,
             control,
-            frame,
+            frame: IncrementalSend::new(frame),
             outer_pin,
             caller_pin,
             caller_lease: Some(caller_lease),

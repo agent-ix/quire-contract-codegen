@@ -208,6 +208,15 @@ impl PreparedIdentity {
         super::outer_setup::NamespaceIdentity::read(&self.path)
     }
 
+    pub(super) fn child_start(&mut self, pid: i32) -> io::Result<u64> {
+        if pid <= 0 {
+            return Err(io::Error::other("claimed child identity must be positive"));
+        }
+        self.path.clear();
+        write!(&mut self.path, "/proc/{pid}/stat").map_err(io::Error::other)?;
+        super::memory::process_start_record(self.read_record()?)
+    }
+
     fn descriptor_pid(&mut self, descriptor: &OwnedFd) -> io::Result<i32> {
         self.path.clear();
         write!(

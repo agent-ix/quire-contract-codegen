@@ -160,3 +160,37 @@ impl OuterPhaseCommand {
         }
     }
 }
+
+/// O-origin startup replies carry real process capabilities, never numbers standing in for pins.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum OuterPhaseReply {
+    MonitorSpawned {
+        authority: RunAuthority,
+    },
+    InnerClaimed {
+        authority: RunAuthority,
+        start: u64,
+        namespace: NamespaceIdentity,
+    },
+    GateReleased {
+        authority: RunAuthority,
+    },
+}
+
+impl OuterPhaseReply {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::MonitorSpawned { .. } | Self::InnerClaimed { .. } => 1,
+            Self::GateReleased { .. } => 0,
+        }
+    }
+
+    pub(super) fn authority(&self) -> RunAuthority {
+        match self {
+            Self::MonitorSpawned { authority }
+            | Self::InnerClaimed { authority, .. }
+            | Self::GateReleased { authority } => *authority,
+        }
+    }
+}

@@ -661,7 +661,7 @@ fn stage_refusal(error: StageError) -> BoundedLaunchError {
             ControlError::InvalidEncoding(_)
             | ControlError::Truncated
             | ControlError::UnknownAncillary
-            | ControlError::ReceivePoisoned => GuardianFailureKind::MalformedControl,
+            | ControlError::ProgressPoisoned => GuardianFailureKind::MalformedControl,
             ControlError::MissingCredentials
             | ControlError::RepeatedCredentials
             | ControlError::ChangedCredentials

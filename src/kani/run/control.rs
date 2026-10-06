@@ -61,7 +61,7 @@ pub(super) enum ControlError {
     RightsNotCloexec,
     UnexpectedCredentials,
     CreatorMismatch,
-    ReceivePoisoned,
+    ProgressPoisoned,
     RightsCount { expected: usize, received: usize },
 }
 
@@ -350,30 +350,48 @@ impl<'fd> Transport<'fd> {
         }
         let bytes = &frame.bytes;
         let mut offset = 0;
+        while offset < bytes.len() {
+            self.wait(PollFlags::OUT, deadline)?;
+            let current_rights = if offset == 0 { rights } else { &[] };
+            if let Some(count) = self.send_chunk(&bytes[offset..], current_rights)? {
+                offset = offset.checked_add(count).ok_or(ControlError::Truncated)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// One actual nonblocking send. Both blocking and actor send modes share this ancillary
+    /// encoding and syscall; rights accompany only the first positively written byte.
+    fn send_chunk(
+        &self,
+        bytes: &[u8],
+        rights: &[BorrowedFd<'_>],
+    ) -> Result<Option<usize>, ControlError> {
+        self.refuse_observable_eof()?;
+        if rights.len() > RECEIVED_RIGHTS {
+            return Err(ControlError::ExcessRights);
+        }
         let mut storage = [MaybeUninit::uninit(); ANCILLARY_BYTES];
         let mut ancillary = SendAncillaryBuffer::new(&mut storage);
         if !rights.is_empty() && !ancillary.push(SendAncillaryMessage::ScmRights(rights)) {
             return Err(ControlError::ExcessRights);
         }
-        while offset < bytes.len() {
-            self.wait(PollFlags::OUT, deadline)?;
-            match sendmsg(
-                self.0,
-                &[IoSlice::new(&bytes[offset..])],
-                &mut ancillary,
-                SendFlags::DONTWAIT | SendFlags::NOSIGNAL,
-            ) {
-                Ok(0) => return Err(ControlError::Eof),
-                Ok(count) => {
-                    offset += count;
-                    // SCM_RIGHTS accompanies only the first successfully written byte.
-                    ancillary.clear();
-                }
-                Err(rustix::io::Errno::AGAIN | rustix::io::Errno::INTR) => {}
-                Err(error) => return Err(error.into()),
-            }
+        let count = match sendmsg(
+            self.0,
+            &[IoSlice::new(bytes)],
+            &mut ancillary,
+            SendFlags::DONTWAIT | SendFlags::NOSIGNAL,
+        ) {
+            Ok(0) => return Err(ControlError::Eof),
+            Ok(count) => count,
+            Err(rustix::io::Errno::AGAIN | rustix::io::Errno::INTR) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        if count > bytes.len() {
+            return Err(ControlError::Truncated);
         }
-        Ok(())
+        self.refuse_observable_eof()?;
+        Ok(Some(count))
     }
 
     pub(super) fn receive<T: DeserializeOwned>(
@@ -650,6 +668,53 @@ impl PreparedFrame {
     }
 }
 
+/// An O-owned encoded reply with finite send progress. The actual role owner retains the
+/// associated process capability until all bytes are sent; retries attach rights only once.
+pub(super) struct IncrementalSend {
+    frame: PreparedFrame,
+    offset: usize,
+    poisoned: bool,
+}
+
+impl IncrementalSend {
+    pub(super) fn new(frame: PreparedFrame) -> Self {
+        Self {
+            frame,
+            offset: 0,
+            poisoned: false,
+        }
+    }
+
+    pub(super) fn advance(
+        &mut self,
+        transport: &Transport<'_>,
+        rights: &[BorrowedFd<'_>],
+        deadline: Instant,
+    ) -> Result<bool, ControlError> {
+        if self.poisoned {
+            return Err(ControlError::ProgressPoisoned);
+        }
+        self.poisoned = true;
+        if Instant::now() >= deadline {
+            return Err(ControlError::Deadline);
+        }
+        transport.refuse_observable_eof()?;
+        if self.offset < self.frame.bytes.len() {
+            let current_rights = if self.offset == 0 { rights } else { &[] };
+            if let Some(count) =
+                transport.send_chunk(&self.frame.bytes[self.offset..], current_rights)?
+            {
+                self.offset = self
+                    .offset
+                    .checked_add(count)
+                    .ok_or(ControlError::Truncated)?;
+            }
+        }
+        self.poisoned = false;
+        Ok(self.offset == self.frame.bytes.len())
+    }
+}
+
 /// Named C receive payload/right storage retained across the closed, ordered role controls.
 pub(super) struct PreparedReceive {
     payload: Vec<u8>,
@@ -692,7 +757,7 @@ impl IncrementalReceive {
         deadline: Instant,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         if self.poisoned {
-            return Err(ControlError::ReceivePoisoned);
+            return Err(ControlError::ProgressPoisoned);
         }
         self.poisoned = true;
         if Instant::now() >= deadline {
@@ -729,7 +794,7 @@ impl IncrementalReceive {
             self.poisoned = false;
             return Ok(None);
         }
-        let length = self.length.ok_or(ControlError::ReceivePoisoned)?;
+        let length = self.length.ok_or(ControlError::ProgressPoisoned)?;
         if let Some(count) = transport.read_chunk(
             &mut self.buffer.payload[self.payload_read..],
             &mut self.credentials,
@@ -967,7 +1032,7 @@ mod tests {
         ));
         assert!(matches!(
             receive.advance::<Message>(&caller.transport(), |_| 0, deadline()),
-            Err(ControlError::ReceivePoisoned)
+            Err(ControlError::ProgressPoisoned)
         ));
     }
 

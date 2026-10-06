@@ -848,6 +848,12 @@ fn process_disappeared(error: &io::Error) -> bool {
         || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error())
 }
 
+/// Reuse the byte-safe proc-stat identity decoder for the retained caller's actual INIT claim.
+#[cfg(target_os = "linux")]
+pub(super) fn process_start_record(record: &[u8]) -> io::Result<u64> {
+    parse_process(record).map(|process| process.start)
+}
+
 fn parse_process(text: &[u8]) -> io::Result<Process> {
     let malformed = || {
         io::Error::new(
