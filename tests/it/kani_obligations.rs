@@ -1788,6 +1788,49 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     let _ = fs::remove_dir_all(directory);
 }
 
+/// Invalid launcher file kinds and execute permissions are typed faults before dispatch.
+///
+/// Trace: FR-017-AC-2, TC-027
+#[cfg(unix)]
+#[test]
+fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let package = bound_package(1000);
+    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    for directory_launcher in [false, true] {
+        let directory = write_crate(&harness, HEALTHY_SUBJECT);
+        let launcher = directory.join("cargo-kani");
+        if directory_launcher {
+            fs::create_dir(&launcher).unwrap();
+        } else {
+            fs::write(&launcher, "#!/bin/sh\nexit 0\n").unwrap();
+            fs::set_permissions(&launcher, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let installation = KaniInstallation { launcher };
+        let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            installation: &installation,
+            harness: (&harness).into(),
+            crate_directory: &directory,
+            target_directory: &directory.join("target"),
+        })
+        .unwrap_err();
+        match refusal {
+            KaniExecutionRefusal::Tool(KaniToolError::Io {
+                tool: KaniTool::Launcher,
+                path,
+                error,
+            }) => {
+                assert_eq!(path, installation.launcher);
+                assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            }
+            other => panic!("expected a typed launcher permission fault, got {other:?}"),
+        }
+        assert!(!directory.join("target").exists(), "nothing ran");
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
 // ---- kani lane ---------------------------------------------------------------
 
 pub(crate) fn scratch(name: &str) -> PathBuf {

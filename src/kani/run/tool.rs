@@ -1,6 +1,9 @@
 //! The Kani backend this crate runs and where it is located (FR-017).
 
-use std::{env, ffi::OsString, fmt, io, path::PathBuf};
+use std::{env, ffi::OsString, fmt, fs, io, path::PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 use serde::Serialize;
 
@@ -58,6 +61,28 @@ pub struct KaniInstallation {
 }
 
 impl KaniInstallation {
+    /// Inspects the launcher's current file kind and Unix execute bits before dispatch.
+    /// This snapshot does not pin the file or eliminate replacement/permission races at exec.
+    pub(super) fn require_executable(&self) -> Result<(), KaniToolError> {
+        let fault = |error| KaniToolError::Io {
+            tool: KaniTool::Launcher,
+            path: self.launcher.clone(),
+            error,
+        };
+        let metadata = fs::metadata(&self.launcher).map_err(&fault)?;
+        #[cfg(unix)]
+        let executable = metadata.permissions().mode() & 0o111 != 0;
+        #[cfg(not(unix))]
+        let executable = true;
+        if !metadata.is_file() || !executable {
+            return Err(fault(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "launcher must be a regular executable file",
+            )));
+        }
+        Ok(())
+    }
+
     /// Locates the launcher the way Cargo resolves a subcommand — `$CARGO_HOME/bin`
     /// (default `$HOME/.cargo/bin`) first, then `PATH`.
     pub fn discover() -> Result<Self, KaniToolError> {

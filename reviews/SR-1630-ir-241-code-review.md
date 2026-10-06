@@ -269,3 +269,43 @@ Round-4 verdict:
   integration tests (5 Kani tests ignored) and 9 ceiling integration tests passed. The narrow
   clippy step finished with exit 0. Full rebased CI and the second Linux Kani run are still
   pending and required before merge.
+
+## New findings (disposition pass 5)
+
+This round reviewed the fixes for the final rebased `make ci` failures: launcher preflight within
+the run deadline, the scoped `test_support` module path, and the split `cfg(test)` /
+`cfg(target_os = "linux")` attributes. The exact head is in the private tracker marker.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-015 | low | The new pre-dispatch launcher check (`fs::metadata`) restores the typed `Tool`/`Launcher` fault only for a launcher that does not exist. A launcher path that exists but cannot be executed, such as a file without the exec bit (which `KaniInstallation::discover` admits, since it checks only `is_file()`) or a directory set through the public `launcher` field, passes the check. Inside bwrap, `execvp` then fails, the wrapper exits 1 with no report, and the run is classified as a backend outcome instead of the typed launcher fault the pre-PR direct spawn returned. A launcher removed between the check and exec takes the same path. | src/kani/run/execute.rs:314-325, src/kani/run/tool.rs:55-58, src/kani/run/tool.rs:96 |
+
+Failure scenario: `KaniInstallation { launcher: "/opt/kani/cargo-kani" }` with mode 0644 gives
+an evidence record with an inconclusive (no-verdict) outcome, where it should have been
+`KaniExecutionRefusal::Tool(Io { PermissionDenied })`. Fix: in the same preflight, also require
+a regular file with an execute bit, and return the typed `Tool` fault for a directory or a
+non-executable file. Alternatively, have the namespace dispatch distinguish bwrap's own exec
+failure from a backend that ran.
+
+Round-5 verdict:
+
+- The production changes are correct. `start()` fixes the absolute deadline once, before any
+  launcher inspection. An already expired deadline skips the inspection entirely, so a zero
+  ceiling still times out before any I/O or spawn. The same deadline goes to
+  `run_bounded_launcher_at`, which no longer resets it, so the identity wall-clock ceiling covers
+  the preflight. `Duration::MAX` (no deadline) still inspects and never elapses. Batches inspect
+  their one shared launcher.
+- An absent launcher is again the typed `Tool`/`Launcher` fault before any helper or backend
+  starts. `tc_027_a_missing_launcher_is_refused_before_anything_runs` is unchanged and still
+  asserts the typed fault and that nothing ran.
+- `test_support` drops its re-export and exposes the `proof_ceilings` module itself. Every caller
+  now uses the defining-module path, and the fixture still has one source.
+- The namespace test `cfg` is split into `#[cfg(test)]` and `#[cfg(target_os = "linux")]`, which
+  is semantically identical. No test, scanner or exception was weakened: `tests/` and `scripts/`
+  are unchanged.
+- FND-001 to FND-010 and FND-012 to FND-014 show no regression. FND-011 stays deferred to IR-639;
+  IR-241 is incomplete until the guardian is delivered.
+- Actual runtime evidence for this head: the focused receipt shows exit 0 for the three tests
+  that previously failed, the 61 runner tests and narrow clippy (`--lib --test it -D warnings`).
+  Full rebased CI failed at the previous head and has not been re-run here. The second Linux Kani
+  run has not been released. Not mergeable until both pass.
