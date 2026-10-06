@@ -22,7 +22,7 @@ pub(super) struct CreatorThread {
 }
 
 impl CreatorThread {
-    /// Called inside the dedicated spawner, before creating L or any setup endpoint.
+    /// Called inside the dedicated spawner before creating L.
     pub(super) fn capture() -> io::Result<Self> {
         let raw = nix::unistd::gettid().as_raw();
         let tid = Pid::from_raw(raw)

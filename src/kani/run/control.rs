@@ -41,6 +41,9 @@ pub(super) struct RoleCaller(OwnedFd);
 /// Child side of an anonymous role pair, either mapped into entry stdin or safely received.
 pub(super) struct RoleEndpoint(OwnedFd);
 
+/// Bounded bootstrap reader with no authenticated-role authority yet.
+pub(super) struct RoleEntry(OwnedFd);
+
 /// A refusal at the bounded framing/descriptor boundary.
 #[derive(Debug)]
 pub(super) enum ControlError {
@@ -172,14 +175,43 @@ impl RoleEndpoint {
     }
 }
 
-fn validate_endpoint(descriptor: &OwnedFd) -> Result<(), ControlError> {
-    if rustix::net::sockopt::socket_domain(descriptor)? != AddressFamily::UNIX
-        || rustix::net::sockopt::socket_type(descriptor)? != SocketType::STREAM
-        || rustix::net::sockopt::socket_passcred(descriptor)?
+impl RoleEntry {
+    /// The helper's known stdio mapping is safely duplicated; no raw inherited-fd adoption.
+    /// The original slot is CLOEXEC before any role is allowed to create another process.
+    pub(super) fn from_entry_stdin() -> Result<Self, ControlError> {
+        let stdin = std::io::stdin();
+        rustix::io::fcntl_setfd(&stdin, rustix::io::FdFlags::CLOEXEC)?;
+        validate_endpoint(&stdin)?;
+        let descriptor = rustix::io::fcntl_dupfd_cloexec(&stdin, 3)?;
+        Ok(Self(descriptor))
+    }
+
+    /// Only bounded decoding is possible before independently checking actual creator authority.
+    pub(super) fn receive<T: DeserializeOwned>(
+        &self,
+        expected_rights: fn(&T) -> usize,
+        deadline: Instant,
+    ) -> Result<Received<T>, ControlError> {
+        Transport(self.0.as_fd(), CredentialsPolicy::ExclusiveCreator)
+            .receive(expected_rights, deadline)
+    }
+
+    pub(super) fn authenticate(
+        self,
+        actual_creator: &OwnedFd,
+    ) -> Result<RoleEndpoint, ControlError> {
+        RoleEndpoint::from_received(self.0, actual_creator)
+    }
+}
+
+fn validate_endpoint(descriptor: impl AsFd) -> Result<(), ControlError> {
+    if rustix::net::sockopt::socket_domain(&descriptor)? != AddressFamily::UNIX
+        || rustix::net::sockopt::socket_type(&descriptor)? != SocketType::STREAM
+        || rustix::net::sockopt::socket_passcred(&descriptor)?
     {
         return Err(ControlError::UnexpectedCredentials);
     }
-    if !rustix::io::fcntl_getfd(descriptor)?.contains(rustix::io::FdFlags::CLOEXEC) {
+    if !rustix::io::fcntl_getfd(&descriptor)?.contains(rustix::io::FdFlags::CLOEXEC) {
         return Err(ControlError::RightsNotCloexec);
     }
     Ok(())
