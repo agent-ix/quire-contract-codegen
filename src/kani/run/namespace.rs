@@ -639,69 +639,19 @@ impl NamespaceOwner {
         }
         let directory = PathBuf::from("/proc").join(claim.pid.to_string());
         let status = bounded_proc_text(&directory.join("status"), 16_384)?;
-        let parent = status.lines().find_map(|line| line.strip_prefix("PPid:"));
-        let nspid = status.lines().find_map(|line| line.strip_prefix("NSpid:"));
-        let parent = parent.and_then(|value| value.trim().parse::<i32>().ok());
-        if parent != self.wrapper.map(|pid| pid.as_raw_pid())
-            || nspid.and_then(|value| value.split_whitespace().last()) != Some("1")
-            || fs::read_link(directory.join("ns/pid"))? != claim.namespace
-        {
+        verify_ready_status(
+            status.as_bytes(),
+            self.wrapper
+                .map(|pid| pid.as_raw_pid())
+                .ok_or(ReadyIdentityError::ChainMismatch)?,
+        )?;
+        if fs::read_link(directory.join("ns/pid"))? != claim.namespace {
             return Err(ReadyIdentityError::ChainMismatch);
         }
         let stat = bounded_proc_text(&directory.join("stat"), 4096)?;
-        let fields = stat
-            .rsplit_once(')')
-            .map(|(_, fields)| fields.split_whitespace().collect::<Vec<_>>())
-            .ok_or(ReadyIdentityError::ChainMismatch)?;
-        if fields.get(19).and_then(|value| value.parse::<u64>().ok()) != Some(claim.start) {
-            return Err(ReadyIdentityError::ChainMismatch);
-        }
-        let group = fields.get(2).and_then(|value| value.parse::<u32>().ok());
-        let session = fields.get(3).and_then(|value| value.parse::<u32>().ok());
-        let tty = fields.get(4).and_then(|value| value.parse::<i64>().ok());
-        if group != Some(claim.pid)
-            || session != Some(claim.pid)
-            || tty != Some(0)
-            || group == u32::try_from(rustix::process::getpgrp().as_raw_pid()).ok()
-            || session
-                == u32::try_from(
-                    rustix::process::getsid(None)
-                        .map_err(io::Error::from)?
-                        .as_raw_pid(),
-                )
-                .ok()
-        {
-            return Err(ReadyIdentityError::SessionNotIsolated);
-        }
+        verify_ready_stat(stat.as_bytes(), claim.pid, claim.start)?;
         let mappings = bounded_proc_text(&directory.join("uid_map"), 4096)?;
-        let host_uid = rustix::process::getuid().as_raw();
-        let mut actual_mapping = None;
-        for (index, mapping) in mappings.lines().enumerate() {
-            if index == 32 {
-                return Err(ReadyIdentityError::UidMappingMismatch);
-            }
-            let mut columns = mapping.split_whitespace();
-            let inside = columns.next().and_then(|value| value.parse::<u32>().ok());
-            let outside = columns.next().and_then(|value| value.parse::<u32>().ok());
-            let length = columns.next().and_then(|value| value.parse::<u32>().ok());
-            let (Some(inside), Some(outside), Some(length)) = (inside, outside, length) else {
-                return Err(ReadyIdentityError::UidMappingMismatch);
-            };
-            if columns.next().is_some() {
-                return Err(ReadyIdentityError::UidMappingMismatch);
-            }
-            if let Some(offset) = host_uid
-                .checked_sub(outside)
-                .filter(|offset| *offset < length)
-            {
-                if actual_mapping.replace(inside.checked_add(offset)).is_some() {
-                    return Err(ReadyIdentityError::UidMappingMismatch);
-                }
-            }
-        }
-        if actual_mapping.flatten() != Some(mapped_uid) {
-            return Err(ReadyIdentityError::UidMappingMismatch);
-        }
+        verify_ready_mapping(mappings.as_bytes(), mapped_uid)?;
         if self.init_terminated()? {
             return Err(ReadyIdentityError::InitTerminated);
         }
@@ -928,6 +878,138 @@ impl Drop for NamespaceOwner {
             let _ = kill_process_group(wrapper, Signal::KILL);
         }
     }
+}
+
+/// Both actual ownership topologies authenticate the same unchanged guardian lease stages.
+/// The legacy direct monitor and the new retained C→L→O→M→I owner supply genuine identities.
+#[cfg(target_os = "linux")]
+pub(super) trait GuardianIdentity {
+    fn verify_ready(
+        &self,
+        sender: super::control::PeerCredentials,
+        mapped_uid: u32,
+    ) -> Result<(), ReadyIdentityError>;
+}
+
+#[cfg(target_os = "linux")]
+impl GuardianIdentity for NamespaceOwner {
+    fn verify_ready(
+        &self,
+        sender: super::control::PeerCredentials,
+        mapped_uid: u32,
+    ) -> Result<(), ReadyIdentityError> {
+        NamespaceOwner::verify_ready(self, sender, mapped_uid)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn verify_ready_status(record: &[u8], monitor: i32) -> Result<(), ReadyIdentityError> {
+    let text = std::str::from_utf8(record).map_err(|_| ReadyIdentityError::ChainMismatch)?;
+    let mut parent = None;
+    let mut nspid = None;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("PPid:") {
+            if parent
+                .replace(
+                    value
+                        .trim()
+                        .parse::<i32>()
+                        .map_err(|_| ReadyIdentityError::ChainMismatch)?,
+                )
+                .is_some()
+            {
+                return Err(ReadyIdentityError::ChainMismatch);
+            }
+        }
+        if let Some(value) = line.strip_prefix("NSpid:") {
+            if nspid.replace(value.split_whitespace().last()).is_some() {
+                return Err(ReadyIdentityError::ChainMismatch);
+            }
+        }
+    }
+    if parent != Some(monitor) || nspid.flatten() != Some("1") {
+        return Err(ReadyIdentityError::ChainMismatch);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn verify_ready_stat(
+    record: &[u8],
+    pid: u32,
+    start: u64,
+) -> Result<(), ReadyIdentityError> {
+    let closing = record
+        .iter()
+        .rposition(|byte| *byte == b')')
+        .ok_or(ReadyIdentityError::ChainMismatch)?;
+    let tail = std::str::from_utf8(
+        record
+            .get(closing + 1..)
+            .ok_or(ReadyIdentityError::ChainMismatch)?,
+    )
+    .map_err(|_| ReadyIdentityError::ChainMismatch)?;
+    let mut fields = tail.split_whitespace();
+    fields.next().ok_or(ReadyIdentityError::ChainMismatch)?;
+    fields.next().ok_or(ReadyIdentityError::ChainMismatch)?;
+    let group = fields.next().and_then(|value| value.parse::<u32>().ok());
+    let session = fields.next().and_then(|value| value.parse::<u32>().ok());
+    let tty = fields.next().and_then(|value| value.parse::<i64>().ok());
+    if fields.nth(14).and_then(|value| value.parse::<u64>().ok()) != Some(start) {
+        return Err(ReadyIdentityError::ChainMismatch);
+    }
+    if group != Some(pid)
+        || session != Some(pid)
+        || tty != Some(0)
+        || group == u32::try_from(rustix::process::getpgrp().as_raw_pid()).ok()
+        || session
+            == u32::try_from(
+                rustix::process::getsid(None)
+                    .map_err(io::Error::from)?
+                    .as_raw_pid(),
+            )
+            .ok()
+    {
+        return Err(ReadyIdentityError::SessionNotIsolated);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn verify_ready_mapping(
+    record: &[u8],
+    mapped_uid: u32,
+) -> Result<(), ReadyIdentityError> {
+    let text = std::str::from_utf8(record).map_err(|_| ReadyIdentityError::UidMappingMismatch)?;
+    let host_uid = rustix::process::getuid().as_raw();
+    let mut actual_mapping = None;
+    for (index, mapping) in text.lines().enumerate() {
+        if index == 32 {
+            return Err(ReadyIdentityError::UidMappingMismatch);
+        }
+        let mut columns = mapping.split_whitespace();
+        let inside = columns.next().and_then(|value| value.parse::<u32>().ok());
+        let outside = columns.next().and_then(|value| value.parse::<u32>().ok());
+        let length = columns.next().and_then(|value| value.parse::<u32>().ok());
+        let (Some(inside), Some(outside), Some(length)) = (inside, outside, length) else {
+            return Err(ReadyIdentityError::UidMappingMismatch);
+        };
+        if columns.next().is_some() {
+            return Err(ReadyIdentityError::UidMappingMismatch);
+        }
+        if let Some(offset) = host_uid
+            .checked_sub(outside)
+            .filter(|offset| *offset < length)
+        {
+            if actual_mapping.replace(inside.checked_add(offset)).is_some() {
+                return Err(ReadyIdentityError::UidMappingMismatch);
+            }
+        }
+    }
+    if actual_mapping.flatten() != Some(mapped_uid) {
+        return Err(ReadyIdentityError::UidMappingMismatch);
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]

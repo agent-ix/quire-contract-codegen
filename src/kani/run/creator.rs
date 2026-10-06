@@ -217,6 +217,49 @@ impl PreparedIdentity {
         super::memory::process_start_record(self.read_record()?)
     }
 
+    pub(super) fn verify_ready(
+        &mut self,
+        child: &OwnedFd,
+        parent: &OwnedFd,
+        expected: (i32, u64, super::outer_setup::NamespaceIdentity),
+        sender: super::control::PeerCredentials,
+        mapped_uid: u32,
+    ) -> Result<(), super::namespace::ReadyIdentityError> {
+        use super::namespace::{
+            verify_ready_mapping, verify_ready_stat, verify_ready_status, ReadyIdentityError,
+        };
+        if sender.pid != expected.0
+            || sender.uid != rustix::process::getuid().as_raw()
+            || sender.gid != rustix::process::getgid().as_raw()
+        {
+            return Err(ReadyIdentityError::SenderMismatch);
+        }
+        let pid = self.validate_child_process(child, parent)?;
+        if pid != expected.0 {
+            return Err(ReadyIdentityError::ChainMismatch);
+        }
+        let monitor = self.descriptor_pid(parent)?;
+        self.path.clear();
+        write!(&mut self.path, "/proc/{pid}/status").map_err(io::Error::other)?;
+        verify_ready_status(self.read_record()?, monitor)?;
+        if self.child_namespace(pid)? != expected.2 {
+            return Err(ReadyIdentityError::ChainMismatch);
+        }
+        self.path.clear();
+        write!(&mut self.path, "/proc/{pid}/stat").map_err(io::Error::other)?;
+        verify_ready_stat(
+            self.read_record()?,
+            u32::try_from(pid).map_err(|_| ReadyIdentityError::ChainMismatch)?,
+            expected.1,
+        )?;
+        self.path.clear();
+        write!(&mut self.path, "/proc/{pid}/uid_map").map_err(io::Error::other)?;
+        verify_ready_mapping(self.read_record()?, mapped_uid)?;
+        require_live(child)?;
+        require_live(parent)?;
+        Ok(())
+    }
+
     fn descriptor_pid(&mut self, descriptor: &OwnedFd) -> io::Result<i32> {
         self.path.clear();
         write!(
