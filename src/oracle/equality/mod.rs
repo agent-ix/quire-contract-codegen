@@ -1629,54 +1629,83 @@ fn presence_path(presence: Presence) -> &'static str {
 /// propagates with `?`, so the expression belongs in a function returning
 /// `Result<_, ReconstructionError>`.
 fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
-    Ok(match value_type {
-        ValueType::Boolean => "rt::ValueType::Boolean".to_owned(),
-        ValueType::Integer => "rt::ValueType::Integer".to_owned(),
-        ValueType::Int(interval) => {
-            format!("rt::ValueType::Int({})", render_interval(interval))
+    enum Task<'a> {
+        Value(&'a ValueType),
+        CloseOption,
+        CloseCollection { minimum: u64, maximum: u64 },
+    }
+
+    let mut rendered = String::new();
+    let mut tasks = vec![Task::Value(value_type)];
+    while let Some(task) = tasks.pop() {
+        match task {
+            Task::CloseOption => rendered.push(')'),
+            Task::CloseCollection { minimum, maximum } => {
+                rendered.push_str(&format!(", rebuild_cardinality({minimum}, {maximum})?))"))
+            }
+            Task::Value(value_type) => match value_type {
+                ValueType::Boolean => rendered.push_str("rt::ValueType::Boolean"),
+                ValueType::Integer => rendered.push_str("rt::ValueType::Integer"),
+                ValueType::Int(interval) => rendered.push_str(&format!(
+                    "rt::ValueType::Int({})",
+                    render_interval(interval)
+                )),
+                ValueType::Rational(domain) => rendered.push_str(&format!(
+                    "rt::ValueType::Rational(rebuild_rational({}, {})?)",
+                    render_interval(domain.numerator()),
+                    render_interval(domain.denominator())
+                )),
+                ValueType::Decimal(decimal) => rendered.push_str(&format!(
+                    "rt::ValueType::Decimal({})",
+                    render_decimal_type(decimal)?
+                )),
+                ValueType::Float(rt::IeeeWidth::Binary32) => {
+                    rendered.push_str("rt::ValueType::Float(rt::IeeeWidth::Binary32)");
+                }
+                ValueType::Float(rt::IeeeWidth::Binary64) => {
+                    rendered.push_str("rt::ValueType::Float(rt::IeeeWidth::Binary64)");
+                }
+                ValueType::Quantity(_) => {
+                    return Err(RenderError::UnsupportedValueType { family: "quantity" });
+                }
+                ValueType::Text(text_type) => rendered.push_str(&format!(
+                    "rt::ValueType::Text(rebuild_text({}, {}, {})?)",
+                    text_type.min(),
+                    text_type.max(),
+                    profile_path(text_type.profile())?
+                )),
+                ValueType::Enum(key) => {
+                    rendered.push_str(&format!("rt::ValueType::Enum({})", render_key(*key)));
+                }
+                ValueType::Option(payload) => {
+                    rendered.push_str("rt::ValueType::option(");
+                    tasks.push(Task::CloseOption);
+                    tasks.push(Task::Value(payload));
+                }
+                ValueType::Composite(key) => {
+                    rendered.push_str(&format!("rt::ValueType::Composite({})", render_key(*key)));
+                }
+                ValueType::Collection(collection) => {
+                    rendered.push_str(&format!(
+                        "rt::ValueType::collection(rt::CollectionType::new({}, ",
+                        collection_kind_path(collection.kind())?
+                    ));
+                    tasks.push(Task::CloseCollection {
+                        minimum: collection.bound().minimum(),
+                        maximum: collection.bound().maximum(),
+                    });
+                    tasks.push(Task::Value(collection.element()));
+                }
+                ValueType::Reference(_) => {
+                    return Err(RenderError::UnsupportedValueType {
+                        family: "reference",
+                    });
+                }
+                &_ => return Err(OracleGenerationError::unknown_variant("ValueType").into()),
+            },
         }
-        ValueType::Rational(domain) => format!(
-            "rt::ValueType::Rational(rebuild_rational({}, {})?)",
-            render_interval(domain.numerator()),
-            render_interval(domain.denominator())
-        ),
-        ValueType::Decimal(decimal) => {
-            format!("rt::ValueType::Decimal({})", render_decimal_type(decimal)?)
-        }
-        ValueType::Float(rt::IeeeWidth::Binary32) => {
-            "rt::ValueType::Float(rt::IeeeWidth::Binary32)".to_owned()
-        }
-        ValueType::Float(rt::IeeeWidth::Binary64) => {
-            "rt::ValueType::Float(rt::IeeeWidth::Binary64)".to_owned()
-        }
-        ValueType::Quantity(_) => {
-            return Err(RenderError::UnsupportedValueType { family: "quantity" });
-        }
-        ValueType::Text(text_type) => format!(
-            "rt::ValueType::Text(rebuild_text({}, {}, {})?)",
-            text_type.min(),
-            text_type.max(),
-            profile_path(text_type.profile())?
-        ),
-        ValueType::Enum(key) => format!("rt::ValueType::Enum({})", render_key(*key)),
-        ValueType::Option(payload) => {
-            format!("rt::ValueType::option({})", render_value_type(payload)?)
-        }
-        ValueType::Composite(key) => format!("rt::ValueType::Composite({})", render_key(*key)),
-        ValueType::Collection(collection) => format!(
-            "rt::ValueType::collection(rt::CollectionType::new({}, {}, rebuild_cardinality({}, {})?))",
-            collection_kind_path(collection.kind())?,
-            render_value_type(collection.element())?,
-            collection.bound().minimum(),
-            collection.bound().maximum()
-        ),
-        ValueType::Reference(_) => {
-            return Err(RenderError::UnsupportedValueType {
-                family: "reference",
-            });
-        }
-        &_ => return Err(OracleGenerationError::unknown_variant("ValueType").into()),
-    })
+    }
+    Ok(rendered)
 }
 
 fn render_interval(interval: &IntegerInterval) -> String {
@@ -1940,38 +1969,41 @@ mod tests {
 
     fn check_synthetic_items(
         mut nodes: Vec<CheckedSemanticNodeV2>,
-        type_ids: &[CheckedNodeId],
+        operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
     ) -> (Vec<Result<(), CompositeEqualityRefusal>>, String) {
-        assert!(type_ids.len() <= 2, "fixture has two distinct item ids");
+        assert!(operands.len() <= 2, "fixture has two distinct item ids");
         let mut records = Vec::new();
         let mut items = Vec::new();
-        for (type_id, (parameter_digit, expression_digit)) in
-            type_ids.iter().zip([('8', '9'), ('6', '7')])
+        for ((left, right), (left_digit, right_digit, expression_digit)) in
+            operands.iter().zip([('8', 'a', '9'), ('6', 'b', '7')])
         {
-            let parameter_id = node_id(parameter_digit);
+            let left_id = node_id(left_digit);
+            let right_id = node_id(right_digit);
             let expression_id = node_id(expression_digit);
-            let parameter: CheckedSemanticNodeV2 = serde_json::from_value(json!({
-                "node_id": parameter_id,
-                "schema_version": "quire.checked-semantic-graph/v2",
-                "node_tag": "value",
-                "semantic_form": "parameter",
-                "semantic_type": type_id,
-                "dependencies": [],
-                "occurrences": [],
-                "body": {"term": "aggregate", "members": []},
-            }))
-            .unwrap();
+            let parameter = |id: &CheckedNodeId, source_type: &CheckedNodeId| {
+                serde_json::from_value::<CheckedSemanticNodeV2>(json!({
+                    "node_id": id,
+                    "schema_version": "quire.checked-semantic-graph/v2",
+                    "node_tag": "value",
+                    "semantic_form": "parameter",
+                    "semantic_type": source_type,
+                    "dependencies": [],
+                    "occurrences": [],
+                    "body": {"term": "aggregate", "members": []},
+                }))
+                .expect("synthetic parameter")
+            };
             let expression: CheckedSemanticNodeV2 = serde_json::from_value(json!({
                 "node_id": expression_id,
                 "schema_version": "quire.checked-semantic-graph/v2",
                 "node_tag": "expression",
                 "semantic_form": "binary",
-                "semantic_type": type_id,
+                "semantic_type": left.source_type,
                 "dependencies": [],
                 "occurrences": [],
                 "body": {"term": "application", "operator": "binary", "arguments": [
-                    {"term": "reference", "target": parameter_id},
-                    {"term": "reference", "target": parameter_id}
+                    {"term": "reference", "target": left_id},
+                    {"term": "reference", "target": right_id}
                 ]},
             }))
             .unwrap();
@@ -1980,7 +2012,7 @@ mod tests {
                     node: expression.clone(),
                     node_tag: CheckedNodeTag::Expression,
                     source_map: Vec::new(),
-                    semantic_type: type_id.clone(),
+                    semantic_type: left.source_type.clone(),
                     dependencies: Vec::new(),
                     bounds: Vec::new(),
                     claims: Vec::new(),
@@ -1994,10 +2026,11 @@ mod tests {
             items.push(CompositeEqualityItem {
                 node_id: expression_id,
                 operator: EqualityOperatorKind::Equal,
-                left: EqualityOperandDescriptor::typed(type_id.clone()),
-                right: EqualityOperandDescriptor::typed(type_id.clone()),
+                left: left.clone(),
+                right: right.clone(),
             });
-            nodes.push(parameter);
+            nodes.push(parameter(&left_id, &left.source_type));
+            nodes.push(parameter(&right_id, &right.source_type));
             nodes.push(expression);
         }
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
@@ -2027,7 +2060,8 @@ mod tests {
         nodes: Vec<CheckedSemanticNodeV2>,
         type_id: CheckedNodeId,
     ) -> Result<(), CompositeEqualityRefusal> {
-        let (mut outcomes, _) = check_synthetic_items(nodes, &[type_id]);
+        let typed = EqualityOperandDescriptor::typed(type_id);
+        let (mut outcomes, _) = check_synthetic_items(nodes, &[(typed.clone(), typed)]);
         outcomes.remove(0)
     }
 
@@ -2182,9 +2216,24 @@ mod tests {
             Ok(ValueType::Boolean)
         );
 
+        // Four roots in one item (left source/target, then right source/target)
+        // consume exactly the limit: the first 65,533-node walk plus three
+        // cached-root entries. The item must still be generated.
+        let at_limit_operand = EqualityOperandDescriptor::converted(ids[4].clone(), ids[4].clone());
+        let (at_limit_outcomes, at_limit_source) = check_synthetic_items(
+            chain.clone(),
+            &[(at_limit_operand.clone(), at_limit_operand)],
+        );
+        assert_eq!(at_limit_outcomes, vec![Ok(())]);
+        assert!(at_limit_source.contains("pub fn oracle_test0"));
+
         // Both items share one synthetic lowered graph and emission pass.
-        let (outcomes, emitted) =
-            check_synthetic_items(chain, &[ids[0].clone(), ids[count].clone()]);
+        let exhausted = EqualityOperandDescriptor::typed(ids[0].clone());
+        let healthy = EqualityOperandDescriptor::typed(ids[count].clone());
+        let (outcomes, emitted) = check_synthetic_items(
+            chain,
+            &[(exhausted.clone(), exhausted), (healthy.clone(), healthy)],
+        );
         assert_eq!(
             outcomes[0],
             Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
@@ -2243,6 +2292,10 @@ mod tests {
                 assert!(matches!(value_type, ValueType::Option(_)));
                 let copy = value_type.clone();
                 assert_eq!(copy, value_type);
+                let rendered = render_value_type(&value_type).expect("deep Option renders");
+                assert_eq!(rendered.matches("rt::ValueType::option(").count(), DEPTH);
+                assert!(rendered.contains("rt::ValueType::Boolean"));
+                assert!(rendered.len() < MAX_GENERATED_SOURCE_BYTES);
                 drop(copy);
                 drop(value_type);
             })

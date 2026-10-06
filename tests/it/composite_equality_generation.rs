@@ -156,6 +156,28 @@ fn assert_recursive_item_generation(
     list: quire_contract_model::CheckedNodeId,
     tree: quire_contract_model::CheckedNodeId,
 ) {
+    fn emitted_key(node: &quire_contract_model::CheckedNodeId) -> String {
+        let key = NodeKey::from_hex(&node.digest).expect("a checked node digest is a runtime key");
+        let bytes = key
+            .as_bytes()
+            .iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("rt::NodeKey::from_bytes([{bytes}])")
+    }
+
+    fn composites_block<'a>(source: &'a str, oracle_symbol: &str) -> &'a str {
+        let stem = oracle_symbol
+            .strip_prefix("oracle_")
+            .expect("generated oracle symbol");
+        let marker = format!("fn composites_{stem}()");
+        let (_, block) = source
+            .split_once(&marker)
+            .expect("item's declaration block");
+        block.split_once("\n}\n").expect("declaration block end").0
+    }
+
     let package = builder.admit();
     let items = [
         CompositeEqualityItem {
@@ -172,19 +194,31 @@ fn assert_recursive_item_generation(
         },
     ];
     let oracles = generate(&package, &items);
-    assert_eq!(
-        generated(only_claim(&oracles, E_QSPEC_LIST)).declaration_keys,
-        vec![list]
-    );
-    assert_eq!(
-        generated(only_claim(&oracles, E_QSPEC_TREE)).declaration_keys,
-        vec![tree]
-    );
+    let list_claim = generated(only_claim(&oracles, E_QSPEC_LIST));
+    let tree_claim = generated(only_claim(&oracles, E_QSPEC_TREE));
+    assert_eq!(list_claim.declaration_keys, vec![list.clone()]);
+    assert_eq!(tree_claim.declaration_keys, vec![tree.clone()]);
     let lib = contents(&oracles, "src/lib.rs");
     assert_eq!(lib.matches("pub fn oracle_").count(), 2);
     assert_eq!(lib.matches("pub fn environment_").count(), 2);
-    assert!(lib.contains("rt::Presence::Optional"));
-    assert!(lib.contains("rebuild_cardinality(0, 3)"));
+    let list_block = composites_block(lib, &list_claim.oracle_symbol);
+    let list_key = emitted_key(&list);
+    assert!(
+        list_block.contains(&format!("rt::CompositeDeclaration::new({list_key}, ")),
+        "List declaration: {list_block}"
+    );
+    assert!(list_block.contains(&format!(
+        "rt::FieldDeclaration::new(\"next\", rt::ValueType::Composite({list_key}), rt::Presence::Optional)"
+    )));
+    let tree_block = composites_block(lib, &tree_claim.oracle_symbol);
+    let tree_key = emitted_key(&tree);
+    assert!(
+        tree_block.contains(&format!("rt::CompositeDeclaration::new({tree_key}, ")),
+        "Tree declaration: {tree_block}"
+    );
+    assert!(tree_block.contains(&format!(
+        "rt::FieldDeclaration::new(\"kids\", rt::ValueType::collection(rt::CollectionType::new(rt::CollectionKind::Sequence, rt::ValueType::Composite({tree_key}), rebuild_cardinality(0, 3)?)), rt::Presence::Required)"
+    )));
 }
 
 /// Optional local conformance against the private QSpec fixture. The public
