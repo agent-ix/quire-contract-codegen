@@ -600,6 +600,33 @@ fixture DTO, rights, hook or coordination cap; where an ordinary production seam
 record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
 criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
 
+### Charged-peak evidence constructors (FR-034-AC-32)
+
+This additional Test and source-flow Analysis procedure is PLANNED/UNRUN. It does not
+claim the current constructors or ledger integration satisfy the amended obligation.
+Audit every emitted evidence constructor and both single-run and compatible batch callers;
+require mandatory `charged_peak: ChargedPeakObservation` propagation without a default.
+Exercise each evidence-producing case below through the real bounded execution flow and
+compare against independently retained complete O charge observations. Use a genuine measured
+sample as the positive control, and reject substitutions of zero, the ceiling, backing reserves,
+a C-only RSS probe or a partial/failed observation. Preserve the existing outcome and settlement
+oracles; an execution error must emit no `KaniExecutionEvidence`.
+
+| Constructor/caller case | Required charged-peak result | Independent adverse oracle |
+|---|---|---|
+| Single-run zero/already-expired original deadline before L/O creation | TimedOut with `NotObserved { reason: PreRoleTimeout }` | No new L/O or Dispatch; AC-20 classification unchanged; no manufactured observation |
+| Single-run startup timeout after role creation, before Dispatch and before the first complete O sample | TimedOut with `NotObserved { reason: StartupTimeoutBeforeObservation }` after required settlement | A role-created startup timeout must not be mislabeled PreRoleTimeout |
+| Single-run startup timeout before Dispatch with a prior complete actual O sample | `Observed { bytes }` using the actual complete peak | Reject NotObserved and any incomplete/proxy charge |
+| Every post-Dispatch single-run evidence conclusion, including timeout, memory exhaustion and completed classification | `Observed { bytes }` from complete actual O observations | Missing complete measurement is execution error with no evidence, never a new absence reason |
+| Compatible completed batch member evidence | The same authenticated whole-run `Observed { bytes }` propagated to each member | No per-member invented charge, optional field or default |
+| C capability/availability failure; failed/expired ledger without an admissible measured conclusion; capture/refusal/settlement errors; whole-batch timeout/resource refusal | Existing execution error with no evidence | No invented NotObserved reason or evidence merely because an internal bounded-launch value exists |
+
+The constructor audit shall distinguish startup admission from dispatched execution and trace
+error conversion before evidence construction. A ledger deadline error alone does not establish
+an evidence-emitting path or prove no prior sample existed. Retain an actual complete prior peak
+when the existing timeout conclusion legitimately emits evidence; otherwise refuse as required.
+No new public request field, observation schedule override, fallback or evidence kind is allocated.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
