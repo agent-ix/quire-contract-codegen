@@ -1226,7 +1226,10 @@ pub fn corpus_package() -> PackageBuilder {
             "composite_type",
             "record",
             T_BOOLEAN,
-            aggregate(vec![binding("next", OPT_SELF)]),
+            aggregate(vec![bound_member(
+                "next",
+                aggregate(vec![binding("optional", OPT_SELF)]),
+            )]),
             "self-cycle",
         )
         .code_in_group(
