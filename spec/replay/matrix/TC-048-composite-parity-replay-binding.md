@@ -82,7 +82,8 @@ and never replace positive QSL evaluation with a verdict double.
    domain, limits or proof-content identity; each returns no settlement. Keep QSL refusal codes,
    executor faults and CG defect causes typed. Before QSL-640 delivery, also exercise inconclusive
    and cover-unsatisfied shadows with retained refinement_failed: each takes typed interim
-   NonProductionProof carrying that strength and returns no terminal value, while cases without
+   NonProductionProof carrying that strength and returns no terminal value. IR-241 owns the
+   refusal variant and verified-strength input; IR-635 owns the widened interim case. Cases without
    disagreement take ordinary inconclusive rows. After delivery, the disagreement-first
    Failed/CgDefect rule applies. While the upstream gate holds, an otherwise valid request reaches
    the unavailable-capability refusal; malformed earlier setup reaches its own refusal. Executable

@@ -144,10 +144,10 @@ operations:
       AC-17 and AC-19 to AC-27 own closed strength projection, cross-outcome disagreement priority,
       ordinary shadow-inconclusive/resource rows, vacuous category and completed Proved/Tested
       outcomes; TC-048 owns its scenarios. UNVERIFIED SOURCE and gated on actual QSL-640 API
-      delivery. IR-241 owns the proof-subject/verified-strength inputs and interim NonProductionProof
-      / ShadowCounterexample variants; IR-635 widens NonProductionProof to bounded-shadow
-      inconclusive/cover-unsatisfied outcomes retaining refinement_failed. These refusals hold
-      until delivery, not as the final map.
+      delivery. IR-241 owns the proof-subject/verified-strength inputs and interim
+      NonProductionProof / ShadowCounterexample variants; IR-635 widens NonProductionProof to
+      bounded-shadow inconclusive/cover-unsatisfied outcomes retaining refinement_failed. These
+      refusals hold until delivery, not as the final map.
   - name: ir_outcome_terminal_value
     inputs: [Contract IR KaniOutcome, the SUCCESS-check count, an optional ReplaySettlement as run_terminal_value takes it]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
