@@ -2,7 +2,7 @@
 //!
 //! The trusted single-thread backend entry owns authentication, actual policy installation and
 //! positive Dispatch. It calls this boundary only after those checks, keeps its authenticated
-//! bootstrap fd0 open and stable through preparation, and never retries an exec failure without
+//! bootstrap fd0 open and stable until exec, and never retries an exec failure without
 //! settling the run. This module installs no policy and creates no child or control transport.
 
 #![cfg(target_os = "linux")]
@@ -25,7 +25,7 @@ pub(super) struct PreparedBackendExec {
 
 /// Prepare the admitted recipe without changing its program, argv, environment or directory.
 ///
-/// The caller must retain the authenticated bootstrap at fd0 until this function returns.
+/// The caller must retain the authenticated bootstrap at fd0 through preparation and exec.
 /// `Closed` describes original backend stdin, not the currently open bootstrap descriptor.
 /// Captured stdout/stderr remain inherited; only the owned report writer gains the report slot.
 pub(super) fn prepare(
