@@ -117,6 +117,7 @@ impl MonotonicInstant {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(super) enum StopOrigin {
     Caller,
+    Launcher,
     Outer,
     Inner,
 }
@@ -125,8 +126,9 @@ impl StopOrigin {
     fn slot(self) -> usize {
         match self {
             Self::Caller => 0,
-            Self::Outer => 1,
-            Self::Inner => 2,
+            Self::Launcher => 1,
+            Self::Outer => 2,
+            Self::Inner => 3,
         }
     }
 }
@@ -155,7 +157,7 @@ impl StopStamp {
 /// earlier producer can shorten the bound; no second event or delayed receipt can extend it.
 pub(super) struct StopTimeline {
     started: MonotonicInstant,
-    last: [Option<MonotonicInstant>; 3],
+    last: [Option<MonotonicInstant>; 4],
     earliest: Option<StopStamp>,
 }
 
@@ -164,7 +166,7 @@ impl StopTimeline {
         started.duration()?;
         Ok(Self {
             started,
-            last: [None; 3],
+            last: [None; 4],
             earliest: None,
         })
     }
