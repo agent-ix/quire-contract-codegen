@@ -603,6 +603,15 @@ waives kernel descendant cancellation.
   FR-017 launcher → FR-028 AC-21 containment slice → FR-034 guardian ownership → FR-028 AC-24 native
   refinement; no whole-requirement or parent-ticket cycle is introduced.
 
+Evidence is staged explicitly in [TC-049](../matrix/TC-049-caller-death-ownership.md)'s evidence
+delivery allocation: ordinary production seams without fixture extension first, IR-655's owed
+exact O-origin/internal-bwrap/final-whole-run-sample and independent role witnesses second. This is
+an evidence-order delta, not a guarantee reduction. Mixed whole criteria remain untagged until all
+obligations have actual Test evidence; partial first-slice readiness is not complete IR-639 or
+Kani MVP acceptance. Unavailable ordinary-seam predicates are explicitly transferred as owed,
+never waived. Original compile/adaptation gaps, assertion and mutant-retirement rules remain
+mandatory, alongside the unchanged independent AC-24 pre-escalation EOF oracle.
+
 Primary source grounding (Analysis, not production Test): Linux
 [PID namespaces](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html) defines INIT-death
 namespace teardown; [parent-death signals](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)

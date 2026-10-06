@@ -182,3 +182,11 @@ at a time.
 The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
 not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No new
 executable coverage is claimed by this specification amendment.
+
+
+Evidence staging follows TC-049's explicit delivery allocation. Slice 1 uses ordinary normal-library
+report/export, collector and kernel descriptor seams without fixture extension. Its assertions do
+not tag a mixed FR-034 collector/lifetime criterion whose O-origin or independent termination
+witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual export or unit-test
+compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
+override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
