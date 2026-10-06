@@ -24,6 +24,8 @@ mod control;
 #[cfg(target_os = "linux")]
 mod caller_bootstrap;
 #[cfg(target_os = "linux")]
+mod caller_streams;
+#[cfg(target_os = "linux")]
 mod launcher_owner;
 
 // Actual creator-thread liveness, including the retained outside L role.

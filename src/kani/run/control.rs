@@ -380,36 +380,59 @@ impl<'fd> Transport<'fd> {
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Instant,
     ) -> Result<Received<T>, ControlError> {
+        let mut buffer = PreparedReceive::prepare()?;
+        let received = self.receive_prepared(&mut buffer, expected_rights, deadline)?;
+        Ok(Received {
+            control: received.control,
+            credentials: received.credentials,
+            rights: std::mem::take(received.rights),
+        })
+    }
+
+    /// C receives into storage whose actual capacity was reserved before L creation. Ancillary
+    /// rights remain owned by that same storage until the caller explicitly takes each pin.
+    pub(super) fn receive_prepared<'buffer, T: DeserializeOwned>(
+        &self,
+        buffer: &'buffer mut PreparedReceive,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
+        buffer.rights.clear();
         let mut credentials = None;
-        let mut rights = Vec::new();
         let mut header = [0; 4];
-        self.read_exact(&mut header, &mut credentials, &mut rights, deadline)?;
+        self.read_exact(&mut header, &mut credentials, &mut buffer.rights, deadline)?;
         let length = usize::try_from(u32::from_be_bytes(header))
             .map_err(|_| ControlError::EncodedBytesExceeded)?;
         if length == 0 || length > CONTROL_BYTES {
             return Err(ControlError::EncodedBytesExceeded);
         }
-        let mut payload = vec![0; length];
-        self.read_exact(&mut payload, &mut credentials, &mut rights, deadline)?;
+        buffer.payload.resize(length, 0);
+        self.read_exact(
+            &mut buffer.payload,
+            &mut credentials,
+            &mut buffer.rights,
+            deadline,
+        )?;
         self.refuse_observable_eof()?;
-        let control = serde_json::from_slice(&payload).map_err(ControlError::InvalidEncoding)?;
-        let expected_rights = expected_rights(&control);
-        if expected_rights > RECEIVED_RIGHTS {
+        let control =
+            serde_json::from_slice(&buffer.payload).map_err(ControlError::InvalidEncoding)?;
+        let expected = expected_rights(&control);
+        if expected > RECEIVED_RIGHTS {
             return Err(ControlError::ExcessRights);
         }
-        if rights.len() != expected_rights {
+        if buffer.rights.len() != expected {
             return Err(ControlError::RightsCount {
-                expected: expected_rights,
-                received: rights.len(),
+                expected,
+                received: buffer.rights.len(),
             });
         }
         if matches!(self.1, CredentialsPolicy::ActualSender) && credentials.is_none() {
             return Err(ControlError::MissingCredentials);
         }
-        Ok(Received {
+        Ok(PreparedReceived {
             control,
             credentials,
-            rights,
+            rights: &mut buffer.rights,
         })
     }
 
@@ -529,8 +552,14 @@ pub(super) struct PreparedFrame {
     bytes: Vec<u8>,
 }
 
-impl PreparedFrame {
-    pub(super) fn encode<T: Serialize>(control: &T) -> Result<Self, ControlError> {
+/// Unencoded bounded storage. It cannot be sent: serialization consumes it into PreparedFrame.
+/// C can measure this actual allocation before filling the run's own charge in its bootstrap.
+pub(super) struct FrameStorage {
+    bytes: Vec<u8>,
+}
+
+impl FrameStorage {
+    pub(super) fn prepare() -> Result<Self, ControlError> {
         let limit = CONTROL_BYTES
             .checked_add(4)
             .ok_or(ControlError::EncodedBytesExceeded)?;
@@ -538,8 +567,25 @@ impl PreparedFrame {
         bytes
             .try_reserve_exact(limit)
             .map_err(|error| ControlError::Io(io::Error::other(error)))?;
-        bytes.extend_from_slice(&[0; 4]);
-        let mut encoded = BoundedEncoding { bytes, limit };
+        Ok(Self { bytes })
+    }
+
+    pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
+        u64::try_from(self.bytes.capacity()).map_err(|_| ControlError::EncodedBytesExceeded)
+    }
+
+    pub(super) fn encode<T: Serialize>(
+        mut self,
+        control: &T,
+    ) -> Result<PreparedFrame, ControlError> {
+        let limit = CONTROL_BYTES
+            .checked_add(4)
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+        self.bytes.extend_from_slice(&[0; 4]);
+        let mut encoded = BoundedEncoding {
+            bytes: self.bytes,
+            limit,
+        };
         if let Err(error) = serde_json::to_writer(&mut encoded, control) {
             return if error.is_io() && encoded.bytes.len() == limit {
                 Err(ControlError::EncodedBytesExceeded)
@@ -559,15 +605,65 @@ impl PreparedFrame {
             .get_mut(..4)
             .ok_or(ControlError::EncodedBytesExceeded)?
             .copy_from_slice(&length.to_be_bytes());
-        Ok(Self {
+        Ok(PreparedFrame {
             bytes: encoded.bytes,
         })
+    }
+}
+
+impl PreparedFrame {
+    pub(super) fn encode<T: Serialize>(control: &T) -> Result<Self, ControlError> {
+        FrameStorage::prepare()?.encode(control)
     }
 
     /// Actual heap capacity, even if the frame's payload is small. The owner additionally charges
     /// its fixed control/ancillary/descriptor state and any decoded command metadata.
     pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
         u64::try_from(self.bytes.capacity()).map_err(|_| ControlError::EncodedBytesExceeded)
+    }
+}
+
+/// Named C receive payload/right storage retained across the closed, ordered role controls.
+pub(super) struct PreparedReceive {
+    payload: Vec<u8>,
+    rights: Vec<OwnedFd>,
+}
+
+pub(super) struct PreparedReceived<'buffer, T> {
+    pub(super) control: T,
+    pub(super) credentials: Option<PeerCredentials>,
+    pub(super) rights: &'buffer mut Vec<OwnedFd>,
+}
+
+impl PreparedReceive {
+    pub(super) fn prepare() -> Result<Self, ControlError> {
+        let mut payload = Vec::new();
+        payload
+            .try_reserve_exact(CONTROL_BYTES)
+            .map_err(|error| ControlError::Io(io::Error::other(error)))?;
+        let mut rights = Vec::new();
+        rights
+            .try_reserve_exact(RECEIVED_RIGHTS)
+            .map_err(|error| ControlError::Io(io::Error::other(error)))?;
+        Ok(Self { payload, rights })
+    }
+
+    pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
+        // Include the explicit temporary control/ancillary arrays as named C control work.
+        // Opaque serde/libc/runtime allocations are not estimated by this capacity calculation.
+        let bytes = self
+            .rights
+            .capacity()
+            .checked_mul(std::mem::size_of::<OwnedFd>())
+            .and_then(|bytes| bytes.checked_add(self.payload.capacity()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Self>()))
+            .and_then(|bytes| bytes.checked_add(ANCILLARY_BYTES))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<[u8; 4]>()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Option<PeerCredentials>>()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<[PollFd<'_>; 1]>()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<[IoSliceMut<'_>; 1]>()))
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+        u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
     }
 }
 
@@ -612,6 +708,53 @@ mod tests {
     #[serde(deny_unknown_fields)]
     struct Message {
         authorized: bool,
+    }
+
+    /// Trace: FR-034-AC-4, FR-034-AC-15, FR-034-AC-16.
+    #[test]
+    fn prepared_receiver_reuses_storage_and_retains_actual_cloexec_rights() {
+        let (caller, endpoint) = private_pair().unwrap();
+        let source = std::fs::File::open("/dev/null").unwrap();
+        let mut receive = PreparedReceive::prepare().unwrap();
+        let reservation = receive.reserved_bytes().unwrap();
+        guardian(&endpoint)
+            .send(&Message { authorized: true }, &[source.as_fd()], deadline())
+            .unwrap();
+        {
+            let received = caller
+                .transport()
+                .receive_prepared::<Message>(
+                    &mut receive,
+                    |message| usize::from(message.authorized),
+                    deadline(),
+                )
+                .unwrap();
+            assert_eq!(received.control, Message { authorized: true });
+            let right = received.rights.pop().unwrap();
+            assert!(rustix::io::fcntl_getfd(&right)
+                .unwrap()
+                .contains(rustix::io::FdFlags::CLOEXEC));
+            let original = rustix::fs::fstat(&source).unwrap();
+            let delivered = rustix::fs::fstat(&right).unwrap();
+            assert_eq!(
+                (delivered.st_dev, delivered.st_ino),
+                (original.st_dev, original.st_ino)
+            );
+        }
+        guardian(&endpoint)
+            .send(&Message { authorized: false }, &[], deadline())
+            .unwrap();
+        let received = caller
+            .transport()
+            .receive_prepared::<Message>(
+                &mut receive,
+                |message| usize::from(message.authorized),
+                deadline(),
+            )
+            .unwrap();
+        assert_eq!(received.control, Message { authorized: false });
+        assert!(received.rights.is_empty());
+        assert_eq!(receive.reserved_bytes().unwrap(), reservation);
     }
 
     fn deadline() -> Instant {
