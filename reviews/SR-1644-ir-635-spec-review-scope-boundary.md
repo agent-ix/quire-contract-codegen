@@ -38,3 +38,11 @@ FR-025 keeps the emitted binding and FR-028 keeps strength and ceiling ownership
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | Some FR-033 statements put an obligation on QSL inside a CG requirement. Line 124 says "QSL shall compare its exact equality result/count ...". FR-033-AC-1 asserts "QSL recompiles ... and validates FR-322 node membership", and AC-8 asserts "QSL derives bound keys". A CG test cannot hold QSL to a `shall`. Restate these as CG obligations on what CG submits and consumes, for example "the driver shall submit ... to QSL's parity arm and shall settle only from its result". Keep QSL's own behaviour as the observed oracle in TC-048. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:124, spec/replay/functional/FR-033-composite-parity-replay-binding.md:164, spec/replay/functional/FR-033-composite-parity-replay-binding.md:171 |
+
+## Dispositions
+
+Round 1 re-check of the fix-round candidate of PR #298, covering every original finding and regressions in the fix. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-033 falsified bullet now reads "the driver shall submit the admitted operands and retained shadow comparison to QSL's parity arm and consume only its exact equality/count comparison". FR-033-AC-1 reads "CG submits the original source/package and node selector to QSL and accepts only its admitted same-package/node result". AC-8 reads "CG submits ... and consumes QSL-derived bound keys without a CG-authored declared-bound list". No QSL `shall` remains in FR-033. |

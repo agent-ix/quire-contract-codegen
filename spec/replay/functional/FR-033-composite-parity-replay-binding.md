@@ -35,42 +35,43 @@ relationships:
 ## Description
 
 When the driver submits a composite equality `bounded_shadow` item for settlement, CG shall
-construct a QSL-owned node-selected equality-parity claim over the original proving package.
-The proposition remains the independent equality verdict and admitted occurrence-pair count
-owned by [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-71 and the native
-refinement comparison owned by [FR-028](../../kani/functional/FR-028-bounded-proof-ceilings.md)
-AC-15. Equality and inequality preserve the claimed operation; an inequality verdict is the
-negation of equality with the same pair count. This is parity evidence about generated code,
-never a source-predicate violation.
+construct a QSL-owned node-selected equality-parity claim over the original proving package. The
+proposition remains the independent equality verdict and admitted occurrence-pair count owned by
+[FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-71 and the native refinement
+comparison owned by [FR-028](../../kani/functional/FR-028-bounded-proof-ceilings.md) AC-15. Equality
+and inequality preserve the claimed operation; an inequality verdict is the negation of equality
+with the same pair count. This is parity evidence about generated code, never a source-predicate
+violation.
 
 This is PLANNED IR-635 work, GATED for implementation on QSL-640's actual public API delivery.
-UNVERIFIED SOURCE: the pending upstream obligations are QSL FR-070 canonical values, QSL-640's node-
-selected parity claim and FR-358 settlement, closed refinement evidence and a legal parity-agreement
-record/cause. QSpec FR-322 owns the checked-package artifact and node identity; it is not a QSL
-node-selector requirement. These obligations are not assertions that the public facade implements
-them. A specification-only upstream change does not release the code gate. At authoring, the
-proposed (unmerged) FR-358 selected-Boolean-function predicate route does not meet this contract;
-its refinement boolean also cannot distinguish a completed comparison from a resource ceiling. This
-requirement records the agreed future shape without fabricating Rust signatures, QSL causes or a
-working replay.
+UNVERIFIED SOURCE: the pending upstream obligations are QSL FR-070 canonical values, QSL-640's
+node-selected parity claim and FR-358 settlement, closed refinement evidence and a legal
+parity-agreement record/cause. QSpec FR-322 owns the checked-package artifact and node identity; it
+is not a QSL node-selector requirement. These obligations are not assertions that the public facade
+implements them. A specification-only upstream change does not release the code gate. At authoring,
+the proposed (unmerged) FR-358 selected-Boolean-function predicate route does not meet this
+contract; its refinement boolean also cannot distinguish a completed comparison from a resource
+ceiling. This requirement records the agreed future shape without fabricating Rust signatures, QSL
+causes or a working replay.
 
 ## Inputs
 
 - The actual composite claim node and operation, original checked/emitted package and original
   source/dependency byte provision needed for QSL recompilation.
-- The generated harness identity, symbolic leaf bindings, operand declarations and literal
-  values from the same proving context; harness bounds and retained original execution limits.
+- The generated harness identity, symbolic leaf bindings, operand declarations and literal values
+  from the same proving context; harness bounds and retained original execution limits.
 - The falsified run's selected assertion playback, or the verified run's SUCCESS count and
   independent native-refinement evidence. The retained shadow comparison outcome includes its
   equality/inequality result and occurrence-pair count.
 - For falsified parity replay, the driver's actual typed native observation of the same proved
   generated artifact over the reconstructed operands and original limits, with its pair count.
   Verified settlement takes no native-observation field; it retains actual refinement evidence,
-  including explicit absence for `not_run`, without an extra native probe or invented observation. A refusal, incomplete
-  outcome or execution fault remains that observation, rather than a fabricated Boolean.
+  including explicit absence for `not_run`, without an extra native probe or invented observation. A
+  refusal, incomplete outcome or execution fault remains that observation, rather than a fabricated
+  Boolean.
 - The CG-minted QSL `ObligationIdentity` and canonical proof-content identity binding this actual
-  node/operation/operand-domain claim, original limits and the proved artifact. AD-002 R-6/R-7,
-  QSL ADR-013 O-09 and ADR-014 B-4 govern their authority.
+  node/operation/operand-domain claim, original limits and the proved artifact. AD-002 R-6/R-7, QSL
+  ADR-013 O-09 and ADR-014 B-4 govern their authority.
 - Configured public replay encoded-input-byte, value-occurrence and work limits admitted by the
   upstream contract. Capture limits for launcher output remain separate inputs and evidence.
 
@@ -78,10 +79,10 @@ working replay.
 
 - A typed QSL-owned parity request for this node and its operand values, or a typed setup refusal
   before QSL evaluation.
-- A binding-checked QSL settlement/record for [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md),
-  or a typed refusal with no settlement if the result belongs to another claim or a required
-  upstream capability is unavailable. No fabricated terminal value or QSL catalog code crosses
-  an unavailable seam.
+- A binding-checked QSL settlement/record for
+  [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md), or a typed refusal with no
+  settlement if the result belongs to another claim or a required upstream capability is
+  unavailable. No fabricated terminal value or QSL catalog code crosses an unavailable seam.
 
 ## Behavior
 
@@ -109,8 +110,8 @@ working replay.
   dereferenced value; absent required environment retains QSL's typed no-value or refusal reading.
   Quantity conversion preserves its exact scalar and unit without rounding.
 - When arbitrary public caller input arrives, the builder shall guard its encoded byte length
-  against the configured replay-input limit, counting actual encoded bytes rather than a decoded-
-  size estimate. It shall enforce checked occurrence/work accounting during traversal.
+  against the configured replay-input limit, counting actual encoded bytes rather than a
+  decoded-size estimate. It shall enforce checked occurrence/work accounting during traversal.
 - The canonical value lifecycle shall use explicit heap stacks for decode, clone, equality, redacted
   Debug and drop, so admitted nesting consumes no proportional native stack. It shall refuse
   byte/count/work exhaustion with its typed resource reason, without an arbitrary nesting-depth cap.
@@ -152,14 +153,16 @@ FR-028 AC-20, with no fake harness, native value or compatibility fallback.
 3. Adapter assertion/harness selection and leaf arity/width/order; canonical syntax, shape,
    identity, presence, member and declared-domain validation, with checked count/work limits.
 4. Availability of the actual upstream node-parity/value/settlement APIs.
-5. For falsified parity replay, required measured native observation and its same-claim/proved-content tie, before evaluation; for verified settlement, coherent actual refinement evidence, with `not_run` explicitly absent.
+5. For falsified parity replay, required measured native observation and its
+   same-claim/proved-content tie, before evaluation; for verified settlement, coherent actual
+   refinement evidence, with `not_run` explicitly absent.
 
 Missing upstream capability is a distinct setup refusal and supplies no invented QSL code. An
-otherwise malformed request reaches its earlier typed refusal even while the code gate holds.
-QSL non-fault refusals retain their own catalog codes; executor faults and CG-raised malformed
+otherwise malformed request reaches its earlier typed refusal even while the code gate holds. QSL
+non-fault refusals retain their own catalog codes; executor faults and CG-raised malformed
 playback/assumption-domain defects retain the failure ownership of FR-029. A real run/refinement
-memory or wall-clock stop remains resource-inconclusive under FR-028 and cannot enter a
-completed `NotExhausted` comparison path.
+memory or wall-clock stop remains resource-inconclusive under FR-028 and cannot enter a completed
+`NotExhausted` comparison path.
 
 ## Acceptance Criteria
 
@@ -181,13 +184,13 @@ completed `NotExhausted` comparison path.
 [TC-048](../matrix/TC-048-composite-parity-replay-binding.md) defines planned public-consumer
 scenarios. No executable coverage is claimed by that document. FR-025 owns emitted binding
 semantics; FR-028 owns shadow independence, refinement class, domain containment and execution
-ceilings; FR-029 owns the exhaustive strength projection, terminal decision and record category.
-QSL owns canonical value types/admission, original-package node selection, exact evaluation,
+ceilings; FR-029 owns the exhaustive strength projection, terminal decision and record category. QSL
+owns canonical value types/admission, original-package node selection, exact evaluation,
 declared-bound completeness and the legal settlement/cause vocabulary. QSpec FR-181 remains the
 encoding authority. No schema, binary or source file is vendored from those owners.
 
 Implementation remains blocked on actual QSL-640 delivery of this parity arm, every required
 canonical conversion/lifecycle operation, closed `Exhausted`/`NotExhausted`/`CeilingReached`
-refinement evidence, same-claim observation/content binding and legal parity-agreement record.
-The proposed discriminant names describe semantics; compilation against the delivered owning
-API must establish their real representation. Spec publication alone establishes none of these.
+refinement evidence, same-claim observation/content binding and legal parity-agreement record. The
+proposed discriminant names describe semantics; compilation against the delivered owning API must
+establish their real representation. Spec publication alone establishes none of these.

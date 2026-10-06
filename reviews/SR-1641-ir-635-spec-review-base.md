@@ -52,3 +52,12 @@ I read every changed file in full and the context it amends: FR-015-AC-70/71, FR
 | --- | --- | --- | --- |
 | FND-001 | low | FR-033 says QSL ADR-021 "TX2 names the separate bounded-shadow route". ADR-021 TX-2 is "Symmetry transfer is a precondition" and says nothing about a bounded-shadow route. TX-3 is the rule on tightened harness bounds. Delete the TX2 clause or cite the clause that actually names the route. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:134 |
 | FND-002 | low | FR-033 calls FR-358's selected-Boolean-function route "published". FR-358 exists only on QSL's open, unmerged PR #645 and is absent from QSL main. The brief requires the pending upstream shape (FR-322/FR-358 node parity, FR-070 canonical values, closed refinement evidence and parity-agreement cause) to carry an explicit UNVERIFIED SOURCE label. FR-033 and FR-029 call these items "proposed" or "planned upstream semantics" but never use that label. Say "proposed (unmerged)" and add the UNVERIFIED SOURCE label to the list of upstream items. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:47, spec/replay/functional/FR-033-composite-parity-replay-binding.md:49, spec/kani/functional/FR-029-run-outcome-terminal-record.md:160 |
+
+## Dispositions
+
+Round 1 re-check of the fix-round candidate of PR #298, covering every original finding and regressions in the fix. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-033 no longer mentions TX2. The verified-shadow bullet now ends "ADR-021 TX-3 owns tightened-bound coverage.", and FR-033-AC-8 keeps "under ADR-021 TX3". This matches QSL ADR-021, where TX-2 is symmetry transfer and TX-3 governs tightened harness bounds. |
+| FND-002 | fixed | FR-033 now opens its gate paragraph with "UNVERIFIED SOURCE:" naming each pending upstream item: FR-070 canonical values, QSL-640's node-selected parity claim and FR-358 settlement, closed refinement evidence and the parity-agreement record/cause. It calls the FR-358 route "proposed (unmerged)". FR-029 carries the same label before its projection table, and the kani and replay matrix rows and spec/tests.md repeat it. QSL-640 remains the code gate, not a spec-merge dependency. |

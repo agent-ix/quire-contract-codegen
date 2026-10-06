@@ -35,3 +35,11 @@ Local targets (StR-001, FR-015, FR-025, FR-028, FR-029, AD-002) resolve in this 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-033's edge `ix://agent-ix/quire-spec-language/FR-322` and its prose "the proposed QSL ... FR-322 node selector" (lines 47-48) and "select the claimed FR-322 node" (line 85) name the wrong artifact. QSL FR-322 is "Evaluate union construction and case at S6a", and QSL PR #645 does not change it. The checked package and node identity that QSL ADR-013 cites as "FR-322 (`quire.checked-package/v2`)" is QSpec FR-322, the checked-package-artifact interface. No QSL node-selector requirement numbered FR-322 exists at QSL main or the PR #645 head. An implementer following the edge reads an unrelated union-evaluation requirement. Retarget the edge to `ix://agent-ix/quire-specification/FR-322` for package and node membership, and name the node-selected parity claim as a pending QSL-640 obligation rather than as FR-322. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:20, spec/replay/functional/FR-033-composite-parity-replay-binding.md:48, spec/replay/functional/FR-033-composite-parity-replay-binding.md:85 |
+
+## Dispositions
+
+Round 1 re-check of the fix-round candidate of PR #298, covering every original finding and regressions in the fix. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-033 edge now targets `ix://agent-ix/quire-specification/FR-322`. The prose says "QSpec FR-322 owns the checked-package artifact and node identity; it is not a QSL node-selector requirement". The builder "shall submit the claimed node inside the original recompiled QSpec FR-322 package to the pending QSL-640 parity selector", and AC-1 cites QSpec FR-322. No QSL FR-322 reference remains. |

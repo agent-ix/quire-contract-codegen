@@ -37,3 +37,17 @@ I read `git diff origin/main...HEAD` in full and both new files end to end. I ch
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | Added prose does not follow the files' existing 100-column wrapping. FR-033 lines 114-117 break mid-sentence ("original limits and canonical" then "proved-content identity"), and several added prose lines run past 100 columns as single unwrapped lines: FR-033 lines 49, 66, 78 and 151, FR-029 lines 60, 81 and 242, FR-028 lines 298, 313, 357 and 358, and TC-048 line 73. The files already hold some over-width lines, so this is a layout nit, not a gate. Reflow the added lines to the surrounding width. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:114, spec/kani/functional/FR-029-run-outcome-terminal-record.md:60, spec/kani/functional/FR-028-bounded-proof-ceilings.md:357, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:73 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The fix round reflowed text by splitting tokens at line ends. Two Markdown link targets are now broken across a newline: FR-029 line 259 `[AD-003](../../assurance/AD-003-evidence-` with `chain.md)` on the next line, and TC-048 line 19 `[FR-033](../functional/FR-033-composite-parity-replay-` with `binding.md)` on the next. A link destination cannot contain a line break, so both render as plain text and the cross-reference is lost. Hyphenated words are split the same way (FR-029 lines 193, 220 and 221; FR-033 lines 47 and 112), so "missing-cover- summary", "out-of- range", "node- selected" and "decoded- size" render with a stray space. Rejoin each link target on one line and wrap at whitespace rather than inside a token. | spec/kani/functional/FR-029-run-outcome-terminal-record.md:259, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:19, spec/kani/functional/FR-029-run-outcome-terminal-record.md:193, spec/replay/functional/FR-033-composite-parity-replay-binding.md:47 |
+
+## Dispositions
+
+Round 1 re-check of the fix-round candidate of PR #298, covering every original finding and regressions in the fix. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | still-open | The mid-sentence break at FR-033 lines 114-117 is fixed: the sentence now reads "limits and canonical proved-content identity". But most of the added over-width prose lines the finding lists are still single lines past 100 columns: FR-033 lines 69, 81 and 155; FR-029 lines 60 and 82; FR-028 lines 297, 312, 356 and 357; and TC-048 line 75. The fix also adds a new one at TC-048 line 69 (123 columns). Reflow these lines; FND-002 records the separate token-splitting regression. |
