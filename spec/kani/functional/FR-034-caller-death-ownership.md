@@ -105,9 +105,12 @@ permission measurement is required before CODE, with actual inherited label and 
 workaround or policy mutation. All creator/L/O deaths and mapping/arm races require exact positive
 barriers and bounded owned cleanup; no timing-only assertion proves liveness.
 
-Nested M shall execute installed bwrap with `--unshare-user --unshare-pid --bind / /` `--dev-bind
-/dev /dev --proc /proc --info-fd 3 --block-fd 4 --` followed by the actual first-party I
-command/arguments. M keeps `process_group(0)`. The new recipe omits `--die-with-parent`: outer PID-1
+Nested M shall execute installed bwrap with `--unshare-user --unshare-pid --as-pid-1` `--new-session
+--bind / / --dev-bind /dev /dev --proc /proc --info-fd 3 --block-fd 4 --` followed by the actual
+first-party I command/arguments. `--as-pid-1` makes I the actual inner PID 1 rather than bwrap PID 1
+supervising a PID-2 command; `--new-session` establishes I session isolation before exec. These
+correct the previously incomplete explicit argv without changing the selected roles or cancellation
+authority. M keeps `process_group(0)`. The new recipe omits `--die-with-parent`: outer PID-1
 teardown supplies M/I containment, while fatal inherited inner PDEATH must not bypass the live-C
 lease oracle. The outer user mapping is only UID/GID 0 to actual caller UID/GID, with verified
 setgroups policy; nested bwrap mapping/privilege behavior must pass installed-tool verification. O
@@ -121,6 +124,30 @@ I/M, distinct from info/gate/control mappings, and immediately closes its own sp
 successful mapping/spawn. M can retain a writer: require actual M termination/reap as well as inner
 teardown before final EOF drain. Reopened procfd and descendant writer copies are included. O
 retains report reader/memfd; C receives only final sealed memfd authority over separate controls.
+
+The report-writer entry ownership prerequisite shall use only safe APIs under forbid-unsafe.
+I may open the authenticated exact `/proc/self/fd/N` slot as a NEW write-only, nonblocking CLOEXEC
+owned File; this does not adopt the inherited raw descriptor. Before closing the original slot,
+I shall bind N to the intended child-only mapping and authenticated original-run/O authority,
+validate the newly owned file's pipe type, device/inode identity and write access against that
+mapping, and verify its CLOEXEC state. Neither a caller-supplied integer nor a matching slot number
+alone grants ownership. During this single-thread entry, no actor may close/rebind/reuse N between
+validation and its one-time close. The locked safe nix close API may close only that positively
+validated original slot; no arbitrary integer closure, unsafe raw adoption or unsafe inherited-FD
+initializer is permitted. Failure settles through bounded owned cancellation, not a guessed close
+or a retry against a potentially reused descriptor number.
+
+After original-slot closure, I shall retain the NEW owned writer as CLOEXEC and safely map it into
+only the actual backend child's N >= 5 slot, with intended exec inheritance. Unrelated execs shall
+inherit neither writer; C/L still hold none. Authentication/identity/access failure refuses before
+backend Dispatch. This entry allocation reopens only the original report PIPE in I; C still
+receives the final sealed memfd as actual OwnedFd and never reopens its proc symlink. It neither
+maps the report into stdio, reuses the exclusive lease, nor changes the unnamed storage mode.
+Safe source APIs make this ownership route a candidate, not measured compatibility: nested mapped
+UID pipe access, original-slot/no-reuse closure, actual helper/bwrap/backend/Cargo inheritance and
+unrelated-exec exclusion, and the real Kani export roundtrip remain UNRUN prerequisites. If this
+concrete entry route cannot satisfy those gates, stop CODE and report the capability gap for a
+measured SPEC revision; no unsafe exception or runtime fallback is authorized.
 
 Separate bootstrap, original-exclusive guardian lease and final report/control channels have
 separate owners and EOF meanings. Only C ever holds the original guardian-lease writer. L/O/M
@@ -633,6 +660,15 @@ monitor setup/info output before internal child_wait release and inner exec. Kan
 uses std::fs::write of the argument-selected path; safe descriptor plumbing and the genuine pipe
 roundtrip remain mandatory implementation gates. No copied source or fixed product dependency pin
 is introduced by these research references.
+
+The same bwrap source's setsid branch and conditional PID-1 fork ground the required
+`--new-session` and `--as-pid-1` flags; its monitor closes extra descriptors only after setup,
+so actual M settlement still precedes report EOF. Linux
+[proc descriptor documentation](https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html) identifies
+separate pipe-inode access checks on reopen; inherited descriptor possession does not prove mapped
+UID reopen permission. Safe std File ownership and the existing nix close signature supply source
+prerequisites only; unsafe command-fds inherited initialization remains excluded. These sources
+establish no actual helper/backend roundtrip or executable coverage.
 
 The lifecycle claim includes signals directed to the original caller's process group/session and
 direct guardian death. Host failure or loss of the kernel's namespace facilities cannot be turned
