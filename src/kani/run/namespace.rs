@@ -11,23 +11,32 @@
 
 use std::{
     ffi::{OsStr, OsString},
-    fs::{self, File},
-    io::{self, Read, Write},
+    fs::File,
+    io,
     os::fd::OwnedFd,
     path::{Path, PathBuf},
     process::{Child, Command},
     time::{Duration, Instant},
 };
 
+#[cfg(target_os = "linux")]
+use std::{
+    fs,
+    io::{Read, Write},
+};
+
+#[cfg(target_os = "linux")]
 use command_fds::{CommandFdExt, FdMapping};
+#[cfg(target_os = "linux")]
+use rustix::pipe::{pipe_with, PipeFlags};
 #[cfg(target_os = "linux")]
 use rustix::process::{pidfd_open, pidfd_send_signal, PidfdFlags};
 use rustix::{
     event::{poll, PollFd, PollFlags},
-    pipe::{pipe_with, PipeFlags},
     process::{kill_process_group, Pid, Signal},
     time::Timespec,
 };
+#[cfg(target_os = "linux")]
 use serde::Deserialize;
 
 /// An internal command recipe with explicit environment inheritance and inherited stdin.
@@ -68,6 +77,7 @@ impl BackendCommand {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StartupInfo {
@@ -81,6 +91,7 @@ struct StartupInfo {
 
 pub(super) struct NamespaceOwner {
     gate: Option<File>,
+    #[cfg(target_os = "linux")]
     info: File,
     wrapper: Option<Pid>,
     init: Option<(u32, u64, OwnedFd)>,
@@ -89,10 +100,9 @@ pub(super) struct NamespaceOwner {
 
 impl NamespaceOwner {
     pub(super) fn prepare(recipe: BackendCommand) -> io::Result<(Command, Self)> {
-        if !cfg!(target_os = "linux") {
-            return Err(unavailable("PID-namespace ownership requires Linux"));
-        }
+        #[cfg(target_os = "linux")]
         let (gate_read, gate_write) = pipe_with(PipeFlags::CLOEXEC)?;
+        #[cfg(target_os = "linux")]
         let (info_read, info_write) = pipe_with(PipeFlags::CLOEXEC)?;
         // Parent FDs remain CLOEXEC. The authoritative adapter maps only this child after
         // fork, with no allocations/locks; concurrent unrelated spawns inherit no controls.
@@ -122,28 +132,37 @@ impl NamespaceOwner {
             command.current_dir(directory);
         }
         command.envs(recipe.environment);
-        command
-            .fd_mappings(vec![
-                FdMapping {
-                    parent_fd: info_write,
-                    child_fd: 3,
+        #[cfg(target_os = "linux")]
+        {
+            command
+                .fd_mappings(vec![
+                    FdMapping {
+                        parent_fd: info_write,
+                        child_fd: 3,
+                    },
+                    FdMapping {
+                        parent_fd: gate_read,
+                        child_fd: 4,
+                    },
+                ])
+                .map_err(|error| {
+                    unavailable(format!("namespace control mapping failed: {error}"))
+                })?;
+            Ok((
+                command,
+                Self {
+                    gate: Some(File::from(gate_write)),
+                    info: File::from(info_read),
+                    wrapper: None,
+                    init: None,
+                    cleaned: false,
                 },
-                FdMapping {
-                    parent_fd: gate_read,
-                    child_fd: 4,
-                },
-            ])
-            .map_err(|error| unavailable(format!("namespace control mapping failed: {error}")))?;
-        Ok((
-            command,
-            Self {
-                gate: Some(File::from(gate_write)),
-                info: File::from(info_read),
-                wrapper: None,
-                init: None,
-                cleaned: false,
-            },
-        ))
+            ))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(unavailable("PID-namespace ownership requires Linux"))
+        }
     }
 
     /// Attach while the monitor is still unreaped; gated init cannot yet change its group.
@@ -155,15 +174,15 @@ impl NamespaceOwner {
     /// Claim the namespace init before releasing any backend instruction.
     pub(super) fn dispatch(
         &mut self,
-        deadline: Option<Instant>,
-        observer: &mut super::memory::MemoryObserver,
+        _deadline: Option<Instant>,
+        _observer: &mut super::memory::MemoryObserver,
     ) -> io::Result<u32> {
-        let startup_limit = Instant::now() + Duration::from_secs(5);
-        let startup_deadline =
-            deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
-        let info = self.startup_information(deadline, startup_deadline)?;
         #[cfg(target_os = "linux")]
         {
+            let startup_limit = Instant::now() + Duration::from_secs(5);
+            let startup_deadline =
+                _deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
+            let info = self.startup_information(_deadline, startup_deadline)?;
             let handle = pidfd_open(valid_pid(info.child)?, PidfdFlags::empty())?;
             let directory = PathBuf::from("/proc").join(info.child.to_string());
             let status = fs::read_to_string(directory.join("status"))?;
@@ -205,9 +224,9 @@ impl NamespaceOwner {
             }
             // Retain the claimed handle before releasing the gate. No later pid reuse changes it.
             self.init = Some((info.child, start, handle));
-            observer.bind_root(info.child, start)?;
+            _observer.bind_root(info.child, start)?;
             if Instant::now() >= startup_deadline {
-                return Err(startup_expiry(deadline));
+                return Err(startup_expiry(_deadline));
             }
             self.gate
                 .as_mut()
@@ -218,11 +237,11 @@ impl NamespaceOwner {
         }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = info;
             Err(unavailable("PID namespaces unavailable"))
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn startup_information(
         &mut self,
         identity_deadline: Option<Instant>,
@@ -237,6 +256,7 @@ impl NamespaceOwner {
         })
     }
 
+    #[cfg(target_os = "linux")]
     fn read_info(&mut self, deadline: Instant) -> io::Result<StartupInfo> {
         let mut bytes = Vec::new();
         loop {
@@ -295,6 +315,7 @@ impl NamespaceOwner {
                     failure = Some(io::Error::from(error));
                 }
             }
+            #[cfg(target_os = "linux")]
             if self.init.is_none() {
                 // On malformed info or early monitor death, inspect only membership of the
                 // still-pinned startup group. This exceptional scan is never the polling path.
@@ -336,6 +357,7 @@ impl Drop for NamespaceOwner {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn confirm_startup_group_dead(group: Pid) -> io::Result<()> {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -390,6 +412,7 @@ fn confirm_startup_group_dead(group: Pid) -> io::Result<()> {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn startup_expiry(identity_deadline: Option<Instant>) -> io::Error {
     if identity_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         io::Error::new(

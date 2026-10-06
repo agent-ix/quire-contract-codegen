@@ -1600,6 +1600,29 @@ exit 0
         vec![member("a", "check", 4), member("b", "check", 4)]
     }
 
+    /// Trace: FR-028-AC-21.
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn unsupported_platform_refuses_single_and_batch_before_backend_dispatch() {
+        let stand_in = StandIn::verifying("unsupported-platform");
+        let harnesses = pair();
+        assert!(matches!(
+            execute_kani_obligation(&stand_in.request(&harnesses[0], T)),
+            Err(KaniExecutionRefusal::MemoryMechanismUnavailable { .. })
+        ));
+        let runs = stand_in.batch(&harnesses, T).unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].members, [0, 1]);
+        assert!(matches!(
+            runs[0].evidence,
+            Err(KaniExecutionRefusal::MemoryMechanismUnavailable { .. })
+        ));
+        assert!(
+            !stand_in.directory.join("calls").exists(),
+            "backend never dispatched"
+        );
+    }
+
     /// N harnesses with equal options and timeout start one launcher process, whose arguments hold
     /// one `--harness <module::harness> --exact` pair per member in request order, then
     /// `--harness-timeout` T, then the shared options; one harness starts one process with the

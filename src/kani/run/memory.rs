@@ -54,13 +54,16 @@ pub(super) struct MemoryObserver {
 
 impl MemoryObserver {
     /// Check mechanism availability before the backend is spawned.
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn prepare(_root: &Path) -> io::Result<Self> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "tree resident-memory observation requires Linux procfs",
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
     pub(super) fn prepare(root: &Path) -> io::Result<Self> {
-        if !cfg!(target_os = "linux") {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "tree resident-memory observation requires Linux procfs",
-            ));
-        }
         let observer = Self {
             root: root.to_path_buf(),
             known: BTreeMap::new(),
@@ -97,6 +100,7 @@ impl MemoryObserver {
         Ok(observer)
     }
 
+    #[cfg(target_os = "linux")]
     pub(super) fn bind_root(&mut self, pid: u32, start: u64) -> io::Result<()> {
         let process = parse_process(&fs::read_to_string(
             self.root.join(pid.to_string()).join("stat"),
