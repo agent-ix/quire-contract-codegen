@@ -28,4 +28,5 @@ pub(crate) mod run;
 pub(crate) mod terminal;
 // Test helpers shared by the tests of more than one `kani/` file.
 #[cfg(test)]
+#[path = "../../tests/common/kani_run.rs"]
 pub(crate) mod test_support;

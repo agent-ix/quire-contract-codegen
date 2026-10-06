@@ -1,0 +1,251 @@
+//! Namespace INIT bootstrap, authenticated Dispatch and kernel-owned descendant supervision.
+//!
+//! This process never replaces itself with the backend. Its termination remains INIT death,
+//! which tears down even unsampled, reparented and nested-namespace descendants. No diagnostic
+//! bytes enter stdout/stderr: both are inherited solely by the backend's bounded captures.
+
+use std::{
+    ffi::OsString,
+    fs,
+    io::{self, Read},
+    path::Path,
+    process::Stdio,
+    time::{Duration, Instant},
+};
+
+use rustix::process::{getpid, getuid, waitpid, Pid, WaitOptions};
+
+use super::{
+    control::{ControlError, Transport},
+    protocol::{
+        BackendExit, BuildIdentity, CallerControl, GuardianControl, GuardianRefusal, StdinControl,
+    },
+};
+
+const BOOTSTRAP_CAP: Duration = Duration::from_secs(3);
+const SUPERVISION_TICK: Duration = Duration::from_millis(20);
+const REAP_WORK: usize = 64;
+const ARTIFACT_COUNT: usize = 8;
+
+#[derive(Debug)]
+pub(super) enum GuardianError {
+    Control(ControlError),
+    Refusal(GuardianRefusal),
+    Io(io::Error),
+}
+
+impl std::fmt::Display for GuardianError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Control(error) => write!(formatter, "{error}"),
+            Self::Refusal(reason) => write!(formatter, "{reason:?}"),
+            Self::Io(error) => write!(formatter, "guardian backend I/O: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for GuardianError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Control(error) => Some(error),
+            Self::Io(error) => Some(error),
+            Self::Refusal(_) => None,
+        }
+    }
+}
+
+impl From<ControlError> for GuardianError {
+    fn from(error: ControlError) -> Self {
+        Self::Control(error)
+    }
+}
+
+impl From<io::Error> for GuardianError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+/// Called only by this package's helper entry with its actual compiled library identity.
+pub(super) fn run(identity: BuildIdentity) -> Result<(), GuardianError> {
+    let stdin = std::io::stdin();
+    let transport = Transport::from_guardian_stdin(&stdin)?;
+    let deadline = Instant::now() + BOOTSTRAP_CAP;
+    let result = supervise(&transport, identity, deadline);
+    if let Err(GuardianError::Refusal(reason)) = &result {
+        // Typed control is the sole diagnostic channel. A closed peer needs no diagnostic.
+        let _ = transport.send(&GuardianControl::Refused { reason: *reason }, &[], deadline);
+    }
+    result
+}
+
+fn supervise(
+    transport: &Transport<'_>,
+    identity: BuildIdentity,
+    startup_deadline: Instant,
+) -> Result<(), GuardianError> {
+    let init = getpid();
+    if init.as_raw_nonzero().get() != 1 {
+        return Err(GuardianError::Refusal(GuardianRefusal::NotNamespaceInit));
+    }
+    if !isolated_init_session()? {
+        return Err(GuardianError::Refusal(GuardianRefusal::SessionNotIsolated));
+    }
+    // Credentials are translated by the guardian's user namespace. An unmapped outside UID
+    // becomes the overflow UID and cannot establish the actual mapped original-caller UID.
+    let creator = transport.creator_credentials()?;
+    if creator.uid != getuid().as_raw() {
+        return Err(GuardianError::Refusal(GuardianRefusal::CreatorUidMismatch));
+    }
+    let hello =
+        transport.receive::<CallerControl>(CallerControl::rights_count, startup_deadline)?;
+    let CallerControl::Hello {
+        identity: expected,
+        authority,
+    } = hello.control
+    else {
+        return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
+    };
+    if expected != identity {
+        return Err(GuardianError::Refusal(
+            GuardianRefusal::BuildIdentityMismatch,
+        ));
+    }
+    transport.send(
+        &GuardianControl::Ready {
+            identity,
+            authority,
+            mapped_uid: getuid().as_raw(),
+            creator_pid: creator.pid,
+        },
+        &[],
+        startup_deadline,
+    )?;
+    let dispatch =
+        transport.receive::<CallerControl>(CallerControl::rights_count, startup_deadline)?;
+    let CallerControl::Dispatch {
+        authority: received_authority,
+        command,
+        stdin,
+        cleanup_paths,
+    } = dispatch.control
+    else {
+        return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
+    };
+    if received_authority != authority {
+        return Err(GuardianError::Refusal(GuardianRefusal::ReplayedAuthority));
+    }
+    if cleanup_paths.len() > ARTIFACT_COUNT {
+        return Err(GuardianError::Refusal(GuardianRefusal::InvalidControl));
+    }
+    let _artifacts = GuardianArtifacts(cleanup_paths);
+    let mut backend = command.into_command();
+    match stdin {
+        StdinControl::Open => {
+            let descriptor = dispatch
+                .rights
+                .into_iter()
+                .next()
+                .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?;
+            backend.stdin(Stdio::from(descriptor));
+        }
+        StdinControl::Closed => {
+            // Control fd0 is CLOEXEC. Inherit leaves fd0 closed at backend exec entry.
+            backend.stdin(Stdio::inherit());
+        }
+    }
+    backend.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    transport.refuse_observable_eof()?;
+    let child = backend
+        .spawn()
+        .map_err(|_| GuardianError::Refusal(GuardianRefusal::BackendSpawnFailed))?;
+    let backend_pid = i32::try_from(child.id())
+        .ok()
+        .and_then(Pid::from_raw)
+        .ok_or(GuardianError::Refusal(
+            GuardianRefusal::BackendObservationFailed,
+        ))?;
+    transport.send(
+        &GuardianControl::Dispatched { authority },
+        &[],
+        startup_deadline,
+    )?;
+    let mut completed = false;
+    loop {
+        // No post-Dispatch input is authorized. Pending controls refuse; EOF exits INIT.
+        match transport.pending_control(SUPERVISION_TICK) {
+            Err(ControlError::Eof) => return Ok(()),
+            Err(error) => return Err(error.into()),
+            Ok(true) => return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl)),
+            Ok(false) => {}
+        }
+        for _ in 0..REAP_WORK {
+            let (pid, status) = match waitpid(None, WaitOptions::NOHANG) {
+                Ok(Some(status)) => status,
+                Ok(None) | Err(rustix::io::Errno::CHILD) => break,
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(error) => return Err(GuardianError::Io(error.into())),
+            };
+            if pid == backend_pid {
+                let outcome = if let Some(code) = status.exit_status() {
+                    BackendExit::Code(code)
+                } else if let Some(signal) = status.terminating_signal() {
+                    BackendExit::Signal(signal)
+                } else {
+                    return Err(GuardianError::Refusal(
+                        GuardianRefusal::BackendObservationFailed,
+                    ));
+                };
+                if completed {
+                    return Err(GuardianError::Refusal(
+                        GuardianRefusal::BackendObservationFailed,
+                    ));
+                }
+                transport.send(
+                    &GuardianControl::Completed { authority, outcome },
+                    &[],
+                    Instant::now() + BOOTSTRAP_CAP,
+                )?;
+                completed = true;
+            }
+        }
+        // After completion remain INIT and retain descendants until the caller closes its lease.
+        // The live caller bounded-reads the report before close; a vanished caller owns no result.
+    }
+}
+
+struct GuardianArtifacts(Vec<OsString>);
+
+fn isolated_init_session() -> io::Result<bool> {
+    let mut bytes = Vec::new();
+    fs::File::open("/proc/self/stat")?
+        .take(4097)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > 4096 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "guardian stat exceeds bound",
+        ));
+    }
+    let text = std::str::from_utf8(&bytes).map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidData, "guardian stat encoding invalid")
+    })?;
+    let fields = text
+        .rsplit_once(')')
+        .map(|(_, fields)| fields)
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "guardian stat fields missing")
+        })?;
+    let mut fields = fields.split_whitespace().skip(2);
+    // An outside process group/session can appear as zero in this PID namespace. Observe it
+    // without treating zero as a valid nonzero process identity.
+    Ok(fields.next() == Some("1") && fields.next() == Some("1") && fields.next() == Some("0"))
+}
+
+impl Drop for GuardianArtifacts {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            let _ = fs::remove_file(Path::new(path));
+        }
+    }
+}

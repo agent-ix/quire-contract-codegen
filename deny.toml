@@ -23,6 +23,8 @@ confidence-threshold = 0.9
 # permissive-only.
 exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-codegen" },
+    # Own per-library-compilation guardian epoch generator; same first-party AGPL decision.
+    { allow = ["AGPL-3.0-or-later"], crate = "quire-guardian-build-epoch" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-ir" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-model" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-runtime" },

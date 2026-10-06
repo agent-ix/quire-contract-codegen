@@ -13,3 +13,40 @@ pub(crate) mod tool;
 pub(crate) mod memory;
 
 mod namespace;
+
+// Anonymous lease framing exists only on the supported guardian platform.
+#[cfg(target_os = "linux")]
+mod control;
+
+#[cfg(target_os = "linux")]
+mod protocol;
+
+#[cfg(target_os = "linux")]
+mod guardian;
+
+#[cfg(target_os = "linux")]
+mod stages;
+
+#[cfg(target_os = "linux")]
+mod owned;
+
+pub(crate) fn guardian_entry() -> std::process::ExitCode {
+    #[cfg(target_os = "linux")]
+    {
+        match guardian::run(protocol::current_build_identity()) {
+            Ok(()) | Err(guardian::GuardianError::Control(control::ControlError::Eof)) => {
+                std::process::ExitCode::SUCCESS
+            }
+            Err(
+                guardian::GuardianError::Control(_)
+                | guardian::GuardianError::Refusal(_)
+                | guardian::GuardianError::Io(_),
+            ) => std::process::ExitCode::FAILURE,
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    std::process::ExitCode::FAILURE
+}
+
+// Original backend stdin is explicit and precedes control-descriptor creation.
+pub(crate) mod stdin;

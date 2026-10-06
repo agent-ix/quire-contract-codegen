@@ -1771,6 +1771,8 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
         launcher: directory.join("cargo-kani"),
     };
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: (&harness).into(),
         crate_directory: &directory,
@@ -1809,6 +1811,8 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
         }
         let installation = KaniInstallation { launcher };
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            guardian_path: crate::common::guardian_path(),
+            original_stdin: crate::common::original_stdin(),
             installation: &installation,
             harness: (&harness).into(),
             crate_directory: &directory,
@@ -1884,6 +1888,8 @@ fn run(
 ) -> quire_contract_codegen::KaniExecutionEvidence {
     let crate_directory = write_crate(harness, subject);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
@@ -1989,6 +1995,8 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     let harness = &harness;
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
@@ -2015,6 +2023,8 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     )
     .unwrap();
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: (&harness).into(),
         crate_directory: &crate_directory,
@@ -2160,6 +2170,8 @@ fn run_scalar_under_real_kani(
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let crate_directory = write_scalar_crate(name, manifest, &harness.rust.contents);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
@@ -2193,6 +2205,8 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let crate_directory = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: (&harness).into(),
         crate_directory: &crate_directory,

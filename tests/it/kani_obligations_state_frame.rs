@@ -3431,6 +3431,8 @@ pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
     )
     .expect("build script");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: harness.into(),
         crate_directory: &directory,
