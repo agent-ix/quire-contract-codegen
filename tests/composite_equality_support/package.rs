@@ -1425,8 +1425,8 @@ pub fn item(
     }
 }
 
-/// Add only equality items to an authoritative QSpec recursive-type package.
-pub fn qspec_recursive_items_package(
+/// Add equality items to a recursive-type checked package held only in memory.
+pub fn recursive_items_package_from_wire(
     wire: Value,
 ) -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
     let named_record = |name: &str| {
@@ -1482,6 +1482,54 @@ pub fn qspec_recursive_items_package(
         );
     }
     (builder, id(&list), id(&tree))
+}
+
+/// Compile independently authored recursive declarations through QSL's public
+/// replay facade and extend the admitted package with equality items.
+pub fn qsl_recursive_items_package() -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
+    use qsl_replay::{compile_package, DependencyInput, ScalarLimits, SourceIdentity, StageLimits};
+
+    let source = include_bytes!("recursive.native");
+    let unbounded = ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    };
+    let compiled = compile_package(
+        SourceIdentity::new("a", "u", "git", "1"),
+        "recursive-items.native",
+        source,
+        [],
+        &DependencyInput::default(),
+        StageLimits {
+            s1: ScalarLimits {
+                text_input_bytes: 1 << 20,
+                ..unbounded
+            },
+            s2: unbounded,
+            s3: unbounded,
+            s4: unbounded,
+        },
+    )
+    .expect("QSL compiles the recursive item types");
+    let read = CheckedPackageV2::read(
+        compiled.bytes(),
+        quire_contract_model::CheckedPackageReadLimits::bounded(),
+        &evidence(),
+    );
+    assert!(
+        matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
+        "QSL package strict reader: {read:?}"
+    );
+    let wire = serde_json::from_slice(compiled.bytes()).expect("QSL checked package JSON");
+    recursive_items_package_from_wire(wire)
 }
 
 /// A CG-owned recursive Tree whose bounded sequence points back to the record.

@@ -146,38 +146,16 @@ fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
 
 /// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
 #[test]
-fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
-    const QSPEC_COMMIT: &str = "60630b0d3d5e9cca048d1c314675db3bf9c6e4f2";
-    const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
-    let repo =
-        std::env::var_os("QSPEC_REPO").expect("QSPEC_REPO must name an independent QSpec checkout");
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .arg("show")
-        .arg(format!("{QSPEC_COMMIT}:{FIXTURE}"))
-        .output()
-        .expect("read authoritative QSpec fixture");
-    assert!(
-        output.status.success(),
-        "git show QSpec fixture: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
-    evidence.support_feature("quire.value.complete/v1");
-    let wire: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("QSpec fixture JSON");
-    let canonical = serde_json::to_vec(&wire).expect("canonical QSpec fixture");
-    let read = CheckedPackageV2::read(
-        &canonical,
-        quire_contract_model::CheckedPackageReadLimits::bounded(),
-        &evidence,
-    );
-    assert!(
-        matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
-        "original QSpec fixture: {read:?}"
-    );
-    let (builder, list, tree) = qspec_recursive_items_package(wire);
+fn tc_029_public_qsl_recursive_items_generate_through_reader() {
+    let (builder, list, tree) = qsl_recursive_items_package();
+    assert_recursive_item_generation(builder, list, tree);
+}
+
+fn assert_recursive_item_generation(
+    builder: PackageBuilder,
+    list: quire_contract_model::CheckedNodeId,
+    tree: quire_contract_model::CheckedNodeId,
+) {
     let package = builder.admit();
     let items = [
         CompositeEqualityItem {
@@ -207,6 +185,46 @@ fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
     assert_eq!(lib.matches("pub fn environment_").count(), 2);
     assert!(lib.contains("rt::Presence::Optional"));
     assert!(lib.contains("rebuild_cardinality(0, 3)"));
+}
+
+/// Optional local conformance against the private QSpec fixture. The public
+/// QSL facade case above exercises the same reader-to-oracle path in CI.
+/// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+#[test]
+fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
+    const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
+    let Some(repo) = std::env::var_os("QSPEC_REPO") else {
+        println!("SKIP local QSpec conformance: QSPEC_REPO is unset; private fixture is not available in public CI");
+        return;
+    };
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .arg("show")
+        .arg(format!("origin/main:{FIXTURE}"))
+        .output()
+        .expect("read authoritative QSpec fixture");
+    assert!(
+        output.status.success(),
+        "git show QSpec fixture: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    let wire: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("QSpec fixture JSON");
+    let canonical = serde_json::to_vec(&wire).expect("canonical QSpec fixture");
+    let read = CheckedPackageV2::read(
+        &canonical,
+        quire_contract_model::CheckedPackageReadLimits::bounded(),
+        &evidence,
+    );
+    assert!(
+        matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
+        "original QSpec fixture: {read:?}"
+    );
+    let (builder, list, tree) = recursive_items_package_from_wire(wire);
+    assert_recursive_item_generation(builder, list, tree);
 }
 
 fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {

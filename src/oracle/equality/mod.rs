@@ -1830,15 +1830,7 @@ mod tests {
             CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
         };
 
-        let source = br#"language "ix:native" edition "1-draft";
-profile v = "quire.value.complete/v1";
-record List {
-    next: List?;
-}
-record Tree {
-    kids: Sequence<Tree>[0,3];
-}
-"#;
+        let source = include_bytes!("../../../tests/composite_equality_support/recursive.native");
         let unbounded = ScalarLimits {
             integer_bits: u64::MAX,
             decimal_digits: u64::MAX,
