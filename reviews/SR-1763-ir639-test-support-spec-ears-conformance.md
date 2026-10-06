@@ -38,3 +38,11 @@ branch inside a production stage...").
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | Several new obligations in the opt-in section are descriptive rather than EARS "shall" statements: "Delivery selects the package helper from the consumer manifest using `cargo -p`", "Both refusal and export absence require verification", and "These are planned obligations". "Production-driver dependency-edge verification shall assert..." puts the obligation on an external actor, not the system. The Behavior "shall" list (lines 58-105), which enumerates every other FR-034 obligation, gained no entry for the feature. Rewrite these as system-subject "shall" statements, and add the feature's obligations to the Behavior list. | spec/kani/functional/FR-034-caller-death-ownership.md:211, spec/kani/functional/FR-034-caller-death-ownership.md:215-222, spec/kani/functional/FR-034-caller-death-ownership.md:58-105 |
+
+## Dispositions
+
+Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: The Behavior list gains system-subject shall entries for the feature, and the new section's normative text is rewritten as shall statements. The probe feasibility and downstream IR-649 sentences remain as context prose. |

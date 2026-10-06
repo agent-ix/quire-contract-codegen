@@ -40,3 +40,11 @@ examined: FR-034-AC-14, AC-23, AC-24, AC-27, AC-28, AC-29 and AC-30, and TC-049 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | FR-034-AC-27 ("No lease, process-ownership handle, public cancellation entry or cleanup-deferring callback is exported") and FR-034-AC-28 ("cannot ... alter a production-stage branch") are structural properties of the source. A runtime test cannot fail on them. TC-049 step 13 verifies them by inspection ("Inspect unconditional shared production stage/cleanup paths"), yet both criteria declare Test only. Declare Test and Inspection for these clauses, or name a mechanical check that counts as Test, such as a public-API surface assertion or a syn-based source check. | spec/kani/functional/FR-034-caller-death-ownership.md:270-271, spec/kani/matrix/TC-049-caller-death-ownership.md:144-148 |
+
+## Dispositions
+
+Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: AC-27 and AC-28 now declare Test, Inspection. TC-049 step 13 records structural inspection separately from runtime and compile tests. |

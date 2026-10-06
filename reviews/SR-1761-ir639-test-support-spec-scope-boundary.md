@@ -40,3 +40,11 @@ repository, and it claims no delivered coverage.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-034-AC-30 is a CG acceptance criterion with Test verification, but its subject is "production-driver dependency-edge verification" in "any production profile". That actor, its repository and "production profile" are defined nowhere in the spec. TC-049 step 14 itself says a CG-only check can never pass it. AC-30 therefore stays permanently unsatisfiable in CG's matrix, and it has no owning requirement or ticket in the repository that must act. Allocate it to the driver's own requirement or ticket and cite that here as a dependency. Alternatively, restate the CG-side obligation (for example, CG documents the feature as test-only and supplies a check the driver can run) and keep only that in AC-30. | spec/kani/functional/FR-034-caller-death-ownership.md:218-222, spec/kani/functional/FR-034-caller-death-ownership.md:273, spec/kani/matrix/TC-049-caller-death-ownership.md:149-157 |
+
+## Dispositions
+
+Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: AC-30 is now a CG publication/allocation criterion verified by Inspection. The downstream dependency-edge assertion is allocated to IR-649 (quire-driver, exists in Backlog) and kept as a separate pending gate in the Dependencies section and the matrix. |

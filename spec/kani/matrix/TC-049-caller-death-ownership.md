@@ -130,33 +130,46 @@ lease-EOF oracle uses the separate documented opt-in fixture operation.
     failed/inconclusive fixture, never a passing mutant result. No sleep or elapsed-time threshold
     establishes success. Before Dispatch, the fixture operation itself sends SIGSTOP through its
     claimed INIT pidfd after InitReady, positively verifies state T plus unchanged start/namespace
-    identity, and queues otherwise valid Dispatch on the normal control stream while retaining live
-    original-caller RunOwner ownership. Invoke unchanged synchronous close_lease_and_observe. Its
-    actual lease close precedes unconditional private monotonic read-only LeaseClosing publication;
-    an internal owned continuation thread observes that positive value and sends SIGCONT through
-    only that pinned pidfd. Publication adds no production-stage branch, callback, blocking handoff
-    or extra I/O. The fixture-owned continuation uses no external-controller permission. Capture
-    publication/coordination facts and raw termination/marker observations before cancellation
-    escalation. The correct guardian confirms INIT termination without a backend marker; ignored EOF
-    fails the closed-lease authorization predicate or records escalation-required. The external
-    harness evaluates these sealed pre-escalation facts only after unconditional cleanup returns.
-    SIGCONT itself cannot satisfy the EOF predicate. Require named assertions to fail when
-    publication precedes actual close, publication is removed, or actual lease close is skipped. A
-    missing publication or failed owned continuation records coordination failure, not a passing
-    platform skip, and cleanup joins/resumes or cancels only the fixture's pinned INIT. This checks
-    observable EOF precedence, not future-death prediction. The normal production driver immediately
-    follows this same typed observation boundary with bounded cleanup; the fixture uses the opt-in
-    observation operation at that boundary without a cfg-test close hook, synthetic ownership,
-    exported run handles or controller-blocked escalation. After the operation returns following
-    unconditional cleanup, evaluate the AC-24 predicate from the immutable pre-escalation raw
-    record, separately from the returned cleanup result; the library evaluates no pass/fail oracle.
-    Never infer the predicate from the eventually dead worker. Independently remove positive
-    Dispatch authorization, replace the PID-1 guardian with a non-INIT watcher, remove session
-    isolation, and close/reap before pinned startup confirmation. Require the corresponding
-    premature-backend-marker, surviving-descendant, actual SID/PGID or startup-order assertion to
-    fail, rather than compilation or fixture setup. Record the ownership observation before
-    emergency cleanup of only the fixture's pinned namespace/group. Restore production and require
-    focused controls to pass. Trace each actual asserted AC.
+    identity, and invokes the unchanged private production Dispatch frame-send step while retaining
+    live original-caller RunOwner ownership. Require the complete actual production frame and rights
+    queued through its bounded nonblocking transport, not fixture-written serialization. The typed
+    pending-frame result is separate from ACK wait; do not wait for stopped INIT acknowledgement.
+    Partial-send failure, would-block beyond the original bounded budget or unavailable transport
+    must record coordination failure and cleanup, never establish a passing fixture. Invoke
+    unchanged synchronous close_lease_and_observe. Its actual lease close precedes unconditional
+    private monotonic read-only LeaseClosing publication; at actual publication seal the optional
+    actual-close completion ordinal and publication ordinal in one immutable per-run snapshot. An
+    internal owned continuation thread reads that snapshot and sends SIGCONT through only that
+    pinned pidfd. The harness requires a present completed-close ordinal strictly below publication;
+    later closure cannot fill an earlier snapshot. This raw ordering assertion fails early
+    publication independently of which thread is scheduled first, even when guardian termination and
+    the marker oracle otherwise pass. Publication adds no production-stage branch, callback,
+    blocking handoff or extra I/O. The fixture-owned continuation uses no external-controller
+    permission. Capture publication/coordination facts and raw termination/marker observations
+    before cancellation escalation. The correct guardian confirms INIT termination without a backend
+    marker; ignored EOF fails the closed-lease authorization predicate or records
+    escalation-required. The external harness evaluates these sealed pre-escalation facts only after
+    unconditional cleanup returns. SIGCONT itself cannot satisfy the EOF predicate. Require named
+    assertions to fail when publication precedes actual close, publication is removed, or actual
+    lease close is skipped. Evaluate the retained early-publication snapshot after the later close
+    and cleanup complete; its original missing/inverted close ordinal must remain unchanged and fail
+    the ordering assertion. No scheduling restriction is needed to distinguish it from
+    close-before-publication. Neither SIGCONT nor valid-looking ordinals alone satisfy the actual
+    INIT/marker/worker predicate. A missing publication or failed owned continuation records
+    coordination failure, not a passing platform skip, and cleanup joins/resumes or cancels only the
+    fixture's pinned INIT. This checks observable EOF precedence, not future-death prediction. The
+    normal production driver immediately follows this same typed observation boundary with bounded
+    cleanup; the fixture uses the opt-in observation operation at that boundary without a cfg-test
+    close hook, synthetic ownership, exported run handles or controller-blocked escalation. After
+    the operation returns following unconditional cleanup, evaluate the AC-24 predicate from the
+    immutable pre-escalation raw record, separately from the returned cleanup result; the library
+    evaluates no pass/fail oracle. Never infer the predicate from the eventually dead worker.
+    Independently remove positive Dispatch authorization, replace the PID-1 guardian with a non-INIT
+    watcher, remove session isolation, and close/reap before pinned startup confirmation. Require
+    the corresponding premature-backend-marker, surviving-descendant, actual SID/PGID or
+    startup-order assertion to fail, rather than compilation or fixture setup. Record the ownership
+    observation before emergency cleanup of only the fixture's pinned namespace/group. Restore
+    production and require focused controls to pass. Trace each actual asserted AC.
 13. Use the actual matched artifacts from steps 1 and 12 to test both feature-mismatch directions.
     Supply the feature-off helper to the feature-on caller, then the feature-on helper to the normal
     feature-off production caller. The bounded executor must refuse actual artifact identity before

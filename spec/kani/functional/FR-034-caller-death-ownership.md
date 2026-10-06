@@ -111,6 +111,9 @@ FR-028 AC-21's whole-group memory ceiling and AC-12's batch deadline remain auth
 - The CG verification harness shall judge the defined oracle from pre-escalation raw observations.
 - The bounded executor shall publish private LeaseClosing state after actual caller-lease closure.
 - The bounded executor shall publish that state unconditionally through a monotonic read-only value.
+- The bounded executor shall seal close/publication ordering at the actual publication boundary.
+- The private Dispatch sender shall queue the unchanged production frame without waiting for ACK.
+- The bounded executor shall wait for Dispatch acknowledgement in a separate bounded transition.
 - The fixture continuation shall resume only its deliberately stopped and pinned INIT.
 - When LeaseClosing is positively observed, the fixture continuation shall send owned-pidfd SIGCONT.
 - The fixture operation shall reject unavailable continuation as passing EOF-cancellation evidence.
@@ -221,12 +224,32 @@ termination. Urgent resource and identity cancellation remains authoritative.
 
 For deterministic pending-Dispatch coordination, the feature-gated fixture owner shall stop its
 verified InitReady INIT through that owned pidfd. The owner shall positively verify stopped state
-`T` against the same live INIT/start/namespace identity before queueing otherwise valid Dispatch on
-the ordinary control stream. The owner shall keep `RunOwner` and the original caller alive while
-invoking the unchanged synchronous `close_lease_and_observe` operation. After actual `CallerLease`
-closure, that production operation shall publish its private LeaseClosing stage unconditionally
-through a monotonic read-only value before waiting for termination. Publication shall add no
-callback, blocking handoff, extra I/O or feature-keyed branch to any production stage.
+`T` against the same live INIT/start/namespace identity before queueing Dispatch through the
+unchanged private production frame-send step on the ordinary control stream. This step shall
+serialize and send the actual production authorization and ancillary rights, not fixture-written
+bytes. The send shall use bounded nonblocking transport within the original deadline. The send shall
+return a typed pending-frame state only after the complete frame is queued. If the bounded send
+fails or transport is unavailable, then the fixture operation shall record typed coordination
+failure. The fixture operation shall invoke cleanup after that failure. The pending-frame state
+proves neither guardian receipt nor backend creation. The normal executor shall await any guardian
+acknowledgement in a separate bounded transition. The stopped-INIT fixture shall not enter that
+acknowledgement wait before closing its lease. The owner shall keep `RunOwner` and the original
+caller alive while invoking the unchanged synchronous `close_lease_and_observe` operation. After
+actual `CallerLease` closure, that production operation shall publish its private LeaseClosing stage
+unconditionally through a monotonic read-only value before waiting for termination. Publication
+shall add no callback, blocking handoff, extra I/O or feature-keyed branch to any production stage.
+
+The bounded executor shall record a close-completion ordinal only after
+consuming the exclusive `CallerLease` and returning from its actual owned-endpoint close. At actual
+LeaseClosing publication, the executor shall assign a publication ordinal and seal one immutable
+snapshot containing the optional completed-close ordinal and publication ordinal. A bounded per-run
+sequence orders these events without timestamps. Publication shall never late-fill or rewrite that
+snapshot after a later close. If publication is duplicated or ordering is unavailable, then the fixture operation shall record
+typed observation failure. The continuation shall read this exact publication snapshot, not a later
+mutable closed flag. The external harness shall require a present close-completion ordinal strictly
+before the publication ordinal. Early publication therefore fails even if a later close occurs
+before the resumed guardian reads its stream. These ordering facts shall complement actual
+namespace/EOF observations, never replace them or grant a synthetic passing value.
 
 The fixture owner shall use an internal owned continuation thread to observe that positive
 publication and send SIGCONT through its positively pinned INIT pidfd. Only that fixture-only
@@ -246,11 +269,12 @@ verification.
 
 The external test harness owns the AC-24 predicate and evaluates it after the operation returns
 following unconditional cleanup, using only sealed observations taken before escalation. For
-pre-Dispatch it requires confirmed INIT termination before escalation and no production backend
-marker. For post-Dispatch it requires confirmed INIT termination and a dead pinned worker which
-positively acknowledged startup, both observed before escalation. Escalation-required, unavailable
-observation and a live worker fail the predicate; subsequent cleanup success cannot change those
-observations. The library supplies raw facts, not a fixture verdict or fabricated proof evidence.
+pre-Dispatch it requires the sealed close-before-publication ordering, confirmed INIT termination
+before escalation and no production backend marker. For post-Dispatch it requires confirmed INIT
+termination and a dead pinned worker which positively acknowledged startup, both observed before
+escalation. Escalation-required, unavailable observation and a live worker fail the predicate;
+subsequent cleanup success cannot change those observations. The library supplies raw facts, not a
+fixture verdict or fabricated proof evidence.
 
 The packaged caller fixture, library and real helper shall use the same normal, non-`cfg(test)`
 library artifact. The fixture build shall select the package helper from the consumer manifest using
@@ -321,11 +345,11 @@ Dispatch: guardian death is PID-1 death, not closure of a sole external gate own
 | FR-034-AC-21 | Guardian connection and handshake have a finite setup cap within the remaining original deadline. Cap expiry while that deadline remains live is a typed setup refusal, distinct from identity-deadline timeout. | Test |
 | FR-034-AC-22 | Control/capture shutdown and cleanup observation waits have finite bounds. Unconfirmed termination refuses with a live caller rather than accepting a proof or claiming physical disappearance of an uninterruptible task. | Test |
 | FR-034-AC-23 | Caller-death fixtures use the ordinary public execution API linked against a normal library built with guardian-test-support off, invoke the real guardian built from this package in the owning target directory and observe pre-initialization, gated and immediate post-Dispatch stages through positive handshakes and owned identities/pidfds, without production test bypasses, sleep-based success or wide host-scan authority. | Test |
-| FR-034-AC-24 | Removing lease-EOF cancellation fails pre-Dispatch closed-lease pending-authorization and post-Dispatch surviving-descendant assertions driven by production close_lease_and_observe. Its consumed CallerLease closes independently of live RunOwner monitor/INIT handles. The guardian-test-support fixture operation seals raw LeaseCloseObservation and owned worker/marker observations at the real private boundary before unconditional production cleanup or emergency cleanup. The test harness requires pre-Dispatch confirmed INIT termination with no marker, or post-Dispatch confirmed INIT termination with a dead pinned positively acknowledged worker, all observed before escalation; escalation-required is a failed EOF-cancellation oracle even if later cleanup kills the worker. Pending authorization is ordered by fixture-owned pidfd SIGSTOP and positive T state, queued Dispatch, actual lease closure with unconditional private LeaseClosing publication, then owned continuation SIGCONT. SIGCONT never satisfies the EOF predicate. Publication-before-close, missing-publication and skipped-lease-close mutants must fail their named observation/EOF predicates. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. Restored controls pass. | Test |
+| FR-034-AC-24 | Removing lease-EOF cancellation fails pre-Dispatch closed-lease pending-authorization and post-Dispatch surviving-descendant assertions driven by production close_lease_and_observe. Its consumed CallerLease closes independently of live RunOwner monitor/INIT handles. The guardian-test-support fixture operation seals raw LeaseCloseObservation and owned worker/marker observations at the real private boundary before unconditional production cleanup or emergency cleanup. The test harness requires pre-Dispatch confirmed INIT termination with no marker, or post-Dispatch confirmed INIT termination with a dead pinned positively acknowledged worker, all observed before escalation; escalation-required is a failed EOF-cancellation oracle even if later cleanup kills the worker. Pending authorization is ordered by fixture-owned pidfd SIGSTOP and positive T state, queued Dispatch, actual lease closure with unconditional private LeaseClosing publication, then owned continuation SIGCONT. SIGCONT never satisfies the EOF predicate. The sealed publication snapshot must contain an actual completed-close ordinal strictly below its publication ordinal; absent/inverted order fails independent of continuation scheduling. Publication-before-close, missing-publication and skipped-lease-close mutants must fail their named ordering/observation/EOF predicates. The unchanged production frame-send step queues bounded nonblocking Dispatch separately from ACK waiting; fixture-written frames are forbidden. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. Restored controls pass. | Test |
 | FR-034-AC-25 | Before backend Dispatch, the helper handshake matches the actual running CG library's build, protocol and lifecycle-capability identity against the actual invoked first-party executable. A stale helper or changed lifecycle implementation refuses, even if a caller supplies a matching version label or digest. Expected identity derives from actual library/helper build artifacts, not caller assertions or manually maintained tracking pins. | Test |
 | FR-034-AC-26 | The guardian's host session and process group are distinct from the original caller's before Ready and backend Dispatch, with no controlling-terminal job-control delivery from that caller's session. Killing the caller's whole group at pre-Ready, InitReady and immediate post-Dispatch stages leaves guardian cleanup operational; a directly killed guardian still triggers kernel namespace teardown. | Test |
 | FR-034-AC-27 | guardian-test-support is off by default, absent from default features, and exposes exactly one documented fixture operation only when explicitly enabled. A feature-off consumer cannot use that operation. No lease, process-ownership handle, public cancellation entry or cleanup-deferring callback is exported. | Test, Inspection |
-| FR-034-AC-28 | The fixture operation seals actual raw typed stage/lease-close and pinned-worker/marker observations before immediately invoking unchanged production cleanup on success, refusal and observation failure. It contains no library pass/fail oracle, external-controller pause or feature-dependent production-stage branch. Lost/overflowed observations and failed stop/publication/resume coordination are typed failures. Private monotonic read-only LeaseClosing publication always follows actual lease close; it adds no callback, blocking handoff, extra I/O or feature branch. The test harness applies the AC-24 predicate to pre-escalation observations; cleanup success cannot rewrite them. | Test, Inspection |
+| FR-034-AC-28 | The fixture operation seals actual raw typed stage/lease-close and pinned-worker/marker observations before immediately invoking unchanged production cleanup on success, refusal and observation failure. It contains no library pass/fail oracle, external-controller pause or feature-dependent production-stage branch. Lost/overflowed observations and failed stop/publication/resume coordination are typed failures. Private monotonic read-only LeaseClosing publication seals actual close/publication ordinals at publication, with no late fill, and always follows actual lease close; it adds no callback, blocking handoff, extra I/O or feature branch. The test harness applies the AC-24 predicate to pre-escalation observations; cleanup success cannot rewrite them. | Test, Inspection |
 | FR-034-AC-29 | The packaged caller fixture and real helper link the same normal library artifact through consumer-manifest package selection with matching target/profile/features/compiler flags. Separate named feature-off/on invocations avoid self dev-dependency feature unification. No cfg-test library or identity override is accepted. The bounded executor refuses feature mismatch in both directions before Dispatch; feature-off consumer compilation verifies absence of the fixture operation. | Test |
 | FR-034-AC-30 | CG publishes the test-only feature contract and allocates production-driver dependency-edge exclusion to IR-649's QSL driver work. The contract requires all downstream production-build profiles to reject direct or transitively unified guardian-test-support. CG inspection verifies the published allocation and checks; downstream assertion evidence is owned by IR-649. | Inspection |
 
