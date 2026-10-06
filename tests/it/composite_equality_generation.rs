@@ -111,6 +111,39 @@ fn generated(
     }
 }
 
+/// Trace: FR-018-AC-24, TC-029.
+#[test]
+fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
+    let list = generate(
+        &corpus_package().admit(),
+        &[item(
+            E_SELF,
+            EqualityOperatorKind::Equal,
+            typed(R_SELF),
+            typed(R_SELF),
+        )],
+    );
+    let tree = generate(
+        &recursive_tree_package().admit(),
+        &[item(
+            E_TREE_CYCLE,
+            EqualityOperatorKind::Equal,
+            typed(R_TREE_CYCLE),
+            typed(R_TREE_CYCLE),
+        )],
+    );
+    for (oracles, expression, record) in
+        [(&list, E_SELF, R_SELF), (&tree, E_TREE_CYCLE, R_TREE_CYCLE)]
+    {
+        let claim = generated(only_claim(oracles, expression));
+        assert_eq!(claim.declaration_keys, vec![code_id(record)]);
+        let lib = contents(oracles, "src/lib.rs");
+        assert_eq!(lib.matches("pub fn oracle_").count(), 1);
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+        assert!(lib.contains(&claim.oracle_symbol));
+    }
+}
+
 fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
     match &claim.result {
         ClaimDisposition::Refused { refusal } => refusal,

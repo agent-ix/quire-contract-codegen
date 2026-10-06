@@ -128,3 +128,9 @@ pub const E_NESTED_CONV: u32 = 122;
 /// An equality whose left operand is a `rational.div` application node, only in
 /// [`application_operand_package`](super::application_operand_package).
 pub const E_APPLICATION_OPERAND: u32 = 123;
+
+/// CG-authored recursive Tree fixture for FR-018-AC-24's public item check.
+pub const R_TREE_CYCLE: u32 = 180;
+pub const SEQ_TREE_CYCLE: u32 = 181;
+pub const CB_TREE_CYCLE: u32 = 182;
+pub const E_TREE_CYCLE: u32 = 183;
