@@ -532,6 +532,8 @@ impl LauncherMemory {
             || after.pid != self.pid
             || before.start != self.start
             || after.start != self.start
+            || status_role_identity(&status, b"Pid:")? != self.pid
+            || status_role_identity(&status, b"Tgid:")? != self.pid
             || status_threads(&status)? != 1
         {
             return Err(io::Error::new(
@@ -551,6 +553,28 @@ impl LauncherMemory {
             "live launcher RSS unavailable",
         ))
     }
+}
+
+#[cfg(target_os = "linux")]
+fn status_role_identity(status: &[u8], key: &[u8]) -> io::Result<u32> {
+    let malformed = || {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "retained launcher status identity is unavailable or ambiguous",
+        )
+    };
+    let mut fields = status
+        .split(|byte| *byte == b'\n')
+        .filter_map(|line| line.strip_prefix(key));
+    let value = fields.next().ok_or_else(malformed)?;
+    if fields.next().is_some() {
+        return Err(malformed());
+    }
+    std::str::from_utf8(value)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .filter(|value| *value != 0)
+        .ok_or_else(malformed)
 }
 
 #[cfg(target_os = "linux")]

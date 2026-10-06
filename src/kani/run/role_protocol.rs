@@ -4,7 +4,7 @@
 //! pin before trusting any bootstrap data; decoding these frames alone grants no spawning,
 //! report-writer or backend authority. Final report delivery does not use the consumed I lease.
 
-use std::num::NonZeroU64;
+use std::{num::NonZeroU64, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -16,9 +16,11 @@ use super::{
 };
 
 /// C-origin settings, forwarded without replacing the original deadline or run authority.
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RunSettings {
+    /// The original explicitly supplied helper, resolved by C without executable PATH search.
+    pub(super) helper: PathBuf,
     pub(super) identity: BuildIdentity,
     pub(super) authority: RunAuthority,
     pub(super) deadline: RoleDeadline,

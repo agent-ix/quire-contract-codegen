@@ -20,7 +20,11 @@ use rustix::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{outer_setup::PreparedOuter, pipe_policy};
+use super::{
+    outer_setup::PreparedOuter,
+    pipe_policy,
+    resource_ledger::{ChargeError, ResourceLedger},
+};
 
 pub(super) const REPORT_SLOT: i32 = 5;
 const READ_BYTES: usize = 65_536;
@@ -60,7 +64,7 @@ impl PipeIdentity {
 }
 
 /// Entire finite backing reservation, checked before exposure and added to every RSS tick.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct BackingReserve {
     pub(super) pipe_bytes: u64,
     pub(super) memfd_bytes: u64,
@@ -95,6 +99,7 @@ pub(super) enum ReportError {
     WriterAccess,
     WriterSlot,
     WriterClose(nix::errno::Errno),
+    MemoryCharge(ChargeError),
 }
 
 impl From<rustix::io::Errno> for ReportError {
@@ -123,6 +128,7 @@ impl std::error::Error for ReportError {
         match self {
             Self::Io(error) => Some(error),
             Self::WriterClose(error) => Some(error),
+            Self::MemoryCharge(error) => Some(error),
             _ => None,
         }
     }
@@ -242,8 +248,14 @@ impl ReportCollector {
         self.reserve
     }
 
-    /// The owner must check its whole-run charge before this child-only mapping transfer.
-    pub(super) fn take_spawn_writer(&mut self) -> Result<OwnedFd, ReportError> {
+    /// The actual checked setup sample must authorize this exact reservation before transfer.
+    pub(super) fn take_spawn_writer(
+        &mut self,
+        ledger: &ResourceLedger,
+    ) -> Result<OwnedFd, ReportError> {
+        ledger
+            .require_writer_exposure(self.identity, self.reserve)
+            .map_err(ReportError::MemoryCharge)?;
         self.writer.take().ok_or(ReportError::WriterNotTransferred)
     }
 
