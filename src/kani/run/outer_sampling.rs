@@ -96,7 +96,7 @@ pub(super) struct OuterSampling {
 /// progression replaces C's BeginMonitor/ClaimInner/ReleaseGate controls.
 pub(super) struct OuterRunOwner {
     sampling: Option<OuterSampling>,
-    monitor: InnerMonitor,
+    monitor: Option<InnerMonitor>,
     phases: OuterPhases,
     completion: InnerCompletion,
     terminal_prepared: Option<TerminalPreparation>,
@@ -115,6 +115,7 @@ enum OuterRunState {
     AwaitReportEof,
     Terminal,
     Committed,
+    ResourceStopped,
 }
 
 /// Private production progress only; none of these variants grants C evidence or cleanup credit.
@@ -145,10 +146,14 @@ impl OuterRunOwner {
         let completion = InnerCompletion::prepare()?;
         let terminal_prepared = TerminalPreparation::prepare()?;
         let mut sampling = OuterSampling::prepare(outer, launcher, settings)?;
-        if matches!(sampling.tick(outer, caller)?, MemoryTick::Exhausted(_)) {
-            return Err(SamplingError::Charge(ChargeError::ResourceExhausted));
-        }
-        let monitor = sampling.prepare_inner_monitor(outer, caller_pin, inner_endpoint)?;
+        let exhausted = matches!(sampling.tick(outer, caller)?, MemoryTick::Exhausted(_));
+        let monitor = if exhausted {
+            // Preserve the actual complete sample/ledger instead of losing this independent
+            // setup resource stop as a generic startup error. No writer or child is exposed.
+            None
+        } else {
+            Some(sampling.prepare_inner_monitor(outer, caller_pin, inner_endpoint)?)
+        };
         Ok(Self {
             sampling: Some(sampling),
             monitor,
@@ -158,7 +163,11 @@ impl OuterRunOwner {
             terminal: None,
             inner_settlement: None,
             startup_deadline,
-            state: OuterRunState::Startup,
+            state: if exhausted {
+                OuterRunState::ResourceStopped
+            } else {
+                OuterRunState::Startup
+            },
             poisoned: false,
         })
     }
@@ -186,6 +195,15 @@ impl OuterRunOwner {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<OuterRunProgress, SamplingError> {
+        if matches!(self.state, OuterRunState::ResourceStopped) {
+            // No M exists, but C/L liveness and fresh O accounting still remain mandatory while
+            // the executor arranges the same original whole-chain resource-stop settlement.
+            self.sampling
+                .as_mut()
+                .ok_or(SamplingError::InvalidMonitorTransition)?
+                .tick(outer, caller)?;
+            return Ok(OuterRunProgress::ResourceExhausted);
+        }
         if matches!(self.state, OuterRunState::Terminal) {
             return match self
                 .terminal
@@ -211,7 +229,9 @@ impl OuterRunOwner {
                     sampling,
                     outer,
                     caller,
-                    &mut self.monitor,
+                    self.monitor
+                        .as_mut()
+                        .ok_or(SamplingError::InvalidMonitorTransition)?,
                     self.startup_deadline,
                 )?;
                 if matches!(progress, PhaseProgress::GateReleased) {
@@ -220,10 +240,14 @@ impl OuterRunOwner {
                 Ok(OuterRunProgress::Startup(progress))
             }
             OuterRunState::Backend => {
-                match self
-                    .completion
-                    .tick(sampling, outer, caller, &self.monitor)?
-                {
+                match self.completion.tick(
+                    sampling,
+                    outer,
+                    caller,
+                    self.monitor
+                        .as_ref()
+                        .ok_or(SamplingError::InvalidMonitorTransition)?,
+                )? {
                     CompletionProgress::Pending => Ok(OuterRunProgress::Pending),
                     CompletionProgress::Dispatched => Ok(OuterRunProgress::BackendDispatched),
                     CompletionProgress::Exhausted => Ok(OuterRunProgress::ResourceExhausted),
@@ -260,7 +284,11 @@ impl OuterRunOwner {
                     return Ok(OuterRunProgress::ResourceExhausted);
                 }
                 if matches!(self.state, OuterRunState::AwaitInnerSettlement) {
-                    self.inner_settlement = self.monitor.poll_settled()?;
+                    self.inner_settlement = self
+                        .monitor
+                        .as_mut()
+                        .ok_or(SamplingError::InvalidMonitorTransition)?
+                        .poll_settled()?;
                     if self.inner_settlement.is_none() {
                         return Ok(OuterRunProgress::Pending);
                     }
@@ -288,7 +316,7 @@ impl OuterRunOwner {
                 self.state = OuterRunState::Terminal;
                 Ok(OuterRunProgress::Pending)
             }
-            OuterRunState::Terminal | OuterRunState::Committed => {
+            OuterRunState::Terminal | OuterRunState::Committed | OuterRunState::ResourceStopped => {
                 Err(SamplingError::InvalidTerminalTransition)
             }
         }
