@@ -18,6 +18,10 @@ mod namespace;
 #[cfg(target_os = "linux")]
 mod control;
 
+// Actual creator-thread liveness, including the retained outside L role.
+#[cfg(target_os = "linux")]
+mod creator;
+
 #[cfg(target_os = "linux")]
 mod protocol;
 

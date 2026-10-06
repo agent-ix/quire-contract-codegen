@@ -137,7 +137,9 @@ impl MemoryObserver {
         for (pid, start) in &self.known {
             match self.resident_bytes(*pid, *start) {
                 Ok(Some(bytes)) => {
-                    total = total.saturating_add(bytes);
+                    total = total.checked_add(bytes).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "owned resident-memory overflow")
+                    })?;
                     observed = true;
                 }
                 Ok(None) => {}
@@ -486,6 +488,85 @@ impl MemoryObserver {
             Ok(None)
         }
     }
+}
+
+/// L observations retained before O replaces procfs. O cannot reopen L through its private proc.
+/// Bootstrap must authenticate the actual L creator pin and these originally opened descriptors.
+#[cfg(target_os = "linux")]
+pub(super) struct LauncherMemory {
+    pin: std::os::fd::OwnedFd,
+    stat: fs::File,
+    status: fs::File,
+    pid: u32,
+    start: u64,
+}
+
+#[cfg(target_os = "linux")]
+impl LauncherMemory {
+    pub(super) fn bind(
+        pin: std::os::fd::OwnedFd,
+        mut stat: fs::File,
+        status: fs::File,
+    ) -> io::Result<Self> {
+        super::creator::require_live(&pin)?;
+        let identity = parse_process(&read_pinned_role_file(&mut stat)?)?;
+        let mut observation = Self {
+            pin,
+            stat,
+            status,
+            pid: identity.pid,
+            start: identity.start,
+        };
+        observation.sample()?;
+        Ok(observation)
+    }
+
+    /// Single-thread L's actual retained identity must remain observable; missing RSS is never
+    /// zero unless a fresh identity-matched stat proves that its address space was released.
+    pub(super) fn sample(&mut self) -> io::Result<u64> {
+        super::creator::require_live(&self.pin)?;
+        let before = parse_process(&read_pinned_role_file(&mut self.stat)?)?;
+        let status = read_pinned_role_file(&mut self.status)?;
+        let after = parse_process(&read_pinned_role_file(&mut self.stat)?)?;
+        if before.pid != self.pid
+            || after.pid != self.pid
+            || before.start != self.start
+            || after.start != self.start
+            || status_threads(&status)? != 1
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "launcher identity or single-thread observation changed",
+            ));
+        }
+        super::creator::require_live(&self.pin)?;
+        if let Some(bytes) = status_rss(&status)? {
+            return Ok(bytes);
+        }
+        if after.virtual_bytes == 0 && after.resident_pages == 0 {
+            return Ok(0);
+        }
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "live launcher RSS unavailable",
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn read_pinned_role_file(file: &mut fs::File) -> io::Result<Vec<u8>> {
+    const FILE_BYTES: usize = 16_384;
+    file.seek(SeekFrom::Start(0))?;
+    let mut bytes = Vec::with_capacity(FILE_BYTES + 1);
+    file.take(u64::try_from(FILE_BYTES + 1).map_err(io::Error::other)?)
+        .read_to_end(&mut bytes)?;
+    if bytes.is_empty() || bytes.len() > FILE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "retained launcher observation missing or oversized",
+        ));
+    }
+    Ok(bytes)
 }
 
 fn read_process_if_present(path: &Path) -> io::Result<Option<Process>> {
