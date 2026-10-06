@@ -62,6 +62,14 @@ Reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d. Found while confirming FND
 | FND-003 | medium | The publication-before-close mutant is detected only by timing. Under that mutant the continuation sees publication and sends SIGCONT before the lease closes. If the close still lands before the resumed guardian reads its stream, the guardian sees EOF, rejects Dispatch and the mutant passes. The spec requires this mutant to fail but names no raw fact that separates it deterministically. When the continuation observes publication, it should record whether the guardian's control endpoint already shows peer hangup (for example a non-blocking HUP/RDHUP poll of a pidfd_getfd duplicate taken while INIT is stopped). Publication observed without closure should be a failed predicate. | spec/kani/functional/FR-034-caller-death-ownership.md:226-238, spec/kani/matrix/TC-049-caller-death-ownership.md:143-144 |
 | FND-004 | low | The pre-Dispatch scenario queues "otherwise valid Dispatch on the ordinary control stream" while INIT is stopped. The spec does not say whether the unchanged production Dispatch send emits it or the fixture writes the frame itself; the kernel probe wrote the frame directly. A fixture-written frame is a synthetic Dispatch path. If the production send waits for any guardian acknowledgement, it blocks against the stopped INIT until the cap expires, and the scenario can only record coordination failure. State that the unchanged private production Dispatch send emits it without waiting on the stopped guardian, or name the private send step used. | spec/kani/functional/FR-034-caller-death-ownership.md:224-225, spec/kani/matrix/TC-049-caller-death-ownership.md:133-134 |
 
+## New findings (disposition pass 2)
+
+Reviewed at d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a. Found while confirming FND-003's fix.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | A FR-034 prose line added this round is 126 characters (line 247: "snapshot after a later close. If publication is duplicated ..."), and the preceding line 242 breaks after only 71. The rest of FR-034's prose wraps at 100, and the author receipt reports "prose<=100 outside tables: PASS", which this line contradicts. Rewrap the paragraph to 100 columns. | spec/kani/functional/FR-034-caller-death-ownership.md:242-248 |
+
 ## Dispositions
 
 Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
@@ -70,3 +78,10 @@ Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
 | --- | --- | --- |
 | FND-001 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: FR-034 now places the pending-Dispatch hold in the fixture owner: owned-pidfd SIGSTOP of the verified INIT with a positive T-state check, Dispatch queued on the ordinary stream, unchanged close_lease_and_observe, an unconditional read-only LeaseClosing publication after the actual close, then a fixture-only SIGCONT. This removes both the guardian-side stage branch and the race. |
 | FND-002 | fixed | ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d: Both mismatch directions now require refusal by the bounded executor before Dispatch, and TC-049 step 13 tests both. |
+
+Round 2, reviewed at d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a. FND-001 and FND-002 already read fixed after round 1.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a: The executor records a close-completion ordinal only after the consumed CallerLease close returns. Publication seals an immutable snapshot holding Option<close ordinal> and the publication ordinal, with no late fill. The harness requires the close ordinal to be present and below the publication ordinal, so early publication fails deterministically whatever the scheduling. The actual INIT/marker/worker predicates are still required. |
+| FND-004 | fixed | d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a: Dispatch goes through the unchanged private production frame-send step: the actual frame and rights, bounded nonblocking, returning a pending-frame state with no ACK wait. Fixture-written bytes are forbidden, send failures are typed coordination failures, and the ACK wait is a separate bounded transition. |

@@ -239,17 +239,18 @@ actual `CallerLease` closure, that production operation shall publish its privat
 unconditionally through a monotonic read-only value before waiting for termination. Publication
 shall add no callback, blocking handoff, extra I/O or feature-keyed branch to any production stage.
 
-The bounded executor shall record a close-completion ordinal only after
-consuming the exclusive `CallerLease` and returning from its actual owned-endpoint close. At actual
-LeaseClosing publication, the executor shall assign a publication ordinal and seal one immutable
-snapshot containing the optional completed-close ordinal and publication ordinal. A bounded per-run
-sequence orders these events without timestamps. Publication shall never late-fill or rewrite that
-snapshot after a later close. If publication is duplicated or ordering is unavailable, then the fixture operation shall record
-typed observation failure. The continuation shall read this exact publication snapshot, not a later
-mutable closed flag. The external harness shall require a present close-completion ordinal strictly
-before the publication ordinal. Early publication therefore fails even if a later close occurs
-before the resumed guardian reads its stream. These ordering facts shall complement actual
-namespace/EOF observations, never replace them or grant a synthetic passing value.
+The bounded executor shall record a close-completion ordinal only after consuming the exclusive
+`CallerLease` and returning from its actual owned-endpoint close. At actual LeaseClosing
+publication, the executor shall assign a publication ordinal and seal one immutable snapshot
+containing the optional completed-close ordinal and publication ordinal. A bounded per-run sequence
+orders these events without timestamps. Publication shall never late-fill or rewrite that snapshot
+after a later close. If publication is duplicated or ordering is unavailable, then the fixture
+operation shall record typed observation failure. The continuation shall read this exact publication
+snapshot, not a later mutable closed flag. The external harness shall require a present
+close-completion ordinal strictly before the publication ordinal. Early publication therefore fails
+even if a later close occurs before the resumed guardian reads its stream. These ordering facts
+shall complement actual namespace/EOF observations, never replace them or grant a synthetic passing
+value.
 
 The fixture owner shall use an internal owned continuation thread to observe that positive
 publication and send SIGCONT through its positively pinned INIT pidfd. Only that fixture-only
