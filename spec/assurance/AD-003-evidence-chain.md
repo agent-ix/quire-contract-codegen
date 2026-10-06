@@ -196,9 +196,13 @@ authored).
   The subject is the claimed operator's FR-322 application node id with its authentic O-07
   `CheckedOccurrence` key (node, `expression` role, ordinal), the existing obligation kind and
   one argument per operand position in operand/harness draw order. Each entry is its position
-  ordinal, authentic operand node id and actual harness operand range: a parameter reference's
-  parameter id, a literal's own literal node id with singleton range (FR-015 AC-16), or a
-  subterm's node id. Repeated independent draws of one parameter remain distinct positional
+  ordinal, typed `OperandIdentity` and actual harness operand range. Its tagged representation
+  is `GraphChild { node_id }` for an actual graph reference (parameter, subterm or an existing
+  literal node), or `InlineLiteral { application, occurrence, position }` using the authentic
+  application node id, selected occurrence key and position ordinal. The inline literal's value
+  is carried by its singleton range (FR-015 AC-16); QSL emits no extra literal node for it.
+  The typed identifier member holds this representation without fabricating a checked node id.
+  Repeated independent draws of one parameter remain distinct positional
   entries. Scalar entries are neither identifier-sorted nor deduplicated by node id; unrelated
   enclosing-function parameters are absent. Function/frame preimages and identifier ordering
   remain unchanged. The scalar positional encoding uses `core::canonical` and waits for the
@@ -212,8 +216,9 @@ authored).
   Contract IR owns that `CheckedPackageV2` accessor and blocks IR-631 CODE admission; its
   specification and implementation remain to be measured. The model-field
   accessor and wrapped optional leaf walk do not provide one. CG must retain the actual selected
-  expression occurrence and authentic operand metadata; an inline literal term alone establishes
-  no literal node id. Missing or ambiguous metadata/kind refuses without minting an identity.
+  expression occurrence and authentic operand metadata. IR-648 must expose that same tagged
+  identity; the inline arm names application/occurrence/position and needs no literal node.
+  Missing or ambiguous metadata/kind refuses without minting an identity.
   Literal and repeated-parameter semantics are resolved by the positional rule; its normative
   upstream merge and actual metadata access remain CODE gates. Decoder/context work is independent.
   The same-artifact content identity is a separate canonical proof-content tie. The driver
@@ -388,7 +393,7 @@ crate CG's lock selects.
   occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
   `integer_bounds`, `dependencies`) has no parameter node id. `ScalarObligationIdentity` holds a
   node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
-  `maximum`) has no operand node id. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
+  `maximum`) has no typed operand identity. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
   node id, the operation scope and the property, and it is the identity of the frame harness whose
   counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
   own, because `OperationSite` carries the frame's, but it records no draw order for the state

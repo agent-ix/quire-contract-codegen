@@ -187,19 +187,24 @@ The scalar subject is the claimed operator's FR-322 application node id and its 
 O-07 occurrence key: that node id with the selected `CheckedOccurrence`'s role `expression`
 and ordinal. The preimage contains only that subject, occurrence, the existing obligation kind,
 and `arguments`. There is **one argument per operand position**, in operand/harness draw order.
-Each argument contains its position ordinal, authentic operand node id and actual operand range
-used by the harness. A parameter reference names the parameter node id; a literal names its
-own literal node id with singleton range (FR-015 AC-16); a subterm names that subterm's node id.
+Each argument contains its position ordinal, typed `OperandIdentity` and actual operand range
+used by the harness. The identity is a tagged representation: `GraphChild { node_id }` for an
+actual graph reference (including a parameter or subterm), or `InlineLiteral { application,
+occurrence, position }` for an inline literal, using the authentic application node id,
+selected occurrence key and operand position ordinal. An inline literal's singleton range
+carries its value (FR-015 AC-16); QSL emits no extra literal node for it. A reference to an
+existing literal node is a graph child. Neither tag fabricates a checked node id.
 Repeated independent draws of the same parameter remain distinct position entries. CG shall
 neither sort these scalar entries by parameter identifier nor deduplicate their node ids.
 Unrelated enclosing-function parameters are absent. This positional scalar rule does not
 change function/frame identity members, encoding or their existing identifier ordering.
 
-CG shall obtain these node ids, the selected occurrence and positional operand correspondence
+CG shall obtain the graph-child node ids, selected occurrence and positional operand correspondence
 from the authoritative checked/emitted proving package and retain them through generation and
 proving. No generated symbol, operand index used as a node id, chosen occurrence ordinal or
-application id reused as an operand substitutes for that metadata. Position is an argument
-member, not a replacement identity for its operand node. The existing persisted draw order
+application id mislabeled as `GraphChild` substitutes for that metadata. Position is an argument
+member; the typed operand identifier holds the valid tagged representation above. The persisted
+draw order
 and operator operand order must correspond exactly to the retained positional arguments.
 
 CG shall encode this owning scalar shape through its existing one canonical place
@@ -214,10 +219,11 @@ observation authentication remain distinct from the O-09 obligation digest.
 Measured IR `CheckedPackageV2::graph()` exposes nodes with authoritative `node_id` and
 `occurrences`, and `source_map()` exposes their source map; `CheckedOccurrence` supplies role
 and ordinal. The current CG scalar record does not retain its selected expression occurrence
-or operand node ids. IR's public node `body` is still a JSON value; no public typed accessor
+or typed operand identities. IR's public node `body` is still a JSON value; no public typed accessor
 for the scalar application's ordered operands, their identities and ranges was measured.
 The model-field accessor and wrapped optional operation-leaf walk do not supply that scalar
-accessor. In particular, an inline literal term does not by itself establish a literal node id.
+accessor. IR-648 must expose the same `GraphChild`/`InlineLiteral` identity distinction;
+inline-literal identity uses the application/occurrence/position and requires no literal node.
 CODE remains gated on [IR-648](https://linear.app/agent-ix/issue/IR-648), the typed scalar
 operand accessor on `CheckedPackageV2`, and on retaining the occurrence selected for the proved item. Missing or ambiguous occurrence, operand identity/range
 or existing kind yields typed setup refusal and no minted identity. The positional rule resolves
@@ -253,7 +259,7 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-6 | PLANNED (IR-631) / GATED (QSL-641). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained sent claim before conversion; a missing claim, another result/run, or changing only the obligation, node, canonical generated-content identity, operator, operand value/range, result range or limits yields typed binding refusal and no settlement. Obligation-digest equality alone and agreement-only identity cannot pass. | Test |
 | FR-032-AC-7 | PLANNED (IR-631) / GATED (QSL-641). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive(ScalarAgrees)`; native `Incomplete`/execution fault becomes `GeneratedFault` and `Failed`, while exact `Incomplete` becomes `Incomplete(ResourceExhausted)`. `RefusedInput` preserves `invalid_runtime_input`; other typed QSL refusals follow the existing refusal map and non-fault refusals retain their code. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
 | FR-032-AC-8 | PLANNED (IR-631) / GATED (QSL-641). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` exercises an admitted operand pair whose exact result is outside the result range. The expected exact result is derived from the actual retained playback, and its correct refusal is never labelled a source violation. The fixture ranges and witness domain/result-range relation are asserted before that observation; no unreachable case or assumed solver choice counts as coverage. | Test |
-| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (pushed owning scalar rule and authoritative metadata access). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, existing kind and one argument per operand position in actual draw order, each with position ordinal, authentic operand node id and harness operand range. Literal operands use their own node id and singleton range; parameter references use parameter node ids; subterms use subterm ids. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Missing occurrence, operand metadata or kind refuses with no identity. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
+| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (pushed owning scalar rule and authoritative metadata access). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, existing kind and one argument per operand position in actual draw order, each with position ordinal, typed `OperandIdentity` and harness operand range. Actual graph references use `GraphChild { node_id }`; inline literals use `InlineLiteral { application, occurrence, position }` from the authentic application/occurrence and position, with their value in the singleton range. QSL emits no extra literal node. A referenced existing literal, parameter or subterm uses its graph node id. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Missing occurrence, operand metadata or kind refuses with no identity. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
 
 ## Intent and Existing Coverage
 
