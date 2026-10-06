@@ -86,3 +86,10 @@ Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db
 | FND-002 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Zero-byte EOF is no exported report (success refuses, failure NoVerdict); nonempty partial or malformed bytes refuse. |
 | FND-003 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Normative nested argv matches namespace.rs minus --die-with-parent, with its reason; O owns info reader and gate writer; fd 3/4 and report N mapping stated. |
 | FND-004 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Availability regression stated; ordinary-caller label/errno measurement is a required CODE gate (FR-034-AC-14, AC-31, TC-049 step 17). |
+
+Round 2 reviewed 6f552cd97c8a6915d999e03d49129ebc3c198195 (previous a661f2f297f5e9860c25e9995226d07332426ab2; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 04443041-0ffa-49c7-a688-2004c61268ae. Only the disposition-pass-1 findings were open; every original finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | 6f552cd97c8a6915d999e03d49129ebc3c198195: Nonempty partial/malformed bytes now yield to an independently established memory/resource or deadline stop, keeping the single-run outcome and the whole-batch refusal with no member classified; FR-017-AC-19, FR-034 report-lifetime prose and TC-027 agree. |
+| FND-006 | fixed | 6f552cd97c8a6915d999e03d49129ebc3c198195: Every report-writer bound is N >= 5 (FR-017 bullet and AC-19, FR-034 lines 119 and 495, FR-034-AC-17, TC-027); the only remaining >= 3 is the unrelated fixture auxiliary descriptor (FR-034:328, TC-049:49). |

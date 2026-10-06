@@ -63,3 +63,9 @@ Round 1 reviewed a661f2f297f5e9860c25e9995226d07332426ab2 (previous 6b9cbd21f2db
 | FND-002 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: Expected Results rows added for FR-034-AC-31, 32, 33 and 34. |
 | FND-003 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: FR-017-AC-19 keeps argv, unnamed authority and absence semantics and references FR-034-AC-32/33 for the collector. |
 | FND-004 | fixed | a661f2f297f5e9860c25e9995226d07332426ab2: The cited fragments in FR-034, TC-027 and TC-049 step 16 are reflowed; other TC-049 fragments are recorded as new FND-005. |
+
+Round 2 reviewed 6f552cd97c8a6915d999e03d49129ebc3c198195 (previous a661f2f297f5e9860c25e9995226d07332426ab2; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 04443041-0ffa-49c7-a688-2004c61268ae. Only the disposition-pass-1 findings were open; every original finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | 6f552cd97c8a6915d999e03d49129ebc3c198195: TC-049 is whitespace-normalized identical to a661f2f, has no short wrap fragments left in steps or description, and ends with a newline again. |
