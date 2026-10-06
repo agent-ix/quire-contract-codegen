@@ -15,6 +15,7 @@ use super::control::RoleEndpoint;
 
 const LAUNCHER_ARGUMENT: &str = "--quire-kani-launcher";
 const OUTER_ARGUMENT: &str = "--quire-kani-outer";
+const BACKEND_ARGUMENT: &str = "--quire-kani-backend";
 
 /// Private roles of the one explicitly configured, artifact-matched package helper.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,6 +23,8 @@ pub(super) enum HelperRole {
     Launcher,
     Outer,
     Inner,
+    /// Trusted sanitized installer; same PID becomes the backend only after policy/Dispatch.
+    Backend,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,6 +46,7 @@ impl HelperRole {
         match self {
             Self::Launcher => Some(LAUNCHER_ARGUMENT),
             Self::Outer => Some(OUTER_ARGUMENT),
+            Self::Backend => Some(BACKEND_ARGUMENT),
             // The actual original guardian invocation is the inner role with no arguments.
             Self::Inner => None,
         }
@@ -58,6 +62,7 @@ impl HelperRole {
             None => Self::Inner,
             Some(argument) if argument.as_ref() == OsStr::new(LAUNCHER_ARGUMENT) => Self::Launcher,
             Some(argument) if argument.as_ref() == OsStr::new(OUTER_ARGUMENT) => Self::Outer,
+            Some(argument) if argument.as_ref() == OsStr::new(BACKEND_ARGUMENT) => Self::Backend,
             Some(_) => return Err(RoleSelectionError::UnknownRole),
         };
         if arguments.next().is_some() {
