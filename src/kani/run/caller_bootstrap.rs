@@ -28,7 +28,7 @@ use super::{
     publication::{Publication, Stage},
     report_storage::PreparedReportRead,
     role_command::HelperRole,
-    role_deadline::{DeadlineError, RoleDeadline},
+    role_deadline::{DeadlineError, ExecutionClock, RoleDeadline},
     role_protocol::{
         LauncherControl, LauncherReply, OuterArmReply, OuterPhaseCommand, OuterPhaseReply,
         RunSettings,
@@ -155,6 +155,7 @@ impl CallerBootstrap {
         stdin: OriginalStdin,
         capture_limit: usize,
         publication: Arc<Publication>,
+        clock: &ExecutionClock,
     ) -> Result<Self, CallerBootstrapError> {
         if settings.authority != bootstrap.authority()
             || settings.identity != current_build_identity()
@@ -163,12 +164,18 @@ impl CallerBootstrap {
         {
             return Err(CallerBootstrapError::SettingsMismatch);
         }
+        settings
+            .bind_clock(clock)
+            .map_err(CallerBootstrapError::Deadline)?;
         let identity_deadline = settings
             .identity_deadline()
             .map_err(CallerBootstrapError::Deadline)?;
-        let deadline = identity_deadline.map_or(bootstrap.setup_deadline(), |deadline| {
-            deadline.min(bootstrap.setup_deadline())
-        });
+        let deadline = settings
+            .work_deadline()
+            .map_err(CallerBootstrapError::Deadline)?
+            .map_or(bootstrap.setup_deadline(), |deadline| {
+                deadline.min(bootstrap.setup_deadline())
+            });
         // A supplied numeric label cannot replace the genuine original C setup clock.
         settings.setup_deadline =
             RoleDeadline::from_original(deadline).map_err(CallerBootstrapError::Deadline)?;

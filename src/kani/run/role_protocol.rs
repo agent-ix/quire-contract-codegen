@@ -12,7 +12,7 @@ use super::{
     outer_setup::NamespaceIdentity,
     protocol::{BuildIdentity, GuardianRefusal, RunAuthority},
     report_storage::{PipeIdentity, REPORT_SLOT},
-    role_deadline::{IdentityDeadline, RoleDeadline},
+    role_deadline::{ExecutionClock, IdentityDeadline, RoleDeadline},
 };
 
 /// C-origin settings, forwarded without replacing the original deadline or run authority.
@@ -24,6 +24,8 @@ pub(super) struct RunSettings {
     pub(super) identity: BuildIdentity,
     pub(super) authority: RunAuthority,
     pub(super) deadline: IdentityDeadline,
+    /// Original C-derived cutoff T-R_eff, not a fresh role-local work allowance.
+    pub(super) work_deadline: IdentityDeadline,
     /// C’s original finite bootstrap cap, bounded by the original identity deadline.
     pub(super) setup_deadline: RoleDeadline,
     pub(super) caller_uid: u32,
@@ -33,6 +35,17 @@ pub(super) struct RunSettings {
 }
 
 impl RunSettings {
+    /// Trusted C binds both clocks before serializing its authenticated start frame. Neither L
+    /// nor O computes a new reserve from its shorter remaining time.
+    pub(super) fn bind_clock(
+        &mut self,
+        clock: &ExecutionClock,
+    ) -> Result<(), super::role_deadline::DeadlineError> {
+        self.deadline = IdentityDeadline::from_original(clock.original_deadline())?;
+        self.work_deadline = IdentityDeadline::from_original(clock.work_deadline())?;
+        Ok(())
+    }
+
     /// None preserves the original never-elapsing admission (including checked_add overflow).
     /// A finite transferred deadline that actually expires remains an error, never None.
     pub(super) fn identity_deadline(
@@ -46,8 +59,14 @@ impl RunSettings {
     ) -> Result<std::time::Instant, super::role_deadline::DeadlineError> {
         let cap = self.setup_deadline.local()?;
         Ok(self
-            .identity_deadline()?
+            .work_deadline()?
             .map_or(cap, |deadline| deadline.min(cap)))
+    }
+
+    pub(super) fn work_deadline(
+        &self,
+    ) -> Result<Option<std::time::Instant>, super::role_deadline::DeadlineError> {
+        self.work_deadline.local()
     }
 }
 

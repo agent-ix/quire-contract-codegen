@@ -284,7 +284,7 @@ impl InnerCompletion {
         let cap = self.frame_deadline.unwrap_or(cap);
         let deadline = sampling
             .settings
-            .identity_deadline()
+            .work_deadline()
             .map_err(SamplingError::Deadline)?
             .map_or(cap, |deadline| deadline.min(cap));
         let Some(received) = self

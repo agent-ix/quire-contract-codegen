@@ -74,10 +74,15 @@ impl OriginalStdin {
                 "original stdin identity changed during capture",
             ));
         }
-        let original_flags = rustix::io::fcntl_getfd(&stdin)?;
+        let original_flags = rustix::io::fcntl_getfd(&stdin)? & rustix::io::FdFlags::CLOEXEC;
+        let original_access = rustix::fs::fcntl_getfl(&stdin)? & rustix::fs::OFlags::ACCMODE;
         let captured = Self::capture(stdin.as_fd())?;
         let after = rustix::fs::fstat(&stdin)?;
-        if rustix::io::fcntl_getfd(&stdin)? != original_flags
+        // Shared open-description flags can change in another process without violating C's
+        // descriptor-table precondition. Only access mode and original exec visibility are the
+        // SPEC's instability comparison; O_NONBLOCK/O_APPEND are neither frozen nor restored.
+        if rustix::io::fcntl_getfd(&stdin)? & rustix::io::FdFlags::CLOEXEC != original_flags
+            || rustix::fs::fcntl_getfl(&stdin)? & rustix::fs::OFlags::ACCMODE != original_access
             || before.st_dev != after.st_dev
             || before.st_ino != after.st_ino
             || rustix::fs::FileType::from_raw_mode(after.st_mode) != expected_type

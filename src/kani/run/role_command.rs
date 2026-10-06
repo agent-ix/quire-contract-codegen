@@ -80,6 +80,10 @@ impl HelperRole {
             command.arg(argument);
         }
         command
+            // No trusted startup role activates arbitrary original-backend loader inputs.
+            // C's exact original environment is retained separately in authenticated bounded
+            // BackendCommand metadata, restored only by the installed backend exec boundary.
+            .env_clear()
             .stdin(Stdio::from(bootstrap.into_child_mapping()))
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());

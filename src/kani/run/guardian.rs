@@ -18,7 +18,7 @@ use command_fds::{CommandFdExt, FdMapping};
 use rustix::process::{getpid, getuid, waitpid, Pid, WaitOptions};
 
 use super::{
-    control::{ControlError, Transport},
+    control::{ControlError, IncrementalSend, PreparedFrame, Transport},
     protocol::{
         BackendExit, BuildIdentity, CallerControl, GuardianControl, GuardianRefusal, StdinControl,
     },
@@ -262,6 +262,187 @@ struct BackendReaper {
     pid: Pid,
     completed: bool,
 }
+
+/// I retains the actual direct Child and both trusted channels. The safe backend installer
+/// supplies that Child only after installing its policy at the same positively owned PID;
+/// this actor neither starts an unfiltered backend nor invents completion from a spawn recipe.
+pub(super) struct InnerBackend {
+    input: super::role_bootstrap::InnerInput,
+    child: std::process::Child,
+    reaper: Option<BackendReaper>,
+    _artifacts: GuardianArtifacts,
+    state: InnerBackendState,
+}
+
+enum InnerBackendState {
+    Dispatching(InnerEvent),
+    Running,
+    Completing(InnerEvent),
+    AwaitLeaseClose,
+}
+
+/// Each event has two independent finite send cursors. A stopped receiver cannot block I's
+/// primary original lease check or O's independently running accounting/collector actor.
+struct InnerEvent {
+    caller: IncrementalSend,
+    outer: IncrementalSend,
+    caller_sent: bool,
+    outer_sent: bool,
+    deadline: Instant,
+}
+
+impl InnerEvent {
+    fn prepare(control: &GuardianControl, deadline: Instant) -> Result<Self, GuardianError> {
+        Ok(Self {
+            caller: IncrementalSend::new(PreparedFrame::encode(control)?),
+            outer: IncrementalSend::new(PreparedFrame::encode(control)?),
+            caller_sent: false,
+            outer_sent: false,
+            deadline,
+        })
+    }
+
+    fn advance(
+        &mut self,
+        input: &super::role_bootstrap::InnerInput,
+    ) -> Result<bool, GuardianError> {
+        // O gets its genuine I-origin event directly; C's receipt never substitutes for it.
+        if !self.outer_sent {
+            self.outer_sent =
+                self.outer
+                    .advance(&input.outer_bootstrap.transport(), &[], self.deadline)?;
+        }
+        if !self.caller_sent {
+            self.caller_sent =
+                self.caller
+                    .advance(&input.caller_lease.transport(), &[], self.deadline)?;
+        }
+        Ok(self.outer_sent && self.caller_sent)
+    }
+}
+
+pub(super) enum InnerBackendProgress {
+    Running,
+    /// Real C lease EOF. I entry must terminate; this value alone proves no namespace settlement.
+    LeaseClosed,
+}
+
+impl InnerBackend {
+    /// Prepare the Dispatch event before arbitrary code starts. The final exec installer owns
+    /// the actual process start; this bounded reservation can fail without creating a backend.
+    pub(super) fn prepare_dispatch_event(
+        admitted: &BackendAdmission,
+        deadline: Instant,
+    ) -> Result<PreparedInnerDispatch, GuardianError> {
+        Ok(PreparedInnerDispatch(InnerEvent::prepare(
+            &GuardianControl::Dispatched {
+                authority: admitted.authority,
+            },
+            deadline,
+        )?))
+    }
+
+    /// Ownership is stored before the next fallible pin/control/reap operation. No error result
+    /// may drop the actual spawned Child and then pretend it was never created.
+    pub(super) fn from_spawned(
+        input: super::role_bootstrap::InnerInput,
+        admitted: BackendAdmission,
+        child: std::process::Child,
+        dispatch: PreparedInnerDispatch,
+    ) -> Self {
+        Self {
+            input,
+            child,
+            reaper: None,
+            _artifacts: admitted.artifacts,
+            state: InnerBackendState::Dispatching(dispatch.0),
+        }
+    }
+
+    /// One finite actor step. Caller EOF remains primary even with queued output/events; no
+    /// post-Dispatch caller frame can authorize new work. Backend completion leaves I alive
+    /// until real lease close, preserving namespace-owned descendant teardown.
+    pub(super) fn tick(&mut self) -> Result<InnerBackendProgress, GuardianError> {
+        match self
+            .input
+            .caller_lease
+            .transport()
+            .pending_control(Duration::ZERO)
+        {
+            Err(ControlError::Eof) => return Ok(InnerBackendProgress::LeaseClosed),
+            Err(error) => return Err(error.into()),
+            Ok(true) => return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl)),
+            Ok(false) => {}
+        }
+        super::creator::require_live(&self.input.outer_pin)?;
+        super::creator::require_live(&self.input.caller_pin)?;
+        self.input
+            .outer_bootstrap
+            .transport()
+            .refuse_observable_eof()?;
+        if self.reaper.is_none() {
+            self.reaper = Some(BackendReaper::from_child(&self.child)?);
+        }
+        match &mut self.state {
+            InnerBackendState::Dispatching(event) => {
+                if event.advance(&self.input)? {
+                    self.state = InnerBackendState::Running;
+                }
+            }
+            InnerBackendState::Running => {
+                let reaper = self.reaper.as_mut().ok_or(GuardianError::Refusal(
+                    GuardianRefusal::BackendObservationFailed,
+                ))?;
+                if let Some(outcome) = reaper.tick()? {
+                    let cap = Instant::now()
+                        .checked_add(super::role_deadline::SETTLE_RESERVE)
+                        .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?;
+                    let deadline = self
+                        .input
+                        .settings
+                        .identity_deadline()
+                        .map_err(io::Error::other)?
+                        .map_or(cap, |original| original.min(cap));
+                    self.state = InnerBackendState::Completing(InnerEvent::prepare(
+                        &GuardianControl::Completed {
+                            authority: self.input.settings.authority,
+                            outcome,
+                        },
+                        deadline,
+                    )?);
+                }
+            }
+            InnerBackendState::Completing(event) => {
+                self.reaper
+                    .as_mut()
+                    .ok_or(GuardianError::Refusal(
+                        GuardianRefusal::BackendObservationFailed,
+                    ))?
+                    .tick()?;
+                if event.advance(&self.input)? {
+                    self.state = InnerBackendState::AwaitLeaseClose;
+                }
+            }
+            InnerBackendState::AwaitLeaseClose => {
+                self.reaper
+                    .as_mut()
+                    .ok_or(GuardianError::Refusal(
+                        GuardianRefusal::BackendObservationFailed,
+                    ))?
+                    .tick()?;
+            }
+        }
+        match self.input.caller_lease.transport().refuse_observable_eof() {
+            Ok(()) => {}
+            Err(ControlError::Eof) => return Ok(InnerBackendProgress::LeaseClosed),
+            Err(error) => return Err(error.into()),
+        }
+        Ok(InnerBackendProgress::Running)
+    }
+}
+
+/// Private pre-spawn reservation, not a Dispatched fact or a backend ownership handle.
+pub(super) struct PreparedInnerDispatch(InnerEvent);
 
 impl BackendReaper {
     fn from_child(child: &std::process::Child) -> Result<Self, GuardianError> {
