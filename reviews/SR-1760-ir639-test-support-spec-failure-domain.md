@@ -100,3 +100,10 @@ Round 3, reviewed at 52bca0d64f2404aa8c23528a41090f2b91dc4f21.
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-005 | fixed | 52bca0d64f2404aa8c23528a41090f2b91dc4f21: The close-completion/publication paragraph is rewrapped to 100 columns with identical words (whitespace-only diff from d5d9d63). The 126-character line and the short 71-character break are gone, and no prose line in the paragraph exceeds 100. |
+
+Round 4, reviewed at c1a8764b3acd1250475e11a083dc3c0ce9f2965d.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | c1a8764b3acd1250475e11a083dc3c0ce9f2965d: Bootstrap is restored as an exact prefix right after monitor spawn, before any claim or gate release. Its witness carries one owned monitor pidfd and typed InitUnclaimed, with no INIT pin fabricated. The Test asserts only stage facts, caller/monitor death, closed gate/lease ownership and no marker; it never infers INIT death from EOF. The present PR #295 monitor-PDEATH/child_wait leak is named and allocated to IR-652 (exists, Backlog, blocks IR-639). Cleanup assurance is kept as separately required Analysis/repair, and later claimed-INIT Tests are unchanged. |
+| FND-007 | fixed | c1a8764b3acd1250475e11a083dc3c0ce9f2965d: The report socket now enters only through startup stdout. That is safely duplicated to a >=3 CLOEXEC OwnedFd auxiliary, and the original stdout is marked CLOEXEC before any spawn. Every child configures explicit stdio that excludes both descriptors. TC-049 step 9 checks both descriptors' absence from monitor, INIT, guardian, backend and unrelated exec by socket identity, plus report EOF. It adds separate flag-removal and stdio-exclusion mutants. No raw-fd adoption. |

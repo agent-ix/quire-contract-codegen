@@ -121,11 +121,17 @@ Later initialized-stage pin/EOF/namespace teardown tests remain mandatory.
    observation failure all require confirmed teardown before outcomes. Close backend streams and
    fail the helper separately; require bounded capture settlement, appropriate typed refusal, no
    proof accepted from success output beside unconfirmed cleanup, monitor reaping with a live
-   caller, and surviving-owner temporary artifact cleanup after caller loss or helper failure.
-   Verify the anonymous pair ends on final close without a filesystem socket artifact; bootstrap
-   creates no persistent private files before the lease. Kill both cleanup owners separately to
-   confirm kernel process containment without falsely claiming that dead actors remove remaining
-   temporary reports.
+   caller, and surviving-owner temporary artifact cleanup after caller loss or helper failure. That
+   artifact-removal expectation is future required behavior gated on IR-652: inherited parent-death
+   SIGKILL after outside-monitor death can bypass guardian Drop and leave reports despite confirmed
+   process teardown/lease closure. Record actual remaining reports as the named IR-652
+   artifact-unlink gap, never a passing removal assertion or an emergency-cleanup success.
+   AC-23/26/27/28 process fixtures remain unchanged and prove no report removal. AC-12 and
+   startup-cleanup/Analysis under AC-23/26 cannot be Covered by IR-639 process fixtures alone before
+   IR-652 delivery. Verify the anonymous pair ends on final close without a filesystem socket
+   artifact; bootstrap creates no persistent private files before the lease. Kill both cleanup
+   owners separately to confirm kernel process containment without falsely claiming that dead actors
+   remove remaining temporary reports.
 8. Supply a missing, non-executable or unusable explicit helper path. Require typed refusal and no
    backend marker, with no PATH/global discovery, copied fixture binary or alternate launcher.
    Inspect setup docs for deliberate matching library/helper delivery, and the Linux, procfs
@@ -265,7 +271,7 @@ Later initialized-stage pin/EOF/namespace teardown tests remain mandatory.
 | FR-034-AC-1/2/3/7 | Trusted bootstrap is distinct from production Dispatch; exact claimed-pidfd termination or truthful unrecoverable-identity refusal covers every stage | EOF starts subject; signal/monitor exit falsely confirms teardown; claim-to-Dispatch gap |
 | FR-034-AC-4/5/6 | Exclusive original-caller pair and actual kernel Ready sender/INIT chain precede Dispatch | Public rendezvous capture; wrong pair or creator/sender credentials; arbitrary parent |
 | FR-034-AC-8/9 | Kernel INIT teardown cancels escaped, late-born and nested descendants, preserving other runs | Kill only sampled PIDs; cancel another run |
-| FR-034-AC-10/11/12/26 | Caller-group death preserves isolated guardian cleanup; guardian death kills namespace; live-caller helper failure always refuses; monitor/artifact cleanup confirmed | External sole gate owner dies; accept proof after helper failure; leak helper/socket |
+| FR-034-AC-10/11/12/26 | Later caller-group/guardian death confirms namespace teardown and lease closure; live-caller helper failure refuses; AC-12 artifact removal and AC-23/26 startup-cleanup Analysis are Gated on IR-652 and cannot be inferred from process-only success | External sole gate owner dies; accept proof after helper failure; leak helper/socket |
 | FR-034-AC-13/14/25 | Explicit real package helper matches actual running library build/capabilities; setup docs and missing-helper refusal are accurate | PATH/copy fallback; stale helper blessed by caller label |
 | FR-034-AC-15/16 | Invalid bounded controls refuse; exclusive lease and safe child-only mapping | EOF authorizes Dispatch; descendants inherit caller lease |
 | FR-034-AC-17/18/19; FR-028-AC-2/3/21/24; FR-017-AC-14/24/25 | Whole-batch ownership, exact recipe, separate captures and existing resource/refinement outcomes | One helper per member; diagnostics become report; weaken ceilings; ambiguous RSS becomes zero |

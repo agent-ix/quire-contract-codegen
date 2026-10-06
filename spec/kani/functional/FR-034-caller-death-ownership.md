@@ -430,6 +430,18 @@ before lease authentication. If every file-cleanup owner dies, temporary files c
 actor is claimed to unlink them. Kernel namespace cancellation and no unauthorized backend creation
 still hold independently of filesystem cleanup and without fabricated evidence.
 
+A second lifecycle gap is the current inherited parent-death artifact-removal risk, also owned by
+[IR-652](https://linear.app/agent-ix/issue/IR-652). After original-caller loss, outside-monitor
+death can deliver SIGKILL to guardian INIT before its report/artifact cleanup runs. Kernel namespace
+teardown and lease closure may succeed while temporary reports remain. Process termination does not
+prove unlink, and cleanup code relying on guardian Drop cannot execute after SIGKILL. This is not
+represented as passing surviving-owner cleanup. The future surviving-owner cleanup obligation above
+and AC-12 remain required and gated on IR-652 delivery. The all-owner-death allowance does not turn
+this inherited-signal race into verified report removal. AC-23/26/27/28 process and fixture
+assertions remain unchanged; their process-only evidence does not establish artifact removal. AC-12
+and the startup-cleanup/Analysis obligations in AC-23/26 cannot be marked Covered from IR-639
+fixtures alone before IR-652 resolves the Bootstrap and artifact-removal gaps.
+
 The guardian has a finite bootstrap connection/control deadline, even if the original caller
 vanishes before lease authentication. No EOF, missing control capability, stale helper, failed
 identity observation or refused startup permits backend creation. Session isolation precedes Ready
