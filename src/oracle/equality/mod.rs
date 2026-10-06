@@ -2101,8 +2101,8 @@ mod tests {
         };
         let list = named("List");
         let tree = named("Tree");
-        assert!(matches!(resolve_shape(nodes, &list.node_id), Ok(_)));
-        assert!(matches!(resolve_shape(nodes, &tree.node_id), Ok(_)));
+        assert!(resolve_shape(nodes, &list.node_id).is_ok());
+        assert!(resolve_shape(nodes, &tree.node_id).is_ok());
         let list_closure = resolve_shape(nodes, &list.node_id).unwrap();
         let list_key = node_key(&list.node_id).unwrap();
         let CompositeShape::Record(fields) = list_closure.composites[&list_key].shape() else {
