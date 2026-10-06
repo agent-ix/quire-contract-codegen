@@ -5,6 +5,7 @@
 //! join its actual creating thread. An error, dropped handle or closed bootstrap proves no reap.
 
 use std::{
+    cell::RefCell,
     io,
     os::fd::{AsFd, OwnedFd},
     process::{Command, Stdio},
@@ -21,6 +22,7 @@ use super::{
         RoleCaller,
     },
     creator,
+    namespace::{GuardianIdentity, ReadyIdentityError},
     outer_setup::NamespaceIdentity,
     protocol::{current_build_identity, BuildIdentity, GuardianRefusal, RunAuthority},
     publication::{Publication, Stage},
@@ -57,6 +59,7 @@ pub(super) enum CallerBootstrapError {
     PhaseReplyMismatch,
     MissingMonitorPin,
     MissingInnerPin,
+    InnerBootstrapConsumed,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -86,14 +89,15 @@ impl std::error::Error for CallerBootstrapError {
             | Self::UnexpectedPhase
             | Self::PhaseReplyMismatch
             | Self::MissingMonitorPin
-            | Self::MissingInnerPin => None,
+            | Self::MissingInnerPin
+            | Self::InnerBootstrapConsumed => None,
         }
     }
 }
 
 /// The original I-lease writer is retained separately from both role-control writers.
 pub(super) struct CallerBootstrap {
-    pub(super) inner_bootstrap: Bootstrap,
+    inner_bootstrap: Option<Bootstrap>,
     pub(super) outer_control: RoleCaller,
     launcher_control: RoleCaller,
     caller_pin: OwnedFd,
@@ -106,7 +110,7 @@ pub(super) struct CallerBootstrap {
     pub(super) streams: CallerStreams,
     pub(super) publication: Arc<Publication>,
     receive: PreparedReceive,
-    identity_records: creator::PreparedIdentity,
+    identity_records: RefCell<creator::PreparedIdentity>,
     named_buffers: u64,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
@@ -246,7 +250,7 @@ impl CallerBootstrap {
             .encode(&LauncherControl::Start { settings })
             .map_err(CallerBootstrapError::Control)?;
         Ok(Self {
-            inner_bootstrap: bootstrap,
+            inner_bootstrap: Some(bootstrap),
             outer_control,
             launcher_control,
             caller_pin,
@@ -259,7 +263,7 @@ impl CallerBootstrap {
             streams,
             publication,
             receive,
-            identity_records,
+            identity_records: RefCell::new(identity_records),
             named_buffers,
             command: Some(command),
             spawner: None,
@@ -414,11 +418,13 @@ impl CallerBootstrap {
         }
         let pid = self
             .identity_records
+            .get_mut()
             .validate_child_process(pin, &launcher.launcher_pin)
             .map_err(CallerBootstrapError::Io)?;
         if sender.pid != pid
             || self
                 .identity_records
+                .get_mut()
                 .child_namespace(pid)
                 .map_err(CallerBootstrapError::Io)?
                 != namespace
@@ -527,6 +533,7 @@ impl CallerBootstrap {
                     .as_ref()
                     .ok_or(CallerBootstrapError::MissingMonitorPin)?;
                 self.identity_records
+                    .get_mut()
                     .validate_child_process(monitor, outer)
                     .map_err(CallerBootstrapError::Io)?;
             }
@@ -543,15 +550,18 @@ impl CallerBootstrap {
                     .ok_or(CallerBootstrapError::MissingInnerPin)?;
                 let pid = self
                     .identity_records
+                    .get_mut()
                     .validate_child_process(inner, monitor)
                     .map_err(CallerBootstrapError::Io)?;
                 if self
                     .identity_records
+                    .get_mut()
                     .child_start(pid)
                     .map_err(CallerBootstrapError::Io)?
                     != start
                     || self
                         .identity_records
+                        .get_mut()
                         .child_namespace(pid)
                         .map_err(CallerBootstrapError::Io)?
                         != namespace
@@ -591,6 +601,17 @@ impl CallerBootstrap {
         Ok(())
     }
 
+    /// Take only the real original C/I lease state after authenticated actual gate release.
+    /// The same existing typed Hello/Ready/Dispatch stages run against this retained chain owner.
+    pub(super) fn take_inner_bootstrap(&mut self) -> Result<Bootstrap, CallerBootstrapError> {
+        if !matches!(self.phase, CallerPhase::ClaimedBootstrap) {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.inner_bootstrap
+            .take()
+            .ok_or(CallerBootstrapError::InnerBootstrapConsumed)
+    }
+
     pub(super) fn named_buffer_reservation(&self) -> u64 {
         self.named_buffers
     }
@@ -605,5 +626,42 @@ impl CallerBootstrap {
         self.identity
             .as_ref()
             .ok_or(CallerBootstrapError::MissingLauncher)
+    }
+}
+
+impl GuardianIdentity for CallerBootstrap {
+    fn verify_ready(
+        &self,
+        sender: super::control::PeerCredentials,
+        mapped_uid: u32,
+    ) -> Result<(), ReadyIdentityError> {
+        let launcher = self
+            .identity
+            .as_ref()
+            .ok_or(ReadyIdentityError::Unclaimed)?;
+        creator::require_live(&launcher.creator_pin)?;
+        creator::require_live(&launcher.launcher_pin)?;
+        let expected = self.inner_identity.ok_or(ReadyIdentityError::Unclaimed)?;
+        let inner = self
+            .inner_pin
+            .as_ref()
+            .ok_or(ReadyIdentityError::Unclaimed)?;
+        let monitor = self
+            .monitor_pin
+            .as_ref()
+            .ok_or(ReadyIdentityError::Unclaimed)?;
+        let mut records = self
+            .identity_records
+            .try_borrow_mut()
+            .map_err(|_| io::Error::other("caller identity records are already borrowed"))?;
+        records.verify_ready(inner, monitor, expected, sender, mapped_uid)?;
+        creator::require_live(
+            self.outer_pin
+                .as_ref()
+                .ok_or(ReadyIdentityError::Unclaimed)?,
+        )?;
+        creator::require_live(&launcher.creator_pin)?;
+        creator::require_live(&launcher.launcher_pin)?;
+        Ok(())
     }
 }

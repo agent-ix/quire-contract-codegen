@@ -9,7 +9,7 @@ use std::{
 
 use super::{
     control::{private_pair, CallerLease, ControlError, GuardianEndpoint, PreparedFrame, Received},
-    namespace::{BackendCommand, NamespaceOwner, ReadyIdentityError},
+    namespace::{BackendCommand, GuardianIdentity, ReadyIdentityError},
     protocol::{
         current_build_identity, BackendExit, CallerControl, GuardianControl, GuardianRefusal,
         RunAuthority, StdinControl,
@@ -209,7 +209,10 @@ impl Bootstrap {
 }
 
 impl ClaimedBootstrap {
-    pub(super) fn authenticate(self, owner: &NamespaceOwner) -> Result<InitReady, StageError> {
+    pub(super) fn authenticate(
+        self,
+        owner: &impl GuardianIdentity,
+    ) -> Result<InitReady, StageError> {
         let received = self
             .0
             .lease
@@ -288,7 +291,10 @@ impl PendingDispatch {
         self.ready.into_lease()
     }
 
-    pub(super) fn acknowledge(self, owner: &NamespaceOwner) -> Result<Dispatched, StageError> {
+    pub(super) fn acknowledge(
+        self,
+        owner: &impl GuardianIdentity,
+    ) -> Result<Dispatched, StageError> {
         let received = self
             .ready
             .bootstrap
@@ -313,7 +319,7 @@ impl Dispatched {
     /// Bounded authenticated completion; control EOF never stands for backend completion.
     pub(super) fn completion(
         &self,
-        owner: &NamespaceOwner,
+        owner: &impl GuardianIdentity,
         deadline: Option<Instant>,
     ) -> Result<Option<BackendExit>, StageError> {
         let transport = self.ready.bootstrap.lease.transport();
@@ -342,7 +348,7 @@ impl Dispatched {
 }
 
 fn verify_sender(
-    owner: &NamespaceOwner,
+    owner: &impl GuardianIdentity,
     received: &Received<GuardianControl>,
     mapped_uid: u32,
 ) -> Result<(), StageError> {
