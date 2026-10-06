@@ -103,6 +103,21 @@ FR-028 AC-21's whole-group memory ceiling and AC-12's batch deadline remain auth
 - Setup documentation shall explain explicit matched helper delivery for library consumers.
 - Production verification shall invoke the real package helper and observable lifecycle barriers.
 - Regression verification shall fail ownership mutants before separate emergency fixture cleanup.
+- The CG library shall omit guardian-test-support from default features.
+- Where guardian-test-support is enabled, the CG library shall export one fixture operation.
+- The fixture operation shall record immutable raw observations before independent INIT escalation.
+- The fixture operation shall invoke unchanged production cleanup immediately after observation.
+- The fixture operation shall exclude pass/fail oracle evaluation from library execution.
+- The CG verification harness shall judge the defined oracle from pre-escalation raw observations.
+- The bounded executor shall publish private LeaseClosing state after actual caller-lease closure.
+- The bounded executor shall publish that state unconditionally through a monotonic read-only value.
+- The fixture continuation shall resume only its deliberately stopped and pinned INIT.
+- When LeaseClosing is positively observed, the fixture continuation shall send owned-pidfd SIGCONT.
+- The fixture operation shall reject unavailable continuation as passing EOF-cancellation evidence.
+- The fixture build shall select the actual package helper through the consumer manifest.
+- The CG verification harness shall build feature-off and feature-on configurations separately.
+- If helper and library feature identities differ, then the bounded executor shall refuse Dispatch.
+- CG documentation shall identify the downstream production-feature exclusion owned by IR-649.
 
 ### Startup and termination observations
 
@@ -160,21 +175,21 @@ original deadline. Both stay in the original caller; this separation neither exp
 transfers monitor ownership. Explicit cancellation in InitReady or Dispatched invokes the production
 `close_lease_and_observe` operation: it consumes and closes `CallerLease`, disables further caller
 Dispatch, and retains `RunOwner` while observing claimed INIT termination. No independent INIT
-signal is sent during this LeaseClosing phase. Pending guardian authorization still obeys observable
-EOF precedence. The same operation handles cancellation before and after Dispatch, not a test-only
-hook.
+cancellation or escalation signal is sent during this LeaseClosing phase. Pending guardian
+authorization still obeys observable EOF precedence. The same operation handles cancellation before
+and after Dispatch, not a test-only hook.
 
 LeaseClosing has a finite observation cap clamped to the remaining original identity deadline. Its
 private typed `LeaseCloseObservation` distinguishes confirmed guardian termination, escalation
 required while INIT remains live, and unavailable termination observation. The operation records and
-returns this observation before any independent INIT signal; it never reports termination from
-stream EOF alone. The normal production cancellation driver immediately uses the observation:
-confirmed termination proceeds to bounded capture settlement and monitor reaping; the other cases
-signal the claimed INIT, perform bounded confirmation/cleanup and refuse unconfirmed teardown. This
-operation boundary lets the opt-in fixture operation record the actual pre-escalation observation
-while its live original caller retains monitor/INIT ownership, then immediately execute the same
-production cleanup phase. It exports no lease or cancellation handle and never waits for a test
-controller.
+returns this observation before any independent INIT cancellation or escalation signal; it never
+reports termination from stream EOF alone. The normal production cancellation driver immediately
+uses the observation: confirmed termination proceeds to bounded capture settlement and monitor
+reaping; the other cases signal the claimed INIT, perform bounded confirmation/cleanup and refuse
+unconfirmed teardown. This operation boundary lets the opt-in fixture operation record the actual
+pre-escalation observation while its live original caller retains monitor/INIT ownership, then
+immediately execute the same production cleanup phase. It exports no lease or cancellation handle
+and never waits for a test controller.
 
 Resource breach, original-deadline expiry and observation/identity failure retain their urgent
 claimed INIT cancellation authority; they do not wait out a new lease grace period or reset a
@@ -194,32 +209,74 @@ namespace INIT, worker, identity check or cleanup implementation. Its sole addit
 recording real typed observations and arranging bounded positive coordination for pending Dispatch.
 Ordinary public execution and caller-death fixtures remain available without this feature.
 
-The fixture operation retains real `RunOwner` handles in the live caller while capturing typed
-stage, `LeaseCloseObservation`, pinned worker liveness and backend-marker observations at the actual
-pre-escalation boundary. It evaluates and seals the named ownership oracle there, including a failed
-oracle when EOF cancellation needs escalation; later cleanup cannot replace that result with
-success. Then it immediately and unconditionally executes the unchanged production cleanup,
-including refusal and observation-error paths, before returning the immutable observation/oracle and
-cleanup result. It returns no lease, process handle or callback that can defer cleanup. Positive
-pending-Dispatch coordination is bounded within the original deadline, advances without controller
-permission, and neither grants Dispatch nor disables observable EOF precedence. Overflow, lost
-observation or failed coordination records a typed failed/inconclusive fixture result and still
-cleans up; it never fabricates a passing ownership observation. Urgent resource and identity
-cancellation remains authoritative.
+The fixture operation shall retain real `RunOwner` handles in the live original caller while
+recording raw typed stage, `LeaseCloseObservation`, pinned worker and backend-marker observations
+before independent INIT escalation. The operation shall seal these observations without evaluating a
+pass/fail oracle. The operation shall immediately invoke unchanged production cleanup on success,
+refusal and observation-error paths. The operation shall return immutable raw observations and a
+separate cleanup result only after that cleanup. The operation shall return no lease, process handle
+or cleanup-deferring callback. If observation is lost, overflowed or unavailable, then the fixture
+operation shall record typed failure. The fixture operation shall reject that failure as confirmed
+termination. Urgent resource and identity cancellation remains authoritative.
+
+For deterministic pending-Dispatch coordination, the feature-gated fixture owner shall stop its
+verified InitReady INIT through that owned pidfd. The owner shall positively verify stopped state
+`T` against the same live INIT/start/namespace identity before queueing otherwise valid Dispatch on
+the ordinary control stream. The owner shall keep `RunOwner` and the original caller alive while
+invoking the unchanged synchronous `close_lease_and_observe` operation. After actual `CallerLease`
+closure, that production operation shall publish its private LeaseClosing stage unconditionally
+through a monotonic read-only value before waiting for termination. Publication shall add no
+callback, blocking handoff, extra I/O or feature-keyed branch to any production stage.
+
+The fixture owner shall use an internal owned continuation thread to observe that positive
+publication and send SIGCONT through its positively pinned INIT pidfd. Only that fixture-only
+continuation may resume its deliberately stopped INIT; no external controller grants permission.
+SIGCONT is a resumption signal, not cancellation or escalation, and shall never establish the EOF
+oracle. The guardian shall observe the already closed stream before accepting its buffered Dispatch.
+The fixture continuation shall use bounded observation within the original deadline and join during
+unconditional cleanup. Failed stop/state validation, publication, continuation or resume shall
+record typed coordination failure and trigger owned cleanup, never a passing fixture or platform
+skip. Urgent deadline/resource/identity cancellation retains its authority while INIT is stopped.
+
+Linux namespace/pidfd/stream probes measured owner stop, positive `T` state, queued Dispatch
+followed by exclusive lease close, resume, EOF alongside buffered bytes and confirmed INIT
+termination. These facility observations establish feasibility only; the unconditional Rust
+publication/continuation and production guardian oracle remain unimplemented and require actual CODE
+verification.
+
+The external test harness owns the AC-24 predicate and evaluates it after the operation returns
+following unconditional cleanup, using only sealed observations taken before escalation. For
+pre-Dispatch it requires confirmed INIT termination before escalation and no production backend
+marker. For post-Dispatch it requires confirmed INIT termination and a dead pinned worker which
+positively acknowledged startup, both observed before escalation. Escalation-required, unavailable
+observation and a live worker fail the predicate; subsequent cleanup success cannot change those
+observations. The library supplies raw facts, not a fixture verdict or fabricated proof evidence.
 
 The packaged caller fixture, library and real helper shall use the same normal, non-`cfg(test)`
-library artifact. Delivery selects the package helper from the consumer manifest using `cargo -p`.
-Target, profile, feature selection and compiler flags shall match. Actual artifact identity remains
-mandatory; fixture observation shall not override it with an epoch, version label or digest. Builds
-without `guardian-test-support` shall expose no fixture operation, and a helper built without it
-shall not satisfy a feature-enabled fixture's actual library identity. Both refusal and export
-absence require verification, not an identity override or a synthetic helper.
+library artifact. The fixture build shall select the package helper from the consumer manifest using
+`cargo -p`. The fixture build shall match target, profile, feature selection and compiler flags. The
+bounded executor shall require actual artifact identity without an epoch, version or digest
+override. If a feature-off helper is supplied to a feature-on fixture, then the bounded executor
+shall refuse before Dispatch. If a feature-on helper is supplied to a feature-off production caller,
+then the bounded executor shall refuse before Dispatch. Feature-off builds shall expose no fixture
+operation. The CG verification harness shall check both mismatch refusals and feature-off export
+absence using actual artifacts.
 
-CG verification documentation shall mark this feature as test-only and name the matched-artifact
-build and feature-off checks. Production-driver dependency-edge verification shall assert that no
-production profile enables it, including through feature unification. These are planned obligations:
-this amendment changes no CI workflow or driver repository, and claims no delivered driver
-assertion.
+The CG verification harness shall use separate named Cargo invocations: `guardian-feature-off` for
+normal feature-off library/helper/caller builds and AC-23/26 public execution fixtures, and
+`guardian-feature-on` for normal feature-enabled library/helper/caller builds and AC-24 observation.
+These names identify verification configurations, not Cargo profiles or new build directories. The
+harness shall not use a self dev-dependency that unifies guardian-test-support into the feature-off
+configuration. Neither configuration uses a `cfg(test)` library to impersonate its normal helper.
+
+CG documentation shall mark guardian-test-support as test-only. CG documentation shall identify
+matched-artifact delivery and separate feature-off/on verification. CG documentation shall allocate
+production-driver dependency-edge exclusion to the QSL production-driver work owned by
+[IR-649](https://linear.app/agent-ix/issue/IR-649). That downstream work must reject the feature in
+all driver production-build profiles, including transitive Cargo feature unification. IR-639 enables
+that work; its downstream delivery is not a prerequisite for delivering the CG observation export.
+CG inspection checks publication of this contract, not the driver's implementation or a CG-only
+surrogate of it. The downstream dependency-edge assertion remains a separate planned gate.
 
 ### Run artifact and bootstrap cleanup
 
@@ -254,7 +311,7 @@ Dispatch: guardian death is PID-1 death, not closure of a sole external gate own
 | FR-034-AC-11 | Guardian SIGKILL, abort or OOM-equivalent death during bootstrap, InitReady or immediately after Dispatch cannot release an unowned production backend: the guardian is INIT, and its death tears down that namespace. With a live original caller, guardian failure always yields a typed refusal and never verified/falsified evidence, even after confirmed teardown and beside a valid success report. | Test |
 | FR-034-AC-12 | Every startup refusal, completion and cancellation stops the guardian/monitor after owned cleanup. The anonymous pair has no public name or persistent socket artifact and ends with its final owner; bootstrap creates no persistent private files before lease authentication. Surviving executor and guardian own temporary artifact cleanup on opposite-owner failure. All-owner death may leave temporary files but never waives kernel descendant cancellation; no dead caller is claimed to reap or unlink. | Test |
 | FR-034-AC-13 | The bounded executor requires an explicit path to this package's actual Cargo executable quire-kani-guardian, built and supplied with the library from the same package source/build inputs. A missing, non-executable or unusable helper gives a typed setup refusal before backend Dispatch, with no PATH/global discovery, copied executable, shell substitute or alternate launcher. Cargo library dependency resolution alone is not helper delivery. | Test |
-| FR-034-AC-14 | Setup documentation identifies the package helper and Linux/procfs children and RSS, pidfd, bubblewrap PID-1/new-session namespace/info/gate features and namespace permissions required by the merged containment code slice (PR #295), without requiring host-policy changes or an ad hoc global installation. Fixture documentation marks guardian-test-support as test-only and identifies matched-artifact delivery, feature-off verification and production-driver exclusion. | Inspection |
+| FR-034-AC-14 | Setup documentation identifies the package helper and Linux/procfs children and RSS, pidfd, bubblewrap PID-1/new-session namespace/info/gate features and namespace permissions required by the planned guardian (IR-639); the merged containment slice (PR #295) instead uses user/PID namespace, die-with-parent, info-fd and block-fd flags, without requiring host-policy changes or an ad hoc global installation. Fixture documentation marks guardian-test-support as test-only and identifies matched-artifact delivery, feature-off verification and production-driver exclusion. | Inspection |
 | FR-034-AC-15 | Typed private controls reject malformed and unknown fields and enforce finite encoded-byte, pending-message and startup-work bounds. Ancillary descriptor count/type is exact, received descriptors are CLOEXEC, and unknown/extra/truncated ancillary data refuses while closing all received descriptors. Invalid/overlimit control or EOF cancels or refuses rather than authorizing Dispatch. | Test |
 | FR-034-AC-16 | Only the original caller holds the pair's executor endpoint. Guardian receives only its control end as fd0 through safe CLOEXEC child-only mapping, borrows it with a safe descriptor API and receives actual backend stdin separately as OwnedFd through safe ancillary rights. Backend fd0 restores that original stdin or closed state, while the control/lease descriptor is excluded from backend and unrelated exec inheritance. No arbitrary raw-fd adoption or unsafe exception occurs. | Test |
 | FR-034-AC-17 | The same backend receives unchanged raw argument bytes, inherited stdin, inherited and overridden environment, and working directory. | Test |
@@ -263,14 +320,14 @@ Dispatch: guardian death is PID-1 death, not closure of a sole external gate own
 | FR-034-AC-20 | Guardian connection, startup, identity verification and Dispatch use the original monotonic identity deadline without resetting it. An already expired deadline causes no Dispatch and settles inconclusive with the timed-out reason as FR-028 AC-2 states; actual identity-deadline expiry during setup or execution uses the same classification. | Test |
 | FR-034-AC-21 | Guardian connection and handshake have a finite setup cap within the remaining original deadline. Cap expiry while that deadline remains live is a typed setup refusal, distinct from identity-deadline timeout. | Test |
 | FR-034-AC-22 | Control/capture shutdown and cleanup observation waits have finite bounds. Unconfirmed termination refuses with a live caller rather than accepting a proof or claiming physical disappearance of an uninterruptible task. | Test |
-| FR-034-AC-23 | Caller-death fixtures use the ordinary public execution API without guardian-test-support, invoke the real guardian built from this package in the owning target directory and observe pre-initialization, gated and immediate post-Dispatch stages through positive handshakes and owned identities/pidfds, without production test bypasses, sleep-based success or wide host-scan authority. | Test |
-| FR-034-AC-24 | Removing lease-EOF cancellation fails pre-Dispatch closed-lease pending-authorization and post-Dispatch surviving-descendant assertions driven by production close_lease_and_observe. Its consumed CallerLease closes independently of live RunOwner monitor/INIT handles. The guardian-test-support fixture operation seals LeaseCloseObservation, owned worker/marker observations and the named oracle at the real private boundary before unconditional production cleanup or emergency cleanup; escalation-required is a failed EOF-cancellation oracle even if later cleanup kills the worker. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. Restored controls pass. | Test |
+| FR-034-AC-23 | Caller-death fixtures use the ordinary public execution API linked against a normal library built with guardian-test-support off, invoke the real guardian built from this package in the owning target directory and observe pre-initialization, gated and immediate post-Dispatch stages through positive handshakes and owned identities/pidfds, without production test bypasses, sleep-based success or wide host-scan authority. | Test |
+| FR-034-AC-24 | Removing lease-EOF cancellation fails pre-Dispatch closed-lease pending-authorization and post-Dispatch surviving-descendant assertions driven by production close_lease_and_observe. Its consumed CallerLease closes independently of live RunOwner monitor/INIT handles. The guardian-test-support fixture operation seals raw LeaseCloseObservation and owned worker/marker observations at the real private boundary before unconditional production cleanup or emergency cleanup. The test harness requires pre-Dispatch confirmed INIT termination with no marker, or post-Dispatch confirmed INIT termination with a dead pinned positively acknowledged worker, all observed before escalation; escalation-required is a failed EOF-cancellation oracle even if later cleanup kills the worker. Pending authorization is ordered by fixture-owned pidfd SIGSTOP and positive T state, queued Dispatch, actual lease closure with unconditional private LeaseClosing publication, then owned continuation SIGCONT. SIGCONT never satisfies the EOF predicate. Publication-before-close, missing-publication and skipped-lease-close mutants must fail their named observation/EOF predicates. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. Restored controls pass. | Test |
 | FR-034-AC-25 | Before backend Dispatch, the helper handshake matches the actual running CG library's build, protocol and lifecycle-capability identity against the actual invoked first-party executable. A stale helper or changed lifecycle implementation refuses, even if a caller supplies a matching version label or digest. Expected identity derives from actual library/helper build artifacts, not caller assertions or manually maintained tracking pins. | Test |
 | FR-034-AC-26 | The guardian's host session and process group are distinct from the original caller's before Ready and backend Dispatch, with no controlling-terminal job-control delivery from that caller's session. Killing the caller's whole group at pre-Ready, InitReady and immediate post-Dispatch stages leaves guardian cleanup operational; a directly killed guardian still triggers kernel namespace teardown. | Test |
-| FR-034-AC-27 | guardian-test-support is off by default, absent from default features, and exposes exactly one documented fixture operation only when explicitly enabled. A feature-off consumer cannot use that operation. No lease, process-ownership handle, public cancellation entry or cleanup-deferring callback is exported. | Test |
-| FR-034-AC-28 | The fixture operation captures actual typed stage/lease-close and pinned-worker/marker observations and seals the required ownership oracle before immediately invoking unchanged production cleanup on success, refusal and observation failure. It cannot pause for a controller, alter a production-stage branch or report a passing oracle after lost/overflowed observations. Cleanup success cannot rewrite a failed pre-escalation oracle. | Test |
-| FR-034-AC-29 | The packaged caller fixture and real helper link the same normal library artifact through consumer-manifest package selection with matching target/profile/features/compiler flags. No cfg-test library or identity override is accepted. An actual helper built without guardian-test-support refuses a feature-enabled fixture's identity; feature-off consumer compilation verifies absence of the fixture operation. | Test |
-| FR-034-AC-30 | Production-driver dependency-edge verification detects guardian-test-support enabled directly or through feature unification in any production profile. A production profile enabling the feature fails that assertion; feature-off profiles pass. Existing assertion delivery is not claimed. | Test |
+| FR-034-AC-27 | guardian-test-support is off by default, absent from default features, and exposes exactly one documented fixture operation only when explicitly enabled. A feature-off consumer cannot use that operation. No lease, process-ownership handle, public cancellation entry or cleanup-deferring callback is exported. | Test, Inspection |
+| FR-034-AC-28 | The fixture operation seals actual raw typed stage/lease-close and pinned-worker/marker observations before immediately invoking unchanged production cleanup on success, refusal and observation failure. It contains no library pass/fail oracle, external-controller pause or feature-dependent production-stage branch. Lost/overflowed observations and failed stop/publication/resume coordination are typed failures. Private monotonic read-only LeaseClosing publication always follows actual lease close; it adds no callback, blocking handoff, extra I/O or feature branch. The test harness applies the AC-24 predicate to pre-escalation observations; cleanup success cannot rewrite them. | Test, Inspection |
+| FR-034-AC-29 | The packaged caller fixture and real helper link the same normal library artifact through consumer-manifest package selection with matching target/profile/features/compiler flags. Separate named feature-off/on invocations avoid self dev-dependency feature unification. No cfg-test library or identity override is accepted. The bounded executor refuses feature mismatch in both directions before Dispatch; feature-off consumer compilation verifies absence of the fixture operation. | Test |
+| FR-034-AC-30 | CG publishes the test-only feature contract and allocates production-driver dependency-edge exclusion to IR-649's QSL driver work. The contract requires all downstream production-build profiles to reject direct or transitively unified guardian-test-support. CG inspection verifies the published allocation and checks; downstream assertion evidence is owned by IR-649. | Inspection |
 
 ## Dependencies
 
@@ -278,6 +335,9 @@ Dispatch: guardian death is PID-1 death, not closure of a sole external gate own
   AC-2/3 own resource outcomes, and AC-24 owns bounded native refinement. This requirement adds
   independent original-caller lifecycle ownership, not another resource model.
 - [FR-017](./FR-017-kani-execution-evidence.md) owns backend reports, capture and batching.
+- Downstream [IR-649](https://linear.app/agent-ix/issue/IR-649) owns QSL production-driver
+  dependency-edge exclusion after IR-639 delivers this contract; it is not a CG acceptance test or
+  an upstream prerequisite for the observation export.
 - [TC-049](../matrix/TC-049-caller-death-ownership.md) describes planned production verification.
   The preceding containment code slice (PR #295) is merged; guardian CODE remains planned,
   independently of completion of all parent IR-241 work. Criterion-level implementation order is
