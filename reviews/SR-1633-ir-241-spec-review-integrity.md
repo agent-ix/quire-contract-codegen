@@ -61,3 +61,8 @@ Round 1. The commit identity of each outcome is in the private tracker marker fo
 | --- | --- | --- |
 | FND-001 | fixed | PR #295 fix round: the `spec/kani/matrix/tests.md` FR-028 rows are split into AC-1 to AC-4 (partial), AC-5 to AC-9 (planned), AC-13 to AC-20 and AC-22 to AC-24 (planned) and AC-21 (partial). The stale "AC-3 unbacked" sentence is gone, and FR-029-AC-3 is marked covered with a tagged test. |
 | FND-002 | fixed | PR #295 fix round: the FR-028-AC-21 marker reads PARTIAL and names what remains (refinement runs, limit-only stand-in); the FR-028 Description says the same. The normative AC text is unchanged. |
+
+Round 3 (rebase regression; the exact head is in the private tracker marker): no regression in
+this method's scope. Its examined spec and test paths carry the same patch as in round 2. The
+rebased matrix keeps `main`'s FR-025-AC-9 row beside the PR's FR-028 rows, and the spec files
+validate. The rebase's one compile regression is recorded as SR-1630 FND-014.

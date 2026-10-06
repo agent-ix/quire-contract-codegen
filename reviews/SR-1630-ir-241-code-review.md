@@ -209,3 +209,38 @@ findings. With every SR-1630 to SR-1633 finding now at a non-open outcome, the P
 review-mergeable. Merge still waits on the final rebase (with a same-session regression
 disposition if owned semantics change), full CI and the second Linux Kani run, none of which has
 run yet. IR-241 itself stays incomplete: IR-639 blocks it.
+
+## New findings (disposition pass 3)
+
+This is a rebase-regression check of the PR #295 head after rebasing onto `main`, which now
+includes the IR-624 code change (#297) and the IR-635 spec change (#298). The exact head and the
+byte-comparison evidence are in the private tracker marker.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-014 | high | Semantic merge conflict. `tests/it/kani_obligations_state_clause_replay.rs`, added on `main` by #297 and so outside this PR's diff, builds a `StateFrameRequest` literal with no `ceilings` field. This PR makes that field required: the struct has no `Default`, no `..` base is used and it is not `#[non_exhaustive]`. The module is compiled unconditionally into the `it` test binary (`tests/it/main.rs:59`), and `#[ignore]` does not stop compilation, so the rebased head's integration-test target does not compile (E0063). `cargo test`, `cargo clippy --all-targets` and `make ci` cannot pass. Git merged it cleanly, and the author's rebase evidence does not mention the file. | tests/it/kani_obligations_state_clause_replay.rs:758-765, tests/it/main.rs:59, src/kani/generate/frame.rs:78 |
+
+Failure scenario: the queued focused run, or the final full CI, builds the `it` target on the
+rebased head and stops with `error[E0063]: missing field 'ceilings' in initializer of
+'StateFrameRequest'`, so no gate result is produced. Fix: add
+`ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(<that file's Kani budget>)`
+(or `proof_ceilings()`) to that literal, the same mechanical propagation used for the other 19
+state-frame literals. Then re-run the focused job.
+
+Round-3 regression verdict:
+
+- Every other PR file carries exactly the patch reviewed in round 2. Comparing `+`/`-` lines with
+  hunk positions stripped, all of `src/kani/run/*` (launcher, namespace, memory, execute,
+  harness) is byte-identical to the round-2 head.
+- The only patch that changed is `tests/it/kani_obligations_state_frame.rs`, which now also gives
+  `ceilings:` to the state-frame literals #297 introduced. It is purely additive and mechanical,
+  uses the single fixture source, and drops no `main` line except the PR's intended `timeout:`
+  removal. It keeps the merged QSL-emitted accessor, positive-range and model-field fixtures, and
+  it does not bring back the removed `generate_over` route.
+- The matrix keeps `main`'s FR-025-AC-9 planned row beside the PR's partial FR-028 rows.
+- FND-001 to FND-010, FND-012 and FND-013 show no regression.
+- FND-011 stays deferred to IR-639, which is In Progress, a child of IR-241 and blocks it. The
+  caller-death disclosure is unchanged in `CLAUDE.md`, `execute.rs`, `namespace.rs`, FR-028 and
+  TC-039.
+- The focused run, full CI and the second Kani run are all pending; no runtime receipt exists for
+  this head. Not mergeable until FND-014 is fixed and those gates pass.

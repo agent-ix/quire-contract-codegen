@@ -61,3 +61,8 @@ Round 1. The commit identity of each outcome is in the private tracker marker fo
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | PR #295 fix round: TC-039 Status now names mandatory PID-namespace ownership and its prerequisites, claimed init, startup-abort ordering, teardown on every conclusion, the escaped and late-fork fixtures, the conservative RSS metric, and the scope that is still planned. |
+
+Round 3 (rebase regression; the exact head is in the private tracker marker): no regression in
+this method's scope. Its examined spec and test paths carry the same patch as in round 2. The
+rebased matrix keeps `main`'s FR-025-AC-9 row beside the PR's FR-028 rows, and the spec files
+validate. The rebase's one compile regression is recorded as SR-1630 FND-014.

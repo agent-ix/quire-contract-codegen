@@ -100,3 +100,8 @@ Round 1. The commit identity of each outcome is in the private tracker marker fo
 Round-1 verdict: PASS for this method. The slice criteria FR-028-AC-1, -2, -3, -4, -12 and -21,
 and now FR-029-AC-3, are tagged. The remaining IR-241 scope is unchanged and still planned.
 Plan completion: not assessed.
+
+Round 3 (rebase regression; the exact head is in the private tracker marker): no regression in
+this method's scope. Its examined spec and test paths carry the same patch as in round 2. The
+rebased matrix keeps `main`'s FR-025-AC-9 row beside the PR's FR-028 rows, and the spec files
+validate. The rebase's one compile regression is recorded as SR-1630 FND-014.
