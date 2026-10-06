@@ -227,15 +227,17 @@ Claim/setup checks and operand/native handling are separate stages:
    must be coherent. Adapter assertion/harness selection and the persisted leaf-binding schema
    must name that actual claim; another result/run cannot settle it. These claim-identity refusals
    precede Disagreed. A bound-schema refusal is not an operand value's admission failure.
-3. The actual upstream node-parity/value/settlement capability must be available. Its absence is a
-   distinct typed setup refusal, not a fabricated terminal value or QSL catalog code.
+3. QSL #645 has delivered the node-parity/value/settlement facade. CG must expose its public
+   consumer to use that facade; until IR-666 code does so, an otherwise coherent request returns
+   CG's typed unavailable-capability setup refusal, never a fabricated terminal value or QSL
+   catalog code.
 4. For the same admitted claim after delivery, retained Disagreed takes F-1/FR-029 AC-24 precedence
    before operand decode/admission and native-observation handling. A composite operand field `x`
    declared `Int[0, 9]` but supplied as `x: 12`, wrong operand shape/member/presence, missing native
    observation or native fault cannot mask that
    retained disagreement as a no-settlement setup refusal. The converter consumes Failed/CgDefect
-   without fabricating an operand or native observation; the delivered owning representation is
-   required by the QSL-640 code gate.
+   without fabricating an operand or native observation; CG code must use QSL #645's delivered
+   owning representation.
 5. Without Disagreed, playback leaf arity/width/order, canonical syntax, typed value
    shape/member/presence and declared-domain validation occurs in the operand stage before exact
    evaluation. Native Incomplete/ExecutionFault is F-2 before operand admission refusal at F-3;
@@ -245,8 +247,8 @@ Claim/setup checks and operand/native handling are separate stages:
    retain F-5/F-6 order. Verified settlement instead consumes coherent actual refinement evidence,
    with `not_run` explicitly absent and no native probe.
 
-While the upstream gate holds, an incoherent claim reaches its own typed refusal and an otherwise
-valid setup reaches unavailable capability. After delivery, operand/native failures do not erase
+While the CG consumer gate holds, an incoherent claim reaches its own typed refusal and an
+otherwise valid setup reaches unavailable capability. After IR-666 code delivery, operand/native failures do not erase
 same-valid-claim Disagreed. QSL non-fault refusals retain their own catalog codes; executor faults
 and CG-raised malformed playback/assumption-domain defects retain FR-029 failure ownership after
 the disagreement row. A real backend or refinement stop retains its original FR-028 classification
@@ -266,7 +268,7 @@ and FR-029 resource terminal; it cannot become completed NotExhausted evidence o
 | FR-033-AC-8 | PLANNED/GATED. CG submits the original claim's operand declarations and literal singleton domains and consumes QSL-derived bound keys without a CG-authored declared-bound list. Omitting a bounded position or using an empty list with declared/unbounded/recursive keys leaves it uncovered; unknown/duplicate/kind-mismatched keys refuse. Exact declared coverage and a wider legal harness range cover; a tightened range/cardinality/depth does not silently cover under ADR-021 TX3. Enum Variants bounds cover only when every source-declared variant is included; a Variants bound naming an undeclared variant and a request DeclaredDomain over an enum position each preserve QSL's typed refusal naming the key; text/rational/decimal/IEEE/quantity/reference positions remain uncovered/Tested until an authoritative whole-domain bound kind exists, rather than promoting one dimension as full coverage. CG cannot supply an invented declared-bound list to promote the result. | Test |
 | FR-033-AC-9 | PLANNED/GATED. A result or record from another node/run/operation/operand/domain/limits/content binding yields no settlement. QSL non-fault refusals retain their catalog codes and executor faults remain failures; unavailable upstream APIs produce the typed unavailable-capability refusal with no fake values, local QSL types, predicate route or fabricated catalog code. | Test |
 | FR-033-AC-10 | PLANNED/GATED. Each lawful generated family exercised by the completed route has a real verify and falsify control with retained backend evidence and mutation-killed same-artifact replay; all canonical families have the AC-2/3 decode checks. Families awaiting shadow generation or upstream admission remain explicitly unsupported/gated and are reported as gaps, rather than counted as passing end-to-end coverage. | Test |
-| FR-033-AC-11 | PLANNED/GATED (IR-635/QSL-640). CG computes O-09 from the exact claimed node, recompiled occurrence, kind and one argument per distinct parameter-operand node ID with actual harness bounds ascending by DomainKey. Self-comparison contributes the same parameter once; two distinct parameters contribute once each; literal-only comparison contributes no arguments. Changing one such member changes it; changing only abstractions, size budget, static closure pair-node count or unexercised behaviours does not. The record's pair-node count is distinct from F-7's runtime occurrence-pair count. Those extras remain in the full FR-015-AC-76 record, and changing proved artifact/context invalidates the separate canonical content tie even when O-09 remains equal. Existing function/frame preimages are unchanged. | Test |
+| FR-033-AC-11 | PLANNED/GATED (IR-635/QSL-640). CG computes O-09 from the exact claimed node, recompiled occurrence, kind and one argument per distinct parameter-operand node ID with actual harness bounds ascending by DomainKey. Self-comparison contributes the same parameter once; two distinct parameters contribute once each; literal-only comparison contributes no arguments. Changing one such member changes it; changing only abstractions, size budget, static closure pair-node count or unexercised behaviours does not. The record's pair-node count is distinct from F-6's runtime occurrence-pair count. Those extras remain in the full FR-015-AC-76 record, and changing proved artifact/context invalidates the separate canonical content tie even when O-09 remains equal. Existing function/frame preimages are unchanged. | Test |
 | FR-033-AC-12 | PLANNED/GATED (IR-635/QSL-640). Both paths carry the same four-state Refinement. Claim/source/node/occurrence/bounds/O-09 refusal precedes Disagreed; for a valid claim Disagreed wins over operand refusal (including an operand field x declared Int[0, 9] but supplied as x: 12), missing native observation, native fault, exact limit, refinement ceiling and agreeing replay. No early operand/native setup refusal erases that disagreement and no missing evidence is fabricated. Completed/Refused native evidence does not replace exact-versus-shadow verdict/pair-count comparison, and the actual Eq/Ne operation survives. | Test |
 | FR-033-AC-13 | PLANNED CG CONSUMER (IR-666; QSL FR-358 delivered). On a valid falsified claim without Disagreed, a native Incomplete or ExecutionFault wins over an invalid operand, too-small admission limit, too-small exact limit and CeilingReached: the result is GeneratedFault/Failed retaining its NativeCause, with no admission or exact evaluation. With a Completed native, an operand outside its declared domain yields RefusedInput/ReplayRefused even with CeilingReached; a request limit reached during admission yields Incomplete/Admission with its counter and no exact evaluation; an exact limit reached after admission yields Incomplete/ExactEvaluation even with CeilingReached; only after admission and exact evaluation complete does CeilingReached yield Incomplete/RefinementCeiling. All three limits are ResourceExhausted but keep distinct stages. Backend Kani timeout/memory Inconclusive outcomes never enter this facade. No resource stage becomes Tested. | Test |
 
