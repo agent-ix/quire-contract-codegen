@@ -143,6 +143,18 @@ pub(super) struct CallerBootstrap {
     inner_identity: Option<(i32, u64, NamespaceIdentity)>,
 }
 
+/// Minted only after actual O custody, L reap and the retained creator's join. It grants no
+/// report/evidence acceptance; output readers still require their own bounded settlement.
+pub(super) struct CallerRoleSettlement {
+    cutoff: Instant,
+}
+
+impl CallerRoleSettlement {
+    pub(super) fn cutoff(&self) -> Instant {
+        self.cutoff
+    }
+}
+
 enum CallerPhase {
     AwaitArm,
     BeforeMonitor,
@@ -678,7 +690,7 @@ impl CallerBootstrap {
         &mut self,
         clock: &ExecutionClock,
         mode: LauncherSettlementMode,
-    ) -> Result<(), CallerBootstrapError> {
+    ) -> Result<CallerRoleSettlement, CallerBootstrapError> {
         if clock.original_deadline() != self.identity_deadline {
             return Err(CallerBootstrapError::SettingsMismatch);
         }
@@ -759,7 +771,11 @@ impl CallerBootstrap {
         spawner
             .settle_launcher(cutoff)
             .map_err(CallerBootstrapError::Io)?;
-        spawner.join(cutoff).map_err(CallerBootstrapError::Io)
+        spawner.join(cutoff).map_err(CallerBootstrapError::Io)?;
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+        }
+        Ok(CallerRoleSettlement { cutoff })
     }
 
     /// The original identity clock is independent from the finite startup cap. None has its
