@@ -39,14 +39,21 @@ pub enum GuardianFixtureDeath {
 pub enum GuardianFixtureScenario {
     /// Send the sealed prefix witness and one actual owned pin, then self-kill.
     ExactDeath {
+        /// Exact shared boundary at which the caller dies.
         prefix: GuardianFixturePrefix,
+        /// Caller or its positively verified dedicated group.
         death: GuardianFixtureDeath,
     },
     /// Stop actual Ready INIT, queue normal Dispatch, close the lease and resume on publication.
-    PendingDispatch { backend_marker: PathBuf },
+    PendingDispatch {
+        /// Backend startup marker inspected before independent escalation.
+        backend_marker: PathBuf,
+    },
     /// Observe closed-lease INIT/escaped-worker termination before independent escalation.
     Dispatched {
+        /// Backend startup marker inspected before independent escalation.
         backend_marker: PathBuf,
+        /// Positive acknowledgement used to validate and pin the actual owned worker.
         worker_acknowledgement: PathBuf,
     },
 }
@@ -114,7 +121,9 @@ pub enum GuardianFixtureError {
     Coordination(GuardianFixtureFailure),
     /// Ordinary production stage refused.
     Guardian {
+        /// Stable production refusal discriminant.
         kind: GuardianFailureKind,
+        /// Diagnostic context; it does not determine the refusal discriminant.
         detail: String,
     },
 }
@@ -183,12 +192,16 @@ pub enum GuardianFixturePin {
     NoInit,
     /// INIT remains unclaimed; only the actual unreaped monitor pin accompanies it.
     Monitor {
+        /// Actual process identity sealed alongside its owned pin.
         identity: GuardianFixtureIdentity,
+        /// Identity of the actual transferred descriptor.
         descriptor: GuardianFixtureDescriptor,
     },
     /// The descriptor clones the already-validated actual owned INIT pin.
     Init {
+        /// Actual process identity sealed alongside its owned pin.
         identity: GuardianFixtureIdentity,
+        /// Identity of the actual transferred descriptor.
         descriptor: GuardianFixtureDescriptor,
     },
 }
@@ -226,7 +239,10 @@ pub enum GuardianFixtureLeaseObservation {
     /// Observation cap ended while actual INIT remained live.
     EscalationRequired,
     /// Kernel observation failed; no termination inferred.
-    Unavailable { detail: String },
+    Unavailable {
+        /// Kernel observation error; no termination is inferred from this text.
+        detail: String,
+    },
 }
 
 /// Cleanup result is separate from the earlier raw lifecycle facts.
@@ -236,7 +252,10 @@ pub enum GuardianFixtureCleanup {
     /// Actual owned namespace cleanup and monitor reaping confirmed.
     Confirmed,
     /// Cleanup or reaping remained unavailable.
-    Unconfirmed { detail: String },
+    Unconfirmed {
+        /// Diagnostic context for unavailable cleanup confirmation.
+        detail: String,
+    },
 }
 
 /// Returned only after immediate unchanged cleanup; contains no cancellation or process handle.
