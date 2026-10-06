@@ -12,6 +12,7 @@ use super::{
     outer_setup::NamespaceIdentity,
     protocol::{BackendExit, BuildIdentity, GuardianRefusal, RunAuthority},
     report_storage::{PipeIdentity, REPORT_SLOT},
+    resource_ledger::MeasuredPeaks,
     role_deadline::{ExecutionClock, IdentityDeadline, RoleDeadline},
 };
 
@@ -280,4 +281,36 @@ impl InnerOwnerControl {
             Self::CompletionObserved { .. } => 0,
         }
     }
+}
+
+/// O's terminal transaction remains separate from the already consumed I lease. A decoded
+/// commit is provisional until actual normal O/L/thread/capture settlement and stream-end checks.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum OuterTerminalReply {
+    ReportDescriptor {
+        authority: RunAuthority,
+        bytes: u64,
+    },
+    Committed {
+        authority: RunAuthority,
+        peaks: MeasuredPeaks,
+    },
+}
+
+impl OuterTerminalReply {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::ReportDescriptor { .. } => 1,
+            Self::Committed { .. } => 0,
+        }
+    }
+}
+
+/// Sent only after C has validated seals/type/size and completed its original bounded report read.
+/// This precedes the final metrics commit and cannot create a recursive acknowledgment window.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum CallerTerminalControl {
+    ReadCompleted { authority: RunAuthority, bytes: u64 },
 }

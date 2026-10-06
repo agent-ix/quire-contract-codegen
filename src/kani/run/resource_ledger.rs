@@ -6,6 +6,8 @@
 
 use std::{num::NonZeroU64, time::Instant};
 
+use serde::{Deserialize, Serialize};
+
 use super::{
     report_storage::{BackingReserve, PipeIdentity},
     spawner::SPAWNER_STACK_BYTES,
@@ -19,7 +21,8 @@ pub(super) struct ChargedSample {
 
 /// Actual recorded production peaks. Construction requires at least one complete observation;
 /// report reservation, the configured ceiling and an absent sample cannot supply either value.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct MeasuredPeaks {
     pub(super) tree_rss_bytes: u64,
     pub(super) charged_bytes: u64,
