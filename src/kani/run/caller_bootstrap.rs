@@ -6,6 +6,7 @@
 
 use std::{
     cell::RefCell,
+    fmt::{self, Write as _},
     io,
     os::fd::{AsFd, OwnedFd},
     process::{Command, Stdio},
@@ -63,6 +64,7 @@ pub(super) enum CallerBootstrapError {
     SettlementAlreadyAttempted,
     SettlementReplyMismatch,
     OuterTerminationUnconfirmed,
+    CleanupDetailConsumed,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -96,7 +98,8 @@ impl std::error::Error for CallerBootstrapError {
             | Self::InnerBootstrapConsumed
             | Self::SettlementAlreadyAttempted
             | Self::SettlementReplyMismatch
-            | Self::OuterTerminationUnconfirmed => None,
+            | Self::OuterTerminationUnconfirmed
+            | Self::CleanupDetailConsumed => None,
         }
     }
 }
@@ -132,6 +135,7 @@ pub(super) struct CallerBootstrap {
     settlement_storage: Option<FrameStorage>,
     retirement_frame: PreparedFrame,
     outer_settled: Option<OuterChildSettlement>,
+    cleanup_detail: Option<PreparedCleanupDetail>,
     outer_pin: Option<OwnedFd>,
     outer_namespace: Option<NamespaceIdentity>,
     outer_network: Option<NamespaceIdentity>,
@@ -141,6 +145,49 @@ pub(super) struct CallerBootstrap {
     phase_frames: [PreparedFrame; 3],
     phase: CallerPhase,
     inner_identity: Option<(i32, u64, NamespaceIdentity)>,
+}
+
+// Existing merged settlement diagnostic ceiling, not another caller-tunable product bound.
+const CLEANUP_DETAIL_BYTES: usize = 4096;
+
+/// A bounded diagnostic owns no process/thread/cleanup authority. Its complete allocation exists
+/// before L, and formatting never allocates another full error String after settlement failure.
+pub(super) struct PreparedCleanupDetail {
+    text: String,
+}
+
+impl PreparedCleanupDetail {
+    fn prepare() -> io::Result<Self> {
+        let mut text = String::new();
+        text.try_reserve_exact(CLEANUP_DETAIL_BYTES)
+            .map_err(io::Error::other)?;
+        Ok(Self { text })
+    }
+
+    fn reserved_bytes(&self) -> io::Result<u64> {
+        u64::try_from(self.text.capacity()).map_err(io::Error::other)
+    }
+
+    pub(super) fn seal(mut self, detail: fmt::Arguments<'_>) -> String {
+        // Reaching the finite diagnostic cap stops formatting at a UTF8 boundary. A diagnostic
+        // truncation cannot choose the failure kind, claim settlement or manufacture evidence.
+        let _ = self.write_fmt(detail);
+        self.text
+    }
+}
+
+impl fmt::Write for PreparedCleanupDetail {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        let remaining = CLEANUP_DETAIL_BYTES
+            .checked_sub(self.text.len())
+            .ok_or(fmt::Error)?;
+        let length = value.floor_char_boundary(remaining.min(value.len()));
+        self.text.push_str(value.get(..length).ok_or(fmt::Error)?);
+        if length != value.len() {
+            return Err(fmt::Error);
+        }
+        Ok(())
+    }
 }
 
 /// Minted only after actual O custody, L reap and the retained creator's join. It grants no
@@ -233,6 +280,7 @@ impl CallerBootstrap {
             claim.map_err(CallerBootstrapError::Control)?,
             release.map_err(CallerBootstrapError::Control)?,
         ];
+        let cleanup_detail = PreparedCleanupDetail::prepare().map_err(CallerBootstrapError::Io)?;
         let settlement_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let retirement_frame = PreparedFrame::encode(&LauncherControl::Retire { authority })
             .map_err(CallerBootstrapError::Control)?;
@@ -248,6 +296,9 @@ impl CallerBootstrap {
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            cleanup_detail
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Io)?,
             settlement_storage
                 .reserved_bytes()
                 .map_err(CallerBootstrapError::Control)?,
@@ -326,6 +377,7 @@ impl CallerBootstrap {
             settlement_storage: Some(settlement_storage),
             retirement_frame,
             outer_settled: None,
+            cleanup_detail: Some(cleanup_detail),
             outer_pin: None,
             outer_namespace: None,
             outer_network: None,
@@ -683,6 +735,17 @@ impl CallerBootstrap {
             .ok_or(CallerBootstrapError::InnerBootstrapConsumed)
     }
 
+    /// Take the actual pre-L diagnostic reservation once. The whole-chain owner selects the
+    /// existing CleanupUnconfirmed kind only after the real settlement attempt; this String
+    /// formatter alone carries no authority and confirms no cleanup.
+    pub(super) fn take_cleanup_detail(
+        &mut self,
+    ) -> Result<PreparedCleanupDetail, CallerBootstrapError> {
+        self.cleanup_detail
+            .take()
+            .ok_or(CallerBootstrapError::CleanupDetailConsumed)
+    }
+
     /// Actual O-child custody is established before L reap/creator join. This method is called
     /// by the original whole-chain owner with its existing first-stop/original cutoff; it does
     /// not close the independent I lease or authorize proof/report acceptance.
@@ -835,5 +898,34 @@ impl GuardianIdentity for CallerBootstrap {
         creator::require_live(&launcher.creator_pin)?;
         creator::require_live(&launcher.launcher_pin)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PreparedCleanupDetail, CLEANUP_DETAIL_BYTES};
+
+    /// Trace: FR-034-AC-38
+    #[test]
+    fn settlement_detail_uses_its_prepared_capacity_and_preserves_utf8_at_the_cap() {
+        let prepared = PreparedCleanupDetail::prepare().unwrap();
+        let capacity = prepared.text.capacity();
+        let input = "界".repeat(CLEANUP_DETAIL_BYTES);
+        let detail = prepared.seal(format_args!("owned role: {input}"));
+        assert!(detail.len() <= CLEANUP_DETAIL_BYTES);
+        assert_eq!(detail.capacity(), capacity);
+        assert!(detail.starts_with("owned role: "));
+        assert!(detail.len() > CLEANUP_DETAIL_BYTES - 3);
+        assert!(detail.ends_with('界'));
+    }
+
+    /// Trace: FR-034-AC-38
+    #[test]
+    fn short_settlement_detail_preserves_actual_diagnostic_fields() {
+        let prepared = PreparedCleanupDetail::prepare().unwrap();
+        let capacity = prepared.text.capacity();
+        let detail = prepared.seal(format_args!("O={} L={} wait={}", 17, 11, "pending"));
+        assert_eq!(detail, "O=17 L=11 wait=pending");
+        assert_eq!(detail.capacity(), capacity);
     }
 }
