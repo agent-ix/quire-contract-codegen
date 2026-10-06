@@ -80,3 +80,7 @@ Round 4, reviewed at agent-ix/quire-contract-codegen@4033aefb1996951b4c9c361500e
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-007 | fixed | 4033aef: TC-041 step 16 now cites FR-029-AC-28 on the reachable `prepare` non-fault `Refused` report pass-through case, and expected result 16, covering that report, the `Fault`/`Admission(Fault)` Failed reading and the no-terminal-value precheck/wrong-claim cases, cites "(FR-029-AC-28; FR-030-AC-17)" |
+
+## Rebase confirmation
+
+Rebased head agent-ix/quire-contract-codegen@ec8d2806ff8d1a9cd9929ea949c2c30072728259 on main 194229bf16b6eaca79ae74bed7e7daed572ad164 (IR-631 #314), replacing review-clean head e89eb68ac0c90f4b199cc07b7b0a8fab78ec376c on old main 743986589149474da3da78b40f9395d21e936090. `git range-diff` shows all seven commits equivalent; the only change is the conflict context in old 9844bdc -> new 13f36eb, spec/replay/matrix/tests.md. In that file at ec8d280, the `| FR-032 | FR-032-AC-1 through FR-032-AC-14 | TC-047 |` and `| TC-047 |` rows are byte-identical to 194229bf; the `| FR-033 | FR-033-AC-1 through FR-033-AC-13 | TC-048 |` (QSL #645 delivered) row, the `| FR-029 | FR-029-AC-28 | TC-048 |` row and the `| TC-048 |` row (FR-029-AC-28, IR-635 claim / IR-666 consumer) are byte-identical to e89eb68; every other line equals 194229bf. The other 11 PR files equal e89eb68 and the other 11 main files equal 194229bf; `git diff 194229bf ec8d280` and `git diff 7439865 e89eb68` both report 12 files, +464/-117. No drift and no new finding.
