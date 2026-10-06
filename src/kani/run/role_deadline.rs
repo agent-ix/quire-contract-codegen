@@ -120,6 +120,8 @@ pub(super) enum StopOrigin {
     Launcher,
     Outer,
     Inner,
+    /// Trusted same-PID installer can detect policy failure before I receives that event.
+    Backend,
 }
 
 impl StopOrigin {
@@ -129,6 +131,7 @@ impl StopOrigin {
             Self::Launcher => 1,
             Self::Outer => 2,
             Self::Inner => 3,
+            Self::Backend => 4,
         }
     }
 }
@@ -157,7 +160,7 @@ impl StopStamp {
 /// earlier producer can shorten the bound; no second event or delayed receipt can extend it.
 pub(super) struct StopTimeline {
     started: MonotonicInstant,
-    last: [Option<MonotonicInstant>; 4],
+    last: [Option<MonotonicInstant>; 5],
     earliest: Option<StopStamp>,
 }
 
@@ -166,7 +169,7 @@ impl StopTimeline {
         started.duration()?;
         Ok(Self {
             started,
-            last: [None; 4],
+            last: [None; 5],
             earliest: None,
         })
     }
