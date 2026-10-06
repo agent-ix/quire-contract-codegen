@@ -307,8 +307,9 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
             runtime_dependency(&[])
         ),
     );
+    let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
     let sysroot = Command::new("rustc")
-        .args(["+stable", "--print", "sysroot"])
+        .args([&toolchain, "--print", "sysroot"])
         .output()
         .unwrap();
     assert!(sysroot.status.success());
@@ -319,7 +320,7 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     }
     let out = Command::new("cargo")
         .args([
-            "+stable",
+            &toolchain,
             "llvm-cov",
             "--offline",
             "--json",

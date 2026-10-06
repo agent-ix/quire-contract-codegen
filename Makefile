@@ -69,12 +69,12 @@ test:
 # count before and after, and a real mixed batch) run through `cargo kani`. The filters
 # follow `--` because libtest accepts several; cargo's own positional filter
 # takes one.
-# The test suite drives real tools: the native-coverage tests run `cargo +stable
-# llvm-cov` and read llvm-cov/llvm-profdata from the stable sysroot, and the Kani
+# The test suite drives real tools: the native-coverage tests run `cargo +$(MSRV)
+# llvm-cov` and read llvm-cov/llvm-profdata from that toolchain's sysroot, and the Kani
 # tests run `cargo kani`. Install them once per machine.
 .PHONY: tools
 tools:
-	rustup component add llvm-tools-preview --toolchain stable
+	rustup component add llvm-tools-preview --toolchain $(MSRV)
 	$(CARGO) install --locked cargo-llvm-cov
 	$(CARGO) install --locked kani-verifier
 	$(CARGO) kani setup

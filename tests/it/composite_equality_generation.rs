@@ -111,6 +111,156 @@ fn generated(
     }
 }
 
+/// Trace: FR-018-AC-24, TC-029.
+#[test]
+fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
+    let list = generate(
+        &corpus_package().admit(),
+        &[item(
+            E_SELF,
+            EqualityOperatorKind::Equal,
+            typed(R_SELF),
+            typed(R_SELF),
+        )],
+    );
+    let tree = generate(
+        &recursive_tree_package().admit(),
+        &[item(
+            E_TREE_CYCLE,
+            EqualityOperatorKind::Equal,
+            typed(R_TREE_CYCLE),
+            typed(R_TREE_CYCLE),
+        )],
+    );
+    for (oracles, expression, record) in
+        [(&list, E_SELF, R_SELF), (&tree, E_TREE_CYCLE, R_TREE_CYCLE)]
+    {
+        let claim = generated(only_claim(oracles, expression));
+        assert_eq!(claim.declaration_keys, vec![code_id(record)]);
+        let lib = contents(oracles, "src/lib.rs");
+        assert_eq!(lib.matches("pub fn oracle_").count(), 1);
+        assert_eq!(lib.matches("pub fn environment_").count(), 1);
+        assert!(lib.contains(&claim.oracle_symbol));
+    }
+}
+
+/// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+#[test]
+fn tc_029_public_qsl_recursive_items_generate_through_reader() {
+    let (builder, list, tree) = qsl_recursive_items_package();
+    assert_recursive_item_generation(builder, list, tree);
+}
+
+fn assert_recursive_item_generation(
+    builder: PackageBuilder,
+    list: quire_contract_model::CheckedNodeId,
+    tree: quire_contract_model::CheckedNodeId,
+) {
+    fn emitted_key(node: &quire_contract_model::CheckedNodeId) -> String {
+        let key = NodeKey::from_hex(&node.digest).expect("a checked node digest is a runtime key");
+        let bytes = key
+            .as_bytes()
+            .iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("rt::NodeKey::from_bytes([{bytes}])")
+    }
+
+    fn composites_block<'a>(source: &'a str, oracle_symbol: &str) -> &'a str {
+        let stem = oracle_symbol
+            .strip_prefix("oracle_")
+            .expect("generated oracle symbol");
+        let marker = format!("fn composites_{stem}()");
+        let (_, block) = source
+            .split_once(&marker)
+            .expect("item's declaration block");
+        block.split_once("\n}\n").expect("declaration block end").0
+    }
+
+    let package = builder.admit();
+    let items = [
+        CompositeEqualityItem {
+            node_id: code_id(E_QSPEC_LIST),
+            operator: EqualityOperatorKind::Equal,
+            left: EqualityOperandDescriptor::typed(list.clone()),
+            right: EqualityOperandDescriptor::typed(list.clone()),
+        },
+        CompositeEqualityItem {
+            node_id: code_id(E_QSPEC_TREE),
+            operator: EqualityOperatorKind::Equal,
+            left: EqualityOperandDescriptor::typed(tree.clone()),
+            right: EqualityOperandDescriptor::typed(tree.clone()),
+        },
+    ];
+    let oracles = generate(&package, &items);
+    let list_claim = generated(only_claim(&oracles, E_QSPEC_LIST));
+    let tree_claim = generated(only_claim(&oracles, E_QSPEC_TREE));
+    assert_eq!(list_claim.declaration_keys, vec![list.clone()]);
+    assert_eq!(tree_claim.declaration_keys, vec![tree.clone()]);
+    let lib = contents(&oracles, "src/lib.rs");
+    assert_eq!(lib.matches("pub fn oracle_").count(), 2);
+    assert_eq!(lib.matches("pub fn environment_").count(), 2);
+    let list_block = composites_block(lib, &list_claim.oracle_symbol);
+    let list_key = emitted_key(&list);
+    assert!(
+        list_block.contains(&format!("rt::CompositeDeclaration::new({list_key}, ")),
+        "List declaration: {list_block}"
+    );
+    assert!(list_block.contains(&format!(
+        "rt::FieldDeclaration::new(\"next\", rt::ValueType::Composite({list_key}), rt::Presence::Optional)"
+    )));
+    let tree_block = composites_block(lib, &tree_claim.oracle_symbol);
+    let tree_key = emitted_key(&tree);
+    assert!(
+        tree_block.contains(&format!("rt::CompositeDeclaration::new({tree_key}, ")),
+        "Tree declaration: {tree_block}"
+    );
+    assert!(tree_block.contains(&format!(
+        "rt::FieldDeclaration::new(\"kids\", rt::ValueType::collection(rt::CollectionType::new(rt::CollectionKind::Sequence, rt::ValueType::Composite({tree_key}), rebuild_cardinality(0, 3)?)), rt::Presence::Required)"
+    )));
+}
+
+/// Optional local conformance against the private QSpec fixture. The public
+/// QSL facade case above exercises the same reader-to-oracle path in CI.
+/// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+#[test]
+fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
+    const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
+    let Some(repo) = std::env::var_os("QSPEC_REPO") else {
+        println!("SKIP local QSpec conformance: QSPEC_REPO is unset; private fixture is not available in public CI");
+        return;
+    };
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .arg("show")
+        .arg(format!("origin/main:{FIXTURE}"))
+        .output()
+        .expect("read authoritative QSpec fixture");
+    assert!(
+        output.status.success(),
+        "git show QSpec fixture: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut evidence = quire_contract_model::CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    let wire: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("QSpec fixture JSON");
+    let canonical = serde_json::to_vec(&wire).expect("canonical QSpec fixture");
+    let read = CheckedPackageV2::read(
+        &canonical,
+        quire_contract_model::CheckedPackageReadLimits::bounded(),
+        &evidence,
+    );
+    assert!(
+        matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
+        "original QSpec fixture: {read:?}"
+    );
+    let (builder, list, tree) = recursive_items_package_from_wire(wire);
+    assert_recursive_item_generation(builder, list, tree);
+}
+
 fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
     match &claim.result {
         ClaimDisposition::Refused { refusal } => refusal,

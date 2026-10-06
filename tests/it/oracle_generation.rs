@@ -327,8 +327,9 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
         ),
     );
     let output_path = directory.0.join("coverage.json");
+    let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
     let sysroot = Command::new("rustc")
-        .args(["+stable", "--print", "sysroot"])
+        .args([&toolchain, "--print", "sysroot"])
         .output()
         .unwrap();
     assert!(sysroot.status.success());
@@ -342,7 +343,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     }
     let output = Command::new("cargo")
         .args([
-            "+stable",
+            &toolchain,
             "llvm-cov",
             "--offline",
             "--json",

@@ -204,8 +204,10 @@ fn family_of(code: u32) -> &'static str {
         T_TEXT => "text",
         T_DECIMAL_SMALL | T_DECIMAL_WIDE => "decimal",
         T_RATIONAL_NARROW | T_RATIONAL_WIDE | T_RATIONAL_INT => "rational",
-        R_POINT | R_FLOAT | R_DUP | R_SELF | R_PAIR_OF_POINTS | R_WITH_REF => "structural",
-        SEQ_R_FLOAT | SEQ_INT | TUP_PAIR | OPT_INT | OPT_SELF => "structural",
+        R_POINT | R_FLOAT | R_DUP | R_SELF | R_PAIR_OF_POINTS | R_WITH_REF | R_TREE_CYCLE => {
+            "structural"
+        }
+        SEQ_R_FLOAT | SEQ_INT | TUP_PAIR | OPT_INT | OPT_SELF | SEQ_TREE_CYCLE => "structural",
         REF_TYPE => "reference",
         other => panic!("no operand family registered for corpus type code {other}"),
     }
@@ -459,6 +461,12 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    /// Extend an authoritative checked-package document in memory for a
+    /// reader-to-oracle test; the source document remains in its own repo.
+    pub fn from_wire(value: Value) -> Self {
+        Self { value }
+    }
+
     pub fn node(
         &mut self,
         digest: &str,
@@ -1417,10 +1425,163 @@ pub fn item(
     }
 }
 
-/// The corpus of items that generate successfully: the agreement and
-/// compile tests build their crate from this list.
-/// Deterministic order is not load-bearing here; the generator re-sorts by
-/// descriptor key.
+/// Add equality items to a recursive-type checked package held only in memory.
+pub fn recursive_items_package_from_wire(
+    wire: Value,
+) -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
+    let named_record = |name: &str| {
+        wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("QSpec graph nodes")
+            .iter()
+            .find(|node| node["declaration"]["qualified_name"] == json!([name]))
+            .and_then(|node| node["node_id"]["digest"].as_str())
+            .expect("QSpec named record")
+            .to_owned()
+    };
+    let list = named_record("List");
+    let tree = named_record("Tree");
+    let mut builder = PackageBuilder::from_wire(wire);
+    builder
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(Vec::new()),
+        )
+        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(Vec::new()));
+    builder.code(
+        T_QSPEC_BOOLEAN,
+        "scalar_type",
+        "boolean",
+        T_QSPEC_BOOLEAN,
+        aggregate(Vec::new()),
+    );
+    for (code, type_digest, name) in [(E_QSPEC_LIST, &list, "list"), (E_QSPEC_TREE, &tree, "tree")]
+    {
+        let parameter = key(3_000 + code);
+        builder.node(
+            &parameter,
+            "value",
+            "parameter",
+            type_digest,
+            parameter_body(name),
+        );
+        builder.application_node(
+            code,
+            "binary",
+            &key(T_QSPEC_BOOLEAN),
+            json!({
+                "term": "application",
+                "operator": "binary",
+                "operation": equality_operation("structural"),
+                "result_type": node_ref(&key(T_QSPEC_BOOLEAN)),
+                "arguments": [reference_to(&parameter), reference_to(&parameter)],
+            }),
+        );
+    }
+    (builder, id(&list), id(&tree))
+}
+
+/// Compile independently authored recursive declarations through QSL's public
+/// replay facade and extend the admitted package with equality items.
+pub fn qsl_recursive_items_package() -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
+    use qsl_replay::{compile_package, DependencyInput, ScalarLimits, SourceIdentity, StageLimits};
+
+    let source = include_bytes!("recursive.native");
+    let unbounded = ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    };
+    let compiled = compile_package(
+        SourceIdentity::new("a", "u", "git", "1"),
+        "recursive-items.native",
+        source,
+        [],
+        &DependencyInput::default(),
+        StageLimits {
+            s1: ScalarLimits {
+                text_input_bytes: 1 << 20,
+                ..unbounded
+            },
+            s2: unbounded,
+            s3: unbounded,
+            s4: unbounded,
+        },
+    )
+    .expect("QSL compiles the recursive item types");
+    let read = CheckedPackageV2::read(
+        compiled.bytes(),
+        quire_contract_model::CheckedPackageReadLimits::bounded(),
+        &evidence(),
+    );
+    assert!(
+        matches!(read, CheckedPackageV2ReadResult::Admitted(_)),
+        "QSL package strict reader: {read:?}"
+    );
+    let wire = serde_json::from_slice(compiled.bytes()).expect("QSL checked package JSON");
+    recursive_items_package_from_wire(wire)
+}
+
+/// A CG-owned recursive Tree whose bounded sequence points back to the record.
+/// Kept separate from the corpus so only AC-24's generation case reaches it.
+pub fn recursive_tree_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    builder
+        .code(
+            3_000 + R_TREE_CYCLE,
+            "value",
+            "parameter",
+            R_TREE_CYCLE,
+            parameter_body("tree"),
+        )
+        .code_in_group(
+            R_TREE_CYCLE,
+            "composite_type",
+            "record",
+            T_BOOLEAN,
+            aggregate(vec![binding("children", CB_TREE_CYCLE)]),
+            "tree-cycle",
+        )
+        .code_in_group(
+            SEQ_TREE_CYCLE,
+            "composite_type",
+            "sequence",
+            T_BOOLEAN,
+            aggregate(vec![reference(R_TREE_CYCLE)]),
+            "tree-cycle",
+        )
+        .code_in_group(
+            CB_TREE_CYCLE,
+            "bounded_domain",
+            "collection_bounds",
+            SEQ_TREE_CYCLE,
+            aggregate(vec![
+                bound_member("min", integer_literal(0)),
+                bound_member("max", integer_literal(2)),
+            ]),
+            "tree-cycle",
+        )
+        .application_code(
+            E_TREE_CYCLE,
+            "binary",
+            binary_body(R_TREE_CYCLE, R_TREE_CYCLE),
+        );
+    builder
+}
+
+/// The complete admitted corpus's equality requests. The agreement and
+/// compile tests build their crate from this list. Deterministic order is not
+/// load-bearing here; the generator re-sorts by descriptor key.
 pub fn golden_items() -> Vec<CompositeEqualityItem> {
     vec![
         item(

@@ -1,0 +1,8 @@
+language "ix:native" edition "1-draft";
+profile v = "quire.value.complete/v1";
+record List {
+    next: List?;
+}
+record Tree {
+    kids: Sequence<Tree>[0,3];
+}
