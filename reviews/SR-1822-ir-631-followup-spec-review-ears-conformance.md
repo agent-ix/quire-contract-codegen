@@ -45,3 +45,6 @@ Round 1 re-check of fix commit `832633d7afa778e8a3688601595beb5d38917cb5` (run 7
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | 832633d7afa778e8a3688601595beb5d38917cb5: AC-10 is split into AC-10 (conformance and acceptance), AC-11 (digest mismatch), AC-12 (membership refusal), AC-13 (encoding refusal) and AC-14 (other paths unchanged), each with its own Expected Results row. |
+| FND-002 | fixed | 60a2ce4e2f727862c615e553beb10c46b8874c6c: AC-11 to AC-14 now carry 'PLANNED (IR-631) / CODE-GATED (...)', each naming its gate: typed scalar-family/metadata retention and the actual CG/QSL route (AC-11, AC-12), typed scalar-family/metadata retention and the CG builder (AC-13), and the actual CG scalar builder/converter (AC-14). This agrees with the Prerequisites paragraph. Only the four label prefixes changed; criterion text is unchanged. |
+
+Round 2 re-check of fix commit `60a2ce4e2f727862c615e553beb10c46b8874c6c` (run 062b7cef-fffe-4c01-824e-c1ea8d492c38, model claude-opus-5-5), limited to FND-002, which was the only open finding after round 1. The fix diff from `832633d7afa778e8a3688601595beb5d38917cb5` touches only the four FR-032 criterion labels. No other method or finding was re-run, and the criteria remain planned and unrun.
