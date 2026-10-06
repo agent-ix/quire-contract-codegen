@@ -147,7 +147,14 @@ impl LauncherOwner {
             .settings
             .deadline
             .local()
-            .map_err(LauncherError::Deadline)?;
+            .map_err(LauncherError::Deadline)?
+            .min(
+                self.input
+                    .settings
+                    .setup_deadline
+                    .local()
+                    .map_err(LauncherError::Deadline)?,
+            );
         let outer = self
             .input
             .outer_endpoint
@@ -242,7 +249,14 @@ impl LauncherOwner {
             .settings
             .deadline
             .local()
-            .map_err(LauncherError::Deadline)?;
+            .map_err(LauncherError::Deadline)?
+            .min(
+                self.input
+                    .settings
+                    .setup_deadline
+                    .local()
+                    .map_err(LauncherError::Deadline)?,
+            );
         let received = self
             .bootstrap
             .transport()
@@ -301,6 +315,11 @@ impl LauncherOwner {
             .namespace
             .require_single_thread()
             .map_err(LauncherError::Setup)?;
+        self.input
+            .settings
+            .setup_deadline
+            .local()
+            .map_err(LauncherError::Deadline)?;
         self.input
             .settings
             .deadline

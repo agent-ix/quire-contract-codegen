@@ -262,6 +262,13 @@ impl OuterPhases {
         monitor: &mut InnerMonitor,
         startup_deadline: Instant,
     ) -> Result<PhaseProgress, SamplingError> {
+        let startup_deadline = startup_deadline.min(
+            sampling
+                .settings
+                .setup_deadline
+                .local()
+                .map_err(SamplingError::Deadline)?,
+        );
         if let Some(reply) = self.pending_reply.as_mut() {
             let tick = sampling.tick(outer, caller)?;
             if matches!(tick, MemoryTick::Exhausted(_)) {
@@ -423,6 +430,10 @@ impl OuterSampling {
         launcher: LauncherMemory,
         settings: RunSettings,
     ) -> Result<Self, SamplingError> {
+        settings
+            .setup_deadline
+            .local()
+            .map_err(SamplingError::Deadline)?;
         let deadline = settings.deadline.local().map_err(SamplingError::Deadline)?;
         let collector = ReportCollector::prepare(outer).map_err(SamplingError::Report)?;
         let mut tree =
@@ -430,6 +441,10 @@ impl OuterSampling {
         tree.restrict_census(settings.memory_bytes)
             .map_err(SamplingError::Observation)?;
         tree.bind_outer(outer).map_err(SamplingError::Observation)?;
+        settings
+            .setup_deadline
+            .local()
+            .map_err(SamplingError::Deadline)?;
         let ledger = ResourceLedger::prepare(
             settings.memory_bytes,
             settings.caller_run_buffers,

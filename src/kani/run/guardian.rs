@@ -6,12 +6,14 @@
 
 use std::{
     ffi::OsString,
-    fs,
+    fs::{self, File},
     io::{self, Read},
     path::Path,
-    process::Stdio,
+    process::{Command, Stdio},
     time::{Duration, Instant},
 };
+
+use command_fds::{CommandFdExt, FdMapping};
 
 use rustix::process::{getpid, getuid, waitpid, Pid, WaitOptions};
 
@@ -102,11 +104,70 @@ pub(super) fn run(identity: BuildIdentity) -> Result<(), GuardianError> {
     result
 }
 
-fn supervise(
+/// The one authenticated C/I admission path prepares the exact original backend command.
+/// Its child has not been spawned: entry-specific report mapping can still be added safely.
+pub(super) struct BackendAdmission {
+    command: Command,
+    authority: super::protocol::RunAuthority,
+    artifacts: GuardianArtifacts,
+}
+
+impl BackendAdmission {
+    /// Only authenticated I entry may export the safely reopened original O report writer to
+    /// the exact backend child. Parent ownership stays CLOEXEC; no unrelated exec inherits it.
+    fn into_pipe_command(mut self, writer: &File) -> Result<Self, GuardianError> {
+        let descriptor = writer.try_clone()?;
+        self.command
+            .fd_mappings(vec![FdMapping {
+                parent_fd: descriptor.into(),
+                child_fd: super::report_storage::REPORT_SLOT,
+            }])
+            .map_err(|error| {
+                io::Error::other(format!("report writer child mapping failed: {error}"))
+            })?;
+        Ok(self)
+    }
+}
+
+/// Real I's authenticated O-origin entry shares the exact C lease admission recipe. Policy
+/// installation remains the separately SPEC-gated backend boundary; this prepares no child.
+pub(super) fn prepare_inner_backend(
+    input: &super::role_bootstrap::InnerInput,
+) -> Result<BackendAdmission, GuardianError> {
+    super::creator::require_live(&input.outer_pin)?;
+    super::creator::require_live(&input.caller_pin)?;
+    input.outer_bootstrap.transport().refuse_observable_eof()?;
+    let deadline = input
+        .settings
+        .deadline
+        .local()
+        .map_err(io::Error::other)?
+        .min(
+            input
+                .settings
+                .setup_deadline
+                .local()
+                .map_err(io::Error::other)?,
+        );
+    let admitted = admit_backend(
+        &input.caller_lease.transport(),
+        input.settings.identity,
+        deadline,
+    )?;
+    if admitted.authority != input.settings.authority {
+        return Err(GuardianError::Refusal(GuardianRefusal::ReplayedAuthority));
+    }
+    super::creator::require_live(&input.outer_pin)?;
+    super::creator::require_live(&input.caller_pin)?;
+    input.outer_bootstrap.transport().refuse_observable_eof()?;
+    admitted.into_pipe_command(&input.writer)
+}
+
+fn admit_backend(
     transport: &Transport<'_>,
     identity: BuildIdentity,
     startup_deadline: Instant,
-) -> Result<(), GuardianError> {
+) -> Result<BackendAdmission, GuardianError> {
     let init = getpid();
     if init.as_raw_nonzero().get() != 1 {
         return Err(GuardianError::Refusal(GuardianRefusal::NotNamespaceInit));
@@ -161,7 +222,7 @@ fn supervise(
     if cleanup_paths.len() > ARTIFACT_COUNT {
         return Err(GuardianError::Refusal(GuardianRefusal::InvalidControl));
     }
-    let _artifacts = GuardianArtifacts(cleanup_paths);
+    let artifacts = GuardianArtifacts(cleanup_paths);
     let mut backend = command.into_command();
     match stdin {
         StdinControl::Open => {
@@ -178,6 +239,33 @@ fn supervise(
         }
     }
     backend.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+
+    Ok(BackendAdmission {
+        command: backend,
+        authority,
+        artifacts,
+    })
+}
+
+fn supervise(
+    transport: &Transport<'_>,
+    identity: BuildIdentity,
+    startup_deadline: Instant,
+) -> Result<(), GuardianError> {
+    let admitted = admit_backend(transport, identity, startup_deadline)?;
+    supervise_admitted(transport, admitted, startup_deadline)
+}
+
+fn supervise_admitted(
+    transport: &Transport<'_>,
+    admitted: BackendAdmission,
+    startup_deadline: Instant,
+) -> Result<(), GuardianError> {
+    let BackendAdmission {
+        command: mut backend,
+        authority,
+        artifacts: _artifacts,
+    } = admitted;
     transport.refuse_observable_eof()?;
     let child = backend
         .spawn()

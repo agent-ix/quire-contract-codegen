@@ -105,6 +105,12 @@ pub(super) fn prepare_launcher(
         .deadline
         .local()
         .map_err(BootstrapError::Deadline)?
+        .min(
+            settings
+                .setup_deadline
+                .local()
+                .map_err(BootstrapError::Deadline)?,
+        )
         .min(initial_deadline);
     if settings.identity != identity {
         // This authenticated C→L pair exists before unshare or any child. Preserve typed stale-
@@ -253,7 +259,17 @@ impl OuterInput {
             .map_err(BootstrapError::Deadline)?;
         let observation = bootstrap
             .transport()
-            .receive::<OuterBootstrap>(OuterBootstrap::rights_count, original.min(initial_deadline))
+            .receive::<OuterBootstrap>(
+                OuterBootstrap::rights_count,
+                original
+                    .min(
+                        settings
+                            .setup_deadline
+                            .local()
+                            .map_err(BootstrapError::Deadline)?,
+                    )
+                    .min(initial_deadline),
+            )
             .map_err(BootstrapError::Control)?;
         let OuterBootstrap::LauncherObservation { authority } = observation.control else {
             return Err(BootstrapError::UnexpectedControl);
@@ -319,7 +335,13 @@ impl OuterInput {
             .settings
             .deadline
             .local()
-            .map_err(BootstrapError::Deadline)?;
+            .map_err(BootstrapError::Deadline)?
+            .min(
+                self.settings
+                    .setup_deadline
+                    .local()
+                    .map_err(BootstrapError::Deadline)?,
+            );
         let (stat, status) = self
             .launcher_observation
             .take()
@@ -450,6 +472,10 @@ impl InnerInput {
         if !settings.helper.is_absolute() {
             return Err(BootstrapError::HelperNotAbsolute);
         }
+        settings
+            .setup_deadline
+            .local()
+            .map_err(BootstrapError::Deadline)?;
         settings
             .deadline
             .local()
