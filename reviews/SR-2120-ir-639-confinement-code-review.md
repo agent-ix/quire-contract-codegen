@@ -45,6 +45,12 @@ Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedc
 | FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: Admission failures are now classified as BoundedLaunchError::Unavailable at the admission site regardless of errno/io::ErrorKind with the original cause retained; the text names the run-stage Unsupported/NotFound classifier as insufficient. |
 | FND-002 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: The same top-level variant now carries a mandatory typed KaniStartupAdmissionCause (MemoryEnforcement, BackendStdioSocket, BackendStdioInspectionFailed, CapabilityUnavailable) beside the unchanged io::Error cause, with no Option/default or string discriminant, and planned CODE broadens the variant doc and Display. A caller can now tell socket stdin from host capability absence by typed field. |
 
+Round 6, reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567f1d5717b9a54cdda828664211f9d5, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 6f92267b-ec4b-4743-97f7-62f863018c42, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4: GuardianFailureKind is now #[non_exhaustive] with exactly one current variant, CleanupUnconfirmed, and no WIP kind catalog. A table maps every other guardian failure or candidate to its existing public variant. The variant set and mapping are no longer open; the table's post-Dispatch exec row is raised separately as FND-004. |
+
 ## New findings (disposition pass 5)
 
 Scoped round 5 on the stdio-capture fix and the new settlement/kernel-fault/API delta only; reviewed at 0696d1bc567f1d5717b9a54cdda828664211f9d5 (prior 412f056e814882eb94b9e9e65977d6993326f3aa, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 7533286d-299c-4811-af95-031c491e2c1e, model claude-opus-5-5.
@@ -52,3 +58,11 @@ Scoped round 5 on the stdio-capture fix and the new settlement/kernel-fault/API 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | low | GuardianFailureKind is specified only as 'shall include CleanupUnconfirmed', so its variant set, which is the API callers match on, is left open. Existing guardian failures already require typed refusals (FR-034-AC-11 'guardian failure always yields a typed refusal'; setup, identity and protocol refusals), and the spec does not say whether those map to further Guardian kinds, stay on existing variants (Tool, MemoryMechanismUnavailable with KaniStartupAdmissionCause) or stay unchanged. Two implementers could put the same failure under different top-level variants. State the closed variant set of GuardianFailureKind, or that CleanupUnconfirmed is its only variant and other guardian failures keep their existing variants. | spec/kani/functional/FR-034-caller-death-ownership.md:812-815 |
+
+## New findings (disposition pass 6)
+
+Scoped round 6 on the three round-5 findings' fixes and the round-6 delta only; reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567f1d5717b9a54cdda828664211f9d5, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 6f92267b-ec4b-4743-97f7-62f863018c42, model claude-opus-5-5.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The new mapping table gives two different public results for a post-Dispatch recipe exec failure. Row 882 maps 'post-Dispatch backend exec/observation I/O' to Tool(KaniToolError::Io { tool: Launcher }) and calls that the existing mapping. Row 892 maps an admitted backend's unsuccessful/no-report completion to the existing FR-017 Inconclusive NoVerdict evidence. In merged source a launcher that fails to exec inside bwrap makes bwrap exit unsuccessfully with no report. src/kani/classify.rs:100-136 (classify_kani_run, whose doc names 'a build, launcher or solver failure') and src/kani/run/execute.rs:694-711 (batch) classify that as Inconclusive NoVerdict evidence, not a Tool refusal. So row 882's 'existing' claim does not match source for this case. The trigger in TC-049 step 22 (an absent interpreter, giving ENOENT after Dispatch) can land in either row, and one gives a refusal while the other gives execution evidence. State which public result a post-Dispatch recipe exec failure produces, and whether that is new or existing behavior. | spec/kani/functional/FR-034-caller-death-ownership.md:882 |

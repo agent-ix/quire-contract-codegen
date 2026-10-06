@@ -66,6 +66,12 @@ Round 5, reviewed at 0696d1bc567f1d5717b9a54cdda828664211f9d5 (prior 412f056e814
 | FND-004 | fixed | 0696d1bc567f1d5717b9a54cdda828664211f9d5: Public rustdoc for execute_kani_obligation, execute_kani_obligations (src/kani/run/execute.rs:321 and 483) and any other public bounded entry must now document the fd0..2 stability precondition, its setup window, the caller-contract-breach consequence and the observed-only refusal limit. AC-36, AC-38 and TC-049 steps 23/25 inspect it. |
 | FND-005 | fixed | 0696d1bc567f1d5717b9a54cdda828664211f9d5: lstat of /proc/self/fd/N is now only a presence/magic-link probe and is never compared with the pin's fstat. Followed stat and the pin's fstat must agree on S_IFMT type, st_dev and st_ino. Original F_GETFL/F_GETFD are compared separately, excluding the pin's own CLOEXEC. TC-049 step 23 adds an Open positive control that must admit despite differing link metadata. |
 
+Round 6, reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567f1d5717b9a54cdda828664211f9d5, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 6f92267b-ec4b-4743-97f7-62f863018c42, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4: Only F_GETFL & O_ACCMODE and F_GETFD & FD_CLOEXEC are compared now. Shared-description status flags such as O_NONBLOCK and O_APPEND are explicitly excluded from instability refusal and are neither rewritten nor restored. TC-049 step 23 adds a positive control in which a real separate process sharing the description changes them and the input is still admitted. |
+
 ## New findings (disposition pass 4)
 
 Scoped round 4 on the caller-stdio-stability delta only; reviewed at 412f056e814882eb94b9e9e65977d6993326f3aa (prior 3368df1392c87f255772af1c1f7511fa3240a506, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run f4448661-73ba-448f-98c0-0a990c619cce, model claude-opus-5-5. All earlier findings keep their latest outcome (fixed).
@@ -82,3 +88,11 @@ Scoped round 5 on the stdio-capture fix and the new settlement/kernel-fault/API 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-006 | low | The fix for FND-005 also compares original F_GETFL status flags across capture observations and refuses on any change. File status flags such as O_NONBLOCK and O_APPEND live on the shared open file description, not the caller's descriptor table. Any other process sharing that description can change them during setup: a parent shell, a sibling in a pipeline, or another program on the same terminal. Such a change is not the embedding caller or its threads, so it is not the caller contract breach the precondition describes, yet it triggers refusal. Only the F_GETFD exec flag and the F_GETFL access mode are within the caller's own control. Either limit the comparison to access mode and FD_CLOEXEC, or state that external status-flag changes on a shared description also refuse, as an availability limit. | spec/kani/functional/FR-034-caller-death-ownership.md:664-667 |
+
+## New findings (disposition pass 6)
+
+Scoped round 6 on the three round-5 findings' fixes and the round-6 delta only; reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567f1d5717b9a54cdda828664211f9d5, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 6f92267b-ec4b-4743-97f7-62f863018c42, model claude-opus-5-5.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | high | The new 'Settlement reserve research receipt' in public TC-049 adds file-tracking provenance links to local scratch: three Markdown links into /tmp/ix-handoff/... and a list of scratch JSON/JSONL receipt files. It also records a host name, exact tool versions and timestamps. Under this repo's CLAUDE.md, records that track files, versions or tools are an antipattern that must not be introduced, and the spec-review checklist grades every tracking-record use high. The links resolve on no other machine or checkout. They point to scratch that cleanup rules require deleting, so they will go stale, and the text itself says the method and values 'remain durable here independently of those scratch files'. Remove the /tmp links and the scratch file list, and the host-specific version/time record unless it is needed to read the numbers. Keep the method, measured values, derivation and limitations. | spec/kani/matrix/TC-049-caller-death-ownership.md:679-682 |
