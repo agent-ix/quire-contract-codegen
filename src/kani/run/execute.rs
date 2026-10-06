@@ -1325,6 +1325,8 @@ mod batch_tests {
 
     /// The options every harness of these tests shares once its `--harness <path> --exact`
     /// selection is taken out, written out so the test is not the code's own vector.
+    // Expected argv for the Linux full bounded-process count test only.
+    #[cfg(target_os = "linux")]
     const SHARED_OPTIONS: [&str; 12] = [
         "-Z",
         "function-contracts",
@@ -1649,6 +1651,8 @@ exit 0
         built
     }
 
+    // Expected selections for the Linux full bounded-process count test only.
+    #[cfg(target_os = "linux")]
     fn path_of(harness: &StateFrameHarness) -> String {
         format!(
             "{}::{}",
@@ -1891,7 +1895,7 @@ exit 0
     /// single-run vector. Counting the processes before (one run each) and after batching gives
     /// N and 1 for N = 1, 10 and 50.
     ///
-    /// Trace: FR-017-AC-21, TC-043
+    /// Trace: FR-017-AC-21, FR-017-AC-22, TC-043
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[cfg(target_os = "linux")]
     #[test]
@@ -1958,6 +1962,18 @@ exit 0
                     "evidence names the real vector"
                 );
                 assert_eq!(evidence.batch.is_some(), count > 1);
+                // Public wire claims must use actual bounded evidence, not a report fixture.
+                let wire = serde_json::to_value(evidence).unwrap();
+                if count == 1 {
+                    assert!(wire.get("batch").is_none());
+                } else {
+                    let selections: Vec<_> = harnesses.iter().map(path_of).collect();
+                    assert_eq!(
+                        wire["batch"]["members"],
+                        serde_json::to_value(selections).unwrap()
+                    );
+                    assert_eq!(wire["batch"]["timeoutSeconds"], 30);
+                }
             }
         }
     }
@@ -2335,6 +2351,8 @@ exit 0
                 })
             );
         }
+        // Report-only metadata wire; public evidence serialization is asserted by the
+        // Linux bounded-process count test using an actual observed execution.
         let wire = serde_json::to_value(&evidence[0]).unwrap();
         assert_eq!(wire["batch"]["members"][1], "b::check");
         assert_eq!(wire["batch"]["timeoutSeconds"], 30);
