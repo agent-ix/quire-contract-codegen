@@ -8,7 +8,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs, io,
-    io::Read,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
 
@@ -243,16 +243,48 @@ impl MemoryObserver {
     }
 
     fn resident_bytes(&self, pid: u32, start: u64) -> io::Result<Option<u64>> {
+        self.resident_bytes_with(pid, start, |task| fs::read_dir(task))
+    }
+
+    fn resident_bytes_with(
+        &self,
+        pid: u32,
+        start: u64,
+        read_tasks: impl FnOnce(&Path) -> io::Result<fs::ReadDir>,
+    ) -> io::Result<Option<u64>> {
         let directory = self.root.join(pid.to_string());
         // Pin the status file before rechecking identity. A later pid reuse cannot redirect
         // this open file to the replacement process; an exited process may instead yield ESRCH.
-        let mut status_file = fs::File::open(directory.join("status"))?;
-        let process = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+        let mut status_file = match fs::File::open(directory.join("status")) {
+            Ok(file) => file,
+            Err(error) if process_disappeared(&error) => {
+                return Self::missing_status(&directory, start)
+            }
+            Err(error) => return Err(error),
+        };
+        let mut stat_file = match fs::File::open(directory.join("stat")) {
+            Ok(file) => file,
+            Err(error) if process_disappeared(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let mut stat = String::new();
+        match stat_file.read_to_string(&mut stat) {
+            Ok(_) => {}
+            Err(error) if process_disappeared(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        }
+        let process = parse_process(&stat)?;
         if process.start != start {
             return Ok(None);
         }
         let mut status = String::new();
-        status_file.read_to_string(&mut status)?;
+        match status_file.read_to_string(&mut status) {
+            Ok(_) => {}
+            Err(error) if process_disappeared(&error) => {
+                return Self::missing_status(&directory, start)
+            }
+            Err(error) => return Err(error),
+        }
         if let Some(bytes) = status_rss(&status)? {
             return Ok(Some(bytes));
         }
@@ -260,20 +292,54 @@ impl MemoryObserver {
         if threads > 1 {
             // An exited leader can have no mm while workers still share the live address space.
             // Use one worker's RSS, never sum threads that share the same mm.
-            let workers = fs::read_dir(directory.join("task")).map_err(|error| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("live worker RSS unavailable: {error}"),
-                )
-            })?;
+            let workers = match read_tasks(&directory.join("task")) {
+                Ok(workers) => workers,
+                Err(error) if process_disappeared(&error) => {
+                    if !Self::still_live_with_identity(
+                        &directory,
+                        start,
+                        &mut status_file,
+                        &mut stat_file,
+                    )? {
+                        return Ok(None);
+                    }
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("live worker RSS unavailable: {error}"),
+                    ));
+                }
+                Err(error) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("live worker RSS unavailable: {error}"),
+                    ))
+                }
+            };
             let mut released = 0u64;
             for worker in workers {
-                let worker = worker.map_err(|error| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("live worker enumeration failed: {error}"),
-                    )
-                })?;
+                let worker = match worker {
+                    Ok(worker) => worker,
+                    Err(error) if process_disappeared(&error) => {
+                        if !Self::still_live_with_identity(
+                            &directory,
+                            start,
+                            &mut status_file,
+                            &mut stat_file,
+                        )? {
+                            return Ok(None);
+                        }
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("live worker enumeration failed: {error}"),
+                        ));
+                    }
+                    Err(error) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("live worker enumeration failed: {error}"),
+                        ))
+                    }
+                };
                 let mut pinned = match fs::File::open(worker.path().join("status")) {
                     Ok(pinned) => pinned,
                     Err(error) if process_disappeared(&error) => continue,
@@ -284,7 +350,9 @@ impl MemoryObserver {
                         ))
                     }
                 };
-                let latest = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+                let Some(latest) = read_process_if_present(&directory.join("stat"))? else {
+                    return Ok(None);
+                };
                 if latest.start != start {
                     return Ok(None);
                 }
@@ -315,11 +383,19 @@ impl MemoryObserver {
                 }
                 released = released.saturating_add(1);
             }
-            let fresh_stat = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+            let Some(fresh_stat) = read_process_if_present(&directory.join("stat"))? else {
+                return Ok(None);
+            };
             if fresh_stat.start != start {
                 return Ok(None);
             }
-            let fresh_status = fs::read_to_string(directory.join("status"))?;
+            let fresh_status = match fs::read_to_string(directory.join("status")) {
+                Ok(status) => status,
+                Err(error) if process_disappeared(&error) => {
+                    return Self::missing_status(&directory, start)
+                }
+                Err(error) => return Err(error),
+            };
             let fresh_threads = status_threads(&fresh_status)?;
             if released > 0
                 && released >= fresh_threads
@@ -336,7 +412,9 @@ impl MemoryObserver {
         // Linux can release task->mm before publishing a zombie state. Its status then has
         // no VmRSS; stat reports zero virtual bytes and resident pages. Verify both from a
         // fresh, identity-matched stat instead of treating an unexplained missing field as zero.
-        let latest = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+        let Some(latest) = read_process_if_present(&directory.join("stat"))? else {
+            return Ok(None);
+        };
         if latest.start != start {
             return Ok(None);
         }
@@ -347,6 +425,77 @@ impl MemoryObserver {
             io::ErrorKind::InvalidData,
             "procfs has no resident-memory value",
         ))
+    }
+
+    fn still_live_with_identity(
+        directory: &Path,
+        start: u64,
+        status_file: &mut fs::File,
+        stat_file: &mut fs::File,
+    ) -> io::Result<bool> {
+        // Read the pinned files again: a path now naming a replacement cannot make the old
+        // process appear live. Then check the current path, which vanishes once it is reaped.
+        for file in [&mut *status_file, &mut *stat_file] {
+            match file.seek(SeekFrom::Start(0)) {
+                Ok(_) => {}
+                Err(error) if process_disappeared(&error) => return Ok(false),
+                Err(error) => return Err(error),
+            }
+        }
+        let mut status = String::new();
+        match status_file.read_to_string(&mut status) {
+            Ok(0) => return Self::empty_pinned_process_file(directory, start),
+            Ok(_) => {}
+            Err(error) if process_disappeared(&error) => return Ok(false),
+            Err(error) => return Err(error),
+        }
+        let mut stat = String::new();
+        match stat_file.read_to_string(&mut stat) {
+            Ok(0) => return Self::empty_pinned_process_file(directory, start),
+            Ok(_) => {}
+            Err(error) if process_disappeared(&error) => return Ok(false),
+            Err(error) => return Err(error),
+        }
+        if parse_process(&stat)?.start != start {
+            return Ok(false);
+        }
+        let Some(current) = read_process_if_present(&directory.join("stat"))? else {
+            return Ok(false);
+        };
+        Ok(current.start == start)
+    }
+
+    fn empty_pinned_process_file(directory: &Path, start: u64) -> io::Result<bool> {
+        let current = read_process_if_present(&directory.join("stat"))?;
+        if current.is_some_and(|process| process.start == start) {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "live pinned procfs identity unavailable",
+            ))
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn missing_status(directory: &Path, start: u64) -> io::Result<Option<u64>> {
+        if read_process_if_present(&directory.join("stat"))?
+            .is_some_and(|process| process.start == start)
+        {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "live process status unavailable",
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+fn read_process_if_present(path: &Path) -> io::Result<Option<Process>> {
+    match fs::read_to_string(path) {
+        Ok(stat) => parse_process(&stat).map(Some),
+        Err(error) if process_disappeared(&error) => Ok(None),
+        Err(error) => Err(error),
     }
 }
 
@@ -719,6 +868,60 @@ mod tests {
         fs::remove_dir_all(directory.join("task")).unwrap();
         assert_eq!(
             observer.resident_bytes(42, 200).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn vanished_process_during_worker_listing_is_skipped_but_live_missing_task_is_refused() {
+        let root = crate::kani::test_support::discover_scratch("memory-worker-list-race");
+        let directory = root.join("42");
+        fs::create_dir(&directory).unwrap();
+        let mut fields = ["0"; 22];
+        fields[0] = "R";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        let stat = format!("42 (exiting) {}", fields.join(" "));
+        fs::write(directory.join("stat"), &stat).unwrap();
+        fs::write(directory.join("status"), "Threads:\t2\n").unwrap();
+        let observer = MemoryObserver {
+            root: root.clone(),
+            known: BTreeMap::new(),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        assert_eq!(
+            observer
+                .resident_bytes_with(42, 200, |task| {
+                    fs::remove_file(directory.join("stat"))?;
+                    fs::read_dir(task)
+                })
+                .unwrap(),
+            None
+        );
+        fs::write(directory.join("stat"), &stat).unwrap();
+        fields[19] = "201";
+        let replacement = format!("42 (replacement) {}", fields.join(" "));
+        assert_eq!(
+            observer
+                .resident_bytes_with(42, 200, |task| {
+                    fs::write(directory.join("stat"), &replacement)?;
+                    fs::read_dir(task)
+                })
+                .unwrap(),
+            None
+        );
+        fs::write(directory.join("stat"), &stat).unwrap();
+        assert_eq!(
+            observer
+                .resident_bytes_with(42, 200, |task| fs::read_dir(task))
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidData
         );
         fs::remove_dir_all(root).unwrap();
