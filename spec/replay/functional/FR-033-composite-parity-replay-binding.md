@@ -46,14 +46,17 @@ with the same pair count. This is parity evidence about generated code, never a 
 violation.
 
 This is PLANNED IR-635 work, GATED for implementation on QSL-640's actual public API delivery. The
-proposed (unmerged) QSL FR-358 now specifies the node-selected parity arm, a shared `Refinement`
-enum and staged settlement rules; QSL FR-070 specifies canonical values. This amended specification
-replaces the earlier selected-Boolean-function proposal. UNVERIFIED SOURCE: the executable
-realization of these contracts remains an actual QSL-640 code gate. The public Rust facade has not
-delivered composite parity replay/verified settlement or composite witness values. Specification
-publication does not establish a callable API or passing replay. QSpec FR-322 owns the
-checked-package artifact and node identity, not a QSL node-selector requirement. This requirement
-names planned semantic obligations without inventing upstream Rust signatures.
+proposed (unmerged) QSL FR-358 specifies the node-selected parity arm, a shared `Refinement` enum
+and staged settlement rules; QSL FR-070 specifies canonical values. This amended specification
+replaces the earlier selected-Boolean-function proposal. The unmerged QSL change now contains
+composite witness value and decode code, including exact composite integer leaves; merged QSL main
+still exposes only Boolean/i64 witness values. The composite parity replay and verified-settlement
+APIs remain absent from both sources. UNVERIFIED SOURCE: the unmerged value/decode implementation
+has not been independently built or exercised here, and the parity contracts still require actual
+QSL-640 code delivery. Specification publication or unmerged value code does not establish a
+callable parity API or passing replay. QSpec FR-322 owns the checked-package artifact and node
+identity, not a QSL node-selector requirement. This requirement names planned semantic obligations
+without inventing upstream Rust signatures.
 
 ## Inputs
 
