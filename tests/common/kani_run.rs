@@ -2,16 +2,12 @@
 
 use std::{env, fs, path::PathBuf};
 
-use crate::{
-    core::{
-        artifact::Artifact,
-        identity::{HarnessSymbol, ModuleSymbol},
-    },
-    kani::{
-        abi::KaniSolver,
-        identity::{StateFrameHarness, StateFrameIdentity, StateFrameProperty, StateFrameScope},
-    },
+use quire_contract_codegen::{
+    Artifact, HarnessSymbol, KaniSolver, ModuleSymbol, StateFrameHarness, StateFrameIdentity,
+    StateFrameProperty, StateFrameScope,
 };
+
+pub(crate) use crate::fixture_budgets as proof_ceilings;
 
 pub(crate) fn state_frame_harness(
     property: StateFrameProperty,
@@ -37,7 +33,7 @@ pub(crate) fn named_state_frame_harness(
     };
     StateFrameHarness {
         identity: StateFrameIdentity {
-            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock(
+            ceilings: proof_ceilings::proof_ceilings_with_wall_clock(
                 std::time::Duration::from_secs(30),
             ),
             clause: id("1"),
@@ -182,7 +178,3 @@ pub(crate) fn discover_scratch(name: &str) -> PathBuf {
     fs::create_dir_all(&path).unwrap();
     path
 }
-
-use crate::kani::identity::ProofCeilings;
-#[path = "../../tests/common/proof_ceilings.rs"]
-pub(crate) mod proof_ceilings;

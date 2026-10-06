@@ -276,6 +276,8 @@ fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarne
     let crate_directory = write_crate(harness, SEEDED_FAILING_SUBJECT);
     let target_directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-witness-join");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        guardian_path: crate::common::guardian_path(),
+        original_stdin: crate::common::original_stdin(),
         installation,
         harness: harness.into(),
         crate_directory: &crate_directory,

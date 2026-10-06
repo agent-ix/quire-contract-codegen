@@ -37,6 +37,7 @@ pub struct MemoryObservation {
 }
 
 /// A procfs process's identity and ancestry. The start tick prevents pid-reuse confusion.
+#[derive(Debug)]
 struct Process {
     pid: u32,
     parent: u32,
@@ -73,9 +74,7 @@ impl MemoryObserver {
         };
         // Reading a directory alone is insufficient: verify both ancestry and resident bytes.
         let own = std::process::id();
-        let own_process = parse_process(&fs::read_to_string(
-            root.join(own.to_string()).join("stat"),
-        )?)?;
+        let own_process = parse_process(&fs::read(root.join(own.to_string()).join("stat"))?)?;
         observer
             .resident_bytes(own, own_process.start)?
             .ok_or_else(|| {
@@ -101,9 +100,7 @@ impl MemoryObserver {
 
     #[cfg(target_os = "linux")]
     pub(super) fn bind_root(&mut self, pid: u32, start: u64) -> io::Result<()> {
-        let process = parse_process(&fs::read_to_string(
-            self.root.join(pid.to_string()).join("stat"),
-        )?)?;
+        let process = parse_process(&fs::read(self.root.join(pid.to_string()).join("stat"))?)?;
         if process.start != start {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -165,7 +162,7 @@ impl MemoryObserver {
                 continue;
             }
             let directory = self.root.join(pid.to_string());
-            let process = match fs::read_to_string(directory.join("stat")) {
+            let process = match fs::read(directory.join("stat")) {
                 Ok(text) => parse_process(&text)?,
                 Err(error) if process_disappeared(&error) => continue,
                 Err(error) => return Err(error),
@@ -186,7 +183,7 @@ impl MemoryObserver {
                     continue;
                 }
                 let parent_stat =
-                    match fs::read_to_string(self.root.join(parent_pid.to_string()).join("stat")) {
+                    match fs::read(self.root.join(parent_pid.to_string()).join("stat")) {
                         Ok(text) => parse_process(&text)?,
                         Err(error) if process_disappeared(&error) => continue,
                         Err(error) => return Err(error),
@@ -200,7 +197,7 @@ impl MemoryObserver {
                 Err(error) if process_disappeared(&error) => {
                     // A reaped child can vanish after its stat was read. A live leader whose
                     // workers still exist is different: missing task ancestry stays fail-closed.
-                    match fs::read_to_string(directory.join("stat")) {
+                    match fs::read(directory.join("stat")) {
                         Err(error) if process_disappeared(&error) => continue,
                         Err(error) => return Err(error),
                         Ok(stat) => {
@@ -267,8 +264,8 @@ impl MemoryObserver {
             Err(error) if process_disappeared(&error) => return Ok(None),
             Err(error) => return Err(error),
         };
-        let mut stat = String::new();
-        match stat_file.read_to_string(&mut stat) {
+        let mut stat = Vec::new();
+        match stat_file.read_to_end(&mut stat) {
             Ok(_) => {}
             Err(error) if process_disappeared(&error) => return Ok(None),
             Err(error) => return Err(error),
@@ -277,8 +274,8 @@ impl MemoryObserver {
         if process.start != start {
             return Ok(None);
         }
-        let mut status = String::new();
-        match status_file.read_to_string(&mut status) {
+        let mut status = Vec::new();
+        match status_file.read_to_end(&mut status) {
             Ok(_) => {}
             Err(error) if process_disappeared(&error) => {
                 return Self::missing_status(&directory, start)
@@ -356,8 +353,8 @@ impl MemoryObserver {
                 if latest.start != start {
                     return Ok(None);
                 }
-                let mut text = String::new();
-                match pinned.read_to_string(&mut text) {
+                let mut text = Vec::new();
+                match pinned.read_to_end(&mut text) {
                     Ok(_) => {}
                     Err(error) if process_disappeared(&error) => continue,
                     Err(error) => {
@@ -370,7 +367,7 @@ impl MemoryObserver {
                 if let Some(bytes) = status_rss(&text)? {
                     return Ok(Some(bytes));
                 }
-                let task_stat = match fs::read_to_string(worker.path().join("stat")) {
+                let task_stat = match fs::read(worker.path().join("stat")) {
                     Ok(stat) => parse_process(&stat)?,
                     Err(error) if process_disappeared(&error) => continue,
                     Err(error) => return Err(error),
@@ -389,7 +386,7 @@ impl MemoryObserver {
             if fresh_stat.start != start {
                 return Ok(None);
             }
-            let fresh_status = match fs::read_to_string(directory.join("status")) {
+            let fresh_status = match fs::read(directory.join("status")) {
                 Ok(status) => status,
                 Err(error) if process_disappeared(&error) => {
                     return Self::missing_status(&directory, start)
@@ -442,15 +439,15 @@ impl MemoryObserver {
                 Err(error) => return Err(error),
             }
         }
-        let mut status = String::new();
-        match status_file.read_to_string(&mut status) {
+        let mut status = Vec::new();
+        match status_file.read_to_end(&mut status) {
             Ok(0) => return Self::empty_pinned_process_file(directory, start),
             Ok(_) => {}
             Err(error) if process_disappeared(&error) => return Ok(false),
             Err(error) => return Err(error),
         }
-        let mut stat = String::new();
-        match stat_file.read_to_string(&mut stat) {
+        let mut stat = Vec::new();
+        match stat_file.read_to_end(&mut stat) {
             Ok(0) => return Self::empty_pinned_process_file(directory, start),
             Ok(_) => {}
             Err(error) if process_disappeared(&error) => return Ok(false),
@@ -492,16 +489,18 @@ impl MemoryObserver {
 }
 
 fn read_process_if_present(path: &Path) -> io::Result<Option<Process>> {
-    match fs::read_to_string(path) {
+    match fs::read(path) {
         Ok(stat) => parse_process(&stat).map(Some),
         Err(error) if process_disappeared(&error) => Ok(None),
         Err(error) => Err(error),
     }
 }
 
-fn status_rss(status: &str) -> io::Result<Option<u64>> {
-    for line in status.lines() {
-        if let Some(rss) = line.strip_prefix("VmRSS:") {
+fn status_rss(status: &[u8]) -> io::Result<Option<u64>> {
+    for line in status.split(|byte| *byte == b'\n') {
+        if let Some(rss) = line.strip_prefix(b"VmRSS:") {
+            let rss = std::str::from_utf8(rss)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
             let mut words = rss.split_whitespace();
             let kib = words
                 .next()
@@ -526,10 +525,11 @@ fn status_rss(status: &str) -> io::Result<Option<u64>> {
     Ok(None)
 }
 
-fn status_threads(status: &str) -> io::Result<u64> {
+fn status_threads(status: &[u8]) -> io::Result<u64> {
     status
-        .lines()
-        .find_map(|line| line.strip_prefix("Threads:"))
+        .split(|byte| *byte == b'\n')
+        .find_map(|line| line.strip_prefix(b"Threads:"))
+        .and_then(|value| std::str::from_utf8(value).ok())
         .and_then(|value| value.trim().parse::<u64>().ok())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "procfs has no thread count"))
 }
@@ -554,16 +554,27 @@ fn process_disappeared(error: &io::Error) -> bool {
         || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error())
 }
 
-fn parse_process(text: &str) -> io::Result<Process> {
+fn parse_process(text: &[u8]) -> io::Result<Process> {
     let malformed = || {
         io::Error::new(
             io::ErrorKind::InvalidData,
             "invalid procfs process ancestry",
         )
     };
-    let (pid, _) = text.split_once(' ').ok_or_else(malformed)?;
-    // A comm field can contain spaces and ')' characters; the final ')' ends that field.
-    let (_, tail) = text.rsplit_once(')').ok_or_else(malformed)?;
+    let separator = text
+        .iter()
+        .position(|byte| *byte == b' ')
+        .ok_or_else(malformed)?;
+    let pid = std::str::from_utf8(text.get(..separator).ok_or_else(malformed)?)
+        .map_err(|_| malformed())?;
+    // comm is opaque bytes and can contain spaces, ')' and non-UTF8 program names. Only
+    // the numeric identity/RSS fields after its final ')' require UTF8/ASCII decoding.
+    let closing = text
+        .iter()
+        .rposition(|byte| *byte == b')')
+        .ok_or_else(malformed)?;
+    let tail = std::str::from_utf8(text.get(closing + 1..).ok_or_else(malformed)?)
+        .map_err(|_| malformed())?;
     let mut fields = tail.split_whitespace();
     fields.next().ok_or_else(malformed)?;
     let parent: u32 = fields
@@ -600,6 +611,49 @@ fn parse_process(text: &str) -> io::Result<Process> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-028-AC-21, FR-034-AC-17
+    #[test]
+    fn opaque_process_names_preserve_identity_and_rss_but_invalid_numbers_refuse() {
+        let mut fields = ["0"; 22];
+        fields[0] = "S";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        fields[20] = "1048576";
+        fields[21] = "16";
+        let mut bytes = b"42 (raw-\xff ) name) ".to_vec();
+        bytes.extend_from_slice(fields.join(" ").as_bytes());
+        let process = parse_process(&bytes).unwrap();
+        assert_eq!(process.pid, 42);
+        assert_eq!(process.parent, 1);
+        assert_eq!(process.start, 200);
+        assert_eq!(process.virtual_bytes, 1048576);
+        assert_eq!(process.resident_pages, 16);
+        assert_eq!(
+            status_rss(b"Name:\traw-\xff\nVmRSS:\t64 kB\nThreads:\t1\n").unwrap(),
+            Some(64 * 1024)
+        );
+        assert_eq!(
+            status_threads(b"Name:\traw-\xff\nThreads:\t1\n").unwrap(),
+            1
+        );
+        bytes.push(0xff);
+        assert_eq!(
+            parse_process(&bytes).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(
+            status_rss(b"Name:\tvalid\nVmRSS:\t\xff kB\n")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(
+            status_threads(b"Threads:\t\xff\n").unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
 
     /// Trace: FR-028-AC-21.
     #[test]

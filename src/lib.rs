@@ -3,6 +3,13 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+// Shared test builders use this crate's public contract in both unit and integration contexts.
+#[cfg(test)]
+extern crate self as quire_contract_codegen;
+#[cfg(test)]
+#[path = "../tests/common/proof_ceilings.rs"]
+pub(crate) mod fixture_budgets;
+
 // The leaf directory: artifact, diagnostic, identity, profile and source-map.
 // `core` here is this crate's own layout module (the AD names the directory `core/`). In this
 // file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
@@ -21,6 +28,15 @@ mod replay;
 mod evidence;
 // The strategy subsystem.
 mod strategy;
+
+/// Runs this package's namespace guardian with its actual compiled library identity.
+///
+/// The packaged `quire-kani-guardian` executable calls this entry. Its mapped stdin must be the
+/// private connected guardian endpoint, and Linux namespace/session/bootstrap authentication
+/// must succeed before a backend can start. Unsupported platforms return failure.
+pub fn run_kani_guardian() -> std::process::ExitCode {
+    kani::run::guardian_entry()
+}
 
 pub use strategy::bound::census::{
     compute_census, render_boundary_constants, render_edge_constants, BoundaryCensus, CensusCase,
@@ -114,7 +130,8 @@ pub use kani::run::execute::{
     OUTPUT_UNREAD_CODE,
 };
 pub use kani::run::harness::KaniExecutableHarness;
-pub use kani::run::launch::CaptureStream;
+pub use kani::run::launch::{CaptureStream, GuardianFailureKind};
+pub use kani::run::stdin::OriginalStdin;
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
