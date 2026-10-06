@@ -69,3 +69,11 @@ Round 3 scoped delta reviewed 0de3e8823f0cae6382fd8d465fd0a787d5109b35 on branch
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-004 | medium | IR-655 SPEC may be grounded, and its coordination cap measured, on O source from the unmerged stage-1 branch, then merged before the CODE PR. Nothing requires that schedule proof and cap to be re-established against the final CODE PR head before it merges. Stage-1 source will change through review fixes and rebases (this branch was just rebased), so a merged IR-655 could rest on a sample schedule the shipped O no longer has. Require the source grounding and cap measurement to be re-verified at the exact CODE PR head, refusing merge on any divergence. | spec/kani/matrix/TC-049-caller-death-ownership.md:54-59, spec/kani/functional/FR-034-caller-death-ownership.md:609-611 |
+
+## Dispositions, round 4
+
+Round 4 reviewed d031e73aed42d35a063986fb703cea0ebe264c6e (previous 0de3e8823f0cae6382fd8d465fd0a787d5109b35; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run c9608ac7-dc6f-4390-9d08-6f6afcedc331. Only the disposition-pass-3 findings were open; every original finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | d031e73aed42d35a063986fb703cea0ebe264c6e: TC-049 and the FR-034 IR-655 Dependencies entry now require the O/C schedule proof and cap evidence to be re-grounded at the exact final frozen CODE source; relevant changes invalidate earlier proof and force re-measurement, any amended IR-655 SPEC merges before the changed fixture code, and divergence blocks merge. |

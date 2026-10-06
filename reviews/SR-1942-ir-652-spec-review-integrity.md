@@ -82,3 +82,12 @@ Round 3 scoped delta reviewed 0de3e8823f0cae6382fd8d465fd0a787d5109b35 on branch
 | --- | --- | --- | --- |
 | FND-006 | low | IR-655 is now a merge gate for the lifecycle CODE PR and its fixture CODE ("shall merge before fixture CODE and before that single CODE PR merges"), but the FR-034 Dependencies list (lines 588-604) names IR-649 and IR-652 with links and never lists IR-655, and no IR-655 mention in FR-034 or TC-049 carries a link. Add an IR-655 Dependencies entry with its link and the edge it imposes. | spec/kani/functional/FR-034-caller-death-ownership.md:588-604, spec/kani/functional/FR-034-caller-death-ownership.md:609-611 |
 | FND-007 | low | Hard-wrap fragments in the new delta: FR-034 line 614 ("criteria remain untagged until all") and TC-049 lines 38 ("internal stage backs.") and 91 ("The original unit tests"). Reflow them. | spec/kani/functional/FR-034-caller-death-ownership.md:614, spec/kani/matrix/TC-049-caller-death-ownership.md:38, spec/kani/matrix/TC-049-caller-death-ownership.md:91 |
+
+## Dispositions, round 4
+
+Round 4 reviewed d031e73aed42d35a063986fb703cea0ebe264c6e (previous 0de3e8823f0cae6382fd8d465fd0a787d5109b35; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run c9608ac7-dc6f-4390-9d08-6f6afcedc331. Only the disposition-pass-3 findings were open; every original finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | d031e73aed42d35a063986fb703cea0ebe264c6e: FR-034 Dependencies now lists IR-655 with an ordinary Linear link and states the SPEC-before-fixture-CODE and single-CODE-PR merge edge; frontmatter relationships are unchanged (no ix:// ticket edge). |
+| FND-007 | fixed | d031e73aed42d35a063986fb703cea0ebe264c6e: The FR-034 staging paragraph is word-for-word equal to 0de3e88 after whitespace normalization and reflowed within 100 columns; TC-049 fragments at lines 38 and 91 are gone (introductory sentences rewritten); both files end with a newline. |

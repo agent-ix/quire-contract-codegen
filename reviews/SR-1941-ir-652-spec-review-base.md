@@ -105,3 +105,11 @@ Round 3 scoped delta reviewed 0de3e8823f0cae6382fd8d465fd0a787d5109b35 on branch
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-007 | low | The allocation table "allocates which obligations each internal stage backs" but lists only FR-017-AC-19 and FR-034-AC-2, 5, 7, 8/10/22, 12, 14, 17, 23/26, 24/27/28 and 31 to 34. Criteria whose evidence also moves under the new C, L, O, M, I topology, such as FR-034-AC-1 (caller death during initialization starts only bounded bootstrap), AC-3 and AC-11, have no stated stage. A reader cannot tell whether they are stage 1, owed to stage 2, or unaffected. State the rule for unlisted criteria. | spec/kani/matrix/TC-049-caller-death-ownership.md:35-38, spec/kani/matrix/TC-049-caller-death-ownership.md:68-82 |
+
+## Dispositions, round 4
+
+Round 4 reviewed d031e73aed42d35a063986fb703cea0ebe264c6e (previous 0de3e8823f0cae6382fd8d465fd0a787d5109b35; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run c9608ac7-dc6f-4390-9d08-6f6afcedc331. Only the disposition-pass-3 findings were open; every original finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-007 | fixed | d031e73aed42d35a063986fb703cea0ebe264c6e: TC-049 now states a rule for any unlisted criterion and adds rows for FR-034-AC-1, AC-3, AC-11 and AC-4/6/9/13/15/16/18/19/20/21/25/29/30; all 34 FR-034 ids appear in the allocation table; mixed criteria stay untagged and nothing is assumed unaffected. |
