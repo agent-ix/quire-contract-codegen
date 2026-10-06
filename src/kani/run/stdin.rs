@@ -26,6 +26,7 @@ pub(super) enum OriginalStdin {
 #[derive(Debug)]
 pub(super) enum StdinInventoryError {
     Socket,
+    HostDirectory,
     Inspection(io::Error),
 }
 
@@ -33,6 +34,9 @@ impl std::fmt::Display for StdinInventoryError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Socket => formatter.write_str("original backend stdin has socket type"),
+            Self::HostDirectory => {
+                formatter.write_str("original backend stdin fd0 has host-directory type")
+            }
             Self::Inspection(error) => {
                 write!(formatter, "captured backend stdin inspection: {error}")
             }
@@ -43,7 +47,7 @@ impl std::fmt::Display for StdinInventoryError {
 impl std::error::Error for StdinInventoryError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Socket => None,
+            Self::Socket | Self::HostDirectory => None,
             Self::Inspection(error) => Some(error),
         }
     }
@@ -58,8 +62,12 @@ impl OriginalStdin {
         };
         let actual = rustix::fs::fstat(descriptor)
             .map_err(|error| StdinInventoryError::Inspection(error.into()))?;
-        if rustix::fs::FileType::from_raw_mode(actual.st_mode) == rustix::fs::FileType::Socket {
-            return Err(StdinInventoryError::Socket);
+        match rustix::fs::FileType::from_raw_mode(actual.st_mode) {
+            rustix::fs::FileType::Socket => return Err(StdinInventoryError::Socket),
+            // Preserving this description would expose original host-directory lookup authority
+            // across the private root. Refuse the root capability; never rewrite input to admit it.
+            rustix::fs::FileType::Directory => return Err(StdinInventoryError::HostDirectory),
+            _ => {}
         }
         Ok(())
     }
@@ -235,5 +243,43 @@ mod tests {
         let captured = OriginalStdin::capture(source.as_fd()).unwrap();
         assert!(matches!(captured, OriginalStdin::Closed));
         assert!(captured.inspect_backend().is_ok());
+    }
+
+    /// Trace: FR-034-AC-36.
+    #[test]
+    fn captured_directory_stdin_cannot_cross_the_private_root() {
+        let source = std::fs::File::open("/").unwrap();
+        rustix::io::fcntl_setfd(&source, rustix::io::FdFlags::empty()).unwrap();
+        let captured = OriginalStdin::capture(source.as_fd()).unwrap();
+        assert!(matches!(
+            captured.inspect_backend(),
+            Err(StdinInventoryError::HostDirectory)
+        ));
+        assert_eq!(
+            rustix::io::fcntl_getfd(&source).unwrap(),
+            rustix::io::FdFlags::empty()
+        );
+    }
+
+    /// Trace: FR-034-AC-36.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn captured_regular_input_remains_admitted_without_rewriting_shared_flags() {
+        let source =
+            rustix::fs::memfd_create("original-regular-input", rustix::fs::MemfdFlags::empty())
+                .unwrap();
+        let original = rustix::fs::fcntl_getfl(&source).unwrap();
+        let captured = OriginalStdin::capture(source.as_fd()).unwrap();
+        assert!(matches!(captured, OriginalStdin::Open(_)));
+        assert!(captured.inspect_backend().is_ok());
+        assert_eq!(rustix::fs::fcntl_getfl(&source).unwrap(), original);
+        rustix::io::write(&source, b"unchanged-original-file").unwrap();
+        let OriginalStdin::Open(pin) = captured else {
+            panic!("regular input must remain Open");
+        };
+        rustix::fs::seek(&source, rustix::fs::SeekFrom::Start(0)).unwrap();
+        let mut bytes = [0; 23];
+        let count = rustix::io::read(&pin, &mut bytes).unwrap();
+        assert_eq!(&bytes[..count], b"unchanged-original-file");
     }
 }

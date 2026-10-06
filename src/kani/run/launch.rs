@@ -299,7 +299,7 @@ fn run_bounded_launcher_at(
     // already captured actual input before controls/children; no later EBADF becomes Closed.
     stdin.inspect_backend().map_err(|error| {
         use super::{
-            execute::{BackendStdioDescriptor, KaniStartupAdmissionCause},
+            execute::{BackendStdioDescriptor, KaniStartupAdmissionCause, KaniStartupCapability},
             stdin::StdinInventoryError,
         };
         let (admission, cause) = match error {
@@ -308,6 +308,15 @@ fn run_bounded_launcher_at(
                     descriptor: BackendStdioDescriptor::Stdin,
                 },
                 io::Error::new(io::ErrorKind::InvalidInput, StdinInventoryError::Socket),
+            ),
+            StdinInventoryError::HostDirectory => (
+                KaniStartupAdmissionCause::CapabilityUnavailable {
+                    capability: KaniStartupCapability::PrivateRoot,
+                },
+                io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    StdinInventoryError::HostDirectory,
+                ),
             ),
             StdinInventoryError::Inspection(cause) => (
                 KaniStartupAdmissionCause::BackendStdioInspectionFailed {
