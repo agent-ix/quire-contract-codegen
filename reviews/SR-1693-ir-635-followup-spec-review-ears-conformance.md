@@ -42,3 +42,11 @@ For each one I checked for a single responsible actor, a `shall`, an explicit tr
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The edited coverage Behavior bullet states the builder and converter obligations with `shall`. It then appends five more obligations as bare declaratives with no actor or `shall`: "Missing keys stay uncovered …", "Literal operands have singleton domains …", "Full enum coverage requires every source-declared variant", "Other non-Boolean leaf families … stay uncovered/Tested …", and the TX-3 sentence. It is a compound requirement, so a reviewer cannot tell which component must enforce the enum and leaf-family rules. Split the bullet into one `shall` statement per rule, each naming its actor: the converter consumes QSL's coverage. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:153 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `48f3555` on quire-contract-codegen#303. Each finding was verified against the spec text at that commit, not against the author's receipt.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 48f3555: The compound coverage bullet is split into nine single-obligation statements, each with a named builder or converter actor and shall. |

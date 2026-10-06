@@ -65,3 +65,12 @@ I checked that no test tags FR-033-AC-* or the planned FR-029 criteria. I did no
 | --- | --- | --- | --- |
 | FND-001 | low | The upstream status paragraph says QSL #645 now contains composite witness value and decode code, but it omits the measured limit stated in QSL #645 FR-070 Status: "A `union` value text decodes, but the checker has no union type form (FR-321 is not yet implemented), so no replay converts one." FR-033-AC-2/3 and TC-048 step 3 still list union among the families to replay. A reader of the status paragraph can conclude that union operands only wait on the parity API. Record the union replay-conversion gap as measured upstream capability data next to the ExactInteger status. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:51, spec/replay/functional/FR-033-composite-parity-replay-binding.md:222 |
 | FND-002 | low | The new enum coverage rule (FR-033 Behavior, AC-8, TC-048 step 6) covers only an all-variants harness versus a partial one. It omits two refusals that measured FR-358 step 5 and AC-7 require: a `Variants` bound naming a variant the declared enum does not admit, and a request `DeclaredDomain` over an enum position. Both refuse with the key named. AC-8's list "unknown/duplicate/kind-mismatched keys refuse" covers keys, not an undeclared variant value. A converter test written from AC-8 therefore never checks that a superset bound such as `{Blue, Green, Purple, Red}` is refused rather than counted as covering. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:227, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:70 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `48f3555` on quire-contract-codegen#303. Each finding was verified against the spec text at that commit, not against the author's receipt.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 48f3555: FR-033 Description now records the measured union gap (union text decodes; no replay conversion without checker union admission) beside the ExactInteger status; TC-048 step 3 forbids counting a union decode as replay. |
+| FND-002 | fixed | 48f3555: FR-033 Behavior, AC-8, TC-048 step 6 and the AC-8 Expected Results row now require QSL's key-naming refusal for an undeclared Variants member and a DeclaredDomain over an enum position. |

@@ -46,3 +46,11 @@ I checked that an artifact or context replacement under an equal O-09 still refu
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The composite O-09 preimage is stated as "the parameter-operand node IDs with their actual harness bounds" (AD-003 E-1 extension, FR-033 Inputs, AC-11, TC-048 step 9). That leaves undefined how a claim that compares one parameter with itself (`f(a: Q): Boolean { a == a }`) contributes its arguments. One reading makes one argument per operand and lists `a` twice. Another makes one argument per distinct parameter, which matches FR-358 step 6's "each argument is a parameter node id and its declared domain, where the declared domain is the harness bounds keyed under that parameter". The two readings produce different digests. If CG mints the first and QSL recomputes the second, an otherwise valid claim refuses as an O-09 mismatch. Duplicate DomainKeys could also trip QSL's duplicate-harness-bound refusal. State that `arguments` holds each distinct parameter once, or say how a repeated parameter operand is handled, and give TC-048 step 9 a self-comparison case. | spec/assurance/AD-003-evidence-chain.md:189, spec/replay/functional/FR-033-composite-parity-replay-binding.md:77, spec/replay/functional/FR-033-composite-parity-replay-binding.md:230, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:97 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `48f3555` on quire-contract-codegen#303. Each finding was verified against the spec text at that commit, not against the author's receipt.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 48f3555: AD-003 E-1 extension, FR-033 Inputs, AC-11 and TC-048 step 9 now define one argument per distinct parameter-operand node id; a self-comparison contributes one argument, with a TC-048 a == a case and no duplicate DomainKeys. |

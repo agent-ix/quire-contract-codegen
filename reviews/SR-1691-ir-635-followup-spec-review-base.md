@@ -55,3 +55,12 @@ FR-015-AC-76 was read for context. I skipped the object, dependency and scope-bo
 | --- | --- | --- | --- |
 | FND-001 | low | "pair count" is used in two senses. In the O-09 exclusion list (FR-033 Inputs, AC-11, AD-003 E-1 extension, TC-048 step 9) it means FR-015-AC-76's static "closure's pair-node count" in the harness identity record. In F-6, AC-7 and `EqualityOutcome` it means the runtime occurrence-pair count. AC-11 says "changing only … pair count … does not [change O-09]", and TC-048 step 9 says "change only … pair count … and require the same O-09 digest". A tester can satisfy both by mutating the runtime count, which was never an identity input, and so never exercise the record-only member. Use AC-76's term "pair-node count" wherever the record field is meant. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:79, spec/replay/functional/FR-033-composite-parity-replay-binding.md:230, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:97 |
 | FND-002 | low | TC-048 step 9 requires a test to "replace the proved artifact or original context while retaining O-09 and require the separate canonical content tie to refuse". The same step ends "no new CG tracking digest or speculative content-binding API is tested". Read literally, the step asks for a content-tie refusal test and forbids testing the content-binding API that refusal goes through. Say what the step means: test the refusal through the delivered owning API once QSL-640 lands, and invent no API before then. That keeps the step from reading as permission to skip the artifact-replacement check. | spec/replay/matrix/TC-048-composite-parity-replay-binding.md:97 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `48f3555` on quire-contract-codegen#303. Each finding was verified against the spec text at that commit, not against the author's receipt.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 48f3555: AD-003 E-1 extension, FR-033 Inputs, AC-11 and TC-048 step 9 now say static closure pair-node count and distinguish it from F-6's runtime occurrence-pair count; step 9 mutates the record count, not the runtime one. |
+| FND-002 | fixed | 48f3555: TC-048 step 9 now makes the artifact-replacement refusal mandatory through the delivered owning content-binding API after QSL-640, gated before delivery with no invented API or extra digest. |

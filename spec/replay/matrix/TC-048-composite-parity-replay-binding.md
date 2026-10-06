@@ -118,7 +118,8 @@ and never replace positive QSL evaluation with a verdict double.
    function/frame preimage vectors remain equal.
 10. Submit a changed source/package/node/occurrence/bound/O-09 request with Disagreed and require
     common claim refusal before any settlement. On the same valid claim, combine Disagreed with
-    operand refusal (including the canonical x: 12 out-of-domain case), missing native observation,
+    operand refusal (a composite field `x` declared `Int[0, 9]` but supplied as `x: 12`), missing
+    native observation,
     native fault, exact-limit/refinement-ceiling and agreeing replay:
     Failed/CgDefect wins before any early operand/native setup refusal; do not fabricate absent
     native evidence. Without disagreement, missing required native observation refuses the replay
