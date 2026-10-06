@@ -75,7 +75,8 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - For a falsified outcome, the replay settlement of its counterexample, as the Description states
   it.
 - Planned (IR-241): the proof subject of the harness (`production` or `bounded_shadow`, FR-028) and,
-  for a verified outcome, its proof strength (FR-028-AC-17). A harness whose family has no shadow
+  for a verified outcome, its proof strength (FR-028-AC-17), plus retained `refinement_failed`
+  disagreement whatever the backend outcome. A harness whose family has no shadow
   carries subject `production` and strength `production_proved`.
 
 - Planned (IR-635), gated on actual QSL-640 delivery: the same-claim composite parity settlement/record, binding, bounds and refinement evidence defined below and by [FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md).
@@ -83,14 +84,16 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 ## Outputs
 
 - One `qsl_replay::TerminalValue` for every pair the Inputs define.
-- A typed refusal, `TerminalPairError`, for a pair they do not: a falsified outcome with no replay
+- For the ordinary source-predicate input, a typed refusal, `TerminalPairError`, for an invalid
+  pair: a falsified outcome with no replay
   settlement (`MissingSettlement`), or any other outcome with one (`UnexpectedSettlement`).
 - Planned (IR-241): two more `TerminalPairError` variants, `NonProductionProof` (carrying the proof
-  strength) for a verified outcome whose strength is not `production_proved`, and `ShadowCounterexample`
-  for a falsified outcome of a `bounded_shadow` harness. Neither returns a terminal value while
-  the actual QSL-640 parity route remains unavailable.
+  strength) for a verified outcome whose strength is not `production_proved`, and
+  `ShadowCounterexample` for a falsified outcome of a `bounded_shadow` harness. Neither returns a
+  terminal value while the actual QSL-640 parity route remains unavailable.
 - Planned (IR-635): the admitted composite route preserves QSL's terminal record/category/cause
-  under AC-17; its typed binding refuses missing or another claim's settlement without a value.
+  under AC-17 and AC-19 to AC-27; its typed binding refuses missing or another claim's settlement
+  without a value.
 
 ## Behavior
 
@@ -157,69 +160,92 @@ set into the proposed QSL evidence as follows, without a wildcard or deleting a 
 | `shadow_proved_refinement_inconclusive` | `Verified { refinement: CeilingReached }`, retaining the actual ceiling evidence |
 | `refinement_failed` | `Disagreed`, retaining the native disagreement |
 
-These discriminants are planned upstream semantics, not current Rust API claims. QSL derives
-declared operand bounds and coverage from the same recompiled node claim under FR-033; CG does
-not assert its own declared-bound completeness. For valid settled composite claims, the adapter
-shall preserve QSL's first-applicable-row order:
+UNVERIFIED SOURCE: these discriminants, the node-selected parity/value arm, authoritative coverage
+and parity-agreement record/cause are planned upstream semantics, not current Rust API claims.
+Actual QSL-640 API delivery remains the code gate. QSL derives declared operand bounds and coverage
+from the same recompiled node claim under FR-033; CG does not assert its own declared-bound
+completeness. For valid bound composite claims, the adapter shall apply refinement disagreement
+before any backend outcome or replay agreement. A retained `refinement_failed` strength produces
+`Failed`/CG-owned `CgDefect` whatever the shadow backend settled, including a falsified replay that
+agrees on its replayed case. The disagreement record is never lost to another path.
 
-| Priority | Same-claim evidence | QSL terminal payload / record reading |
+For the remaining completed proof-path cases, the adapter shall preserve this first-applicable order
+while keeping the original backend classification:
+
+| Priority | Backend outcome and same-claim evidence | QSL terminal payload / record reading |
 |---|---|---|
-| 1 | `Disagreed` | `Failed`, with CG-owned `CgDefect` cause |
-| 2 | `Verified { refinement: CeilingReached }` | `Incomplete(ResourceExhausted)`, category inconclusive |
-| 3 | other verified evidence, SUCCESS count zero | `Proved { success_checks: 0 }`, category inconclusive with `KaniVacuousProof` |
-| 4 | `Verified { refinement: Exhausted }`, nonzero count n and every declared bound key covered | `Proved { success_checks: n }` |
-| 5 | remaining completed verified evidence | `Tested` |
+| 1 | any outcome with `refinement_failed` / `Disagreed` | `Failed`, with CG-owned `CgDefect` cause |
+| 2 | verified shadow with `CeilingReached` refinement | `Incomplete(ResourceExhausted)`, category inconclusive |
+| 3 | vacuous-proof `inconclusive` or `cover-unsatisfied`, zero SUCCESS checks | ordinary `Proved { success_checks: 0 }`, category inconclusive with `KaniVacuousProof` |
+| 4 | verified shadow, nonzero count n, `Exhausted` and every QSL-declared bound key covered | `Proved { success_checks: n }` |
+| 5 | remaining completed verified shadow with nonzero count | `Tested` |
 
-An actual backend/native execution wall-clock or memory stop remains `inconclusive` in FR-028's
-run evidence. Ordinary timeout/memory terminal rows still apply to those run outcomes. A verified
-shadow whose native refinement hits a ceiling takes priority 2, retaining which ceiling stopped
-it, and never priority 5. A completed sampled comparison differs from an interrupted execution;
-no ceiling result is coerced into `NotExhausted`. QSL settlement's own resource/admission refusal
-also retains its typed refusal reading rather than entering priority 5. The source evidence and
-QSL terminal classification are separate stages.
+Row 3 consumes the ordinary vacuous backend classification; it does not coerce that run into a
+verified outcome or send invented `Verified` evidence to QSL. A verified backend outcome has at
+least one SUCCESS check. QSL's own vacuous payload/category policy remains authoritative when
+reading any returned record. The zero-count facade safeguard is not claimed as a reachable CG
+verified-run row.
 
-For a falsified composite shadow, the adapter shall map QSL exact equality/count divergence to
-`Failed` with CG's own `CgDefect` cause and agreement with the retained shadow result/count to
-QSL's named parity-agreement `Inconclusive`; it shall never map either to `Refuted`. Non-fault QSL
-refusals carry their actual catalog codes and faults remain `Failed`. Unknown legal upstream
-cause representation is an implementation gate, never an invented predicate disagreement.
+In the absence of a retained refinement disagreement, every `bounded_shadow` inconclusive backend
+outcome takes the ordinary inconclusive rows, without a proof strength or a completed parity
+settlement: vacuous proof and cover-unsatisfied give the vacuous record; timed-out gives
+`Incomplete(TimedOut)`; memory-exhausted and unwind-bound-exhausted give
+`Incomplete(ResourceExhausted)`; no-verdict, failure-without-counterexample and missing-cover-
+summary give `Failed`. These source classes are not deleted by the parity route.
 
-The adapter shall read the actual QSL record category and cause, including inconclusive
-`Proved { success_checks: 0 }`, without promoting a payload into a success record. AC-17 owns
-this closed map and its precedence; FR-028 AC-17/24 retain refinement and ceiling ownership.
+A backend run stopped at a wall-clock or memory ceiling is `inconclusive` under FR-028 AC-2/3 and
+takes those ordinary rows. A verified shadow whose refinement run hits either ceiling retains
+strength `shadow_proved_refinement_inconclusive` under FR-028 AC-24 and takes priority 2, retaining
+which ceiling stopped it. A completed sampled comparison differs from an interrupted refinement run;
+no ceiling result becomes `NotExhausted` or `Tested`. QSL settlement's own resource/admission
+refusal retains its typed refusal reading rather than entering priority 5. The backend
+classification, refinement evidence and QSL terminal record are separate stages.
+
+For a falsified composite shadow without a retained refinement disagreement, the adapter shall
+consume QSL exact equality/count divergence as `Failed` with CG's own `CgDefect` cause and agreement
+with the retained shadow result/count as QSL's named parity-agreement `Inconclusive`. Neither
+becomes `Refuted`. Non-fault QSL refusals carry their actual catalog codes and faults remain
+`Failed`. Unknown legal upstream cause representation is an implementation gate, never an invented
+predicate disagreement.
+
+The adapter shall read the actual QSL record category and cause, including inconclusive `Proved {
+success_checks: 0 }`, without promoting a payload into a success record. AC-17 and AC-19 to AC-27
+own this map; FR-028 AC-17/24 retain refinement and ceiling ownership. The ordinary
+`ReplaySettlement` input and its MissingSettlement/UnexpectedSettlement rules remain scoped to
+source-predicate replay. The composite route requires a distinct typed same-claim settlement input;
+AC-15 cannot reject that input as an ordinary unexpected replay settlement.
 
 - Planned (pending QSL-634, IR-460): the Kani adapter shall read a post-state value outside its
   field's declared range as the subject's output and so as the witness, not as a refused input: QSL
-  ruled (QSL-634, filed, not merged) that inputs are refused and outputs are evidence, so an
-  out-of-range pre state or argument stays refused (`invalid_runtime_input`), and QSL will admit an
-  out-of-range post state as an exact observation, never clamped, and settle the replay as
-  reproduced or violated naming the field, the range and the observed value. The map then reads it
-  as any settled replay: a reproduced `violation` is `Refuted`, not
-  `Inconclusive(ReplayRefused)` (FR-029-AC-18). Until QSL-634 lands this repository keeps today's
-  behaviour, and builds nothing against it.
+  ruled (QSL-634, filed, not merged) that inputs are refused and outputs are evidence, so an out-of-
+  range pre state or argument stays refused (`invalid_runtime_input`), and QSL will admit an out-of-
+  range post state as an exact observation, never clamped, and settle the replay as reproduced or
+  violated naming the field, the range and the observed value. The map then reads it as any settled
+  replay: a reproduced `violation` is `Refuted`, not `Inconclusive(ReplayRefused)` (FR-029-AC-18).
+  Until QSL-634 lands this repository keeps today's behaviour, and builds nothing against it.
 - The Kani adapter shall classify a fault by walking the whole error the replay path returned, not
   by its top variant. A fault is `ReplayRefusal::Fault`, `ReplayRefusal::Admission` carrying
-  `AdmissionFailure::Fault`, and `CallSiteRefusal::Fault`, which reaches the map directly and wrapped
-  in `ReplayPackageError::CallSite`, in `FrameReplayError::CallSite` and in
+  `AdmissionFailure::Fault`, and `CallSiteRefusal::Fault`, which reaches the map directly and
+  wrapped in `ReplayPackageError::CallSite`, in `FrameReplayError::CallSite` and in
   `StateClauseReplayError::CallSite`. Each maps to `Failed`, and so does a `ReplayRefusal` fault
   wrapped in `SpineReplayError::Refused`, `FrameReplayError::Refused` or
   `StateClauseReplayError::Refused` (FR-029-AC-10).
 - The Kani adapter shall put only a code from QSL's closed catalog inside
   `Inconclusive(InconclusiveCause::ReplayRefused)`, and shall define no code of its own for it.
-- The Kani adapter shall map a failed replay setup to `Inconclusive(ReplayRefused)` carrying the
-  QSL catalog code only when a QSL refusal value supplies that code: a `CallSiteRefusal` other than
-  `Fault`, bare or wrapped, and `DependencyLockError::Input`. Such a refusal reached after a
-  refuted run is `ReplayRefused`, never `Declined`, which QSL reserves for a refusal before any
-  backend run, when nothing was refuted.
+- The Kani adapter shall map a failed replay setup to `Inconclusive(ReplayRefused)` carrying the QSL
+  catalog code only when a QSL refusal value supplies that code: a `CallSiteRefusal` other than
+  `Fault`, bare or wrapped, and `DependencyLockError::Input`. Such a refusal reached after a refuted
+  run is `ReplayRefused`, never `Declined`, which QSL reserves for a refusal before any backend run,
+  when nothing was refuted.
 - The Kani adapter shall map to `Failed` exactly these failures, which this repository raises and
   which carry no QSL catalog code: `SpineReplayError::{UnboundArgument, FieldDelimiter, Transcript,
-  WrongArm, Identity}`, `FrameReplayError::{Transcript, Envelope, Name, NotAFrame,
-  FieldSetMismatch, Decode, OutOfDomain, PreState, ScopeMismatch, Identity}`,
-  `ReplayPackageError::InvalidFunction`, a Kani playback outside the harness proof bound, a
-  decode failure (`DecodeFailure`), which is a playback that does not type against the bindings
-  this repository persisted, and a replay reproduced in a category other than `violation`. `ReplayPackageError::InvalidFunction` wraps a discarded `InvalidIdentifier`
-  from `Identifier::new`, which has no code. `FrameReplayError::Name` wraps QSL's
-  `EmptyQualifiedName`, which has no code; as built, no call reaches it, because every
+  WrongArm, Identity}`, `FrameReplayError::{Transcript, Envelope, Name, NotAFrame, FieldSetMismatch,
+  Decode, OutOfDomain, PreState, ScopeMismatch, Identity}`, `ReplayPackageError::InvalidFunction`, a
+  Kani playback outside the harness proof bound, a decode failure (`DecodeFailure`), which is a
+  playback that does not type against the bindings this repository persisted, and a replay
+  reproduced in a category other than `violation`. `ReplayPackageError::InvalidFunction` wraps a
+  discarded `InvalidIdentifier` from `Identifier::new`, which has no code. `FrameReplayError::Name`
+  wraps QSL's `EmptyQualifiedName`, which has no code; as built, no call reaches it, because every
   `QualifiedName::new` call passes a non-empty list.
 - The Kani adapter shall read the result and errors of the state-clause replay path (FR-024) as
   FR-029-AC-16 states, by the same rules as the frame path's `FrameReplayError`, and shall map
@@ -230,16 +256,17 @@ this closed map and its precedence; FR-028 AC-17/24 retain refinement and ceilin
   defect. [AD-001](../../assurance/AD-001-codegen-architecture.md)'s failure view keeps each a
   distinct typed state before the map.
 - The Kani adapter shall expose no `proof_category` function. A value's category is
-  `TerminalValue::category()` of it and nothing else
-  ([AD-003](../../assurance/AD-003-evidence-chain.md) E-9).
+  `TerminalValue::category()` of it and nothing else ([AD-003](../../assurance/AD-003-evidence-
+  chain.md) E-9).
 - The Kani adapter shall refuse a falsified outcome given no replay settlement, and any other
-  outcome given one, with a `TerminalPairError`, and shall return no terminal value for it. This
-  is a design choice: the map takes the outcome and an optional settlement, so the driver calls
-  one function with one shape, and the pairing the Inputs state is checked at that call. The
-  refusal is typed rather than a value, and FR-029-AC-15 asserts it. Other designs make every
-  pair total without a refusal, for example a replay callback the map calls only for a falsified
-  outcome; they were not chosen.
-- The ordinary production/source-predicate map shall map no outcome to `Tested`; only an admitted QSL composite settlement may return `Tested` under AC-17.
+  outcome given one, with a `TerminalPairError`, and shall return no terminal value for it. This is
+  a design choice: the map takes the outcome and an optional settlement, so the driver calls one
+  function with one shape, and the pairing the Inputs state is checked at that call. The refusal is
+  typed rather than a value, and FR-029-AC-15 asserts it. Other designs make every pair total
+  without a refusal, for example a replay callback the map calls only for a falsified outcome; they
+  were not chosen.
+- The ordinary production/source-predicate map shall map no outcome to `Tested`; only an admitted
+  QSL composite settlement may return `Tested` under AC-19.
 - The generator shall use QSL's terminal-value type, defining none of its own and importing none
   from Contract IR.
 
@@ -252,7 +279,7 @@ this closed map and its precedence; FR-028 AC-17/24 retain refinement and ceilin
 | FR-029-AC-3 | The timed-out reason maps to `Incomplete(TimedOut)`, and the memory-exhausted and exhausted-unwind-bound reasons each map to `Incomplete(ResourceExhausted)`. | Test (TC-040) |
 | FR-029-AC-4 | The no-verdict reason maps to `Failed`. | Test (TC-040) |
 | FR-029-AC-5 | The failure-without-counterexample and missing-cover-summary reasons each map to `Failed`. | Test (TC-040) |
-| FR-029-AC-6 | The ordinary production/source-predicate map returns no `Tested`; an admitted composite parity route returns it only under AC-17, never for disagreement, zero checks, a resource ceiling or a proved exhaustive covered claim. The latter route is PLANNED (IR-635), GATED on actual QSL-640 delivery. | Test |
+| FR-029-AC-6 | The ordinary production/source-predicate map returns no `Tested`. | Test |
 | FR-029-AC-8 | `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness` and `NoValue`) maps to `Inconclusive(ReplayParity)` carrying that `DisagreementCause`. | Test (TC-040) |
 | FR-029-AC-9 | `falsified` with a non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying `ReplayRefusal::code()` of that refusal. | Test (TC-040) |
 | FR-029-AC-10 | `falsified` with a fault maps to `Failed` for each of: the call-site fault's own reading (`ReplaySettlement::Fault`, which QSL's replay result does not carry: QSL reports a fault as an error); `ReplayRefusal::Fault` and `ReplayRefusal::Admission(AdmissionFailure::Fault)`, each bare and as the cause of `SpineReplayError::Refused`, `FrameReplayError::Refused` and `StateClauseReplayError::Refused`; and `CallSiteRefusal::Fault` bare and wrapped in `ReplayPackageError::CallSite`, `FrameReplayError::CallSite` and `StateClauseReplayError::CallSite`. | Test (TC-040) |
@@ -260,10 +287,19 @@ this closed map and its precedence; FR-028 AC-17/24 retain refinement and ceilin
 | FR-029-AC-12 | Across every replay settlement other than reproduced, `falsified` maps to a value other than `Refuted`. | Test (TC-040) |
 | FR-029-AC-13 | `falsified` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped in `ReplayPackageError` and `FrameReplayError`, maps to `Inconclusive(ReplayRefused)` carrying `CallSiteRefusal::code()` or `DependencyInputRefusal::code()` of that refusal, and never to `Declined`. | Test (TC-040) |
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
-| FR-029-AC-15 | A falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-040) |
+| FR-029-AC-15 | For the ordinary source-predicate `ReplaySettlement` input, a falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. The distinct typed composite-parity settlement input is governed by AC-17 and AC-19 to AC-27, not this criterion. | Test |
 | FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do for a non-fault refusal (`Inconclusive(ReplayRefused)` with its catalog code; their fault reading is FR-029-AC-10's), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `UndeclaredField`, `DuplicateField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. | Test (TC-040) |
-| FR-029-AC-17 | PLANNED (IR-635), GATED on actual QSL-640 delivery. The closed map enumerates every FR-028-AC-17 strength: production retains its ordinary map; exhaustive projects to Exhausted, sampled/not_run to NotExhausted, ceiling-inconclusive to CeilingReached, and refinement_failed to Disagreed. On the same admitted composite claim, disagreement maps Failed/CgDefect even with zero checks; ceiling maps Incomplete(ResourceExhausted) even with zero checks or covered bounds; other zero checks yield Proved0 with actual record category inconclusive/KaniVacuousProof; nonzero exhausted+QSL-derived complete coverage yields Proved n; remaining completed verification yields Tested. Missing bound keys stay uncovered and malformed coverage refuses. Falsified parity divergence maps Failed/CgDefect, agreement named parity-agreement Inconclusive, never Refuted. Actual run/refinement stops and QSL resource refusals never become Tested. Another claim's result yields no settlement. Until delivery, interim nonproduction/shadow-counterexample refusals return no terminal value. Adding a strength without a row fails the build or test, and the converter reads actual QSL record category/cause without promoting Proved0. | Test |
+| FR-029-AC-17 | PLANNED (IR-635), GATED on actual QSL-640 delivery. The strength projection enumerates every FR-028-AC-17 strength: production retains its ordinary map; exhaustive projects to Exhausted, sampled/not_run to NotExhausted, ceiling-inconclusive to CeilingReached, and refinement_failed to Disagreed. Backend-inconclusive outcomes acquire no invented verified proof strength. | Test |
 | FR-029-AC-18 | For the `falsified` state-clause run of the wrapping debit subject `deposit_debiting`, whose post-state value (-1) lies outside `balance`'s declared range, this repository builds the post snapshot with that exact unclamped value and does not refuse it itself (not as `StateClauseReplayError::OutOfDomain` or any other CG defect), and the run maps to `Refuted`, the ordinary violated terminal, and not to `Inconclusive(ReplayRefused)` or `Failed`. How QSL settles the replay of such a snapshot is QSL-634's to decide; this criterion states CG's own obligation and the target terminal. PLANNED, pending QSL-634 (IR-460), and nothing is built against it: QSL admission refuses such a post snapshot today, so the run reads `Inconclusive(ReplayRefused(InvalidRuntimeInput))` until QSL-634 lands. | Test (TC-040) |
+| FR-029-AC-19 | PLANNED/GATED (IR-635/QSL-640). After the cross-outcome disagreement rule, verified shadow CeilingReached yields Incomplete(ResourceExhausted); nonzero Exhausted with QSL-derived complete coverage yields Proved n; remaining completed nonzero verification yields Tested. Tested is excluded for disagreement, ceilings and zero checks; tightening or missing coverage cannot promote it to Proved. | Test |
+| FR-029-AC-20 | PLANNED/GATED (IR-635/QSL-640). A falsified composite shadow with no retained refinement disagreement consumes QSL equality/count divergence as Failed/CgDefect and agreeing shadow comparison as named parity-agreement Inconclusive, never Refuted; QSL non-fault refusal retains its code and executor fault remains Failed. | Test |
+| FR-029-AC-21 | PLANNED (IR-635). Until actual QSL-640 parity capability delivery, a verified nonproduction shadow and a falsified shadow retain the typed NonProductionProof/ShadowCounterexample interim refusals with no terminal value, never a fabricated predicate replay or terminal cause. | Test |
+| FR-029-AC-22 | PLANNED (IR-635). The strength set enumerated by the map equals FR-028-AC-17's closed set; adding a strength without its projection and outcome row fails the build or test rather than entering a wildcard mapping. | Test |
+| FR-029-AC-23 | PLANNED/GATED (IR-635/QSL-640). A stopped backend run retains its ordinary timeout/memory inconclusive classification; a stopped refinement retains FR-028-AC-24's CeilingReached projection and recorded ceiling. Neither stop, nor QSL settlement resource refusal, becomes completed NotExhausted evidence or Tested. | Test |
+| FR-029-AC-24 | PLANNED/GATED (IR-635/QSL-640). Retained refinement_failed/Disagreed evidence yields Failed/CgDefect for verified, falsified, inconclusive and cover-unsatisfied backend outcomes, including zero checks and a falsified replay agreeing on its retained case; this disagreement takes precedence over resource, vacuity and agreement rows. | Test |
+| FR-029-AC-25 | PLANNED (IR-635). With no retained refinement disagreement, every bounded_shadow inconclusive reason maps through the ordinary rows: vacuous proof and cover-unsatisfied are Proved0; timeout is Incomplete(TimedOut); memory and unwind exhaustion are Incomplete(ResourceExhausted); no-verdict, failure-without-counterexample and missing-summary are Failed. No vacuous outcome is coerced into verified evidence. | Test |
+| FR-029-AC-26 | PLANNED/GATED (IR-635/QSL-640). The converter preserves the actual QSL record category/cause: Proved0 remains inconclusive/KaniVacuousProof and is never promoted by its payload. Zero-count backend cases use AC-25, not an unreachable verified-count-zero row. | Test |
+| FR-029-AC-27 | PLANNED/GATED (IR-635/QSL-640). The distinct typed composite settlement input refuses a missing settlement or another claim's node/run/operation/operand/domain/limits/content binding with no value; ordinary source-predicate AC-15 does not consume or reject a valid verified-parity settlement as UnexpectedSettlement. | Test |
 
 ### Mutation FR-029-AC-17 detects
 
@@ -293,14 +329,15 @@ owning facade before the interim refusals can be replaced. No compatibility laye
 
 Built (Linear IR-465) in `kani/terminal.rs` as `run_terminal_value`, with the typed
 `ReplaySettlement` it reads and, in `replay/`, the `From` conversions from every error the replay
-path returns, and for the state-clause path (FR-029-AC-16, IR-460). Every built criterion is backed by a tagged test except one. FR-029-AC-3 is backed for the
-timed-out and exhausted-unwind-bound reasons only: `KaniInconclusiveReason` has no memory-exhausted
-reason until FR-028-AC-3 adds one, and the map's `match` fails to compile there until that arm is
-written. FR-029-AC-10 is backed: `tc_040_a_fault_in_any_replay_wrapper_is_failed` builds each fault
-wrapper the criterion names from QSL's constructible `InternalFault` (re-exported by `qsl-replay`,
-`InternalFault::new`, QSL `main` bcca433, QSL #635) and asserts `Failed` through the whole error.
-The fault readings of `StateClauseReplayError::Refused` and `CallSite` are listed under
-FR-029-AC-10, so FR-029-AC-16 holds only clauses a test asserts. FR-029-AC-17 (IR-241) and
+path returns, and for the state-clause path (FR-029-AC-16, IR-460). Every built criterion is backed
+by a tagged test except one. FR-029-AC-3 is backed for the timed-out and exhausted-unwind-bound
+reasons only: `KaniInconclusiveReason` has no memory-exhausted reason until FR-028-AC-3 adds one,
+and the map's `match` fails to compile there until that arm is written. FR-029-AC-10 is backed:
+`tc_040_a_fault_in_any_replay_wrapper_is_failed` builds each fault wrapper the criterion names from
+QSL's constructible `InternalFault` (re-exported by `qsl-replay`, `InternalFault::new`, QSL `main`
+bcca433, QSL #635) and asserts `Failed` through the whole error. The fault readings of
+`StateClauseReplayError::Refused` and `CallSite` are listed under FR-029-AC-10, so FR-029-AC-16
+holds only clauses a test asserts. FR-029-AC-17 and AC-19 to AC-27 (IR-635, actual QSL-640 gate) and
 FR-029-AC-18 (QSL-634) are planned and unbuilt.
 
 Post state outside its range (pending QSL-634, IR-460). QSL ruled (cited as QSL-634, filed, not

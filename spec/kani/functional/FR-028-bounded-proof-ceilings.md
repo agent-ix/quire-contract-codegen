@@ -175,12 +175,11 @@ other.
 ### Parity settlement projection (planned IR-635)
 
 The strength names, independent comparison, domain-containment checks and native resource
-classification above remain authoritative. [FR-029](./FR-029-run-outcome-terminal-record.md)
-AC-17 owns their projection into QSL's closed parity evidence and terminal precedence. In
-particular a native run stopped at either recorded ceiling remains
-`shadow_proved_refinement_inconclusive`, whose parity projection is `CeilingReached`, rather
-than the completed `NotExhausted` projection of sampled/not_run evidence. No terminal settlement
-promotes the shadow to `production_proved`.
+classification above remain authoritative. [FR-029](./FR-029-run-outcome-terminal-record.md) AC-17
+owns their projection into QSL's closed parity evidence and terminal precedence. In particular a
+refinement run stopped at either recorded ceiling remains `shadow_proved_refinement_inconclusive`,
+whose parity projection is `CeilingReached`, rather than the completed `NotExhausted` projection of
+sampled/not_run evidence. No terminal settlement promotes the shadow to `production_proved`.
 
 ## Acceptance Criteria
 

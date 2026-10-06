@@ -99,7 +99,6 @@ adds no unsupported-family machine ABI or implicit integer narrowing.
 | FR-025-AC-6 | A binding that names no parameter of the selected function, and a parameter of that function with no binding, are each refused at generation with a typed reason and no harness. | Test (TC-036) |
 | FR-025-AC-7 | An argument of a family with no row in the Rust-type table (rational, decimal, IEEE, text, enum, composite, collection or function) is accounted `unsupported` with a typed reason naming the family, and no harness is emitted. | Test (TC-036) |
 | FR-025-AC-8 | A harness over a state-reading obligation passes each state value to the subject as `&mut` to a harness-owned value and copies it before the call; the pre-state the harness asserts over is the copy, and the post-state is the value after the call. | Test (TC-036) |
-
 | FR-025-AC-9 | PLANNED (IR-635). Every emitted composite shadow leaf binding retains its original operand/parameter node, typed path, declared domain and primitive draw type in symbolic call order; controls distinguish absent/null/present slots and option/union members. A missing, duplicate, unknown or domain/type-conflicting leaf refuses with a typed reason and no harness; parameter/literal and literal/literal operands retain their literal singleton identity/value with no unconstrained draw. Public reconstruction preserves these facts through FR-033. | Test |
 
 ## Dependencies

@@ -137,7 +137,15 @@ operations:
   - name: run_terminal_value
     inputs: [KaniRunOutcome, the SUCCESS-check count, an optional ReplaySettlement (reproduced | disagreement carrying QSL's DisagreementCause | refused carrying a ReplayRefusal | setup refusal carrying a QSL Code | fault | CG defect), which the From impls of SpineReplayError, ReplayPackageError, FrameReplayError, StateClauseReplayError, DependencyLockError, EvidenceFailureCause, ReplayVerdict and the QSL CallSiteRefusal build; the EvidenceFailureCause impl reads a decode failure and a value outside the proof bound as a CG defect, a disagreement as its QSL cause, and a reproduction in a category other than violation as a CG defect]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement; planned, IR-241: NonProductionProof | ShadowCounterexample)
-    semantics: the one match over the pair (outcome with its inconclusive reason, replay settlement) with no wildcard arm; a falsified outcome is Refuted only with a reproduced replay, and the settlement accompanies a falsified outcome only (FR-029); planned (IR-241, FR-029-AC-17): a verified outcome is Proved only with proof strength production_proved; each other strength (shadow_proved_refinement_exhaustive, _sampled, _not_run, _inconclusive, refinement_failed) is NonProductionProof and a falsified shadow harness is ShadowCounterexample, neither returning a terminal value
+    semantics: >-
+      the ordinary source-predicate match has no wildcard arm; falsified is Refuted only with
+      reproduced replay, and this ReplaySettlement accompanies falsified only (FR-029 AC-15).
+      Planned IR-635 composite parity takes a distinct typed same-claim settlement input: FR-029
+      AC-17 and AC-19 to AC-27 own closed strength projection, cross-outcome disagreement priority,
+      ordinary shadow-inconclusive/resource rows, vacuous category and completed Proved/Tested
+      outcomes; TC-048 owns its scenarios. UNVERIFIED SOURCE and gated on actual QSL-640 API
+      delivery; interim NonProductionProof/ShadowCounterexample refusals hold until then, not as the
+      final map.
   - name: ir_outcome_terminal_value
     inputs: [Contract IR KaniOutcome, the SUCCESS-check count, an optional ReplaySettlement as run_terminal_value takes it]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)

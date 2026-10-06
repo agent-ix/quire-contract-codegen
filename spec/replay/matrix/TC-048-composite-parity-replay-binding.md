@@ -16,14 +16,13 @@ relationships:
 
 ## Description
 
-Planned public-consumer scenarios for
-[FR-033](../functional/FR-033-composite-parity-replay-binding.md),
-[FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
-[FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-6/17. All completed-route
-checks are GATED on actual QSL-640 node-parity/value/settlement API delivery, not a spec-only
-merge. This scenario artifact claims no executable coverage. FR-028 AC-17/24 retain the
-strength/ceiling evidence checked here; native execution and backend controls use their named
-lanes and never replace positive QSL evaluation with a verdict double.
+Planned public-consumer scenarios for [FR-033](../functional/FR-033-composite-parity-replay-
+binding.md), [FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
+[FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-27. All
+completed-route checks are GATED on actual QSL-640 node-parity/value/settlement API delivery, not a
+spec-only merge. This scenario artifact claims no executable coverage. FR-028 AC-17/24 retain the
+strength/ceiling evidence checked here; native execution and backend controls use their named lanes
+and never replace positive QSL evaluation with a verdict double.
 
 ## Test Procedure
 
@@ -66,9 +65,12 @@ lanes and never replace positive QSL evaluation with a verdict double.
    range/cardinality/depth, omitted key, empty list with declared keys, unbounded/recursive key,
    unknown key, duplicate and bound-kind mismatch. Use literal singleton domains. Record QSL's
    authoritative declared-key derivation; no caller-supplied declaration list establishes proof.
-7. Enumerate every FR-028 AC-17 strength through FR-029 AC-17, and retain independent refinement
-   evidence. Test disagreement with zero checks, CeilingReached with zero checks and otherwise
-   covered bounds, ordinary zero checks, exhausted covered nonzero checks, exhausted uncovered
+7. Enumerate every FR-028 AC-17 strength through FR-029 AC-17 and AC-19 to AC-27, retaining
+   independent refinement evidence. Test disagreement for verified, falsified (including agreeing replay), inconclusive and
+   cover-unsatisfied outcomes, including zero checks. Test verified CeilingReached with covered
+   bounds; ordinary vacuous/cover-unsatisfied zero checks retain their backend class and record.
+   Exercise every shadow-inconclusive reason with no disagreement, exhausted covered nonzero
+   checks and exhausted uncovered
    bounds, completed sampled and not-run cases. Verified settlement takes no native-observation
    field: record not_run as explicit absence, without an extra probe or fabricated observation. Use the typed execution entry to cause actual
    native wall-clock and memory stops in the named ceiling lane; assert FR-028 AC-24's class,
@@ -91,7 +93,7 @@ lanes and never replace positive QSL evaluation with a verdict double.
 | FR-033-AC-4 | Public encoded-byte guard and checked counts/work; iterative admitted lifecycle | Apply capture-only guard, add a depth cap, recurse during drop or allow arithmetic overflow |
 | FR-033-AC-6/7/10 | Actual same-artifact QSL parity: divergence Failed/CgDefect, assertion-only agreement Inconclusive; real generated verify/falsify controls | Supply a canned native verdict, regenerate away the mutation, ignore pair count or label parity Refuted |
 | FR-033-AC-8 | QSL derives complete declared-key coverage and literal singleton bounds | Treat empty/omitted/unbounded keys as covered or accept duplicate/unknown key |
-| FR-029-AC-6/17; FR-028-AC-17/24 | Closed strengths and ordered disagreement → ceiling → zero → exhausted+covered → Tested; actual record category preserved | Delete a strength row, let zero defeat disagreement/ceiling, promote Proved0 or label a stopped refinement sampled/Tested |
+| FR-029-AC-17 and AC-19 to AC-27; FR-028-AC-17/24 | Closed strengths; cross-outcome disagreement wins, then verified refinement ceiling, ordinary vacuous record, exhausted+covered, completed Tested; all shadow-inconclusive rows and actual record category preserved | Delete a strength row, let zero defeat disagreement/ceiling, promote Proved0 or label a stopped refinement sampled/Tested |
 | FR-033-AC-9 | Same-binding converter and truthful typed capability/refusal/fault readings | Accept another result, invent QSL code/cause or bridge through predicate replay |
 
 Unimplemented canonical conversions, family harnesses or legal cause representations remain

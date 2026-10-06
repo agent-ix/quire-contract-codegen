@@ -11,7 +11,9 @@ relationships:
 ## Description
 
 Verify that each pair of run outcome and replay settlement maps to the QSL terminal value FR-029's
-tables state, and that a falsified run is `Refuted` only with a reproduced replay.
+ordinary source-predicate tables state, and that an ordinary falsified run is `Refuted` only
+with a reproduced replay. Composite parity uses a distinct typed input and planned
+[TC-048](../../replay/matrix/TC-048-composite-parity-replay-binding.md).
 
 ## Test Procedure
 
@@ -21,7 +23,7 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
 3. Map `inconclusive` with the timed-out, memory-exhausted and exhausted-unwind-bound reasons.
 4. Map `inconclusive` with the no-verdict reason.
 5. Map `inconclusive` with the failure-without-counterexample and missing-cover-summary reasons.
-6. Map every outcome and reason, and collect the values.
+6. Map every ordinary source-predicate outcome and reason, and collect the values.
 7. Map `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness`,
    `NoValue`).
 8. Map `falsified` with a non-fault `ReplayRefusal`.
@@ -39,11 +41,14 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     each bare and wrapped in `ReplayPackageError` and `FrameReplayError`.
 13. Map `falsified` with the refusal QSL's `DependencyInput::new` returns for a lock whose only
     defect is one library identity selected twice.
-14. Map `falsified` with no replay settlement, and map each other outcome and reason with one.
+14. Map ordinary source-predicate `falsified` with no `ReplaySettlement`, and map each other
+    ordinary outcome and reason with that input.
 15. Map `falsified` with each `StateClauseReplayError` variant and with a reproduced and an
     inconclusive `StateClauseReplayResult` (FR-024).
-16. Map `verified` with each proof strength, and `falsified` and `inconclusive` of a
-    `bounded_shadow` harness (FR-029-AC-17, planned, IR-241; see Expected Results).
+16. Delegate the planned IR-635 composite strength projection and parity terminal scenarios to
+    [TC-048](../../replay/matrix/TC-048-composite-parity-replay-binding.md), which verifies
+    FR-029 AC-17 and AC-19 to AC-27 under the actual QSL-640 code gate. Keep ordinary input
+    pairing separate from the distinct verified/falsified composite settlement input.
 17. Map the `falsified` state-clause run of `deposit_debiting`, whose post-state value lies outside
     its field's declared range, with the exact unclamped post snapshot (FR-029-AC-18, planned,
     pending QSL-634, IR-460).
@@ -57,7 +62,7 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
    (FR-029-AC-3).
 4. `Failed` (FR-029-AC-4).
 5. Each is `Failed` (FR-029-AC-5).
-6. No value is `Tested` (FR-029-AC-6).
+6. No ordinary source-predicate value is `Tested` (FR-029-AC-6).
 7. Each is `Inconclusive(ReplayParity)` carrying its `DisagreementCause` (FR-029-AC-8).
 8. `Inconclusive(ReplayRefused)` carrying the refusal's catalog code (FR-029-AC-9).
 9. Each is `Failed` (FR-029-AC-10).
@@ -79,12 +84,10 @@ tables state, and that a falsified run is `Refuted` only with a reproduced repla
     `Inconclusive(ReplayRefused)`, and a non-fault `CallSiteRefusal` or
     `DependencyLockError::Input` wrapped in `StateClauseReplayError` is
     `Inconclusive(ReplayRefused)` with its code (FR-029-AC-16).
-16. Enumerate every proof strength FR-028-AC-17 names, assert the set equals the strength table's
-    rows, and map `verified` with each (`production_proved`, the four `shadow_proved_*` strengths
-    `exhaustive`, `sampled`, `not_run` and `inconclusive`, and `refinement_failed`); map `falsified` of a `bounded_shadow` harness and
-    `inconclusive` of a `bounded_shadow` harness (FR-029-AC-17, planned, IR-241): `Proved` for
-    `production_proved` only, `NonProductionProof` carrying the strength for each other, `ShadowCounterexample`
-    for the falsified shadow, with no value for any of them, and the usual value for the inconclusive one.
+16. TC-048 owns the planned closed strength projection, disagreement across backend outcomes,
+    ceiling/resource priority, ordinary shadow-inconclusive rows, vacuous record category and
+    completed parity Proved/Tested outcomes. Interim nonproduction/shadow-counterexample refusals
+    remain only until actual QSL-640 delivery; they are not the final parity map.
 17. The post snapshot holds the exact unclamped value and CG refuses nothing itself, and the run is
     `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, planned, pending
     QSL-634, IR-460). Not built: QSL-634 is not merged, and until it lands the run reads
@@ -99,4 +102,4 @@ by `tc_040_a_fault_in_any_replay_wrapper_is_failed`, which builds each fault wra
 constructible `InternalFault` (QSL bcca433) and asserts `Failed`. Step 15 (FR-029-AC-16, IR-460)
 is covered: the reproduced and the inconclusive results are real `StateClauseReplayResult`s of the
 QSL twin. The state-clause fault readings are step 9's (FR-029-AC-10). Steps 16 and 17 are planned
-(FR-029-AC-17, IR-241; FR-029-AC-18, pending QSL-634) and have no test.
+(IR-635 parity in TC-048; FR-029-AC-18, pending QSL-634) and have no test.
