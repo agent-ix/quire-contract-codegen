@@ -123,11 +123,18 @@ and never replace positive QSL evaluation with a verdict double.
     native fault, exact-limit/refinement-ceiling and agreeing replay:
     Failed/CgDefect wins before any early operand/native setup refusal; do not fabricate absent
     native evidence. Without disagreement, missing required native observation refuses the replay
-    continuing beyond F-1. Combine operand refusal with native fault; native
-    Incomplete or ExecutionFault with exact-limit/refinement-ceiling; then exact-limit with
-    refinement-ceiling. Assert the F-2 through F-5 order, retained native/NativeCause and distinct
-    ExactEvaluation and RefinementCeiling stages. Completed/Refused native evidence cannot supply
-    F-6's verdict; mutate shadow equality/inequality result and pair count independently. Backend
+    continuing beyond F-1. Combine an out-of-domain operand with native Incomplete and with native
+    ExecutionFault, each also under a request admission limit, an exact-evaluation limit and
+    CeilingReached: F-2 is GeneratedFault/Failed retaining its NativeCause before admission.
+    With Completed native, make one operand fail admission and set CeilingReached: F-3 is
+    RefusedInput/ReplayRefused with operand index and QSL code. Exhaust the request's accounting
+    limit while admitting an otherwise valid operand and set CeilingReached: F-4 is
+    Incomplete/Admission with counter, configured limit and count reached, and no exact evaluation.
+    Exhaust QSL's exact limit after admission and set CeilingReached: F-5 is
+    Incomplete/ExactEvaluation; with sufficient limits, CeilingReached reaches F-6
+    Incomplete/RefinementCeiling. Assert F-4, F-5 and F-6 have the same ResourceExhausted terminal
+    value but distinct retained stages. Completed/Refused native evidence cannot supply
+    F-7's verdict; mutate shadow equality/inequality result and pair count independently. Backend
     Kani timeout/memory outcomes stay outside replay and retain ordinary final Incomplete mapping
     under FR-028 AC-2/3; independent refinement ceiling stays AC-24's class. No actual backend stop
     becomes Tested.

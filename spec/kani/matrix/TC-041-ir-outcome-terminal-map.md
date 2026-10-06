@@ -36,6 +36,18 @@ cause, and that the map is one match with no wildcard arm.
 12. Map `Counterexample` with the refusal QSL's `DependencyInput::new` returns for a lock whose
     only defect is one library identity selected twice.
 13. Map `Counterexample` with no replay settlement, and each other `KaniOutcomeKind` with one.
+14. For an IR `Counterexample` carrying a valid falsified composite parity claim, consume a real
+    QSL `CompositeParityReport` from the distinct typed route. Combine Disagreed with native
+    ExecutionFault and an out-of-domain operand. Without Disagreed, use native Incomplete and
+    ExecutionFault, each with an out-of-domain operand, too-small admission and exact limits, and
+    CeilingReached. Inspect the retained native outcome and NativeCause.
+15. With valid identity, Completed native and no Disagreed, exercise an out-of-domain operand with
+    CeilingReached; a request accounting limit reached during admission with CeilingReached; a QSL
+    exact limit reached after admission with CeilingReached; and CeilingReached with sufficient
+    limits. Inspect the operand index/code and each incomplete report stage and counter.
+16. With all earlier rows absent, change the retained shadow verdict and pair count independently,
+    then make both agree. Supply a common-step refusal, a missing report and a report whose
+    `CompositeIdentity` changes one observation member. Inspect the terminal record and category.
 
 ## Expected Results
 
@@ -57,10 +69,25 @@ cause, and that the map is one match with no wildcard arm.
 12. `Inconclusive(ReplayRefused)` carrying `invalid_package` (FR-030-AC-13).
 13. `TerminalPairError::MissingSettlement` for the counterexample and `UnexpectedSettlement` for each
     other kind, with no terminal value (FR-030-AC-14).
+14. Disagreed is F-1 Failed/CgDefect. Each native stop is F-2 GeneratedFault/Failed with its own
+    NativeCause, before admission or exact evaluation despite every later competing condition
+    (FR-030-AC-15).
+15. The invalid operand is F-3 RefusedInput/ReplayRefused with its index and QSL code. Admission
+    accounting is F-4 Incomplete(ResourceExhausted)/Admission with its request counter and no exact
+    evaluation. Exact exhaustion is F-5 Incomplete(ResourceExhausted)/ExactEvaluation, and only
+    after exact evaluation completes does CeilingReached become F-6
+    Incomplete(ResourceExhausted)/RefinementCeiling. The three report stages remain distinct and no
+    case is Tested or Refuted (FR-030-AC-16).
+16. Verdict and count divergence each give F-7 Failed/CgDefect; agreement gives
+    Inconclusive(ScalarAgrees) with CompositeEquality/Equality. A QSL common-step refusal wins
+    over Disagreed and yields Inconclusive(ReplayRefused) with its QSL code. Missing or wrong-claim
+    reports yield no terminal value; the valid composite report is not `UnexpectedSettlement`
+    (FR-030-AC-17).
 
 ## Status
 
-Implemented in `tests/it/terminal_map.rs`. Steps 1 to 13 run, and step 7's inspection is a `syn`
+Steps 1 to 13 are implemented in `tests/it/terminal_map.rs`; steps 14 to 16 are planned for the
+IR-666 code consumer after QSL #645 and IR-665's gate repair. Step 7's inspection is a `syn`
 test over `kani/terminal.rs`. Step 9 maps a `Counterexample` with `ReplaySettlement::Fault`, with
 each fault wrapper FR-029-AC-10 lists (built from QSL's constructible `InternalFault`, QSL
 bcca433), and with each CG-raised failure FR-029-AC-11 lists, in one test traced to FR-030-AC-10.

@@ -45,9 +45,9 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
     ordinary outcome and reason with that input.
 15. Map `falsified` with each `StateClauseReplayError` variant and with a reproduced and an
     inconclusive `StateClauseReplayResult` (FR-024).
-16. Delegate the planned IR-635 composite strength projection and parity terminal scenarios to
-    [TC-048](../../replay/matrix/TC-048-composite-parity-replay-binding.md), which verifies
-    FR-029 AC-17 and AC-19 to AC-27 under the actual QSL-640 code gate. Keep ordinary input
+16. Delegate the planned composite strength projection and QSL FR-358 F-1 to F-7 terminal
+    scenarios to [TC-048](../../replay/matrix/TC-048-composite-parity-replay-binding.md), which
+    verifies FR-029 AC-17 and AC-19 to AC-27 through the IR-666 code consumer. Keep ordinary input
     pairing separate from the distinct verified/falsified composite settlement input.
 17. Map the `falsified` state-clause run of `deposit_debiting`, whose post-state value lies outside
     its field's declared range, with the exact unclamped post snapshot (FR-029-AC-18, planned,
@@ -85,9 +85,10 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
     `DependencyLockError::Input` wrapped in `StateClauseReplayError` is
     `Inconclusive(ReplayRefused)` with its code (FR-029-AC-16).
 16. TC-048 owns the planned closed strength projection, disagreement across backend outcomes,
-    ceiling/resource priority, ordinary shadow-inconclusive rows, vacuous record category and
-    completed parity Proved/Tested outcomes. Interim nonproduction/shadow-counterexample refusals
-    remain only until actual QSL-640 delivery; they are not the final parity map.
+    F-2 native GeneratedFault before F-3 RefusedInput, distinct F-4 Admission/F-5 ExactEvaluation/
+    F-6 RefinementCeiling stages, F-7 comparison, ordinary shadow-inconclusive rows, vacuous record
+    category and completed parity Proved/Tested outcomes. Interim nonproduction and shadow
+    counterexample refusals remain until CG consumes the delivered QSL facade.
 17. The post snapshot holds the exact unclamped value and CG refuses nothing itself, and the run is
     `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, planned, pending
     QSL-634, IR-460). Not built: QSL-634 is not merged, and until it lands the run reads
