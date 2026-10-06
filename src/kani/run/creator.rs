@@ -61,21 +61,30 @@ impl CreatorThread {
 
 /// Checks the actual retained capability, including an outside parent invisible as PID0.
 pub(super) fn require_live(pin: impl AsFd) -> io::Result<()> {
-    let mut events = [PollFd::new(&pin, PollFlags::IN)];
-    poll(&mut events, Some(&Timespec::default()))?;
-    let received = events[0].revents();
-    if received.intersects(PollFlags::IN | PollFlags::HUP) {
+    if terminated(pin)? {
         return Err(io::Error::new(
             io::ErrorKind::BrokenPipe,
             "the positively owned creator has terminated",
         ));
+    }
+    Ok(())
+}
+
+/// Positive termination observation on an already authenticated and retained pidfd. An invalid
+/// descriptor or other poll fault is an error, not a terminated identity or teardown proof.
+pub(super) fn terminated(pin: impl AsFd) -> io::Result<bool> {
+    let mut events = [PollFd::new(&pin, PollFlags::IN)];
+    poll(&mut events, Some(&Timespec::default()))?;
+    let received = events[0].revents();
+    if received.intersects(PollFlags::IN | PollFlags::HUP) {
+        return Ok(true);
     }
     if !received.is_empty() {
         return Err(io::Error::other(
             "creator liveness capability cannot be observed",
         ));
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Arm, inspect, then check actual creator liveness; repeat after any credential transition.

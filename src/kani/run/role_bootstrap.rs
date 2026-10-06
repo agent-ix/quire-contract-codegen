@@ -90,7 +90,9 @@ pub(super) fn prepare_launcher(
     let received = entry
         .receive::<LauncherControl>(LauncherControl::rights_count, initial_deadline)
         .map_err(BootstrapError::Control)?;
-    let LauncherControl::Start { settings } = received.control;
+    let LauncherControl::Start { settings } = received.control else {
+        return Err(BootstrapError::UnexpectedControl);
+    };
     let [creator_pin, caller_pin, inner, outer]: [OwnedFd; 4] =
         received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
             BootstrapError::Control(ControlError::RightsCount {
