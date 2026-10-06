@@ -85,3 +85,9 @@ Round 2, reviewed at d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a. FND-001 and FND-0
 | --- | --- | --- |
 | FND-003 | fixed | d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a: The executor records a close-completion ordinal only after the consumed CallerLease close returns. Publication seals an immutable snapshot holding Option<close ordinal> and the publication ordinal, with no late fill. The harness requires the close ordinal to be present and below the publication ordinal, so early publication fails deterministically whatever the scheduling. The actual INIT/marker/worker predicates are still required. |
 | FND-004 | fixed | d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a: Dispatch goes through the unchanged private production frame-send step: the actual frame and rights, bounded nonblocking, returning a pending-frame state with no ACK wait. Fixture-written bytes are forbidden, send failures are typed coordination failures, and the ACK wait is a separate bounded transition. |
+
+Round 3, reviewed at 52bca0d64f2404aa8c23528a41090f2b91dc4f21.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | 52bca0d64f2404aa8c23528a41090f2b91dc4f21: The close-completion/publication paragraph is rewrapped to 100 columns with identical words (whitespace-only diff from d5d9d63). The 126-character line and the short 71-character break are gone, and no prose line in the paragraph exceeds 100. |

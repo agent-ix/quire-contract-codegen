@@ -18,29 +18,52 @@ Planned production scenarios for [FR-034](../functional/FR-034-caller-death-owne
 CODE builds on the merged containment code slice (PR #295) and remains planned; this amendment does
 not require completion of all parent IR-241 work. No executable coverage is claimed. Use the real
 Cargo guardian as namespace PID 1, the real bounded executor, and explicit helper configuration as a
-library consumer. Tiny research probes are not production fixtures. AC-23/26 caller-death scenarios
-use the ordinary public execution API without `guardian-test-support`; the mandatory AC-24 private
-lease-EOF oracle uses the separate documented opt-in fixture operation.
+library consumer. Tiny research probes are not production fixtures. AC-23/26 exact early-stage
+caller-death scenarios use the opt-in fixture operation with shared
+private sequence prefixes; positive post-Dispatch scenarios use the ordinary feature-off public API.
+The mandatory AC-24 private lease-EOF oracle uses that same documented opt-in fixture operation.
 [TC-039](./TC-039-bounded-proof-ceilings.md) retains its broader ceiling/refinement scenarios.
 
 ## Test Procedure
 
-1. Use the separate named guardian-feature-off Cargo invocation to build the package library and
-   real `quire-kani-guardian` from the same source/build inputs in the owning target directory with
-   guardian-test-support compiled off. Do not enable it through a self dev-dependency; AC-23/26 run
-   against this normal feature-off library. Supply the required explicit helper executable path to a
-   separate original-caller fixture. Keep that caller in its own positively verified fixture
-   session/group so group signals reach no other work. Retain controller-owned monitor/INIT
-   identities and pidfds. Use observable production barriers at Bootstrap before claim,
-   ClaimedBootstrap before lease connection, InitReady before Dispatch and immediately after
-   Dispatch; no production bypass, sleeps or host-wide scan establishes a successful assertion.
-2. At each barrier, kill only the original fixture caller, then its whole fixture process group in a
-   separate run. Use SIGKILL, abort and a forced process-kill model of OOM without host memory
-   pressure. Before Dispatch no production backend marker appears, even if gate EOF starts guardian
-   bootstrap. Absent/closed lease and connection deadline cause bounded helper exit and artifact
-   cleanup. After session separation, observe the guardian remains outside caller job-control/hangup
-   delivery and handles lease loss. Verify its SID/PGID isolation at Ready and retain the positive
-   group-death cleanup observation.
+1. Use the separate named guardian-feature-off Cargo invocation to build the normal package library
+   and real `quire-kani-guardian` from matching source/build inputs in the owning target directory.
+   Do not enable the feature through a self dev-dependency. Supply the required explicit helper path
+   to the original-caller fixture using the ordinary public API. Keep that caller in its own
+   positively verified dedicated session/group. Observe a positive production backend startup marker
+   and pin its actual escaped worker before immediate post-Dispatch caller death; no sleep or host
+   scan establishes success. Feature-on early-stage cases require the matched build from step 12
+   before invoking the single operation, not unavailable private reads from the feature-off API.
+2. In separate feature-on cases select bounded shared-sequence prefixes as data at BeforeMonitor,
+   ClaimedGated, ClaimedBootstrap and InitReady. The normal executor traverses all these same
+   functions in the same order: claim actual INIT and bind its observer with gate retained, release
+   gate, then authenticate Ready. Require actual unconditional monotonic stage publication, no
+   copied orchestrator, feature branch, replacement transition or production I/O. At the selected
+   prefix seal the stage and actual owned caller/monitor/INIT start and namespace identities. Send
+   one bounded typed witness on the harness-created anonymous CLOEXEC reporting socketpair, with
+   exactly one cloned already-validated INIT pidfd when INIT exists. BeforeMonitor reports typed
+   NoInit and actual no-spawn/lease/pair state with no rights, never a fabricated process or
+   descriptor. After complete send, self-SIGKILL the original caller or its positively owned
+   dedicated group before the next shared transition; no ACK or controller pause. Authenticate
+   sender credentials against the harness's unreaped caller Child/start/pidfd. Receive safe owned
+   CLOEXEC rights; reject wrong sender, unknown, truncated or extra/missing rights. Test receipt
+   while INIT is live and after it has died: verify live start/namespace when available, and retain
+   the validated transferred pin after death rather than reopening a reused PID. Require confirmed
+   caller/INIT death and no backend marker at every initialized early prefix; NoInit instead
+   requires no actual INIT/marker, closed lease/pair and termination of any other actually owned
+   setup child. ClaimedGated must positively retain its gate; ClaimedBootstrap must not pretend the
+   released gate is retained. Record failure before independent owned emergency cleanup. Partial
+   report, unavailable stage/pin or failed coordination fails and invokes unchanged cleanup while
+   the caller lives, within the original deadline. Repeat feature-off public post-Dispatch caller
+   and group SIGKILL using step 1's positive marker. Retain abort and forced process-kill OOM-model
+   cases without host memory pressure. Absent/closed lease and connection deadline cause bounded
+   helper exit; no production Dispatch follows gate EOF. Verify guardian SID/PGID isolation before
+   Ready/Dispatch and operational lease-loss cleanup after caller-group death; before session
+   separation the gated INIT remains startup-group owned. The intentional-death operation does not
+   return or fabricate a caller result. The surviving harness judges its witness, pins and marker
+   before its own emergency cleanup. The measured queued-pidfd probe establishes only the Linux
+   descriptor facility; actual original-caller Rust stage coverage and these assertions remain
+   mandatory CODE gates.
 3. Kill the actual guardian INIT through its pinned pidfd before its peer/Ready claim, in InitReady,
    and immediately after Dispatch. Require no pre-Dispatch backend marker and kernel cancellation of
    post-Dispatch descendants. With a live original caller, even confirmed teardown beside valid
@@ -175,13 +198,18 @@ lease-EOF oracle uses the separate documented opt-in fixture operation.
     feature-off production caller. The bounded executor must refuse actual artifact identity before
     backend Dispatch in both cases; no supplied epoch/version/digest may bless a pair. Build a
     normal feature-off consumer in its separate invocation and require a compile-fail check
-    specifically for the absent fixture operation. Run ordinary public caller-death controls against
-    the actual feature-off library, not a feature-on library which simply avoids calling the
-    operation. Inspect exactly one documented feature-on fixture operation and the absence of public
-    lease, process-ownership, cancellation or cleanup-deferring callback exports. Inspect shared
-    private production stage/cleanup paths for unconditional behavior alongside runtime
-    observations. Record structural inspection separately from runtime/compile Tests; no
-    feature-dependent stage bypass or resource/identity weakening is permitted.
+    specifically for the absent fixture operation. Run ordinary public caller-death controls for
+    positive post-Dispatch death against the actual feature-off library. Exact early-stage controls
+    use the feature-on shared-prefix operation; a feature-on library avoiding its operation cannot
+    replace the feature-off controls. Inspect exactly one documented feature-on fixture operation
+    and the absence of public lease, process-ownership, cancellation or cleanup-deferring callback
+    exports. Inspect shared private production stage/cleanup paths for one shared sequence and
+    identical functions/order selected as all-stages or prefix data, and unconditional read-only
+    stage publication. Only the single fixture item may be feature-gated; no production feature
+    branch or copied orchestrator may implement early-stage tests. Keep this structural evidence
+    alongside actual runtime observations and the mandatory AC-24 mutants. Record structural
+    inspection separately from runtime/compile Tests; no feature-dependent stage bypass or
+    resource/identity weakening is permitted.
 14. Through the feature-on operation, fail stage observation, overflow bounded observation storage
     and fail owned stop/T-state/publication/resume coordination separately. Verify publication
     cannot precede actual lease close and that SIGCONT alone yields no passing EOF predicate. Apply
