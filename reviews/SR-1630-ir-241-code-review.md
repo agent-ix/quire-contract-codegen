@@ -354,3 +354,19 @@ not implemented, so IR-241 remains incomplete) and 0 open. Runtime evidence is u
 product tested at the round-6 head; only a comment changed since. Full rebased CI must still be
 re-run after its earlier failure, and the second Linux Kani run has not been released. Neither is
 claimed here.
+
+Round 8 (narrow regression check; the exact head is in the private tracker marker): clean, with
+no new findings and no outcome changes. Full rebased CI failed only at rustdoc, on two broken
+intra-doc links, so the default test lane never ran. The fix touches only those two doc comments:
+
+- `execute.rs`: `batch_launch_command` now links `super::namespace::BackendCommand`, the type it
+  actually returns.
+- `launch.rs`: the group-leader sentence now links `run_monitored`, which sets
+  `.process_group(0)`, replacing the removed `run_launcher_with_timeout`.
+
+Both new links resolve to the defining items and describe the code truthfully. No code, test,
+assertion, spec, import or lint `allow` changed. The latest SR-1630 to SR-1633 outcomes stay 20
+fixed, 1 deferred (FND-011, deferred to IR-639; the guardian is not implemented, so IR-241 is
+incomplete) and 0 open. Actual evidence for this head: `RUSTDOCFLAGS=-Dwarnings cargo doc
+--locked --no-deps --document-private-items` exited 0. Full CI must be re-run, including the
+default test lane it never reached, and the second Linux Kani run has not been released.
