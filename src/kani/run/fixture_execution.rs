@@ -775,6 +775,6 @@ fn production_error(error: BoundedLaunchError) -> GuardianFixtureError {
         BoundedLaunchError::Guardian { kind, detail } => {
             GuardianFixtureError::Guardian { kind, detail }
         }
-        BoundedLaunchError::Unavailable(error) => GuardianFixtureError::Io(error),
+        BoundedLaunchError::Unavailable { cause, .. } => GuardianFixtureError::Io(cause),
     }
 }

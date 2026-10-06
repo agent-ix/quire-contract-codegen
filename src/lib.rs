@@ -125,9 +125,9 @@ pub use kani::output::report::{
     OtherCheckClass,
 };
 pub use kani::run::execute::{
-    execute_kani_obligation, execute_kani_obligations, KaniBatchInvocation, KaniExecutionEvidence,
-    KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun, OUTPUT_OVER_LIMIT_CODE,
-    OUTPUT_UNREAD_CODE,
+    execute_kani_obligation, execute_kani_obligations, BackendStdioDescriptor, KaniBatchInvocation,
+    KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun,
+    KaniStartupAdmissionCause, KaniStartupCapability, OUTPUT_OVER_LIMIT_CODE, OUTPUT_UNREAD_CODE,
 };
 #[cfg(feature = "guardian-test-support")]
 pub use kani::run::fixture::{

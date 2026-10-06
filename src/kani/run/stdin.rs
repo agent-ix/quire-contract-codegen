@@ -23,7 +23,46 @@ pub(super) enum OriginalStdin {
     Closed,
 }
 
+#[derive(Debug)]
+pub(super) enum StdinInventoryError {
+    Socket,
+    Inspection(io::Error),
+}
+
+impl std::fmt::Display for StdinInventoryError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Socket => formatter.write_str("original backend stdin has socket type"),
+            Self::Inspection(error) => {
+                write!(formatter, "captured backend stdin inspection: {error}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for StdinInventoryError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Socket => None,
+            Self::Inspection(error) => Some(error),
+        }
+    }
+}
+
 impl OriginalStdin {
+    /// Inspect the actual retained Open pin at eligible launch, never the now-reusable fd0.
+    /// Closed retains its ordinary-exec meaning without issuing fstat on an absent descriptor.
+    pub(super) fn inspect_backend(&self) -> Result<(), StdinInventoryError> {
+        let Self::Open(descriptor) = self else {
+            return Ok(());
+        };
+        let actual = rustix::fs::fstat(descriptor)
+            .map_err(|error| StdinInventoryError::Inspection(error.into()))?;
+        if rustix::fs::FileType::from_raw_mode(actual.st_mode) == rustix::fs::FileType::Socket {
+            return Err(StdinInventoryError::Socket);
+        }
+        Ok(())
+    }
     /// The caller must keep standard descriptors stable during this initial snapshot, as required
     /// by std's Stdin borrowing contract. This function never changes original descriptor flags.
     #[cfg(target_os = "linux")]
@@ -174,5 +213,27 @@ mod tests {
             rustix::io::fcntl_getfd(&source).unwrap(),
             rustix::io::FdFlags::empty()
         );
+    }
+
+    /// Trace: FR-034-AC-36.
+    #[test]
+    fn open_actual_socket_stdin_is_refused_by_owned_inventory() {
+        let (source, _peer) = std::os::unix::net::UnixStream::pair().unwrap();
+        rustix::io::fcntl_setfd(&source, rustix::io::FdFlags::empty()).unwrap();
+        let captured = OriginalStdin::capture(source.as_fd()).unwrap();
+        assert!(matches!(
+            captured.inspect_backend(),
+            Err(StdinInventoryError::Socket)
+        ));
+    }
+
+    /// Trace: FR-034-AC-36.
+    #[test]
+    fn original_cloexec_socket_is_closed_and_has_no_backend_socket_inventory() {
+        let (source, _peer) = std::os::unix::net::UnixStream::pair().unwrap();
+        rustix::io::fcntl_setfd(&source, rustix::io::FdFlags::CLOEXEC).unwrap();
+        let captured = OriginalStdin::capture(source.as_fd()).unwrap();
+        assert!(matches!(captured, OriginalStdin::Closed));
+        assert!(captured.inspect_backend().is_ok());
     }
 }
