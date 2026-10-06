@@ -70,6 +70,15 @@ Reviewed at d5d9d63b600b51a98b66db7b0b2396e6aa5ebb4a. Found while confirming FND
 | --- | --- | --- | --- |
 | FND-005 | low | A FR-034 prose line added this round is 126 characters (line 247: "snapshot after a later close. If publication is duplicated ..."), and the preceding line 242 breaks after only 71. The rest of FR-034's prose wraps at 100, and the author receipt reports "prose<=100 outside tables: PASS", which this line contradicts. Rewrap the paragraph to 100 columns. | spec/kani/functional/FR-034-caller-death-ownership.md:242-248 |
 
+## New findings (amended scope)
+
+Reviewed at 893ac1afb5a851c9ccc02528489af700b198c737. The same PR's spec owner amended AC-23/26/27/28 and TC-049 (exact early-stage witness allocation).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | The amended early-stage witness list (BeforeMonitor, ClaimedGated, ClaimedBootstrap, InitReady) skips the FR-034 stage table's Bootstrap row: monitor spawned, INIT not yet claimed, gate retained. Caller death there is the window FR-034 was written for: the caller-owned gate closes before the parent-death chain is armed, and gate EOF is the only release path. The previous TC-049 step 1 required a "Bootstrap before claim" barrier (line 34 at 52bca0d). No step now kills the caller at that stage; step 5 covers it only with a live caller. AC-23's "gated" now means ClaimedGated, which is after claim. Add an exact Bootstrap prefix whose witness carries a cloned owned monitor pidfd (INIT typed unclaimed, no fabricated INIT pin) and asserts no backend marker and bounded guardian exit after gate EOF. Otherwise state which scenario exercises caller death in that window. | spec/kani/matrix/TC-049-caller-death-ownership.md:37-40, spec/kani/functional/FR-034-caller-death-ownership.md:138 |
+| FND-007 | medium | The report socketpair is described as CLOEXEC but may be "mapped ... to the fixture's reporting stdio". A descriptor at fd 0-2 is inherited across exec, so it reaches the bwrap monitor, INIT, guardian and backend unless every spawn explicitly overrides that stdio slot. FR-034 forbids this (line 258: the report channel shall never "enter the helper/backend inheritance set"), but TC-049 never checks it: step 9 (line 122) verifies only the caller lease endpoint and bootstrap-control writer. A leaked copy also keeps the harness's receive side from seeing EOF and lets the guardian or backend write into the witness channel. Add the report channel to step 9's runtime inheritance checks for the monitor, INIT, guardian, backend and an unrelated exec. Either require a non-stdio CLOEXEC auxiliary descriptor, or require that every child's stdio slot holding it is overridden. | spec/kani/functional/FR-034-caller-death-ownership.md:250-258, spec/kani/matrix/TC-049-caller-death-ownership.md:122-124 |
+
 ## Dispositions
 
 Round 1, reviewed at ef9ee8ec51b81c4f9a967c6ea738e16cc9e4528d.
