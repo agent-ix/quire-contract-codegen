@@ -190,10 +190,18 @@ authored).
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
 - E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
-  operation-application preimage; QSL carries it as opaque. The following owning rule is measured in pushed ADR-013 O-09/FR-357 on unmerged QSL change #650; that
+  operation-application preimage. The planned operator-parity contract requires QSL to
+  recompute and verify that digest and refuse a mismatch. The positional owning rule below is
+  measured in pushed ADR-013 O-09/FR-357 on unmerged QSL change #650; that
   branch's spec and source still carry the obligation digest without recomputing or checking it.
-  No scalar digest-verification API or exact encoded-member spelling is established there;
-  CODE waits for the merged owning contract and actual CG conformance.
+  No scalar digest-verification API or exact encoded-member spelling is established there.
+  The newer QSL-stated owning decision requires operator digest recomputation/refusal, but is
+  QSL-STATED until new pushed normative text and implementation are measured. CODE waits for
+  that merged owning contract and actual CG/QSL conformance: the scalar bytes must exactly match
+  QSL O-09's application preimage through ADR-013 section 2's one `quire-canonical` encoder;
+  actual QSL must accept a CG-minted matching identity and refuse a mismatched digest. Exact
+  scalar JSON member/tag/domain spelling remains unavailable, so no local recipe is invented.
+  Function/clause carry-only contracts and existing function/frame encoding remain unchanged.
   The subject is the claimed operator's FR-322 application node id with its authentic O-07
   `CheckedOccurrence` key (node, `expression` role, ordinal), the existing obligation kind and
   one argument per operand position in operand/harness draw order. Each entry is its position
