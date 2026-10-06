@@ -21,14 +21,6 @@ pub fn guardian_path() -> &'static std::path::Path {
 }
 
 /// Capture original stdin once, before any integration request creates guardian controls.
-pub fn original_stdin() -> &'static quire_contract_codegen::OriginalStdin {
-    use std::{os::fd::AsFd, sync::OnceLock};
-    static ORIGINAL: OnceLock<quire_contract_codegen::OriginalStdin> = OnceLock::new();
-    ORIGINAL.get_or_init(|| {
-        quire_contract_codegen::OriginalStdin::capture(std::io::stdin().as_fd())
-            .expect("capture the integration caller's known-valid original stdin")
-    })
-}
 
 /// Shared Kani command/report fixture builders, also used by library unit tests.
 pub(crate) mod kani_run;

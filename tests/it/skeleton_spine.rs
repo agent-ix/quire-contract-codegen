@@ -1228,7 +1228,6 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
     let directory = write_crate(harness, subject);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         guardian_path: crate::common::guardian_path(),
-        original_stdin: crate::common::original_stdin(),
         installation: &installation,
         harness: harness.into(),
         crate_directory: &directory,

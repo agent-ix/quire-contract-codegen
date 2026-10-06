@@ -61,8 +61,6 @@ pub struct KaniExecutionRequest<'a> {
     /// dependency features through the consumer's declared features. A build from this package's
     /// own manifest can compile a different library artifact and is refused.
     pub guardian_path: &'a Path,
-    /// Original backend stdin captured before any control pair or pipe is created.
-    pub original_stdin: &'a super::stdin::OriginalStdin,
     /// The generated harness.
     pub harness: KaniExecutableHarness<'a>,
     /// Crate root whose `src/lib.rs` contains the harness source byte-for-byte.
@@ -241,6 +239,8 @@ pub struct KaniExecutionEvidence {
     pub ceilings: crate::kani::identity::ProofCeilings,
     /// Actual backend-tree memory mechanism and observed peak.
     pub memory: MemoryObservation,
+    /// Hard report-content cap, separately enforced from the identity's whole-run memory ceiling.
+    pub report_cap_bytes: u64,
     /// Every symbolic argument and its identity bounds.
     pub symbolic_arguments: Vec<crate::kani::identity::SymbolicArgumentBounds>,
     /// Contract role of a contract harness; `None` for an exact-scalar harness, whose claim
@@ -299,6 +299,7 @@ impl ReportedExecution {
     fn with_memory(self, memory: MemoryObservation) -> KaniExecutionEvidence {
         KaniExecutionEvidence {
             memory,
+            report_cap_bytes: super::REPORT_CONTENT_BYTES,
             ceilings: self.ceilings,
             symbolic_arguments: self.symbolic_arguments,
             kind: self.kind,
@@ -340,8 +341,11 @@ pub struct KaniBatchInvocation {
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    let deadline = Instant::now().checked_add(request.harness.view().ceilings.wall_clock);
+    let stdin = super::stdin::OriginalStdin::capture_original()
+        .map_err(|cause| KaniExecutionRefusal::MemoryMechanismUnavailable { cause })?;
     require_in_crate(request)?;
-    run_single(request)
+    run_single(request, &stdin, deadline)
 }
 
 /// Refuses a request whose crate's library source does not contain its harness's generated
@@ -366,6 +370,7 @@ fn require_in_crate(request: &KaniExecutionRequest<'_>) -> Result<(), KaniExecut
 /// failure to start it to the refusal that names the launcher.
 fn start(
     request: &KaniExecutionRequest<'_>,
+    stdin: &super::stdin::OriginalStdin,
     command: super::namespace::BackendCommand,
     timeout: Duration,
     harnesses: NonZeroUsize,
@@ -381,7 +386,7 @@ fn start(
     run_bounded_launcher(
         command,
         request.guardian_path,
-        request.original_stdin,
+        stdin,
         report_path,
         ceilings,
         harnesses,
@@ -459,14 +464,16 @@ fn evidence_of(
 /// The run of one harness whose presence in the crate has been checked.
 fn run_single(
     request: &KaniExecutionRequest<'_>,
+    stdin: &super::stdin::OriginalStdin,
+    deadline: Option<Instant>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    let deadline = Instant::now().checked_add(request.harness.view().ceilings.wall_clock);
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
     let _cleanup = ReportCleanup(&report_path);
     let (arguments, command) = launch_command(request, &report_path);
     let launch = start(
         request,
+        stdin,
         command,
         request.harness.view().ceilings.wall_clock,
         NonZeroUsize::MIN,
@@ -528,6 +535,11 @@ pub struct KaniGroupRun {
 pub fn execute_kani_obligations(
     requests: &[KaniExecutionRequest<'_>],
 ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {
+    if requests.is_empty() {
+        return Ok(Vec::new());
+    }
+    let stdin = super::stdin::OriginalStdin::capture_original()
+        .map_err(|cause| KaniExecutionRefusal::MemoryMechanismUnavailable { cause })?;
     for request in requests {
         require_in_crate(request)?;
     }
@@ -536,8 +548,13 @@ pub fn execute_kani_obligations(
         .map(|group| KaniGroupRun {
             members: group.iter().map(|(position, _)| *position).collect(),
             evidence: match group.as_slice() {
-                [(_, only)] => run_single(only).map(|evidence| vec![evidence]),
-                _ => run_group(&group),
+                [(_, only)] => run_single(
+                    only,
+                    &stdin,
+                    Instant::now().checked_add(only.harness.view().ceilings.wall_clock),
+                )
+                .map(|evidence| vec![evidence]),
+                _ => run_group(&group, &stdin),
             },
         })
         .collect())
@@ -568,21 +585,10 @@ fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest
     first.harness.view().ceilings == other.harness.view().ceilings
         && first.installation.launcher == other.installation.launcher
         && first.guardian_path == other.guardian_path
-        && same_stdin(first.original_stdin, other.original_stdin)
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
         && without_selection(first.harness.view().options)
             == without_selection(other.harness.view().options)
-}
-
-fn same_stdin(first: &super::stdin::OriginalStdin, other: &super::stdin::OriginalStdin) -> bool {
-    match (first, other) {
-        (super::stdin::OriginalStdin::Closed, super::stdin::OriginalStdin::Closed) => true,
-        (super::stdin::OriginalStdin::Open(first), super::stdin::OriginalStdin::Open(other)) => {
-            std::ptr::eq(first, other)
-        }
-        _ => false,
-    }
 }
 
 /// `options` with every `--harness <path> --exact` selection removed.
@@ -656,6 +662,7 @@ fn batch_launch_command(
 /// The run of a group of more than one harness, in one process.
 fn run_group(
     group: &[(usize, &KaniExecutionRequest<'_>)],
+    stdin: &super::stdin::OriginalStdin,
 ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
     let (Some((_, first)), Some(count)) = (group.first(), NonZeroUsize::new(group.len())) else {
         return Ok(Vec::new());
@@ -671,7 +678,15 @@ fn run_group(
     remove_stale_report(&report_path)?;
     let _cleanup = ReportCleanup(&report_path);
     let (arguments, command) = batch_launch_command(first, &selections, &report_path);
-    let launch = start(first, command, timeout, count, &report_path, deadline)?;
+    let launch = start(
+        first,
+        stdin,
+        command,
+        timeout,
+        count,
+        &report_path,
+        deadline,
+    )?;
     let report = launch.report;
     let (exited_successfully, exit_code, text) = match settle(launch.outcome)? {
         Concluded::Completed {
@@ -1049,7 +1064,6 @@ mod classification_tests {
         test_support::{report, state_frame_harness, COVER_NO, COVER_OK, PASSED},
     };
     use std::path::PathBuf;
-    static CLOSED: super::super::stdin::OriginalStdin = super::super::stdin::OriginalStdin::Closed;
 
     /// A precondition harness asserts nothing; its only property is its cover. The same report
     /// that is a vacuous proof for any other harness therefore decides by the cover alone for a
@@ -1120,7 +1134,6 @@ mod classification_tests {
         let request = KaniExecutionRequest {
             installation: &installation,
             guardian_path: Path::new("/unused-helper"),
-            original_stdin: &CLOSED,
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: Path::new("/crate"),
             target_directory: Path::new("/target"),
@@ -1228,7 +1241,7 @@ mod planning_tests {
     };
     use std::path::PathBuf;
     const T: Duration = Duration::from_secs(30);
-    static CLOSED: super::super::stdin::OriginalStdin = super::super::stdin::OriginalStdin::Closed;
+
     fn member(module: &str, harness: &str, unwind: u32) -> StateFrameHarness {
         let mut built = named_state_frame_harness(
             module,
@@ -1270,7 +1283,6 @@ mod planning_tests {
             .map(|harness| KaniExecutionRequest {
                 installation: &installation,
                 guardian_path: Path::new("/unused-helper"),
-                original_stdin: &CLOSED,
                 harness: harness.into(),
                 crate_directory: Path::new("/unused-crate"),
                 target_directory: Path::new("/unused-target"),
@@ -1316,7 +1328,6 @@ mod planning_tests {
             let request = KaniExecutionRequest {
                 installation: &installation,
                 guardian_path: Path::new("/unused-helper"),
-                original_stdin: &CLOSED,
                 harness: (&harness).into(),
                 crate_directory: Path::new("/crate"),
                 target_directory: Path::new("/target"),

@@ -20,7 +20,10 @@ use nix::{
 use rustix::process::{pidfd_open, PidfdFlags};
 use serde::{Deserialize, Serialize};
 
-use super::creator;
+use super::{
+    control::{ControlError, RoleEndpoint},
+    creator,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -50,13 +53,14 @@ pub(super) struct LauncherNamespace {
 }
 
 /// Minted only after actual outer-PID1, mapped identity, arm and private-proc verification.
-pub(super) struct PreparedOuter {
+pub(super) struct PreparedOuter<'bootstrap> {
     namespace: NamespaceIdentity,
     launcher: OwnedFd,
     outer: OwnedFd,
+    bootstrap: &'bootstrap RoleEndpoint,
 }
 
-impl PreparedOuter {
+impl PreparedOuter<'_> {
     pub(super) fn namespace(&self) -> NamespaceIdentity {
         self.namespace
     }
@@ -66,13 +70,18 @@ impl PreparedOuter {
     }
 
     pub(super) fn require_creator_live(&self) -> Result<(), SetupError> {
-        creator::require_live(&self.launcher).map_err(SetupError::Creator)
+        creator::require_live(&self.launcher).map_err(SetupError::Creator)?;
+        self.bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(SetupError::Bootstrap)
     }
 }
 
 #[derive(Debug)]
 pub(super) enum SetupError {
     Creator(io::Error),
+    Bootstrap(ControlError),
     TaskCensus(io::Error),
     NotSingleThreaded,
     NamespaceIdentity(io::Error),
@@ -109,6 +118,7 @@ impl std::error::Error for SetupError {
             | Self::UidMap(error)
             | Self::GidMap(error)
             | Self::ProcIdentity(error) => Some(error),
+            Self::Bootstrap(error) => Some(error),
             Self::Unshare(error)
             | Self::Session(error)
             | Self::MakeMountsPrivate(error)
@@ -144,6 +154,7 @@ pub(super) fn require_single_thread() -> Result<(), SetupError> {
 /// L arms and checks the actual creating-thread pin before setup and after mapping changes.
 pub(super) fn prepare_launcher(
     creator_pin: &OwnedFd,
+    bootstrap: &RoleEndpoint,
     caller_uid: u32,
     caller_gid: u32,
 ) -> Result<LauncherNamespace, SetupError> {
@@ -157,6 +168,10 @@ pub(super) fn prepare_launcher(
         return Err(SetupError::MappingMismatch);
     }
     creator::arm_parent_death(creator_pin).map_err(SetupError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(SetupError::Bootstrap)?;
     let original_mount =
         NamespaceIdentity::read("/proc/self/ns/mnt").map_err(SetupError::NamespaceIdentity)?;
     let original_pid =
@@ -191,6 +206,10 @@ pub(super) fn prepare_launcher(
     // Mapping/credential changes can clear PDEATH. Reinstallation plus the actual nonleader pin
     // closes the before-arm race; getppid(TGID) cannot substitute for that thread capability.
     creator::arm_parent_death(creator_pin).map_err(SetupError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(SetupError::Bootstrap)?;
     Ok(LauncherNamespace {
         original_mount,
         original_pid,
@@ -201,11 +220,12 @@ pub(super) fn prepare_launcher(
 }
 
 /// O arms actual L liveness before private mounts or ANY inner child creation.
-pub(super) fn prepare_outer(
+pub(super) fn prepare_outer<'bootstrap>(
     launcher_pin: OwnedFd,
+    bootstrap: &'bootstrap RoleEndpoint,
     original_mount: NamespaceIdentity,
     original_pid: NamespaceIdentity,
-) -> Result<PreparedOuter, SetupError> {
+) -> Result<PreparedOuter<'bootstrap>, SetupError> {
     require_single_thread()?;
     if rustix::process::getpid().as_raw_nonzero().get() != 1
         || rustix::process::getuid().as_raw() != 0
@@ -217,6 +237,10 @@ pub(super) fn prepare_outer(
     }
     // The outside parent appears as PID0 in O. The retained real L pidfd supplies liveness.
     creator::arm_parent_death(&launcher_pin).map_err(SetupError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(SetupError::Bootstrap)?;
     let current_mount =
         NamespaceIdentity::read("/proc/self/ns/mnt").map_err(SetupError::NamespaceIdentity)?;
     if current_mount == original_mount {
@@ -267,12 +291,17 @@ pub(super) fn prepare_outer(
         return Err(SetupError::ProcNamespaceMismatch);
     }
     creator::require_live(&launcher_pin).map_err(SetupError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(SetupError::Bootstrap)?;
     let outer = pidfd_open(rustix::process::getpid(), PidfdFlags::NONBLOCK)
         .map_err(|error| SetupError::LauncherIdentity(error.into()))?;
     Ok(PreparedOuter {
         namespace: current_pid,
         launcher: launcher_pin,
         outer,
+        bootstrap,
     })
 }
 

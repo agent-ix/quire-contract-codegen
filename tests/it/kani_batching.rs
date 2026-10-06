@@ -165,7 +165,6 @@ impl Lane {
         assert_eq!(harness.identity.ceilings.wall_clock, timeout);
         KaniExecutionRequest {
             guardian_path: crate::common::guardian_path(),
-            original_stdin: crate::common::original_stdin(),
             installation: &self.installation,
             harness: harness.into(),
             crate_directory: &self.crate_directory,

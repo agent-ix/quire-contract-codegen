@@ -2,7 +2,7 @@
 
 use quire_contract_codegen::{
     execute_kani_obligation, Artifact, KaniExecutableHarness, KaniExecutionRequest,
-    KaniInstallation, OriginalStdin, StateFrameHarness, StateFrameIdentity,
+    KaniInstallation, StateFrameHarness, StateFrameIdentity,
 };
 use serde::Deserialize;
 use std::{
@@ -109,6 +109,10 @@ fn read_invocation(path: &Path) -> Result<Invocation, io::Error> {
 
 fn run() -> Result<(), String> {
     let started = Instant::now();
+    // This packaged caller exercises ordinary closed-at-exec stdin through actual descriptor
+    // flags. The public execution API captures it internally; no request can override stdin.
+    rustix::io::fcntl_setfd(std::io::stdin(), rustix::io::FdFlags::CLOEXEC)
+        .map_err(|error| error.to_string())?;
     // This process owns its dedicated session/group before any monitor can exist.
     #[cfg(target_os = "linux")]
     rustix::process::setsid().map_err(|error| error.to_string())?;
@@ -118,9 +122,6 @@ fn run() -> Result<(), String> {
         return Err("expected one invocation document".to_owned());
     }
     let invocation = read_invocation(Path::new(&invocation)).map_err(|error| error.to_string())?;
-    // Fixtures explicitly select Closed; Rust startup's standard-descriptor sanitization is not
-    // used as evidence of closed-at-exec backend behavior.
-    let stdin = OriginalStdin::Closed;
     match invocation {
         Invocation::Public { guardian_path, run } => {
             let harness = StateFrameHarness {
@@ -133,7 +134,6 @@ fn run() -> Result<(), String> {
                     launcher: run.launcher,
                 },
                 guardian_path: &guardian_path,
-                original_stdin: &stdin,
                 harness: KaniExecutableHarness::from(&harness),
                 crate_directory: &run.crate_directory,
                 target_directory: &run.target_directory,
@@ -169,7 +169,6 @@ fn run() -> Result<(), String> {
                 arguments: &run.arguments,
                 directory: &run.directory,
                 environment: &run.environment,
-                original_stdin: &stdin,
                 report_path: &run.report_path,
                 deadline,
                 ceilings: run.ceilings,

@@ -1,6 +1,6 @@
 //! Opt-in TC-049 observation contract. The harness judges raw facts after owned cleanup.
 
-use super::{launch::GuardianFailureKind, stdin::OriginalStdin};
+use super::launch::GuardianFailureKind;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
@@ -70,8 +70,6 @@ pub struct GuardianFixtureRequest<'a> {
     pub directory: &'a Path,
     /// Environment additions applied to the ordinary inherited environment.
     pub environment: &'a [(OsString, OsString)],
-    /// Explicit original backend stdin, captured before controls exist.
-    pub original_stdin: &'a OriginalStdin,
     /// Assigned report path; it is not created by bootstrap.
     pub report_path: &'a Path,
     /// Original deadline, shared by all coordination and cleanup observations.
