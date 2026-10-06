@@ -803,30 +803,93 @@ report inside the execution call. No returned io::Error, refusal or other Result
 cleanup authority; dropping an error or guard after return shall not be a cleanup mechanism. CODE
 shall introduce no post-return cleanup thread, daemon or hidden custodian to achieve bounded return.
 
-The lifecycle guarantee has the explicit kernel fault precondition that SIGKILL is delivered and
-PID-namespace teardown completes within the original bounded settlement window. Every settlement,
-Drop and join observation allowance shall be clamped to the remaining original monotonic deadline;
-existing lease-close/cleanup caps are ceilings inside that window, not an additional 250 ms or five
-seconds of grace. No reset, extra timeout or post-return observation extends T. If actual owned-role
-or creator-thread settlement cannot be confirmed in that window, then execution shall return only a
-typed settlement-unconfirmed Err, with no KaniExecutionEvidence, verdict, outcome or confirmed-cleanup
-claim, even beside retained valid report bytes. This is an unavailable-confirmation observation,
-not a positive diagnosis of D-state, a kernel bug or any particular cause.
+The request's original whole-run bound T includes work and settlement. CODE shall use one named,
+non-caller-tunable SETTLE_RESERVE R = 1 second, with the effective finite reserve allocated inside T
+below. The [TC-049 settlement reserve research receipt](../matrix/TC-049-caller-death-ownership.md#settlement-reserve-research-receipt)
+derives R from max(1 second, ten times the measured P99 representative kernel-topology settlement),
+rounded to the least whole-second duration greater than or equal to that maximum; an integral
+boundary is unchanged. This recorded research selects the SPEC allocation, not product acceptance.
+Actual integrated production whole-tree settlement shall be remeasured as a mandatory CODE gate;
+this scratch result cannot back AC-35 through AC-38 or substitute for their UNRUN Tests. That reserve
+is not new wall-clock or memory headroom, a fixture-coordination cap or a post-expiry allowance.
+
+Short finite ceilings remain admitted; this amendment allocates no minimum-time admission refusal
+or CeilingBelowSettlementReserve cause. For a finite representable original monotonic deadline,
+R_eff=min(R,T/2), with T/2 evaluated as duration division without rounding up. The workdeadline is
+the original deadline minus R_eff. Here T is the original whole-run bound: a compatible batch retains
+its existing member timeout and N-times-member-timeout outer-bound calculation, and reserves once
+from that outer bound, never from each member separately. Checked arithmetic shall neither
+underflow/wrap nor reset the deadline. An already-expired original deadline, including the current
+zero-ceiling case, permits no Dispatch and retains existing timeout/capability ordering; reserve
+arithmetic shall not create an admission error or a later deadline. A workdeadline already passed
+while original T remains live shall immediately cancel/settle without Dispatch.
+
+Setup, Dispatch and backend work shall not proceed beyond a finite workdeadline. If admitted work
+reaches it without completion, then C shall stop work, cancel and settle, selecting the existing
+TimedOut classification for the exhausted whole-run work allocation. Evidence and batch metadata
+still name their original ceilings; recipe argv/environment/cwd and existing backend timeout flags
+shall not be silently rewritten. R_eff is reserved once per whole run and never restarted after
+failure. At small T this provides a proportionately smaller settlement window without changing the
+existing ability to run short budgets or inventing a minimum-budget refusal.
+
+The existing never-elapsing large-timeout cases remain admitted exactly: an outer-bound product
+that does not fit remains Duration::MAX; original checked_add returning None means no elapsing
+original deadline, not Tool/InvalidInput refusal. When the original deadline is None, there is no
+workdeadline subtraction or timeout-driven stop. Member T above 4294967295 rounded whole seconds
+still omits --harness-timeout, and a fitting finite original outer bound retains its normal expiry.
+At the FIRST actual stop trigger for a None deadline (completion, cancellation, a resource ceiling
+or observed caller death), the settlement deadline shall be that trigger's monotonic instant plus R.
+That single stop-trigger-relative allowance does not extend an existing expiry, because this case
+has none. It shall not restart on later triggers or per role/phase. No artificial wall-clock cutoff
+or new refusal replaces this existing never-elapsing work behavior; all memory/capture/ownership
+obligations remain live. A checked-add failure of the original deadline must not be confused with
+an already-expired Some deadline.
+
+For a finite deadline, settlement begins no later than workdeadline, with actual owned roles retained
+through confirmation. Every settlement, Drop and join observation shall complete or report by the
+same original deadline T; the None case instead uses its one FIRST-stop-trigger-plus-R deadline;
+phase caps cannot accumulate additional allowances. No post-expiry grace, reset, new observation gap
+or post-return cleanup extends T. If actual whole-chain/capture/creator settlement is positively
+confirmed by the applicable settlement deadline, then C shall preserve its candidate classification: workdeadline expiry gives
+single-run KaniRunOutcome::Inconclusive with KaniInconclusiveReason::TimedOut or the existing
+BatchTimedOut refusal, as FR-028 AC-2/FR-034 AC-20 require; other candidates retain existing resource,
+report and refusal precedence. No classification is published before that actual settlement.
+
+The lifecycle guarantee has the explicit kernel fault precondition that SIGKILL delivery and
+PID-namespace teardown permit this whole settlement to be confirmed by the applicable settlement
+deadline. If confirmation is unavailable by that deadline, then CleanupUnconfirmed overrides every candidate, including timed-out, and
+execution shall return only a typed settlement-unconfirmed Err, with no KaniExecutionEvidence,
+verdict, outcome or confirmed-cleanup claim, even beside retained valid report bytes. This is an
+unavailable-confirmation observation, not a positive diagnosis of D-state, a kernel bug or any
+particular cause. Ordinary timeouts with confirmed settlement retain their timed-out classification;
+this exceptional observation is not their normal replacement. This allocation reconciles original
+AC-10/20/34: work stops with its reserved in-T settlement window, actual owned teardown precedes
+conclusions and every phase still uses the original whole-run ceilings/deadline without reset.
 
 This amendment allocates a new public variant in KaniExecutionRefusal, which merged source does not
-yet provide: `Guardian { kind: GuardianFailureKind, detail: String }`. Planned public
-GuardianFailureKind shall have exactly one variant, `CleanupUnconfirmed`, for the observation
-above. No additional kind, non-exhaustive catchall or unmerged WIP kind catalog is allocated.
-Callers shall select meaning from that typed value, never parse detail. Other failures retain their
-existing variants/mapping: execute.rs::start maps BoundedLaunchError::Unavailable to
-MemoryMechanismUnavailable (with this amendment's separately allocated mandatory admission context)
-and BoundedLaunchError::Io to Tool(KaniToolError::Io { tool: Launcher, path, error }); executable
-prechecks retain their existing Tool refusal. Existing resource/report/capture refusal mappings
-remain unchanged. Only settlement-unconfirmed takes this new Guardian variant. This follows the existing public refusal
-enum/typed-context conventions and adds no compatibility layer, public Result handle or authority
-inside io::Error. It is a CODE API delta, not adoption of unmerged WIP as normative authority.
-CleanupUnconfirmed has code()==None and remains an execution error, never a serialized execution
-evidence kind or synthetic Failed/inconclusive verdict.
+yet provide: `Guardian { kind: GuardianFailureKind, detail: String }`. The planned public
+GuardianFailureKind shall be #[non_exhaustive] and this amendment allocates exactly one current
+variant, CleanupUnconfirmed. External exhaustive matches shall follow that non-exhaustive API;
+this slice allocates no other kind or adoption of an unmerged WIP catalog. Meaning comes from the
+typed value, never detail parsing. It adds no compatibility layer, public Result handle or authority
+inside io::Error. CleanupUnconfirmed has code()==None and remains an execution error, never a
+serialized evidence kind or synthetic Failed/inconclusive verdict.
+
+After positive settlement, every other guardian failure retains its existing refusal/evidence path:
+
+| Failure or candidate | Existing public mapping retained by this amendment |
+|---|---|
+| Tool executable precheck or ordinary launcher I/O, including post-Dispatch backend exec/observation I/O | Tool(KaniToolError::Io { tool: KaniTool::Launcher, path, error }); execute.rs::start retains BoundedLaunchError::Io mapping. No synthetic Kani evidence. |
+| Unavailable setup/memory mechanism, namespace/proc capability, authenticated owner protection or confinement admission | MemoryMechanismUnavailable with original io::Error and mandatory KaniStartupAdmissionCause: existing MemoryEnforcement or the separately allocated BackendStdioSocket, BackendStdioInspectionFailed, CapabilityUnavailable. Admission Unavailable is independent of errno; existing run-stage Unsupported/NotFound unavailable mapping is retained for non-admission I/O. |
+| Authenticated startup/identity/protocol failure before Dispatch | Existing unavailable startup path when ownership/protection cannot be established; otherwise ordinary I/O Tool refusal. No additional Guardian kind or Dispatch. |
+| Actual memory observation unavailable after admission | MemoryObservationFailed { detail }; no classified report/evidence. |
+| Observed whole-tree memory ceiling exceeded | Single-run Inconclusive with MemoryExhausted; compatible batch BatchMemoryExhausted { members, memory_bytes, memory }. |
+| Short finite or zero ceiling | Existing admitted short-budget resource paths; R_eff=min(R,T/2). Zero/already-expired retains current no-Dispatch timeout/capability ordering, no minimum-budget cause. |
+| Original checked_add None or overflowing outer product | Existing admitted never-elapsing work semantics, no workdeadline stop or arithmetic refusal; FIRST actual stop starts one R settlement allowance. Existing above-backend-maximum member flag omission remains. |
+| Admitted workdeadline expiry | Single-run Inconclusive with TimedOut; compatible batch BatchTimedOut { members, timeout }, naming original request ceiling. |
+| Capture overflow or failed capture | OutputOverLimit { stream, limit, harnesses } or OutputUnread { stream, detail }, retaining existing stable codes and no outcome. |
+| Unusable exported report, nonmember playback or crate/harness mismatch | Report(KaniReportRefusal), PlaybackForNonMember { harness } or HarnessNotInCrate { harness_path }, respectively. |
+| Admitted backend unsuccessful/no-report completion, including unavailable cache or denied rendezvous | Existing FR-017 Inconclusive NoVerdict path, with existing memory/deadline precedence; no fabricated setup failure or report. |
 
 The diagnostic detail shall contain at most 4096 UTF-8 bytes, charged to existing caller run buffers
 and whole-run ceilings. This small bound permits fixed known L/O/M/I and creator/capture role labels,
@@ -894,7 +957,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-35 | PLANNED/UNRUN. L creates private network/root before O, O validates before M, and nested bind / / refers to confined O root. Safe backend-only seccomp/privilege installation before Dispatch preserves the same positively owned PID and original recipe, with no unfiltered Dispatch or extra surviving process/ownership/deadline; policy installation failure is pre-Dispatch, actual recipe exec/failure is post-Dispatch with existing bounded handling/no fabricated evidence; trusted installer starts in sanitized loader environment and restores original backend environment only at filtered recipe exec; I/O/M remain outside that filter. Continuous AF_UNIX socket/datagram-socketpair, legacy syscall/ABI/io_uring and inherited-endpoint exclusion prevents host-peer acquisition/export throughout writable shared source/target/cwd paths, including listeners created after Dispatch. AC authority requires the same real backend unconfined positive control to connect/export at that visible shared prefix; confined real attempts and a genuine omission mutant distinguish protection from absent listeners. Anonymous local stream socketpair IPC remains admitted. Safe-boundary feasibility and genuine installed Cargo/Kani under the actual filter are decisive UNRUN gates; incompatibility stops CODE for SPEC revision, no relaxation. Required capabilities fail through typed pre-Dispatch unavailable admission regardless errno with confirmed owned cleanup; successful admission followed by missing cache/denied rendezvous build failure retains FR-017 NoVerdict and resource precedence. All old contained-death/writer/EOF/seal/deadline/lease obligations remain mandatory. | Test, Analysis |
 | FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Caller fd0..2 stability throughout setup is a trusted precondition; observed capture inconsistency refuses, with no claim to detect every ambient mutation. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned public rustdoc documents the caller stability precondition/setup window and observed-only capture refusal; target type/device/inode, original O_ACCMODE and FD_CLOEXEC are compared separately from proc-link presence; mutable shared-OFD status flags neither trigger instability refusal nor get rewritten. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
-| FR-034-AC-38 | PLANNED/UNRUN. Normal returns positively settle/reap actual owned roles, captures and the existing creator thread before conclusions. Settlement/Drop/join observations use only remaining original T, with no reset or added lease/cleanup grace. If confirmation is unavailable within that window, execution returns only Err(Guardian { kind: CleanupUnconfirmed, detail }) with code()==None, no evidence/verdict/outcome/cleanup claim and at most 4096 UTF-8 diagnostic bytes charged to existing ceilings. GuardianFailureKind contains only CleanupUnconfirmed; other failures retain existing variants/mapping. Detail is never parsed to select kind and holds no authority. No new post-return cleanup thread/daemon/custodian or error-owned cleanup is introduced. An exceptional existing kernel-stuck unjoined creator role is truthfully reported and relinquished, never claimed joined/retired; kernel SIGKILL delivery/namespace teardown within the window is an explicit fault precondition, not a diagnosis from timeout. Public bounded API rustdoc documents this and the stdio precondition. Positive settled controls and unavailable-confirmation adverse checks are independent UNRUN gates. | Test, Analysis |
+| FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
 
 ## Dependencies
 

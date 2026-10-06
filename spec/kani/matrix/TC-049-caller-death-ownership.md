@@ -534,32 +534,59 @@ oracle and one-CODE-PR gate.
     all-writer EOF, four seals and final delivery. Early channel close, outer kill or blanket
     sendmsg denial cannot repair the predicate.
 
-25. PLANNED/UNRUN (FR-034 AC-38). Exercise normal completion, startup refusal and cancellation
+25. PLANNED/UNRUN (FR-034 AC-38). Independently inspect the recorded SETTLE_RESERVE R=1 second
+    and research receipt below: R=max(1 second,10*measuredP99), rounded up to whole seconds,
+    fixed/non-caller-tunable. Remeasure actual integrated production whole-tree settlement as a
+    mandatory CODE gate; the representative kernel probe is not product evidence. Verify short finite ceilings remain admitted with R_eff=min(R,T/2),
+    duration division rounded down, no minimum-budget cause/refusal. Preserve the existing real
+    single 200ms and two-member 200ms-per-member batch timeout cases; the whole batch bound is
+    still N*T, with a reserve once from that outer bound. For finite deadlines, positively observe
+    workdeadline=T-R_eff cancellation then all-role/capture/creator settlement by original T;
+    require existing single TimedOut/batch BatchTimedOut paths naming original ceilings.
+    Exercise zero/already-expired identity with current no-Dispatch timeout/capability ordering and
+    no reserve-derived admission error or reset. A passed workdeadline with T still live immediately
+    cancels/settles without Dispatch. Inspect rounding at integral/subsecond measured durations:
+    least whole second >=max, no extra second at an integral boundary.
+    Preserve checked_add None and overflowed N*T/Duration::MAX as admitted never-elapsing work,
+    without workdeadline subtraction/forced timeout/Tool InvalidInput. Above4294967295 member
+    timeout omission remains; a finite fitting outer bound still expires. Positively observe actual
+    completion/cancellation/resource/caller-loss stop separately in None cases: the FIRST actual
+    trigger starts one R settlement deadline, subsequent triggers cannot restart it. Confirm actual
+    settlement before classification, and unavailable confirmation by that deadline gives only
+    CleanupUnconfirmed. Do not create a synthetic initial deadline or change backend timeout flags.
+    Use a real still-live worker at finite workdeadline and positive whole-chain termination
+    witnesses, not only an artificially expired deadline with zero children. No early report or
+    incomplete candidate may publish during settlement; original recipe/capture/memory accounting
+    remains unchanged.
+    Exercise normal completion, startup refusal and cancellation
     through production entry: independently confirm actual L/O/M/I termination/reaping, captures and
     existing creator-thread join before any conclusion. Through an already permitted private
-    settlement-observation boundary, make confirmation unavailable at the original deadline without
+    settlement-observation boundary, make confirmation unavailable at the applicable settlement deadline without
     fabricating kernel D-state or creating an unkillable task. Require Err(KaniExecutionRefusal::Guardian
     { kind: GuardianFailureKind::CleanupUnconfirmed, detail }), code()==None, absent execution
     evidence/verdict/outcome/cleanup claim even beside valid report bytes. Detail must fit 4096 UTF-8
     bytes under existing accounting and contain only bounded already-observed role/identity/stage
     data, no handles/authority or inferred kernel cause. Exercise omission at a UTF-8 boundary and
     prove it cannot change kind or manufacture settlement. Restore the observation and positively
-    confirm settlement; absence of a residual witness alone is not a positive control.
+    confirm actual settlement by the applicable deadline and candidate classification; absence of a residual witness alone is not a positive control.
     Exercise Drop/join error paths through their actual allowed private boundary: settle or report
-    inside the call, every allowance clamped to original remaining T; no added 250 ms/five-second
-    grace, reset or post-return observation. Source/ownership Analysis must establish no new cleanup
+    inside the call, every finite allowance fits R_eff/remaining whole T and each None allowance fits
+    its single FIRST-stop-trigger-plus-R deadline; no accumulated phase
+    allowance, post-expiry grace, reset or post-return observation. Source/ownership Analysis must establish no new cleanup
     thread/daemon/custodian and no io::Error/Result-owned authority or dependence on error Drop.
     Exceptional existing unjoined creator-role observations must remain explicitly unconfirmed;
     never claim join/retirement or diagnose kernel failure from timeout. No public hook is allocated
     and no real kernel-stuck task is required. If a required ordinary seam is absent, record owed
     evidence under the existing fixture SPEC gate, never claim this criterion backed.
-    Inspect the public GuardianFailureKind definition: only CleanupUnconfirmed, no extra kind or
-    non-exhaustive catchall. Exercise existing startup Unavailable and Io paths plus executable
+    Inspect the public #[non_exhaustive] GuardianFailureKind definition: this amendment allocates
+    only CleanupUnconfirmed, no other current kind or WIP kind catalog. Exercise existing startup Unavailable and Io paths plus executable
     prechecks and verify their existing MemoryMechanismUnavailable/Tool mapping remains; retain
     separately allocated admission context and existing resource/report/capture mappings. No message
     parsing or adoption of a WIP kind catalog.
     Inspect single/batch public rustdoc for both caller-stdio and kernel-settlement preconditions,
-    exact setup/original settlement windows, typed error and diagnostic-only residual/no cleanup
+    exact setup/workdeadline/applicable settlement windows, finite R_eff and preserved None work/stop
+    behavior, no minimum admission cause, and timeout
+    versus unconfirmed-error precedence, typed error and diagnostic-only residual/no cleanup
     guarantee outside the kernel precondition. Keep ordinary caller/group death and contained
     writer/death/EOF/seal adverse gates mandatory; this fault boundary cannot repair their failure.
 
@@ -597,3 +624,64 @@ coverage. Native refinement remains planned until its actual typed entry is deli
 destruction and uninterruptible tasks cannot justify fabricated teardown; live-caller unavailable
 confirmation refuses. Caller-group signals and direct guardian death are included lifecycle cases,
 not excluded double faults.
+
+
+## Settlement reserve research receipt
+
+This research records the basis for SETTLE_RESERVE = 1 second. It supplies no executable coverage
+of AC-35 through AC-38, whose production Tests remain PLANNED/UNRUN. Actual integrated product
+whole-tree settlement must be remeasured before CODE delivery; this result is not a real Cargo/Kani
+roundtrip, matched production helper/protocol evidence, runtime acceptance or proof for arbitrary
+or kernel-unkillable tasks. No probe script, binary, schema or foreign artifact is copied here.
+
+On luna, one replacement measurement ran 200 trials (100 baseline and 100 with a single CPU burner),
+with controller/trees/burner pinned to CPU0, nice10 and a nonblocking machinewide flock. The
+representative topology used nested bwrap PID namespaces and Python outer/inner INIT roles, a
+backend-like child, workers, grandchild, detached session worker and adopted orphan. Positive
+readiness/parent/start/namespace checks retained owned host pidfds before signalling only the actual
+outer INIT pidfd with SIGKILL. Monotonic timing ran from just before that signal until every retained
+pidfd exited, its original host/proc identity was gone and the direct launcher was reaped.
+
+The run completed exit0 in 28.755899541 seconds, within its separate 60-second research bound, from
+2026-10-06T18:43:42.199978Z to 18:44:10.955860Z. Observed versions were Linux
+6.17.0-20-generic (x86_64), bubblewrap 0.9.0, Python 3.12.3, GNU nice 9.4 and util-linux flock 2.39.3.
+The separate research runner bound is neither R nor a production timeout. Nearest-rank quantiles
+were independently recomputed from raw monotonic rows; combined P99 is sorted rank198 of200.
+
+| Group | Trials | P50 nanoseconds | P99 nanoseconds | Maximum nanoseconds |
+|---|---:|---:|---:|---:|
+| Baseline | 100 | 3511211 | 4811362 | 5077398 |
+| Single-CPU load | 100 | 6386183 | 8010711 | 8251330 |
+| Combined | 200 | 3925047 | 7909234 | 8251330 |
+
+The integer whole-second derivation is
+R = ceil(max(1,000,000,000 ns, 10 * 7,909,234 ns) / 1,000,000,000 ns) seconds = 1 second.
+For a 200ms whole-run T, R_eff=min(1s,100ms)=100ms, which exceeds ten combined P99
+(79.09234ms) and ten loaded P99 (80.10711ms) in this measurement. This numerical example does not
+assure settlement for every tree, host load or smaller T.
+
+All 200 positive cleanup confirmations covered 1853 per-trial retained identity records; each had
+pidfd exit and original host identity disappearance. No emergency cleanup signal was used.
+All known-good inner-member pairs accepted and known-bad outer/inner pairs rejected. The burner
+was confirmed by waitpid of the original unreaped fork child, but its PID/start/pidfd facts were not
+serialized; no independent raw burner-identity witness is claimed. The trees' raw per-identity
+confirmations and burner control-flow/waitpid confirmation have different evidence scopes.
+
+The first separate measurement attempt failed preflight at nested-membership comparison before
+measurement SIGKILL: 0/200 trials, no burner, no latency quantiles and no derived R. The NSpid
+numeric-prefix oracle was wrong, not evidence of failed kernel teardown. Its retained-owner cleanup
+completed, but individual failed-trial PID/start facts were not serialized. A separately released
+known-good/known-bad replacement preflight then passed in 2.063187376 seconds via normal two-second
+payload alarm exit: nine retained identities exited/disappeared and launcher reaped, no measurement
+or emergency SIGKILL and no derived R. Neither preliminary attempt counts among the 200 measurement
+samples or supplies product acceptance.
+
+Primary retained research receipts are
+[/tmp/ix-handoff/ir639-settlement-reserve-probe-replacement/measurement-receipt.md](/tmp/ix-handoff/ir639-settlement-reserve-probe-replacement/measurement-receipt.md),
+its measurement-receipt.json, rawlaunch.json, measurement-trials.jsonl,
+measurement-ownership-cleanup.jsonl and root-measurement-audit.json in that same directory;
+[replacement preflight](</tmp/ix-handoff/ir639-settlement-reserve-probe-replacement/preflight-receipt.md>)
+and [first failed attempt](</tmp/ix-handoff/ir639-settlement-reserve-probe/receipt.md>) retain provenance
+and limitations. The method, measured values, unsuccessful first attempt and limits above remain
+durable here independently of those scratch files. No additional execution or new assurance claim
+follows from this receipt.
