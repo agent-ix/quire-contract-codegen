@@ -114,7 +114,9 @@ and never replace positive QSL evaluation with a verdict double.
    count, refinement and verified SUCCESS count with the sent identity held fixed; each returns
    no settlement. As a separate control, change a request BEFORE send and require its legitimate
    changed echo, without claiming consumer corruption or artifact authentication. Public ReplayLimits
-   is the last entry argument and separate from ScalarLimits/full claim. Read actual record
+   is the last entry argument and separate from ScalarLimits/full claim. Independently replace
+   the proved artifact or retained original source/package/context with O-09 and the echoed claim
+   held fixed; require the independent R-6/R-7 binding refusal, not an echo-authentication claim.
 
 9. For O-09 composite identity, retain the exact claimed application node, original recompiled
    occurrence and kind. Use the owning public typed parity_obligation with one argument per operand
@@ -176,12 +178,6 @@ and never replace positive QSL evaluation with a verdict double.
     under FR-028 AC-2/3; independent refinement ceiling stays AC-24's class. No actual backend stop
     becomes Tested.
 
-All claim-shape and complete-identity checks added here are PLANNED/UNRUN. Real Text-leaf profile
-selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
-remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
-as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact
-verify/falsify controls, never a verdict double or invented source predicate.
-
 ## Expected Results
 
 | Authority | Planned observation | Mutation that must fail |
@@ -200,3 +196,9 @@ verify/falsify controls, never a verdict double or invented source predicate.
 Unimplemented canonical conversions, family harnesses or legal cause representations remain reported
 gaps. The future terminal payload names have the semantic meaning in FR-029, and the owning
 delivered API must establish their actual Rust representation before positive tests run.
+
+All claim-shape and complete-identity checks added here are PLANNED/UNRUN. Real Text-leaf profile
+selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
+remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
+as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact
+verify/falsify controls, never a verdict double or invented source predicate.

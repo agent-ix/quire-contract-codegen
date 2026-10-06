@@ -94,8 +94,9 @@ success.
 - Planned composite parity also requires the separate canonical proved-content tie of
   [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md): the driver's actual
   observation must belong to the same proved generated artifact and original context. O-09 alone
-  cannot establish that tie. The owning content-binding API/representation remains a QSL-640
-  implementation gate under the repository's canonical proof-content exception; this AD does not
+  cannot establish that tie. QSL's supplied content-identity API is delivered; CG's retained
+  proving-record representation, driver authentication and consumer conformance remain CODE-gated
+  under the repository's canonical proof-content exception. This AD does not
   require another CG-minted tracking digest or manually maintained fingerprint. If the owning
   representation requires a second CG-minted digest, that concrete design decision must be resolved
   before implementation, while retaining artifact-replacement refusal. No source/tool tracking hash,
@@ -266,22 +267,31 @@ authored).
   and applies on every outcome, including refusal, exact `Incomplete`,
   generated fault and divergence. Report `claim()` on every outcome is measured in merged
   change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
-- E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
-  only the exact claimed equality/inequality node, its occurrence key obtained from the recompiled
-  original package, the obligation kind and one argument per distinct parameter-operand node ID
-  with its actual harness bounds. A parameter compared with itself appears once in arguments;
-  operand appearances are not separate bindings. Each argument's domain is its harness bounds keyed
-  under that parameter, ascending by `DomainKey` (ADR-021 TX-3); literal operands remain singleton
-  source values and contribute no
-  fabricated parameter ID. The full FR-015 AC-76 CG record keeps abstractions, size budget, static
-  closure pair-node count and unexercised behaviours outside this preimage. That static record
-  count is distinct from the runtime occurrence-pair count of QSL's equality outcome.
-  No blanket widening of E-1 occurs:
-  existing function/frame member spelling, domain encoding and digest preimages stay unchanged. The
-  composite owning encoder contract remains gated on actual QSL-640 delivery. The request's O-09
-  identity is checked against the recompiled claim before any settlement, including Disagreed.
-  Same-artifact canonical content identity is independently checked and retained; changing
-  artifact/context cannot pass merely because the O-09 claim digest is equal.
+- E-1 composite extension (PLANNED / UNRUN CG CONSUMER, IR-635/QSL-640). CG's
+  composite O-09 preimage contains only the exact claimed equality/inequality application
+  node, its authentic occurrence key from the recompiled original package, the obligation
+  kind and one argument per operand position in operand order. A self-comparison contributes
+  two graph-child argument entries for the same actual parameter, each with its actual
+  harness bounds; repeated positions are not a distinct-node set. A composite literal uses
+  its own actual graph-child node with empty Bounds. An inline integer literal uses the
+  actual application/occurrence/position identity with a singleton Range; unsupported
+  inline literal forms refuse. Within each Bounds argument, keys sort by canonical encoded
+  key bytes, not DomainKey ordering, and duplicate keys refuse within that argument.
+  Repeated parameter positions retain separate argument entries with the same admitted
+  bounds; they are not duplicate keys inside one Bounds argument.
+  CG shall construct the owning typed preimage and use the public shared `parity_obligation`
+  mint, with no copied or second parity encoder. The full FR-015 AC-76 CG record keeps
+  abstractions, size budget, static closure pair-node count and unexercised behaviours outside
+  this preimage. The static record count is distinct from QSL's runtime occurrence-pair count.
+  Existing function/frame member spelling, domain encoding and digest preimages stay
+  unchanged. QSL's owning composite identity/parity interfaces are delivered; actual CG
+  metadata retention, typed consumer conformance and generated-family evidence remain
+  CODE-gated and UNRUN. The request's O-09 identity is checked against actual original
+  node/occurrence/operand membership before settlement, including Disagreed. Full retained
+  sent-claim comparison on every report outcome and independent same-proved-artifact/context
+  authentication remain required under E-2 and FR-033. O-09 or an echoed content identity
+  alone cannot establish that artifact tie; no operator/native/content/refinement/counter
+  top-level O-09 member or tracking digest is added.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001). For the planned scalar and composite routes,
   [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) and
@@ -319,7 +329,8 @@ authored).
   input before Kani runs, as IR reports it, is `Declined(ProofRefusalCause)` through the
   IR-outcome rows of C-09 (FR-030; R-Q1) and is outside the replay (counterexample) rows of C-09.
 - E-4. The ordinary production/source-predicate map returns no `Tested`; planned composite parity
-  may consume `Tested` only under FR-029 AC-19 and FR-033, gated on actual QSL-640 delivery.
+  may consume `Tested` only under FR-029 AC-19 and FR-033. The owning QSL API is delivered;
+  CG retention, driver authority, concrete representation and consumer conformance remain CODE-gated.
 - E-5. A run whose SUCCESS-check count is zero maps to a value QSL reads as non-success. A
   precondition harness counts its satisfied cover as its one SUCCESS check (question b).
 - E-6. A run is classified only from the output of the launch it made: a transcript or report
