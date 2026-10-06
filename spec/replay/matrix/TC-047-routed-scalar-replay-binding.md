@@ -78,24 +78,35 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    claimed replay verdict. Error-path seam observations may use a recording/failing executor;
    the positive evaluation must use QSL and the actual generated artifact.
 6. For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and
-   other `Refused` report, compare its full `claim()` to the exact retained sent claim before
-   terminal conversion. Bind another result/run to the first binding and require no settlement;
-   repeat by corrupting the returned report while retaining the actual sent claim, changing
-   only obligation identity, node, canonical generated-content identity,
-   occurrence, kind, operator, operand identity/value/range, result range, limits and native outcome. Keep the obligation digest equal
-   for the other mutations to prove digest-only checking cannot pass. A report that faithfully
-   carries a mutated request still equals that request's sent claim; do not treat it as report
-   corruption. Native-outcome-only report mutation leaves the obligation digest unchanged. A missing report claim
-   refuses too; agreement-only identity is insufficient. Use the merged full-report spec/API; do not fabricate a full report or substitute agreement
-   for other outcomes. Pass
-   valid converter
-   settlements to `run_terminal_value`; repeat with no settlement to reuse
-   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace executable
-   tests to each criterion they actually assert; this document alone provides no coverage.
+   other `Refused` report produced by the actual public QSL facade, pass that immutable report
+   with CG's retained expected sent `OperatorIdentity` and checked run/context completion to
+   the converter. Compare its full `claim()` before settlement. Hold the real report fixed and
+   change only one retained expected member at a time: obligation, node, content identity,
+   occurrence, kind, operator, operand identity/value/range, result range, limits or native
+   outcome. Require binding refusal with no settlement. Keep the obligation digest equal for
+   the other member mutations; a native-outcome-only difference cannot be found by the digest.
+   Do not mutate or fabricate QSL's private report representation. A faithful report of a
+   mutated request still equals that request's sent claim. Separately bind a report from
+   another run and require refusal. Retain the actual wire used by checked driver completion
+   and compare it against the original proving context. Substitute a consistently compiled
+   package, another enclosing function, source bytes, dependencies or limits while keeping
+   the claim equal; require no settlement. An echoed expected context cannot establish the
+   actual sent context. Pass valid settlements, and no settlement, to `run_terminal_value`
+   to reuse FR-029 AC-15. These public-boundary tests remain planned and unrun.
+
 7. Using the positional rule measured in merged QSL change #650, after
    IR-648's authoritative typed `CheckedPackageV2` operand access is available, independently
    inspect the scalar preimage passed to the public shared `parity_obligation` mint function. Use the claimed operator application node and its actual selected
-   expression occurrence. Retain one argument per operand/harness draw position, each with its
+   expression occurrence. With exactly one such occurrence, retain it; with zero or multiple
+   expression occurrences require typed unavailable/ambiguous refusal and no identity, never
+   select the first ordinal. Multi-occurrence replay awaits owning generation selection.
+   Use the sole scalar-family allocation in FR-032; its typed generation source/retention
+   remains CODE-gated, with no free caller string or clause-role substitution.
+   Check domain provenance by position: own bounded-domain parameters/subterms use their
+   checked derived interval; inline or referenced literal nodes use the actual singleton;
+   an untyped nonliteral subterm uses the enclosing claim's first checked result bound as
+   current generation does. Missing provenance or widening any retained assumed range refuses.
+   Retain one argument per operand/harness draw position, each with its
    position ordinal, typed `OperandIdentity` and actual range. An actual graph reference uses
    `GraphChild { node_id }`, including parameters, subterms or referenced existing literal nodes.
    An inline literal uses `InlineLiteral { node_id, occurrence_key, position }` from the authentic
@@ -105,43 +116,49 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    position entries; identifier sorting and node-id deduplication must fail. Exclude unrelated
    enclosing-function parameters. Change each included member and require an identity change;
    changing source span, native outcome and generated-content identity leaves it unchanged.
-   Missing selected occurrence, authentic operand identity/range or existing kind refuses with
+   Missing selected occurrence, authentic operand identity/range or scalar kind whose typed retention is gated refuses with
    no identity. IR graph/source-map access supplies node occurrence data, but raw JSON or
    an invented literal node does not close the typed scalar accessor CODE gate; IR-648 must
    expose the same tagged operand identity.
 
-8. Using merged QSL O-09 and the public shared `parity_obligation` mint function,
+8. Using merged QSL O-09 and the public shared `qsl_replay::parity_obligation` mint function,
+   check CG calls that owner through its existing dependency and implements no second encoder.
+   Use the owning worked vector solely as a cross-check;
    verify independently that the canonical scalar preimage has the exact closed members,
    tags, lowercase node hex, numeric ordinals/positions and decimal-string bounds specified
    in FR-032: arguments `{domain, operand, position}`, scalar domain
    `{lower, tag: "range", upper}`. Send the CG-minted identity to the actual operator entry
    and require acceptance; mutate the digest alone and require `ScalarIdentity::Obligation`
    with claimed/recomputed digests and `stale_dependency`/`revision-mismatch` before comparison.
-   Repeat with a changed positional identity/range, occurrence or kind and retained digest.
+   Repeat with an otherwise membership-valid changed range/kind or occurrence and retained
+   digest; invalid identity/occurrence mutations instead reach the prior membership refusal.
    A carry-only report or stand-in verifier cannot pass. Independently mint a self-consistent
    claim with invented occurrence/graph-child metadata or wrong inline literal value/singleton
-   range; require the merged typed membership refusal before identity comparison. An
-   unencodable preimage must refuse `ScalarIdentity::Encoding` with no usable identity,
-   whatever digest is claimed. Keep original function/clause carry-only behavior and existing
-   function/frame encodings. Test native `Incomplete`/`ExecutionFault` combined with an
-   out-of-range operand: after context/site/digest checks QSL returns `GeneratedFault` before
-   operand admission; CG's own setup still refuses that operand before normal dispatch.
+   range; require the merged typed membership refusal before identity comparison. Use the public owning mint with an
+   unencodable preimage and require `IdentityEncodeError`, no identity and typed CG setup
+   refusal before replay. An invented occurrence sent to the facade instead reaches its
+   earlier membership refusal; do not fabricate a private Encoding report. Keep original function/clause carry-only behavior and existing
+   function/frame encodings.
    These are planned, unrun CG conformance checks.
 
 ## Expected Results
 
 | Criterion | Planned observation | Mutation that must fail the check |
 |---|---|---|
-| FR-032-AC-1 | Public typed consumer uses scalar identity; an otherwise valid request reaches unsupported-capability after ordered setup checks, with no settlement | Require function identity or admit a synthetic predicate as the scalar route |
+| FR-032-AC-1 | Public typed consumer uses scalar identity; unavailable named capability refuses after setup; all named capabilities available yields an admitted plan | Require function identity, admit a synthetic predicate, or continue refusing after every named capability is available |
 | FR-032-AC-2 | Adapter-decoded playback uses persisted order; builder rejects above 8 MiB before parsing | Decode in alphabetic order, ignore another harness name or discard extra bytes |
 | FR-032-AC-3 | Operand endpoints and request operator/ranges agree with the harness/package; limits match original generation context, including AD-002 identities | Skip a bound check, replace operator/node, use result bounds for a literal or swap operands |
 | FR-032-AC-4 | Driver authenticates same-proved-artifact observation against CG's retained record and checked completion ties operands/limits/content | Accept an unchecked outcome/digest echo, treat playback as a generated result or accept fresh regeneration that removes the mutation |
 | FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current four-operator completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict, accept `Undefined`/`Incomplete` as agreement or add unproved refusal-cause/accounting-counter equality |
-| FR-032-AC-6 | Full report claim and run match the retained sent claim on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/content/operator/operand range/result range/limits/native outcome on a refusal, exact Incomplete, generated fault or divergence |
+| FR-032-AC-6 | Immutable full report claim and actual sent context match the retained binding/original proving context on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/content/operator/operand range/result range/limits/native outcome on a refusal, exact Incomplete, generated fault or divergence |
 | FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
 | FR-032-AC-9 | Scalar positional shape measured in merged QSL change #650: actual application/expression occurrence/kind and one ordinal/tagged-identity/range entry per draw; `GraphChild` for graph references, `InlineLiteral` for application/occurrence/position, literal value in singleton range, repeated parameter draws distinct | Invent occurrence/operand ids or extra literal nodes, omit or swap identity tags, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |
-| FR-032-AC-10 | Actual QSL accepts a CG-minted byte-conformant scalar identity and refuses a mismatched digest through the merged shared mint and verifier | Accept carry-only echo or a synthetic/stand-in verifier; change the specified object/tag/decimal-string encoding, skip mismatch or authentic-membership validation or change existing function/frame encodings |
+| FR-032-AC-10 | Shared mint conforms to independently checked O-09 scalar bytes and actual QSL accepts the identity once kind/metadata authority is available | Use a copied encoder, stand-in verifier or synthetic acceptance |
+| FR-032-AC-11 | Digest mismatch yields typed Obligation refusal with both digests and owning codes | Retain old digest after positional/occurrence/kind change and accept |
+| FR-032-AC-12 | Correctly hashed invented occurrence/child or false literal value/range yields typed membership refusal | Accept self-consistent hashing as membership authority |
+| FR-032-AC-13 | Public mint refuses an unencodable preimage; CG setup returns no identity or replay | Return a usable sentinel identity or accept an unencodable claim |
+| FR-032-AC-14 | Scalar addition preserves function/clause carry-only and function/frame identity rules | Redirect other paths through scalar positional parity |
 
 All checks are planned; completed-route observations have the same explicit remaining CODE gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never

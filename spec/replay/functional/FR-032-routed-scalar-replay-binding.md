@@ -19,6 +19,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-016
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-357
+    type: depends_on
   - target: ix://agent-ix/quire-spec-language/ADR-013
     type: references
 ---
@@ -109,8 +111,8 @@ hash or new observation API is invented here.
   scalar terminal readings follow the measured QSL contract below; their CG settlement
   representation and checked conversion remain planned and gated on full-report identity.
   Existing predicate replay causes do not substitute for scalar readings.
-- For the interim unsupported-capability setup refusal, a typed converter refusal with no
-  settlement. The missing upstream capability is not relabelled a CG defect or assigned a
+- For setup refusal caused by a named unavailable capability below, a typed converter refusal with no
+  settlement. The named missing capability is not relabelled a CG defect or assigned a
   fabricated QSL code. The caller cannot manufacture a terminal record from that refusal;
   attempted terminal mapping without settlement remains governed by
   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15.
@@ -137,7 +139,7 @@ hash or new observation API is invented here.
   validate the retained run-to-binding tie. This check applies to **every** outcome, including
   `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused`.
   Equality of the obligation digest alone, or identity present only on agreement, is insufficient.
-  A missing or different report claim yields a typed binding refusal with no settlement.
+  An absent report or different report claim yields a typed binding refusal with no settlement.
   The report `claim()` contract is measured in merged QSL change #650; actual CG consumer
   conformance remains planned and untested.
 - The converter shall read QSL's typed result/refusal discriminants and catalog codes rather
@@ -171,10 +173,12 @@ refusal returns no settlement. After successful full-claim comparison, QSL `Dive
 `GeneratedFault` read as `Failed`; `Agrees` reads as `Inconclusive(ScalarAgrees)`; `RefusedInput` reads as
 `Inconclusive(ReplayRefused(invalid_runtime_input))`; exact `Incomplete` reads as
 `Incomplete(ResourceExhausted)`; other QSL `Refused` follows the existing typed QSL refusal
-mapping and preserves its catalog code for non-fault refusals. After context/site/identity verification, QSL handles native `Incomplete` or `ExecutionFault`
+mapping and preserves its catalog code for non-fault refusals. Source observation, owned by QSL: after context/site/identity verification, merged
+`scalar.rs::compare` handles native `Incomplete` or `ExecutionFault`
 as `GeneratedFault` before its operand-admission backstop. Thus a native fault plus an
 out-of-range operand reaches `GeneratedFault`, not `RefusedInput`; CG setup still admits
-operands before dispatch. Native `Incomplete` is not exact resource exhaustion. CG's scalar settlement representation must
+operands before dispatch. This internal QSL ordering is attribution only, not a CG
+acceptance obligation or a change to FR-357. Native `Incomplete` is not exact resource exhaustion. CG's scalar settlement representation must
 preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Verified`.
 
 ## Scalar Obligation Identity
@@ -195,9 +199,47 @@ without producing an identity. This is source inspection, not a passing-test cla
 CG/QSL conformance remains planned. Function/clause carry-only contracts and function/frame
 preimages remain unchanged.
 
+The following CG-owned allocation defines the closed scalar wire vocabulary. It is a new
+specification allocation, not a member already present in `ScalarObligationIdentity` or the
+clause-role `ObligationKind`. QSL carries this string opaquely.
+
+| Scalar family actually minted by this route | O-09 `obligation_kind` wire value | Authority/source |
+|---|---|---|
+| Integer arithmetic lowering parity (`add`, `subtract`, `multiply`, `negate`) | `operator_parity` | This FR-032 allocation; CG generation shall supply a typed family value and retain it in the proving record. Its typed implementation/accessor is CODE-gated and unrun. |
+
+This is the sole current scalar-family value. CG shall not derive it from `operation_identity`,
+reuse a precondition/postcondition/invariant/frame role, or accept a caller-chosen free string.
+Future parity families require their own owning allocation; the composite family is specified
+separately. Current CG has no typed scalar-kind source. Until generation implements and retains
+this allocation, the route returns the named unavailable-capability refusal without minting an
+identity. The canonical vector below demonstrates encoding only, not authoritative application
+membership, generation implementation or a passing routed replay.
+
+**Worked scalar identity cross-check.** The public owning test
+`an_operator_parity_range_preimage_has_its_hand_written_text_and_digest` in
+`qsl-replay/src/execute/parity_identity.rs` on
+[QSL change #655](https://github.com/agent-ix/quire-spec-language/pull/655) uses the following
+synthetic encoding inputs. These ids illustrate the encoder only; they claim no authoritative
+application or operand membership.
+
+| Member | Worked input |
+|---|---|
+| Application node | 32 bytes each `0x11` (64 lowercase hex `1` digits) |
+| Occurrence | `expression`, ordinal `0` |
+| Kind | The sole scalar-family allocation in the table above |
+| Argument at position `0` | Graph child: 32 bytes each `0x22`; inclusive range `[-2,3]` |
+| Expected canonical identity | `ce7c6db3f790558d63e613427d14cfc5916802329b1e3ce032daa5878dc8ee2a` |
+
+The exact canonical UTF-8 text belongs to that owning test; this document references it rather
+than retaining a copied fixture or encoder. Its 350 bytes independently rehash to the identity
+above. The test source asserts both canonical-byte equality and the public mint's identity;
+its encoder execution has not been verified here. Change #655 is unmerged: its merge and
+actual owning-test execution remain explicit CODE evidence gates. This vector is not a
+passing CG replay test and adds no operation/native/content member to O-09.
+
 The scalar subject is the claimed operator's FR-322 application node id and its authentic
 O-07 occurrence key: that node id with the selected `CheckedOccurrence`'s role `expression`
-and ordinal. The preimage contains only that subject, occurrence, the existing obligation kind,
+and ordinal. The preimage contains only that subject, occurrence, the scalar obligation-kind value from the allocation above,
 and `arguments`. There is **one argument per operand position**, in operand/harness draw order.
 Each argument contains its position ordinal, typed `OperandIdentity` and actual operand range
 used by the harness. The identity is a tagged representation: `GraphChild { node_id }` for an
@@ -221,13 +263,23 @@ application id mislabeled as `GraphChild` substitutes for that metadata. Positio
 member; the typed operand identifier holds the valid tagged representation above. The persisted
 draw order and operator operand order must correspond exactly to the retained positional arguments.
 
+Under FR-022's one-item-per-distinct-node generation, an authentic occurrence means the sole
+`expression` occurrence of that application in the proving package. Zero or multiple such
+occurrences yields typed occurrence-unavailable/ambiguous setup refusal and no identity; CG
+shall not pick the first or lowest ordinal. Replay of multi-occurrence nodes is CODE-gated on
+an owning generation change that selects and retains the proved item's occurrence. A node's
+having several valid QSL occurrences alone supplies no selection provenance.
+
 CG shall construct the owning `ParityPreimage` with `ParityArgument` and `Domain::Range`
 and mint it through QSL's public `parity_obligation`, which uses ADR-013 section 2's one
-RFC 8785 `quire-canonical` encoder. Independent conformance checks shall match O-09's exact
-preimage. Its closed object members are `arguments`, `node`, `obligation_kind` and
+RFC 8785 `quire-canonical` encoder. QSL is the sole parity-encoder owner: CG shall call
+`qsl_replay::parity_obligation(&ParityPreimage)` through its existing QSL dependency and
+shall implement no canonical-byte encoder for obligation identities. The worked vector is
+a conformance cross-check only, not an alternative mint implementation. Independent
+conformance checks shall match O-09's exact preimage. Its closed object members are `arguments`, `node`, `obligation_kind` and
 `occurrence_key`. `node` is the application node id in lowercase hex;
 `occurrence_key` is `{ordinal, role}`, with numeric ordinal and the authentic `expression`
-role string; `obligation_kind` is the existing CG kind's wire string. Each ordered argument is
+role string; `obligation_kind` is the scalar wire string from the allocation above, supplied by typed generation. Each ordered argument is
 `{domain, operand, position}`: `position` is its zero-based numeric operand ordinal and
 `domain` is `{lower, tag: "range", upper}`, the inclusive harness integer range with both
 bounds as decimal strings. This is the scalar arm of O-09's unified parity-domain representation. A graph operand is
@@ -241,7 +293,7 @@ owning encoding contract; CG retains no copy of QSL's encoder or artifact.
 No CG-specific member, transcript, native outcome, generated-content digest, operator label,
 solver, renderer counter, build or tool/version tracking field enters that preimage. Source
 regions/spans are excluded. The full report claim separately carries the obligation, application
-node and occurrence, existing kind, operator, decoded operands with their identities/ranges,
+node and occurrence, authoritative scalar kind, operator, decoded operands with their identities/ranges,
 result range, retained limits and canonical generated-content identity. It and same-artifact
 observation authentication remain distinct from the O-09 obligation digest.
 
@@ -255,18 +307,47 @@ accessor. IR-648 must expose the same `GraphChild`/`InlineLiteral` identity dist
 inline-literal identity uses the application/occurrence/position and requires no literal node.
 CODE remains gated on [IR-648](https://linear.app/agent-ix/issue/IR-648), the typed scalar
 operand accessor on `CheckedPackageV2`, and on retaining the occurrence selected for the proved item. Missing or ambiguous occurrence, operand identity/range
-or existing kind yields typed setup refusal and no minted identity. The positional rule resolves
+or authoritative scalar kind yields typed setup refusal and no minted identity. The positional rule resolves
 literal and repeated-parameter semantics; no ambiguity gate for those semantics remains.
 The merged QSL verifier authenticates the occurrence against the application, operand count,
 and each graph-child reference at its position. An inline literal must be the actual inline
 integer at that position, with its observed value and singleton range; typed mismatches refuse
 before digest verification. A graph-child identity check does not itself validate that child's
 claimed integer range against its declared proving domain. CG shall retain and validate the
-actual harness ranges against the checked/emitted proving schema. IR-648's authentic metadata
+actual harness ranges against the checked/emitted proving schema, retaining their positional
+provenance. A parameter or subterm typed by its own `bounded_domain` uses that bound's
+checked derived integer interval; its bound must belong to the lowered claim's checked bounds.
+An inline literal or referenced literal-value node uses its actual singleton integer value.
+For a subterm with no own bound and no literal value, the current generation authority uses
+the enclosing scalar claim's first checked result bound, rather than infer a new subterm range.
+The replay record must retain that exact result-bound provenance and interval. The same rule
+applies to any other operand lowered through the result-bound case. No wider interval, caller
+hint or freshly inferred child domain substitutes for the range the harness actually assumed.
+If typed access cannot recover that provenance, the route refuses under the IR-648 gate;
+this specification neither broadens generation nor changes its result-bound rule. IR-648's authentic metadata
 access and CG retention remain CODE gates. Encoder failure returns typed refusal with no
 identity; the previous all-zero error sentinel is absent from the merged shared encoder.
 
 Decoder and original-limits context work can proceed independently.
+
+## Converter Boundary and Original Context
+
+The planned converter accepts the actual immutable public `OperatorParityReport` together
+with CG's retained binding and checked driver-completion context; absent report means no
+settlement under FR-029 AC-15. It reads `report.claim()`;
+it does not construct, deserialize or alter QSL's private report fields. The retained binding
+holds the expected sent `OperatorIdentity` separately, so mismatches are observable at this
+public boundary without a fabricated report.
+
+`OperatorIdentity` and O-09 do not bind the replay wire's package, selected function, source
+bytes or dependencies. In addition to full-claim equality, the converter shall compare the
+actual wire used for that run, recorded by checked driver completion, with the original
+proving `call_site` context retained by CG: package identity/reference, selected enclosing
+function, dependencies, source byte provision and original limits including `ReplayLimits`.
+An equal claim replayed against another internally consistent package or enclosing function
+must refuse with no settlement. The driver must record the actual sent context, not echo an
+expected claim/context supplied afterward. This checked completion/retention representation
+is a CODE gate; no new QSL identity field, tracking hash or public constructor is claimed.
 
 ## Setup Refusal Precedence
 
@@ -278,9 +359,15 @@ The builder uses the first applicable refusal in this order, even while the upst
 3. Adapter selection and decoding: assertion block, qualified harness name, arity, byte width
    and persisted operand ordering.
 4. Decoded operand-domain validation against the original schema.
-5. Availability of all upstream capabilities needed for an admitted plan.
+5. Availability of the typed IR-648 operand/provenance accessor, authoritative scalar-kind
+   value/source, retained unique expression occurrence and proving-context/limits record,
+   and checked driver observation/context-completion seam.
 
-An otherwise valid request reaches the distinct unsupported-capability refusal at step 5.
+An otherwise valid request reaches unsupported-capability at step 5 only when at least one
+named capability is unavailable. Once those capabilities are available and the prior setup
+checks succeed, the builder shall return an admitted replay plan; completion with authenticated
+observation and actual original context shall enable replay and conversion. A permanently
+refusing builder after these conditions hold cannot satisfy this requirement.
 A malformed request reaches its earlier typed refusal; the absent capability never hides it.
 After plan completion, the native-observation/proof-content tie is checked before QSL evaluation.
 Cross-binding converter failures return no settlement rather than settling another obligation.
@@ -289,16 +376,20 @@ Cross-binding converter failures return no settlement rather than settling anoth
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-032-AC-1 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). A public consumer passes the routed harness's `ScalarObligationIdentity` directly to the scalar builder; its typed call constructs neither `KaniObligationIdentity` nor V1 `ReplayPackage`. After the ordered setup checks, an otherwise valid request returns the unsupported-capability refusal while the gate holds; conversion returns no settlement rather than a synthetic function request or invented terminal cause. | Test |
+| FR-032-AC-1 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). A public consumer passes the routed harness's `ScalarObligationIdentity` directly to the scalar builder; its typed call constructs neither `KaniObligationIdentity` nor V1 `ReplayPackage`. After the ordered setup checks, an otherwise valid request returns unsupported-capability only while a named step-5 capability is unavailable; when all are available it returns an admitted plan, and authenticated completion enables replay/conversion. Conversion of a capability refusal returns no settlement rather than a synthetic function request or invented terminal cause. | Test |
 | FR-032-AC-2 | PLANNED (IR-631). The builder decodes actual routed-harness playback in persisted symbolic call order through the Kani output adapter; another harness name, missing/extra operand, wrong byte width, playback above the builder-owned 8 MiB per-harness ceiling or malformed assertion block yields the distinct typed refusal under the stated precedence before replay. | Test |
 | FR-032-AC-3 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). Each operand at its own lower or upper bound is admitted and the adjacent out-of-domain value is refused before replay. The admitted QSL inputs preserve the catalogued operator, operands, operand ranges, result range and harness limits. Another node/operation, altered operand schema or replay limit differing from the retained original generation context refuses; operand correspondence uses [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-16. | Test |
 | FR-032-AC-4 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). The driver's actual native observation of the proved generated oracle is required and tied to this operand vector, limits and canonical proof-content identity; the checked completion requires driver authentication; a bare outcome/digest echo, missing observation, another artifact's observation or fresh regeneration that removes the arithmetic mutation refuses before QSL evaluation. Playback bytes and Kani falsification alone cannot supply a generated outcome. | Test |
 | FR-032-AC-5 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). The public consumer executes the same proved generated artifact and invokes QSL between the builder and converter. QSL compares its actual native observation with authoritative exact operator evaluation using the four-operator projection owned by [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-37, without adding refusal-cause or accounting-counter equality; changing the generated arithmetic while keeping original node/operator identity changes the measured parity result. `Undefined`, `Incomplete` and execution faults cannot be agreeing outcomes of this profile. No CG-local evaluator or replay verdict replaces QSL. | Test |
-| FR-032-AC-6 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained sent claim before conversion; a missing claim, another result/run, or changing only the obligation, node, occurrence, kind, canonical generated-content identity, operator, operand identity/value/range, result range, limits or native outcome yields typed binding refusal and no settlement. Obligation-digest equality alone and agreement-only identity cannot pass. | Test |
-| FR-032-AC-7 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive(ScalarAgrees)`; native `Incomplete`/execution fault becomes `GeneratedFault` and `Failed` after context/site/identity checks and before QSL operand admission, even with an out-of-range operand, while exact `Incomplete` becomes `Incomplete(ResourceExhausted)`. `RefusedInput` preserves `invalid_runtime_input`; other typed QSL refusals follow the existing refusal map and non-fault refusals retain their code. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
+| FR-032-AC-6 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained sent claim and actual sent wire against the original proving context before conversion; a changed package/function/source/dependency or original limit refuses even with an equal claim. At the immutable-report/retained-binding boundary, an absent report, another result/run, or changing only the obligation, node, occurrence, kind, canonical generated-content identity, operator, operand identity/value/range, result range, limits or native outcome yields typed binding refusal and no settlement. Obligation-digest equality alone and agreement-only identity cannot pass. | Test |
+| FR-032-AC-7 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive(ScalarAgrees)`; native `Incomplete`/execution fault becomes `GeneratedFault` and `Failed` while exact `Incomplete` becomes `Incomplete(ResourceExhausted)`. `RefusedInput` preserves `invalid_runtime_input`; other typed QSL refusals follow the existing refusal map and non-fault refusals retain their code. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
 | FR-032-AC-8 | PLANNED (IR-631) / CODE-GATED (CG retention, observation and consumer conformance). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` exercises an admitted operand pair whose exact result is outside the result range. The expected exact result is derived from the actual retained playback, and its correct refusal is never labelled a source violation. The fixture ranges and witness domain/result-range relation are asserted before that observation; no unreachable case or assumed solver choice counts as coverage. | Test |
-| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (authoritative metadata access and CG retention). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, existing kind and one argument per operand position in actual draw order, each with position ordinal, typed `OperandIdentity` and harness operand range. Actual graph references use `GraphChild { node_id }`; inline literals use `InlineLiteral { node_id, occurrence_key, position }` from the authentic application/occurrence and position, with their value in the singleton range. QSL emits no extra literal node. A referenced existing literal, parameter or subterm uses its graph node id. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Missing occurrence, operand metadata or kind refuses with no identity. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
-| FR-032-AC-10 | PLANNED (IR-631) / CODE-GATED (actual CG/QSL conformance). Using the merged owning scalar preimage encoding and verifier, CG's canonical preimage bytes conform exactly to QSL O-09 and ADR-013 section 2's encoder; the actual QSL operator route accepts the identity CG minted for the retained application/occurrence/kind/positional operands and ranges, and refuses a mismatched obligation digest before scalar comparison as `ScalarIdentity::Obligation`, carrying claimed/recomputed digests and `stale_dependency`/`revision-mismatch`. Mutating a positional operand identity/range, occurrence or kind while retaining the original digest must refuse too. Neither a copied verifier, synthetic success nor carry-only report satisfies this criterion. The exact closed scalar object/tag/decimal-string encoding specified above and the public shared mint function are required. A correctly hashed invented occurrence or operand identity, an inline literal with another value or non-singleton range, and an unencodable preimage all refuse before comparison; encoding failure produces no identity. Existing function/clause carry-only behavior and function/frame identity encodings remain unchanged. | Test |
+| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (authoritative metadata access and CG retention). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, authoritative scalar kind and one argument per operand position in actual draw order, each with position ordinal, typed `OperandIdentity` and harness operand range. Actual graph references use `GraphChild { node_id }`; inline literals use `InlineLiteral { node_id, occurrence_key, position }` from the authentic application/occurrence and position, with their value in the singleton range. QSL emits no extra literal node. A referenced existing literal, parameter or subterm uses its graph node id. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Zero/multiple expression occurrences, missing operand provenance or absent typed scalar-family retention refuses with no identity; a unique occurrence is retained without inventing an ordinal. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
+| FR-032-AC-10 | PLANNED (IR-631) / CODE-GATED (typed scalar-family retention and actual CG/QSL conformance). When the authoritative scalar kind and retained positional metadata are available, the public shared mint produces the identity for the independently checked exact O-09 canonical scalar preimage, and the actual QSL operator route accepts it. A copied encoder, stand-in verifier or synthetic success cannot pass. | Test |
+| FR-032-AC-11 | PLANNED (IR-631). When the obligation digest differs from the retained positional preimage, after an otherwise membership-valid preimage member change with the old digest, the consumer observes QSL's typed `ScalarIdentity::Obligation` refusal with claimed/recomputed digests and `stale_dependency`/`revision-mismatch` before comparison. | Test |
+| FR-032-AC-12 | PLANNED (IR-631). When a correctly minted claim invents an application occurrence or operand child, or misstates an inline literal's value/singleton range, the consumer observes the corresponding merged typed membership refusal before identity comparison; self-consistent hashing cannot admit the invented metadata. | Test |
+| FR-032-AC-13 | PLANNED (IR-631). When the owning mint cannot encode the preimage, the public `parity_obligation` returns `IdentityEncodeError` with no identity, and the CG builder returns typed setup refusal without replay. No claimed digest or usable sentinel can replace that error. | Test |
+| FR-032-AC-14 | PLANNED (IR-631). Adding the scalar builder/converter preserves existing function/clause carry-only behavior and function/frame identity encoding; none is redirected through scalar parity or changed by its positional argument rule. | Test |
 
 ## Intent and Existing Coverage
 
@@ -355,15 +446,19 @@ The positive operator-level route has these explicit **CODE gates**:
    range, retained limits and native outcome. Compare it before settlement on every outcome.
    The merged function-parity report does not authorize CG function-parity implementation here.
 2. CG generation must retain the authoritative scalar metadata needed by the positional O-09
-   preimage and original renderer-limit/proving record. Selected occurrence, typed positional
-   operand identity/range access (IR-648) and existing kind retention remain explicit gates.
-   CG must use the public shared `parity_obligation` mint function and prove matching identity
+   preimage and original renderer-limit/proving record. Unique authentic occurrence, typed positional operand identity/range/provenance access
+   (IR-648) and the typed scalar-family implementation/retention remain explicit gates.
+   The referenced owning vector test in QSL change #655 must merge and its actual execution
+   be verified; its source/independent byte rehash alone is not passing encoder evidence.
+   CG must use the public shared `parity_obligation` mint function, with no second encoder
+   or obligation-canonical-byte implementation in CG, and prove matching identity
    acceptance and mismatch refusal with actual QSL. Merged QSL authenticates occurrence,
    operand count, graph children and inline literal value/singleton range, and refuses encoder
    errors; CG must still validate retained graph-child ranges against the proving schema.
 
 3. The driver must implement same-proved-artifact execution and observation authentication;
-   CG must supply the retained generation/proving record and checked completion/conversion seam.
+   CG must supply the retained generation/proving record and checked completion/conversion seam,
+   including the actual sent original replay wire/context, independently of full-claim equality.
    QSL never sees or authenticates the artifact; carried digest equality alone is insufficient.
 4. CG's converter/settlement representation must consume the measured legal scalar terminal
    readings only after full-claim and retained-run comparison. Existing predicate disagreement
@@ -379,7 +474,7 @@ facade. This contract neither adds a fourth CG executor nor claims a new call-si
 and this document grants no architecture exception.
 
 All acceptance criteria are **Planned**. AC-1's admitted call, AC-3's admitted QSL inputs and
-AC-4 through AC-10's completed scalar route are additionally **Gated** on the above contracts;
+AC-4 through AC-14's completed scalar route are additionally **Gated** on the above contracts;
 no test coverage is claimed. Unsupported-capability refusal, ordered decoding and operand
 validation can be implemented independently. The merged function-level declared-parameter parity route is outside this operator-level CG contract.
 

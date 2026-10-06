@@ -194,6 +194,8 @@ authored).
   FR-357 and `qsl-replay/src/execute/parity_identity.rs` agree on tagged `domain` entries.
   CG shall construct the owning `ParityPreimage` and call public `parity_obligation`, the
   shared scalar/composite mint function using ADR-013 section 2's `quire-canonical` encoder.
+  QSL owns that sole parity encoder; CG calls it through its existing dependency and adds
+  no obligation-canonical-byte encoder. The FR-032 vector is a cross-check only.
   `operator_parity.rs` authenticates application/operator/function membership, occurrence
   and positional operands before verifying the digest. Mismatch refuses
   `ScalarIdentity::Obligation` with claimed/recomputed digests; encoder refusal returns
@@ -204,8 +206,8 @@ authored).
   This is source inspection, not passing-test evidence; actual CG conformance remains gated.
   Function/clause carry-only contracts and existing function/frame encoding remain unchanged.
   The subject is the claimed operator's FR-322 application node id with its authentic O-07
-  `CheckedOccurrence` key (node, `expression` role, ordinal), the existing obligation kind and
-  one argument per operand position in operand/harness draw order. Each entry is its position
+  `CheckedOccurrence` key (node, `expression` role, ordinal), the scalar kind allocated once
+  by FR-032 (typed generation source CODE-gated), and one argument per operand position in operand/harness draw order. Each entry is its position
   ordinal, typed `OperandIdentity` and actual harness operand range. Its tagged representation
   is `GraphChild { node_id }` for an actual graph reference (parameter, subterm or an existing
   literal node), or `InlineLiteral { node_id, occurrence_key, position }` using the authentic
@@ -232,14 +234,22 @@ authored).
   no public typed scalar ordered-operand identity/range accessor was measured. IR-648 in
   Contract IR owns that `CheckedPackageV2` accessor and blocks IR-631 CODE admission; its
   specification and implementation remain to be measured. The model-field
-  accessor and wrapped optional leaf walk do not provide one. CG must retain the actual selected
-  expression occurrence and authentic operand metadata. IR-648 must expose that same tagged
+  accessor and wrapped optional leaf walk do not provide one. CG must retain the sole authentic
+  expression occurrence and operand metadata. Zero/multiple
+  expression occurrences refuse without a chosen ordinal; multi-occurrence replay awaits
+  generation-owned selection/retention. Current clause-role `ObligationKind` supplies no
+  scalar wire kind: FR-032 owns its sole allocation; typed generation source/retention
+  remains CODE-gated. IR-648 must expose that same tagged
   identity; the inline arm names application/occurrence/position and needs no literal node.
   Missing or ambiguous metadata/kind refuses without minting an identity.
   Merged QSL authenticates the occurrence, operand count, each graph-child reference and
   inline literal value/singleton range before digest verification, and encoding errors refuse
   without an identity. Graph-child range correspondence to the declared proving domain remains
-  a CG validation obligation; QSL's child-identity check alone does not establish it.
+  a CG validation obligation with positional provenance: own bounded-domain parameters or
+  subterms use the checked derived interval, literals use the actual singleton, and untyped
+  nonliteral subterms use the enclosing scalar claim's first checked result bound as current
+  generation does. Missing provenance or a widened range refuses; QSL's child-identity check
+  alone does not establish it.
   Literal and repeated-parameter semantics are resolved; authentic metadata access, retention
   and actual consumer conformance remain CODE gates. Decoder/context work is independent.
   The same-artifact content identity is a separate canonical proof-content tie. The driver
@@ -249,7 +259,11 @@ authored).
   unchecked digest/outcome echo or regenerated oracle is insufficient. QSL never sees the
   artifact and does not authenticate it: it carries the `DigestRecord` and evaluates exact
   semantics. Before any scalar settlement, CG compares every member of the report's full claim
-  with the retained sent claim, plus the retained run tie, including refusal, exact `Incomplete`,
+  with the retained sent claim at the immutable-report/retained-binding converter boundary,
+  plus checked driver completion's actual wire/run context against the original proving
+  package/function/source/dependencies/limits. The report and O-09 do not bind that wire;
+  an equal echoed claim is insufficient. This independent R-7 retention/check is CODE-gated
+  and applies on every outcome, including refusal, exact `Incomplete`,
   generated fault and divergence. Report `claim()` on every outcome is measured in merged
   change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
 - E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
