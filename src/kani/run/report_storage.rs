@@ -358,59 +358,100 @@ fn required_seals() -> SealFlags {
     SealFlags::WRITE | SealFlags::GROW | SealFlags::SHRINK | SealFlags::SEAL
 }
 
-/// C validates the actual safely received CLOEXEC descriptor before allocating or reading bytes.
-pub(super) fn read_received(
-    descriptor: OwnedFd,
-    expected_bytes: usize,
-    deadline: Option<Instant>,
-) -> Result<Option<Vec<u8>>, ReportError> {
-    check_deadline(deadline)?;
-    let limit = usize::try_from(super::REPORT_CONTENT_BYTES)
-        .map_err(|_| io::Error::other("report cap exceeds platform range"))?;
-    if expected_bytes > limit {
-        return Err(ReportError::ReportCapExceeded);
+/// C's named report-read buffers, reserved before L can be spawned. The full fixed report cap
+/// remains charged even for an empty or short final report; no late allocation scales with bytes
+/// delivered by O. This owns no report descriptor until actual authenticated final delivery.
+pub(super) struct PreparedReportRead {
+    collected: Vec<u8>,
+    scratch: Vec<u8>,
+}
+
+impl PreparedReportRead {
+    pub(super) fn prepare() -> Result<Self, ReportError> {
+        let limit = usize::try_from(super::REPORT_CONTENT_BYTES)
+            .map_err(|_| io::Error::other("report cap exceeds platform range"))?;
+        let mut collected = Vec::new();
+        collected
+            .try_reserve_exact(limit)
+            .map_err(io::Error::other)?;
+        let mut scratch = Vec::new();
+        scratch
+            .try_reserve_exact(READ_BYTES)
+            .map_err(io::Error::other)?;
+        scratch.resize(READ_BYTES, 0);
+        Ok(Self { collected, scratch })
     }
-    if !rustix::io::fcntl_getfd(&descriptor)?.contains(rustix::io::FdFlags::CLOEXEC)
-        || !fcntl_get_seals(&descriptor)?.contains(required_seals())
-    {
-        return Err(ReportError::MissingSeals);
+
+    /// Actual retained Vec capacities and fixed owner state, rather than the configured cap.
+    pub(super) fn reserved_bytes(&self) -> Result<u64, ReportError> {
+        let bytes = self
+            .collected
+            .capacity()
+            .checked_add(self.scratch.capacity())
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Self>()))
+            .ok_or_else(|| io::Error::other("caller report-read reservation overflow"))?;
+        u64::try_from(bytes).map_err(|_| {
+            io::Error::other("caller report-read reservation exceeds platform range").into()
+        })
     }
-    let mut file = File::from(descriptor);
-    let identity = fstat(&file)?;
-    if rustix::fs::FileType::from_raw_mode(identity.st_mode) != rustix::fs::FileType::RegularFile
-        || file.metadata()?.len()
-            != u64::try_from(expected_bytes)
-                .map_err(|_| io::Error::other("report size exceeds platform range"))?
-    {
-        return Err(ReportError::ContentSizeMismatch);
-    }
-    file.seek(SeekFrom::Start(0))?;
-    let mut collected = Vec::with_capacity(expected_bytes);
-    let mut bytes = [0; READ_BYTES];
-    loop {
+
+    /// Validate the actual safely received CLOEXEC descriptor before reading any bytes. The
+    /// consumed preparation ensures that a second delivery cannot reuse an earlier report.
+    pub(super) fn read_received(
+        self,
+        descriptor: OwnedFd,
+        expected_bytes: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Option<Vec<u8>>, ReportError> {
         check_deadline(deadline)?;
-        let count = file.read(&mut bytes)?;
-        if count == 0 {
-            break;
+        let limit = usize::try_from(super::REPORT_CONTENT_BYTES)
+            .map_err(|_| io::Error::other("report cap exceeds platform range"))?;
+        if expected_bytes > limit {
+            return Err(ReportError::ReportCapExceeded);
         }
-        let next = collected
-            .len()
-            .checked_add(count)
-            .ok_or(ReportError::ReportCapExceeded)?;
-        if next > expected_bytes {
+        if !rustix::io::fcntl_getfd(&descriptor)?.contains(rustix::io::FdFlags::CLOEXEC)
+            || !fcntl_get_seals(&descriptor)?.contains(required_seals())
+        {
+            return Err(ReportError::MissingSeals);
+        }
+        let mut file = File::from(descriptor);
+        let identity = fstat(&file)?;
+        if rustix::fs::FileType::from_raw_mode(identity.st_mode)
+            != rustix::fs::FileType::RegularFile
+            || file.metadata()?.len()
+                != u64::try_from(expected_bytes)
+                    .map_err(|_| io::Error::other("report size exceeds platform range"))?
+        {
             return Err(ReportError::ContentSizeMismatch);
         }
-        collected.extend_from_slice(&bytes[..count]);
+        file.seek(SeekFrom::Start(0))?;
+        let mut collected = self.collected;
+        let mut bytes = self.scratch;
+        loop {
+            check_deadline(deadline)?;
+            let count = file.read(bytes.as_mut_slice())?;
+            if count == 0 {
+                break;
+            }
+            let next = collected
+                .len()
+                .checked_add(count)
+                .ok_or(ReportError::ReportCapExceeded)?;
+            if next > expected_bytes {
+                return Err(ReportError::ContentSizeMismatch);
+            }
+            collected.extend_from_slice(&bytes[..count]);
+        }
+        let final_identity = fstat(&file)?;
+        if identity.st_dev != final_identity.st_dev || identity.st_ino != final_identity.st_ino {
+            return Err(ReportError::DescriptorIdentityChanged);
+        }
+        if collected.len() != expected_bytes {
+            return Err(ReportError::ContentSizeMismatch);
+        }
+        check_deadline(deadline)?;
+        Ok((!collected.is_empty()).then_some(collected))
     }
-    let final_identity = fstat(&file)?;
-    if identity.st_dev != final_identity.st_dev || identity.st_ino != final_identity.st_ino {
-        return Err(ReportError::DescriptorIdentityChanged);
-    }
-    if collected.len() != expected_bytes {
-        return Err(ReportError::ContentSizeMismatch);
-    }
-    check_deadline(deadline)?;
-    Ok((!collected.is_empty()).then_some(collected))
 }
 
 fn check_deadline(deadline: Option<Instant>) -> Result<(), ReportError> {
@@ -430,4 +471,45 @@ fn round_pages(bytes: u64, page: u64) -> io::Result<u64> {
         .map(|rounded| rounded / page)
         .and_then(|pages| pages.checked_mul(page))
         .ok_or_else(|| io::Error::other("report backing reservation overflow"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn report_descriptor(bytes: &[u8], sealed: bool) -> OwnedFd {
+        let descriptor = memfd_create(
+            "quire-report-read-unit",
+            MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING,
+        )
+        .unwrap();
+        let mut file = File::from(descriptor);
+        file.write_all(bytes).unwrap();
+        if sealed {
+            fcntl_add_seals(&file, required_seals()).unwrap();
+        }
+        file.into()
+    }
+
+    /// Trace: FR-034-AC-33.
+    #[test]
+    fn prepared_report_read_accepts_actual_seals_and_refuses_mutable_or_wrong_sized_delivery() {
+        let content = b"actual report";
+        let read = PreparedReportRead::prepare().unwrap();
+        assert_eq!(
+            read.read_received(report_descriptor(content, true), content.len(), None)
+                .unwrap(),
+            Some(content.to_vec())
+        );
+        let read = PreparedReportRead::prepare().unwrap();
+        assert!(matches!(
+            read.read_received(report_descriptor(content, false), content.len(), None),
+            Err(ReportError::MissingSeals)
+        ));
+        let read = PreparedReportRead::prepare().unwrap();
+        assert!(matches!(
+            read.read_received(report_descriptor(content, true), content.len() - 1, None),
+            Err(ReportError::ContentSizeMismatch)
+        ));
+    }
 }
