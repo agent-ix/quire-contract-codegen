@@ -538,24 +538,38 @@ pub fn execute_kani_obligations(
     if requests.is_empty() {
         return Ok(Vec::new());
     }
+    let preparation_started = Instant::now();
     let stdin = super::stdin::OriginalStdin::capture_original()
         .map_err(|cause| KaniExecutionRefusal::MemoryMechanismUnavailable { cause })?;
     for request in requests {
         require_in_crate(request)?;
     }
-    Ok(plan_groups(requests)
+    let groups = plan_groups(requests);
+    // Each original per-group budget includes the shared pre-spawn snapshot/validation/planning.
+    // Waiting for another group is not that group's execution or a fresh setup allocation.
+    let preparation = preparation_started.elapsed();
+    Ok(groups
         .into_iter()
-        .map(|group| KaniGroupRun {
-            members: group.iter().map(|(position, _)| *position).collect(),
-            evidence: match group.as_slice() {
-                [(_, only)] => run_single(
-                    only,
-                    &stdin,
-                    Instant::now().checked_add(only.harness.view().ceilings.wall_clock),
-                )
-                .map(|evidence| vec![evidence]),
-                _ => run_group(&group, &stdin),
-            },
+        .map(|group| {
+            let started = Instant::now();
+            KaniGroupRun {
+                members: group.iter().map(|(position, _)| *position).collect(),
+                evidence: match group.as_slice() {
+                    [(_, only)] => run_single(
+                        only,
+                        &stdin,
+                        started.checked_add(
+                            only.harness
+                                .view()
+                                .ceilings
+                                .wall_clock
+                                .saturating_sub(preparation),
+                        ),
+                    )
+                    .map(|evidence| vec![evidence]),
+                    _ => run_group(&group, &stdin, preparation, started),
+                },
+            }
         })
         .collect())
 }
@@ -663,12 +677,14 @@ fn batch_launch_command(
 fn run_group(
     group: &[(usize, &KaniExecutionRequest<'_>)],
     stdin: &super::stdin::OriginalStdin,
+    preparation: Duration,
+    started: Instant,
 ) -> Result<Vec<KaniExecutionEvidence>, KaniExecutionRefusal> {
     let (Some((_, first)), Some(count)) = (group.first(), NonZeroUsize::new(group.len())) else {
         return Ok(Vec::new());
     };
     let timeout = outer_bound(first.harness.view().ceilings.wall_clock, group.len());
-    let deadline = Instant::now().checked_add(timeout);
+    let deadline = started.checked_add(timeout.saturating_sub(preparation));
     let views: Vec<HarnessView<'_>> = group
         .iter()
         .map(|(_, request)| request.harness.view())
