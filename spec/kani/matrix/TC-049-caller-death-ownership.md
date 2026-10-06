@@ -498,11 +498,14 @@ oracle and one-CODE-PR gate.
     precondition, exact setup window and observed-only refusal limit. Treat authenticated self-proc
     lstat as a link-presence probe, never compare its symlink inode/type/mode with the target pin.
     Require followed stat and pin fstat agreement on target S_IFMT type/st_dev/st_ino and separate
-    agreement of original F_GETFL/F_GETFD observations; exclude intentional pin CLOEXEC from the
-    original exec flags. Positive unchanged Open input must admit despite different link metadata.
+    agreement of original F_GETFL & O_ACCMODE and F_GETFD & FD_CLOEXEC observations; exclude
+    intentional pin CLOEXEC from the original exec flag. Positive unchanged Open input must admit despite different link metadata.
     Through the existing private capture boundary, exercise observed absence/Open mismatch, target
-    identity/type mismatch, original flag change and unexpected EBADF after Open: require typed
-    refusal. No public hook, atomicity or same-inode open-file-description identity claim.
+    identity/type mismatch, original access-mode/FD_CLOEXEC change and unexpected EBADF after Open:
+    require typed refusal. Positively admit unchanged Open identity/access/exec flags while a real
+    separate process sharing the original open file description changes O_NONBLOCK/O_APPEND status
+    flags at an acknowledged capture boundary. Those mutable flags do not drive instability refusal;
+    require unchanged input/recipe handling, no rewrite or restoration of a status-flag snapshot. No public hook, atomicity or same-inode open-file-description identity claim.
     Concurrent caller close/rebind/replacement is caller contract breach outside backend fault domain; no assertion requires detecting every ambient
     mutation or preventing such a race. Authenticated self-proc/safe absent capture remains UNRUN;
     unavailable safe capture refuses, with no raw descriptor adoption or public request field.
@@ -550,6 +553,11 @@ oracle and one-CODE-PR gate.
     never claim join/retirement or diagnose kernel failure from timeout. No public hook is allocated
     and no real kernel-stuck task is required. If a required ordinary seam is absent, record owed
     evidence under the existing fixture SPEC gate, never claim this criterion backed.
+    Inspect the public GuardianFailureKind definition: only CleanupUnconfirmed, no extra kind or
+    non-exhaustive catchall. Exercise existing startup Unavailable and Io paths plus executable
+    prechecks and verify their existing MemoryMechanismUnavailable/Tool mapping remains; retain
+    separately allocated admission context and existing resource/report/capture mappings. No message
+    parsing or adoption of a WIP kind catalog.
     Inspect single/batch public rustdoc for both caller-stdio and kernel-settlement preconditions,
     exact setup/original settlement windows, typed error and diagnostic-only residual/no cleanup
     guarantee outside the kernel precondition. Keep ordinary caller/group death and contained
