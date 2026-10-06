@@ -2078,7 +2078,7 @@ mod tests {
     /// Local conformance lane: `QSPEC_REPO=/path/to/quire-specification cargo test
     /// --locked --lib tc_029_qspec_recursive_fixture_uses_the_reader_shapes -- --ignored`.
     ///
-    /// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+    /// Trace: FR-018-AC-26, FR-018-AC-27, TC-029.
     #[test]
     #[ignore = "set QSPEC_REPO to a QSpec checkout for the local conformance lane"]
     fn tc_029_qspec_recursive_fixture_uses_the_reader_shapes() {
@@ -2148,7 +2148,7 @@ mod tests {
         Ok(closure)
     }
 
-    /// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+    /// Trace: FR-018-AC-26, FR-018-AC-27, TC-029.
     #[test]
     fn tc_029_recursive_list_and_tree_shapes_close_at_record_keys() {
         let nodes = recursive_shape_nodes();
