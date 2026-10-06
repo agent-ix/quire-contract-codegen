@@ -519,21 +519,59 @@ pub(super) fn try_spawn_capture<R>(
 where
     R: Read + AsFd + Send + 'static,
 {
-    let stop = Arc::clone(&flags.stop);
-    let failure = FlagOnFailure {
-        flag: Arc::clone(&flags.failed),
-        failed: true,
-    };
-    thread::Builder::new()
-        .stack_size(CAPTURE_STACK_BYTES)
-        .spawn(move || {
-            // The whole guard moves into the thread: a closure naming only `failure.failed` would
-            // capture that field and drop the guard, and set the flag, here.
-            let mut failure = failure;
-            let captured = capture(pipe, &stop, limit, STOP_DRAIN_LIMIT, poll);
-            failure.failed = captured.is_err();
-            captured
-        })
+    PreparedCapture::prepare(limit)?.spawn(pipe, flags)
+}
+
+/// Run-owned output storage that can be allocated and charged before launching any role.
+/// The retained capacity, rather than the eventual output length, is the reservation.
+#[cfg(any(test, target_os = "linux"))]
+pub(super) struct PreparedCapture {
+    kept: Vec<u8>,
+    limit: usize,
+}
+
+#[cfg(any(test, target_os = "linux"))]
+impl PreparedCapture {
+    pub(super) fn prepare(limit: usize) -> io::Result<Self> {
+        let mut kept = Vec::new();
+        kept.try_reserve_exact(limit).map_err(io::Error::other)?;
+        Ok(Self { kept, limit })
+    }
+
+    /// Actual Vec capacity and the declared thread stack. This excludes other run resources;
+    /// the caller must add controls, metadata and its creating-thread reservation separately.
+    pub(super) fn reserved_bytes(&self) -> io::Result<u64> {
+        u64::try_from(self.kept.capacity())
+            .map_err(io::Error::other)?
+            .checked_add(u64::try_from(CAPTURE_STACK_BYTES).map_err(io::Error::other)?)
+            .ok_or_else(|| io::Error::other("capture reservation cannot be represented"))
+    }
+
+    pub(super) fn spawn<R>(
+        self,
+        pipe: R,
+        flags: &CaptureFlags,
+    ) -> io::Result<thread::JoinHandle<Captured>>
+    where
+        R: Read + AsFd + Send + 'static,
+    {
+        let stop = Arc::clone(&flags.stop);
+        let failure = FlagOnFailure {
+            flag: Arc::clone(&flags.failed),
+            failed: true,
+        };
+        thread::Builder::new()
+            .stack_size(CAPTURE_STACK_BYTES)
+            .spawn(move || {
+                // The whole guard moves into the thread: a closure naming only `failure.failed` would
+                // capture that field and drop the guard, and set the flag, here.
+                let mut failure = failure;
+                let captured =
+                    capture_into(pipe, &stop, self.limit, STOP_DRAIN_LIMIT, poll, self.kept);
+                failure.failed = captured.is_err();
+                captured
+            })
+    }
 }
 
 #[cfg(test)]
@@ -580,15 +618,26 @@ pub(super) fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
 /// More than `limit` bytes is [`CaptureFailure::OverLimit`] and exactly `limit` is returned
 /// whole; a failed poll or read is [`CaptureFailure::Unread`]. Nothing is truncated and nothing
 /// that failed is returned as what had been read so far.
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(test)]
 fn capture<R: Read + AsFd>(
-    mut pipe: R,
+    pipe: R,
     stop: &AtomicBool,
     limit: usize,
     drain_limit: Duration,
     poll_pipe: PollFn,
 ) -> Captured {
-    let mut kept = Vec::new();
+    capture_into(pipe, stop, limit, drain_limit, poll_pipe, Vec::new())
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn capture_into<R: Read + AsFd>(
+    mut pipe: R,
+    stop: &AtomicBool,
+    limit: usize,
+    drain_limit: Duration,
+    poll_pipe: PollFn,
+    mut kept: Vec<u8>,
+) -> Captured {
     let mut chunk = [0_u8; 64 * 1024];
     let interval = Timespec::try_from(LAUNCHER_POLL_INTERVAL).unwrap_or_default();
     let no_wait = Timespec::default();
@@ -623,10 +672,10 @@ fn capture<R: Read + AsFd>(
         match pipe.read(&mut chunk) {
             Ok(0) => break,
             Ok(read) => {
-                kept.extend(chunk.iter().take(read));
-                if kept.len() > limit {
+                if read > limit.saturating_sub(kept.len()) {
                     return Err(CaptureFailure::OverLimit);
                 }
+                kept.extend(chunk.iter().take(read));
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(error) => {
