@@ -1,29 +1,39 @@
 //! Launching the Kani launcher process: spawn, bounded capture, the wall-clock budget and the
 //! owned namespace teardown (FR-017, FR-028).
 
+use std::{fmt, io, num::NonZeroUsize, time::Instant};
+
+#[cfg(any(test, target_os = "linux"))]
 use std::{
-    fmt, io,
     io::Read,
-    num::NonZeroUsize,
-    os::{fd::AsFd, unix::process::CommandExt},
-    process::{Child, Command, Stdio},
+    os::fd::AsFd,
+    process::Child,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
+};
+
+#[cfg(test)]
+use rustix::process::{kill_process_group, Signal};
+#[cfg(test)]
+use std::{
+    os::unix::process::CommandExt,
+    process::{Command, Stdio},
 };
 
 use super::{
     memory::{MemoryObservation, MemoryObserver},
-    namespace::{BackendCommand, NamespaceOwner},
+    namespace::BackendCommand,
 };
 
+#[cfg(any(test, target_os = "linux"))]
 use rustix::{
     event::{poll, PollFd, PollFlags},
     io::Errno,
-    process::{kill_process_group, waitid, Pid, Signal, WaitId, WaitIdOptions},
+    process::{waitid, Pid, WaitId, WaitIdOptions},
     time::Timespec,
 };
 
@@ -95,7 +105,8 @@ impl fmt::Display for CaptureStream {
 
 /// Why a capture thread did not return its stream.
 #[derive(Debug, Eq, PartialEq)]
-enum CaptureFailure {
+#[cfg(any(test, target_os = "linux"))]
+pub(super) enum CaptureFailure {
     /// More than the limit was read.
     OverLimit,
     /// The pipe could not be polled or read, or its thread panicked.
@@ -103,26 +114,31 @@ enum CaptureFailure {
 }
 
 /// What one capture thread returns: the whole stream, or why it could not.
-type Captured = Result<Vec<u8>, CaptureFailure>;
+#[cfg(any(test, target_os = "linux"))]
+pub(super) type Captured = Result<Vec<u8>, CaptureFailure>;
 
 /// The `poll(2)` a capture thread waits with. A parameter so that a failed poll, which no real pipe
 /// produces on demand, is exercised by a test.
+#[cfg(any(test, target_os = "linux"))]
 type PollFn = fn(&mut [PollFd<'_>], Option<&Timespec>) -> Result<usize, Errno>;
 
 /// Polling interval while waiting for the launcher to exit within its budget, and the longest a
 /// capture thread goes between looking at its stop flag. Short enough that a tight caller-declared
 /// timeout in a test is still observed promptly, long enough not to spin.
+#[cfg(any(test, target_os = "linux"))]
 const LAUNCHER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// Most bytes each of the launcher's stdout and stderr may carry, per harness the process runs. A
 /// stream over it is refused, never truncated: the verdict is in the exported report, but the
 /// playback a falsified harness is attributed from is printed in the stream, and a cut stream
 /// cannot say which blocks it lost.
+#[cfg(any(test, target_os = "linux"))]
 pub(super) const CAPTURE_LIMIT: usize = 8 * 1024 * 1024;
 
 /// Longest a capture thread keeps reading after it is told to stop. Whatever the launcher wrote
 /// before it ended is already in the pipe and is read in microseconds; the limit only bounds a
 /// straggler that keeps writing.
+#[cfg(any(test, target_os = "linux"))]
 const STOP_DRAIN_LIMIT: Duration = Duration::from_millis(100);
 
 /// Runs `command` to completion or kills its process group once `timeout` elapses, whichever
@@ -166,11 +182,12 @@ pub(super) fn run_launcher(
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> io::Result<LaunchOutcome> {
-    run_monitored(command, timeout, harnesses, None, None, None)
+    run_monitored(command, timeout, harnesses, None, None)
 }
 
 /// A bounded launch together with the observations made by its enforcement mechanism.
 pub(super) struct BoundedLaunch {
+    pub(super) report: Result<Option<Vec<u8>>, crate::kani::output::report::KaniReportRefusal>,
     pub(super) outcome: LaunchOutcome,
     pub(super) memory: MemoryObservation,
 }
@@ -179,17 +196,68 @@ pub(super) struct BoundedLaunch {
 pub(super) enum BoundedLaunchError {
     Unavailable(io::Error),
     Io(io::Error),
+    Guardian {
+        kind: GuardianFailureKind,
+        detail: String,
+    },
 }
 
-/// Run a backend with both ceilings, retaining the actual memory observations.
+/// Stable kind of a guardian refusal; diagnostic text does not select its meaning.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GuardianFailureKind {
+    /// The configured helper path is absent.
+    MissingHelper,
+    /// The configured helper is not an executable regular file.
+    UnusableHelper,
+    /// Pair creation, mapping or transport I/O failed.
+    ControlUnavailable,
+    /// The guardian disappeared or its exclusive control endpoint closed.
+    GuardianTerminated,
+    /// A finite setup/control allowance elapsed with the original deadline still live.
+    ControlDeadline,
+    /// Control encoding or ancillary metadata was malformed.
+    MalformedControl,
+    /// Control bytes or work exceeded their finite bounds.
+    ControlLimit,
+    /// Received descriptor count, ownership or CLOEXEC state was invalid.
+    InvalidDescriptors,
+    /// Actual sender credentials did not match the retained INIT.
+    SenderMismatch,
+    /// The helper's actual compilation artifact differs from the running library.
+    BuildIdentityMismatch,
+    /// Control authority was stale or belonged to another run.
+    AuthorityMismatch,
+    /// The actual monitor/INIT chain or its observation was invalid.
+    InitIdentityMismatch,
+    /// Guardian's session/process group was not isolated.
+    SessionNotIsolated,
+    /// Creator UID did not match the actual original-caller mapping.
+    UidMappingMismatch,
+    /// A control arrived in an unauthorized lifecycle stage.
+    UnexpectedControl,
+    /// The authenticated guardian could not spawn the configured backend.
+    BackendSpawnFailed,
+    /// The guardian could not observe/reap its backend.
+    BackendObservationFailed,
+    /// Claimed INIT teardown or monitor reaping could not be confirmed.
+    CleanupUnconfirmed,
+}
+
+/// Run the actual packaged guardian with one ownership set for this backend recipe.
 pub(super) fn run_bounded_launcher(
     command: BackendCommand,
+    helper: &std::path::Path,
+    stdin: &super::stdin::OriginalStdin,
+    report_path: &std::path::Path,
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     deadline: Option<Instant>,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
     run_bounded_launcher_at(
         command,
+        helper,
+        stdin,
+        report_path,
         ceilings,
         harnesses,
         std::path::Path::new("/proc"),
@@ -199,47 +267,52 @@ pub(super) fn run_bounded_launcher(
 
 fn run_bounded_launcher_at(
     command: BackendCommand,
+    helper: &std::path::Path,
+    stdin: &super::stdin::OriginalStdin,
+    report_path: &std::path::Path,
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     procfs: &std::path::Path,
     deadline: Option<Instant>,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
-    let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
+    let observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         return Ok(BoundedLaunch {
             outcome: LaunchOutcome::TimedOut,
             memory: observer.observation(),
+            report: Ok(None),
         });
     }
-    let (command, owner) =
-        NamespaceOwner::prepare(command).map_err(BoundedLaunchError::Unavailable)?;
-    let outcome = run_monitored(
-        command,
-        ceilings.wall_clock,
-        harnesses,
-        Some((&mut observer, ceilings.memory_bytes.get())),
-        Some(owner),
-        deadline,
-    )
-    .map_err(|error| {
-        if error.kind() == io::ErrorKind::Unsupported || error.kind() == io::ErrorKind::NotFound {
-            BoundedLaunchError::Unavailable(error)
-        } else {
-            BoundedLaunchError::Io(error)
-        }
-    })?;
-    Ok(BoundedLaunch {
-        outcome,
-        memory: observer.observation(),
-    })
+    #[cfg(target_os = "linux")]
+    {
+        let mut observer = observer;
+        super::owned::run(
+            command,
+            helper,
+            stdin,
+            report_path,
+            ceilings,
+            harnesses,
+            deadline,
+            &mut observer,
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (command, helper, stdin, report_path, ceilings, harnesses);
+        Err(BoundedLaunchError::Unavailable(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "PID-namespace guardian requires Linux",
+        )))
+    }
 }
 
+#[cfg(test)]
 fn run_monitored(
     mut command: Command,
     timeout: Duration,
     harnesses: NonZeroUsize,
     mut memory: Option<(&mut MemoryObserver, u64)>,
-    mut namespace: Option<NamespaceOwner>,
     supplied_deadline: Option<Instant>,
 ) -> io::Result<LaunchOutcome> {
     command
@@ -252,15 +325,8 @@ fn run_monitored(
     }
     let mut child = command.spawn()?;
     drop(command); // Close the parent copies of child-only control descriptors before reading EOF.
-    if let Some(owner) = &mut namespace {
-        owner.attach(&child)?;
-    }
     let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
-        if let Some(owner) = &mut namespace {
-            owner.cleanup()?;
-        } else {
-            kill_process_tree(&mut child);
-        }
+        kill_process_tree(&mut child);
         let _ = reap_stopped_launcher(&mut child);
         return Err(io::Error::other("a piped standard stream was not captured"));
     };
@@ -272,42 +338,12 @@ fn run_monitored(
     let stdout_reader = spawn_capture(stdout, &flags, limit);
     let stderr_reader = spawn_capture(stderr, &flags, limit);
 
-    let startup = match &mut namespace {
-        Some(owner) => match &mut memory {
-            Some((observer, _)) => owner.dispatch(deadline, observer).map(Some),
-            None => Err(io::Error::other("namespace memory observer missing")),
-        },
-        None => Ok(None),
-    };
-    let exited = match &startup {
-        Ok(root) => wait_until_at(&child, deadline, &flags.failed, &mut memory, *root),
-        Err(error) if error.kind() == io::ErrorKind::TimedOut => Ok(WaitConclusion::TimedOut),
-        Err(_) => Err(io::Error::other("namespace startup refused")), // Refusal is returned after owned cleanup.
-    };
-    let cleanup = match &mut namespace {
-        Some(owner) => owner.cleanup(),
-        None => {
-            kill_process_tree(&mut child);
-            Ok(())
-        }
-    };
+    let exited = wait_until_at(&child, deadline, &flags.failed, &mut memory, None);
+    kill_process_tree(&mut child);
     let reaped = reap_stopped_launcher(&mut child);
     flags.stop.store(true, Ordering::Release);
     let stdout_bytes = finish_capture(stdout_reader);
     let stderr_bytes = finish_capture(stderr_reader);
-    if let Err(error) = cleanup {
-        return Ok(LaunchOutcome::MemoryUnobserved {
-            detail: format!("namespace cleanup failed: {error}"),
-        });
-    }
-    if let Err(error) = startup {
-        if error.kind() != io::ErrorKind::TimedOut {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                format!("namespace startup refused: {error}"),
-            ));
-        }
-    }
     let exited = exited?;
     let reaped = reaped?;
 
@@ -348,7 +384,8 @@ fn run_monitored(
 }
 
 /// Reap only after observing exit; never turn unconfirmed kernel teardown into an unbounded wait.
-fn reap_stopped_launcher(child: &mut Child) -> io::Result<std::process::ExitStatus> {
+#[cfg(any(test, target_os = "linux"))]
+pub(super) fn reap_stopped_launcher(child: &mut Child) -> io::Result<std::process::ExitStatus> {
     let pid = i32::try_from(child.id())
         .ok()
         .and_then(Pid::from_raw)
@@ -372,7 +409,8 @@ fn reap_stopped_launcher(child: &mut Child) -> io::Result<std::process::ExitStat
 
 /// The bytes of `stream`, or the outcome that refuses the run because they were not all read or
 /// were more than `limit`.
-fn stream_bytes(
+#[cfg(any(test, target_os = "linux"))]
+pub(super) fn stream_bytes(
     stream: CaptureStream,
     captured: Captured,
     limit: usize,
@@ -389,15 +427,17 @@ fn stream_bytes(
 }
 
 /// The two flags the capture threads and the run share.
-struct CaptureFlags {
+#[cfg(any(test, target_os = "linux"))]
+pub(super) struct CaptureFlags {
     /// Set by the run once the launcher is gone: read what is in the pipe and return.
-    stop: Arc<AtomicBool>,
+    pub(super) stop: Arc<AtomicBool>,
     /// Set by a capture thread that failed: the run can no longer be trusted, stop waiting.
-    failed: Arc<AtomicBool>,
+    pub(super) failed: Arc<AtomicBool>,
 }
 
 /// The settled reason for stopping the unreaped launcher.
 #[derive(Debug)]
+#[cfg(test)]
 enum WaitConclusion {
     Completed,
     TimedOut,
@@ -418,6 +458,7 @@ fn wait_until(
     wait_until_at(child, deadline, failed, memory, None)
 }
 
+#[cfg(test)]
 fn wait_until_at(
     child: &Child,
     deadline: Option<Instant>,
@@ -464,7 +505,12 @@ fn wait_until_at(
 /// Starts a thread that reads `pipe` to its end, or until `stop` is set and nothing more is
 /// waiting in it. A failure sets `failed`, so the run stops waiting for a launcher whose output
 /// nobody is reading any more.
-fn spawn_capture<R>(pipe: R, flags: &CaptureFlags, limit: usize) -> thread::JoinHandle<Captured>
+#[cfg(any(test, target_os = "linux"))]
+pub(super) fn try_spawn_capture<R>(
+    pipe: R,
+    flags: &CaptureFlags,
+    limit: usize,
+) -> io::Result<thread::JoinHandle<Captured>>
 where
     R: Read + AsFd + Send + 'static,
 {
@@ -473,7 +519,7 @@ where
         flag: Arc::clone(&flags.failed),
         failed: true,
     };
-    thread::spawn(move || {
+    thread::Builder::new().spawn(move || {
         // The whole guard moves into the thread: a closure naming only `failure.failed` would
         // capture that field and drop the guard, and set the flag, here.
         let mut failure = failure;
@@ -483,14 +529,24 @@ where
     })
 }
 
+#[cfg(test)]
+fn spawn_capture<R>(pipe: R, flags: &CaptureFlags, limit: usize) -> thread::JoinHandle<Captured>
+where
+    R: Read + AsFd + Send + 'static,
+{
+    try_spawn_capture(pipe, flags, limit).expect("test capture reader thread must start")
+}
+
 /// Sets `flag` when dropped while `failed`, which a capture thread is until it has returned its
 /// stream: a thread that panics unwinds through this and so stops the run's wait too, instead of
 /// leaving the run waiting on a launcher whose output nobody reads.
+#[cfg(any(test, target_os = "linux"))]
 struct FlagOnFailure {
     flag: Arc<AtomicBool>,
     failed: bool,
 }
 
+#[cfg(any(test, target_os = "linux"))]
 impl Drop for FlagOnFailure {
     fn drop(&mut self) {
         if self.failed {
@@ -501,7 +557,8 @@ impl Drop for FlagOnFailure {
 
 /// The stream a capture thread returned, or why it did not: a thread that panicked is an unread
 /// stream, never an empty one.
-fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
+#[cfg(any(test, target_os = "linux"))]
+pub(super) fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
     reader.join().unwrap_or_else(|_| {
         Err(CaptureFailure::Unread {
             detail: "the capture thread panicked".to_owned(),
@@ -516,6 +573,7 @@ fn finish_capture(reader: thread::JoinHandle<Captured>) -> Captured {
 /// More than `limit` bytes is [`CaptureFailure::OverLimit`] and exactly `limit` is returned
 /// whole; a failed poll or read is [`CaptureFailure::Unread`]. Nothing is truncated and nothing
 /// that failed is returned as what had been read so far.
+#[cfg(any(test, target_os = "linux"))]
 fn capture<R: Read + AsFd>(
     mut pipe: R,
     stop: &AtomicBool,
@@ -586,6 +644,7 @@ fn capture<R: Read + AsFd>(
 ///
 /// A descendant that leaves the group (`setsid`, `setpgid`) is not reached. Nothing in Kani's
 /// process tree does, and this call does not wait for one either way.
+#[cfg(test)]
 fn kill_process_tree(child: &mut Child) {
     if let Some(group) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
         let _ = kill_process_group(group, Signal::KILL);
@@ -640,7 +699,6 @@ mod tests {
             Duration::from_secs(5),
             NonZeroUsize::MIN,
             None,
-            None,
             Some(Instant::now()),
         )
         .unwrap();
@@ -661,6 +719,9 @@ mod tests {
         command.arg("-c").arg("touch \"$1\"").arg("sh").arg(&marker);
         let result = run_bounded_launcher_at(
             command,
+            std::path::Path::new("/unused-guardian"),
+            &super::super::stdin::OriginalStdin::Closed,
+            &directory.join("report.json"),
             crate::kani::identity::ProofCeilings {
                 memory_bytes: std::num::NonZeroU64::new(1024).unwrap(),
                 wall_clock: Duration::from_secs(5),
@@ -1366,7 +1427,6 @@ mod tests {
             Duration::from_secs(5),
             NonZeroUsize::MIN,
             Some((&mut observer, u64::MAX)),
-            None,
             None,
         )
         .unwrap();

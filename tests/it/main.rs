@@ -36,6 +36,7 @@
 //! no process-global state, so nothing forces the duplication here -- it is not load-bearing.
 #[path = "../common/mod.rs"]
 pub(crate) mod common;
+pub(crate) use common::proof_ceilings as fixture_budgets;
 
 mod bound_census;
 mod bound_coverage;
@@ -69,3 +70,11 @@ mod skeleton_spine;
 mod strategy_generation;
 mod terminal_map;
 mod vacuity_primitives;
+
+#[cfg(target_os = "linux")]
+#[path = "../common/kani_execution_batch.rs"]
+mod guarded_batch;
+
+#[cfg(target_os = "linux")]
+#[path = "../common/kani_execution_single.rs"]
+mod guarded_single;

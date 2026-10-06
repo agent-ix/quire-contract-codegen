@@ -4,48 +4,46 @@
 //! the unreaped monitor pins the dedicated startup process group. After dispatch, the init
 //! pidfd owns every descendant, including orphaned, session-escaped and nested-namespace tasks.
 //!
-//! This ownership and teardown covers in-process conclusions and startup error/unwind paths.
-//! Abrupt caller death (SIGKILL, abort, OOM kill) before the gate/PDEATH chain is fully armed
-//! can close the gate and release an unowned backend. Caller-death supervision is deferred
-//! to IR-639; this module does not claim protection for that startup window.
-
-use std::{
-    ffi::{OsStr, OsString},
-    fs::File,
-    io,
-    os::fd::OwnedFd,
-    path::{Path, PathBuf},
-    process::{Child, Command},
-    time::Instant,
-};
-
-#[cfg(target_os = "linux")]
-use std::{
-    fs,
-    io::{Read, Write},
-    time::Duration,
-};
+//! The gate releases only trusted guardian bootstrap. Positive backend Dispatch belongs to the
+//! separately authenticated caller lease; gate EOF itself supplies no backend authorization.
 
 #[cfg(target_os = "linux")]
 use command_fds::{CommandFdExt, FdMapping};
 #[cfg(target_os = "linux")]
-use rustix::pipe::{pipe_with, PipeFlags};
-#[cfg(target_os = "linux")]
-use rustix::process::{pidfd_open, pidfd_send_signal, PidfdFlags};
 use rustix::{
     event::{poll, PollFd, PollFlags},
-    process::{kill_process_group, Pid, Signal},
+    pipe::{pipe_with, PipeFlags},
+    process::{kill_process_group, pidfd_open, pidfd_send_signal, Pid, PidfdFlags, Signal},
     time::Timespec,
 };
+use serde::{Deserialize, Serialize};
+#[cfg(any(test, target_os = "linux"))]
+use std::process::Command;
+use std::{
+    ffi::{OsStr, OsString},
+    path::Path,
+};
 #[cfg(target_os = "linux")]
-use serde::Deserialize;
+use std::{
+    fs::{self, File},
+    io::{self, Read, Write},
+    os::fd::OwnedFd,
+    path::PathBuf,
+    process::Child,
+    time::Instant,
+};
+
+#[cfg(all(test, target_os = "linux"))]
+use std::time::Duration;
 
 /// An internal command recipe with explicit environment inheritance and inherited stdin.
 /// Capture owns stdout/stderr; no caller-configured stream is silently reconstructed.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct BackendCommand {
     program: OsString,
     arguments: Vec<OsString>,
-    directory: Option<PathBuf>,
+    directory: Option<OsString>,
     environment: Vec<(OsString, OsString)>,
 }
 
@@ -55,10 +53,9 @@ impl BackendCommand {
             program: program.as_ref().to_owned(),
             arguments: Vec::new(),
             directory: None,
-            environment: Vec::new(),
+            environment: std::env::vars_os().collect(),
         }
     }
-    #[cfg(test)]
     pub(super) fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
         self.arguments.push(argument.as_ref().to_owned());
         self
@@ -73,16 +70,26 @@ impl BackendCommand {
         self
     }
     pub(super) fn current_dir(&mut self, directory: impl AsRef<Path>) -> &mut Self {
-        self.directory = Some(directory.as_ref().to_owned());
+        self.directory = Some(directory.as_ref().as_os_str().to_owned());
         self
     }
     /// Apply the same argv, working directory and inherited-environment additions to a command.
-    fn configure(&self, command: &mut Command) {
+    #[cfg(any(test, target_os = "linux"))]
+    pub(super) fn configure(&self, command: &mut Command) {
         command.args(&self.arguments);
         if let Some(directory) = &self.directory {
-            command.current_dir(directory);
+            command.current_dir(Path::new(directory));
         }
-        command.envs(self.environment.iter().map(|(name, value)| (name, value)));
+        command
+            .env_clear()
+            .envs(self.environment.iter().map(|(name, value)| (name, value)));
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn into_command(self) -> Command {
+        let mut command = Command::new(&self.program);
+        self.configure(&mut command);
+        command
     }
 
     /// Real POSIX command capture for report tests, with no resource-enforcement attestation.
@@ -107,17 +114,37 @@ struct StartupInfo {
     namespace: u64,
 }
 
+#[cfg(target_os = "linux")]
+struct InitClaim {
+    pid: u32,
+    start: u64,
+    handle: OwnedFd,
+    namespace: PathBuf,
+}
+
+/// Produced only after INIT identity and memory-root binding both succeed with the gate retained.
+#[cfg(target_os = "linux")]
+pub(super) struct GatedClaim {
+    pid: u32,
+    start: u64,
+}
+
+#[cfg(target_os = "linux")]
 pub(super) struct NamespaceOwner {
     gate: Option<File>,
     #[cfg(target_os = "linux")]
     info: File,
     wrapper: Option<Pid>,
-    init: Option<(u32, u64, OwnedFd)>,
+    init: Option<InitClaim>,
     cleaned: bool,
 }
 
+#[cfg(target_os = "linux")]
 impl NamespaceOwner {
-    pub(super) fn prepare(recipe: BackendCommand) -> io::Result<(Command, Self)> {
+    pub(super) fn prepare(
+        helper: &Path,
+        #[cfg(target_os = "linux")] endpoint: super::control::GuardianEndpoint,
+    ) -> io::Result<(Command, Self)> {
         #[cfg(target_os = "linux")]
         let (gate_read, gate_write) = pipe_with(PipeFlags::CLOEXEC)?;
         #[cfg(target_os = "linux")]
@@ -129,6 +156,8 @@ impl NamespaceOwner {
             .args([
                 "--unshare-user",
                 "--unshare-pid",
+                "--as-pid-1",
+                "--new-session",
                 "--die-with-parent",
                 "--bind",
                 "/",
@@ -144,12 +173,15 @@ impl NamespaceOwner {
             .arg("--block-fd")
             .arg("4")
             .arg("--")
-            .arg(&recipe.program);
-        recipe.configure(&mut command);
+            .arg(helper);
         #[cfg(target_os = "linux")]
         {
             command
                 .fd_mappings(vec![
+                    FdMapping {
+                        parent_fd: endpoint.into_child_mapping(),
+                        child_fd: 0,
+                    },
                     FdMapping {
                         parent_fd: info_write,
                         child_fd: 3,
@@ -173,10 +205,6 @@ impl NamespaceOwner {
                 },
             ))
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            Err(unavailable("PID-namespace ownership requires Linux"))
-        }
     }
 
     /// Attach while the monitor is still unreaped; gated init cannot yet change its group.
@@ -185,19 +213,61 @@ impl NamespaceOwner {
         Ok(())
     }
 
-    /// Claim the namespace init before releasing any backend instruction.
+    /// Claim and bind the namespace INIT while retaining its bootstrap gate.
     #[cfg(target_os = "linux")]
-    pub(super) fn dispatch(
+    pub(super) fn claim_gated(
         &mut self,
         deadline: Option<Instant>,
+        startup_deadline: Instant,
         observer: &mut super::memory::MemoryObserver,
-    ) -> io::Result<u32> {
-        let startup_limit = Instant::now() + Duration::from_secs(5);
-        let startup_deadline =
-            deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
+    ) -> io::Result<GatedClaim> {
         let info = self.startup_information(deadline, startup_deadline)?;
-        let handle = pidfd_open(valid_pid(info.child)?, PidfdFlags::empty())?;
-        let directory = PathBuf::from("/proc").join(info.child.to_string());
+        self.claim_init(info.child, Some(info.namespace))?;
+        let start = self
+            .init
+            .as_ref()
+            .map(|claim| claim.start)
+            .ok_or_else(|| unavailable("namespace init claim missing"))?;
+        observer.bind_root(info.child, start)?;
+        if Instant::now() >= startup_deadline {
+            return Err(startup_expiry(deadline));
+        }
+        Ok(GatedClaim {
+            pid: info.child,
+            start,
+        })
+    }
+
+    /// Release only trusted bootstrap, after the retained INIT claim and observer binding.
+    pub(super) fn release_bootstrap_gate(
+        &mut self,
+        claim: GatedClaim,
+        deadline: Option<Instant>,
+        startup_deadline: Instant,
+    ) -> io::Result<u32> {
+        if !self
+            .init
+            .as_ref()
+            .is_some_and(|init| init.pid == claim.pid && init.start == claim.start)
+        {
+            return Err(unavailable("namespace bootstrap requires its INIT claim"));
+        }
+        if Instant::now() >= startup_deadline {
+            return Err(startup_expiry(deadline));
+        }
+        self.gate
+            .as_mut()
+            .ok_or_else(|| unavailable("namespace startup gate missing"))?
+            .write_all(&[1])?;
+        self.gate.take();
+        Ok(claim.pid)
+    }
+
+    /// Validate a candidate only against the still-owned monitor and actual kernel identity.
+    #[cfg(target_os = "linux")]
+    fn claim_init(&mut self, child: u32, reported_namespace: Option<u64>) -> io::Result<()> {
+        let handle = pidfd_open(valid_pid(child)?, PidfdFlags::empty())?;
+        let directory = PathBuf::from("/proc").join(child.to_string());
         let status = fs::read_to_string(directory.join("status"))?;
         let parent = status
             .lines()
@@ -212,7 +282,7 @@ impl NamespaceOwner {
         if parent != self.wrapper.map(|pid| pid.as_raw_nonzero().get())
             || nspid != Some("1")
             || namespace == caller_namespace
-            || namespace != format!("pid:[{}]", info.namespace)
+            || reported_namespace.is_some_and(|reported| namespace != format!("pid:[{reported}]"))
         {
             return Err(unavailable(
                 "namespace init identity did not match its owned monitor",
@@ -236,27 +306,181 @@ impl NamespaceOwner {
             return Err(unavailable("namespace init died before claim"));
         }
         // Retain the claimed handle before releasing the gate. No later pid reuse changes it.
-        self.init = Some((info.child, start, handle));
-        observer.bind_root(info.child, start)?;
-        if Instant::now() >= startup_deadline {
-            return Err(startup_expiry(deadline));
-        }
-        self.gate
-            .as_mut()
-            .ok_or_else(|| unavailable("namespace startup gate missing"))?
-            .write_all(&[1])?;
-        self.gate.take();
-        Ok(info.child)
+        self.init = Some(InitClaim {
+            pid: child,
+            start,
+            handle,
+            namespace,
+        });
+        Ok(())
     }
 
-    /// Unsupported targets cannot dispatch a PID-namespace backend.
-    #[cfg(not(target_os = "linux"))]
-    pub(super) fn dispatch(
-        &mut self,
-        _: Option<Instant>,
-        _: &mut super::memory::MemoryObserver,
-    ) -> io::Result<u32> {
-        Err(unavailable("PID namespaces unavailable"))
+    /// Revalidate the retained INIT chain and its new session after authenticated bootstrap.
+    #[cfg(target_os = "linux")]
+    pub(super) fn verify_ready(
+        &self,
+        sender: super::control::PeerCredentials,
+        mapped_uid: u32,
+    ) -> Result<(), ReadyIdentityError> {
+        let claim = self.init.as_ref().ok_or(ReadyIdentityError::Unclaimed)?;
+        if u32::try_from(sender.pid).ok() != Some(claim.pid)
+            || sender.uid != rustix::process::getuid().as_raw()
+            || sender.gid != rustix::process::getgid().as_raw()
+        {
+            return Err(ReadyIdentityError::SenderMismatch);
+        }
+        let directory = PathBuf::from("/proc").join(claim.pid.to_string());
+        let status = bounded_proc_text(&directory.join("status"), 16_384)?;
+        let parent = status.lines().find_map(|line| line.strip_prefix("PPid:"));
+        let nspid = status.lines().find_map(|line| line.strip_prefix("NSpid:"));
+        let parent = parent.and_then(|value| value.trim().parse::<i32>().ok());
+        if parent != self.wrapper.map(|pid| pid.as_raw_pid())
+            || nspid.and_then(|value| value.split_whitespace().last()) != Some("1")
+            || fs::read_link(directory.join("ns/pid"))? != claim.namespace
+        {
+            return Err(ReadyIdentityError::ChainMismatch);
+        }
+        let stat = bounded_proc_text(&directory.join("stat"), 4096)?;
+        let fields = stat
+            .rsplit_once(')')
+            .map(|(_, fields)| fields.split_whitespace().collect::<Vec<_>>())
+            .ok_or(ReadyIdentityError::ChainMismatch)?;
+        if fields.get(19).and_then(|value| value.parse::<u64>().ok()) != Some(claim.start) {
+            return Err(ReadyIdentityError::ChainMismatch);
+        }
+        let group = fields.get(2).and_then(|value| value.parse::<u32>().ok());
+        let session = fields.get(3).and_then(|value| value.parse::<u32>().ok());
+        let tty = fields.get(4).and_then(|value| value.parse::<i64>().ok());
+        if group != Some(claim.pid)
+            || session != Some(claim.pid)
+            || tty != Some(0)
+            || group == u32::try_from(rustix::process::getpgrp().as_raw_pid()).ok()
+            || session
+                == u32::try_from(
+                    rustix::process::getsid(None)
+                        .map_err(io::Error::from)?
+                        .as_raw_pid(),
+                )
+                .ok()
+        {
+            return Err(ReadyIdentityError::SessionNotIsolated);
+        }
+        let mappings = bounded_proc_text(&directory.join("uid_map"), 4096)?;
+        let host_uid = rustix::process::getuid().as_raw();
+        let mut actual_mapping = None;
+        for (index, mapping) in mappings.lines().enumerate() {
+            if index == 32 {
+                return Err(ReadyIdentityError::UidMappingMismatch);
+            }
+            let mut columns = mapping.split_whitespace();
+            let inside = columns.next().and_then(|value| value.parse::<u32>().ok());
+            let outside = columns.next().and_then(|value| value.parse::<u32>().ok());
+            let length = columns.next().and_then(|value| value.parse::<u32>().ok());
+            let (Some(inside), Some(outside), Some(length)) = (inside, outside, length) else {
+                return Err(ReadyIdentityError::UidMappingMismatch);
+            };
+            if columns.next().is_some() {
+                return Err(ReadyIdentityError::UidMappingMismatch);
+            }
+            if let Some(offset) = host_uid
+                .checked_sub(outside)
+                .filter(|offset| *offset < length)
+            {
+                if actual_mapping.replace(inside.checked_add(offset)).is_some() {
+                    return Err(ReadyIdentityError::UidMappingMismatch);
+                }
+            }
+        }
+        if actual_mapping.flatten() != Some(mapped_uid) {
+            return Err(ReadyIdentityError::UidMappingMismatch);
+        }
+        if self.init_terminated()? {
+            return Err(ReadyIdentityError::InitTerminated);
+        }
+        Ok(())
+    }
+
+    /// Pidfd readiness alone, rather than control EOF, confirms namespace INIT termination.
+    #[cfg(target_os = "linux")]
+    pub(super) fn init_terminated(&self) -> io::Result<bool> {
+        let claim = self
+            .init
+            .as_ref()
+            .ok_or_else(|| unavailable("INIT remains unclaimed"))?;
+        let mut ready = [PollFd::new(&claim.handle, PollFlags::IN)];
+        poll(&mut ready, Some(&Timespec::default()))?;
+        if ready[0]
+            .revents()
+            .intersects(PollFlags::ERR | PollFlags::NVAL)
+        {
+            return Err(io::Error::other("INIT pidfd observation failed"));
+        }
+        Ok(ready[0].revents().contains(PollFlags::IN))
+    }
+
+    /// Recovery reads only the live retained monitor's bounded direct task children.
+    #[cfg(target_os = "linux")]
+    fn recover_owned_init(&mut self) -> io::Result<()> {
+        use std::collections::BTreeSet;
+
+        const TASKS: usize = 16;
+        const CHILDREN: usize = 64;
+        const CHILD_BYTES: u64 = 4096;
+        let monitor = self
+            .wrapper
+            .ok_or_else(|| unavailable("owned monitor missing"))?;
+        let monitor_handle = pidfd_open(monitor, PidfdFlags::empty())?;
+        let mut live = [PollFd::new(&monitor_handle, PollFlags::IN)];
+        poll(&mut live, Some(&Timespec::default()))?;
+        if !live[0].revents().is_empty() {
+            return Err(unavailable("owned monitor died before INIT recovery"));
+        }
+        let directory = PathBuf::from("/proc")
+            .join(monitor.as_raw_nonzero().get().to_string())
+            .join("task");
+        let mut candidates = BTreeSet::new();
+        for (index, task) in fs::read_dir(directory)?.enumerate() {
+            if index == TASKS {
+                return Err(unavailable("owned monitor task recovery exceeds bound"));
+            }
+            let mut bytes = Vec::new();
+            File::open(task?.path().join("children"))?
+                .take(CHILD_BYTES + 1)
+                .read_to_end(&mut bytes)?;
+            if u64::try_from(bytes.len()).map_err(|_| unavailable("owned children size invalid"))?
+                > CHILD_BYTES
+            {
+                return Err(unavailable(
+                    "owned monitor children recovery exceeds byte bound",
+                ));
+            }
+            let text = std::str::from_utf8(&bytes)
+                .map_err(|_| unavailable("owned monitor children encoding invalid"))?;
+            for child in text.split_whitespace() {
+                let child = child
+                    .parse::<u32>()
+                    .map_err(|_| unavailable("owned monitor child identity invalid"))?;
+                candidates.insert(child);
+                if candidates.len() > CHILDREN {
+                    return Err(unavailable(
+                        "owned monitor children recovery exceeds count bound",
+                    ));
+                }
+            }
+        }
+        // The monitor may have exited during collection. Its reparented children confer no claim.
+        poll(&mut live, Some(&Timespec::default()))?;
+        if !live[0].revents().is_empty() {
+            return Err(unavailable("owned monitor died during INIT recovery"));
+        }
+        for child in candidates {
+            if self.claim_init(child, None).is_ok() {
+                return Ok(());
+            }
+        }
+        Err(unavailable(
+            "owned INIT recovery unavailable; teardown unconfirmed",
+        ))
     }
 
     #[cfg(target_os = "linux")]
@@ -319,28 +543,32 @@ impl NamespaceOwner {
         }
         let mut failure = None;
         #[cfg(target_os = "linux")]
-        if let Some((_, _, handle)) = &self.init {
+        if self.init.is_none() && self.wrapper.is_some() {
+            // Exact INIT recovery takes precedence while the bootstrap gate remains retained.
+            if let Err(error) = self.recover_owned_init() {
+                failure = Some(error);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(InitClaim { handle, .. }) = &self.init {
             if let Err(error) = pidfd_send_signal(handle, Signal::KILL) {
                 if error != rustix::io::Errno::SRCH {
                     failure = Some(io::Error::from(error));
                 }
             }
         }
-        // Group kill MUST precede every possible gate close, even when init signalling failed.
-        if let Some(wrapper) = self.wrapper {
-            if let Err(error) = kill_process_group(wrapper, Signal::KILL) {
-                if error != rustix::io::Errno::SRCH {
-                    failure = Some(io::Error::from(error));
+        // Unclaimed startup cancellation signals its pinned group before any gate close.
+        // With exact INIT ownership, leave the retained monitor alive to report/reap that INIT.
+        if self.init.is_none() {
+            if let Some(wrapper) = self.wrapper {
+                if let Err(error) = kill_process_group(wrapper, Signal::KILL) {
+                    if error != rustix::io::Errno::SRCH {
+                        failure = Some(io::Error::from(error));
+                    }
                 }
             }
-            #[cfg(target_os = "linux")]
-            if self.init.is_none() {
-                // On malformed info or early monitor death, inspect only membership of the
-                // still-pinned startup group. This exceptional scan is never the polling path.
-                confirm_startup_group_dead(wrapper)?;
-            }
         }
-        if let Some((_, _, handle)) = &self.init {
+        if let Some(InitClaim { handle, .. }) = &self.init {
             let mut ready = [PollFd::new(handle, PollFlags::IN)];
             poll(
                 &mut ready,
@@ -362,72 +590,73 @@ impl NamespaceOwner {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Drop for NamespaceOwner {
     fn drop(&mut self) {
-        // Retry own-group SIGKILL before fields close on an exceptional cleanup failure.
-        // The API refuses unconfirmed cleanup; it never accepts a proof in that state.
-        let _ = self.cleanup();
-        if !self.cleaned {
-            if let Some(wrapper) = self.wrapper {
-                let _ = kill_process_group(wrapper, Signal::KILL);
-            }
+        if self.cleaned {
+            return;
+        }
+        // Abandonment initiates pinned cancellation without blocking Drop on observation.
+        // Only explicit cleanup confirms teardown. The gate stays owned until after signals.
+        #[cfg(target_os = "linux")]
+        if let Some(InitClaim { handle, .. }) = &self.init {
+            let _ = pidfd_send_signal(handle, Signal::KILL);
+        }
+        if let Some(wrapper) = self.wrapper {
+            let _ = kill_process_group(wrapper, Signal::KILL);
         }
     }
 }
 
 #[cfg(target_os = "linux")]
-fn confirm_startup_group_dead(group: Pid) -> io::Result<()> {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let mut alive = false;
-        for entry in fs::read_dir("/proc")? {
-            let entry = entry?;
-            if entry
-                .file_name()
-                .to_str()
-                .and_then(|name| name.parse::<u32>().ok())
-                .is_none()
-            {
-                continue;
-            }
-            let text = match fs::read_to_string(entry.path().join("stat")) {
-                Ok(text) => text,
-                Err(error)
-                    if error.kind() == io::ErrorKind::NotFound
-                        || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error()) =>
-                {
-                    continue
-                }
-                Err(error) => return Err(error),
-            };
-            let Some((_, fields)) = text.rsplit_once(')') else {
-                continue;
-            };
-            let mut fields = fields.split_whitespace();
-            let state = fields.next();
-            fields.next();
-            let process_group = fields.next().and_then(|group| group.parse::<i32>().ok());
-            if process_group == Some(group.as_raw_nonzero().get())
-                && state != Some("Z")
-                && state != Some("X")
-            {
-                alive = true;
-            }
-        }
-        if !alive {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Err(io::Error::other(
-                "startup group termination was not confirmed",
-            ));
-        }
-        match kill_process_group(group, Signal::KILL) {
-            Ok(()) | Err(rustix::io::Errno::SRCH) => {}
-            Err(error) => return Err(error.into()),
-        }
-        std::thread::sleep(Duration::from_millis(20));
+#[derive(Debug)]
+pub(super) enum ReadyIdentityError {
+    Unclaimed,
+    SenderMismatch,
+    ChainMismatch,
+    SessionNotIsolated,
+    UidMappingMismatch,
+    InitTerminated,
+    Observation(io::Error),
+}
+
+#[cfg(target_os = "linux")]
+impl From<io::Error> for ReadyIdentityError {
+    fn from(error: io::Error) -> Self {
+        Self::Observation(error)
     }
+}
+
+#[cfg(target_os = "linux")]
+impl std::fmt::Display for ReadyIdentityError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Observation(error) => write!(formatter, "guardian identity observation: {error}"),
+            other => write!(formatter, "{other:?}"),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl std::error::Error for ReadyIdentityError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Observation(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn bounded_proc_text(path: &Path, limit: usize) -> io::Result<String> {
+    let mut bytes = Vec::new();
+    File::open(path)?
+        .take(u64::try_from(limit).map_err(|_| unavailable("procfs read bound invalid"))? + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(unavailable("owned procfs identity exceeds read bound"));
+    }
+    String::from_utf8(bytes).map_err(|_| unavailable("owned procfs identity encoding invalid"))
 }
 
 #[cfg(target_os = "linux")]
@@ -442,10 +671,12 @@ fn startup_expiry(identity_deadline: Option<Instant>) -> io::Error {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn unavailable(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::Unsupported, message.into())
 }
 
+#[cfg(target_os = "linux")]
 fn valid_pid(pid: u32) -> io::Result<Pid> {
     i32::try_from(pid)
         .ok()
@@ -515,7 +746,9 @@ mod tests {
     /// Trace: FR-028-AC-2, FR-028-AC-21.
     #[test]
     fn startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed() {
-        let (_command, mut owner) = NamespaceOwner::prepare(BackendCommand::new("sh")).unwrap();
+        let (_lease, endpoint) = super::super::control::private_pair().unwrap();
+        let (_command, mut owner) =
+            NamespaceOwner::prepare(Path::new("/unused-helper"), endpoint).unwrap();
         let allowance = Instant::now();
         let error = owner
             .startup_information(Some(allowance + Duration::from_secs(600)), allowance)

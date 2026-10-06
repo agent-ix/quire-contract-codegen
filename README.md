@@ -18,6 +18,29 @@ This runs formatting, specification/plan validation, Clippy, the test suite unde
 supported Rust version, license and source checks, the unsafe-code audit, and the API documentation
 build. CI workflows are manual-only.
 
+## Bounded Kani execution
+
+Linux bounded execution requires an explicit `guardian_path` naming this package's
+`quire-kani-guardian` executable and an `OriginalStdin` captured before creating controls or pipes.
+The helper authenticates the actual compiled library artifact. A separately compiled or stale
+helper is refused even when its source is identical.
+
+Library consumers deliberately build the helper from their **consumer manifest**, selecting both
+the consumer package and this dependency so Cargo uses the same normal library compilation. For
+example, a consumer package and executable named `caller` builds both with:
+
+```bash
+cargo build --manifest-path caller/Cargo.toml \
+  -p caller -p quire-contract-codegen \
+  --bin caller --bin quire-kani-guardian
+```
+
+Use the same target directory, target, profile, compiler, features and compiler flags for delivery.
+Forward dependency features through a feature declared on the consumer, and select that consumer
+feature in this command. Dependency compilation alone does not deliver the helper executable.
+Rebuild both after changing those inputs; Cargo may reuse the existing library artifact when the
+inputs are unchanged. Supply the resulting helper path directly in `KaniExecutionRequest`.
+
 ## Generated artifacts
 
 Every generated artifact is a path and its contents. The documents under `schemas/` are domain

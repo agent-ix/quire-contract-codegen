@@ -4,8 +4,10 @@
 use std::{
     fs, io,
     io::Read,
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
+    time::Instant,
 };
 
 use crate::kani::output::report::KaniReportRefusal;
@@ -46,8 +48,38 @@ pub(super) fn remove_stale_report(path: &Path) -> Result<(), KaniReportRefusal> 
 
 /// Reads the exported report, bounded by [`REPORT_LIMIT`]. `None` is a report that was never
 /// written; one that cannot be read, or is too large, is refused.
-pub(super) fn read_report(path: &Path) -> Result<Option<Vec<u8>>, KaniReportRefusal> {
-    let file = match fs::File::open(path) {
+pub(super) fn read_report(
+    path: &Path,
+    deadline: Option<Instant>,
+) -> Result<Option<Vec<u8>>, KaniReportRefusal> {
+    let unreadable = |error: io::Error| KaniReportRefusal::Unreadable {
+        detail: error.to_string(),
+    };
+    let check_deadline = || {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            Err(unreadable(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "original identity deadline elapsed during report read",
+            )))
+        } else {
+            Ok(())
+        }
+    };
+    check_deadline()?;
+    // Do not block opening a malicious FIFO or follow a replaced symlink outside this run's file.
+    let file = match fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(
+            i32::try_from((rustix::fs::OFlags::NONBLOCK | rustix::fs::OFlags::NOFOLLOW).bits())
+                .map_err(|_| {
+                    unreadable(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "report open flags exceed platform range",
+                    ))
+                })?,
+        )
+        .open(path)
+    {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
@@ -56,21 +88,50 @@ pub(super) fn read_report(path: &Path) -> Result<Option<Vec<u8>>, KaniReportRefu
             })
         }
     };
+    let identity = file.metadata().map_err(unreadable)?;
+    if !identity.is_file() {
+        return Err(unreadable(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "run report is not a regular file",
+        )));
+    }
     let mut bytes = Vec::new();
-    file.take(
+    let mut bounded = file.take(
         u64::try_from(REPORT_LIMIT)
             .unwrap_or(u64::MAX)
             .saturating_add(1),
-    )
-    .read_to_end(&mut bytes)
-    .map_err(|error| KaniReportRefusal::Unreadable {
-        detail: error.to_string(),
-    })?;
+    );
+    let mut chunk = [0; 65_536];
+    loop {
+        check_deadline()?;
+        let count = bounded.read(&mut chunk).map_err(unreadable)?;
+        if count == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+    }
     if bytes.len() > REPORT_LIMIT {
         return Err(KaniReportRefusal::TooLarge {
             limit: REPORT_LIMIT,
         });
     }
+    let retained = bounded.get_ref().metadata().map_err(unreadable)?;
+    let current = fs::symlink_metadata(path).map_err(unreadable)?;
+    if !current.is_file()
+        || retained.dev() != current.dev()
+        || retained.ino() != current.ino()
+        || identity.len() != retained.len()
+        || identity.mtime() != retained.mtime()
+        || identity.mtime_nsec() != retained.mtime_nsec()
+        || identity.ctime() != retained.ctime()
+        || identity.ctime_nsec() != retained.ctime_nsec()
+    {
+        return Err(unreadable(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "run report identity changed during read",
+        )));
+    }
+    check_deadline()?;
     Ok(Some(bytes))
 }
 
@@ -78,6 +139,32 @@ pub(super) fn read_report(path: &Path) -> Result<Option<Vec<u8>>, KaniReportRefu
 mod tests {
     use super::*;
     use crate::kani::test_support::discover_scratch;
+
+    /// Trace: FR-034-AC-10, FR-034-AC-12, FR-034-AC-20
+    #[test]
+    fn completed_report_retention_refuses_symlink_and_expired_original_deadline() {
+        let directory = discover_scratch("guardian-report-retention");
+        let other = directory.join("other-run.json");
+        let assigned = directory.join("assigned-run.json");
+        fs::write(&other, b"other run report").unwrap();
+        std::os::unix::fs::symlink(&other, &assigned).unwrap();
+        assert!(matches!(
+            read_report(&assigned, None),
+            Err(KaniReportRefusal::Unreadable { .. })
+        ));
+        assert_eq!(fs::read(&other).unwrap(), b"other run report");
+        fs::remove_file(&assigned).unwrap();
+        fs::write(&assigned, b"actual completed report").unwrap();
+        assert!(matches!(
+            read_report(&assigned, Some(Instant::now())),
+            Err(KaniReportRefusal::Unreadable { .. })
+        ));
+        assert_eq!(
+            read_report(&assigned, None).unwrap().unwrap(),
+            b"actual completed report"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     /// The exported report is read bounded: a file over the limit is refused, and a report that
     /// was never written is `None`.
@@ -87,21 +174,21 @@ mod tests {
     fn tc_027_the_report_is_read_bounded_and_refused_not_truncated() {
         let directory = discover_scratch("report-bound");
         let path = directory.join("report.json");
-        assert_eq!(read_report(&path), Ok(None));
+        assert_eq!(read_report(&path, None), Ok(None));
         fs::write(&path, vec![b' '; REPORT_LIMIT]).unwrap();
         assert_eq!(
-            read_report(&path).map(|r| r.map(|b| b.len())),
+            read_report(&path, None).map(|r| r.map(|b| b.len())),
             Ok(Some(REPORT_LIMIT))
         );
         fs::write(&path, vec![b' '; REPORT_LIMIT + 1]).unwrap();
         assert_eq!(
-            read_report(&path),
+            read_report(&path, None),
             Err(KaniReportRefusal::TooLarge {
                 limit: REPORT_LIMIT
             })
         );
         remove_stale_report(&path).unwrap();
-        assert_eq!(read_report(&path), Ok(None));
+        assert_eq!(read_report(&path, None), Ok(None));
         let _ = fs::remove_dir_all(directory);
     }
 }
