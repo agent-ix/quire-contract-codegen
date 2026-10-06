@@ -75,6 +75,8 @@ FR-028 AC-21's whole-group memory ceiling and AC-12's batch deadline remain auth
 - The guardian shall enforce finite control-byte, pending-message and startup-work bounds.
 - The guardian shall reject malformed controls and unknown fields.
 - If caller-lease EOF occurs, then the guardian shall exit as namespace INIT.
+- Explicit cancellation shall consume the private caller lease while retaining run ownership.
+- The bounded executor shall record lease-close observation before independent INIT escalation.
 - While Bootstrap is unclaimed, the bounded executor shall retain its gate during cancellation.
 - When Bootstrap is cancelled, the bounded executor shall signal its pinned startup group.
 - While INIT is claimed, the bounded executor shall confirm its pidfd termination on cleanup.
@@ -111,7 +113,7 @@ The stage boundaries and cancellation observations are cumulative only where exp
 | Bootstrap: monitor created; guardian INIT not yet claimed; no backend Dispatch | The bounded executor retains its unreaped monitor and bootstrap-gate writer. Recover exact INIT through bounded startup information or direct owned-monitor child/identity observation. If recovery is reliable, claim its pidfd and use that authority. Otherwise signal only the pinned startup group before close/reap, close the exclusive lease and refuse unconfirmed cleanup. Gate EOF starts only trusted bootstrap; it cannot supply a replacement caller authority. | Exact recovered INIT pidfd termination confirms namespace teardown. A live child/identity observation must verify parent/start/namespace before claim. If monitor death/reparenting or unavailable data prevents recovery, no group signal, monitor exit or host scan is accepted as confirmation: return typed unconfirmed-cleanup refusal. |
 | ClaimedBootstrap: INIT pidfd/start/parent/namespace verified; gate released only for trusted bootstrap; no backend Dispatch | bounded executor retains monitor and INIT handles while guardian enters its new session and authenticates the exclusive pair. Failed lease authentication, guardian death or caller loss never authorizes a backend. | Claimed INIT pidfd signals termination on cancellation; no production backend marker. |
 | InitReady: guardian peer/build/session verified; observer ready; no backend Dispatch | bounded executor retains monitor and INIT handles. Lease EOF causes guardian exit; live bounded executor can cancel through the claimed INIT pidfd. Guardian death itself is namespace-INIT death. | Claimed INIT pidfd signals termination before a live caller accepts cleanup; no backend marker. |
-| Dispatched: guardian received positive typed authorization with live lease | Guardian supervises the whole backend namespace. Caller loss causes guardian exit after owned cancellation; guardian death invokes kernel namespace teardown. Live bounded executor cancels through the claimed INIT pidfd on every completion or failure. | Claimed INIT pidfd signals termination before any live-caller proof conclusion; descendants are cancelled through kernel INIT teardown, not an observed-PID list. |
+| Dispatched: guardian received positive typed authorization with live lease | Guardian supervises the whole backend namespace. Caller loss causes guardian exit after owned cancellation; guardian death invokes kernel namespace teardown. Live bounded executor confirms claimed INIT termination on every completion or failure. Explicit cancellation first closes the lease and observes guardian exit; bounded escalation uses the claimed INIT pidfd. | Claimed INIT pidfd signals termination before any live-caller proof conclusion; descendants are cancelled through kernel INIT teardown, not an observed-PID list. |
 
 Bootstrap cancellation gives exact INIT ownership precedence. The bounded executor may recover INIT
 from bounded startup information or a bounded walk of the live owned monitor's direct task children,
@@ -149,6 +151,37 @@ from backend inheritance, and stdout/stderr remain the original bounded captures
 EOF and peer/build mismatch refuse before Dispatch. Observable lease EOF takes precedence over
 buffered or pending Dispatch; an earlier valid authorization remains owned by INIT, which cancels
 when it observes EOF. No atomic prediction of future caller death is claimed.
+
+### Production lease-close cancellation
+
+Private typed ownership separates a non-clonable `CallerLease`, which owns only the executor stream,
+from `RunOwner`, which retains the unreaped monitor Child, claimed INIT pidfd/identity, captures and
+original deadline. Both stay in the original caller; this separation neither exports the lease nor
+transfers monitor ownership. Explicit cancellation in InitReady or Dispatched invokes the production
+`close_lease_and_observe` operation: it consumes and closes `CallerLease`, disables further caller
+Dispatch, and retains `RunOwner` while observing claimed INIT termination. No independent INIT
+signal is sent during this LeaseClosing phase. Pending guardian authorization still obeys observable
+EOF precedence. The same operation handles cancellation before and after Dispatch, not a test-only
+hook.
+
+LeaseClosing has a finite observation cap clamped to the remaining original identity deadline. Its
+private typed `LeaseCloseObservation` distinguishes confirmed guardian termination, escalation
+required while INIT remains live, and unavailable termination observation. The operation records and
+returns this observation before any independent INIT signal; it never reports termination from
+stream EOF alone. The normal production cancellation driver immediately uses the observation:
+confirmed termination proceeds to bounded capture settlement and monitor reaping; the other cases
+signal the claimed INIT, perform bounded confirmation/cleanup and refuse unconfirmed teardown. This
+operation boundary lets a fixture assert the actual pre-escalation observation while its live
+original caller still owns the monitor/INIT handles, then execute the same production cleanup phase.
+It adds no public cancellation API, observer bypass or wait for a test controller.
+
+Resource breach, original-deadline expiry and observation/identity failure retain their urgent
+claimed INIT cancellation authority; they do not wait out a new lease grace period or reset a
+deadline. LeaseClosing expiry records escalation before signalling, never a successful EOF
+cancellation. `RunOwner` remains an ownership guard throughout both phases: dropping or abandoning a
+live owned run initiates pinned cancellation; only explicit bounded cleanup can confirm teardown,
+reap and settle a result. Dropping the separate lease cannot drop or reap the monitor. No proof is
+accepted during LeaseClosing or from an escalation-required/unavailable observation.
 
 Temporary run reports/artifacts have an explicit bounded executor/guardian cleanup owner before
 their creation. The surviving bounded executor cleans them on guardian failure; the isolated
@@ -191,7 +224,7 @@ Dispatch: guardian death is PID-1 death, not closure of a sole external gate own
 | FR-034-AC-21 | Guardian connection and handshake have a finite setup cap within the remaining original deadline. Cap expiry while that deadline remains live is a typed setup refusal, distinct from identity-deadline timeout. | Test |
 | FR-034-AC-22 | Control/capture shutdown and cleanup observation waits have finite bounds. Unconfirmed termination refuses with a live caller rather than accepting a proof or claiming physical disappearance of an uninterruptible task. | Test |
 | FR-034-AC-23 | Caller-death fixtures invoke the real guardian built from this package in the owning target directory and observe pre-initialization, gated and immediate post-Dispatch stages through positive handshakes and owned identities/pidfds, without production test bypasses, sleep-based success or wide host-scan authority. | Test |
-| FR-034-AC-24 | Removing lease-EOF cancellation fails a pre-Dispatch closed-lease pending-authorization assertion and a post-Dispatch surviving-descendant assertion. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. The lease mutant fixture keeps the original monitor owner alive and performs no independent INIT kill before recording the oracle, so parent-death teardown or emergency cleanup cannot mask it. Restored controls pass. | Test |
+| FR-034-AC-24 | Removing lease-EOF cancellation fails pre-Dispatch closed-lease pending-authorization and post-Dispatch surviving-descendant assertions driven by production close_lease_and_observe. Its consumed CallerLease closes independently of live RunOwner monitor/INIT handles. The fixture records LeaseCloseObservation and owned worker/marker observations before independent INIT escalation or emergency cleanup; escalation-required is a failed EOF-cancellation oracle even if later cleanup kills the worker. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. Restored controls pass. | Test |
 | FR-034-AC-25 | Before backend Dispatch, the helper handshake matches the actual running CG library's build, protocol and lifecycle-capability identity against the actual invoked first-party executable. A stale helper or changed lifecycle implementation refuses, even if a caller supplies a matching version label or digest. Expected identity derives from actual library/helper build artifacts, not caller assertions or manually maintained tracking pins. | Test |
 | FR-034-AC-26 | The guardian's host session and process group are distinct from the original caller's before Ready and backend Dispatch, with no controlling-terminal job-control delivery from that caller's session. Killing the caller's whole group at pre-Ready, InitReady and immediate post-Dispatch stages leaves guardian cleanup operational; a directly killed guardian still triggers kernel namespace teardown. | Test |
 

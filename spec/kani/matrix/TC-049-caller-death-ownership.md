@@ -104,21 +104,34 @@ library consumer. Tiny research probes are not production fixtures.
     timed-out reason; actual deadline expiry during setup has the same classification; helper-cap
     expiry is typed setup refusal. Verify no deadline reset, bounded shutdown and observation, and
     refusal on unconfirmed teardown without a physical-disappearance claim.
-12. First remove guardian lease-EOF cancellation. Keep the original monitor-owning caller alive and
-    close only its authenticated lease after Dispatch; retain an escaped worker handshake. No caller
-    cleanup, parent-death kill, resource deadline or controller INIT signal may mask the oracle.
-    Require the named surviving-descendant assertion to fail before emergency cleanup. Before
-    Dispatch, queue an otherwise valid authorization behind a positively acknowledged barrier, close
-    the lease and establish observable EOF before releasing that barrier. Correct guardian rejects
-    the pending Dispatch and emits no marker; the ignored-EOF mutant fails the named closed-lease
-    authorization/premature-marker assertion. This tests observable EOF precedence, not an
-    impossible claim to detect an unobservable future caller death. Independently remove positive
-    Dispatch authorization, replace the PID-1 guardian with a non-INIT watcher, remove session
-    isolation, and close/reap before pinned startup confirmation. Require the corresponding
-    premature-backend-marker, surviving-descendant, actual SID/PGID or startup-order assertion to
-    fail, rather than compilation or fixture setup. Record the ownership observation before
-    emergency cleanup of only the fixture's pinned namespace/group. Restore production and require
-    focused controls to pass. Trace each actual asserted AC.
+12. First remove guardian lease-EOF cancellation. In the live original fixture caller invoke the
+    real private production `close_lease_and_observe` cancellation operation after Dispatch. It
+    consumes only `CallerLease`; retain `RunOwner`'s unreaped monitor and claimed INIT handles and
+    an escaped worker's positive handshake/pidfd. Observe its actual bounded LeaseClosing phase,
+    then assert its returned typed `LeaseCloseObservation` and the worker's pinned state before
+    invoking production escalation/cleanup. The correct guardian terminates INIT and the worker;
+    the ignored-EOF mutant records escalation-required with live INIT/worker and fails the named
+    surviving-descendant assertion. Later successful escalation cannot turn that record into a
+    passing EOF-cancellation oracle. Keep the original caller alive: no parent-death kill, resource
+    deadline or controller INIT signal establishes this observation. Choose an original deadline
+    with remaining observation budget; expiry or unavailable observation is a failed/inconclusive
+    fixture, never a passing mutant result. No sleep or elapsed-time threshold establishes success.
+    Before Dispatch, queue an otherwise valid authorization behind a positively acknowledged
+    production-stage barrier, invoke the same InitReady cancellation operation, and establish
+    observable EOF before pending authorization continues. Correct guardian rejects it with no
+    marker and confirmed termination. The ignored-EOF mutant fails the named closed-lease
+    authorization/premature-marker assertion or records escalation-required instead of guardian
+    termination; assert these observations before independent INIT cleanup. This tests observable
+    EOF precedence, not an atomic prediction of future caller death. The normal production driver
+    immediately follows this same typed observation boundary with bounded cleanup; the fixture
+    uses that boundary without a cfg-test close hook, synthetic ownership or controller-blocked
+    escalation. Independently remove positive Dispatch authorization, replace the PID-1 guardian
+    with a non-INIT watcher, remove session isolation, and close/reap before pinned startup
+    confirmation. Require the corresponding premature-backend-marker, surviving-descendant,
+    actual SID/PGID or startup-order assertion to fail, rather than compilation or fixture setup.
+    Record the ownership observation before emergency cleanup of only the fixture's pinned
+    namespace/group. Restore production and require focused controls to pass. Trace each actual
+    asserted AC.
 
 ## Expected Results
 
@@ -132,7 +145,7 @@ library consumer. Tiny research probes are not production fixtures.
 | FR-034-AC-15/16 | Invalid bounded controls refuse; exclusive lease and safe child-only mapping | EOF authorizes Dispatch; descendants inherit caller lease |
 | FR-034-AC-17/18/19; FR-028-AC-2/3/21/24; FR-017-AC-14/24/25 | Whole-batch ownership, exact recipe, separate captures and existing resource/refinement outcomes | One helper per member; diagnostics become report; weaken ceilings; ambiguous RSS becomes zero |
 | FR-034-AC-20/21/22 | Original deadline and expired-deadline outcome persist; setup cap distinct; bounded observation refuses ambiguity | Reset deadline; setup refusal falsely timed out; hang capture |
-| FR-034-AC-23/24 | Real helper, positive observations and lease-EOF mutant without independent INIT kill masking | Ignored EOF keeps worker or accepts closed-lease Dispatch; emergency teardown masks failure |
+| FR-034-AC-23/24 | Real helper, positive observations and production typed lease-close boundary before INIT escalation | Ignored EOF keeps worker or accepts closed-lease Dispatch; emergency teardown masks failure |
 
 Scenario prose or research probes establish no executable coverage. Native refinement remains
 planned until its actual typed entry is delivered. Host destruction and uninterruptible tasks cannot
