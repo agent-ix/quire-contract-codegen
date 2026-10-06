@@ -99,6 +99,7 @@ impl LauncherOwner {
             settings: input.settings.clone(),
             original_mount: input.namespace.original_mount,
             original_pid: input.namespace.original_pid,
+            original_network: input.namespace.original_network,
         })
         .map_err(LauncherError::Control)?;
         let observation_frame = PreparedFrame::encode(&OuterBootstrap::LauncherObservation {
@@ -268,6 +269,7 @@ impl LauncherOwner {
             identity,
             authority,
             namespace,
+            network,
             mapped_uid,
             mapped_gid,
         } = received.control;
@@ -276,6 +278,7 @@ impl LauncherOwner {
             || mapped_uid != 0
             || mapped_gid != 0
             || namespace == self.input.namespace.original_pid
+            || network == self.input.namespace.original_network
         {
             return Err(LauncherError::ArmMismatch);
         }
@@ -298,6 +301,12 @@ impl LauncherOwner {
         if actual_identity.st_dev != expected_identity.st_dev
             || actual_identity.st_ino != expected_identity.st_ino
             || observed_namespace != namespace
+            || self
+                .input
+                .namespace
+                .child_network_namespace(child.id())
+                .map_err(LauncherError::Io)?
+                != network
         {
             return Err(LauncherError::CapabilityMismatch);
         }
@@ -348,6 +357,7 @@ pub(super) fn publish_outer_arm(
         identity: settings.identity,
         authority: settings.authority,
         namespace: guard.namespace(),
+        network: guard.network(),
         mapped_uid: 0,
         mapped_gid: 0,
     })

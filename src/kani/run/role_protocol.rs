@@ -114,6 +114,7 @@ pub(super) enum OuterBootstrap {
         settings: RunSettings,
         original_mount: NamespaceIdentity,
         original_pid: NamespaceIdentity,
+        original_network: NamespaceIdentity,
     },
     /// Rights: actual L stat/status files, opened before private proc replacement.
     LauncherObservation { authority: RunAuthority },
@@ -136,6 +137,7 @@ pub(super) enum OuterArmReply {
         identity: BuildIdentity,
         authority: RunAuthority,
         namespace: NamespaceIdentity,
+        network: NamespaceIdentity,
         mapped_uid: u32,
         mapped_gid: u32,
     },

@@ -201,6 +201,7 @@ pub(super) struct OuterInput {
     bootstrap: RoleEndpoint,
     original_mount: NamespaceIdentity,
     original_pid: NamespaceIdentity,
+    original_network: NamespaceIdentity,
     launcher_observation: Option<(File, File)>,
 }
 
@@ -218,6 +219,7 @@ impl OuterInput {
             settings,
             original_mount,
             original_pid,
+            original_network,
         } = received.control
         else {
             return Err(BootstrapError::UnexpectedControl);
@@ -302,6 +304,7 @@ impl OuterInput {
             bootstrap,
             original_mount,
             original_pid,
+            original_network,
             launcher_observation: Some((File::from(stat), File::from(status))),
         })
     }
@@ -336,6 +339,7 @@ impl OuterInput {
                 bootstrap: self.bootstrap,
                 original_mount: self.original_mount,
                 original_pid: self.original_pid,
+                original_network: self.original_network,
                 deadline,
             },
         })
@@ -357,6 +361,7 @@ pub(super) struct OuterSetup {
     bootstrap: RoleEndpoint,
     original_mount: NamespaceIdentity,
     original_pid: NamespaceIdentity,
+    original_network: NamespaceIdentity,
     deadline: Instant,
 }
 
@@ -372,6 +377,7 @@ impl OuterSetup {
             &self.bootstrap,
             self.original_mount,
             self.original_pid,
+            self.original_network,
         )
         .map_err(BootstrapError::Setup)?;
         self.require_deadline()?;
