@@ -32,11 +32,12 @@
 //!
 //! | Form | Members |
 //! |------|---------|
-//! | `record` | one `binding` per field in declaration order: its `name` is the field name, its value a `reference` to the field's type node; a field whose bound node is itself a `composite_type` of form `option` is `Presence::Optional` with the unwrapped payload type, every other field `Presence::Required` |
+//! | `record` | one `binding` per field in declaration order: its `name` is the field name; a direct reference is required, while an `aggregate` with one `binding(optional, reference Option)` is optional |
 //! | `tuple` | one `reference` per position, in declaration order |
 //! | `option` | one `reference` to the payload type node |
-//! | `sequence`, `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
-//! | `collection_bounds` | two canonical decimal `integer` literals: minimum, maximum |
+//! | `sequence` | one element `reference` when named by a `collection_bounds` node; an inline bounds form has a second bounds `reference` |
+//! | `set`, `bag`, `ordered_set` | an element `reference`, then a bounds `reference` |
+//! | `collection_bounds` | named `min` and `max` bindings of canonical decimal `integer` literals |
 //!
 //! Neither this generator nor the source it emits panics (FR-018-AC-17,
 //! FR-018-AC-19). Every runtime constructor the emitted source calls to
@@ -1064,6 +1065,23 @@ fn read_binding(term: &Value) -> Option<(String, CheckedNodeId)> {
     Some((name, target))
 }
 
+/// A record field has either a direct type reference or the checked optional wrapper.
+fn read_record_field(term: &Value) -> Option<(String, CheckedNodeId, bool)> {
+    if term.get("term")?.as_str()? != "binding" {
+        return None;
+    }
+    let name = term.get("name")?.as_str()?.to_owned();
+    let value = term.get("value")?;
+    if let Some(target) = read_reference(value) {
+        return Some((name, target, false));
+    }
+    let [optional] = aggregate_members(value)? else {
+        return None;
+    };
+    let (wrapper_name, target) = read_binding(optional)?;
+    (wrapper_name == "optional").then_some((name, target, true))
+}
+
 fn is_option_node(node: &CheckedSemanticNodeV2) -> bool {
     CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::CompositeType)
         && &*node.semantic_form == "option"
@@ -1092,6 +1110,23 @@ fn resolve_type(
                 unsupported_node_id: type_id.clone(),
                 node_tag: "bounded_domain",
             };
+            if &*node.semantic_form == "collection_bounds" {
+                if CheckedNodeTag::from_wire(&base.node_tag) == Some(CheckedNodeTag::CompositeType)
+                    && &*base.semantic_form == "sequence"
+                {
+                    return resolve_collection(
+                        graph,
+                        bounds_by_type,
+                        closure,
+                        &base.node_id,
+                        base,
+                        Some(node),
+                    );
+                }
+                return Err(CompositeEqualityRefusal::UnreadableBound {
+                    bound: type_id.clone(),
+                });
+            }
             if CheckedNodeTag::from_wire(&base.node_tag) != Some(CheckedNodeTag::ScalarType) {
                 return Err(unsupported());
             }
@@ -1241,13 +1276,17 @@ fn resolve_composite(
                 let shape = if node.semantic_form.as_ref() == "record" {
                     let mut fields = Vec::with_capacity(members.len());
                     for member in members {
-                        let (name, target) = read_binding(member).ok_or_else(|| {
-                            CompositeEqualityRefusal::MalformedComposite {
+                        let (name, target, wrapped_optional) = read_record_field(member)
+                            .ok_or_else(|| CompositeEqualityRefusal::MalformedComposite {
                                 composite: type_id.clone(),
-                            }
-                        })?;
+                            })?;
                         let target_node = lookup(graph, &target)?;
-                        let (value_type, presence) = if is_option_node(target_node) {
+                        if wrapped_optional && !is_option_node(target_node) {
+                            return Err(CompositeEqualityRefusal::MalformedComposite {
+                                composite: type_id.clone(),
+                            });
+                        }
+                        let (value_type, presence) = if wrapped_optional {
                             let payload_members =
                                 aggregate_members(&target_node.body).ok_or_else(|| {
                                     CompositeEqualityRefusal::MalformedComposite {
@@ -1314,71 +1353,8 @@ fn resolve_composite(
             let payload = resolve_type(graph, bounds_by_type, closure, &payload_target)?;
             Ok(ValueType::option(payload))
         }
-        form @ ("sequence" | "set" | "bag" | "ordered_set") => {
-            let members = aggregate_members(&node.body).ok_or_else(|| {
-                CompositeEqualityRefusal::MalformedComposite {
-                    composite: type_id.clone(),
-                }
-            })?;
-            let [element_term, bounds_term] = members else {
-                return Err(CompositeEqualityRefusal::MalformedComposite {
-                    composite: type_id.clone(),
-                });
-            };
-            let element_target = read_reference(element_term).ok_or_else(|| {
-                CompositeEqualityRefusal::MalformedComposite {
-                    composite: type_id.clone(),
-                }
-            })?;
-            let element = resolve_type(graph, bounds_by_type, closure, &element_target)?;
-            let bounds_target = read_reference(bounds_term).ok_or_else(|| {
-                CompositeEqualityRefusal::MalformedComposite {
-                    composite: type_id.clone(),
-                }
-            })?;
-            let bounds_node = lookup(graph, &bounds_target)?;
-            if &*bounds_node.semantic_form != "collection_bounds" {
-                return Err(CompositeEqualityRefusal::UnreadableBound {
-                    bound: bounds_target,
-                });
-            }
-            let bound_members_terms = aggregate_members(&bounds_node.body).ok_or_else(|| {
-                CompositeEqualityRefusal::UnreadableBound {
-                    bound: bounds_target.clone(),
-                }
-            })?;
-            let [minimum, maximum] = bound_members(bound_members_terms, COLLECTION_BOUNDS_MEMBERS)
-                .ok_or_else(|| CompositeEqualityRefusal::UnreadableBound {
-                    bound: bounds_target.clone(),
-                })?;
-            let (minimum, maximum) = (
-                literal_count(minimum).ok_or_else(|| {
-                    CompositeEqualityRefusal::UnreadableBound {
-                        bound: bounds_target.clone(),
-                    }
-                })?,
-                literal_count(maximum).ok_or_else(|| {
-                    CompositeEqualityRefusal::UnreadableBound {
-                        bound: bounds_target.clone(),
-                    }
-                })?,
-            );
-            let cardinality = CardinalityBound::new(minimum, maximum).map_err(|_| {
-                CompositeEqualityRefusal::UnreadableBound {
-                    bound: bounds_target,
-                }
-            })?;
-            let kind = match form {
-                "sequence" => CollectionKind::Sequence,
-                "set" => CollectionKind::Set,
-                "bag" => CollectionKind::Bag,
-                _ => CollectionKind::OrderedSet,
-            };
-            Ok(ValueType::collection(CollectionType::new(
-                kind,
-                element,
-                cardinality,
-            )))
+        "sequence" | "set" | "bag" | "ordered_set" => {
+            resolve_collection(graph, bounds_by_type, closure, type_id, node, None)
         }
         "reference" => Err(CompositeEqualityRefusal::BlockedOnUpstream {
             unsupported_node_id: type_id.clone(),
@@ -1390,6 +1366,73 @@ fn resolve_composite(
             node_tag: "composite_type",
         }),
     }
+}
+
+fn resolve_collection(
+    graph: &Graph<'_>,
+    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
+    closure: &mut TypeClosure,
+    type_id: &CheckedNodeId,
+    node: &CheckedSemanticNodeV2,
+    external_bound: Option<&CheckedSemanticNodeV2>,
+) -> Result<ValueType, CompositeEqualityRefusal> {
+    let malformed = || CompositeEqualityRefusal::MalformedComposite {
+        composite: type_id.clone(),
+    };
+    let members = aggregate_members(&node.body).ok_or_else(malformed)?;
+    let (element_term, bounds_node) = match (members, external_bound) {
+        ([element], Some(bound)) if &*node.semantic_form == "sequence" => (element, bound),
+        ([element, bounds], None) => {
+            let target = read_reference(bounds).ok_or_else(malformed)?;
+            (element, lookup(graph, &target)?)
+        }
+        _ => return Err(malformed()),
+    };
+    let element_target = read_reference(element_term).ok_or_else(malformed)?;
+    let element = resolve_type(graph, bounds_by_type, closure, &element_target)?;
+    if CheckedNodeTag::from_wire(&bounds_node.node_tag) != Some(CheckedNodeTag::BoundedDomain)
+        || &*bounds_node.semantic_form != "collection_bounds"
+    {
+        return Err(CompositeEqualityRefusal::UnreadableBound {
+            bound: bounds_node.node_id.clone(),
+        });
+    }
+    let bounds_target = bounds_node.node_id.clone();
+    let cardinality = {
+        let bound_members_terms = aggregate_members(&bounds_node.body).ok_or_else(|| {
+            CompositeEqualityRefusal::UnreadableBound {
+                bound: bounds_target.clone(),
+            }
+        })?;
+        let [minimum, maximum] = bound_members(bound_members_terms, COLLECTION_BOUNDS_MEMBERS)
+            .ok_or_else(|| CompositeEqualityRefusal::UnreadableBound {
+                bound: bounds_target.clone(),
+            })?;
+        let (minimum, maximum) = (
+            literal_count(minimum).ok_or_else(|| CompositeEqualityRefusal::UnreadableBound {
+                bound: bounds_target.clone(),
+            })?,
+            literal_count(maximum).ok_or_else(|| CompositeEqualityRefusal::UnreadableBound {
+                bound: bounds_target.clone(),
+            })?,
+        );
+        CardinalityBound::new(minimum, maximum).map_err(|_| {
+            CompositeEqualityRefusal::UnreadableBound {
+                bound: bounds_target,
+            }
+        })?
+    };
+    let kind = match &*node.semantic_form {
+        "sequence" => CollectionKind::Sequence,
+        "set" => CollectionKind::Set,
+        "bag" => CollectionKind::Bag,
+        _ => CollectionKind::OrderedSet,
+    };
+    Ok(ValueType::collection(CollectionType::new(
+        kind,
+        element,
+        cardinality,
+    )))
 }
 
 fn hex_digest(key: &NodeKey) -> String {
@@ -1929,6 +1972,300 @@ fn artifact(path: &str, contents: String) -> Artifact {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn recursive_shape_nodes() -> Vec<CheckedSemanticNodeV2> {
+        let reference = |digit| json!({"term": "reference", "target": node_id(digit)});
+        let node = |digit: char, tag: &str, form: &str, semantic_type: char, body: Value| {
+            serde_json::from_value(json!({
+                "node_id": node_id(digit),
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": tag,
+                "semantic_form": form,
+                "semantic_type": node_id(semantic_type),
+                "dependencies": [],
+                "occurrences": [],
+                "body": body,
+            }))
+            .expect("synthetic shape")
+        };
+        vec![
+            node(
+                'a',
+                "composite_type",
+                "record",
+                'a',
+                json!({"term": "aggregate", "members": [{
+                    "term": "binding", "name": "next", "value": {"term": "aggregate", "members": [{
+                        "term": "binding", "name": "optional", "value": reference('b')
+                    }]}
+                }]}),
+            ),
+            node(
+                'b',
+                "composite_type",
+                "option",
+                'b',
+                json!({"term": "aggregate", "members": [reference('a')]}),
+            ),
+            node(
+                'c',
+                "composite_type",
+                "record",
+                'c',
+                json!({"term": "aggregate", "members": [{
+                    "term": "binding", "name": "kids", "value": reference('e')
+                }]}),
+            ),
+            node(
+                'd',
+                "composite_type",
+                "sequence",
+                'd',
+                json!({"term": "aggregate", "members": [reference('c')]}),
+            ),
+            node(
+                'e',
+                "bounded_domain",
+                "collection_bounds",
+                'd',
+                json!({"term": "aggregate", "members": [
+                    {"term": "binding", "name": "min", "value": {"term": "literal", "type": node_id('f'), "value_kind": "integer", "value": "0"}},
+                    {"term": "binding", "name": "max", "value": {"term": "literal", "type": node_id('f'), "value_kind": "integer", "value": "3"}}
+                ]}),
+            ),
+            node(
+                'f',
+                "scalar_type",
+                "integer",
+                'f',
+                json!({"term": "aggregate", "members": []}),
+            ),
+        ]
+    }
+
+    /// Read the current authoritative QSpec fixture from a supplied checkout.
+    fn qspec_recursive_fixture() -> CheckedPackageV2 {
+        use quire_contract_model::{
+            CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
+        };
+        use std::process::Command;
+
+        let relative = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
+        let checkout = std::env::var_os("QSPEC_REPO")
+            .expect("set QSPEC_REPO to a QSpec checkout for the recursive fixture test");
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(checkout)
+            .arg("show")
+            .arg(format!("origin/main:{relative}"))
+            .output()
+            .expect("git reads the sibling QSpec checkout");
+        assert!(
+            output.status.success(),
+            "QSpec recursive fixture is available"
+        );
+        let value: Value = serde_json::from_slice(&output.stdout).expect("QSpec fixture JSON");
+        let canonical = serde_json::to_vec(&value).expect("canonical fixture bytes");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let read =
+            CheckedPackageV2::read(&canonical, CheckedPackageReadLimits::bounded(), &evidence);
+        let CheckedPackageV2ReadResult::Admitted(package) = read else {
+            panic!("QSpec recursive fixture must pass Contract IR's strict reader: {read:?}")
+        };
+        *package
+    }
+
+    /// Local conformance lane: `QSPEC_REPO=/path/to/quire-specification cargo test
+    /// --locked --lib tc_029_qspec_recursive_fixture_uses_the_reader_shapes -- --ignored`.
+    ///
+    /// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+    #[test]
+    #[ignore = "set QSPEC_REPO to a QSpec checkout for the local conformance lane"]
+    fn tc_029_qspec_recursive_fixture_uses_the_reader_shapes() {
+        if std::env::var_os("QSPEC_REPO").is_none() {
+            eprintln!("SKIP: set QSPEC_REPO to run the QSpec recursive fixture conformance lane");
+            return;
+        }
+        let package = qspec_recursive_fixture();
+        let nodes = &package.graph().nodes;
+        let named = |name: &str| {
+            nodes
+                .iter()
+                .find(|node| {
+                    node.declaration.as_ref().is_some_and(|declaration| {
+                        declaration.qualified_name.len() == 1
+                            && declaration.qualified_name[0].as_ref() == name
+                    })
+                })
+                .expect("named QSpec record")
+        };
+        let list = named("List");
+        let tree = named("Tree");
+        assert!(matches!(resolve_shape(nodes, &list.node_id), Ok(_)));
+        assert!(matches!(resolve_shape(nodes, &tree.node_id), Ok(_)));
+        let list_closure = resolve_shape(nodes, &list.node_id).unwrap();
+        let list_key = node_key(&list.node_id).unwrap();
+        let CompositeShape::Record(fields) = list_closure.composites[&list_key].shape() else {
+            panic!("QSpec List is a record")
+        };
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].name(), "next");
+        assert_eq!(fields[0].presence(), Presence::Optional);
+        assert_eq!(fields[0].value_type(), &ValueType::Composite(list_key));
+        let tree_closure = resolve_shape(nodes, &tree.node_id).unwrap();
+        let tree_key = node_key(&tree.node_id).unwrap();
+        let CompositeShape::Record(fields) = tree_closure.composites[&tree_key].shape() else {
+            panic!("QSpec Tree is a record")
+        };
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].name(), "kids");
+        assert_eq!(
+            fields[0].value_type(),
+            &ValueType::collection(CollectionType::new(
+                CollectionKind::Sequence,
+                ValueType::Composite(tree_key),
+                CardinalityBound::new(0, 3).unwrap(),
+            ))
+        );
+    }
+
+    fn resolve_shape(
+        nodes: &[CheckedSemanticNodeV2],
+        type_id: &CheckedNodeId,
+    ) -> Result<TypeClosure, CompositeEqualityRefusal> {
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let mut bounds = BTreeMap::new();
+        for node in nodes {
+            if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
+                bounds
+                    .entry(&node.semantic_type)
+                    .or_insert_with(Vec::new)
+                    .push(node);
+            }
+        }
+        let mut closure = TypeClosure::default();
+        resolve_type(&graph, &bounds, &mut closure, type_id)?;
+        Ok(closure)
+    }
+
+    /// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+    #[test]
+    fn tc_029_recursive_list_and_tree_shapes_close_at_record_keys() {
+        let nodes = recursive_shape_nodes();
+        let list = resolve_shape(&nodes, &node_id('a')).expect("List closes");
+        let list_key = node_key(&node_id('a')).unwrap();
+        let CompositeShape::Record(list_fields) = list.composites[&list_key].shape() else {
+            panic!("List is a record")
+        };
+        assert_eq!(list_fields.len(), 1);
+        assert_eq!(list_fields[0].name(), "next");
+        assert_eq!(list_fields[0].presence(), Presence::Optional);
+        assert_eq!(list_fields[0].value_type(), &ValueType::Composite(list_key));
+
+        let tree = resolve_shape(&nodes, &node_id('c')).expect("Tree closes");
+        let tree_key = node_key(&node_id('c')).unwrap();
+        let CompositeShape::Record(tree_fields) = tree.composites[&tree_key].shape() else {
+            panic!("Tree is a record")
+        };
+        assert_eq!(tree_fields.len(), 1);
+        assert_eq!(tree_fields[0].name(), "kids");
+        assert_eq!(tree_fields[0].presence(), Presence::Required);
+        assert_eq!(
+            tree_fields[0].value_type(),
+            &ValueType::collection(CollectionType::new(
+                CollectionKind::Sequence,
+                ValueType::Composite(tree_key),
+                CardinalityBound::new(0, 3).unwrap(),
+            ))
+        );
+    }
+
+    /// Trace: FR-018-AC-26, TC-029.
+    #[test]
+    fn tc_029_optional_wrapper_malformed_shapes_refuse_without_affecting_tree() {
+        for mutation in ["remove", "rename", "second", "non_option"] {
+            let mut nodes = recursive_shape_nodes();
+            let optional = &mut nodes[0].body["members"][0]["value"]["members"];
+            match mutation {
+                "remove" => *optional = json!([]),
+                "rename" => optional[0]["name"] = json!("maybe"),
+                "second" => {
+                    let duplicate = optional[0].clone();
+                    optional.as_array_mut().unwrap().push(duplicate);
+                }
+                "non_option" => optional[0]["value"]["target"] = json!(node_id('f')),
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                resolve_shape(&nodes, &node_id('a')).err(),
+                Some(CompositeEqualityRefusal::MalformedComposite {
+                    composite: node_id('a')
+                }),
+                "{mutation}"
+            );
+            assert!(
+                resolve_shape(&nodes, &node_id('c')).is_ok(),
+                "{mutation}: healthy Tree"
+            );
+        }
+    }
+
+    /// Trace: FR-018-AC-26, TC-029.
+    #[test]
+    fn tc_029_direct_option_field_is_required_not_silently_optional() {
+        let mut nodes = recursive_shape_nodes();
+        nodes[0].body["members"][0]["value"] = json!({"term": "reference", "target": node_id('b')});
+        let closure = resolve_shape(&nodes, &node_id('a')).expect("direct option is valid");
+        let key = node_key(&node_id('a')).unwrap();
+        let CompositeShape::Record(fields) = closure.composites[&key].shape() else {
+            panic!("List is a record")
+        };
+        assert_eq!(fields[0].presence(), Presence::Required);
+        assert_eq!(
+            fields[0].value_type(),
+            &ValueType::option(ValueType::Composite(key))
+        );
+    }
+
+    /// Trace: FR-018-AC-27, TC-029.
+    #[test]
+    fn tc_029_sequence_bound_shape_mutants_refuse_without_affecting_list() {
+        for mutation in [
+            "non_sequence",
+            "missing_min",
+            "duplicate_max",
+            "non_integer",
+        ] {
+            let mut nodes = recursive_shape_nodes();
+            match mutation {
+                "non_sequence" => nodes[4].semantic_type = node_id('f'),
+                "missing_min" => {
+                    nodes[4].body["members"].as_array_mut().unwrap().remove(0);
+                }
+                "duplicate_max" => {
+                    let duplicate = nodes[4].body["members"][1].clone();
+                    nodes[4].body["members"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(duplicate);
+                }
+                "non_integer" => nodes[4].body["members"][0]["value"]["value_kind"] = json!("text"),
+                _ => unreachable!(),
+            }
+            assert!(
+                matches!(
+                    resolve_shape(&nodes, &node_id('c')).err(),
+                    Some(CompositeEqualityRefusal::UnreadableBound { .. })
+                ),
+                "{mutation}"
+            );
+            assert!(
+                resolve_shape(&nodes, &node_id('a')).is_ok(),
+                "{mutation}: healthy List"
+            );
+        }
+    }
 
     fn interval_of(lower: &str, upper: &str) -> IntegerInterval {
         IntegerInterval::new(
