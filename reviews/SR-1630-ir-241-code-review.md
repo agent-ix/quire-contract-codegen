@@ -309,3 +309,32 @@ Round-5 verdict:
   that previously failed, the 61 runner tests and narrow clippy (`--lib --test it -D warnings`).
   Full rebased CI failed at the previous head and has not been re-run here. The second Linux Kani
   run has not been released. Not mergeable until both pass.
+
+## Dispositions (round 6)
+
+Round 6. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-015 | fixed | PR #295 fix round 6: the private `KaniInstallation::require_executable` (in the owning `tool.rs`) refuses a launcher that is not a regular file or has no Unix execute bit, with the typed `Tool`/`Launcher` `Io` fault naming the path (`PermissionDenied`). It runs under the same absolute deadline and is skipped once that deadline has passed. `tc_027_non_executable_launchers_are_refused_before_anything_runs` covers a mode-0644 file and a directory through the public API, asserting the exact fault, the path and that nothing ran. The doc comment says the check is a snapshot that does not pin the file or close replacement or permission races. "Any execute bit" is not the caller's own access (ACLs, `noexec` mounts, interpreters), and that residual is stated rather than claimed closed. |
+
+## New findings (disposition pass 6)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-016 | low | `tc_027_non_executable_launchers_are_refused_before_anything_runs` traces `FR-017-AC-2`, whose text is "An absent launcher is refused with a typed reason naming its path before anything runs". The test asserts a present but non-executable file and a directory, not an absent launcher, so it binds behaviour the cited criterion does not state. No criterion owns the non-executable-launcher refusal. | tests/it/kani_obligations.rs:1793-1796, spec/kani/functional/FR-017-kani-execution-evidence.md:250 |
+
+Failure scenario: the computed matrix counts this test as evidence for FR-017-AC-2, while the
+refusal it actually checks has no owning criterion. A later change that weakens the
+non-executable refusal fails only a test whose cited criterion it does not violate. Fix: either
+broaden FR-017-AC-2's statement to "an absent or non-executable launcher" (a spec edit, with its
+own review), or trace the test to TC-027 alone and record the refusal as owned by an existing or
+new criterion. This is not a correctness defect in the code.
+
+Round-6 verdict: FND-015 is fixed. New FND-016 (low, trace) is open. No other changed path
+regresses: the only production change is the private preflight helper and its call site.
+FND-001 to FND-010 and FND-012 to FND-014 stay fixed, and FND-011 stays deferred to IR-639,
+which is not implemented, so IR-241 is incomplete. Actual runtime evidence for this head: the
+focused job exited 0, covering the new and original launcher tests, the layout and panic-scan
+tests, 61 runner tests and narrow clippy. Full rebased CI must still be re-run after its earlier
+failure, and the second Linux Kani run has not been released.

@@ -1790,7 +1790,7 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
 
 /// Invalid launcher file kinds and execute permissions are typed faults before dispatch.
 ///
-/// Trace: FR-017-AC-2, TC-027
+/// Trace: TC-027
 #[cfg(unix)]
 #[test]
 fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
