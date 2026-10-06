@@ -10,7 +10,7 @@ use std::{io, path::Path};
 use super::{
     control::{ControlError, RoleEndpoint},
     memory::{LauncherMemory, MemoryObserver},
-    namespace::OuterMonitorOwner,
+    namespace::{GatedClaim, OuterMonitorOwner},
     outer_setup::PreparedOuter,
     report_storage::{ReportCollector, ReportError},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
@@ -163,6 +163,26 @@ impl OuterSampling {
             &self.ledger,
         )
         .map_err(SamplingError::Observation)
+    }
+
+    /// A fresh complete normal accounting tick precedes each finite startup read. This preserves
+    /// the same outer-root observer while the retained monitor creates/maps its gated inner INIT.
+    pub(super) fn claim_monitor_tick(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+        monitor: &mut OuterMonitorOwner,
+        startup_deadline: std::time::Instant,
+    ) -> Result<(MemoryTick, Option<GatedClaim>), SamplingError> {
+        let tick = self.tick(outer, caller)?;
+        if matches!(tick, MemoryTick::Exhausted(_)) {
+            return Ok((tick, None));
+        }
+        let claim = monitor
+            .namespace()
+            .claim_gated_tick(startup_deadline, &mut self.tree)
+            .map_err(SamplingError::Observation)?;
+        Ok((tick, claim))
     }
 
     /// Actual complete measured peaks only. This is not a settled evidence constructor.

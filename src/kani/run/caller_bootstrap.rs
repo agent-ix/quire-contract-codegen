@@ -22,12 +22,12 @@ use super::{
     },
     creator,
     outer_setup::NamespaceIdentity,
-    protocol::{current_build_identity, BuildIdentity, RunAuthority},
+    protocol::{current_build_identity, BuildIdentity, GuardianRefusal, RunAuthority},
     publication::Publication,
     report_storage::PreparedReportRead,
     role_command::HelperRole,
     role_deadline::DeadlineError,
-    role_protocol::{LauncherControl, OuterArmReply, RunSettings},
+    role_protocol::{LauncherControl, LauncherReply, OuterArmReply, RunSettings},
     spawner::{RetainedSpawner, SpawnIdentity},
     stages::{Bootstrap, PreparedDispatch},
     stdin::OriginalStdin,
@@ -48,6 +48,8 @@ pub(super) enum CallerBootstrapError {
     ArmMismatch,
     MissingOuterPin,
     CapabilityMismatch,
+    LauncherRefused(GuardianRefusal),
+    LauncherReplyMismatch,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -71,7 +73,9 @@ impl std::error::Error for CallerBootstrapError {
             | Self::MissingSender
             | Self::ArmMismatch
             | Self::MissingOuterPin
-            | Self::CapabilityMismatch => None,
+            | Self::CapabilityMismatch
+            | Self::LauncherRefused(_)
+            | Self::LauncherReplyMismatch => None,
         }
     }
 }
@@ -264,7 +268,37 @@ impl CallerBootstrap {
         // its independent O-control writer throughout the later live-caller lease observation.
         self.inner_endpoint.take();
         self.outer_endpoint.take();
-        Ok(())
+        let received = self
+            .launcher_control
+            .transport()
+            .receive_prepared::<LauncherReply>(
+                &mut self.receive,
+                LauncherReply::rights_count,
+                self.deadline,
+            )
+            .map_err(CallerBootstrapError::Control)?;
+        let sender = received
+            .credentials
+            .ok_or(CallerBootstrapError::MissingSender)?;
+        if sender.pid != identity.launcher_pid.as_raw_pid()
+            || sender.uid != self.caller_uid
+            || sender.gid != self.caller_gid
+        {
+            return Err(CallerBootstrapError::LauncherReplyMismatch);
+        }
+        creator::require_live(&identity.launcher_pin).map_err(CallerBootstrapError::Io)?;
+        match received.control {
+            LauncherReply::Ready {
+                identity,
+                authority,
+            } if identity == self.build_identity && authority == self.authority => Ok(()),
+            LauncherReply::Refused {
+                authority, reason, ..
+            } if authority == self.authority => Err(CallerBootstrapError::LauncherRefused(reason)),
+            LauncherReply::Ready { .. } | LauncherReply::Refused { .. } => {
+                Err(CallerBootstrapError::LauncherReplyMismatch)
+            }
+        }
     }
 
     /// C accepts only the actual live child of its retained L, authenticated as the O sender.

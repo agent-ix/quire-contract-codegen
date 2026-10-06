@@ -151,6 +151,72 @@ struct StartupInfo {
 }
 
 #[cfg(target_os = "linux")]
+struct StartupReader {
+    file: File,
+    bytes: Vec<u8>,
+    eof: bool,
+}
+
+#[cfg(target_os = "linux")]
+impl StartupReader {
+    const INPUT_BYTES: usize = 4096;
+
+    fn prepare(file: File) -> io::Result<Self> {
+        let flags = rustix::fs::fcntl_getfl(&file)?;
+        rustix::fs::fcntl_setfl(&file, flags | rustix::fs::OFlags::NONBLOCK)?;
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(
+                Self::INPUT_BYTES
+                    .checked_add(1)
+                    .ok_or_else(|| unavailable("startup information bound overflow"))?,
+            )
+            .map_err(io::Error::other)?;
+        Ok(Self {
+            file,
+            bytes,
+            eof: false,
+        })
+    }
+
+    /// At most one finite read, never a completion wait. Only actual writer EOF permits parsing.
+    fn advance(&mut self) -> io::Result<Option<StartupInfo>> {
+        if !self.eof {
+            let mut chunk = [0; 1024];
+            match self.file.read(&mut chunk) {
+                Ok(0) => self.eof = true,
+                Ok(length) => {
+                    let next = self
+                        .bytes
+                        .len()
+                        .checked_add(length)
+                        .ok_or_else(|| unavailable("startup information size overflow"))?;
+                    if next > Self::INPUT_BYTES {
+                        return Err(unavailable(
+                            "namespace startup information exceeds its bound",
+                        ));
+                    }
+                    self.bytes.extend_from_slice(&chunk[..length]);
+                    return Ok(None);
+                }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                    ) =>
+                {
+                    return Ok(None)
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        serde_json::from_slice(&self.bytes)
+            .map(Some)
+            .map_err(|error| unavailable(format!("namespace startup failed: {error}")))
+    }
+}
+
+#[cfg(target_os = "linux")]
 struct InitClaim {
     pid: u32,
     start: u64,
@@ -243,7 +309,7 @@ pub(super) struct GatedClaim {
 pub(super) struct NamespaceOwner {
     gate: Option<File>,
     #[cfg(target_os = "linux")]
-    info: File,
+    info: StartupReader,
     wrapper: Option<Pid>,
     init: Option<InitClaim>,
     cleaned: bool,
@@ -322,7 +388,7 @@ impl NamespaceOwner {
                 command,
                 Self {
                     gate: Some(File::from(gate_write)),
-                    info: File::from(info_read),
+                    info: StartupReader::prepare(File::from(info_read))?,
                     wrapper: None,
                     init: None,
                     cleaned: false,
@@ -404,7 +470,7 @@ impl NamespaceOwner {
             command,
             Self {
                 gate: Some(File::from(gate_write)),
-                info: File::from(info_read),
+                info: StartupReader::prepare(File::from(info_read))?,
                 wrapper: None,
                 init: None,
                 cleaned: false,
@@ -426,6 +492,18 @@ impl NamespaceOwner {
         observer: &mut super::memory::MemoryObserver,
     ) -> io::Result<GatedClaim> {
         let info = self.startup_information(deadline, startup_deadline)?;
+        let claim = self.bind_gated_information(info, observer)?;
+        if Instant::now() >= startup_deadline {
+            return Err(startup_expiry(deadline));
+        }
+        Ok(claim)
+    }
+
+    fn bind_gated_information(
+        &mut self,
+        info: StartupInfo,
+        observer: &mut super::memory::MemoryObserver,
+    ) -> io::Result<GatedClaim> {
         self.claim_init(info.child, Some(info.namespace))?;
         let start = self
             .init
@@ -433,9 +511,6 @@ impl NamespaceOwner {
             .map(|claim| claim.start)
             .ok_or_else(|| unavailable("namespace init claim missing"))?;
         observer.bind_root(info.child, start)?;
-        if Instant::now() >= startup_deadline {
-            return Err(startup_expiry(deadline));
-        }
         Ok(GatedClaim {
             pid: info.child,
             start,
@@ -704,7 +779,6 @@ impl NamespaceOwner {
 
     #[cfg(target_os = "linux")]
     fn read_info(&mut self, deadline: Instant) -> io::Result<StartupInfo> {
-        let mut bytes = Vec::new();
         loop {
             if Instant::now() >= deadline {
                 return Err(io::Error::new(
@@ -712,7 +786,10 @@ impl NamespaceOwner {
                     "namespace startup exceeded its allowance",
                 ));
             }
-            let mut ready = [PollFd::new(&self.info, PollFlags::IN)];
+            if let Some(info) = self.info.advance()? {
+                return Ok(info);
+            }
+            let mut ready = [PollFd::new(&self.info.file, PollFlags::IN)];
             poll(
                 &mut ready,
                 Some(&Timespec {
@@ -720,24 +797,36 @@ impl NamespaceOwner {
                     tv_nsec: 20_000_000,
                 }),
             )?;
-            if ready[0].revents().is_empty() {
-                continue;
-            }
-            let mut chunk = [0; 1024];
-            let length = self.info.read(&mut chunk)?;
-            if length == 0 {
-                break;
-            }
-            if bytes.len().saturating_add(length) > 4096 {
-                return Err(unavailable(
-                    "namespace startup information exceeds its bound",
-                ));
-            }
-            bytes.extend_from_slice(&chunk[..length]);
         }
-        let info: StartupInfo = serde_json::from_slice(&bytes)
-            .map_err(|error| unavailable(format!("namespace startup failed: {error}")))?;
-        Ok(info)
+    }
+
+    /// O uses one nonblocking startup step per normal observer tick. Waiting for bwrap's info
+    /// EOF may not suspend whole-tree accounting or report/control work until the setup cap.
+    pub(super) fn claim_gated_tick(
+        &mut self,
+        startup_deadline: Instant,
+        observer: &mut super::memory::MemoryObserver,
+    ) -> io::Result<Option<GatedClaim>> {
+        if self.init.is_some() {
+            return Err(unavailable("namespace INIT already claimed"));
+        }
+        if Instant::now() >= startup_deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "namespace startup exceeded its allowance",
+            ));
+        }
+        let Some(info) = self.info.advance()? else {
+            return Ok(None);
+        };
+        let claim = self.bind_gated_information(info, observer)?;
+        if Instant::now() >= startup_deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "namespace startup exceeded its allowance",
+            ));
+        }
+        Ok(Some(claim))
     }
 
     /// Kill init on every conclusion, then confirm kernel namespace teardown before accepting it.
@@ -895,6 +984,28 @@ mod tests {
     use crate::kani::test_support::discover_scratch;
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
+
+    /// Trace: FR-034-AC-34.
+    #[test]
+    fn startup_reader_returns_between_partial_reads_and_requires_actual_writer_eof() {
+        let (reader, writer) = pipe_with(PipeFlags::CLOEXEC).unwrap();
+        let mut reader = StartupReader::prepare(File::from(reader)).unwrap();
+        let mut writer = File::from(writer);
+        writer.write_all(b"{\"child-pid\":2,").unwrap();
+        assert!(reader.advance().unwrap().is_none());
+        assert!(reader.advance().unwrap().is_none());
+        writer
+            .write_all(b"\"mnt-namespace\":12,\"pid-namespace\":23}")
+            .unwrap();
+        assert!(reader.advance().unwrap().is_none());
+        // Complete JSON is still not actual EOF while the one real writer remains open.
+        assert!(reader.advance().unwrap().is_none());
+        drop(writer);
+        let info = reader.advance().unwrap().unwrap();
+        assert_eq!(info.child, 2);
+        assert_eq!(info.namespace, 23);
+        assert_eq!(info._mount, 12);
+    }
 
     fn ready(handle: &OwnedFd) -> bool {
         let mut fds = [PollFd::new(handle, PollFlags::IN)];

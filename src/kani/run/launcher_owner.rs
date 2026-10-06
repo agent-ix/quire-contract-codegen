@@ -7,7 +7,7 @@
 use std::{
     io,
     os::fd::{AsFd, OwnedFd},
-    process::{Child, Command},
+    process::{Child, Command, ExitStatus},
     time::Instant,
 };
 
@@ -81,6 +81,8 @@ pub(super) struct LauncherOwner {
     start_frame: PreparedFrame,
     observation_frame: PreparedFrame,
     arm: Option<NamespaceIdentity>,
+    cancellation_attempted: bool,
+    exit: Option<ExitStatus>,
 }
 
 impl LauncherOwner {
@@ -113,6 +115,8 @@ impl LauncherOwner {
             start_frame,
             observation_frame,
             arm: None,
+            cancellation_attempted: false,
+            exit: None,
         })
     }
 
@@ -181,6 +185,48 @@ impl LauncherOwner {
             )
             .map_err(LauncherError::Control)?;
         Ok(())
+    }
+
+    /// Initiate cancellation of the one actual positively owned O. This is not settlement;
+    /// the retained Child must separately yield a real exit status before L can return normally.
+    pub(super) fn cancel_outer(&mut self) -> Result<(), LauncherError> {
+        if self.poll_outer_exit()?.is_some() || self.cancellation_attempted {
+            return Ok(());
+        }
+        self.cancellation_attempted = true;
+        if let Some(pin) = &self.pin {
+            match rustix::process::pidfd_send_signal(pin, Signal::KILL) {
+                Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
+                Err(error) => Err(LauncherError::Io(error.into())),
+            }
+        } else {
+            // Spawn records this unreaped Child before pidfd_open. If that capability call
+            // failed, std Child remains exact owned cancellation/reaping authority, not a
+            // guessed PID or permission to continue an unsupported run.
+            let child = self.child.as_mut().ok_or(LauncherError::MissingChild)?;
+            match child.kill() {
+                Ok(()) => Ok(()),
+                Err(error)
+                    if error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error()) =>
+                {
+                    Ok(())
+                }
+                Err(error) => Err(LauncherError::Io(error)),
+            }
+        }
+    }
+
+    /// Only the unreaped Child's actual wait result proves O exit. A ready pidfd, EOF, signal
+    /// request or an error does not invent a successful reap; repeated polls retain the result.
+    pub(super) fn poll_outer_exit(&mut self) -> Result<Option<ExitStatus>, LauncherError> {
+        if let Some(exit) = self.exit {
+            return Ok(Some(exit));
+        }
+        let Some(child) = self.child.as_mut() else {
+            return Ok(None);
+        };
+        self.exit = child.try_wait().map_err(LauncherError::Io)?;
+        Ok(self.exit)
     }
 
     pub(super) fn confirm_arm(&mut self) -> Result<NamespaceIdentity, LauncherError> {

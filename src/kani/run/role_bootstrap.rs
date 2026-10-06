@@ -11,9 +11,9 @@ use super::{
     creator,
     memory::LauncherMemory,
     outer_setup::{self, LauncherNamespace, NamespaceIdentity, PreparedOuter, SetupError},
-    protocol::BuildIdentity,
+    protocol::{BuildIdentity, GuardianRefusal},
     role_deadline::DeadlineError,
-    role_protocol::{InnerBootstrap, LauncherControl, OuterBootstrap, RunSettings},
+    role_protocol::{InnerBootstrap, LauncherControl, LauncherReply, OuterBootstrap, RunSettings},
     spawner::SPAWNER_STACK_BYTES,
 };
 
@@ -101,7 +101,39 @@ pub(super) fn prepare_launcher(
     let bootstrap = entry
         .authenticate(&caller_pin)
         .map_err(BootstrapError::Control)?;
+    let original_deadline = settings
+        .deadline
+        .local()
+        .map_err(BootstrapError::Deadline)?
+        .min(initial_deadline);
     if settings.identity != identity {
+        // This authenticated C→L pair exists before unshare or any child. Preserve typed stale-
+        // artifact refusal rather than timing out the unrelated C→O channel when no O exists.
+        bootstrap
+            .transport()
+            .send(
+                &LauncherReply::Refused {
+                    identity,
+                    authority: settings.authority,
+                    reason: GuardianRefusal::BuildIdentityMismatch,
+                },
+                &[],
+                original_deadline,
+            )
+            .map_err(BootstrapError::Control)?;
+        // Let C consume the refusal before our own EOF makes buffered bytes ineligible. No
+        // authorization is accepted here; the caller closes this bootstrap during settlement.
+        while Instant::now() < original_deadline {
+            match bootstrap
+                .transport()
+                .pending_control(std::time::Duration::from_millis(20))
+            {
+                Ok(false) => {}
+                Ok(true) => return Err(BootstrapError::UnexpectedControl),
+                Err(ControlError::Eof) => break,
+                Err(error) => return Err(BootstrapError::Control(error)),
+            }
+        }
         return Err(BootstrapError::BuildIdentityMismatch);
     }
     if !settings.helper.is_absolute() {
@@ -139,6 +171,17 @@ pub(super) fn prepare_launcher(
         .deadline
         .local()
         .map_err(BootstrapError::Deadline)?;
+    bootstrap
+        .transport()
+        .send(
+            &LauncherReply::Ready {
+                identity,
+                authority: settings.authority,
+            },
+            &[],
+            original_deadline,
+        )
+        .map_err(BootstrapError::Control)?;
     Ok(PreparedLauncher {
         settings,
         namespace,
