@@ -18,7 +18,7 @@ use command_fds::{CommandFdExt, FdMapping};
 use rustix::process::{getpid, getuid, waitpid, Pid, WaitOptions};
 
 use super::{
-    control::{ControlError, IncrementalSend, PreparedFrame, Transport},
+    control::{ControlError, IncrementalReceive, IncrementalSend, PreparedFrame, Transport},
     protocol::{
         BackendExit, BuildIdentity, CallerControl, GuardianControl, GuardianRefusal, StdinControl,
     },
@@ -271,13 +271,14 @@ pub(super) struct InnerBackend {
     child: std::process::Child,
     reaper: Option<BackendReaper>,
     _artifacts: GuardianArtifacts,
+    owner_receive: IncrementalReceive,
     state: InnerBackendState,
 }
 
 enum InnerBackendState {
     Dispatching(InnerEvent),
     Running,
-    Completing(InnerEvent),
+    Completing { event: InnerEvent, observed: bool },
     AwaitLeaseClose,
 }
 
@@ -305,6 +306,7 @@ impl InnerEvent {
     fn advance(
         &mut self,
         input: &super::role_bootstrap::InnerInput,
+        authorize_caller: bool,
     ) -> Result<bool, GuardianError> {
         // O gets its genuine I-origin event directly; C's receipt never substitutes for it.
         if !self.outer_sent {
@@ -312,7 +314,7 @@ impl InnerEvent {
                 self.outer
                     .advance(&input.outer_bootstrap.transport(), &[], self.deadline)?;
         }
-        if !self.caller_sent {
+        if authorize_caller && !self.caller_sent {
             self.caller_sent =
                 self.caller
                     .advance(&input.caller_lease.transport(), &[], self.deadline)?;
@@ -334,12 +336,15 @@ impl InnerBackend {
         admitted: &BackendAdmission,
         deadline: Instant,
     ) -> Result<PreparedInnerDispatch, GuardianError> {
-        Ok(PreparedInnerDispatch(InnerEvent::prepare(
-            &GuardianControl::Dispatched {
-                authority: admitted.authority,
-            },
-            deadline,
-        )?))
+        Ok(PreparedInnerDispatch {
+            event: InnerEvent::prepare(
+                &GuardianControl::Dispatched {
+                    authority: admitted.authority,
+                },
+                deadline,
+            )?,
+            owner_receive: IncrementalReceive::prepare()?,
+        })
     }
 
     /// Ownership is stored before the next fallible pin/control/reap operation. No error result
@@ -355,7 +360,8 @@ impl InnerBackend {
             child,
             reaper: None,
             _artifacts: admitted.artifacts,
-            state: InnerBackendState::Dispatching(dispatch.0),
+            owner_receive: dispatch.owner_receive,
+            state: InnerBackendState::Dispatching(dispatch.event),
         }
     }
 
@@ -380,12 +386,27 @@ impl InnerBackend {
             .outer_bootstrap
             .transport()
             .refuse_observable_eof()?;
+        if !matches!(
+            self.state,
+            InnerBackendState::Completing {
+                observed: false,
+                ..
+            }
+        ) && self
+            .input
+            .outer_bootstrap
+            .transport()
+            .pending_control(Duration::ZERO)?
+        {
+            // An early or duplicate acknowledgment is an unauthorized lifecycle record.
+            return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
+        }
         if self.reaper.is_none() {
             self.reaper = Some(BackendReaper::from_child(&self.child)?);
         }
         match &mut self.state {
             InnerBackendState::Dispatching(event) => {
-                if event.advance(&self.input)? {
+                if event.advance(&self.input, true)? {
                     self.state = InnerBackendState::Running;
                 }
             }
@@ -403,23 +424,62 @@ impl InnerBackend {
                         .identity_deadline()
                         .map_err(io::Error::other)?
                         .map_or(cap, |original| original.min(cap));
-                    self.state = InnerBackendState::Completing(InnerEvent::prepare(
-                        &GuardianControl::Completed {
-                            authority: self.input.settings.authority,
-                            outcome,
-                        },
-                        deadline,
-                    )?);
+                    self.state = InnerBackendState::Completing {
+                        event: InnerEvent::prepare(
+                            &GuardianControl::Completed {
+                                authority: self.input.settings.authority,
+                                outcome,
+                            },
+                            deadline,
+                        )?,
+                        observed: false,
+                    };
                 }
             }
-            InnerBackendState::Completing(event) => {
+            InnerBackendState::Completing { event, observed } => {
                 self.reaper
                     .as_mut()
                     .ok_or(GuardianError::Refusal(
                         GuardianRefusal::BackendObservationFailed,
                     ))?
                     .tick()?;
-                if event.advance(&self.input)? {
+                event.advance(&self.input, false)?;
+                if !event.outer_sent
+                    && self
+                        .input
+                        .outer_bootstrap
+                        .transport()
+                        .pending_control(Duration::ZERO)?
+                {
+                    return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
+                }
+                if event.outer_sent && !*observed {
+                    if let Some(received) = self
+                        .owner_receive
+                        .advance::<super::role_protocol::InnerOwnerControl>(
+                        &self.input.outer_bootstrap.transport(),
+                        super::role_protocol::InnerOwnerControl::rights_count,
+                        event.deadline,
+                    )? {
+                        let super::role_protocol::InnerOwnerControl::CompletionObserved {
+                            authority,
+                        } = received.control;
+                        if authority != self.input.settings.authority {
+                            return Err(GuardianError::Refusal(GuardianRefusal::ReplayedAuthority));
+                        }
+                        *observed = true;
+                    }
+                }
+                if *observed
+                    && self
+                        .input
+                        .outer_bootstrap
+                        .transport()
+                        .pending_control(Duration::ZERO)?
+                {
+                    return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
+                }
+                if *observed && event.advance(&self.input, true)? {
                     self.state = InnerBackendState::AwaitLeaseClose;
                 }
             }
@@ -442,7 +502,10 @@ impl InnerBackend {
 }
 
 /// Private pre-spawn reservation, not a Dispatched fact or a backend ownership handle.
-pub(super) struct PreparedInnerDispatch(InnerEvent);
+pub(super) struct PreparedInnerDispatch {
+    event: InnerEvent,
+    owner_receive: IncrementalReceive,
+}
 
 impl BackendReaper {
     fn from_child(child: &std::process::Child) -> Result<Self, GuardianError> {

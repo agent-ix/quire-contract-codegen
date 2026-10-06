@@ -26,7 +26,9 @@ use super::{
     report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
     role_deadline::DeadlineError,
-    role_protocol::{InnerBootstrap, OuterPhaseCommand, OuterPhaseReply, RunSettings},
+    role_protocol::{
+        InnerBootstrap, InnerOwnerControl, OuterPhaseCommand, OuterPhaseReply, RunSettings,
+    },
 };
 
 #[derive(Debug)]
@@ -236,6 +238,11 @@ pub(super) struct InnerCompletion {
 enum InnerCompletionState {
     AwaitDispatch,
     Dispatched,
+    Acknowledging {
+        outcome: BackendExit,
+        send: IncrementalSend,
+        deadline: Instant,
+    },
     Completed(BackendExit),
 }
 
@@ -274,6 +281,24 @@ impl InnerCompletion {
         }
         if let InnerCompletionState::Completed(outcome) = self.state {
             return Ok(CompletionProgress::Completed(outcome));
+        }
+        if let InnerCompletionState::Acknowledging {
+            outcome,
+            send,
+            deadline,
+        } = &mut self.state
+        {
+            // The normal complete accounting tick above runs again on EVERY finite send attempt.
+            // Buffered I bytes or merely preparing this frame never count as an observed event.
+            if send
+                .advance(&monitor.control.transport(), &[], *deadline)
+                .map_err(SamplingError::Control)?
+            {
+                let outcome = *outcome;
+                self.state = InnerCompletionState::Completed(outcome);
+                return Ok(CompletionProgress::Completed(outcome));
+            }
+            return Ok(CompletionProgress::Pending);
         }
         // A normal never-elapsing backend may legitimately have no event for arbitrarily long.
         // Once the first frame byte is received, its finite control cap is retained, never reset.
@@ -316,8 +341,15 @@ impl InnerCompletion {
                 InnerCompletionState::Dispatched,
                 GuardianControl::Completed { authority, outcome },
             ) if authority == sampling.settings.authority => {
-                self.state = InnerCompletionState::Completed(outcome);
-                Ok(CompletionProgress::Completed(outcome))
+                self.state = InnerCompletionState::Acknowledging {
+                    outcome,
+                    send: IncrementalSend::new(
+                        PreparedFrame::encode(&InnerOwnerControl::CompletionObserved { authority })
+                            .map_err(SamplingError::Control)?,
+                    ),
+                    deadline,
+                };
+                Ok(CompletionProgress::Pending)
             }
             (InnerCompletionState::AwaitDispatch, GuardianControl::Dispatched { .. })
             | (InnerCompletionState::Dispatched, GuardianControl::Completed { .. }) => {
@@ -326,6 +358,7 @@ impl InnerCompletion {
             (
                 InnerCompletionState::AwaitDispatch
                 | InnerCompletionState::Dispatched
+                | InnerCompletionState::Acknowledging { .. }
                 | InnerCompletionState::Completed(_),
                 _,
             ) => Err(SamplingError::UnexpectedInnerEvent),
