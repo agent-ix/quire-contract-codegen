@@ -32,8 +32,10 @@ AC-31 through AC-34 remain mandatory UNRUN CODE gates, with no implementation co
 
 ## Evidence delivery allocation
 
-The explicit staging delta separates evidence delivery into slice 1 (ordinary production seams,
-without extending the fixture surface) and slice 2 (IR-655's still-owed exact-boundary evidence).
+IR-639 lifecycle CODE is one PR. Slice 1 (ordinary production seams without fixture extension)
+and slice 2 (IR-655's still-owed exact-boundary evidence) are internal commit stages and review
+scopes of that PR, not separate merge deliveries. The table allocates which obligations each
+internal stage backs.
 The rationale is the new O-owned gate/reap/accounting schedule: current single-M/I witnesses and
 C-origin observations cannot prove O's exact transition or final whole-run sample. This changes
 implementation/evidence order only; every existing guarantee remains required before complete
@@ -48,6 +50,20 @@ be tagged only after actual complete assertions exist. Inspection, source schedu
 scratch facilities cannot stand in for required Test evidence. If measurement shows an ordinary
 seam cannot expose its allocated predicate without fixture extension, record that measured gap
 explicitly and move the owed evidence to slice 2; do not weaken the criterion or fabricate coverage.
+
+IR-655 fixture SPEC may be authored from actual integrated O production source on the UNMERGED
+stage-1 branch. Its source grounding shall establish the real O/C whole-run sample schedule before
+measuring a numeric coordination cap; the cap remains unselected/unmeasured until that proof and
+measurement exist. IR-655 SPEC shall merge before any fixture CODE implementing its new allocation,
+and before the single lifecycle CODE PR merges. This permits source-grounded specification without
+a stage-1 merge prerequisite; it allocates no fixture DTO/design or cap now.
+
+The single CODE PR may open only after all required pre-PR gates pass. It may merge only after both
+internal stages are complete and every old test is genuinely adapted, or consciously retired by an
+explicit listed SPEC delta preserving a stronger guarantee and its actual adverse witness. Full
+gates, old assertions, no skipped tests, no compatibility and matched helper identity remain
+mandatory. An internal stage may be uncompilable/unmergeable while the overall PR is pending;
+partial readiness never substitutes for final acceptance or for passing pre-PR gates.
 
 | Criterion | Slice 1: ordinary-seam Test evidence, without fixture extension | Slice 2: IR-655 owed Test evidence; PLANNED/untagged in slice 1 |
 |---|---|---|
@@ -77,11 +93,13 @@ The original unit tests
 `completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample` remain required.
 Their obsolete direct-M invocation may leave the unit-test target uncompilable during slice 1;
 record that compile gap explicitly. Independently compiling normal-library integration tests do
-not settle it, permit skip/deletion, or make slice 1 merge-ready against the required full gates.
+not settle it or permit skip/deletion. There is no separate slice-1 merge: the compile gap remains
+a blocker to the single CODE PR's pre-PR gates until resolved within its internal stages.
 There is no compatibility prepare API, libtest helper-identity override or weakened assertion.
-Genuine adaptation waits for the required O-origin retained-gate and final-whole-run-sample
-witnesses in slice 2. Preserve original assertions/mutants until genuine new-design adverse
-witnesses fail and restored controls pass. Any retirement/re-aim requires a separately listed
+Genuine adaptation uses the required O-origin retained-gate and final-whole-run-sample witnesses
+in internal stage 2 after merged IR-655 SPEC; it does not await a separate CODE-stage merge.
+Preserve original assertions/mutants until genuine new-design adverse witnesses fail and restored
+controls pass. Any retirement/re-aim requires a separately listed
 spec delta naming the original temporal/ownership oracle, new O-origin boundary, stronger confirmed
 whole-outer-tree guarantee and an adverse witness defeating actual new cancellation authority.
 The independent AC-24 ignored-inner-lease-EOF oracle is never retired or masked by outer cleanup.

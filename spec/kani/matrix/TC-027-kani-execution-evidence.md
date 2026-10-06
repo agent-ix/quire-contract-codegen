@@ -185,8 +185,11 @@ executable coverage is claimed by this specification amendment.
 
 
 Evidence staging follows TC-049's explicit delivery allocation. Slice 1 uses ordinary normal-library
-report/export, collector and kernel descriptor seams without fixture extension. Its assertions do
-not tag a mixed FR-034 collector/lifetime criterion whose O-origin or independent termination
+report/export, collector and kernel descriptor seams without fixture extension. Slices are internal
+commit stages of ONE lifecycle CODE PR, not separate merges. IR-655 SPEC may use real unmerged O
+source but must merge before its fixture CODE and the single CODE PR merge. All internal stages
+and required pre-PR/full gates remain mandatory. Its assertions do not tag a mixed FR-034
+collector/lifetime criterion whose O-origin or independent termination
 witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual export or unit-test
 compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
 override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
