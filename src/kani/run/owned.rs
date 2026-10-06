@@ -30,7 +30,7 @@ use super::{
     stdin::OriginalStdin,
 };
 
-const TICK: Duration = Duration::from_millis(20);
+pub(super) const TICK: Duration = Duration::from_millis(20);
 const LEASE_CLOSE_CAP: Duration = Duration::from_millis(250);
 
 /// Owns every independent cancellation/settlement authority; the lease owns none of these.

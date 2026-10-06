@@ -14,8 +14,8 @@ use std::{
 
 use super::{
     control::{
-        role_pair, ControlError, GuardianEndpoint, IncrementalReceive, IncrementalSend,
-        PreparedFrame, RoleCaller, RoleEndpoint,
+        role_pair, ControlError, FrameStorage, GuardianEndpoint, IncrementalReceive,
+        IncrementalSend, PreparedFrame, RoleCaller, RoleEndpoint,
     },
     memory::{LauncherMemory, MemoryObserver},
     namespace::{
@@ -27,7 +27,8 @@ use super::{
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
     role_deadline::DeadlineError,
     role_protocol::{
-        InnerBootstrap, InnerOwnerControl, OuterPhaseCommand, OuterPhaseReply, RunSettings,
+        CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
+        OuterPhaseReply, OuterTerminalReply, RunSettings,
     },
 };
 
@@ -46,6 +47,9 @@ pub(super) enum SamplingError {
     InnerIdentity(ReadyIdentityError),
     InnerCompletionAuthority,
     UnexpectedInnerEvent,
+    InvalidTerminalTransition,
+    TerminalAuthority,
+    TerminalSize,
 }
 
 impl std::fmt::Display for SamplingError {
@@ -69,7 +73,10 @@ impl std::error::Error for SamplingError {
             | Self::UnexpectedPhase
             | Self::SettlementReportMismatch
             | Self::InnerCompletionAuthority
-            | Self::UnexpectedInnerEvent => None,
+            | Self::UnexpectedInnerEvent
+            | Self::InvalidTerminalTransition
+            | Self::TerminalAuthority
+            | Self::TerminalSize => None,
         }
     }
 }
@@ -124,10 +131,10 @@ impl TerminalSampling {
         result
     }
 
-    /// Invoke after actual seal/descriptor delivery/read completion and before filling the
-    /// already-reserved terminal commit. This actual O observation is the final complete sample;
-    /// no later recursive metrics acknowledgment can extend or replace it.
-    pub(super) fn final_observation(
+    /// Actual complete normal observation and recorded peaks. Only the sample attached to the
+    /// eventual successful complete commit is final; zero-progress attempts must sample again.
+    /// Descriptor/read stages use this same actual source without granting final metrics credit.
+    pub(super) fn observation_and_peaks(
         &mut self,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
@@ -138,6 +145,198 @@ impl TerminalSampling {
             .measured_peaks()
             .map_err(SamplingError::Charge)?;
         Ok((tick, peaks))
+    }
+}
+
+/// Reserve all terminal protocol storage while O is still preparing, before any M/writer child.
+/// Its actual allocations remain in O's observed RSS; report backing retains its full reservation.
+pub(super) struct TerminalPreparation {
+    descriptor: FrameStorage,
+    commit: FrameStorage,
+    read_ack: IncrementalReceive,
+}
+
+impl TerminalPreparation {
+    pub(super) fn prepare() -> Result<Self, SamplingError> {
+        Ok(Self {
+            descriptor: FrameStorage::prepare().map_err(SamplingError::Control)?,
+            commit: FrameStorage::prepare().map_err(SamplingError::Control)?,
+            read_ack: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
+        })
+    }
+
+    /// The cutoff is the retained whole owner's ALREADY started settlement deadline. This method
+    /// creates no phase allowance; finite original T may only shorten that same cutoff.
+    pub(super) fn begin(
+        self,
+        report: SealedReport,
+        sampling: TerminalSampling,
+        cutoff: Instant,
+    ) -> Result<TerminalDelivery, SamplingError> {
+        let bytes = u64::try_from(report.bytes).map_err(|_| SamplingError::TerminalSize)?;
+        if bytes > super::REPORT_CONTENT_BYTES {
+            return Err(SamplingError::TerminalSize);
+        }
+        let deadline = sampling
+            .settings
+            .identity_deadline()
+            .map_err(SamplingError::Deadline)?
+            .map_or(cutoff, |original| cutoff.min(original));
+        if Instant::now() >= deadline {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        let authority = sampling.settings.authority;
+        let descriptor = self
+            .descriptor
+            .encode(&OuterTerminalReply::ReportDescriptor { authority, bytes })
+            .map_err(SamplingError::Control)?;
+        Ok(TerminalDelivery {
+            sampling,
+            state: TerminalState::DeliverDescriptor {
+                report,
+                send: IncrementalSend::new(descriptor),
+            },
+            commit: Some(self.commit),
+            read_ack: self.read_ack,
+            bytes,
+            deadline,
+            poisoned: false,
+        })
+    }
+}
+
+enum TerminalState {
+    DeliverDescriptor {
+        report: SealedReport,
+        send: IncrementalSend,
+    },
+    AwaitRead,
+    Commit,
+    Committed,
+}
+
+pub(super) enum TerminalProgress {
+    Pending,
+    Exhausted,
+    /// Complete commit emission only. The executor may now exit normally; C must still prove
+    /// actual normal O exit/reap through retained L, capture closure and creator settlement.
+    Committed,
+}
+
+/// O's single terminal transaction. Every unsuccessful finite attempt returns to actual fresh
+/// accounting, with no recursive commit ACK, repeated descriptor, new buffer or deadline reset.
+pub(super) struct TerminalDelivery {
+    sampling: TerminalSampling,
+    state: TerminalState,
+    commit: Option<FrameStorage>,
+    read_ack: IncrementalReceive,
+    bytes: u64,
+    deadline: Instant,
+    poisoned: bool,
+}
+
+impl TerminalDelivery {
+    pub(super) fn tick(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<TerminalProgress, SamplingError> {
+        if self.poisoned || matches!(self.state, TerminalState::Committed) {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        self.poisoned = true;
+        let result = self.advance(outer, caller);
+        if result.is_ok() {
+            self.poisoned = false;
+        }
+        result
+    }
+
+    fn advance(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<TerminalProgress, SamplingError> {
+        if Instant::now() >= self.deadline {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        let sample_started = Instant::now();
+        let (tick, peaks) = self.sampling.observation_and_peaks(outer, caller)?;
+        if matches!(tick, MemoryTick::Exhausted(_)) {
+            return Ok(TerminalProgress::Exhausted);
+        }
+        match &mut self.state {
+            TerminalState::DeliverDescriptor { report, send } => {
+                if send
+                    .advance(
+                        &caller.transport(),
+                        &[report.descriptor.as_fd()],
+                        self.deadline,
+                    )
+                    .map_err(SamplingError::Control)?
+                {
+                    // Drop only O's already delivered sealed descriptor; C owns its genuine
+                    // transferred duplicate. The original full backing reserve remains charged.
+                    self.state = TerminalState::AwaitRead;
+                }
+                Ok(TerminalProgress::Pending)
+            }
+            TerminalState::AwaitRead => {
+                let Some(received) = self
+                    .read_ack
+                    .advance::<CallerTerminalControl>(&caller.transport(), |_| 0, self.deadline)
+                    .map_err(SamplingError::Control)?
+                else {
+                    return Ok(TerminalProgress::Pending);
+                };
+                let CallerTerminalControl::ReadCompleted { authority, bytes } = received.control;
+                if authority != self.sampling.settings.authority {
+                    return Err(SamplingError::TerminalAuthority);
+                }
+                if bytes != self.bytes {
+                    return Err(SamplingError::TerminalSize);
+                }
+                self.state = TerminalState::Commit;
+                Ok(TerminalProgress::Pending)
+            }
+            TerminalState::Commit => {
+                // This fresh actual-source sample follows all seal/report descriptor delivery/
+                // bounded-read points. Serialize only scalars into the pre-reserved O buffer.
+                let storage = self
+                    .commit
+                    .take()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?;
+                let frame = storage
+                    .encode(&OuterTerminalReply::Committed {
+                        authority: self.sampling.settings.authority,
+                        peaks,
+                    })
+                    .map_err(SamplingError::Control)?;
+                // Do not freeze the early peak while serialization/preemption consumes a due
+                // ordinary 20ms observer tick. Zero-progress returns to a fresh complete sample.
+                // This check is immediately before the nonblocking syscall, not a promise that
+                // scheduler or kernel execution cannot cross that point afterward.
+                let due = sample_started
+                    .checked_add(super::owned::TICK)
+                    .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
+                if Instant::now() >= due {
+                    self.commit = Some(frame.into_storage());
+                    return Ok(TerminalProgress::Pending);
+                }
+                if caller
+                    .transport()
+                    .send_terminal_once(&frame, self.deadline)
+                    .map_err(SamplingError::Control)?
+                {
+                    self.state = TerminalState::Committed;
+                    Ok(TerminalProgress::Committed)
+                } else {
+                    self.commit = Some(frame.into_storage());
+                    Ok(TerminalProgress::Pending)
+                }
+            }
+            TerminalState::Committed => Err(SamplingError::InvalidTerminalTransition),
+        }
     }
 }
 
