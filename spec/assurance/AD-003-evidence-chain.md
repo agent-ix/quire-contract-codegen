@@ -188,11 +188,15 @@ authored).
   follows in a follow-up; until then the spelling is CG's own and interim.
 - E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
   only the exact claimed equality/inequality node, its occurrence key obtained from the recompiled
-  original package, the obligation kind and the parameter-operand node IDs with their actual harness
-  bounds. Each argument's domain is its harness bounds keyed under that parameter, ascending by
-  `DomainKey` (ADR-021 TX-3); literal operands remain singleton source values and contribute no
-  fabricated parameter ID. The full FR-015 AC-76 CG record keeps abstractions, size budget, pair
-  count and unexercised behaviours outside this preimage. No blanket widening of E-1 occurs:
+  original package, the obligation kind and one argument per distinct parameter-operand node ID
+  with its actual harness bounds. A parameter compared with itself appears once in arguments;
+  operand appearances are not separate bindings. Each argument's domain is its harness bounds keyed
+  under that parameter, ascending by `DomainKey` (ADR-021 TX-3); literal operands remain singleton
+  source values and contribute no
+  fabricated parameter ID. The full FR-015 AC-76 CG record keeps abstractions, size budget, static
+  closure pair-node count and unexercised behaviours outside this preimage. That static record
+  count is distinct from the runtime occurrence-pair count of QSL's equality outcome.
+  No blanket widening of E-1 occurs:
   existing function/frame member spelling, domain encoding and digest preimages stay unchanged. The
   composite owning encoder contract remains gated on actual QSL-640 delivery. The request's O-09
   identity is checked against the recompiled claim before any settlement, including Disagreed.

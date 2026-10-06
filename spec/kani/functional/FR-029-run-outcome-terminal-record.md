@@ -177,9 +177,11 @@ Actual QSL-640 API delivery remains the code gate. QSL derives declared operand 
 from the same recompiled node claim under FR-033; CG does not assert its own declared-bound
 completeness. Common admission checks claim/source/node/occurrence/bounds/O-09 identity.
 When common admission succeeds, the adapter shall apply refinement disagreement to that valid claim
-before any backend outcome or replay agreement. A retained `refinement_failed` strength produces `Failed`/CG-owned `CgDefect` whatever
-the shadow backend settled, including a falsified replay that agrees on its replayed case. The
-disagreement record is never lost to another path.
+before any backend outcome or replay agreement. A retained `refinement_failed` strength produces
+`Failed`/CG-owned `CgDefect` whatever the shadow backend settled, including a falsified replay that
+agrees on its replayed case. The
+disagreement record is never lost to an early operand admission or missing/fault native-observation
+path; those checks follow the same-valid-claim Disagreed row under FR-033.
 
 For the remaining completed proof-path cases, the adapter shall preserve this first-applicable order
 while keeping the original backend classification:
@@ -314,7 +316,7 @@ AC-15 cannot reject that input as an ordinary unexpected replay settlement.
 | FR-029-AC-21 | PLANNED: IR-241 owns the refusal variants and verified proof-strength input; IR-635 owns the widened inconclusive/cover-unsatisfied case. Until actual QSL-640 parity capability delivery, a verified nonproduction shadow takes NonProductionProof and a falsified shadow takes ShadowCounterexample; inconclusive and cover-unsatisfied shadows with retained refinement_failed take NonProductionProof carrying that strength. All are typed interim refusals with no terminal value, never a fabricated predicate replay or terminal cause. | Test |
 | FR-029-AC-22 | PLANNED (IR-635). The strength set enumerated by the map equals FR-028-AC-17's closed set; adding a strength without its projection and outcome row fails the build or test rather than entering a wildcard mapping. | Test |
 | FR-029-AC-23 | PLANNED/GATED (IR-635/QSL-640). A stopped backend run retains its ordinary timeout/memory inconclusive classification; a stopped refinement retains FR-028-AC-24's CeilingReached projection and recorded ceiling. Neither stop, nor QSL settlement resource refusal, becomes completed NotExhausted evidence or Tested. | Test |
-| FR-029-AC-24 | PLANNED/GATED (IR-635/QSL-640). After common claim/source/node/bounds/O-09 validation, retained refinement_failed/Disagreed evidence for the same valid claim yields Failed/CgDefect for verified, falsified, inconclusive and cover-unsatisfied backend outcomes, including zero checks and a falsified replay agreeing on its retained case; this disagreement takes precedence over resource, vacuity and agreement rows. | Test |
+| FR-029-AC-24 | PLANNED/GATED (IR-635/QSL-640). After common claim/source/node/bounds/O-09 validation, retained refinement_failed/Disagreed evidence for the same valid claim yields Failed/CgDefect for verified, falsified, inconclusive and cover-unsatisfied backend outcomes, including zero checks, an out-of-domain operand x: 12, missing/fault native observation and a falsified replay agreeing on its retained case; no early operand/native setup refusal loses this disagreement, which precedes resource, vacuity and agreement rows. Missing observations are never fabricated. | Test |
 | FR-029-AC-25 | PLANNED (IR-635). With no retained refinement disagreement, every bounded_shadow inconclusive reason maps through the ordinary rows: vacuous proof and cover-unsatisfied are Proved0; timeout is Incomplete(TimedOut); memory and unwind exhaustion are Incomplete(ResourceExhausted); no-verdict, failure-without-counterexample and missing-summary are Failed. No vacuous outcome is coerced into verified evidence. | Test |
 | FR-029-AC-26 | PLANNED/GATED (IR-635/QSL-640). The converter preserves the actual QSL record category/cause: Proved0 remains inconclusive/KaniVacuousProof and is never promoted by its payload. Zero-count backend cases use AC-25, not an unreachable verified-count-zero row. | Test |
 | FR-029-AC-27 | PLANNED/GATED (IR-635/QSL-640). The distinct typed composite settlement input refuses a missing settlement or another claim's node/run/operation/operand/domain/limits/content binding with no value; ordinary source-predicate AC-15 does not consume or reject a valid verified-parity settlement as UnexpectedSettlement. | Test |
