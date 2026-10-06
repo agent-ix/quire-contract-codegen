@@ -382,6 +382,49 @@ The independent AC-24 ignored-inner-lease-EOF oracle is never retired or masked 
     capacity; missing enforceable bound gives capability refusal before Dispatch. Apply each missing
     consumer F_GET_SEALS seal and require refusal before read. These tests remain UNRUN.
 
+18. Exercise the UNRUN report-writer entry successful control with the real matched normal helper
+    and its actual nested UID mapping. O records the original pipe's device/inode before mapping
+    and sends those values with actual N >= 5 over authenticated original-run/O control. Require I
+    to compare its newly opened write-only/nonblocking CLOEXEC pipe File against that O-origin
+    identity before original-slot close or backend Dispatch. Record actual access/identity/flags,
+    backend positive startup/export and bounded final EOF/read, not a self-comparison of N with its
+    proc link. Actual mapped-UID reopen denial is typed pre-Dispatch refusal, never passing skip or
+    permission workaround. The genuine helper/bwrap/backend/Cargo/Kani roundtrip remains UNRUN.
+19. In separate real protocol/owned-descriptor entry cases, supply foreign/replayed run or O
+    authority, missing expected identity, changed device/inode and substituted wrong pipe at N;
+    also supply wrong-type/read-only descriptors, unavailable N and actual denied reopen access.
+    Require the named authentication, independent identity or access cause before Dispatch, with
+    no backend marker and bounded owned cleanup. Use only positively owned descriptors/children.
+    A skipped-authentication or skipped-O-identity-validation matched-helper mutant must fail
+    this refusal/no-marker predicate despite plausible slot numbers and valid-looking bytes;
+    restored controls pass. No caller/library build-identity override supplies a test seam.
+20. Establish successful original-slot closure at the actual single-thread entry boundary before
+    later descriptor allocation/reuse. Require the original N closed exactly once, the NEW owned
+    writer retained/CLOEXEC, and a separately owned sentinel/control descriptor still usable.
+    Then deliberately reuse the freed N with an owned sentinel and exercise later settlement;
+    require that sentinel still usable, detecting a duplicate numeric close after reuse. A
+    wrong-slot-close mutant must fail sentinel/ownership or original-writer-closure assertions;
+    a skipped-close mutant must fail the actual closure/extra-writer predicate. The observation
+    must describe actual close/descriptor state at that boundary, not a later reused N or an
+    implementation counter detached from the close. Emergency cleanup follows sealed observations.
+21. Positively identify the original report pipe in the actual backend's N >= 5 after exec and
+    verify expected access and genuine exported bytes. Spawn an unrelated owned exec from the same
+    entry path and require BOTH the original inherited slot and NEW writer identity absent there;
+    CLOEXEC flags alone do not establish exclusion. C/L still hold no writer. Test actual reopened
+    and descendant/Cargo writer copies, M settlement and actual pipe EOF after all holders close.
+    A backend-mapping omission must fail the real export control; unrelated-exec writer leakage
+    must fail actual inherited-identity/extra-holder or EOF assertions before emergency cleanup.
+    Restore controls; no report-to-stdio mapping, named fallback or C memfd proc reopening is used.
+
+Steps 18–21 are PLANNED/UNRUN Test procedures for the existing writer-entry obligations, not new
+criteria or a claim that the current fixture operation exposes these boundaries. Use actual
+ordinary production/protocol/kernel descriptor seams in internal production stage 1 where
+available. If exact authentication,
+original-slot close/no-reuse or inheritance observations require a fixture extension, record the
+measured missing seam and carry that evidence to IR-655 stage 2 with SPEC merged before fixture
+CODE. No new DTO/rights/hook/cap is allocated here. Mixed whole criteria remain untagged until all
+assertions are actual, alongside the unchanged independent AC-24 EOF oracle and one-CODE-PR gate.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |

@@ -91,3 +91,9 @@ Round 4 reviewed d031e73aed42d35a063986fb703cea0ebe264c6e (previous 0de3e8823f0c
 | --- | --- | --- |
 | FND-006 | fixed | d031e73aed42d35a063986fb703cea0ebe264c6e: FR-034 Dependencies now lists IR-655 with an ordinary Linear link and states the SPEC-before-fixture-CODE and single-CODE-PR merge edge; frontmatter relationships are unchanged (no ix:// ticket edge). |
 | FND-007 | fixed | d031e73aed42d35a063986fb703cea0ebe264c6e: The FR-034 staging paragraph is word-for-word equal to 0de3e88 after whitespace normalization and reflowed within 100 columns; TC-049 fragments at lines 38 and 91 are gone (introductory sentences rewritten); both files end with a newline. |
+
+## Round 5 scoped amendment
+
+Round 5 scoped amendment reviewed a7389cc1af4562e05b545bdd73fef24ef39177c3 (prior 37d93da9a78a1bd2e844a0dde4d669e386f00f88; fresh main fcf7f6a415a31a80824eafbe95b64bf977555c38; PR not open). Scope: only the FR-034 delta 37d93da9a78a1bd2e844a0dde4d669e386f00f88..a7389cc1af4562e05b545bdd73fef24ef39177c3 (39 added, 3 removed lines): the corrected nested bwrap argv (`--as-pid-1`, `--new-session`), the safe I report-writer entry prerequisite, and the added source-grounding paragraph. All 34 FR-034 criterion rows are byte-identical, and no TC, Rust, test, Trace or review artifact changed. Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 1a9e76d9-fc6c-47a7-b7e5-a9dd973d87e0. Source facts are grounding only, never runtime acceptance. All prior findings keep their latest outcome; no disposition row is added.
+
+**Round 5 verdict: clean amendment.** The criterion rows are byte-identical, new prose stays within 100 columns, the argv paragraph remains consistent with the fd 3/4 and N >= 5 mapping and the M-reap-before-EOF rule, and the grounding paragraph is labelled Analysis-only.

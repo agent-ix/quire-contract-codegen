@@ -125,17 +125,21 @@ successful mapping/spawn. M can retain a writer: require actual M termination/re
 teardown before final EOF drain. Reopened procfd and descendant writer copies are included. O
 retains report reader/memfd; C receives only final sealed memfd authority over separate controls.
 
-The report-writer entry ownership prerequisite shall use only safe APIs under forbid-unsafe.
-I may open the authenticated exact `/proc/self/fd/N` slot as a NEW write-only, nonblocking CLOEXEC
-owned File; this does not adopt the inherited raw descriptor. Before closing the original slot,
-I shall bind N to the intended child-only mapping and authenticated original-run/O authority,
-validate the newly owned file's pipe type, device/inode identity and write access against that
-mapping, and verify its CLOEXEC state. Neither a caller-supplied integer nor a matching slot number
-alone grants ownership. During this single-thread entry, no actor may close/rebind/reuse N between
-validation and its one-time close. The locked safe nix close API may close only that positively
-validated original slot; no arbitrary integer closure, unsafe raw adoption or unsafe inherited-FD
-initializer is permitted. Failure settles through bounded owned cancellation, not a guessed close
-or a retry against a potentially reused descriptor number.
+The report-writer entry ownership prerequisite shall use only safe APIs under forbid-unsafe. I may
+open the authenticated exact `/proc/self/fd/N` slot as a NEW write-only, nonblocking CLOEXEC owned
+File; this does not adopt the inherited raw descriptor. O shall obtain expected device/inode
+identity from its originally created report pipe BEFORE child mapping, and deliver that expected
+identity and chosen N through bounded authenticated control bound to the original run and verified O
+authority. Before closing the original slot, I shall authenticate that O-origin expectation, bind N
+to the intended child-only mapping, and validate the NEW owned File's pipe type, device/inode
+identity and write access against O's independently supplied expected identity. I shall also verify
+its CLOEXEC state. An identity derived only from reopening N, comparing N with its own proc link, or
+trusting a caller-supplied expectation is not the required independent check. Neither a
+caller-supplied integer nor a matching slot number alone grants ownership. During this single-thread
+entry, no actor may close/rebind/reuse N between validation and its one-time close. The locked safe
+nix close API may close only that positively validated original slot; no arbitrary integer closure,
+unsafe raw adoption or unsafe inherited-FD initializer is permitted. Failure settles through bounded
+owned cancellation, not a guessed close or a retry against a potentially reused descriptor number.
 
 After original-slot closure, I shall retain the NEW owned writer as CLOEXEC and safely map it into
 only the actual backend child's N >= 5 slot, with intended exec inheritance. Unrelated execs shall
