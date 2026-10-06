@@ -433,9 +433,18 @@ oracle and one-CODE-PR gate.
     FD inheritance or supervisor-wide filter. Verify same owned PID under I and exact original
     argv0/argv/environment/cwd/stdio and ownership/deadline. Force policy/filter/privilege installation
     failure before positive Dispatch: require typed unavailable refusal over authenticated bounded
-    startup channel, no arbitrary recipe exec and confirmed owned cleanup. Separately allow positive
-    Dispatch then force actual original recipe exec failure (missing/non-executable recipe program);
-    require existing bounded backend-failure handling, teardown/deadline/capture settlement, no
+    startup channel, no arbitrary recipe exec and confirmed owned cleanup. For post-Dispatch exec
+    failure, author a regular executable script with a shebang naming a deliberately absent absolute
+    interpreter in the owned confined root. Close its writing handle and retain unchanged file/mode
+    and interpreter absence throughout: no sleep, removal/replacement race, copied ELF or public hook.
+    Require the actual KaniInstallation::require_executable precheck to pass, positive Dispatch to
+    occur, and the actual recipe exec to fail ENOENT because that interpreter is absent. This avoids
+    ENOEXEC shell fallback; require no shell substitution or unfiltered retry. Separately retain
+    missing/non-executable launcher cases as pre-Dispatch Tool refusals, never post-Dispatch evidence.
+    Source: execute.rs::start calls run/tool.rs::require_executable (regular-file/execute-bit check);
+    Linux [execve](https://man7.org/linux/man-pages/man2/execve.2.html) names absent script interpreter
+    as ENOENT. The authored fixture and actual positive barriers remain PLANNED/UNRUN. Require
+    existing bounded backend-failure handling, teardown/deadline/capture settlement, no
     synthetic report/status/evidence and no unfiltered retry/fallback. Initial trusted-helper spawn
     or early EOF proves neither installation nor recipe exec. Startup transport remains CLOEXEC
     through successful recipe exec. Run trusted installer with separate sanitized loader environment;
