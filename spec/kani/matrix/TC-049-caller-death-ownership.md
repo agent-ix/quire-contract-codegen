@@ -614,7 +614,7 @@ oracles; an execution error must emit no `KaniExecutionEvidence`.
 
 | Constructor/caller case | Required charged-peak result | Independent adverse oracle |
 |---|---|---|
-| Single-run zero/already-expired original deadline before L/O creation | TimedOut with `NotObserved { reason: PreRoleTimeout }` | No new L/O or Dispatch; AC-20 classification unchanged; no manufactured observation |
+| Single-run timeout before L/O creation: zero/already-expired original deadline, or finite workdeadline elapsed with original T still live | TimedOut with `NotObserved { reason: PreRoleTimeout }` after applicable confirmed settlement | No new L/O or Dispatch after either cutoff; AC-20 original zero/expiry ordering unchanged; no manufactured observation or new reason |
 | Single-run startup timeout after role creation, before Dispatch and before the first complete O sample | TimedOut with `NotObserved { reason: StartupTimeoutBeforeObservation }` after required settlement | A role-created startup timeout must not be mislabeled PreRoleTimeout |
 | Single-run startup timeout before Dispatch with a prior complete actual O sample | `Observed { bytes }` using the actual complete peak | Reject NotObserved and any incomplete/proxy charge |
 | Every post-Dispatch single-run evidence conclusion, including timeout, memory exhaustion and completed classification | `Observed { bytes }` from complete actual O observations | Missing complete measurement is execution error with no evidence, never a new absence reason |
@@ -626,6 +626,24 @@ error conversion before evidence construction. A ledger deadline error alone doe
 an evidence-emitting path or prove no prior sample existed. Retain an actual complete prior peak
 when the existing timeout conclusion legitimately emits evidence; otherwise refuse as required.
 No new public request field, observation schedule override, fallback or evidence kind is allocated.
+
+Also exercise a pre-role workdeadline stop with a positively observed original deadline still live.
+Require unchanged TimedOut candidate classification and confirmed settlement by original T;
+unconfirmed settlement retains the existing CleanupUnconfirmed override with no evidence.
+This case shall not require original expiry or role creation to select PreRoleTimeout.
+
+The additional accounting Test and source-flow Analysis is PLANNED/UNRUN. Audit the complete charge
+as all named formula terms: positively observed L/O/M/I and every owned descendant RSS, the declared
+finite own caps of C per-run controls/captures (including bounded diagnostic detail), actual reserved
+pipe capacity and pre-reserved memfd maximum. Require actual complete O setup/tick measurements and
+the unchanged schedule. Independently omit L RSS, a named caller buffer, pipe reservation and memfd
+reservation in separate mutants; each omission shall fail its actual charge/observation oracle.
+Missing a named cap/quantity or owned-worker observation shall refuse, never become an incidental
+allocation exclusion. Incidental caller-process allocations beyond the named terms, including
+opaque Command/thread/native-runtime/TLS/guard/alternate-stack/allocator transients, are outside this
+resource claim; no test shall claim their complete bound or use requested stack/whole-C RSS as its
+proxy. The exclusion shall not remove L, named caller buffers or backing reservations, and shall
+not relax ownership, writer closure, EOF, seals, ceilings, lease or original deadlines.
 
 ## Expected Results
 
