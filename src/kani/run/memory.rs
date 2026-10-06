@@ -1,9 +1,9 @@
 //! Linux procfs observation of the sum of backend-process resident memory (FR-028-AC-21).
 //!
-//! The peak is the largest resident total observed at a polling instant. It is not an
-//! allocation limit or an estimate of memory between observations. Descendants are retained
-//! by pid and start time after leaving the launcher's process group; a reused pid is never
-//! counted or signalled as the old process.
+//! Sampling walks the owned namespace init's task-child ancestry, with start identities
+//! excluding PID reuse. This observer signals no process; NamespaceOwner owns teardown.
+//! The peak is the largest conservative sum of per-process RSS observed at a polling instant,
+//! counting shared pages per process. It is no allocation limit or intersample peak estimate.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -79,6 +79,13 @@ impl MemoryObserver {
             .ok_or_else(|| {
                 io::Error::new(io::ErrorKind::Unsupported, "procfs caller identity changed")
             })?;
+        // CONFIG_PROC_CHILDREN is required: an empty file is valid, an absent live task's
+        // file is not. Probe before dispatch, then keep checking this during owned traversal.
+        let own_tasks = root.join(own.to_string()).join("task");
+        for task in fs::read_dir(&own_tasks)? {
+            let task = task?;
+            read_task_children(&task.path())?;
+        }
         #[cfg(target_os = "linux")]
         {
             let pid = i32::try_from(own)
@@ -209,8 +216,8 @@ impl MemoryObserver {
             };
             for task in tasks {
                 let task = task?;
-                match fs::read_to_string(task.path().join("children")) {
-                    Ok(children) => {
+                match read_task_children(&task.path()) {
+                    Ok(Some(children)) => {
                         for child in children.split_whitespace() {
                             pending.push((
                                 child.parse::<u32>().map_err(|_| {
@@ -223,7 +230,7 @@ impl MemoryObserver {
                             ));
                         }
                     }
-                    Err(error) if process_disappeared(&error) => {}
+                    Ok(None) => {}
                     Err(error) => return Err(error),
                 }
             }
@@ -246,13 +253,7 @@ impl MemoryObserver {
         if let Some(bytes) = status_rss(&status)? {
             return Ok(Some(bytes));
         }
-        let threads = status
-            .lines()
-            .find_map(|line| line.strip_prefix("Threads:"))
-            .and_then(|value| value.trim().parse::<u64>().ok())
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "procfs has no thread count")
-            })?;
+        let threads = status_threads(&status)?;
         if threads > 1 {
             // An exited leader can have no mm while workers still share the live address space.
             // Use one worker's RSS, never sum threads that share the same mm.
@@ -262,6 +263,7 @@ impl MemoryObserver {
                     format!("live worker RSS unavailable: {error}"),
                 )
             })?;
+            let mut released = 0u64;
             for worker in workers {
                 let worker = worker.map_err(|error| {
                     io::Error::new(
@@ -297,6 +299,31 @@ impl MemoryObserver {
                 if let Some(bytes) = status_rss(&text)? {
                     return Ok(Some(bytes));
                 }
+                let task_stat = match fs::read_to_string(worker.path().join("stat")) {
+                    Ok(stat) => parse_process(&stat)?,
+                    Err(error) if process_disappeared(&error) => continue,
+                    Err(error) => return Err(error),
+                };
+                if task_stat.virtual_bytes != 0 || task_stat.resident_pages != 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "live worker has no RSS",
+                    ));
+                }
+                released = released.saturating_add(1);
+            }
+            let fresh_stat = parse_process(&fs::read_to_string(directory.join("stat"))?)?;
+            if fresh_stat.start != start {
+                return Ok(None);
+            }
+            let fresh_status = fs::read_to_string(directory.join("status"))?;
+            let fresh_threads = status_threads(&fresh_status)?;
+            if released > 0
+                && released >= fresh_threads
+                && fresh_stat.virtual_bytes == 0
+                && fresh_stat.resident_pages == 0
+            {
+                return Ok(Some(0));
             }
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -345,6 +372,29 @@ fn status_rss(status: &str) -> io::Result<Option<u64>> {
         }
     }
     Ok(None)
+}
+
+fn status_threads(status: &str) -> io::Result<u64> {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("Threads:"))
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "procfs has no thread count"))
+}
+
+fn read_task_children(task: &Path) -> io::Result<Option<String>> {
+    match fs::read_to_string(task.join("children")) {
+        Ok(children) => Ok(Some(children)),
+        Err(error) if process_disappeared(&error) => match fs::metadata(task) {
+            Err(error) if process_disappeared(&error) => Ok(None),
+            Err(error) => Err(error),
+            Ok(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "live task children observation unavailable",
+            )),
+        },
+        Err(error) => Err(error),
+    }
 }
 
 fn process_disappeared(error: &io::Error) -> bool {
@@ -396,6 +446,34 @@ fn parse_process(text: &str) -> io::Result<Process> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn unavailable_children_observation_refuses_and_only_disappeared_tasks_are_skipped() {
+        use std::os::unix::fs::symlink;
+        let root = crate::kani::test_support::discover_scratch("memory-no-children");
+        let own = std::process::id();
+        let directory = root.join(own.to_string());
+        let task = directory.join(format!("task/{own}"));
+        fs::create_dir_all(&task).unwrap();
+        for file in ["stat", "status"] {
+            symlink(format!("/proc/{own}/{file}"), directory.join(file)).unwrap();
+        }
+        assert_eq!(
+            MemoryObserver::prepare(&root).err().unwrap().kind(),
+            io::ErrorKind::Unsupported
+        );
+        fs::write(task.join("children"), []).unwrap();
+        assert!(MemoryObserver::prepare(&root).is_ok());
+        fs::remove_file(task.join("children")).unwrap();
+        assert_eq!(
+            read_task_children(&task).unwrap_err().kind(),
+            io::ErrorKind::Unsupported
+        );
+        fs::remove_dir(&task).unwrap();
+        assert_eq!(read_task_children(&task).unwrap(), None);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     /// Trace: FR-028-AC-21.
     #[test]
@@ -547,6 +625,33 @@ mod tests {
         assert_eq!(
             observer.resident_bytes(42, 200).unwrap(),
             Some(64 * 1024 * 1024)
+        );
+        // Every remaining thread can pass exit_mm before Threads drops to one.
+        fs::create_dir(directory.join("task/42")).unwrap();
+        for tid in [42, 43] {
+            fs::write(
+                directory.join(format!("task/{tid}/status")),
+                "Threads:\t2\n",
+            )
+            .unwrap();
+            fs::write(
+                directory.join(format!("task/{tid}/stat")),
+                format!("{tid} (released) {}", fields.join(" ")),
+            )
+            .unwrap();
+        }
+        assert_eq!(observer.resident_bytes(42, 200).unwrap(), Some(0));
+        // A remaining task with a live mm and unreadable RSS still fails closed.
+        fields[20] = "4096";
+        fields[21] = "1";
+        fs::write(
+            directory.join("task/43/stat"),
+            format!("43 (live) {}", fields.join(" ")),
+        )
+        .unwrap();
+        assert_eq!(
+            observer.resident_bytes(42, 200).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
         );
         fs::remove_dir_all(directory.join("task")).unwrap();
         assert_eq!(

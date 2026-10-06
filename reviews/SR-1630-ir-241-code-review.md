@@ -126,3 +126,68 @@ These were checked and are sound:
   `MemoryExhausted` is distinct and maps to `Incomplete(ResourceExhausted)`.
 - Repo conventions. No new hash, pin or tool-version record was introduced. No `unsafe` was
   added.
+
+## New findings (disposition pass 1)
+
+These were reviewed at the PR #295 fix-round head; the exact identity is in the private tracker
+marker. They are new defects in the fix, or gaps the fix exposed. None of them reopens an original
+finding.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | medium | When a multithreaded process exits normally, there is a window where the leader has released its mm (no `VmRSS`), `Threads:` is still above 1, and every worker has also passed `exit_mm` but has not been released. No worker then reports `VmRSS`, so `resident_bytes` returns "live worker RSS unavailable". The healthy run is stopped and refused as `MemoryObservationFailed`. Cargo, rustc and CBMC are multithreaded and exit many times per Kani run. | src/kani/run/memory.rs:256-304 |
+| FND-009 | low | Namespace startup is capped at a fixed 5 s, independent of the identity ceiling. When that cap, and not the identity deadline, elapses, `read_info` reports `TimedOut`. `run_monitored` then settles it as `WaitConclusion::TimedOut`, so the run is classified `inconclusive` timed-out "naming the ceiling", or refused as `BatchTimedOut`, although the wall-clock ceiling was never reached. | src/kani/run/namespace.rs:156-157, src/kani/run/launch.rs:276-278 |
+| FND-010 | low | A missing `/proc/<pid>/task/<tid>/children` file is treated as process disappearance and skipped, and `prepare` never checks that the file exists. On a kernel built without `CONFIG_PROC_CHILDREN`, the observer sees only the namespace init. It records a tiny peak and never trips the memory ceiling, while evidence names the observing mechanism. That is unsupported observation accepted rather than refused before spawn. | src/kani/run/memory.rs:213-227, src/kani/run/memory.rs:57-92 |
+| FND-011 | low | Before dispatch, bwrap's `--block-fd` treats EOF as release. If the caller process dies (SIGKILL, abort, OOM kill) between spawn and gate write, the kernel closes the gate write end before the outer wrapper is signalled. The gated init can then exec the backend, unowned. In-process error and unwind paths are correct, because `cleanup`/`Drop` kill the pinned group before closing the gate; this window exists only for caller-process death. | src/kani/run/namespace.rs:90-141, src/kani/run/namespace.rs:209-213 |
+| FND-012 | low | Every bounded Kani execution now requires bubblewrap and permission to create unprivileged user and PID namespaces. Without them, every run is refused `MemoryMechanismUnavailable`. The public entry docs (`execute_kani_obligation`, `execute_kani_obligations`) and the repo setup docs (`CLAUDE.md` commands, `make tools`) do not state this prerequisite. | src/kani/run/execute.rs:268-269, src/kani/run/execute.rs:419, src/kani/run/namespace.rs:1-5 |
+| FND-013 | low | The `memory.rs` module doc still describes the removed design ("Descendants are retained by pid and start time after leaving the launcher's process group; a reused pid is never ... signalled"). The observer now walks the namespace init's task children and signals nothing. | src/kani/run/memory.rs:1-6 |
+
+### Failure scenarios (disposition pass 1)
+
+- FND-008: a Kani run whose cargo build spawns rustc with worker threads. At a 20 ms sample
+  rustc is in `exit_group`: the leader has passed `exit_mm`, and the workers are between
+  `exit_mm` and `release_task` (closing files, task work). `Threads:` reads 4 and no task
+  reports `VmRSS`, so the run is refused although nothing was over the ceiling. Fix: when no
+  worker reports `VmRSS`, read each worker's task `stat`. If every task shows vsize 0 and rss 0,
+  the thread group has released its address space, so return `Some(0)`. Refuse only when a task
+  has a live address space but no readable RSS. Add a fixture for the all-released case.
+- FND-009: on a loaded host bwrap takes more than 5 s to write its info for a harness whose
+  identity ceiling is 600 s. Evidence reads `inconclusive` `timed_out`, attributed to the 600 s
+  ceiling. Fix: map the startup-cap expiry to a typed startup refusal (unavailable or
+  observation failure), and keep `TimedOut` for when the identity deadline itself has passed.
+- FND-010: a custom kernel without `CONFIG_PROC_CHILDREN` and a backend allocating 8 GiB under a
+  1 GiB ceiling. The run completes `Verified`, with a peak equal to bwrap init's RSS. Fix: in
+  `prepare`, require `/proc/self/task/<tid>/children` to be readable. In `processes`, treat
+  `NotFound` on a child file as disappearance only after re-confirming the task directory is
+  gone.
+- FND-011: an OOM killer or `kill -9` hits the caller between `spawn` and `dispatch`. bwrap's
+  init reads EOF, forks the Kani backend, and runs it unbounded after the caller is gone. Fix
+  options: write the gate byte only after the claim, as now, and also make the backend command
+  check a positive token; or keep a guardian that SIGKILLs the startup group when the caller
+  dies. At minimum, state the window in the namespace module doc.
+- FND-012: a consumer upgrades and every `execute_kani_obligation` call returns
+  `MemoryMechanismUnavailable` on Ubuntu with `kernel.apparmor_restrict_unprivileged_userns=1`
+  and no profiled bwrap. No doc says why. Fix: state the prerequisite on both public entries and
+  in the repo's tool and setup documentation.
+- FND-013: a reader of `memory.rs` concludes descendants are tracked by process group and
+  signalled by the observer. Fix: rewrite the module doc for owned-init traversal.
+
+## Dispositions
+
+Round 1. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | PR #295 fix round: `kani_launch_command`, `launch_evidence`, `run_launcher_with_timeout` and `LaunchOutcome` are no longer crate-root exports; the timeout-only launcher and launch-command builder are `#[cfg(test)]`; the only production spawn path is `run_bounded_launcher` through `NamespaceOwner`. |
+| FND-002 | fixed | PR #295 fix round: a mandatory per-run bubblewrap PID namespace with a pidfd-claimed, identity-verified init; cleanup kills init and confirms teardown on every conclusion. The fixtures cover a double-forked, setsid, reparented allocator and a fork after the last sample, and the cleanup-omitted mutant is killed. Residual edges are FND-009 to FND-011. |
+| FND-003 | fixed | PR #295 fix round: a released leader mm uses one live worker's RSS, never a sum over threads; missing worker RSS or task ancestry is refused. FND-008 is a new consequence. |
+| FND-004 | fixed | PR #295 fix round: the mechanism, evidence field and TC-039 now state a conservative sum of per-process RSS, with shared pages counted per process and no physical-footprint claim. |
+| FND-005 | fixed | PR #295 fix round: steady-state sampling walks only the owned init's task `children`; a host scan runs only on pre-claim startup abort. |
+| FND-006 | fixed | PR #295 fix round: `HarnessView` no longer carries bounds; `symbolic_arguments()` runs only in `evidence_of`. |
+| FND-007 | fixed | PR #295 fix round: `tests/common/proof_ceilings.rs` is the single fixture source, reused by `src/kani/test_support.rs`; no other copy of the literal remains. |
+
+Round-1 verdict: the original findings are all fixed. New FND-008 (medium) and FND-009 to
+FND-013 (low) are open and go back to the coder. This was a static disposition: no gates were
+run by the reviewer. The final rebased full CI, `cargo deny` over the new `command-fds` and `nix`
+dependencies, and the second Kani run (the first run of real Kani inside the namespace) are
+still required.

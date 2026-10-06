@@ -52,3 +52,12 @@ exists, and the slice criteria are tagged in `quire matrix`.
   beside the AC-21 marker.
 
 Both are spec-text-only edits. No requirement statement needs to change.
+
+## Dispositions
+
+Round 1. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | PR #295 fix round: the `spec/kani/matrix/tests.md` FR-028 rows are split into AC-1 to AC-4 (partial), AC-5 to AC-9 (planned), AC-13 to AC-20 and AC-22 to AC-24 (planned) and AC-21 (partial). The stale "AC-3 unbacked" sentence is gone, and FR-029-AC-3 is marked covered with a tagged test. |
+| FND-002 | fixed | PR #295 fix round: the FR-028-AC-21 marker reads PARTIAL and names what remains (refinement runs, limit-only stand-in); the FR-028 Description says the same. The normative AC text is unchanged. |

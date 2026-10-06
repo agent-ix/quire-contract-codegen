@@ -266,6 +266,13 @@ pub struct KaniBatchInvocation {
 }
 
 /// Runs the harness and reports the backend's own outcome.
+///
+/// Bounded execution requires Linux with readable procfs task-child/RSS information and pidfd
+/// APIs, plus `bwrap` supporting user/PID namespaces, gated startup and info descriptors.
+/// Permission to create those namespaces is required (including host AppArmor policy).
+/// Missing support yields `MemoryMechanismUnavailable` before the backend starts.
+/// In-process conclusions and startup errors confirm owned teardown. Abrupt caller death
+/// before the startup gate/PDEATH chain is fully armed is not yet protected (IR-639).
 pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
@@ -416,6 +423,10 @@ pub struct KaniGroupRun {
 /// attributed, an output stream over 8 MiB per member and an outer bound that elapsed each refuse
 /// that process (group) and classify none of its members. The generator does not split or retry a
 /// refused group.
+///
+/// The same Linux, procfs/pidfd, bubblewrap and namespace-permission prerequisites as
+/// [`execute_kani_obligation`] apply to every group; unsupported setup refuses before dispatch.
+/// Its documented caller-death startup limitation (IR-639) applies to batches too.
 pub fn execute_kani_obligations(
     requests: &[KaniExecutionRequest<'_>],
 ) -> Result<Vec<KaniGroupRun>, KaniExecutionRefusal> {

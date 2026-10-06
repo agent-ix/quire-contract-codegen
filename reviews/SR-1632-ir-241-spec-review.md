@@ -53,3 +53,11 @@ The new Status text was checked against the base checklist:
 Suggested wording for FND-001: "The observer counts and kills the launcher group and every
 descendant it has observed. A descendant that leaves the group and is reparented before the
 first observation is not tracked."
+
+## Dispositions
+
+Round 1. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | PR #295 fix round: TC-039 Status now names mandatory PID-namespace ownership and its prerequisites, claimed init, startup-abort ordering, teardown on every conclusion, the escaped and late-fork fixtures, the conservative RSS metric, and the scope that is still planned. |

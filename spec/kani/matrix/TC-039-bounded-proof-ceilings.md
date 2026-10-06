@@ -166,6 +166,8 @@ The focused tests backing the ceiling slice are:
 - `released_address_space_is_observed_before_zombie_status_but_missing_rss_is_refused`
 - `released_leader_mm_uses_live_worker_rss_or_refuses_observation`
 - `missing_task_ancestry_refuses_a_zombie_leader_with_live_workers`
+- `unavailable_children_observation_refuses_and_only_disappeared_tasks_are_skipped`
+- `startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed`
 - `unranged_state_draws_record_the_full_i64_domain`
 - `gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend`
 - `completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample`
@@ -195,7 +197,17 @@ AC-21's obligation to hold every run to its ceiling continues throughout executi
 observation or descendant ownership therefore stops the owned run and yields the typed
 `MemoryObservationFailed` refusal, even beside a valid success report. The real procfs-failure
 fixture backs this interpretation of the existing criterion; it adds no new normative obligation.
-No limit-only mechanism or bounded native-refinement execution is implemented or claimed here.
+The namespace startup allowance is a separate setup bound: its expiry refuses setup rather than
+attributing a timeout to an identity wall-clock ceiling that has not elapsed. All threads having
+released their address spaces permits an observed zero RSS; a live mm without readable RSS still
+refuses observation. Missing task `children` support is refused before dispatch, and a missing
+live task's `children` file is refused during execution.
+
+The ownership/teardown claim covers in-process conclusions and startup error/unwind paths.
+Abrupt caller SIGKILL, abort or OOM before the gate/PDEATH chain is fully armed can close the
+gate and release an unowned backend. That startup caller-death guarantee remains deferred to
+IR-639; it is not claimed by this partial delivery. No limit-only mechanism or bounded
+native-refinement execution is implemented or claimed here.
 
 Steps 5 to 9 and steps 11 to 18 and 20 to 22 remain planned. The ceiling slice supplies no shadow,
 refinement obligation, proof strength, family/proof-subject field or tool-version evidence. In

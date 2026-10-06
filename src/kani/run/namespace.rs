@@ -3,6 +3,11 @@
 //! Bubblewrap is mandatory. The caller's process never becomes a subreaper. Before dispatch,
 //! the unreaped monitor pins the dedicated startup process group. After dispatch, the init
 //! pidfd owns every descendant, including orphaned, session-escaped and nested-namespace tasks.
+//!
+//! This ownership and teardown covers in-process conclusions and startup error/unwind paths.
+//! Abrupt caller death (SIGKILL, abort, OOM kill) before the gate/PDEATH chain is fully armed
+//! can close the gate and release an unowned backend. Caller-death supervision is deferred
+//! to IR-639; this module does not claim protection for that startup window.
 
 use std::{
     ffi::{OsStr, OsString},
@@ -154,8 +159,9 @@ impl NamespaceOwner {
         observer: &mut super::memory::MemoryObserver,
     ) -> io::Result<u32> {
         let startup_limit = Instant::now() + Duration::from_secs(5);
-        let deadline = deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
-        let info = self.read_info(deadline)?;
+        let startup_deadline =
+            deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
+        let info = self.startup_information(deadline, startup_deadline)?;
         #[cfg(target_os = "linux")]
         {
             let handle = pidfd_open(valid_pid(info.child)?, PidfdFlags::empty())?;
@@ -200,11 +206,8 @@ impl NamespaceOwner {
             // Retain the claimed handle before releasing the gate. No later pid reuse changes it.
             self.init = Some((info.child, start, handle));
             observer.bind_root(info.child, start)?;
-            if Instant::now() >= deadline {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "namespace dispatch allowance elapsed",
-                ));
+            if Instant::now() >= startup_deadline {
+                return Err(startup_expiry(deadline));
             }
             self.gate
                 .as_mut()
@@ -218,6 +221,20 @@ impl NamespaceOwner {
             let _ = info;
             Err(unavailable("PID namespaces unavailable"))
         }
+    }
+
+    fn startup_information(
+        &mut self,
+        identity_deadline: Option<Instant>,
+        startup_deadline: Instant,
+    ) -> io::Result<StartupInfo> {
+        self.read_info(startup_deadline).map_err(|error| {
+            if error.kind() == io::ErrorKind::TimedOut {
+                startup_expiry(identity_deadline)
+            } else {
+                error
+            }
+        })
     }
 
     fn read_info(&mut self, deadline: Instant) -> io::Result<StartupInfo> {
@@ -373,6 +390,17 @@ fn confirm_startup_group_dead(group: Pid) -> io::Result<()> {
     }
 }
 
+fn startup_expiry(identity_deadline: Option<Instant>) -> io::Error {
+    if identity_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        io::Error::new(
+            io::ErrorKind::TimedOut,
+            "identity wall-clock ceiling elapsed during namespace startup",
+        )
+    } else {
+        unavailable("namespace startup allowance elapsed before the identity ceiling")
+    }
+}
+
 fn unavailable(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::Unsupported, message.into())
 }
@@ -422,6 +450,23 @@ mod tests {
             .split_whitespace()
             .map(|pid| pid.parse().unwrap())
             .collect()
+    }
+
+    /// Trace: FR-028-AC-2, FR-028-AC-21.
+    #[test]
+    fn startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed() {
+        let (_command, mut owner) = NamespaceOwner::prepare(BackendCommand::new("sh")).unwrap();
+        let allowance = Instant::now();
+        let error = owner
+            .startup_information(Some(allowance + Duration::from_secs(600)), allowance)
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+        let error = owner
+            .startup_information(Some(allowance), allowance)
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
     }
 
     /// Trace: FR-028-AC-21.

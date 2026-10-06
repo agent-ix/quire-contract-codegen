@@ -87,3 +87,16 @@ never observed is reported once, in SR-1630 FND-002.
   says so.
 - Semantic review: run, focused on the slice criteria, as the dispatch requested.
 - Plan completion: not assessed
+
+## Dispositions
+
+Round 1. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | PR #295 fix round: `SymbolicBounds::Unspecified` is removed. A Boolean contract draw records `Boolean`; an unbounded `i64` contract draw and an unranged state field record the full `i64` domain. State-frame fields are all `i64` (frame.rs:74). Backed by `unranged_state_draws_record_the_full_i64_domain`. |
+| FND-002 | fixed | PR #295 fix round: TC-039 Status ties continuous observation to existing FR-028-AC-21, without new normative text. `observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run` drives a real mid-run procfs failure beside a valid success report, and the mutant mapping it to `TimedOut` is killed. |
+
+Round-1 verdict: PASS for this method. The slice criteria FR-028-AC-1, -2, -3, -4, -12 and -21,
+and now FR-029-AC-3, are tagged. The remaining IR-241 scope is unchanged and still planned.
+Plan completion: not assessed.
