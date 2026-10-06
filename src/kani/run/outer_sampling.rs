@@ -65,6 +65,8 @@ impl OuterSampling {
         let collector = ReportCollector::prepare(outer).map_err(SamplingError::Report)?;
         let mut tree =
             MemoryObserver::prepare(Path::new("/proc")).map_err(SamplingError::Observation)?;
+        tree.restrict_census(settings.memory_bytes)
+            .map_err(SamplingError::Observation)?;
         tree.bind_outer(outer).map_err(SamplingError::Observation)?;
         let ledger = ResourceLedger::prepare(
             settings.memory_bytes,

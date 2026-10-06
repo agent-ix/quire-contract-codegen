@@ -52,6 +52,7 @@ pub(super) struct MemoryObserver {
     known: BTreeMap<u32, u64>,
     observation: MemoryObservation,
     observation_deadline: Option<Instant>,
+    census_entries: usize,
 }
 
 impl MemoryObserver {
@@ -68,6 +69,7 @@ impl MemoryObserver {
     pub(super) fn prepare(root: &Path) -> io::Result<Self> {
         let observer = Self {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.to_path_buf(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -118,8 +120,46 @@ impl MemoryObserver {
                 "owned init RSS identity changed",
             )
         })?;
+        if !self.known.contains_key(&pid) {
+            self.check_census_size(
+                self.known
+                    .len()
+                    .checked_add(1)
+                    .ok_or_else(census_overflow)?,
+            )?;
+        }
         self.known.insert(pid, start);
         Ok(())
+    }
+
+    /// Bound census records against the original product ceiling. This is a finite workspace
+    /// admission bound, not an RSS estimate: the ledger still measures actual O allocations.
+    /// Each individual collection is bounded; duplicate ancestry cannot grow the pending queue
+    /// without limit before its next observation. Small ceilings still admit the root observation
+    /// so independently measured exhaustion keeps its existing classification priority.
+    #[cfg(target_os = "linux")]
+    pub(super) fn restrict_census(&mut self, ceiling: std::num::NonZeroU64) -> io::Result<()> {
+        let record_bytes =
+            u64::try_from(std::mem::size_of::<Process>()).map_err(io::Error::other)?;
+        let entries = ceiling.get().checked_div(record_bytes).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "census record has no finite size",
+            )
+        })?;
+        self.census_entries = usize::try_from(entries.max(1)).map_err(io::Error::other)?;
+        self.check_census_size(self.known.len())
+    }
+
+    fn check_census_size(&self, entries: usize) -> io::Result<()> {
+        if entries > self.census_entries {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "owned census exceeds its finite workspace admission bound",
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     /// Bind the actual prepared outer PID1 as the whole contained-tree root. L is outside this
@@ -190,6 +230,14 @@ impl MemoryObserver {
         self.check_observation_deadline()?;
         for process in &processes {
             self.check_observation_deadline()?;
+            if !self.known.contains_key(&process.pid) {
+                self.check_census_size(
+                    self.known
+                        .len()
+                        .checked_add(1)
+                        .ok_or_else(census_overflow)?,
+                )?;
+            }
             self.known.insert(process.pid, process.start);
         }
         let mut total = 0u64;
@@ -218,14 +266,19 @@ impl MemoryObserver {
 
     /// Walk only the owned namespace subtree, including children created by worker threads.
     fn processes(&self, launcher: u32) -> io::Result<Vec<Process>> {
-        let mut pending: Vec<(u32, Option<(u32, u64)>)> = vec![(launcher, None)];
+        let mut pending: Vec<(u32, Option<(u32, u64)>)> = Vec::new();
+        reserve_census_push(&mut pending, self.census_entries)?;
+        pending.push((launcher, None));
         let mut seen = BTreeSet::new();
         let mut processes = Vec::new();
+        let mut task_entries = 0usize;
         while let Some((pid, parent)) = pending.pop() {
             self.check_observation_deadline()?;
-            if !seen.insert(pid) {
+            if seen.contains(&pid) {
                 continue;
             }
+            self.check_census_size(seen.len().checked_add(1).ok_or_else(census_overflow)?)?;
+            seen.insert(pid);
             let directory = self.root.join(pid.to_string());
             let process = match read_proc_file(directory.join("stat")) {
                 Ok(text) => parse_process(&text)?,
@@ -281,11 +334,14 @@ impl MemoryObserver {
             };
             for task in tasks {
                 self.check_observation_deadline()?;
+                task_entries = task_entries.checked_add(1).ok_or_else(census_overflow)?;
+                self.check_census_size(task_entries)?;
                 let task = task?;
                 match read_task_children(&task.path()) {
                     Ok(Some(children)) => {
                         for child in children.split_whitespace() {
                             self.check_observation_deadline()?;
+                            reserve_census_push(&mut pending, self.census_entries)?;
                             pending.push((
                                 child.parse::<u32>().map_err(|_| {
                                     io::Error::new(
@@ -301,6 +357,7 @@ impl MemoryObserver {
                     Err(error) => return Err(error),
                 }
             }
+            reserve_census_push(&mut processes, self.census_entries)?;
             processes.push(process);
         }
         Ok(processes)
@@ -379,8 +436,11 @@ impl MemoryObserver {
                 }
             };
             let mut released = 0u64;
+            let mut worker_entries = 0usize;
             for worker in workers {
                 self.check_observation_deadline()?;
+                worker_entries = worker_entries.checked_add(1).ok_or_else(census_overflow)?;
+                self.check_census_size(worker_entries)?;
                 let worker = match worker {
                     Ok(worker) => worker,
                     Err(error) if process_disappeared(&error) => {
@@ -643,6 +703,44 @@ fn status_role_identity(status: &[u8], key: &[u8]) -> io::Result<u32> {
         .ok_or_else(malformed)
 }
 
+fn census_overflow() -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, "owned census size overflow")
+}
+
+/// Grow only within the finite record bound, using fallible geometric reservation. A refused
+/// push supplies no partial census, RSS peak or permission to expose the backend writer.
+fn reserve_census_push<T>(records: &mut Vec<T>, limit: usize) -> io::Result<()> {
+    let required = records.len().checked_add(1).ok_or_else(census_overflow)?;
+    if required > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "owned census exceeds its finite workspace admission bound",
+        ));
+    }
+    if required > records.capacity() {
+        let capacity = records
+            .capacity()
+            .checked_mul(2)
+            .unwrap_or(limit)
+            .max(required)
+            .min(limit);
+        records
+            .try_reserve_exact(
+                capacity
+                    .checked_sub(records.len())
+                    .ok_or_else(census_overflow)?,
+            )
+            .map_err(io::Error::other)?;
+        if records.capacity() > limit {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "census allocation exceeds its finite reservation bound",
+            ));
+        }
+    }
+    Ok(())
+}
+
 // Proc records are untrusted observation input. Refuse an oversized record rather than
 // allocating until EOF, accepting a truncated ancestry/RSS sample, or substituting zero.
 // This bounds one record only; the O owner separately bounds its census workspace.
@@ -870,6 +968,7 @@ mod tests {
         fs::write(directory.join("status"), "VmRSS:\t64 kB\nThreads:\t1\n").unwrap();
         let mut observer = MemoryObserver {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.clone(),
             known: BTreeMap::from([(42, 200)]),
             observation: MemoryObservation {
@@ -903,6 +1002,62 @@ mod tests {
             observer.observe(42).unwrap_err().kind(),
             io::ErrorKind::InvalidData
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Trace: FR-028-AC-21, FR-034-AC-32.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn oversized_census_refuses_without_accepting_partial_rss_or_changing_peak() {
+        let root = crate::kani::test_support::discover_scratch("memory-census-bound");
+        let directory = root.join("42");
+        fs::create_dir_all(directory.join("task/42")).unwrap();
+        let mut fields = ["0"; 22];
+        fields[0] = "S";
+        fields[1] = "1";
+        fields[19] = "200";
+        fields[20] = "1048576";
+        fields[21] = "16";
+        fs::write(
+            directory.join("stat"),
+            format!("42 (owned) {}", fields.join(" ")),
+        )
+        .unwrap();
+        fs::write(directory.join("status"), "VmRSS:\t64 kB\nThreads:\t1\n").unwrap();
+        let children = directory.join("task/42/children");
+        fs::write(&children, []).unwrap();
+        let mut observer = MemoryObserver {
+            observation_deadline: None,
+            census_entries: usize::MAX,
+            root: root.clone(),
+            known: BTreeMap::from([(42, 200)]),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        observer
+            .restrict_census(
+                std::num::NonZeroU64::new(u64::try_from(std::mem::size_of::<Process>()).unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(observer.observe(42).unwrap(), 64 * 1024);
+        // Repeated ancestry cannot inflate the pending queue before deduplication.
+        fs::write(&children, "43 43").unwrap();
+        assert_eq!(
+            observer.observe(42).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(observer.observation().peak_resident_bytes, Some(64 * 1024));
+        fs::write(&children, []).unwrap();
+        fs::create_dir_all(directory.join("task/43")).unwrap();
+        fs::write(directory.join("task/43/children"), []).unwrap();
+        assert_eq!(
+            observer.observe(42).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(observer.observation().peak_resident_bytes, Some(64 * 1024));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -984,6 +1139,7 @@ mod tests {
         fs::write(directory.join("status"), "VmRSS:\t65536 kB\n").unwrap();
         let observer = MemoryObserver {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -1020,6 +1176,7 @@ mod tests {
         .unwrap();
         let mut observer = MemoryObserver {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -1066,6 +1223,7 @@ mod tests {
         fs::write(directory.join("stat"), stat(&fields)).unwrap();
         let observer = MemoryObserver {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.clone(),
             known: BTreeMap::from([(42, 200)]),
             observation: MemoryObservation {
@@ -1111,6 +1269,7 @@ mod tests {
         fs::write(directory.join("task/43/status"), "VmRSS:\t65536 kB\n").unwrap();
         let observer = MemoryObserver {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -1173,6 +1332,7 @@ mod tests {
         fs::write(directory.join("status"), "Threads:\t2\n").unwrap();
         let observer = MemoryObserver {
             observation_deadline: None,
+            census_entries: usize::MAX,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
