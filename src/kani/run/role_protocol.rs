@@ -64,6 +64,13 @@ impl RunSettings {
     pub(super) fn startup_deadline(
         &self,
     ) -> Result<std::time::Instant, super::role_deadline::DeadlineError> {
+        if self.settlement_reserve > super::role_deadline::SETTLE_RESERVE
+            || (matches!(self.deadline, IdentityDeadline::NeverElapses)
+                && self.settlement_reserve != super::role_deadline::SETTLE_RESERVE)
+        {
+            return Err(super::role_deadline::DeadlineError::InvalidClock);
+        }
+        self.started.require_started()?;
         let cap = self.setup_deadline.local()?;
         Ok(self
             .work_deadline()?

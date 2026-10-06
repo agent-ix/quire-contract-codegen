@@ -94,6 +94,16 @@ impl MonotonicInstant {
         })
     }
 
+    /// Bootstrap lower bounds cannot be supplied from a future kernel epoch. This check is
+    /// independent of the later event stamps and occurs before writer/Dispatch permission.
+    pub(super) fn require_started(self) -> Result<(), DeadlineError> {
+        self.duration()?;
+        if self > Self::now()? {
+            return Err(DeadlineError::FutureStop);
+        }
+        Ok(())
+    }
+
     fn duration(self) -> Result<Duration, DeadlineError> {
         if self.nanoseconds >= 1_000_000_000 {
             return Err(DeadlineError::InvalidClock);
