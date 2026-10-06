@@ -338,3 +338,19 @@ which is not implemented, so IR-241 is incomplete. Actual runtime evidence for t
 focused job exited 0, covering the new and original launcher tests, the layout and panic-scan
 tests, 61 runner tests and narrow clippy. Full rebased CI must still be re-run after its earlier
 failure, and the second Linux Kani run has not been released.
+
+## Dispositions (round 7)
+
+Round 7. The commit identity of each outcome is in the private tracker marker for this round.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-016 | fixed | PR #295 fix round 7: `tc_027_non_executable_launchers_are_refused_before_anything_runs` now traces `TC-027` only. `quire trace --id FR-017-AC-2` binds just the original absent-launcher test and the discovery test, so the wrong binding is gone. Assertions, logic, production code and spec are unchanged. The non-executable refusal is still not stated by any FR-017 criterion; it is accepted as a TC-027-level defensive check of the existing launcher contract, not a new obligation for this PR. |
+
+Round-7 verdict: clean. FND-016 is fixed, there are no new findings, and nothing regressed: the
+only non-artifact change is one trace comment. The latest SR-1630 to SR-1633 outcomes are 20
+fixed, 1 deferred (FND-011, startup caller-death supervision, deferred to IR-639; the guardian is
+not implemented, so IR-241 remains incomplete) and 0 open. Runtime evidence is unchanged from the
+product tested at the round-6 head; only a comment changed since. Full rebased CI must still be
+re-run after its earlier failure, and the second Linux Kani run has not been released. Neither is
+claimed here.
