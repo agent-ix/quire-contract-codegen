@@ -645,6 +645,31 @@ resource claim; no test shall claim their complete bound or use requested stack/
 proxy. The exclusion shall not remove L, named caller buffers or backing reservations, and shall
 not relax ownership, writer closure, EOF, seals, ceilings, lease or original deadlines.
 
+### Cross-namespace named accounting inputs (FR-034-AC-32)
+
+This independent Test and source-flow Analysis is PLANNED/UNRUN. Positively establish that actual L
+is not directly visible in O's fresh private proc, while O still obtains fresh L RSS from the two
+original read-only stat/status descriptions opened by L before namespace changes. Require the
+existing exclusive authenticated L-to-O bootstrap, exact two observation rights, same actual L
+pidfd, original run authority and PID/start binding; verify fresh stat-before/status/stat-after and
+live-pin checks at setup and every original tick. Independently substitute a foreign/stale file,
+replay another run's observation, omit one description, change access/type or break L pin/identity
+binding; each must refuse before writer/Dispatch or cancel under existing observation rules.
+Missing live L RSS shall never become zero or omission without actual identity-matched MM-release
+proof. Compare against an independent real L observation through the harness's retained owned
+identity; no backend-provided scalar or ambient PID lookup supplies the positive control.
+
+Trace C's named per-run control/capture/diagnostic caps through authenticated C-to-L settings and
+unchanged run-bound forwarding to O. Require those actual finite caps, original deadline/ceiling and
+checked arithmetic; a stack floor alone does not establish the named buffer bound. O shall combine
+that immutable bound with fresh L/private-tree RSS and actual pipe/memfd reservations at setup and
+every tick. Separate missing/underdeclared named-cap, wrong-run, omitted-L and missing-backing mutants
+must fail their named oracle; existing complete within-ceiling setup sample must precede writer
+exposure and Dispatch. Verify no retained host-view observation/control description reaches M/I or
+backend/descendants, and O retains fresh private proc rather than mounting host proc. Runtime evidence
+must cover later ticks and final settlement; bootstrap success/one sample alone is insufficient.
+All failure checks preserve existing classification, original timer and owned cleanup obligations.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
