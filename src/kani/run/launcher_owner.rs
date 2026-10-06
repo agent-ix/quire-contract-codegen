@@ -233,7 +233,10 @@ impl LauncherOwner {
             rustix::fs::fstat(&actual).map_err(|error| LauncherError::Io(error.into()))?;
         let expected_identity =
             rustix::fs::fstat(expected).map_err(|error| LauncherError::Io(error.into()))?;
-        let observed_namespace = NamespaceIdentity::read(&format!("/proc/{}/ns/pid", child.id()))
+        let observed_namespace = self
+            .input
+            .namespace
+            .child_pid_namespace(child.id())
             .map_err(LauncherError::Io)?;
         if actual_identity.st_dev != expected_identity.st_dev
             || actual_identity.st_ino != expected_identity.st_ino
@@ -248,7 +251,10 @@ impl LauncherOwner {
     }
 
     fn require_parent(&self) -> Result<(), LauncherError> {
-        super::outer_setup::require_single_thread().map_err(LauncherError::Setup)?;
+        self.input
+            .namespace
+            .require_single_thread()
+            .map_err(LauncherError::Setup)?;
         self.input
             .settings
             .deadline

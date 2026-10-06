@@ -50,6 +50,46 @@ pub(super) struct LauncherNamespace {
     pub(super) launcher_pin: OwnedFd,
     pub(super) launcher_stat: File,
     pub(super) launcher_status: File,
+    original_proc: File,
+    launcher_tasks: File,
+}
+
+impl LauncherNamespace {
+    /// Recheck L's original task directory, even after O replaced their shared mount's proc view.
+    pub(super) fn require_single_thread(&self) -> Result<(), SetupError> {
+        let tasks = rustix::fs::Dir::read_from(&self.launcher_tasks)
+            .map_err(|error| SetupError::TaskCensus(error.into()))?;
+        let mut found = false;
+        for task in tasks {
+            let task = task.map_err(|error| SetupError::TaskCensus(error.into()))?;
+            if matches!(task.file_name().to_bytes(), b"." | b"..") {
+                continue;
+            }
+            if found {
+                return Err(SetupError::NotSingleThreaded);
+            }
+            found = true;
+        }
+        if !found {
+            return Err(SetupError::NotSingleThreaded);
+        }
+        Ok(())
+    }
+
+    /// Look up only the positively retained Child's PID namespace through the original proc root.
+    pub(super) fn child_pid_namespace(&self, child: u32) -> io::Result<NamespaceIdentity> {
+        let descriptor = rustix::fs::openat(
+            &self.original_proc,
+            format!("{child}/ns/pid"),
+            rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::CLOEXEC,
+            rustix::fs::Mode::empty(),
+        )?;
+        let metadata = rustix::fs::fstat(&descriptor)?;
+        Ok(NamespaceIdentity {
+            device: metadata.st_dev,
+            inode: metadata.st_ino,
+        })
+    }
 }
 
 /// Minted only after actual outer-PID1, mapped identity, arm and private-proc verification.
@@ -184,6 +224,10 @@ pub(super) fn prepare_launcher(
         .map_err(|error| SetupError::LauncherIdentity(error.into()))?;
     let launcher_stat = File::open("/proc/self/stat").map_err(SetupError::LauncherIdentity)?;
     let launcher_status = File::open("/proc/self/status").map_err(SetupError::LauncherIdentity)?;
+    // L and O initially share their NEWNS. O's fresh proc mount cannot redirect these retained
+    // L-only directory descriptions to O's PID view; neither directory is sent to O/I/backend.
+    let original_proc = File::open("/proc").map_err(SetupError::LauncherIdentity)?;
+    let launcher_tasks = File::open("/proc/self/task").map_err(SetupError::LauncherIdentity)?;
     unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNS)
         .map_err(SetupError::Unshare)?;
     let current_mount =
@@ -220,6 +264,8 @@ pub(super) fn prepare_launcher(
         launcher_pin,
         launcher_stat,
         launcher_status,
+        original_proc,
+        launcher_tasks,
     })
 }
 

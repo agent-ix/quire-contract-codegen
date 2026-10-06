@@ -10,6 +10,7 @@ use std::{
     fs, io,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 #[cfg(target_os = "linux")]
@@ -50,6 +51,7 @@ pub(super) struct MemoryObserver {
     root: PathBuf,
     known: BTreeMap<u32, u64>,
     observation: MemoryObservation,
+    observation_deadline: Option<Instant>,
 }
 
 impl MemoryObserver {
@@ -65,6 +67,7 @@ impl MemoryObserver {
     #[cfg(target_os = "linux")]
     pub(super) fn prepare(root: &Path) -> io::Result<Self> {
         let observer = Self {
+            observation_deadline: None,
             root: root.to_path_buf(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -117,24 +120,80 @@ impl MemoryObserver {
         Ok(())
     }
 
+    /// Bind the actual prepared outer PID1 as the whole contained-tree root. L is outside this
+    /// private proc view and is sampled separately from its retained original files/pidfd.
+    #[cfg(target_os = "linux")]
+    pub(super) fn bind_outer(
+        &mut self,
+        outer: &super::outer_setup::PreparedOuter<'_>,
+    ) -> io::Result<()> {
+        outer.require_creator_live().map_err(io::Error::other)?;
+        let pid = std::process::id();
+        if pid != 1 {
+            return Err(io::Error::other(
+                "outer observation is not running in actual PID1",
+            ));
+        }
+        let process = parse_process(&fs::read(self.root.join("1/stat"))?)?;
+        self.bind_root(pid, process.start)?;
+        outer.require_creator_live().map_err(io::Error::other)
+    }
+
     pub(super) fn observation(&self) -> MemoryObservation {
         self.observation.clone()
     }
 
+    /// O retains the original deadline through each census/RSS operation. A failed partial
+    /// traversal supplies no sample. Resetting this private guard changes neither the original
+    /// deadline nor the owner's work/settlement allocation, and does not alter prior peak data.
+    #[cfg(target_os = "linux")]
+    pub(super) fn observe_before(&mut self, launcher: u32, deadline: Instant) -> io::Result<u64> {
+        self.observation_deadline = Some(deadline);
+        let result = self.observe(launcher);
+        self.observation_deadline = None;
+        result
+    }
+
+    fn check_observation_deadline(&self) -> io::Result<()> {
+        if self
+            .observation_deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "original census deadline elapsed",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     pub(super) fn observe(&mut self, launcher: u32) -> io::Result<u64> {
-        let processes = self.processes(launcher)?;
+        self.check_observation_deadline()?;
+        let mut processes = self.processes(launcher)?;
+        // One retained-census membership lookup per known identity; an O(N^2) rescan could
+        // consume the original window before any fresh RSS/control/collector progress.
+        processes.sort_unstable_by_key(|process| (process.pid, process.start));
+        self.check_observation_deadline()?;
+        let deadline = self.observation_deadline;
         self.known.retain(|pid, start| {
-            *pid == launcher
+            // On expiry preserve remaining identities, then refuse this incomplete sample.
+            // Retention does not establish observed zero, a new peak or permission to dispatch.
+            deadline.is_some_and(|deadline| Instant::now() >= deadline)
+                || *pid == launcher
                 || processes
-                    .iter()
-                    .any(|process| process.pid == *pid && process.start == *start)
+                    .binary_search_by_key(&(*pid, *start), |process| (process.pid, process.start))
+                    .is_ok()
         });
+        self.check_observation_deadline()?;
         for process in &processes {
+            self.check_observation_deadline()?;
             self.known.insert(process.pid, process.start);
         }
         let mut total = 0u64;
         let mut observed = false;
         for (pid, start) in &self.known {
+            self.check_observation_deadline()?;
             match self.resident_bytes(*pid, *start) {
                 Ok(Some(bytes)) => {
                     total = total.checked_add(bytes).ok_or_else(|| {
@@ -147,6 +206,7 @@ impl MemoryObserver {
                 Err(error) => return Err(error),
             }
         }
+        self.check_observation_deadline()?;
         if observed {
             self.observation.peak_resident_bytes =
                 Some(self.observation.peak_resident_bytes.unwrap_or(0).max(total));
@@ -160,6 +220,7 @@ impl MemoryObserver {
         let mut seen = BTreeSet::new();
         let mut processes = Vec::new();
         while let Some((pid, parent)) = pending.pop() {
+            self.check_observation_deadline()?;
             if !seen.insert(pid) {
                 continue;
             }
@@ -217,10 +278,12 @@ impl MemoryObserver {
                 Err(error) => return Err(error),
             };
             for task in tasks {
+                self.check_observation_deadline()?;
                 let task = task?;
                 match read_task_children(&task.path()) {
                     Ok(Some(children)) => {
                         for child in children.split_whitespace() {
+                            self.check_observation_deadline()?;
                             pending.push((
                                 child.parse::<u32>().map_err(|_| {
                                     io::Error::new(
@@ -251,6 +314,7 @@ impl MemoryObserver {
         start: u64,
         read_tasks: impl FnOnce(&Path) -> io::Result<fs::ReadDir>,
     ) -> io::Result<Option<u64>> {
+        self.check_observation_deadline()?;
         let directory = self.root.join(pid.to_string());
         // Pin the status file before rechecking identity. A later pid reuse cannot redirect
         // this open file to the replacement process; an exited process may instead yield ESRCH.
@@ -316,6 +380,7 @@ impl MemoryObserver {
             };
             let mut released = 0u64;
             for worker in workers {
+                self.check_observation_deadline()?;
                 let worker = match worker {
                     Ok(worker) => worker,
                     Err(error) if process_disappeared(&error) => {
@@ -778,6 +843,7 @@ mod tests {
         fs::write(directory.join("stat"), stat(&fields)).unwrap();
         fs::write(directory.join("status"), "VmRSS:\t64 kB\nThreads:\t1\n").unwrap();
         let mut observer = MemoryObserver {
+            observation_deadline: None,
             root: root.clone(),
             known: BTreeMap::from([(42, 200)]),
             observation: MemoryObservation {
@@ -862,6 +928,7 @@ mod tests {
         .unwrap();
         fs::write(directory.join("status"), "VmRSS:\t65536 kB\n").unwrap();
         let observer = MemoryObserver {
+            observation_deadline: None,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -897,6 +964,7 @@ mod tests {
         )
         .unwrap();
         let mut observer = MemoryObserver {
+            observation_deadline: None,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -942,6 +1010,7 @@ mod tests {
         let stat = |fields: &[&str]| format!("42 (exiting) {}", fields.join(" "));
         fs::write(directory.join("stat"), stat(&fields)).unwrap();
         let observer = MemoryObserver {
+            observation_deadline: None,
             root: root.clone(),
             known: BTreeMap::from([(42, 200)]),
             observation: MemoryObservation {
@@ -986,6 +1055,7 @@ mod tests {
         fs::write(directory.join("status"), "Threads:\t2\n").unwrap();
         fs::write(directory.join("task/43/status"), "VmRSS:\t65536 kB\n").unwrap();
         let observer = MemoryObserver {
+            observation_deadline: None,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
@@ -1047,6 +1117,7 @@ mod tests {
         fs::write(directory.join("stat"), &stat).unwrap();
         fs::write(directory.join("status"), "Threads:\t2\n").unwrap();
         let observer = MemoryObserver {
+            observation_deadline: None,
             root: root.clone(),
             known: BTreeMap::new(),
             observation: MemoryObservation {
