@@ -15,6 +15,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/AD-002
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/AD-003
+    type: references
   - target: ix://agent-ix/quire-spec-language/FR-070
     type: references
   - target: ix://agent-ix/quire-specification/FR-322
@@ -43,16 +45,15 @@ and inequality preserve the claimed operation; an inequality verdict is the nega
 with the same pair count. This is parity evidence about generated code, never a source-predicate
 violation.
 
-This is PLANNED IR-635 work, GATED for implementation on QSL-640's actual public API delivery.
-UNVERIFIED SOURCE: the pending upstream obligations are QSL FR-070 canonical values, QSL-640's
-node-selected parity claim and FR-358 settlement, closed refinement evidence and a legal
-parity-agreement record/cause. QSpec FR-322 owns the checked-package artifact and node identity; it
-is not a QSL node-selector requirement. These obligations are not assertions that the public facade
-implements them. A specification-only upstream change does not release the code gate. At authoring,
-the proposed (unmerged) FR-358 selected-Boolean-function predicate route does not meet this
-contract; its refinement boolean also cannot distinguish a completed comparison from a resource
-ceiling. This requirement records the agreed future shape without fabricating Rust signatures, QSL
-causes or a working replay.
+This is PLANNED IR-635 work, GATED for implementation on QSL-640's actual public API delivery. The
+proposed (unmerged) QSL FR-358 now specifies the node-selected parity arm, a shared `Refinement`
+enum and staged settlement rules; QSL FR-070 specifies canonical values. This amended specification
+replaces the earlier selected-Boolean-function proposal. UNVERIFIED SOURCE: the executable
+realization of these contracts remains an actual QSL-640 code gate. The public Rust facade has not
+delivered composite parity replay/verified settlement or composite witness values. Specification
+publication does not establish a callable API or passing replay. QSpec FR-322 owns the
+checked-package artifact and node identity, not a QSL node-selector requirement. This requirement
+names planned semantic obligations without inventing upstream Rust signatures.
 
 ## Inputs
 
@@ -69,9 +70,16 @@ causes or a working replay.
   including explicit absence for `not_run`, without an extra native probe or invented observation. A
   refusal, incomplete outcome or execution fault remains that observation, rather than a fabricated
   Boolean.
-- The CG-minted QSL `ObligationIdentity` and canonical proof-content identity binding this actual
-  node/operation/operand-domain claim, original limits and the proved artifact. AD-002 R-6/R-7, QSL
-  ADR-013 O-09 and ADR-014 B-4 govern their authority.
+- The CG-minted QSL `ObligationIdentity`, whose O-09 preimage is only the claimed composite node,
+  its occurrence key from the recompiled package, obligation kind and parameter-operand node ids
+  with their actual harness bounds ordered by `DomainKey` (ADR-021 TX-3).
+- The full CG harness identity/evidence record owned by FR-015 AC-76, retaining its abstractions,
+  size budget, pair count and unexercised behaviours outside O-09.
+- The separate canonical proved-content identity and retained original context tying the native
+  observation to the actual proved generated artifact and original limits. This content binding is
+  not the O-09 digest and cannot be replaced by it. AD-002 R-6/R-7 and
+  [AD-003](../../assurance/AD-003-evidence-chain.md) distinguish the roles; no tool/source tracking
+  hash, digest label pin or additional tracking identity is introduced.
 - Configured public replay encoded-input-byte, value-occurrence and work limits admitted by the
   upstream contract. Capture limits for launcher output remain separate inputs and evidence.
 
@@ -125,19 +133,57 @@ causes or a working replay.
   limits, content identity or result identity yields a typed refusal with no settlement.
 - The driver shall call QSL's exact equality parity arm between CG's public builder and converter.
   CG supplies no local exact evaluator, synthetic predicate or canned replay verdict.
-- For a falsified shadow, the driver shall submit the admitted operands and retained shadow
-  comparison to QSL's parity arm and consume only its exact equality/count comparison under the
-  claimed operation. Divergence becomes `Failed` with CG's own `CgDefect` cause; agreement becomes
-  QSL's named parity-agreement `Inconclusive`. Neither becomes `Refuted` or a reproduced source
-  violation. The actual native observation remains bound evidence, including a native/shadow
-  disagreement. A retained `refinement_failed` disagreement takes precedence over replay agreement
-  and yields `Failed`/CG-owned `CgDefect` whatever the backend outcome, as FR-029 AC-24 states.
-- For a verified shadow, CG shall pass the same node-selected claim, SUCCESS count, harness bounds
-  and the closed refinement evidence projected from FR-028's strengths, with no native observation
-  field or extra probe to fill `not_run`. The converter shall consume only QSL-derived declared
-  operand-bound keys and coverage from the recompiled claim. A missing key is uncovered;
-  unknown/duplicate keys and bound-kind mismatches refuse. Literal domains are their singleton
-  values, not the enclosing type's full range. ADR-021 TX-3 owns tightened-bound coverage.
+- The builder shall project actual FR-028 refinement evidence into one shared `Refinement` for both
+  falsified and verified requests: `Exhausted`, `NotExhausted`, `CeilingReached` or `Disagreed`.
+  Exhaustive maps to `Exhausted`, sampled/not_run to `NotExhausted`, actual refinement ceiling to
+  `CeilingReached`, and retained refinement_failed to `Disagreed`. Verified settlement carries no
+  native observation, including no extra probe for `not_run`.
+- The converter shall preserve the claim-validity refusals before applying any parity settlement
+  row, including `Disagreed`; another package/node/occurrence, malformed bounds or O-09 mismatch
+  cannot settle the actual claim.
+- For a valid falsified claim, the converter shall consume QSL's first applicable outcome in the
+  Falsified Settlement table below, retaining the actual native cause and resource stage.
+- For a valid verified claim, the converter shall consume QSL's disagreement, refinement ceiling,
+  zero/vacuous, exhausted-and-covered, then otherwise-Tested order. The ordinary CG backend's
+  vacuous/inconclusive classification remains owned by FR-029; it is never relabelled a verified
+  backend run to create a zero-check request.
+- The builder shall submit the same node-selected claim and actual harness bounds for verified
+  coverage, without a CG-authored declared-bound list; the converter shall consume QSL-derived
+  positions and source coverage. Missing keys stay uncovered and unknown/duplicate/kind-mismatched
+  keys refuse. Literal operands have singleton domains and derive no parameter position. Full enum
+  coverage requires every source-declared variant. Other non-Boolean leaf families (text, rational,
+  decimal, IEEE, quantity and reference) stay uncovered/Tested until an authoritative bound kind
+  describes their whole declared domain; reaching one length/range/scale dimension cannot establish
+  full coverage. ADR-021 TX-3 governs tightened harness bounds.
+
+## Falsified Settlement
+
+When source/package, claimed-node membership, bound and O-09 identity admission succeeds, CG shall
+preserve the following QSL first-match order for that valid claim. These are planned public facade
+semantics, not implemented CG/QSL API claims.
+
+| Row | Condition | Consumed settlement and retained evidence |
+|---|---|---|
+| F-1 | `Refinement::Disagreed` | Failed with CG-owned CgDefect, even if operand admission, native observation or exact comparison would otherwise agree/refuse/stop |
+| F-2 | operand admission refusal | Inconclusive(ReplayRefused), retaining the actual QSL catalog code and operand index |
+| F-3 | actual native observation is Incomplete or ExecutionFault | Failed/GeneratedFault retaining the actual native outcome and NativeCause; no fabricated completed result |
+| F-4 | QSL exact evaluation reaches its accounting limit | Incomplete(ResourceExhausted), retaining ExactEvaluation stage, counter, configured limit and count reached |
+| F-5 | `Refinement::CeilingReached` | Incomplete(ResourceExhausted), retaining RefinementCeiling stage and actual refinement ceiling evidence |
+| F-6 | otherwise, exact versus retained shadow equality/inequality result and pair count | divergence Failed/CgDefect; agreement Inconclusive(ScalarAgrees) retaining the CompositeEquality claim and outcome; never Refuted |
+
+A native `Completed` or `Refused` observation remains measured same-artifact evidence but is not the
+settlement oracle: the exact-versus-shadow comparison owns F-6. `Equal` and `NotEqual` preserve the
+actual claimed operator and the same admitted pair count. A retained independent refinement
+disagreement cannot disappear merely because the replayed case agrees. The common identity refusal
+is earlier because a mismatched request is not the same claim; FR-029 AC-24 remains intact for the
+admitted claim.
+
+The single-observation native failure in F-3 retains its actual cause and is separate from QSL's
+exact-evaluation exhaustion (F-4) and an independent refinement ceiling (F-5). Backend Kani
+wall/memory ceilings are outside these replay inputs: FR-028 AC-2/3 classify that backend run as
+`KaniRunOutcome::Inconclusive`, and FR-029's ordinary map returns final `Incomplete(TimedOut)` or
+`Incomplete(ResourceExhausted)`. FR-028 AC-24 governs the separate native refinement run. No stage
+is collapsed into completed `NotExhausted` evidence or `Tested`; FR-029 AC-23 remains intact.
 
 The terminal decision and its precedence remain owned by FR-029 AC-17 and AC-19 to AC-27; the source
 strength and resource classification remain owned by FR-028 AC-17/24. Canonical decoding all value
@@ -160,24 +206,27 @@ FR-028 AC-20, with no fake harness, native value or compatibility fallback.
 Missing upstream capability is a distinct setup refusal and supplies no invented QSL code. An
 otherwise malformed request reaches its earlier typed refusal even while the code gate holds. QSL
 non-fault refusals retain their own catalog codes; executor faults and CG-raised malformed
-playback/assumption-domain defects retain the failure ownership of FR-029. A real run/refinement
-memory or wall-clock stop remains resource-inconclusive under FR-028 and cannot enter a completed
-`NotExhausted` comparison path.
+playback/assumption-domain defects retain the failure ownership of FR-029. A real backend or
+refinement stop retains its original FR-028 classification and FR-029 resource terminal; it cannot
+enter a completed `NotExhausted` comparison path.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-033-AC-1 | PLANNED/GATED. A public consumer builds the equality-parity request directly from the composite node and original proving context. CG submits the original source/package and node selector to QSL and accepts only its admitted same-package/node result under QSpec FR-322; another package/source/node, operation or domain refuses with no settlement. Parameter/parameter, parameter/literal and literal/literal claims preserve their operands and literal singleton domains without an enclosing-function predicate or synthetic source. | Test |
-| FR-033-AC-2 | PLANNED/GATED. Canonical round trips preserve every listed leaf family, including beyond-i64 integer, IEEE NaN and signed-zero bits, normalized rational, retained decimal, delimiter-containing Unicode text, enum member, exact quantity/unit and reference identity, and every listed composite kind. Mixed nested values retain declaration/slot/member/presence/arity/order/multiplicity. No decoder claim depends on a currently supported Boolean/i64 harness alone. | Test |
+| FR-033-AC-2 | PLANNED/GATED. Canonical round trips preserve every listed leaf family, including beyond-i64 composite integer leaves as ExactInteger (while top-level Integer remains i64), IEEE NaN and signed-zero bits, normalized rational, retained decimal, delimiter-containing Unicode text, enum member, exact quantity/unit and reference identity, and every listed composite kind. Mixed nested values retain declaration/slot/member/presence/arity/order/multiplicity. No decoder claim depends on a currently supported Boolean/i64 harness alone. | Test |
 | FR-033-AC-3 | PLANNED/GATED. Noncanonical JCS/tag/scalar/escape spelling, unknown declaration or unit/reference identity, wrong enum/union member, missing/extra or wrongly present record slot, wrong tuple arity, excess cardinality, out-of-domain leaf, duplicate set/ordered-set element under authoritative equality or altered canonical element order yields a typed refusal before evaluation; bag duplicates and legal ordered-set order survive. | Test |
 | FR-033-AC-4 | PLANNED/GATED. Public caller input exactly at the configured encoded-byte limit is admitted and one byte over refuses before parsing; occurrence/work exhaustion refuses with checked accounting. A 100,000-link admitted recursive value decodes, clones, compares, formats redacted Debug and drops on a 512 KiB native stack without a depth refusal. Its one-byte-too-small budget refuses truthfully; launcher capture limits alone cannot satisfy this check. | Test |
 | FR-033-AC-5 | PLANNED/GATED. The retained actual assertion playback reconstructs operand values by the FR-025 original-node/leaf bindings; another harness, swapped leaf order, missing/extra leaf or wrong primitive width refuses. Literal payloads remain their singleton value and absent/null/present states remain distinct. Removing or changing a leaf binding changes reconstruction or refuses, rather than silently decoding another operand. | Test |
 | FR-033-AC-6 | PLANNED/GATED. For falsified replay the driver executes the same proved generated artifact and supplies its actual native outcome/count; QSL receives this observation, the retained shadow result/count and the canonical content tie. Missing observation, another artifact, fresh regeneration that removes the mutation or changed limits refuses before parity evaluation. A canned observation or Kani transcript alone supplies no positive coverage. | Test |
-| FR-033-AC-7 | PLANNED/GATED. Actual QSL exact equality/count divergence from a falsified shadow maps to CG-defect `Failed`; an assertion-only mutation with otherwise agreeing equality/count maps to named parity-agreement `Inconclusive`. Neither maps to `Refuted`. Independently mutating equality result and occurrence-pair count is detected, including no early exit after an unequal pair. | Test |
-| FR-033-AC-8 | PLANNED/GATED. CG submits the original claim's operand declarations and literal singleton domains and consumes QSL-derived bound keys without a CG-authored declared-bound list. Omitting a bounded position or using an empty list with declared/unbounded/recursive keys leaves it uncovered; unknown/duplicate/kind-mismatched keys refuse. Exact declared coverage and a wider legal harness range cover; a tightened range/cardinality/depth does not silently cover under ADR-021 TX3. CG cannot supply an invented declared-bound list to promote the result. | Test |
+| FR-033-AC-7 | PLANNED/GATED. For an identity-valid claim reaching row F-6, actual QSL exact equality/count divergence from a falsified shadow maps to CG-defect `Failed`; an assertion-only mutation with otherwise agreeing equality/count maps to `Inconclusive(ScalarAgrees)` retaining the CompositeEquality claim/outcome. Neither maps to `Refuted`. Independently mutating equality result and occurrence-pair count is detected, including no early exit after an unequal pair. | Test |
+| FR-033-AC-8 | PLANNED/GATED. CG submits the original claim's operand declarations and literal singleton domains and consumes QSL-derived bound keys without a CG-authored declared-bound list. Omitting a bounded position or using an empty list with declared/unbounded/recursive keys leaves it uncovered; unknown/duplicate/kind-mismatched keys refuse. Exact declared coverage and a wider legal harness range cover; a tightened range/cardinality/depth does not silently cover under ADR-021 TX3. Enum Variants bounds cover only when every source-declared variant is included; text/rational/decimal/IEEE/quantity/reference positions remain uncovered/Tested until an authoritative whole-domain bound kind exists, rather than promoting one dimension as full coverage. CG cannot supply an invented declared-bound list to promote the result. | Test |
 | FR-033-AC-9 | PLANNED/GATED. A result or record from another node/run/operation/operand/domain/limits/content binding yields no settlement. QSL non-fault refusals retain their catalog codes and executor faults remain failures; unavailable upstream APIs produce the typed unavailable-capability refusal with no fake values, local QSL types, predicate route or fabricated catalog code. | Test |
 | FR-033-AC-10 | PLANNED/GATED. Each lawful generated family exercised by the completed route has a real verify and falsify control with retained backend evidence and mutation-killed same-artifact replay; all canonical families have the AC-2/3 decode checks. Families awaiting shadow generation or upstream admission remain explicitly unsupported/gated and are reported as gaps, rather than counted as passing end-to-end coverage. | Test |
+| FR-033-AC-11 | PLANNED/GATED (IR-635/QSL-640). CG computes O-09 from the exact claimed node, recompiled occurrence, kind and parameter-operand node IDs with actual harness bounds ascending by DomainKey. Changing one such member changes it; changing only abstractions, size budget, pair count or unexercised behaviours does not. Those extras remain in the full FR-015-AC-76 record, and changing proved artifact/context invalidates the separate canonical content tie even when O-09 remains equal. Existing function/frame preimages are unchanged. | Test |
+| FR-033-AC-12 | PLANNED/GATED (IR-635/QSL-640). Both paths carry the same four-state Refinement. Claim/source/node/occurrence/bounds/O-09 refusal precedes Disagreed; for a valid claim Disagreed wins over operand refusal, native fault, exact limit, refinement ceiling and agreeing replay. Completed/Refused native evidence does not replace exact-versus-shadow verdict/pair-count comparison, and the actual Eq/Ne operation survives. | Test |
+| FR-033-AC-13 | PLANNED/GATED (IR-635/QSL-640). Falsified admission refusal precedes native fault; native Incomplete/ExecutionFault yields GeneratedFault/Failed with actual NativeCause before exact evaluation; ExactEvaluation resource exhaustion precedes RefinementCeiling and each remains distinctly staged Incomplete(ResourceExhausted). Backend Kani timeout/memory Inconclusive outcomes never enter this facade and retain their ordinary final Incomplete mapping. No resource stage is fabricated or converted to Tested. | Test |
 
 ## Dependencies
 
@@ -190,7 +239,8 @@ declared-bound completeness and the legal settlement/cause vocabulary. QSpec FR-
 encoding authority. No schema, binary or source file is vendored from those owners.
 
 Implementation remains blocked on actual QSL-640 delivery of this parity arm, every required
-canonical conversion/lifecycle operation, closed `Exhausted`/`NotExhausted`/`CeilingReached`
-refinement evidence, same-claim observation/content binding and legal parity-agreement record. The
-proposed discriminant names describe semantics; compilation against the delivered owning API must
-establish their real representation. Spec publication alone establishes none of these.
+canonical conversion/lifecycle operation, shared
+`Exhausted`/`NotExhausted`/`CeilingReached`/`Disagreed` refinement evidence, same-claim
+observation/content binding and legal parity-agreement record. The proposed discriminant names
+describe semantics; compilation against the delivered owning API must establish their real
+representation. Spec publication alone establishes none of these.

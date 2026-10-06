@@ -14,6 +14,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-033
+    type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-030
     type: references
   - target: ix://agent-ix/quire-contract-ir/FR-030
@@ -39,7 +41,9 @@ missing.
 
 Scope: from an admitted `CheckedPackageV2` to one QSL terminal value per run item. Out of scope:
 oracle generation, strategy generation, Kani's internals, QSL's evaluation and the replay
-request itself (AD-002).
+request itself (AD-002). The existing source-predicate/function/frame joins below retain their
+meaning; planned composite node parity uses FR-033/FR-029 and never produces source Refuted.
+Its O-09 extension and separate same-artifact content tie are explicitly scoped below.
 
 ## Views
 
@@ -82,10 +86,18 @@ success.
 
 ### Versioned contracts and how identity is asserted
 
-- The identity that binds a proof to its content is the obligation identity: one canonical
-  content-identity digest, minted by CG over the obligation's identity members, carried in the
-  envelope as QSL's `ObligationIdentity` (E-1). It is the only digest CG mints for a proof, and no
-  other digest, pin, SHA or version record is added to this chain.
+- CG mints the O-09 `ObligationIdentity` over the exact claim preimage and carries it in QSL's
+  owning type (E-1). It identifies the claim and harness domains, not every byte or evidence field
+  of the generated artifact. The full CG identity/evidence record remains a separate record.
+- Planned composite parity also requires the separate canonical proved-content tie of
+  [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md): the driver's actual
+  observation must belong to the same proved generated artifact and original context. O-09 alone
+  cannot establish that tie. The owning content-binding API/representation remains a QSL-640
+  implementation gate under the repository's canonical proof-content exception; this AD does not
+  require another CG-minted tracking digest or manually maintained fingerprint. If the owning
+  representation requires a second CG-minted digest, that concrete design decision must be resolved
+  before implementation, while retaining artifact-replacement refusal. No source/tool tracking hash,
+  version pin or digest label is introduced.
 - The other digests on the chain already exist and bind content, not tools or versions:
   `package_id` (QSL recomputes it on replay), the byte digests QSL checks on provided source and
   the `CaseIdentity` name of a corpus case. The `ByteDigest` of the transcript that the function path
@@ -174,6 +186,18 @@ authored).
   node and its occurrence key) and are kept, so that no function-path identity changes
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
+- E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
+  only the exact claimed equality/inequality node, its occurrence key obtained from the recompiled
+  original package, the obligation kind and the parameter-operand node IDs with their actual harness
+  bounds. Each argument's domain is its harness bounds keyed under that parameter, ascending by
+  `DomainKey` (ADR-021 TX-3); literal operands remain singleton source values and contribute no
+  fabricated parameter ID. The full FR-015 AC-76 CG record keeps abstractions, size budget, pair
+  count and unexercised behaviours outside this preimage. No blanket widening of E-1 occurs:
+  existing function/frame member spelling, domain encoding and digest preimages stay unchanged. The
+  composite owning encoder contract remains gated on actual QSL-640 delivery. The request's O-09
+  identity is checked against the recompiled claim before any settlement, including Disagreed.
+  Same-artifact canonical content identity is independently checked and retained; changing
+  artifact/context cannot pass merely because the O-09 claim digest is equal.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
   regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
@@ -188,7 +212,8 @@ authored).
   A refusal of the obligation's own
   input before Kani runs, as IR reports it, is `Declined(ProofRefusalCause)` through the
   IR-outcome rows of C-09 (FR-030; R-Q1) and is outside the replay (counterexample) rows of C-09.
-- E-4. No outcome maps to `Tested`.
+- E-4. The ordinary production/source-predicate map returns no `Tested`; planned composite parity
+  may consume `Tested` only under FR-029 AC-19 and FR-033, gated on actual QSL-640 delivery.
 - E-5. A run whose SUCCESS-check count is zero maps to a value QSL reads as non-success. A
   precondition harness counts its satisfied cover as its one SUCCESS check (question b).
 - E-6. A run is classified only from the output of the launch it made: a transcript or report
@@ -385,7 +410,7 @@ crate CG's lock selects.
 
 | Question | Owner | Recommendation |
 | --- | --- | --- |
-| What is the obligation-identity preimage, now that three CG identity structs exist and none carries the O-09 members? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded by `quire_canonical`, one implementation in CG used by all three identities. This is the one canonical content-identity digest that binds a proof to its content; CG adds no other. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
+| What is the obligation-identity preimage, now that three CG identity structs exist and none carries the O-09 members? | CG proposes, QSL and QSpec confirm | State it by ADR-013 O-09's member list, not by struct name: the node id, occurrence key, kind and arguments (parameter node id and domain), source span excluded, RFC 8785 encoded by `quire_canonical`, one implementation in CG used by all three identities. This is the O-09 claim digest, not a digest of the full FR-015-AC-76 record or proved artifact. Composite parity separately requires the canonical same-artifact content tie in FR-033; the owning representation remains gated, with no additional CG tracking hash authorized. QSL's `ObligationIdentity` stays opaque (it carries 32 bytes). CG writes E-1. QSL's doc says the digest domain is not in the closed FR-201 set; QSpec decides whether it needs a domain name (R-S3). |
 | Replace IR's `KaniProviderResult` map | IR | Delete the type and its map as FR-039 already says, together with the CG import change above (IR-347). |
 | IR cause codes as strings | IR | Resolved for the code type: IR exports `Std001Code` with constants for the registered codes (IR FR-044). The family lowerings' own codes are typed `std001_code!` values that STD-001 does not register; they leave with the lowerings (IR-347). |
 | One map instead of two | CG after QSL | After the pending inconclusive types of (a) land. |
