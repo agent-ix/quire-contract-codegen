@@ -13,6 +13,9 @@ use std::{
 
 use super::control::RoleEndpoint;
 
+const LAUNCHER_ARGUMENT: &str = "--quire-kani-launcher";
+const OUTER_ARGUMENT: &str = "--quire-kani-outer";
+
 /// Private roles of the one explicitly configured, artifact-matched package helper.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HelperRole {
@@ -38,8 +41,8 @@ impl std::error::Error for RoleSelectionError {}
 impl HelperRole {
     fn argument(self) -> Option<&'static str> {
         match self {
-            Self::Launcher => Some("--quire-kani-launcher"),
-            Self::Outer => Some("--quire-kani-outer"),
+            Self::Launcher => Some(LAUNCHER_ARGUMENT),
+            Self::Outer => Some(OUTER_ARGUMENT),
             // The actual original guardian invocation is the inner role with no arguments.
             Self::Inner => None,
         }
@@ -53,10 +56,8 @@ impl HelperRole {
     {
         let role = match arguments.next() {
             None => Self::Inner,
-            Some(argument) if argument.as_ref() == OsStr::new("--quire-kani-launcher") => {
-                Self::Launcher
-            }
-            Some(argument) if argument.as_ref() == OsStr::new("--quire-kani-outer") => Self::Outer,
+            Some(argument) if argument.as_ref() == OsStr::new(LAUNCHER_ARGUMENT) => Self::Launcher,
+            Some(argument) if argument.as_ref() == OsStr::new(OUTER_ARGUMENT) => Self::Outer,
             Some(_) => return Err(RoleSelectionError::UnknownRole),
         };
         if arguments.next().is_some() {

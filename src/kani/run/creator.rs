@@ -125,6 +125,37 @@ pub(super) fn validate_parent_thread(thread: &OwnedFd, process: &OwnedFd) -> io:
     require_live(process)
 }
 
+/// Bind a received process capability to an already retained actual parent in this proc view.
+/// Both pins must remain live across the bounded identity read; numbers alone grant no authority.
+pub(super) fn validate_child_process(child: &OwnedFd, parent: &OwnedFd) -> io::Result<i32> {
+    require_live(child)?;
+    require_live(parent)?;
+    let child_metadata = rustix::fs::fstat(child)?;
+    let parent_metadata = rustix::fs::fstat(parent)?;
+    if child_metadata.st_dev != parent_metadata.st_dev {
+        return Err(io::Error::other("child capability is not an actual pidfd"));
+    }
+    let child_pid = descriptor_pid(child)?;
+    let parent_pid = descriptor_pid(parent)?;
+    if child_pid <= 0 || parent_pid <= 0 || child_pid == parent_pid {
+        return Err(io::Error::other(
+            "child capability has no distinct live process identity",
+        ));
+    }
+    let status = read_bounded(&format!("/proc/{child_pid}/status"))?;
+    if unique_number(&status, b"Pid:")? != child_pid
+        || unique_number(&status, b"Tgid:")? != child_pid
+        || unique_number(&status, b"PPid:")? != parent_pid
+    {
+        return Err(io::Error::other(
+            "child capability is not the retained parent's process",
+        ));
+    }
+    require_live(child)?;
+    require_live(parent)?;
+    Ok(child_pid)
+}
+
 fn descriptor_pid(descriptor: &OwnedFd) -> io::Result<i32> {
     let info = read_bounded(&format!("/proc/self/fdinfo/{}", descriptor.as_raw_fd()))?;
     unique_number(&info, b"Pid:")

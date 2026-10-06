@@ -67,6 +67,27 @@ impl OuterBootstrap {
     }
 }
 
+/// Actual O-origin arm publication, received separately by L and C with one actual O pidfd.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum OuterArmReply {
+    Armed {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+        namespace: NamespaceIdentity,
+        mapped_uid: u32,
+        mapped_gid: u32,
+    },
+}
+
+impl OuterArmReply {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::Armed { .. } => 1,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum InnerBootstrap {

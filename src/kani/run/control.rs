@@ -149,6 +149,12 @@ impl GuardianEndpoint {
     }
 }
 
+impl AsFd for GuardianEndpoint {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+
 impl RoleCaller {
     pub(super) fn transport(&self) -> Transport<'_> {
         Transport(self.0.as_fd(), CredentialsPolicy::ActualSender)
@@ -172,6 +178,12 @@ impl RoleEndpoint {
 
     pub(super) fn transport(&self) -> Transport<'_> {
         Transport(self.0.as_fd(), CredentialsPolicy::ExclusiveCreator)
+    }
+}
+
+impl AsFd for RoleEndpoint {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
     }
 }
 
