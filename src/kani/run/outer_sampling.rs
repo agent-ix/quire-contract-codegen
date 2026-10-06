@@ -82,6 +82,94 @@ pub(super) struct OuterSampling {
     settings: RunSettings,
 }
 
+/// O's actual accounting survives collector sealing and descriptor delivery. This owner grants
+/// no writer exposure or child creation, and its latest complete sample is not cleanup evidence.
+pub(super) struct TerminalSampling {
+    launcher: LauncherMemory,
+    tree: MemoryObserver,
+    ledger: ResourceLedger,
+    settings: RunSettings,
+}
+
+impl TerminalSampling {
+    /// Preserve every normal accounting tick while report delivery/read acknowledgement remains
+    /// pending. The already consumed pipe collector cannot be drained or reopened here.
+    pub(super) fn tick(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<MemoryTick, SamplingError> {
+        self.ledger.begin_observation();
+        let result = (|| {
+            let tick = observe_live(
+                &mut self.launcher,
+                &mut self.tree,
+                &mut self.ledger,
+                &self.settings,
+                outer,
+                caller,
+            )?;
+            outer
+                .require_creator_live()
+                .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
+            caller
+                .transport()
+                .refuse_observable_eof()
+                .map_err(SamplingError::Control)?;
+            Ok(tick)
+        })();
+        if result.is_err() {
+            self.ledger.begin_observation();
+        }
+        result
+    }
+
+    /// Invoke after actual seal/descriptor delivery/read completion and before filling the
+    /// already-reserved terminal commit. This actual O observation is the final complete sample;
+    /// no later recursive metrics acknowledgment can extend or replace it.
+    pub(super) fn final_observation(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<(MemoryTick, MeasuredPeaks), SamplingError> {
+        let tick = self.tick(outer, caller)?;
+        let peaks = self
+            .ledger
+            .measured_peaks()
+            .map_err(SamplingError::Charge)?;
+        Ok((tick, peaks))
+    }
+}
+
+/// One actual-source accounting operation shared by collecting and terminal states. No caller
+/// observation, missing quantity, elapsed label or previous ledger peak substitutes for this read.
+fn observe_live(
+    launcher: &mut LauncherMemory,
+    tree: &mut MemoryObserver,
+    ledger: &mut ResourceLedger,
+    settings: &RunSettings,
+    outer: &PreparedOuter<'_>,
+    caller: &RoleEndpoint,
+) -> Result<MemoryTick, SamplingError> {
+    caller
+        .transport()
+        .refuse_observable_eof()
+        .map_err(SamplingError::Control)?;
+    outer
+        .require_creator_live()
+        .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
+    let launcher = launcher.sample().map_err(SamplingError::Observation)?;
+    let deadline = settings
+        .identity_deadline()
+        .map_err(SamplingError::Deadline)?;
+    let tree = tree
+        .observe_until(1, deadline)
+        .map_err(SamplingError::Observation)?;
+    ledger
+        .observe(Some(launcher), Some(tree))
+        .map_err(SamplingError::Charge)
+}
+
 /// O retains the actual nested monitor and its private I bootstrap in one owner. State advances
 /// only through the same production gate/claim operations; no fixture fabricates an INIT claim.
 pub(super) struct InnerMonitor {
@@ -639,26 +727,14 @@ impl OuterSampling {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<MemoryTick, SamplingError> {
-        caller
-            .transport()
-            .refuse_observable_eof()
-            .map_err(SamplingError::Control)?;
-        outer
-            .require_creator_live()
-            .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
-        let launcher = self.launcher.sample().map_err(SamplingError::Observation)?;
-        let deadline = self
-            .settings
-            .identity_deadline()
-            .map_err(SamplingError::Deadline)?;
-        let tree = self
-            .tree
-            .observe_until(1, deadline)
-            .map_err(SamplingError::Observation)?;
-        let tick = self
-            .ledger
-            .observe(Some(launcher), Some(tree))
-            .map_err(SamplingError::Charge)?;
+        let tick = observe_live(
+            &mut self.launcher,
+            &mut self.tree,
+            &mut self.ledger,
+            &self.settings,
+            outer,
+            caller,
+        )?;
         if matches!(tick, MemoryTick::Exhausted(_)) {
             return Ok(tick);
         }
@@ -755,29 +831,25 @@ impl OuterSampling {
         self.collector.eof()
     }
 
-    /// Consume the collector only after its own genuine I/M settlement and actual writer EOF.
-    /// This returns sealed bytes/measurements to the retained O owner, not execution evidence or
-    /// permission for C to return before actual O/L/thread settlement and bounded report reading.
+    /// Consume only the collector after genuine I/M settlement and actual writer EOF. Retained
+    /// accounting remains active through sealed descriptor delivery and the bounded consumer read.
+    /// The pre-seal sample is not serialized as final metrics or accepted as cleanup evidence.
     pub(super) fn seal_after_inner_settlement(
         mut self,
         settlement: InnerSettlement,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
-    ) -> Result<(SealedReport, MeasuredPeaks), SamplingError> {
+    ) -> Result<(SealedReport, TerminalSampling), SamplingError> {
         if !settlement.matches_report(self.collector.identity()) {
             return Err(SamplingError::SettlementReportMismatch);
         }
-        // This is a normal final whole-tree/actual-L sample after actual I/M settlement,
-        // not a caller-only relabel, suppressed tick or fixture-controlled sampling barrier.
+        // This is a complete normal pre-seal sample after actual I/M settlement. Accounting
+        // continues after seals/delivery, so this cannot be mislabeled as final metrics.
         if matches!(self.tick(outer, caller)?, MemoryTick::Exhausted(_)) {
             return Err(SamplingError::Charge(ChargeError::ResourceExhausted));
         }
         self.ledger
             .require_writer_exposure(self.collector.identity(), self.collector.reserve())
-            .map_err(SamplingError::Charge)?;
-        let peaks = self
-            .ledger
-            .measured_peaks()
             .map_err(SamplingError::Charge)?;
         let deadline = self
             .settings
@@ -787,7 +859,15 @@ impl OuterSampling {
             .collector
             .seal(deadline)
             .map_err(SamplingError::Report)?;
-        Ok((report, peaks))
+        Ok((
+            report,
+            TerminalSampling {
+                launcher: self.launcher,
+                tree: self.tree,
+                ledger: self.ledger,
+                settings: self.settings,
+            },
+        ))
     }
 
     /// Actual complete measured peaks only. This is not a settled evidence constructor.
