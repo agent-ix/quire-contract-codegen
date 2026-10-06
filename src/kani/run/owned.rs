@@ -621,7 +621,7 @@ fn wait(
             return Ok(Stop::CaptureFailed);
         }
         if let Some(exit) = dispatched.completion(&owner.namespace, owner.deadline)? {
-            return Ok(Stop::Completed(exit));
+            return Ok(Stop::Completed(exit.outcome));
         }
         thread::sleep(TICK);
     }

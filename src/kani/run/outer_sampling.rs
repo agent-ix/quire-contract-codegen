@@ -25,7 +25,7 @@ use super::{
     protocol::{BackendExit, GuardianControl},
     report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
-    role_deadline::{DeadlineError, IdentityDeadline},
+    role_deadline::{DeadlineError, IdentityDeadline, StopOrigin, StopTimeline},
     role_protocol::{
         CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
         OuterPhaseReply, OuterTerminalReply, RunSettings,
@@ -89,6 +89,7 @@ pub(super) struct OuterSampling {
     ledger: ResourceLedger,
     collector: ReportCollector,
     settings: RunSettings,
+    stops: StopTimeline,
 }
 
 /// One actual O actor composes the existing production phases, I completion and terminal
@@ -330,6 +331,7 @@ pub(super) struct TerminalSampling {
     tree: MemoryObserver,
     ledger: ResourceLedger,
     settings: RunSettings,
+    stops: StopTimeline,
 }
 
 impl TerminalSampling {
@@ -347,6 +349,7 @@ impl TerminalSampling {
                 &mut self.tree,
                 &mut self.ledger,
                 &self.settings,
+                &self.stops,
                 outer,
                 caller,
             )?;
@@ -357,6 +360,11 @@ impl TerminalSampling {
                 .transport()
                 .refuse_observable_eof()
                 .map_err(SamplingError::Control)?;
+            if matches!(tick, MemoryTick::Exhausted(_)) {
+                self.stops
+                    .capture_once(StopOrigin::Outer)
+                    .map_err(SamplingError::Deadline)?;
+            }
             Ok(tick)
         })();
         if result.is_err() {
@@ -431,10 +439,7 @@ impl TerminalPreparation {
             .checked_add(std::time::Duration::from_secs(3))
             .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
         let cap = self.frame_deadline.unwrap_or(cap);
-        let frame_deadline = sampling
-            .settings
-            .identity_deadline()
-            .map_err(SamplingError::Deadline)?
+        let frame_deadline = observation_deadline(&sampling.settings, &sampling.stops)?
             .map_or(cap, |original| cap.min(original));
         let Some(received) = self
             .read_ack
@@ -450,6 +455,7 @@ impl TerminalPreparation {
         let CallerTerminalControl::CompletedClose {
             authority,
             deadline,
+            stop,
         } = received.control
         else {
             return Err(SamplingError::InvalidTerminalTransition);
@@ -457,6 +463,25 @@ impl TerminalPreparation {
         if authority != sampling.settings.authority {
             return Err(SamplingError::TerminalAuthority);
         }
+        sampling
+            .stops
+            .observe(stop)
+            .map_err(SamplingError::Deadline)?;
+        let earliest = sampling
+            .stops
+            .deadline(
+                sampling.settings.settlement_reserve,
+                sampling.settings.deadline,
+            )
+            .map_err(SamplingError::Deadline)?;
+        let deadline = if earliest
+            .no_later_than(deadline)
+            .map_err(SamplingError::Deadline)?
+        {
+            earliest
+        } else {
+            deadline
+        };
         let original = sampling.settings.deadline;
         if let IdentityDeadline::Finite { deadline: bound } = original {
             if !deadline
@@ -634,6 +659,11 @@ impl TerminalDelivery {
                     .encode(&OuterTerminalReply::Committed {
                         authority: self.sampling.settings.authority,
                         peaks,
+                        stop: self
+                            .sampling
+                            .stops
+                            .earliest()
+                            .map_err(SamplingError::Deadline)?,
                     })
                     .map_err(SamplingError::Control)?;
                 // Do not freeze the early peak while serialization/preemption consumes a due
@@ -666,11 +696,33 @@ impl TerminalDelivery {
 
 /// One actual-source accounting operation shared by collecting and terminal states. No caller
 /// observation, missing quantity, elapsed label or previous ledger peak substitutes for this read.
+fn observation_deadline(
+    settings: &RunSettings,
+    stops: &StopTimeline,
+) -> Result<Option<Instant>, SamplingError> {
+    let original = settings
+        .identity_deadline()
+        .map_err(SamplingError::Deadline)?;
+    let stop = stops
+        .active_deadline(settings.settlement_reserve, settings.deadline)
+        .map_err(SamplingError::Deadline)?;
+    match stop {
+        Some(stop) => {
+            let cutoff = stop.local().map_err(SamplingError::Deadline)?;
+            Ok(Some(
+                original.map_or(cutoff, |original| original.min(cutoff)),
+            ))
+        }
+        None => Ok(original),
+    }
+}
+
 fn observe_live(
     launcher: &mut LauncherMemory,
     tree: &mut MemoryObserver,
     ledger: &mut ResourceLedger,
     settings: &RunSettings,
+    stops: &StopTimeline,
     outer: &PreparedOuter<'_>,
     caller: &RoleEndpoint,
 ) -> Result<MemoryTick, SamplingError> {
@@ -682,9 +734,7 @@ fn observe_live(
         .require_creator_live()
         .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
     let launcher = launcher.sample().map_err(SamplingError::Observation)?;
-    let deadline = settings
-        .identity_deadline()
-        .map_err(SamplingError::Deadline)?;
+    let deadline = observation_deadline(settings, stops)?;
     let tree = tree
         .observe_until(1, deadline)
         .map_err(SamplingError::Observation)?;
@@ -950,13 +1000,37 @@ impl InnerCompletion {
             }
             (
                 InnerCompletionState::Dispatched,
-                GuardianControl::Completed { authority, outcome },
+                GuardianControl::Completed {
+                    authority,
+                    outcome,
+                    stop,
+                },
             ) if authority == sampling.settings.authority => {
+                if stop.origin != StopOrigin::Inner {
+                    return Err(SamplingError::UnexpectedInnerEvent);
+                }
+                let stop = sampling
+                    .stops
+                    .observe(stop)
+                    .map_err(SamplingError::Deadline)?;
+                let cutoff = sampling
+                    .stops
+                    .deadline(
+                        sampling.settings.settlement_reserve,
+                        sampling.settings.deadline,
+                    )
+                    .map_err(SamplingError::Deadline)?
+                    .local()
+                    .map_err(SamplingError::Deadline)?;
+                let deadline = deadline.min(cutoff);
                 self.state = InnerCompletionState::Acknowledging {
                     outcome,
                     send: IncrementalSend::new(
-                        PreparedFrame::encode(&InnerOwnerControl::CompletionObserved { authority })
-                            .map_err(SamplingError::Control)?,
+                        PreparedFrame::encode(&InnerOwnerControl::CompletionObserved {
+                            authority,
+                            stop,
+                        })
+                        .map_err(SamplingError::Control)?,
                     ),
                     deadline,
                 };
@@ -1225,6 +1299,7 @@ impl OuterSampling {
             tree,
             ledger,
             collector,
+            stops: StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?,
             settings,
         })
     }
@@ -1255,16 +1330,17 @@ impl OuterSampling {
             &mut self.tree,
             &mut self.ledger,
             &self.settings,
+            &self.stops,
             outer,
             caller,
         )?;
         if matches!(tick, MemoryTick::Exhausted(_)) {
+            self.stops
+                .capture_once(StopOrigin::Outer)
+                .map_err(SamplingError::Deadline)?;
             return Ok(tick);
         }
-        let deadline = self
-            .settings
-            .identity_deadline()
-            .map_err(SamplingError::Deadline)?;
+        let deadline = observation_deadline(&self.settings, &self.stops)?;
         self.collector
             .drain_tick(deadline)
             .map_err(SamplingError::Report)?;
@@ -1374,10 +1450,7 @@ impl OuterSampling {
         self.ledger
             .require_writer_exposure(self.collector.identity(), self.collector.reserve())
             .map_err(SamplingError::Charge)?;
-        let deadline = self
-            .settings
-            .identity_deadline()
-            .map_err(SamplingError::Deadline)?;
+        let deadline = observation_deadline(&self.settings, &self.stops)?;
         let report = self
             .collector
             .seal(deadline)
@@ -1389,6 +1462,7 @@ impl OuterSampling {
                 tree: self.tree,
                 ledger: self.ledger,
                 settings: self.settings,
+                stops: self.stops,
             },
         ))
     }

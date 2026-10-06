@@ -13,7 +13,7 @@ use super::{
     protocol::{BackendExit, BuildIdentity, GuardianRefusal, RunAuthority},
     report_storage::{PipeIdentity, REPORT_SLOT},
     resource_ledger::MeasuredPeaks,
-    role_deadline::{ExecutionClock, IdentityDeadline, RoleDeadline},
+    role_deadline::{ExecutionClock, IdentityDeadline, MonotonicInstant, RoleDeadline, StopStamp},
 };
 
 /// C-origin settings, forwarded without replacing the original deadline or run authority.
@@ -25,6 +25,10 @@ pub(super) struct RunSettings {
     pub(super) identity: BuildIdentity,
     pub(super) authority: RunAuthority,
     pub(super) deadline: IdentityDeadline,
+    /// Mandatory C kernel-clock lower bound, captured before any creating thread/L starts.
+    pub(super) started: MonotonicInstant,
+    /// The same original C-derived R_eff, never a receiving role's new budget.
+    pub(super) settlement_reserve: std::time::Duration,
     /// Original C-derived cutoff T-R_eff, not a fresh role-local work allowance.
     pub(super) work_deadline: IdentityDeadline,
     /// C’s original finite bootstrap cap, bounded by the original identity deadline.
@@ -42,6 +46,8 @@ impl RunSettings {
         &mut self,
         clock: &ExecutionClock,
     ) -> Result<(), super::role_deadline::DeadlineError> {
+        self.started = clock.started();
+        self.settlement_reserve = clock.reserve();
         self.deadline = IdentityDeadline::from_original(clock.original_deadline())?;
         self.work_deadline = IdentityDeadline::from_original(clock.work_deadline())?;
         Ok(())
@@ -272,7 +278,10 @@ impl OuterPhaseReply {
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum InnerOwnerControl {
-    CompletionObserved { authority: RunAuthority },
+    CompletionObserved {
+        authority: RunAuthority,
+        stop: StopStamp,
+    },
 }
 
 impl InnerOwnerControl {
@@ -295,6 +304,7 @@ pub(super) enum OuterTerminalReply {
     Committed {
         authority: RunAuthority,
         peaks: MeasuredPeaks,
+        stop: StopStamp,
     },
 }
 
@@ -317,6 +327,7 @@ pub(super) enum CallerTerminalControl {
     CompletedClose {
         authority: RunAuthority,
         deadline: RoleDeadline,
+        stop: StopStamp,
     },
     ReadCompleted {
         authority: RunAuthority,

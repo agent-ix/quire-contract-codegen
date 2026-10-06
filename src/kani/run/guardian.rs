@@ -22,6 +22,7 @@ use super::{
     protocol::{
         BackendExit, BuildIdentity, CallerControl, GuardianControl, GuardianRefusal, StdinControl,
     },
+    role_deadline::{StopOrigin, StopStamp, StopTimeline},
 };
 
 const BOOTSTRAP_CAP: Duration = Duration::from_secs(3);
@@ -274,6 +275,7 @@ pub(super) struct InnerBackend {
     _artifacts: GuardianArtifacts,
     owner_receive: IncrementalReceive,
     state: InnerBackendState,
+    stops: Option<StopTimeline>,
 }
 
 enum InnerBackendState {
@@ -363,6 +365,7 @@ impl InnerBackend {
             _artifacts: admitted.artifacts,
             owner_receive: dispatch.owner_receive,
             state: InnerBackendState::Dispatching(dispatch.event),
+            stops: None,
         }
     }
 
@@ -370,6 +373,10 @@ impl InnerBackend {
     /// post-Dispatch caller frame can authorize new work. Backend completion leaves I alive
     /// until real lease close, preserving namespace-owned descendant teardown.
     pub(super) fn tick(&mut self) -> Result<InnerBackendProgress, GuardianError> {
+        if self.stops.is_none() {
+            self.stops =
+                Some(StopTimeline::prepare(self.input.settings.started).map_err(io::Error::other)?);
+        }
         match self
             .input
             .caller_lease
@@ -403,6 +410,18 @@ impl InnerBackend {
             // An early or duplicate acknowledgment is an unauthorized lifecycle record.
             return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
         }
+        if let Some(deadline) = self
+            .stops
+            .as_ref()
+            .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?
+            .active_deadline(
+                self.input.settings.settlement_reserve,
+                self.input.settings.deadline,
+            )
+            .map_err(io::Error::other)?
+        {
+            deadline.local().map_err(io::Error::other)?;
+        }
         if self.reaper.is_none() {
             self.reaper = Some(BackendReaper::from_child(&self.child)?);
         }
@@ -417,20 +436,27 @@ impl InnerBackend {
                     GuardianRefusal::BackendObservationFailed,
                 ))?;
                 if let Some(outcome) = reaper.tick()? {
-                    let cap = Instant::now()
-                        .checked_add(super::role_deadline::SETTLE_RESERVE)
+                    let stops = self
+                        .stops
+                        .as_mut()
                         .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?;
-                    let deadline = self
-                        .input
-                        .settings
-                        .identity_deadline()
+                    let stop = stops
+                        .capture_once(StopOrigin::Inner)
+                        .map_err(io::Error::other)?;
+                    let deadline = stops
+                        .deadline(
+                            self.input.settings.settlement_reserve,
+                            self.input.settings.deadline,
+                        )
                         .map_err(io::Error::other)?
-                        .map_or(cap, |original| original.min(cap));
+                        .local()
+                        .map_err(io::Error::other)?;
                     self.state = InnerBackendState::Completing {
                         event: InnerEvent::prepare(
                             &GuardianControl::Completed {
                                 authority: self.input.settings.authority,
                                 outcome,
+                                stop,
                             },
                             deadline,
                         )?,
@@ -465,10 +491,25 @@ impl InnerBackend {
                     )? {
                         let super::role_protocol::InnerOwnerControl::CompletionObserved {
                             authority,
+                            stop,
                         } = received.control;
                         if authority != self.input.settings.authority {
                             return Err(GuardianError::Refusal(GuardianRefusal::ReplayedAuthority));
                         }
+                        let stops = self
+                            .stops
+                            .as_mut()
+                            .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?;
+                        stops.observe(stop).map_err(io::Error::other)?;
+                        let cutoff = stops
+                            .deadline(
+                                self.input.settings.settlement_reserve,
+                                self.input.settings.deadline,
+                            )
+                            .map_err(io::Error::other)?
+                            .local()
+                            .map_err(io::Error::other)?;
+                        event.deadline = event.deadline.min(cutoff);
                         *observed = true;
                     }
                 }
@@ -586,7 +627,11 @@ fn supervise_admitted(
         }
         if let Some(outcome) = reaper.tick()? {
             transport.send(
-                &GuardianControl::Completed { authority, outcome },
+                &GuardianControl::Completed {
+                    authority,
+                    outcome,
+                    stop: StopStamp::capture(StopOrigin::Inner).map_err(io::Error::other)?,
+                },
                 &[],
                 Instant::now() + BOOTSTRAP_CAP,
             )?;

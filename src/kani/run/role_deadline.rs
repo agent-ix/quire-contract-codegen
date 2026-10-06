@@ -169,6 +169,19 @@ impl StopTimeline {
         })
     }
 
+    pub(super) fn capture_once(&mut self, origin: StopOrigin) -> Result<StopStamp, DeadlineError> {
+        if let Some(instant) = self.last.get(origin.slot()).copied().flatten() {
+            return Ok(StopStamp { origin, instant });
+        }
+        let stamp = StopStamp::capture(origin)?;
+        self.observe(stamp)?;
+        Ok(stamp)
+    }
+
+    pub(super) fn earliest(&self) -> Result<StopStamp, DeadlineError> {
+        self.earliest.ok_or(DeadlineError::StopNotStarted)
+    }
+
     pub(super) fn observe(&mut self, stamp: StopStamp) -> Result<StopStamp, DeadlineError> {
         self.observe_at(stamp, MonotonicInstant::now()?)
     }
@@ -207,6 +220,17 @@ impl StopTimeline {
 
     /// Return the absolute earliest-trigger bound, clipped to the original finite T. No local
     /// conversion or receiving role's current time contributes a new allowance.
+    pub(super) fn active_deadline(
+        &self,
+        reserve: Duration,
+        original: IdentityDeadline,
+    ) -> Result<Option<RoleDeadline>, DeadlineError> {
+        if self.earliest.is_none() {
+            return Ok(None);
+        }
+        self.deadline(reserve, original).map(Some)
+    }
+
     pub(super) fn deadline(
         &self,
         reserve: Duration,
@@ -263,6 +287,8 @@ pub(super) struct ExecutionClock {
     original: Option<Instant>,
     work: Option<Instant>,
     settlement: Option<Instant>,
+    stops: StopTimeline,
+    reserve: Duration,
 }
 
 impl ExecutionClock {
@@ -272,9 +298,10 @@ impl ExecutionClock {
         original: Option<Instant>,
         whole_bound: Duration,
     ) -> Result<Self, DeadlineError> {
+        let reserve = SETTLE_RESERVE.min(whole_bound / 2);
+        let started = MonotonicInstant::now()?;
         let work = original
             .map(|deadline| {
-                let reserve = SETTLE_RESERVE.min(whole_bound / 2);
                 deadline
                     .checked_sub(reserve)
                     .ok_or(DeadlineError::Unrepresentable)
@@ -284,7 +311,58 @@ impl ExecutionClock {
             original,
             work,
             settlement: original,
+            stops: StopTimeline::prepare(started)?,
+            reserve: if original.is_some() {
+                reserve
+            } else {
+                SETTLE_RESERVE
+            },
         })
+    }
+
+    pub(super) fn started(&self) -> MonotonicInstant {
+        self.stops.started
+    }
+
+    /// Adopt only an already authenticated origin record. Validation precedes local conversion;
+    /// a late O/I frame retains its producer's absolute trigger and may only shorten C's cutoff.
+    pub(super) fn adopt_stop(
+        &mut self,
+        stamp: StopStamp,
+        original: IdentityDeadline,
+    ) -> Result<Instant, DeadlineError> {
+        self.stops.observe(stamp)?;
+        let deadline = self.stops.deadline(self.reserve, original)?.local()?;
+        let deadline = self
+            .settlement
+            .map_or(deadline, |previous| previous.min(deadline));
+        self.settlement = Some(deadline);
+        Ok(deadline)
+    }
+
+    /// Called synchronously at C's genuine first stop boundary. Preserve the first C stamp if
+    /// another local condition follows; the shared timeline can still adopt an earlier O/I event.
+    pub(super) fn capture_caller_stop(
+        &mut self,
+        original: IdentityDeadline,
+    ) -> Result<Instant, DeadlineError> {
+        let stamp = self.stops.capture_once(StopOrigin::Caller)?;
+        self.adopt_stop(stamp, original)
+    }
+
+    pub(super) fn reserve(&self) -> Duration {
+        self.reserve
+    }
+
+    pub(super) fn stop_deadline(
+        &self,
+        original: IdentityDeadline,
+    ) -> Result<RoleDeadline, DeadlineError> {
+        self.stops.deadline(self.reserve, original)
+    }
+
+    pub(super) fn stop_stamp(&self) -> Result<StopStamp, DeadlineError> {
+        self.stops.earliest()
     }
 
     pub(super) fn original_deadline(&self) -> Option<Instant> {
