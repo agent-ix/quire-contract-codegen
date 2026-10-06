@@ -6,9 +6,13 @@
 
 use std::{
     io,
-    os::fd::{AsFd, OwnedFd},
+    os::{
+        fd::{AsFd, OwnedFd},
+        unix::process::ExitStatusExt,
+    },
     process::{Child, Command, ExitStatus},
-    time::Instant,
+    thread,
+    time::{Duration, Instant},
 };
 
 use rustix::process::{pidfd_open, Pid, PidfdFlags, Signal};
@@ -17,10 +21,14 @@ use super::{
     control::{role_pair, ControlError, PreparedFrame, RoleCaller},
     creator,
     outer_setup::{NamespaceIdentity, PreparedOuter, SetupError},
+    protocol::BackendExit,
     role_bootstrap::{BootstrapError, PreparedLauncher},
     role_command::HelperRole,
     role_deadline::DeadlineError,
-    role_protocol::{OuterArmReply, OuterBootstrap, RunSettings},
+    role_protocol::{
+        LauncherControl, LauncherReply, LauncherSettlementMode, OuterArmReply, OuterBootstrap,
+        OuterChildSettlement, RunSettings,
+    },
 };
 
 #[derive(Debug)]
@@ -41,6 +49,11 @@ pub(super) enum LauncherError {
     SenderMismatch,
     ArmMismatch,
     CapabilityMismatch,
+    SettlementAuthorityMismatch,
+    SettlementDeadlineMismatch,
+    UnexpectedSettlementControl,
+    InvalidOuterExit,
+    SettlementAlreadyAttempted,
 }
 
 impl std::fmt::Display for LauncherError {
@@ -67,7 +80,12 @@ impl std::error::Error for LauncherError {
             | Self::MissingSender
             | Self::SenderMismatch
             | Self::ArmMismatch
-            | Self::CapabilityMismatch => None,
+            | Self::CapabilityMismatch
+            | Self::SettlementAuthorityMismatch
+            | Self::SettlementDeadlineMismatch
+            | Self::UnexpectedSettlementControl
+            | Self::InvalidOuterExit
+            | Self::SettlementAlreadyAttempted => None,
         }
     }
 }
@@ -83,6 +101,7 @@ pub(super) struct LauncherOwner {
     arm: Option<NamespaceIdentity>,
     cancellation_attempted: bool,
     exit: Option<ExitStatus>,
+    settlement_attempted: bool,
 }
 
 impl LauncherOwner {
@@ -117,11 +136,15 @@ impl LauncherOwner {
             arm: None,
             cancellation_attempted: false,
             exit: None,
+            settlement_attempted: false,
         })
     }
 
     /// Every failure leaves actual Child custody in this existing owner for bounded settlement.
     pub(super) fn spawn(&mut self) -> Result<(), LauncherError> {
+        if self.settlement_attempted {
+            return Err(LauncherError::SettlementAlreadyAttempted);
+        }
         self.require_parent()?;
         let mut command = self
             .command
@@ -233,6 +256,99 @@ impl LauncherOwner {
         };
         self.exit = child.try_wait().map_err(LauncherError::Io)?;
         Ok(self.exit)
+    }
+
+    /// Consume one authenticated original-C cleanup request and retain O custody through reap.
+    /// A reply is sent only after the real Child wait; L remains live until C acknowledges it.
+    /// Neither this request nor the reply creates another settlement window.
+    pub(super) fn settle_for_caller(
+        &mut self,
+        request: LauncherControl,
+    ) -> Result<(), LauncherError> {
+        if self.settlement_attempted {
+            return Err(LauncherError::SettlementAlreadyAttempted);
+        }
+        self.settlement_attempted = true;
+        let LauncherControl::Settle {
+            authority,
+            deadline,
+            mode,
+        } = request
+        else {
+            return Err(LauncherError::UnexpectedSettlementControl);
+        };
+        if authority != self.input.settings.authority {
+            return Err(LauncherError::SettlementAuthorityMismatch);
+        }
+        let deadline = deadline.local().map_err(LauncherError::Deadline)?;
+        match self
+            .input
+            .settings
+            .identity_deadline()
+            .map_err(LauncherError::Deadline)?
+        {
+            Some(original) if deadline > original => {
+                return Err(LauncherError::SettlementDeadlineMismatch);
+            }
+            None if deadline.saturating_duration_since(Instant::now())
+                > super::role_deadline::SETTLE_RESERVE =>
+            {
+                return Err(LauncherError::SettlementDeadlineMismatch);
+            }
+            Some(_) | None => {}
+        }
+        // The executor decoded this command on the authenticated original C endpoint, under
+        // its existing finite per-frame cap. Only the transferred original/first-stop cutoff
+        // controls settlement; the checks above cannot refresh or extend it.
+        let custody = if self.child.is_none() {
+            OuterChildSettlement::NotCreated
+        } else {
+            if matches!(mode, LauncherSettlementMode::CancelOuter) {
+                self.cancel_outer()?;
+            }
+            let exit = loop {
+                if let Some(exit) = self.poll_outer_exit()? {
+                    break exit;
+                }
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|remaining| !remaining.is_zero())
+                    .ok_or(LauncherError::Deadline(DeadlineError::Expired))?;
+                thread::park_timeout(remaining.min(Duration::from_millis(20)));
+            };
+            let outcome = match (exit.code(), exit.signal()) {
+                (Some(code), None) => BackendExit::Code(code),
+                (None, Some(signal)) => BackendExit::Signal(signal),
+                _ => return Err(LauncherError::InvalidOuterExit),
+            };
+            OuterChildSettlement::Reaped { outcome }
+        };
+        self.input
+            .bootstrap
+            .transport()
+            .send(
+                &LauncherReply::OuterSettled {
+                    identity: self.input.settings.identity,
+                    authority: self.input.settings.authority,
+                    custody,
+                },
+                &[],
+                deadline,
+            )
+            .map_err(LauncherError::Control)?;
+        let acknowledged = self
+            .input
+            .bootstrap
+            .transport()
+            .receive::<LauncherControl>(LauncherControl::rights_count, deadline)
+            .map_err(LauncherError::Control)?;
+        let LauncherControl::Retire { authority } = acknowledged.control else {
+            return Err(LauncherError::UnexpectedSettlementControl);
+        };
+        if authority != self.input.settings.authority {
+            return Err(LauncherError::SettlementAuthorityMismatch);
+        }
+        Ok(())
     }
 
     pub(super) fn confirm_arm(&mut self) -> Result<NamespaceIdentity, LauncherError> {

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     outer_setup::NamespaceIdentity,
-    protocol::{BuildIdentity, GuardianRefusal, RunAuthority},
+    protocol::{BackendExit, BuildIdentity, GuardianRefusal, RunAuthority},
     report_storage::{PipeIdentity, REPORT_SLOT},
     role_deadline::{ExecutionClock, IdentityDeadline, RoleDeadline},
 };
@@ -75,14 +75,38 @@ impl RunSettings {
 pub(super) enum LauncherControl {
     /// Rights: actual creating-thread pin, actual C process pin, I lease endpoint, O endpoint.
     Start { settings: RunSettings },
+    /// Same original settlement cutoff; this is not a fresh allowance at L.
+    Settle {
+        authority: RunAuthority,
+        deadline: RoleDeadline,
+        mode: LauncherSettlementMode,
+    },
+    /// C has consumed actual O custody while L remained live on the original endpoint.
+    Retire { authority: RunAuthority },
 }
 
 impl LauncherControl {
     pub(super) fn rights_count(&self) -> usize {
         match self {
             Self::Start { .. } => 4,
+            Self::Settle { .. } | Self::Retire { .. } => 0,
         }
     }
+}
+
+/// Private whole-owner settlement selection, never a public caller cancellation handle.
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub(super) enum LauncherSettlementMode {
+    ObserveOuterExit,
+    CancelOuter,
+}
+
+/// Trusted L reports only custody established from its retained actual Child wait result.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum OuterChildSettlement {
+    NotCreated,
+    Reaped { outcome: BackendExit },
 }
 
 /// Authenticated L-origin bootstrap status. Neither status grants backend authorization.
@@ -92,6 +116,11 @@ pub(super) enum LauncherReply {
     Ready {
         identity: BuildIdentity,
         authority: RunAuthority,
+    },
+    OuterSettled {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+        custody: OuterChildSettlement,
     },
     Refused {
         identity: BuildIdentity,

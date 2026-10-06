@@ -30,8 +30,8 @@ use super::{
     role_command::HelperRole,
     role_deadline::{DeadlineError, ExecutionClock, RoleDeadline},
     role_protocol::{
-        LauncherControl, LauncherReply, OuterArmReply, OuterPhaseCommand, OuterPhaseReply,
-        RunSettings,
+        LauncherControl, LauncherReply, LauncherSettlementMode, OuterArmReply,
+        OuterChildSettlement, OuterPhaseCommand, OuterPhaseReply, RunSettings,
     },
     spawner::{RetainedSpawner, SpawnIdentity},
     stages::{Bootstrap, PreparedDispatch},
@@ -60,6 +60,9 @@ pub(super) enum CallerBootstrapError {
     MissingMonitorPin,
     MissingInnerPin,
     InnerBootstrapConsumed,
+    SettlementAlreadyAttempted,
+    SettlementReplyMismatch,
+    OuterTerminationUnconfirmed,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -90,7 +93,10 @@ impl std::error::Error for CallerBootstrapError {
             | Self::PhaseReplyMismatch
             | Self::MissingMonitorPin
             | Self::MissingInnerPin
-            | Self::InnerBootstrapConsumed => None,
+            | Self::InnerBootstrapConsumed
+            | Self::SettlementAlreadyAttempted
+            | Self::SettlementReplyMismatch
+            | Self::OuterTerminationUnconfirmed => None,
         }
     }
 }
@@ -123,6 +129,9 @@ pub(super) struct CallerBootstrap {
     caller_gid: u32,
     original_namespace: NamespaceIdentity,
     original_network: NamespaceIdentity,
+    settlement_storage: Option<FrameStorage>,
+    retirement_frame: PreparedFrame,
+    outer_settled: Option<OuterChildSettlement>,
     outer_pin: Option<OwnedFd>,
     outer_namespace: Option<NamespaceIdentity>,
     outer_network: Option<NamespaceIdentity>,
@@ -212,6 +221,9 @@ impl CallerBootstrap {
             claim.map_err(CallerBootstrapError::Control)?,
             release.map_err(CallerBootstrapError::Control)?,
         ];
+        let settlement_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
+        let retirement_frame = PreparedFrame::encode(&LauncherControl::Retire { authority })
+            .map_err(CallerBootstrapError::Control)?;
         let frame_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let helper_capacity = u64::try_from(settings.helper.capacity())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
@@ -224,6 +236,12 @@ impl CallerBootstrap {
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            settlement_storage
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
+            retirement_frame
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
             RetainedSpawner::reserved_bytes().map_err(CallerBootstrapError::Io)?,
             frame_storage
                 .reserved_bytes()
@@ -293,6 +311,9 @@ impl CallerBootstrap {
             caller_gid,
             original_namespace,
             original_network,
+            settlement_storage: Some(settlement_storage),
+            retirement_frame,
+            outer_settled: None,
             outer_pin: None,
             outer_namespace: None,
             outer_network: None,
@@ -377,6 +398,9 @@ impl CallerBootstrap {
                 identity,
                 authority,
             } if identity == self.build_identity && authority == self.authority => Ok(()),
+            LauncherReply::OuterSettled { .. } => {
+                return Err(CallerBootstrapError::LauncherReplyMismatch)
+            }
             LauncherReply::Refused {
                 authority, reason, ..
             } if authority == self.authority => Err(CallerBootstrapError::LauncherRefused(reason)),
@@ -645,6 +669,97 @@ impl CallerBootstrap {
         self.inner_bootstrap
             .take()
             .ok_or(CallerBootstrapError::InnerBootstrapConsumed)
+    }
+
+    /// Actual O-child custody is established before L reap/creator join. This method is called
+    /// by the original whole-chain owner with its existing first-stop/original cutoff; it does
+    /// not close the independent I lease or authorize proof/report acceptance.
+    pub(super) fn settle_launcher_chain(
+        &mut self,
+        clock: &ExecutionClock,
+        mode: LauncherSettlementMode,
+    ) -> Result<(), CallerBootstrapError> {
+        if clock.original_deadline() != self.identity_deadline {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        }
+        let cutoff = clock
+            .settlement_deadline()
+            .map_err(CallerBootstrapError::Deadline)?;
+        let storage = self
+            .settlement_storage
+            .take()
+            .ok_or(CallerBootstrapError::SettlementAlreadyAttempted)?;
+        let deadline =
+            RoleDeadline::from_original(cutoff).map_err(CallerBootstrapError::Deadline)?;
+        let frame = storage
+            .encode(&LauncherControl::Settle {
+                authority: self.authority,
+                deadline,
+                mode,
+            })
+            .map_err(CallerBootstrapError::Control)?;
+        self.launcher_control
+            .transport()
+            .send_prepared(&frame, &[], cutoff)
+            .map_err(CallerBootstrapError::Control)?;
+        let received = self
+            .launcher_control
+            .transport()
+            .receive_prepared::<LauncherReply>(
+                &mut self.receive,
+                LauncherReply::rights_count,
+                cutoff,
+            )
+            .map_err(CallerBootstrapError::Control)?;
+        let launcher = self
+            .identity
+            .as_ref()
+            .ok_or(CallerBootstrapError::MissingLauncher)?;
+        let sender = received
+            .credentials
+            .ok_or(CallerBootstrapError::MissingSender)?;
+        if sender.pid != launcher.launcher_pid.as_raw_pid()
+            || sender.uid != self.caller_uid
+            || sender.gid != self.caller_gid
+        {
+            return Err(CallerBootstrapError::SettlementReplyMismatch);
+        }
+        let LauncherReply::OuterSettled {
+            identity,
+            authority,
+            custody,
+        } = received.control
+        else {
+            return Err(CallerBootstrapError::SettlementReplyMismatch);
+        };
+        if identity != self.build_identity || authority != self.authority {
+            return Err(CallerBootstrapError::SettlementReplyMismatch);
+        }
+        if let Some(pin) = &self.outer_pin {
+            if matches!(custody, OuterChildSettlement::NotCreated) {
+                return Err(CallerBootstrapError::SettlementReplyMismatch);
+            }
+            // A malformed arm candidate is retained for descriptor cleanup, but never grants
+            // process authority. Only completed actual child/pidfd binding set outer_pid.
+            if self.outer_pid.is_some()
+                && !super::creator::terminated(pin).map_err(CallerBootstrapError::Io)?
+            {
+                return Err(CallerBootstrapError::OuterTerminationUnconfirmed);
+            }
+        }
+        self.outer_settled = Some(custody);
+        self.launcher_control
+            .transport()
+            .send_prepared(&self.retirement_frame, &[], cutoff)
+            .map_err(CallerBootstrapError::Control)?;
+        let spawner = self
+            .spawner
+            .as_mut()
+            .ok_or(CallerBootstrapError::MissingLauncher)?;
+        spawner
+            .settle_launcher(cutoff)
+            .map_err(CallerBootstrapError::Io)?;
+        spawner.join(cutoff).map_err(CallerBootstrapError::Io)
     }
 
     /// The original identity clock is independent from the finite startup cap. None has its
