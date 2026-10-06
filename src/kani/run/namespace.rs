@@ -494,15 +494,22 @@ mod tests {
             .collect()
     }
 
-    fn child_with_nspid(children: &[u32], local_pid: &str) -> Option<u32> {
-        children.iter().copied().find(|pid| {
-            fs::read_to_string(format!("/proc/{pid}/status")).is_ok_and(|status| {
-                status
-                    .lines()
-                    .find_map(|line| line.strip_prefix("NSpid:"))
-                    .is_some_and(|ids| ids.split_whitespace().last() == Some(local_pid))
-            })
-        })
+    fn child_with_nspid(children: &[u32], local_pid: &str) -> (Option<u32>, Vec<String>) {
+        let mut found = None;
+        let mut observed = Vec::with_capacity(children.len());
+        for &pid in children {
+            match fs::read_to_string(format!("/proc/{pid}/status")) {
+                Ok(status) => {
+                    let nspid = status.lines().find(|line| line.starts_with("NSpid:"));
+                    observed.push(format!("host_pid={pid} {nspid:?}"));
+                    if nspid.is_some_and(|ids| ids.split_whitespace().last() == Some(local_pid)) {
+                        found = Some(pid);
+                    }
+                }
+                Err(error) => observed.push(format!("host_pid={pid} status_error={error}")),
+            }
+        }
+        (found, observed)
     }
 
     /// Trace: FR-028-AC-2, FR-028-AC-21.
@@ -587,6 +594,7 @@ if os.fork():
         os.sched_yield()
     os._exit(0)
 os.setsid()
+# Rename publishes the complete PID before the caller can observe the ready path.
 (root/'orphan-ready.tmp').write_text(str(os.getpid()))
 (root/'orphan-ready.tmp').replace(root/'orphan-ready')
 while os.getppid()!=1:
@@ -620,17 +628,20 @@ signal.pause()
         wait_for(&ready_file);
         observer.observe(init).unwrap(); // The later fork is deliberately not sampled.
         let local_orphan = fs::read_to_string(&ready_file).unwrap();
-        let local_orphan = local_orphan.trim();
-        // The held parent makes the previously raced direct-child lookup fail here.
         assert!(
-            child_with_nspid(&children(init), local_orphan).is_none(),
+            !local_orphan.is_empty() && local_orphan.bytes().all(|byte| byte.is_ascii_digit()),
+            "orphan-ready must contain a nonempty ASCII-digit NSpid, got {local_orphan:?}"
+        );
+        // The held parent constructs a ready-before-adoption window for this test.
+        assert!(
+            child_with_nspid(&children(init), &local_orphan).0.is_none(),
             "held orphan parent must prevent adoption before release"
         );
         fs::write(adopt, []).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         let orphan = loop {
-            let observed = children(init);
-            if let Some(orphan) = child_with_nspid(&observed, local_orphan) {
+            let (candidate, observed) = child_with_nspid(&children(init), &local_orphan);
+            if let Some(orphan) = candidate {
                 break orphan;
             }
             assert!(
