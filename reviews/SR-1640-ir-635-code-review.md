@@ -51,3 +51,10 @@ Round 1 re-check of the fix-round candidate of PR #298, covering every original 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | still-open | The mid-sentence break at FR-033 lines 114-117 is fixed: the sentence now reads "limits and canonical proved-content identity". But most of the added over-width prose lines the finding lists are still single lines past 100 columns: FR-033 lines 69, 81 and 155; FR-029 lines 60 and 82; FR-028 lines 297, 312, 356 and 357; and TC-048 line 75. The fix also adds a new one at TC-048 line 69 (123 columns). Reflow these lines; FND-002 records the separate token-splitting regression. |
+
+Round 2 re-check of the next fix-round candidate of PR #298, covering every finding whose latest outcome was still open or unset, and regressions in the fix. Findings whose latest outcome is already `fixed` need no new row. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | No prose line the PR adds is now longer than 100 columns: a scan of every added non-table line in `git diff origin/main...HEAD -- spec` finds none. That includes the lines the round-1 row listed (FR-033, FR-029, FR-028 and TC-048) and TC-048 line 69. The FR-028 change in this round is whitespace-only reflow. |
+| FND-002 | fixed | Both link targets are whole again: FR-029 reads `([AD-003](../../assurance/AD-003-evidence-chain.md) E-9)` and TC-048 reads `[FR-033](../functional/FR-033-composite-parity-replay-binding.md),`. No link target in the changed files ends at a line break. The split tokens are rejoined as "missing-cover-summary", "out-of-range", "node-selected" and "decoded-size". No added line ends in a hyphen inside a token. |

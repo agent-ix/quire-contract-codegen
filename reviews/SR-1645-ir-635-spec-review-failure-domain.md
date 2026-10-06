@@ -45,6 +45,12 @@ I took FR-028-AC-17's strengths and the conditions under which each is assigned,
 | --- | --- | --- | --- |
 | FND-003 | low | The fix gates FR-029-AC-24, which makes a retained `refinement_failed` yield `Failed`/`CgDefect` whatever the backend outcome, on QSL-640. FR-029-AC-25 applies the ordinary inconclusive rows only "with no retained refinement disagreement". AC-21 gives the interim refusals only for a verified nonproduction shadow and a falsified shadow. So before QSL-640 delivery, a `bounded_shadow` inconclusive or cover-unsatisfied outcome that carries `refinement_failed` matches no stated row. State its interim reading, for example the ordinary inconclusive row or a typed interim refusal, so the gated period has a total map. | spec/kani/functional/FR-029-run-outcome-terminal-record.md:296, spec/kani/functional/FR-029-run-outcome-terminal-record.md:299, spec/kani/functional/FR-029-run-outcome-terminal-record.md:300 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The round-2 interim rule (FR-029 Behavior, lines 152-156, and AC-21) sends a bounded-shadow `inconclusive` or `cover-unsatisfied` outcome with retained `refinement_failed` to `NonProductionProof`. The Outputs section (lines 92-95) still defines `NonProductionProof` as "for a verified outcome whose strength is not `production_proved`". An implementer who builds the variant from Outputs gets a refusal the Behavior section does not allow, or a variant that cannot carry the non-verified case. Widen the Outputs bullet to name the inconclusive and cover-unsatisfied `refinement_failed` case. | spec/kani/functional/FR-029-run-outcome-terminal-record.md:92, spec/kani/functional/FR-029-run-outcome-terminal-record.md:152, spec/kani/functional/FR-029-run-outcome-terminal-record.md:304 |
+
 ## Dispositions
 
 Round 1 re-check of the fix-round candidate of PR #298, covering every original finding and regressions in the fix. The fixing commit is recorded in the private ticket marker.
@@ -53,3 +59,9 @@ Round 1 re-check of the fix-round candidate of PR #298, covering every original 
 | --- | --- | --- |
 | FND-001 | fixed | FR-029 restores the rule: "In the absence of a retained refinement disagreement, every `bounded_shadow` inconclusive backend outcome takes the ordinary inconclusive rows". It lists vacuous and cover-unsatisfied, timed-out, memory and unwind, and no-verdict and missing-output, as AC-25 asserts. Priority row 3 now reads "vacuous-proof `inconclusive` or `cover-unsatisfied`, zero SUCCESS checks" and states it does not coerce a run into verified evidence. AC-26 says zero-count cases use AC-25, "not an unreachable verified-count-zero row". |
 | FND-002 | fixed | FR-029 now applies refinement disagreement "before any backend outcome or replay agreement ... including a falsified replay that agrees on its replayed case". Priority row 1 is "any outcome with `refinement_failed` / `Disagreed`". FR-029-AC-24 asserts `Failed`/`CgDefect` for verified, falsified, inconclusive and cover-unsatisfied outcomes, including zero checks and agreeing replay. FR-033's falsified bullet and the FR-029 Inputs section carry the same rule. |
+
+Round 2 re-check of the next fix-round candidate of PR #298, covering every finding whose latest outcome was still open or unset, and regressions in the fix. Findings whose latest outcome is already `fixed` need no new row. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | The map is now total before QSL-640. FR-029 Behavior adds: "Before actual QSL-640 delivery, a bounded-shadow `inconclusive` or `cover-unsatisfied` outcome with retained `refinement_failed` takes the typed interim `NonProductionProof` refusal carrying that strength and yields no terminal value. Outcomes without retained disagreement still take the ordinary inconclusive rows." FR-029-AC-21 lists all four interim cases, and TC-048 step 8 exercises them. The paragraph says it does not weaken the delivered disagreement-first `Failed`/`CgDefect` rule, which AC-24 keeps gated, and it claims no available QSL cause. FND-004 records a remaining Outputs inconsistency. |

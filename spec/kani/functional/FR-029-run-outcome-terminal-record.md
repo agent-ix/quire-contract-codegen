@@ -89,10 +89,11 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - For the ordinary source-predicate input, a typed refusal, `TerminalPairError`, for an invalid
   pair: a falsified outcome with no replay settlement (`MissingSettlement`), or any other outcome
   with one (`UnexpectedSettlement`).
-- Planned (IR-241): two more `TerminalPairError` variants, `NonProductionProof` (carrying the proof
-  strength) for a verified outcome whose strength is not `production_proved`, and
-  `ShadowCounterexample` for a falsified outcome of a `bounded_shadow` harness. Neither returns a
-  terminal value while the actual QSL-640 parity route remains unavailable.
+- Planned (IR-635): interim `TerminalPairError::NonProductionProof` carries the proof strength
+  for a verified outcome whose strength is not `production_proved`, and for a `bounded_shadow`
+  `inconclusive` or `cover-unsatisfied` outcome with retained `refinement_failed`.
+  `TerminalPairError::ShadowCounterexample` refuses a falsified `bounded_shadow` outcome.
+  Neither returns a terminal value while the actual QSL-640 parity route remains unavailable.
 - Planned (IR-635): the admitted composite route preserves QSL's terminal record/category/cause
   under AC-17 and AC-19 to AC-27; its typed binding refuses missing or another claim's settlement
   without a value.
