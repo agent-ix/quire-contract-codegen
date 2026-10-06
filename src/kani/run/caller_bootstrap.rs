@@ -18,6 +18,7 @@ use super::{
     creator,
     outer_setup::NamespaceIdentity,
     protocol::{current_build_identity, BuildIdentity, RunAuthority},
+    report_storage::PreparedReportRead,
     role_command::HelperRole,
     role_deadline::DeadlineError,
     role_protocol::{LauncherControl, OuterArmReply, RunSettings},
@@ -79,6 +80,7 @@ pub(super) struct CallerBootstrap {
     inner_endpoint: Option<OwnedFd>,
     outer_endpoint: Option<OwnedFd>,
     start_frame: PreparedFrame,
+    pub(super) report_read: Option<PreparedReportRead>,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
     identity: Option<SpawnIdentity>,
@@ -103,6 +105,7 @@ impl CallerBootstrap {
         inner_endpoint: GuardianEndpoint,
         stdout: Stdio,
         stderr: Stdio,
+        report_read: PreparedReportRead,
     ) -> Result<Self, CallerBootstrapError> {
         if settings.authority != bootstrap.authority()
             || settings.identity != current_build_identity()
@@ -146,6 +149,12 @@ impl CallerBootstrap {
                     .ok()
                     .and_then(|frame| bytes.checked_add(frame))
             })
+            .and_then(|bytes| {
+                report_read
+                    .reserved_bytes()
+                    .ok()
+                    .and_then(|report| bytes.checked_add(report))
+            })
             .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         if declared < minimum {
             return Err(CallerBootstrapError::MissingReservation);
@@ -158,6 +167,7 @@ impl CallerBootstrap {
             inner_endpoint: Some(inner_endpoint.into_child_mapping()),
             outer_endpoint: Some(outer_endpoint.into_child_mapping()),
             start_frame,
+            report_read: Some(report_read),
             command: Some(command),
             spawner: None,
             identity: None,
