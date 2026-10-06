@@ -22,6 +22,8 @@ mod namespace;
 mod control;
 
 #[cfg(target_os = "linux")]
+mod backend_policy;
+#[cfg(target_os = "linux")]
 mod caller_bootstrap;
 #[cfg(target_os = "linux")]
 mod caller_streams;
