@@ -37,3 +37,13 @@ This is a source-only review. I ran no build, test, Kani or replay, and I do not
 | FND-001 | medium | The ready-file PID is never checked to be a non-empty numeric NSpid. Empty or garbled content makes the held-parent `is_none()` assertion vacuous and turns a ready-file publish defect into a misleading "not adopted" deadline failure. The atomic temp-and-rename publish that prevents this has no guard. | src/kani/run/namespace.rs:622-628 |
 | FND-002 | low | The new comment says the held parent reproduces "the previously raced direct-child lookup". In the base fixture the orphan waited for `getppid()==1` before it created the ready file, so a pre-adoption lookup was not directly reachable there. Python's non-atomic `write_text` (create/truncate, then write) let `wait_for` + `read_to_string` read `""`, which matches no NSpid and would also produce the observed `Option::unwrap` failure. | src/kani/run/namespace.rs:624 |
 | FND-003 | low | The deadline failure lists the children's host PIDs but not their NSpid lines or status-read results, and `child_with_nspid` silently treats an unreadable status as a non-match. A failure therefore cannot tell "orphan absent" from "orphan present but NSpid unreadable or different". | src/kani/run/namespace.rs:636-639 |
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@be267fe33944f8977f04263bf0851f07d019a14f (fix commit over prior 98337b0ab10d876d5995c329031701a47813391b). Source-only re-check: no build, test, Kani or replay run, and no acceptance credit for code or gates. The fix round introduced no new finding. All original assertions below the lookup (late fork, barrier, init pin, completion wait, owned cleanup, fallback teardown) are unchanged.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | be267fe33944f8977f04263bf0851f07d019a14f |
+| FND-002 | fixed | be267fe33944f8977f04263bf0851f07d019a14f |
+| FND-003 | fixed | be267fe33944f8977f04263bf0851f07d019a14f |
