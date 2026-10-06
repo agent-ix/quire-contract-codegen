@@ -78,3 +78,6 @@ mod guarded_batch;
 #[cfg(target_os = "linux")]
 #[path = "../common/kani_execution_single.rs"]
 mod guarded_single;
+
+#[cfg(all(target_os = "linux", feature = "guardian-test-support"))]
+mod guardian_private;
