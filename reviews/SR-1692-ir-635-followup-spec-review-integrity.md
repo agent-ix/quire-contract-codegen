@@ -62,3 +62,4 @@ Round 1 re-check of fix commit `48f3555` on quire-contract-codegen#303. Each fin
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | 48f3555: FR-033 Setup Refusal Precedence is split: claim-identity/bound-schema refusals precede Disagreed (step 2); for an admitted claim Disagreed precedes operand decode/admission and missing/fault native handling (step 4); Outputs, operand and native Behavior bullets, AC-3/5/6/12/13, FR-029 Behavior and AC-24, and TC-048 steps 2/3/5/10 agree; no observation or operand is fabricated and the owning representation stays QSL-640 gated. |
+| FND-002 | fixed | dafae60 (round 2): FR-033 Setup Refusal Precedence step 4, FR-033-AC-3, FR-033-AC-12, FR-029-AC-24 and TC-048 step 10 now each define the example in place as a composite operand field `x` declared `Int[0, 9]` but supplied as `x: 12`; no bare `x: 12` remains under spec/. |
