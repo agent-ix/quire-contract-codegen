@@ -234,3 +234,19 @@ impl OuterPhaseReply {
         }
     }
 }
+
+/// O has actually authenticated I's complete backend event. Queueing the I-origin event alone
+/// grants no permission to publish C Completed and let original lease close destroy its sender.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum InnerOwnerControl {
+    CompletionObserved { authority: RunAuthority },
+}
+
+impl InnerOwnerControl {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::CompletionObserved { .. } => 0,
+        }
+    }
+}
