@@ -93,12 +93,27 @@ the run and everything read back from it.
   for a precondition harness, whose only property is its non-vacuity cover, the generator shall
   instead classify the run by its cover summary alone, as verified, cover-unsatisfied or
   inconclusive under the cover rules above.
-- The generator shall launch Kani with `-Z unstable-options --export-json <file>`, the file in the
-  request's target directory under a name unique to that launch (the process id and a process-wide
-  sequence), and shall remove only that file, before launching and after reading it. Runs sharing a
-  target directory, in this process or in others at the same time, therefore never write, remove
-  or read each other's report, and a file left by an earlier run is never read as this run's
-  verdict.
+- The generator shall append `-Z`, `unstable-options`, `--export-json`, and
+  `/proc/self/fd/N`, in that exact order after the unchanged harness options. `N` is the actual
+  child-only mapped anonymous report-pipe writer descriptor, at least 3. Evidence records these
+  actual argument bytes, not a synthetic target-directory pathname. All other argument bytes,
+  stdin, environment and cwd remain unchanged.
+- The report is internal per-run unnamed kernel storage: a bounded anonymous pipe collected into
+  a sealing-capable memfd by the trusted outer supervisor specified in FR-034. No target-directory
+  report is created, reopened, removed or accepted. Concurrent runs cannot substitute each other's
+  descriptor authority. This replaces the internal named-report allocation; no named compatibility
+  reader, fallback or externally supplied report pathname is provided.
+- While backend completion is pending, the collector shall retain at most 16 MiB plus one overflow-detection
+  byte in memfd. It shall concurrently charge actual pipe capacity and kernel memfd backing against
+  the original whole-run memory ceiling; unmapped shared storage is not accounted as zero RSS.
+  Crossing the 16 MiB report limit shall cancel owned execution and yield the existing
+  `Incomplete(ResourceExhausted)` outcome, never `Failed` or acceptance of truncated content.
+- Authenticated Completed precedes original-lease closure and confirmed owned inner teardown.
+  After all writer handles close, bounded drain to actual pipe EOF precedes WRITE/GROW/SHRINK
+  sealing and consumer reads through the retained actual memfd OwnedFd. The final report/control
+  handoff is separate from the closed original lease. Collection, accounting, drain, sealing,
+  reading and cleanup retain the original deadline without resetting it. Parsing/classification
+  follows confirmed cleanup and bounded stable-descriptor reading, never pathname reopening.
 - The generator shall run the launcher as the leader of its own process group and, when the run
   does not conclude within the timeout, kill that group, so that the solver and every other
   process the launcher started in it are killed with it.
@@ -260,7 +275,7 @@ the run and everything read back from it.
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
 | FR-017-AC-17 | A run that times out has the whole group the launcher leads killed, a real grandchild included. | Test (TC-027) |
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result in a single run, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
-| FR-017-AC-19 | The launch exports its report after the harness options; its report file name is unique to the launch, so a report another run left or is writing in the same target directory is never read, removed or overwritten by this run, and the run removes its own file; a report over the read bound is refused and not truncated. | Test (TC-027) |
+| FR-017-AC-19 | Actual argv appends `-Z unstable-options --export-json /proc/self/fd/N` after unchanged harness options, with N the actual child-only anonymous pipe writer at least 3; evidence records the actual bytes. Per-run pipe-to-memfd storage has no persistent pathname and is reclaimed at final close even after every owner dies. Before Completed, retained memfd is bounded to 16 MiB plus one detection byte and actual pipe capacity plus kernel backing are charged concurrently to the original whole-run ceiling. Over-limit reports cancel owned execution and yield Incomplete(ResourceExhausted), never Failed or truncated acceptance. Authenticated Completed, original lease close, confirmed inner teardown/all writers closed, bounded actual-EOF drain, immutable seals and stable OwnedFd read occur in that order under the original deadline. Another run's or stale named report is never used. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
 | FR-017-AC-21 | N harnesses with equal option vectors (the harness selection removed) and equal request timeout T start exactly one launcher process whose argument vector holds one `--harness <module::harness> --exact` pair per member in request order, `--harness-timeout` T, then the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes; one harness starts one process with the single-run argument vector. The group's outer bound is N times T, never elapsing when the product does not fit, and a group killed at it leaves no report and is refused as timed out with no member classified. A T that rounded up exceeds 4294967295 seconds (a `Duration::MAX` request) launches without `--harness-timeout`. A group that exits successfully with no report is refused with the missing-report refusal and classifies no member; one that exits unsuccessfully with no report (an argument error, a failed build) has every member inconclusive `NoVerdict`. Requests that name another launcher, crate directory or target directory are never grouped. | Test (TC-043) |
 | FR-017-AC-22 | Over a real or captured batch report, members are matched by `module::harness` path (two members with the bare symbol `check` stay distinct), and each member's outcome, checks and SUCCESS count come from its own entry: a falsified member beside a verified member leaves the verified member verified; a Success member in a non-zero exit with no Failure entry is inconclusive, and with one Failure entry is verified; a Failure entry with no checks and exit status `timeout` is inconclusive timed-out naming T while the others keep their results; a Failure entry with no checks and no timeout is inconclusive with no counterexample; each member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and checks plus the group's argument vector, the member list, a statement that it was a batch, and the exit code. | Test (TC-043) |

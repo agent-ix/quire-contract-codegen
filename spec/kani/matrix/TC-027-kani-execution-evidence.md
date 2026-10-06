@@ -39,12 +39,31 @@ Per-check view (FR-017-AC-20): classify the falsified and the exhausted-unwind c
 check's id, class, file, line and status; a line of `unknown` is absent and a non-numeric line is refused; serialize a view and read the keys
 `id`, `class`, `location { file, line }` and `status`.
 
-Report file (FR-017-AC-19): the launch's arguments are the harness options then the export flags;
-two launches name different report files, a report another run left in the target directory is
-neither read nor removed, runs sharing one target directory concurrently each read their own, and
-a run removes its own file; a file over the read bound is refused. A success report listing a
-failed, errored, undetermined or unknown check (any class) is refused for every obligation kind
-(FR-017-AC-18), and a class spelled `cover` or `unwind` is always that class (FR-017-AC-20).
+Unnamed report storage (FR-017-AC-19): verify exact actual argv order and descriptor locator
+`-Z unstable-options --export-json /proc/self/fd/N`, with actual N >= 3. Concurrent launches sharing
+one target directory retain distinct descriptor authority; stale named files are untouched and
+never read. Run genuine installed Kani 0.68 export through cargo inheritance into the mapped pipe,
+including normal compiler outputs, proving the export neither seeks nor rereads its destination.
+A failed pipe roundtrip stops CODE delivery and requires a measured spec revision; no runtime
+named/direct-memfd fallback is permitted. These roundtrip tests are UNRUN, not satisfied by captured
+JSON or source inspection of Kani's `std::fs::write` export.
+
+Write exactly the report cap and then beyond it before Completed; inspect collector bounds and
+concurrent pipe-capacity/kernel-backing charge, including unmapped backing. Over-limit writes must
+cancel owned execution and yield `Incomplete(ResourceExhausted)`, never `Failed` or a truncated
+valid report. Slow the collector and fill the pipe while control and deadline events remain live;
+both slow and over-cap cases must end within the original deadline without writer/collector
+wait cycles. Verify every writer copy, including reopened procfd handles and descendants, closes
+before actual EOF; no idle interval substitutes for EOF. Assert ordering of authenticated Completed,
+original lease closure, confirmed inner teardown, bounded drain, immutable seals and final OwnedFd
+handoff/read. The separate report/control channel remains usable after lease closure. Fail consumer
+reading before Completed and require bounded cancellation of O/I and final kernel storage release.
+Kill caller, launcher, outer supervisor and guardian in separate and all-owner cases; kernel storage
+has no pathname residue and is reclaimed after the last actual descriptor closes.
+Concurrent-accounting,
+seal races, inheritance/EOF and all-owner-death assertions are mandatory UNRUN CODE gates.
+A success report listing a failed, errored, undetermined or unknown check remains refused under
+FR-017-AC-18; class spelling remains governed by FR-017-AC-20.
 
 The output cap, capture failure, group cleanup and batching (FR-017-AC-14, FR-017-AC-21 to
 FR-017-AC-25) are verified by TC-043, not here.
@@ -144,3 +163,7 @@ FR-017-AC-19, with the `src/kani/classify.rs` test
 generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d and runs through
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.
+
+The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
+not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No new
+executable coverage is claimed by this specification amendment.
