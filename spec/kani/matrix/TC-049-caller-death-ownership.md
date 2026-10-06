@@ -98,6 +98,10 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-32 | Actual kernel collector/accounting units and normal-library cargo/Kani pipe roundtrip; hard cap, resize reservation, unmapped backing, slow/over-cap no-deadlock, original deadline and single/batch resource classifications. | Integrated O/C schedule must be source-grounded before any final-whole-run-sample temporal witness; that witness stays owed, never inferred from collector units. Any unavailable ordinary-seam predicate is explicitly transferred, not waived. |
 | FR-034-AC-33 | Actual pipe writers/EOF, O spawn-copy closure/M settlement where observable, four seals/consumer refusal/bounded OwnedFd read, independent lease/report channels, stable identity and unnamed backing lifetime through normal seams. | Independent all-owner role/tree termination authority or O-origin immutable EOF/confirmation/reap order if unavailable to ordinary seams; existing one M/I pin cannot establish O death. Whole AC stays untagged while any such assertion is owed. |
 | FR-034-AC-34 | Existing real live-C lease-close observation keeps outer ownership/final controls, ignored-EOF mutant fails before escalation; ordinary accounting/deadline failures retain classifications. | O/C integrated sampling/confirmation/reap facts needed for literal final-sample and ownership ordering; source schedule alone supplies no runtime parity. Whole AC stays untagged while required facts are owed. |
+| FR-034-AC-35 | PLANNED/UNRUN: independent host pathname/abstract listener and host proc-alias exclusion, actual confinement capability refusal and no contained writer export (step 22). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; no generic namespace label or prior death test supplies this new criterion. |
+| FR-034-AC-36 | PLANNED/UNRUN: independent real socket-stdin admission, actual production capture-pipe inventory and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
+| FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
+| FR-034-AC-38 | PLANNED/UNRUN: independent normal settlement/join, original-window unavailable confirmation, typed diagnostic-only refusal and no new post-return custody (step 25). Untagged until actual complete Tests. | Any unavailable ordinary-seam observation is explicitly owed; prior death tests or source-only fault discussion do not supply this new criterion. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -425,6 +429,250 @@ merged before fixture CODE. No new DTO/rights/hook/cap is allocated here. Mixed 
 remain untagged until all assertions are actual, alongside the unchanged independent AC-24 EOF
 oracle and one-CODE-PR gate.
 
+22. PLANNED/UNRUN (FR-034 AC-35). First source-audit safe backend-only installation before
+    Dispatch and the arbitrary recipe, with no unsafe/pre_exec, unfiltered release, temporary trusted
+    FD inheritance or supervisor-wide filter. Verify same owned PID under I and exact original
+    argv0/argv/environment/cwd/stdio and ownership/deadline. Force policy/filter/privilege installation
+    failure before positive Dispatch: require typed unavailable refusal over authenticated bounded
+    startup channel, no arbitrary recipe exec and confirmed owned cleanup. For post-Dispatch exec
+    failure, author a regular executable script with a shebang naming a deliberately absent absolute
+    interpreter in the owned confined root. Close its writing handle and retain unchanged file/mode
+    and interpreter absence throughout: no sleep, removal/replacement race, copied ELF or public hook.
+    Require the actual KaniInstallation::require_executable precheck to pass, positive Dispatch to
+    occur, and the actual recipe exec to fail ENOENT because that interpreter is absent. This avoids
+    ENOEXEC shell fallback; require no shell substitution or unfiltered retry. Separately retain
+    missing/non-executable launcher cases as pre-Dispatch Tool refusals, never post-Dispatch evidence.
+    Source: execute.rs::start calls run/tool.rs::require_executable (regular-file/execute-bit check);
+    Linux [execve](https://man7.org/linux/man-pages/man2/execve.2.html) names absent script interpreter
+    as ENOENT. The authored fixture and actual positive barriers remain PLANNED/UNRUN. Require
+    confirmed owned teardown and original deadline/capture settlement, then the one existing public
+    result: KaniRunOutcome::Inconclusive { reason: KaniInconclusiveReason::NoVerdict } for the single
+    run and every compatible batch member. Actual observed unsuccessful backend exit with no report
+    supports this result; it is not synthetic evidence, Tool Io, pre-Dispatch admission or Failed.
+    Preserve resource/deadline and CleanupUnconfirmed precedence. Separately exercise C/launcher
+    boundary I/O as the existing Tool refusal, never conflate it with the backend exec exit. Require
+    no fabricated report/status/evidence, shell substitution or unfiltered retry/fallback. Initial trusted-helper spawn
+    or early EOF proves neither installation nor recipe exec. Startup transport remains CLOEXEC
+    through successful recipe exec. Run trusted installer with separate sanitized loader environment;
+    carry original raw backend environment as authenticated bounded metadata and restore it only
+    at filtered recipe exec after Dispatch. Controlled original LD_PRELOAD/LD_LIBRARY_PATH inputs
+    must distinguish trusted startup (no loader activation) from actual filtered backend exec
+    (original environment preserved), with positive observations and an early-loader activation
+    mutant before cleanup. These tests remain PLANNED/UNRUN and choose no entry mechanism. A matched
+    helper entry remains CODE-plan candidate only; infeasibility stops CODE for SPEC revision.
+    Require L NEWNET/private-root before O and O validation before M; nested bind / / names confined
+    O root, not host root. Own positively live host pathname/abstract listeners. Place the pathname listener inside the actual shared cwd/crate/target prefix visible
+    to the backend, not an absent or unbound host directory. Run the same real backend
+    listener/client workload as an unconfined owned host control and require a successful connection
+    and descriptor transfer; a merely listening server or generic host client is insufficient. Under
+    the confined production path, positively release the real backend attempt and require failed
+    socket acquisition/connection/send-to-address, no accepted backend channel and no writer export.
+    After Dispatch, create another host listener in a still-writable, backend-visible shared prefix;
+    repeat the actual backend attempt and require continuous exclusion, not a startup socket scan.
+    Verify actual backend denial of AF_UNIX socket creation and datagram socketpairs, including
+    legacy socketcall/ABI and io_uring alternatives, and absence of inherited
+    sockets/listeners/rings. Exercise pathname stream and datagram recipients, explicit-address
+    sendto/sendmsg where sockets are admitted, alternate proc/root and retained-directory aliases.
+    Anonymous connected stream socketpairs shall exchange real local data/SCM_RIGHTS, proving
+    sendmsg is not blanket-denied. A mutation disabling the actual continuous IPC enforcement must
+    fail its raw export/reachability predicate before emergency cleanup; restored enforcement
+    passes. Positively verify permitted contained-local IPC and named original trusted owner
+    channels. Record actual mount/net/PID identities and enforcement facts. Deny each actual
+    network/root/proc/IPC protection capability separately; require typed pre-Dispatch unavailable
+    admission with original cause, no backend marker and confirmed owned cleanup. Run genuine
+    installed Cargo plus Kani 0.68 through the actual filter using cached inputs as the decisive
+    PLANNED/UNRUN compatibility gate. If incompatible, stop CODE for SPEC revision, never
+    relax/filter-fallback. Missing registry/git inputs or unavailable host Unix rendezvous after
+    successful admission produce the existing unsuccessful-no-report Inconclusive NoVerdict
+    classification, not a made-up setup error. Preserve deadline/memory classifications; no
+    prefetch, recipe rewrite or weaker network mode. Independently stolen host authority is outside
+    the uniform channel fault domain; peer-created shared-path listeners and contained export remain
+    in scope.
+23. PLANNED/UNRUN (FR-034 AC-36). Drive actual original C stdin before ordinary execution,
+    not a new public request field. Verify internal capture/pin before child/control fd allocation
+    or reuse. Real socketpair input and a socket without a usable peer must be captured Open and
+    rejected by actual S_IFSOCK inspection before Dispatch. Inspect actual production fd1/fd2 mapping
+    and owned inventory: both are capture pipes, not caller-selectable socket positions. Analysis
+    establishes no ordinary path replaces them with sockets; no public hook or unreachable output
+    socket case. Exercise inspection failure through the allowed private syscall boundary, retaining
+    original errno and the actual production admission function. Pipes, regular files, terminal and
+    /dev/null are admitted stdin controls. Initial authoritative absent fd0 (EBADF) or original
+    exec-CLOEXEC gives internal Closed and is preserved; transport clone CLOEXEC does not reclassify
+    original Open. Keep caller fd0/fd1/fd2 stable throughout setup as the trusted-caller precondition.
+    Inspect public execute_kani_obligation and bounded batch rustdoc for the fd0..2 stability
+    precondition, exact setup window and observed-only refusal limit. Treat authenticated self-proc
+    lstat as a link-presence probe, never compare its symlink inode/type/mode with the target pin.
+    Require followed stat and pin fstat agreement on target S_IFMT type/st_dev/st_ino and separate
+    agreement of original F_GETFL & O_ACCMODE and F_GETFD & FD_CLOEXEC observations; exclude
+    intentional pin CLOEXEC from the original exec flag. Positive unchanged Open input must admit despite different link metadata.
+    Through the existing private capture boundary, exercise observed absence/Open mismatch, target
+    identity/type mismatch, original access-mode/FD_CLOEXEC change and unexpected EBADF after Open:
+    require typed refusal. Positively admit unchanged Open identity/access/exec flags while a real
+    separate process sharing the original open file description changes O_NONBLOCK/O_APPEND status
+    flags at an acknowledged capture boundary. Those mutable flags do not drive instability refusal;
+    require unchanged input/recipe handling, no rewrite or restoration of a status-flag snapshot. No public hook, atomicity or same-inode open-file-description identity claim.
+    Concurrent caller close/rebind/replacement is caller contract breach outside backend fault domain; no assertion requires detecting every ambient
+    mutation or preventing such a race. Authenticated self-proc/safe absent capture remains UNRUN;
+    unavailable safe capture refuses, with no raw descriptor adoption or public request field.
+    Later captured-Open inspection EBADF/error refuses, never becomes Closed or probes child fd0.
+    Echo raw original argv0/non-report argv/environment/cwd/input bytes through normal matched
+    artifacts to detect rewriting/reopening. Admission-site Unavailable is independent of errno;
+    MemoryMechanismUnavailable retains original io::Error and mandatory KaniStartupAdmissionCause:
+    BackendStdioSocket { descriptor: Stdin }, BackendStdioInspectionFailed { descriptor },
+    CapabilityUnavailable { capability }, or MemoryEnforcement for existing checks. Verify capability
+    metadata/broadened docs/Display, no Option/None/default/message discriminant. Planned API changes
+    and tests remain UNRUN; no fabricated evidence/kind/outcome/terminal/Failed, code()==None. Expire
+    original deadline separately and preserve classification.
+24. PLANNED/UNRUN (FR-034 AC-37). Positively validate the actual trusted channel owners/mappings: I
+    receives its exclusive lease through Dispatch; O/C final report/control remains usable after
+    that lease closes. Test backend/descendant/sibling-exec inherited descriptor identities and
+    attempts to reach those channels through their actual proc/mount view, including the same-UID
+    trusted I at /proc/1/fd, pidfd_getfd and ptrace. Record I non-dumpability and the enforced
+    absence of backend ptrace-equivalent privilege, including across exec/nested-userns attempts;
+    ambient Yama/profile denial is not the protection proof. A protection omission mutant exposes
+    the actual I endpoint through at least one named route and fails before cleanup; restored
+    protection passes. Throughout this test, neither controls nor fixture reporter are reachable by
+    arbitrary code. Trusted O/I retain their intended endpoints; no assertion requires trusted
+    owners themselves to lose access. A leaked-control/inheritance mutant fails the named
+    arbitrary-code access predicate before owned emergency cleanup; restored controls pass. Preserve
+    the ignored-EOF mutant's pre-escalation failure with live C and retained outer ownership, actual
+    all-writer EOF, four seals and final delivery. Early channel close, outer kill or blanket
+    sendmsg denial cannot repair the predicate.
+
+25. PLANNED/UNRUN (FR-034 AC-38). Independently inspect the recorded SETTLE_RESERVE R=1 second
+    and research receipt below: R=max(1 second,10*measuredP99), rounded up to whole seconds,
+    fixed/non-caller-tunable. Remeasure actual integrated production whole-tree settlement as a
+    mandatory CODE gate; the representative kernel probe is not product evidence. Verify short finite ceilings remain admitted with R_eff=min(R,T/2),
+    duration division rounded down, no minimum-budget cause/refusal. Preserve the existing real
+    single 200ms and two-member 200ms-per-member batch timeout cases; the whole batch bound is
+    still N*T, with a reserve once from that outer bound. For finite deadlines, positively observe
+    workdeadline=T-R_eff cancellation then all-role/capture/creator settlement by original T;
+    require existing single TimedOut/batch BatchTimedOut paths naming original ceilings.
+    Exercise zero/already-expired identity with current no-Dispatch timeout/capability ordering and
+    no reserve-derived admission error or reset. A passed workdeadline with T still live immediately
+    cancels/settles without Dispatch. Inspect rounding at integral/subsecond measured durations:
+    least whole second >=max, no extra second at an integral boundary.
+    Preserve checked_add None and overflowed N*T/Duration::MAX as admitted never-elapsing work,
+    without workdeadline subtraction/forced timeout/Tool InvalidInput. Above4294967295 member
+    timeout omission remains; a finite fitting outer bound still expires. Positively observe actual
+    completion/cancellation/resource/caller-loss stop separately in None cases: the FIRST actual
+    trigger starts one R settlement deadline, subsequent triggers cannot restart it. Confirm actual
+    settlement before classification, and unavailable confirmation by that deadline gives only
+    CleanupUnconfirmed. Do not create a synthetic initial deadline or change backend timeout flags.
+    Use a real still-live worker at finite workdeadline and positive whole-chain termination
+    witnesses, not only an artificially expired deadline with zero children. No early report or
+    incomplete candidate may publish during settlement; original recipe/capture/memory accounting
+    remains unchanged.
+    Exercise normal completion, startup refusal and cancellation
+    through production entry: independently confirm actual L/O/M/I termination/reaping, captures and
+    existing creator-thread join before any conclusion. Through an already permitted private
+    settlement-observation boundary, make confirmation unavailable at the applicable settlement deadline without
+    fabricating kernel D-state or creating an unkillable task. Require Err(KaniExecutionRefusal::Guardian
+    { kind: GuardianFailureKind::CleanupUnconfirmed, detail }), code()==None, absent execution
+    evidence/verdict/outcome/cleanup claim even beside valid report bytes. Detail must fit 4096 UTF-8
+    bytes under existing accounting and contain only bounded already-observed role/identity/stage
+    data, no handles/authority or inferred kernel cause. Exercise omission at a UTF-8 boundary and
+    prove it cannot change kind or manufacture settlement. Restore the observation and positively
+    confirm actual settlement by the applicable deadline and candidate classification; absence of a residual witness alone is not a positive control.
+    Exercise Drop/join error paths through their actual allowed private boundary: settle or report
+    inside the call, every finite allowance fits R_eff/remaining whole T and each None allowance fits
+    its single FIRST-stop-trigger-plus-R deadline; no accumulated phase
+    allowance, post-expiry grace, reset or post-return observation. Source/ownership Analysis must establish no new cleanup
+    thread/daemon/custodian and no io::Error/Result-owned authority or dependence on error Drop.
+    Exceptional existing unjoined creator-role observations must remain explicitly unconfirmed;
+    never claim join/retirement or diagnose kernel failure from timeout. No public hook is allocated
+    and no real kernel-stuck task is required. If a required ordinary seam is absent, record owed
+    evidence under the existing fixture SPEC gate, never claim this criterion backed.
+    Inspect the public #[non_exhaustive] GuardianFailureKind definition: this amendment allocates
+    only CleanupUnconfirmed, no other current kind or WIP kind catalog. Exercise existing startup Unavailable and Io paths plus executable
+    prechecks and verify their existing MemoryMechanismUnavailable/Tool mapping remains; retain
+    separately allocated admission context and existing resource/report/capture mappings. No message
+    parsing or adoption of a WIP kind catalog.
+    Inspect single/batch public rustdoc for both caller-stdio and kernel-settlement preconditions,
+    exact setup/workdeadline/applicable settlement windows, finite R_eff and preserved None work/stop
+    behavior, no minimum admission cause, and timeout
+    versus unconfirmed-error precedence, typed error and diagnostic-only residual/no cleanup
+    guarantee outside the kernel precondition. Keep ordinary caller/group death and contained
+    writer/death/EOF/seal adverse gates mandatory; this fault boundary cannot repair their failure.
+
+Steps 22–25 allocate independent new confinement/admission/settlement Tests, all PLANNED/UNRUN. They add no
+fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
+record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
+criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
+
+### Charged-peak evidence constructors (FR-034-AC-32)
+
+This additional Test and source-flow Analysis procedure is PLANNED/UNRUN. It does not
+claim the current constructors or ledger integration satisfy the amended obligation.
+Audit every emitted evidence constructor and both single-run and compatible batch callers;
+require mandatory `charged_peak: ChargedPeakObservation` propagation without a default.
+Exercise each evidence-producing case below through the real bounded execution flow and
+compare against independently retained complete O charge observations. Use a genuine measured
+sample as the positive control, and reject substitutions of zero, the ceiling, backing reserves,
+a C-only RSS probe or a partial/failed observation. Preserve the existing outcome and settlement
+oracles; an execution error must emit no `KaniExecutionEvidence`.
+
+| Constructor/caller case | Required charged-peak result | Independent adverse oracle |
+|---|---|---|
+| Single-run timeout before L/O creation: zero/already-expired original deadline, or finite workdeadline elapsed with original T still live | TimedOut with `NotObserved { reason: PreRoleTimeout }` after applicable confirmed settlement | No new L/O or Dispatch after either cutoff; AC-20 original zero/expiry ordering unchanged; no manufactured observation or new reason |
+| Single-run startup timeout after role creation, before Dispatch and before the first complete O sample | TimedOut with `NotObserved { reason: StartupTimeoutBeforeObservation }` after required settlement | A role-created startup timeout must not be mislabeled PreRoleTimeout |
+| Single-run startup timeout before Dispatch with a prior complete actual O sample | `Observed { bytes }` using the actual complete peak | Reject NotObserved and any incomplete/proxy charge |
+| Every post-Dispatch single-run evidence conclusion, including timeout, memory exhaustion and completed classification | `Observed { bytes }` from complete actual O observations | Missing complete measurement is execution error with no evidence, never a new absence reason |
+| Compatible completed batch member evidence | The same authenticated whole-run `Observed { bytes }` propagated to each member | No per-member invented charge, optional field or default |
+| C capability/availability failure; failed/expired ledger without an admissible measured conclusion; capture/refusal/settlement errors; whole-batch timeout/resource refusal | Existing execution error with no evidence | No invented NotObserved reason or evidence merely because an internal bounded-launch value exists |
+
+The constructor audit shall distinguish startup admission from dispatched execution and trace
+error conversion before evidence construction. A ledger deadline error alone does not establish
+an evidence-emitting path or prove no prior sample existed. Retain an actual complete prior peak
+when the existing timeout conclusion legitimately emits evidence; otherwise refuse as required.
+No new public request field, observation schedule override, fallback or evidence kind is allocated.
+
+Also exercise a pre-role workdeadline stop with a positively observed original deadline still live.
+Require unchanged TimedOut candidate classification and confirmed settlement by original T;
+unconfirmed settlement retains the existing CleanupUnconfirmed override with no evidence.
+This case shall not require original expiry or role creation to select PreRoleTimeout.
+
+The additional accounting Test and source-flow Analysis is PLANNED/UNRUN. Audit the complete charge
+as all named formula terms: positively observed L/O/M/I and every owned descendant RSS, the declared
+finite own caps of C per-run controls/captures (including bounded diagnostic detail), actual reserved
+pipe capacity and pre-reserved memfd maximum. Require actual complete O setup/tick measurements and
+the unchanged schedule. Independently omit L RSS, a named caller buffer, pipe reservation and memfd
+reservation in separate mutants; each omission shall fail its actual charge/observation oracle.
+Missing a named cap/quantity or owned-worker observation shall refuse, never become an incidental
+allocation exclusion. Incidental caller-process allocations beyond the named terms, including
+opaque Command/thread/native-runtime/TLS/guard/alternate-stack/allocator transients, are outside this
+resource claim; no test shall claim their complete bound or use requested stack/whole-C RSS as its
+proxy. The exclusion shall not remove L, named caller buffers or backing reservations, and shall
+not relax ownership, writer closure, EOF, seals, ceilings, lease or original deadlines.
+
+### Cross-namespace named accounting inputs (FR-034-AC-32)
+
+This independent Test and source-flow Analysis is PLANNED/UNRUN. Positively establish that actual L
+is not directly visible in O's fresh private proc, while O still obtains actual fresh L RSS at setup
+and EACH original accounting tick from its selected authenticated source. Require original run
+binding, actual owned L pidfd, recorded start/TGID identity and checked liveness. Independently
+substitute a foreign/stale source, replay another run's observation, omit an input or break L
+pin/identity/liveness binding; each must refuse before writer/Dispatch or cancel under existing
+observation rules. Missing live L RSS shall never become zero or omission without actual
+identity-matched MM-release proof. Compare against an independent real L observation through the
+harness's retained owned identity; no backend-provided scalar or ambient PID lookup supplies the
+positive control. The selected Safe observation implementation shall be feasibility-tested first;
+this procedure allocates properties and does not mandate a particular transport or descriptor count.
+
+Trace C's named per-run control/capture/diagnostic caps through authenticated C-origin authority
+bound to the original run/ceiling/deadline. Require actual finite own caps and checked arithmetic;
+a stack floor or C RSS alone does not establish the named buffer bound. O shall combine that bound
+with fresh authenticated L/private-tree RSS and actual pipe/memfd reservations at setup and every
+tick. Separate missing/underdeclared named-cap, wrong-run, omitted-L and missing-backing mutants
+must fail their named oracle; complete within-ceiling setup sampling precedes writer exposure and
+Dispatch. Unavailable L observation after admission shall yield existing MemoryObservationFailed
+execution error without evidence, never a mid-run NotObserved; unavailable observation capability
+before Dispatch retains typed unavailable admission. Verify no host observation/control authority
+is reachable by arbitrary backend/descendants and O retains required private proc/PID isolation.
+Runtime evidence must cover later ticks and final settlement; bootstrap success/one sample alone
+is insufficient. All failure checks preserve existing classification, original timer and owned
+cleanup obligations.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -443,6 +691,10 @@ oracle and one-CODE-PR gate.
 | FR-034-AC-32 | Hard writer retention bound and defined conservative charge; actual Kani pipe roundtrip; slow/overflow cases stop under original deadline | Unmapped backing counted as zero; resizable pipe exceeds reservation; backend/collector deadlock; report cap becomes Failed or truncated pass |
 | FR-034-AC-33 | O spawn writer closed, M and inner writers terminated, actual EOF, verified four seals and final descriptor read; final-close backing reclamation | Extra monitor writer prevents EOF; forged seal claim; report residue after all owners die |
 | FR-034-AC-34 | Separate lease/report controls and live C retained outer ownership; ignored-EOF fails before outer escalation | Outer kill masks mandatory EOF mutant; deadline/ceiling reset or missing charge accepted |
+| FR-034-AC-35 | PLANNED/UNRUN: safe same-PID backend-only installation, L/O/M allocation, real unconfined shared-prefix control and dynamic listener exclusion; actual Cargo/Kani compatibility; typed unavailable refusal and original build/resource classes | Policy bypass or inherited ring; peer socket created after Dispatch; unbound vacuous listener; unfiltered release or compatibility relaxation |
+| FR-034-AC-36 | PLANNED/UNRUN: real socket stdin refuses, production fd1/fd2 capture inventory verified; explicit Closed and Open inspection error distinguished; mandatory typed cause and no fabricated result | Unreachable stdout socket test claimed; Open EBADF admitted as Closed; caller-fixable socket misreported as memory-only failure |
+| FR-034-AC-37 | PLANNED/UNRUN: I non-dumpability/backend privilege exclusion block proc1fd/pidfd_getfd/ptrace; trusted channel lifetimes and unchanged EOF mutant retained; uniform authority fault domain | Ambient Yama masks absent protection; contained export excused as outside peer; final delivery closed early |
+| FR-034-AC-38 | PLANNED/UNRUN: actual normal role/capture/spawner settlement; original-window typed CleanupUnconfirmed error with bounded diagnostic-only residuals, no new post-return custody; public precondition docs | Error carries authority; hidden cleanup worker; false joined/retired or kernel-cause claim; valid bytes accepted after unconfirmed settlement; grace resets T |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
@@ -450,3 +702,50 @@ coverage. Native refinement remains planned until its actual typed entry is deli
 destruction and uninterruptible tasks cannot justify fabricated teardown; live-caller unavailable
 confirmation refuses. Caller-group signals and direct guardian death are included lifecycle cases,
 not excluded double faults.
+
+
+## Settlement reserve research receipt
+
+This research records the basis for SETTLE_RESERVE = 1 second. It supplies no executable coverage
+of AC-35 through AC-38, whose production Tests remain PLANNED/UNRUN. Actual integrated product
+whole-tree settlement must be remeasured before CODE delivery; this result is not a real Cargo/Kani
+roundtrip, matched production helper/protocol evidence, runtime acceptance or proof for arbitrary
+or kernel-unkillable tasks. No probe script, binary, schema or foreign artifact is copied here.
+
+The measurement used 200 trials (100 baseline and 100 with a single CPU burner), with controller,
+trees and burner sharing one CPU, reduced scheduling priority and a nonblocking machinewide lock.
+The representative topology used nested bwrap PID namespaces and Python outer/inner INIT roles,
+a backend-like child, workers, grandchild, detached session worker and adopted orphan. Positive
+readiness/parent/start/namespace checks retained owned host pidfds before signalling only the actual
+outer INIT pidfd with SIGKILL. Monotonic timing ran from just before that signal until every retained
+pidfd exited, its original host/proc identity was gone and the direct launcher was reaped.
+Nearest-rank quantiles were independently recomputed from raw monotonic samples; combined P99 is
+sorted rank198 of200. This method measures representative kernel-topology settlement, not actual
+product helper/protocol or Cargo/Kani behavior.
+
+| Group | Trials | P50 nanoseconds | P99 nanoseconds | Maximum nanoseconds |
+|---|---:|---:|---:|---:|
+| Baseline | 100 | 3511211 | 4811362 | 5077398 |
+| Single-CPU load | 100 | 6386183 | 8010711 | 8251330 |
+| Combined | 200 | 3925047 | 7909234 | 8251330 |
+
+The integer whole-second derivation is
+R = ceil(max(1,000,000,000 ns, 10 * 7,909,234 ns) / 1,000,000,000 ns) seconds = 1 second.
+For a 200ms whole-run T, R_eff=min(1s,100ms)=100ms, which exceeds ten combined P99
+(79.09234ms) and ten loaded P99 (80.10711ms) in this measurement. This numerical example does not
+assure settlement for every tree, host load or smaller T.
+
+All 200 positive cleanup confirmations covered 1853 per-trial retained identity records; each had
+pidfd exit and original host identity disappearance. No emergency cleanup signal was used.
+All known-good inner-member pairs accepted and known-bad outer/inner pairs rejected. The burner
+was confirmed by waitpid of the original unreaped fork child, but its PID/start/pidfd facts were not
+serialized; no independent raw burner-identity witness is claimed. The trees' raw per-identity
+confirmations and burner control-flow/waitpid confirmation have different evidence scopes.
+
+One earlier attempt failed its own preflight and is recorded privately. It produced no measurement
+samples or derived reserve; its failed membership oracle is not evidence of failed kernel teardown.
+A separate known-good/known-bad preflight confirmed nine retained identities exited/disappeared and
+launcher reaped via normal payload exit, without measurement or emergency SIGKILL. Neither
+preliminary attempt counts among the 200 measurement samples or supplies product acceptance.
+Full receipts and provenance are retained privately; this public note carries only the method,
+quantile values, derivation and limits. No additional execution or assurance claim follows from it.

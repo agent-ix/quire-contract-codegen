@@ -1,0 +1,114 @@
+---
+id: "SR-2123"
+title: "IR-639 spec-review/integrity review of report threat boundary and backend IPC confinement"
+type: SpecReview
+analysis: integrity
+review_set: subset
+scope: "agent-ix/quire-contract-codegen@b0cb2737eaea22aa1f58970931d92d4f55e3868e; spec/kani/functional/FR-034-caller-death-ownership.md, spec/kani/matrix/TC-049-caller-death-ownership.md (unopened PR; diff against base cd9fdaa46fec2ae8f7cdc8c9bc4e1c32bce81770)"
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-034
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/TC-049
+    type: reviews
+---
+
+# SR-2123: IR-639 spec-review/integrity review of report threat boundary and backend IPC confinement
+
+## Summary
+
+Ticket: IR-639. PR: quire-contract-codegen#unopened at b0cb2737eaea22aa1f58970931d92d4f55e3868e. Reviewer model claude-opus-5-5, run dbb8a12e-b532-45a6-a5bd-451efbb27322.
+Scope units examined: FR-034 (new section lines 522-574 and Dependencies lines 734-741),
+FR-034-AC-35, FR-034-AC-36, FR-034-AC-37, TC-049 (Coverage rows, steps 22-24, Expected Results
+rows). Context only: FR-034-AC-4, FR-034 recipe lines 61, 90, 108-109, 157, 280-284. 1 finding(s).
+
+## Method
+
+Read the full base..head diff (+110/-0 lines; git diff --numstat shows 66 and 44 insertions and zero deletions, so FR-034-AC-1..34 and TC-049 steps 1..21 are byte-unchanged at head). Grounded the cited CG facts in source at the frozen head: src/kani/run/execute.rs start (BoundedLaunchError::Unavailable -> KaniExecutionRefusal::MemoryMechanismUnavailable, lines 348-371), KaniExecutionRefusal::code (lines 138-151, None for that variant), src/kani/terminal.rs run_terminal_value(&KaniRunOutcome, ..) (line 82), src/kani/run/launch.rs run-stage error classification (lines 224-229) and stdio setup (lines 245-247), src/kani/run/namespace.rs bwrap recipe (lines 129-142). No test, build, Kani or gate was run; all new criteria and TC-049 steps 22-24 are PLANNED/UNRUN and no tag for FR-034-AC-35..37 exists in src/ or tests/. quire validate on the two changed files exited 0 with ambient warnings recorded in the review manifest. Integrity lens: consistency of the new section with the unchanged normative recipe (L namespaces line 61, setup capability list line 90, exact M argv lines 108-109), the EARS list, the AC table, and TC-049 Coverage/Procedure/Expected Results.
+
+## Verdict
+
+**FAIL**: one high finding. The new mandatory profile is not allocated to any role and contradicts the still-normative exact recipe.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | The new IPC profile is mandatory, but no role is assigned to establish it, and it contradicts recipe text that is still normative. Lines 108-109 still require M to run bwrap with exactly '--unshare-user --unshare-pid --as-pid-1 --new-session --bind / / --dev-bind /dev /dev --proc /proc ...': no network namespace, and the whole host root bound. Line 61 has L create only user, PID and mount namespaces, and line 90 lists only NEWUSER/NEWPID/NEWNS as setup capabilities. A host-root bind exposes every host pathname socket (for example /run/user/<uid>/bus and /tmp/.X11-unix) unless some layer curates the view, and no layer is named. Line 540 concedes that the recipe does not establish the profile. But the change neither amends the argv and capability lists nor says which role (L, O or M) creates the network namespace and curates the mount view. It also does not say which capability check produces AC-35's refusal. Allocate both to a named role and update the argv and capability text in the same change. | spec/kani/functional/FR-034-caller-death-ownership.md:535-540 |
+
+## New findings (disposition pass 1)
+
+Reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The fix requires that 'Installation/exec failure shall be known as typed refusal before positive Dispatch', and in the same paragraph keeps 'arbitrary backend creation/execution needs positive Dispatch'. Exec of the arbitrary backend recipe can only happen after positive Dispatch, so its failure (for example ENOENT or EACCES on the recipe program) cannot be known before Dispatch. The text is only consistent if 'exec' means exec into the filtered boundary/helper entry, which then waits for Dispatch before executing the recipe. TC-049 step 22 ('Force installation/exec failure and require typed refusal before positive Dispatch') inherits the same ambiguity. Say which exec is meant, and state how a post-Dispatch recipe exec failure is classified. | spec/kani/functional/FR-034-caller-death-ownership.md:582-586 |
+
+## Dispositions
+
+Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 4ade9999-807a-4f26-9625-9b01e9be076f, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: L now creates NEWNET and the confined private root before O; O validates both before M; the setup capability list (line 90) adds NEWNET; the unchanged exact inner argv's --bind / / is defined to bind O's confined root, never the host root. Continuous pathname exclusion is assigned to the backend-only seccomp policy. |
+
+Round 2, reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run f90d3cf1-e644-4114-8208-665e32c34e50, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-002 | fixed | 004c864626720341f3e06994f3d17494bbd6aa44: A two-row boundary table now separates the two failures. Policy/filter/privilege installation failure happens before positive Dispatch and is reported over the authenticated startup channel as typed unavailable admission. Exec failure of the actual recipe happens after Dispatch and is handled by the existing bounded backend-failure rules (AC-10 already lists backend exec failure), with no synthetic evidence, no new kind and no retroactive pre-Dispatch reclassification. TC-049 step 22 now tests the two cases separately. |
+
+Round 3, reviewed at a210dc10310e77499d14cbc9f172524a80194a85 (prior 004c864626720341f3e06994f3d17494bbd6aa44, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run aeb596e2-83a8-4867-a9ef-6170edca8002, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | a210dc10310e77499d14cbc9f172524a80194a85: Step 22's post-Dispatch exec failure now uses an authored regular executable script whose shebang names a deliberately absent absolute interpreter. KaniInstallation::require_executable (src/kani/run/tool.rs:66-84) checks only regular-file kind and execute bits, so it passes. KaniInstallation's only field is the public launcher (tool.rs:58-61), so an ordinary caller can name the script. The launcher is the recipe program (execute.rs:822 BackendCommand::new). execve then fails with ENOENT for the absent interpreter after positive Dispatch. That avoids the execvp ENOEXEC shell fallback, and closing the writing handle avoids ETXTBSY. Missing and non-executable launchers stay pre-Dispatch Tool refusals. No race, sleep, copied ELF or public hook is used. The fixture is still PLANNED/UNRUN. |
+
+Round 6, reviewed at 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4 (prior 0696d1bc567f1d5717b9a54cdda828664211f9d5, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 6f92267b-ec4b-4743-97f7-62f863018c42, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | 5d65b57659f808ee94c0ca3710eb3237cb9eb3f4: The deadline contradiction is resolved. T is now the whole-run bound for work plus settlement, with fixed R = 1 s, R_eff = min(R, T/2) and workdeadline = original minus R_eff. Work stops at the workdeadline and settlement must be confirmed by the original T. If it is confirmed, workdeadline expiry keeps single-run Inconclusive TimedOut or BatchTimedOut naming the original ceiling, as FR-028-AC-2 and FR-034-AC-20 require. CleanupUnconfirmed overrides only when settlement is unconfirmed. Short budgets stay admitted, zero or already-expired ordering is unchanged, and a None or overflowing deadline keeps never-elapsing work with one first-stop-trigger + R settlement deadline. The unsupported 250 ms / five-second 'existing caps' text is gone. |
+
+Round 9, reviewed at e0353e146eaf911a16129cdfb4ae5c7c80a30935 (prior c5786732cbf12e5474ddca77753b2402ad22ab73, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 03de4a0f-8d1a-4d7d-b089-6ee83b2dcc62, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | e0353e146eaf911a16129cdfb4ae5c7c80a30935: PreRoleTimeout now covers both pre-role timeout stops: an expired original deadline (including zero), and a finite workdeadline (T minus R_eff) that has elapsed while the original deadline is still live. Workdeadline cancellation, settlement and candidate classification are kept, no L/O is created and no Dispatch is authorized after either cutoff, AC-20 ordering is unchanged and no new reason or outcome is added. The TC-049 constructor row (line 617) and a new pre-role workdeadline case (lines 630-633) match it, including the existing CleanupUnconfirmed override. |
+
+Round 10, reviewed at 97a335b1c73df8fcbb2a2dd23fe77239bec64646 (prior e0353e146eaf911a16129cdfb4ae5c7c80a30935, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 01a2d284-565d-46e5-b9a1-80caf21335f8, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | 97a335b1c73df8fcbb2a2dd23fe77239bec64646: The observation of L is now allocated. O's fresh private proc is no longer assumed to expose L. O must obtain a fresh L RSS sample at setup and every original accounting tick from an authenticated source that stays valid under the private proc view. That source is bound to the original run, the actual owned L pidfd, recorded start/TGID and checked liveness, with no proxy, omission or backend-reachable self-report. Zero is allowed only under the existing identity-matched address-space release rule (src/kani/run/memory.rs:412). C's named buffer caps reach O through authenticated C-origin authority with checked arithmetic. O combines all four terms at setup, before writer exposure or Dispatch, and at every tick. Loss after admission follows MemoryUnobserved to MemoryObservationFailed with no evidence (src/kani/run/execute.rs:778-779), and loss before Dispatch keeps the typed unavailable admission. No mid-run NotObserved reason is added. Authority stays CLOEXEC and unreachable from the backend, O's private proc/PID view is kept, and TC-049 adds independent positive and adverse PLANNED/UNRUN oracles. The spec states properties only and leaves the mechanism to a feasibility-proven CODE choice. |
+
+## New findings (disposition pass 2)
+
+Reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | TC-049 step 22's post-Dispatch recipe exec failure case names 'missing/non-executable recipe program' as its trigger. Those inputs never reach Dispatch: start (src/kani/run/execute.rs:355-358) calls KaniInstallation::require_executable (src/kani/run/tool.rs:66-84) before launch, which refuses a missing path or a file with no execute bit as KaniToolError::Io before any backend spawn. The named case therefore yields the existing pre-Dispatch Tool refusal, or else needs a timing race that TC-049 forbids. Name a trigger that passes the existing check and fails at the actual exec, such as an executable regular file with an invalid format or a missing ELF interpreter, or state that the existing pre-check stays and how the post-Dispatch path is reached. | spec/kani/matrix/TC-049-caller-death-ownership.md:436-438 |
+
+## New findings (disposition pass 5)
+
+Scoped round 5 on the stdio-capture fix and the new settlement/kernel-fault/API delta only; reviewed at 0696d1bc567f1d5717b9a54cdda828664211f9d5 (prior 412f056e814882eb94b9e9e65977d6993326f3aa, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 7533286d-299c-4811-af95-031c491e2c1e, model claude-opus-5-5.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The new settlement rule clamps every settlement, Drop and join observation to the remaining original deadline T, forbids any added grace or extra timeout, and returns CleanupUnconfirmed with no outcome when confirmation is not reached in that window. When the run is stopped because T itself expired (the wall-clock ceiling), the remaining window is zero. SIGKILL delivery, namespace teardown and reaping all take non-zero time, so confirmation essentially never fits. Every genuine timeout would therefore return Err(Guardian { kind: CleanupUnconfirmed }) instead of the Inconclusive timed-out classification. That contradicts the unchanged FR-028-AC-2 and FR-034-AC-20 ('actual identity-deadline expiry during setup or execution uses the same classification'), and AC-10's confirmed teardown on timeout. Today launch.rs:128-131 returns within timeout plus a small constant (poll interval plus STOP_DRAIN_LIMIT), which the new rule now forbids. The 'existing lease-close/cleanup caps' of 250 ms and five seconds named on line 805 appear in neither merged source nor the prior spec. Allocate an explicit settlement reserve inside T (stop the backend at T minus the reserve) or a bounded post-expiry settlement allowance, and state how timeout classification and CleanupUnconfirmed interact. | spec/kani/functional/FR-034-caller-death-ownership.md:803-808 |
+
+## New findings (disposition pass 8)
+
+Reviewed at c5786732cbf12e5474ddca77753b2402ad22ab73 (prior custody 04992e23d60d6e8da7caa0c1988802a1e2d456cc, prior reviewed source b9a794ac71e2e705682f86b7bd2c7884ff3bc0da, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run e1cc2674-c597-4007-a32e-d6d9d91b8149, model claude-opus-5-5. All earlier findings in this artifact keep their latest outcome (fixed). Round-8 scope: only the charged-peak evidence delta between 04992e23d60d6e8da7caa0c1988802a1e2d456cc and c5786732cbf12e5474ddca77753b2402ad22ab73: FR-034 lines 785-807 (new charged_peak paragraphs), the appended sentences of FR-034-AC-32 (line 981; the original AC-32 text is an unchanged prefix of the amended row) and the new TC-049 'Charged-peak evidence constructors' procedure (lines 603-628). Checked against the prior 21 fixed findings for regressions and against merged CG source: src/kani/run/execute.rs:217-258 (KaniExecutionEvidence, whose existing memory field is MemoryObservation with optional peak_resident_bytes), execute.rs:280 (the single ReportedExecution::with_memory constructor), and src/kani/run/launch.rs:207-213 (expired deadline returns LaunchOutcome::TimedOut before NamespaceOwner::prepare) and 275-286 (startup/dispatch). No owned.rs exists in merged public CG source; planner references to it were not used as authority. No test, build, Kani or probe ran; TC-049's constructor oracle is PLANNED/UNRUN and this addendum certifies no runtime or CI result.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | The closed ChargedPeakNotObservedReason set (PreRoleTimeout, StartupTimeoutBeforeObservation) has no reason for one evidence-emitting single-run TimedOut path that the round-6 settlement allocation created. FR-034 line 851 says a workdeadline (T minus R_eff) already passed while the original deadline T is still live 'shall immediately cancel/settle without Dispatch', and under the workdeadline rule that stop is the existing TimedOut. That can happen before L/O creation when C-side pre-role work (helper and executable checks, stdio capture, observer preparation) consumes time under a small T. PreRoleTimeout is defined only for 'the original deadline has already expired before L/O creation', and StartupTimeoutBeforeObservation only 'after role creation'. An implementer must either stretch PreRoleTimeout to an unexpired original deadline, or return an execution error, which changes an existing TimedOut evidence outcome that line 806 says must not change. The TC-049 row (line 617) likewise covers only 'zero/already-expired original deadline'. Define PreRoleTimeout as any pre-role timeout stop (original deadline or workdeadline), or add the case explicitly, with a matching TC-049 row. | spec/kani/functional/FR-034-caller-death-ownership.md:795-800 |
+
+## New findings (disposition pass 9)
+
+Scoped round 9 on the SR-2123 FND-005 fix and the round-9 named-accounting delta only; reviewed at e0353e146eaf911a16129cdfb4ae5c7c80a30935 (prior c5786732cbf12e5474ddca77753b2402ad22ab73, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 03de4a0f-8d1a-4d7d-b089-6ee83b2dcc62, model claude-opus-5-5.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | The round-9 clarification requires the complete conservative charge to include 'positively observed launcher L RSS' (lines 788-789; owned_RSS at line 769 sums L/O/M/I). Charged-peak text says `Observed` is used 'if and only if O obtained an actual complete conservative-charge observation' (line 799), that 'O shall establish the complete charge observation' before Dispatch (lines 816-817), and that TC-049 requires 'actual complete O setup/tick measurements'. But L creates O as PID 1 of a new PID namespace, and O's proc view must be a fresh outer proc that agrees with that namespace (lines 91 and 96). L, its parent, is not visible there, so O cannot positively observe L's RSS itself. C's caller_run_buffers are likewise C-side quantities. Read literally, `Observed` is never reachable, and an implementer must either drop L (forbidden by line 788) or use an unallocated channel, such as C-supplied host-view samples or self-reported L RSS, which the spec neither defines nor authenticates. State which role observes L (for example C through its retained host pidfd/proc view) and how C's L sample and named buffer caps are combined with O's in-namespace observations into the one complete charge. Or define 'O obtained' to include authenticated C-observed terms. Add the matching TC-049 oracle. | spec/kani/functional/FR-034-caller-death-ownership.md:796-800 |
