@@ -2200,6 +2200,59 @@ mod tests {
 
     /// Trace: FR-018-AC-25, TC-029.
     #[test]
+    fn tc_029_deep_option_resolution_and_runtime_type_operations_fit_a_small_stack() {
+        const DEPTH: usize = 2_048;
+        let ids: Vec<CheckedNodeId> = (0..=DEPTH)
+            .map(|index| CheckedNodeId {
+                domain: "quire.checked-semantic-node/v1".into(),
+                digest: format!("{:064x}", index + 1).into(),
+            })
+            .collect();
+        let nodes: Vec<CheckedSemanticNodeV2> = (0..=DEPTH)
+            .map(|index| {
+                let (tag, form, body) = if index == DEPTH {
+                    ("scalar_type", "boolean", json!({"term": "aggregate", "members": []}))
+                } else {
+                    (
+                        "composite_type",
+                        "option",
+                        json!({"term": "aggregate", "members": [{"term": "reference", "target": ids[index + 1]}]}),
+                    )
+                };
+                serde_json::from_value(json!({
+                    "node_id": ids[index],
+                    "schema_version": "quire.checked-semantic-graph/v2",
+                    "node_tag": tag,
+                    "semantic_form": form,
+                    "semantic_type": ids[index],
+                    "dependencies": [],
+                    "occurrences": [],
+                    "body": body,
+                }))
+                .expect("synthetic deep Option node")
+            })
+            .collect();
+        std::thread::Builder::new()
+            .stack_size(64 * 1024)
+            .spawn(move || {
+                let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+                let mut closure = TypeClosure::default();
+                let value_type = resolve_type(&graph, &BTreeMap::new(), &mut closure, &ids[0])
+                    .expect("deep Option resolves within the work budget");
+                assert_eq!(closure.work_consumed, DEPTH as u64 + 1);
+                assert!(matches!(value_type, ValueType::Option(_)));
+                let copy = value_type.clone();
+                assert_eq!(copy, value_type);
+                drop(copy);
+                drop(value_type);
+            })
+            .expect("small-stack worker starts")
+            .join()
+            .expect("deep Option operations fit the worker stack");
+    }
+
+    /// Trace: FR-018-AC-25, TC-029.
+    #[test]
     fn tc_029_inline_collection_bound_is_charged_before_lookup() {
         let mut nodes = recursive_shape_nodes();
         nodes[3].body = json!({"term": "aggregate", "members": [

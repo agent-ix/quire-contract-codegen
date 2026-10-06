@@ -318,18 +318,23 @@ pub(super) fn resolve_type(
             Frame::FinishRecord { id, key, fields } => {
                 let mut built = Vec::with_capacity(fields.len());
                 for (name, wrapped) in fields.into_iter().rev() {
-                    let value = values.pop().ok_or_else(|| {
+                    let mut value = values.pop().ok_or_else(|| {
                         CompositeEqualityRefusal::MalformedComposite {
                             composite: id.clone(),
                         }
                     })?;
                     let (value, presence) = if wrapped {
-                        let ValueType::Option(payload) = value else {
+                        let ValueType::Option(payload) = &mut value else {
                             return Err(CompositeEqualityRefusal::MalformedComposite {
                                 composite: id,
                             });
                         };
-                        (*payload, Presence::Optional)
+                        // `ValueType` owns iterative Drop glue, so detach its child before
+                        // the discarded Option shell is dropped.
+                        (
+                            std::mem::replace(payload.as_mut(), ValueType::Boolean),
+                            Presence::Optional,
+                        )
                     } else {
                         (value, Presence::Required)
                     };
