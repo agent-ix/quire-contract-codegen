@@ -233,7 +233,15 @@ impl RetainedSpawner {
                         if child.try_wait()?.is_some() {
                             custody.reaped = true;
                         } else if !signal_sent {
-                            child.kill()?;
+                            match child.kill() {
+                                Ok(()) => {}
+                                Err(error)
+                                    if error.raw_os_error()
+                                        == Some(rustix::io::Errno::SRCH.raw_os_error()) => {}
+                                Err(error) => return Err(error),
+                            }
+                            // Retire acknowledgement can let L exit between try_wait and kill.
+                            // ESRCH ends the one signal attempt, never the retained Child wait.
                             custody.signal_sent = true;
                         }
                     }
