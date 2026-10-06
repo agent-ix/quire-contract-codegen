@@ -33,8 +33,8 @@ settlement converter; the driver owns the intervening QSL replay call. QSL owns 
 exact evaluation, envelope arm, evidence and terminal causes.
 
 This is planned IR-631 work. The scalar route is gated on the upstream QSL-641 capability and
-observation contract below. No scalar API, QSL envelope variant or passing test is claimed to
-exist. This requirement names semantic obligations, not speculative upstream Rust types.
+observation contract below. The measured QSL operator API is described below; the full-report
+identity contract is still a CODE gate. No CG implementation or passing scalar-replay test is claimed.
 
 ## Scope
 
@@ -83,10 +83,22 @@ rules. Scalar lowering parity is never a source-property refutation.
 - At conversion, the same scalar binding and falsified run, plus QSL's own scalar result or
   refusal from the driver's call, or the builder's typed setup refusal.
 
-Who executes the native generated artifact, how its typed observation crosses the upstream
-boundary, and how QSL validates its proof-content tie are prerequisites below. This document
-requires the evidence and does not invent its upstream wire representation or pretend CG
-links the caller's generated artifact.
+The driver is the native-observation authentication authority. CG supplies the retained
+scalar generation/proving record and a checked plan-completion/conversion contract; the
+builder makes no native execution or QSL replay call. The driver executes the **same proved
+generated artifact** at the decoded operand vector and retained renderer limits, and authenticates
+the typed outcome against that record's canonical proved generated-content identity, operands
+and limits before completing the request. Missing evidence or a mismatch returns a typed
+completion refusal, with no QSL evaluation or settlement. An unchecked caller echo of outcome
+and digest, or a newly regenerated oracle, does not meet this contract.
+
+This boundary trusts the driver to execute and authenticate that artifact honestly. QSL does
+not receive or execute the artifact: it carries the supplied canonical content `DigestRecord`
+and compares exact semantics against the supplied typed observation. QSL carrying that record
+is not independent authentication of the observation. CG's checked completion contract must
+require the driver's authenticated observation, rather than silently accepting a bare outcome.
+The concrete producer/consumer representation remains CODE-gated; no signing scheme, tracking
+hash or new observation API is invented here.
 
 ## Outputs
 
@@ -95,9 +107,9 @@ links the caller's generated artifact.
   its actual native generated observation before calling QSL; it executes no regenerated oracle.
 - A checked conversion to the existing settlement where representable, or a typed binding
   refusal with no settlement when a result or run belongs to another obligation. The new
-  upstream harness-defect reading and QSL-reported lowering divergence each require an
-  expressly legal settlement/terminal representation; both are gated and cannot be fabricated
-  from existing predicate replay causes or by silently widening existing settlement variants.
+  scalar terminal readings follow the measured QSL contract below; their CG settlement
+  representation and checked conversion remain planned and gated on full-report identity.
+  Existing predicate replay causes do not substitute for scalar readings.
 - For the interim unsupported-capability setup refusal, a typed converter refusal with no
   settlement. The missing upstream capability is not relabelled a CG defect or assigned a
   fabricated QSL code. The caller cannot manufacture a terminal record from that refusal;
@@ -121,8 +133,13 @@ links the caller's generated artifact.
   validated, then the builder shall return a distinct typed setup refusal before replay.
 - CG's scalar builder and converter shall leave exact evaluation and replay execution to QSL
   through the driver's public-facade call.
-- When returning a settlement, the converter shall validate that its scalar binding, retained
-  run and QSL evidence belong to the same node, operation and lowering-parity proposition.
+- When asked to return a settlement or derive its terminal value, the converter shall compare
+  the QSL report's full claim identity with the exact retained claim sent by the driver, and
+  validate the retained run-to-binding tie. This check applies to **every** outcome, including
+  `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused`.
+  Equality of the obligation digest alone, or identity present only on agreement, is insufficient.
+  A missing or different report claim yields a typed binding refusal with no settlement.
+  The required upstream report `claim()` contract remains unverified and CODE-gated.
 - The converter shall read QSL's typed result/refusal discriminants and catalog codes rather
   than infer a verdict or refusal code from message text.
 - The converter shall preserve QSL's distinction between generated/native-exact divergence
@@ -150,10 +167,55 @@ own generation and replay acceptance criteria.
 `run_terminal_value` and absent-settlement behavior remain owned by
 [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md). CG-only malformed/decode
 and assumption-domain setup failures retain its `CgDefect` reading. Unsupported-capability
-refusal returns no settlement. QSL-reported divergence is not automatically an existing
-`CgDefect` (documented as CG-raised) or `Fault` (documented as an executor fault); its legal
-representation is an upstream/terminal gate. No predicate disagreement stands in for a missing
-scalar cause.
+refusal returns no settlement. After successful full-claim comparison, QSL `Diverged` and
+`GeneratedFault` read as `Failed`; `Agrees` reads as `Inconclusive(ScalarAgrees)`; `RefusedInput` reads as
+`Inconclusive(ReplayRefused(invalid_runtime_input))`; exact `Incomplete` reads as
+`Incomplete(ResourceExhausted)`; other QSL `Refused` follows the existing typed QSL refusal
+mapping and preserves its catalog code for non-fault refusals. A native `Incomplete` is a
+`GeneratedFault`, not exact resource exhaustion. CG's scalar settlement representation must
+preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Verified`.
+
+## Scalar Obligation Identity
+
+CG owns the scalar `ObligationIdentity` preimage. QSL's
+[ADR-013 O-09](ix://agent-ix/quire-spec-language/ADR-013) delegates the scalar item's preimage
+to its owner and carries the resulting opaque identity unchanged; it does not mint or validate
+that digest. This scalar allocation fixes only O-09's members: the claimed scalar/application
+node id, its authentic occurrence key, the existing obligation kind, and `arguments` containing
+actual parameter-operand node ids with the actual declared domains/bounds used by the harness.
+The occurrence key is the authoritative node/role/ordinal key; source regions and spans are
+excluded. CG shall obtain node ids, the occurrence and operand-to-parameter correspondence from
+the checked/emitted proving package and retain them through generation/proving, never mint them
+from symbols, operand positions or a chosen ordinal.
+
+Arguments ascend by their authoritative declared parameter identifier, as O-09 specifies;
+they are keyed by actual parameter node id, not generated `arg_0` names. This identity order
+must not replace the persisted symbolic playback call order or the operator's positional operand
+order. The checked correspondence joins those orders. A literal's drawn value still decodes and
+has its singleton bound under FR-015 AC-16, but it is not a parameter: neither an inline literal
+nor a reference to a literal `value` node gains a fabricated parameter id. Only actual
+parameter operands enter `arguments`; unrelated parameters of the enclosing function are not
+scalar operands and do not enter this scalar-item preimage.
+
+CG shall encode these fixed members through its existing one canonical place
+(`core::canonical`, RFC 8785 via `quire-canonical`), following AD-003 E-1's established member
+and domain spelling. No CG-specific member, transcript, decoded native outcome, generated-content
+digest, operator label, solver, limit counter, build or tool/version tracking field enters the
+obligation preimage. The node identifies the application; the full replay claim separately
+carries its operator, decoded operands and their ranges, result range, retained renderer limits
+and canonical generated-content identity. Claim identity and same-artifact authentication
+remain distinct from the O-09 obligation digest.
+
+The current scalar record has no authentic occurrence key or parameter node ids, and carries
+no existing obligation-kind member. The fixed member rule does not establish a producer for
+those facts. In particular, O-09 does not specify the scalar literal/parameter correspondence
+or repeated-parameter binding rule; if the same actual parameter is drawn independently at two
+operand positions, CG cannot assume those draws form one declared-parameter binding. CODE is
+gated on measuring the authoritative scalar metadata and resolving that correspondence and
+existing kind, with the owning contracts, before minting an admitted identity. Missing or
+ambiguous essential metadata yields a typed setup refusal and no identity; a generated symbol,
+application id reused as a parameter, invented occurrence or function-contract digest is never
+a substitute. This residual uncertainty does not block the independent decoder/context work.
 
 ## Setup Refusal Precedence
 
@@ -179,11 +241,12 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-1 | PLANNED (IR-631) / GATED (QSL-641). A public consumer passes the routed harness's `ScalarObligationIdentity` directly to the scalar builder; its typed call constructs neither `KaniObligationIdentity` nor V1 `ReplayPackage`. After the ordered setup checks, an otherwise valid request returns the unsupported-capability refusal while the gate holds; conversion returns no settlement rather than a synthetic function request or invented terminal cause. | Test |
 | FR-032-AC-2 | PLANNED (IR-631). The builder decodes actual routed-harness playback in persisted symbolic call order through the Kani output adapter; another harness name, missing/extra operand, wrong byte width, playback above the builder-owned 8 MiB per-harness ceiling or malformed assertion block yields the distinct typed refusal under the stated precedence before replay. | Test |
 | FR-032-AC-3 | PLANNED (IR-631) / GATED (QSL-641). Each operand at its own lower or upper bound is admitted and the adjacent out-of-domain value is refused before replay. The admitted QSL inputs preserve the catalogued operator, operands, operand ranges, result range and harness limits. Another node/operation, altered operand schema or replay limit differing from the retained original generation context refuses; operand correspondence uses [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-16. | Test |
-| FR-032-AC-4 | PLANNED (IR-631) / GATED (QSL-641). The driver's actual native observation of the proved generated oracle is required and tied to this operand vector, limits and canonical proof-content identity; missing observation, another artifact's observation or fresh regeneration that removes the arithmetic mutation refuses before QSL evaluation. Playback bytes and Kani falsification alone cannot supply a generated outcome. | Test |
+| FR-032-AC-4 | PLANNED (IR-631) / GATED (QSL-641). The driver's actual native observation of the proved generated oracle is required and tied to this operand vector, limits and canonical proof-content identity; the checked completion requires driver authentication; a bare outcome/digest echo, missing observation, another artifact's observation or fresh regeneration that removes the arithmetic mutation refuses before QSL evaluation. Playback bytes and Kani falsification alone cannot supply a generated outcome. | Test |
 | FR-032-AC-5 | PLANNED (IR-631) / GATED (QSL-641). The public consumer executes the same proved generated artifact and invokes QSL between the builder and converter. QSL compares its actual native observation with authoritative exact operator evaluation using the four-operator projection owned by [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-37, without adding refusal-cause or accounting-counter equality; changing the generated arithmetic while keeping original node/operator identity changes the measured parity result. `Undefined`, `Incomplete` and execution faults cannot be agreeing outcomes of this profile. No CG-local evaluator or replay verdict replaces QSL. | Test |
-| FR-032-AC-6 | PLANNED (IR-631) / GATED (QSL-641). The converter refuses another scalar binding's result/run with no settlement; changing only the claimed node, operation, operands, result range or limits cannot yield a settlement for the original binding. | Test |
-| FR-032-AC-7 | PLANNED (IR-631) / GATED (QSL-641). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive` with the upstream named harness-defect cause; QSL non-fault refusal retains its catalog code and executor fault remains `Failed`. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
+| FR-032-AC-6 | PLANNED (IR-631) / GATED (QSL-641). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained sent claim before conversion; a missing claim, another result/run, or changing only the obligation, node, canonical generated-content identity, operator, operand value/range, result range or limits yields typed binding refusal and no settlement. Obligation-digest equality alone and agreement-only identity cannot pass. | Test |
+| FR-032-AC-7 | PLANNED (IR-631) / GATED (QSL-641). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive(ScalarAgrees)`; native `Incomplete`/execution fault becomes `GeneratedFault` and `Failed`, while exact `Incomplete` becomes `Incomplete(ResourceExhausted)`. `RefusedInput` preserves `invalid_runtime_input`; other typed QSL refusals follow the existing refusal map and non-fault refusals retain their code. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
 | FR-032-AC-8 | PLANNED (IR-631) / GATED (QSL-641). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` exercises an admitted operand pair whose exact result is outside the result range. The expected exact result is derived from the actual retained playback, and its correct refusal is never labelled a source violation. The fixture ranges and witness domain/result-range relation are asserted before that observation; no unreachable case or assumed solver choice counts as coverage. | Test |
+| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (authoritative scalar metadata). Independent canonical-preimage checks include only the authentic claimed node/occurrence, existing kind and actual parameter-operand node ids with the harness's actual declared domains in authoritative ascending identifier order. Changing any included member changes the identity; changing source span, native outcome or artifact-content identity does not. Literal singleton operands have no fabricated parameter argument; unrelated enclosing-function parameters are absent. Missing occurrence, parameter correspondence or existing kind yields typed setup refusal and no minted identity; repeated independent draws of one parameter remain gated until their binding rule is resolved. | Test |
 
 ## Intent and Existing Coverage
 
@@ -193,7 +256,7 @@ This table records the authoring gap analysis, not a computed test matrix.
 |---|---|---|
 | Real routed scalar generation | [FR-022](../../routed/functional/FR-022-routed-generation.md) AC-2/10/13/15; `tests/it/routed_generation.rs` carries those trace tags | The returned scalar identity has no public replay binding |
 | Typed ordered playback and domain validation | [FR-016](./FR-016-witness-native-replay.md) AC-1/2/5/8; `tests/it/kani_witness_join.rs`, `kani_argument_order.rs` and `skeleton_spine.rs` exercise the function schema | Direct scalar schema and operator-level replay inputs |
-| QSL refusal and terminal reading | [FR-016](./FR-016-witness-native-replay.md) AC-9/10/11/12 and [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-1/10/13; `skeleton_spine.rs` and `terminal_map.rs` cover existing replay paths; AC-12 remains planned in the replay index | Scalar lowering fault and new harness-defect cause; predicate violation/parity readings do not establish scalar semantics |
+| QSL refusal and terminal reading | [FR-016](./FR-016-witness-native-replay.md) AC-9/10/11/12 and [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-1/10/13; `skeleton_spine.rs` and `terminal_map.rs` cover existing replay paths; AC-12 remains planned in the replay index | Planned checked scalar conversion to the measured QSL causes; predicate violation/parity readings do not establish scalar semantics |
 | Missing settlement produces no terminal value | [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15; `tests/it/terminal_map.rs` | Reuse in the routed integration without duplicating the terminal requirement |
 | Driver calls QSL between public typed builder and converter | No scalar requirement or test on the inspected source | This requirement and planned [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md) |
 
@@ -210,43 +273,48 @@ The emitted increment fixture's result range is `Int[0,10]`, as
 addition descriptor already accepted by `tests/it/kani_obligations.rs::scalar_package` has
 operand/result bounds `[-1000,1000]`; `(600,600)` giving `1200` illustrates a reachable
 out-of-result-range exact result, without prescribing Kani's chosen witness. The check derives
-its expected exact result from the actual retained operand pair. Its QSL source counterpart and original `call_site`
+its expected exact result from the actual retained operand pair. Its QSL source counterpart and
+original `call_site`
 package/source binding must be admitted under the same upstream gates as the positive replay;
 no hand-edited emitted package or fabricated source identity substitutes for that admission.
 
-The inspected QSL facade has no operator-parity envelope arm. `CallSiteSelection` admits
-function, operation, clause, field and population selections, without a scalar expression, and
-`replay` rejects non-Boolean functions as `NotAPredicate`. The existing terminal causes express
-predicate replay parity/refusal, not harness-defect inconclusive. These source boundaries
-remain until new upstream contracts land; no widened function selection is assumed.
+The measured QSL `FR-357` and `qsl-replay/src/scalar.rs` expose
+`replay_operator_parity`, `OperatorClaim`, `OperatorParityReport`, `NativeOutcome` and the
+scalar result/terminal readings above. The operator entry recompiles the original source,
+checks `package_id`, and validates scalar-node/operator membership in the selected enclosing
+function; it does not replay that function as a predicate. `OperatorClaim.identity` carries a
+canonical generated-content `DigestRecord`, expressly never recomputed or checked by QSL.
+`OperatorParityReport` currently exposes `obligation()`, `result()` and `terminal_value()`,
+with no full report claim; `claim()` exists only on `ScalarAgreement`. Thus the existing report cannot establish full-claim equality on
+refusal, exact `Incomplete`, generated fault or divergence. The upstream full-claim fix is
+required, not inferred from an announcement or agreement coverage.
 
-The positive operator-level route requires the following QSL-641 upstream contracts:
+The positive operator-level route has these explicit **CODE gates**:
 
-1. A public typed operator-level arm in the QSL replay/envelope facade, with operator, recorded
-   operands, operand ranges, result range and accounting limits, evaluated by QSL's authoritative
-   exact kernel. It must distinguish lowering fault, harness-defect inconclusive and refusal.
-2. A concrete native generated-oracle observation contract: the driver's typed observed outcome
-   and validation tying it to the same canonical proved generated-content identity, operand
-   vector and limits. The driver executes the actual artifact and QSL never regenerates it.
-   Input operands alone are not the generated result. The parity projection compares no
-   admitted-charge sequence or consumed counters beyond the current harness assertion.
-3. A named upstream harness-defect inconclusive cause and an expressly legal settlement/terminal
-   representation for both that cause and QSL-reported generated/exact divergence. The existing
-   `CgDefect` and `Fault` documentation cannot be widened silently. CG must not invent a QSL
-   cause/code or retrofit a predicate disagreement.
-4. AD-002 R-6: a QSL-owned scalar `ObligationIdentity` and authoritative scalar preimage that
-   CG can mint from the obligation members and carry unchanged into request, envelope and
-   settlement. That recipe is absent today; neither a function-contract preimage nor a
-   transcript digest substitutes for it.
-5. AD-002 R-7: the scalar arm retains the **original** proving `call_site` package identity and
-   source bytes; QSL recompiles those bytes, checks the same package identity, and validates
-   scalar node/operator membership. The existing facade can locate an enclosing non-Boolean
-   function for compilation, but its predicate replay selection is still refused; the planned
-   operator arm must evaluate this scalar node without a synthetic predicate selection.
+1. QSL-641's amended spec and implemented report API must carry the full claim on every outcome,
+   exposed as `claim()` for both parity reports; measure the actual upstream spec/source before
+   relying on it. For this operator slice the full claim is the retained obligation identity,
+   scalar node, canonical generated-content `DigestRecord`, operator, ordered operands with
+   their ranges, result range and retained limits. The function-parity report requirement is an
+   upstream consistency gate and authorizes no CG function-parity implementation here.
+2. CG generation must retain the authoritative scalar metadata needed by the fixed O-09
+   preimage and original renderer-limit/proving record. The occurrence, parameter correspondence,
+   repeated-parameter rule and existing kind gaps in Scalar Obligation Identity remain explicit;
+   QSL-641 does not supply a CG-owned preimage by naming an opaque digest.
+3. The driver must implement same-proved-artifact execution and observation authentication;
+   CG must supply the retained generation/proving record and checked completion/conversion seam.
+   QSL never sees or authenticates the artifact; carried digest equality alone is insufficient.
+4. CG's converter/settlement representation must consume the measured legal scalar terminal
+   readings only after full-claim and retained-run comparison. Existing predicate disagreement
+   or a fabricated scalar cause must not stand in for that conversion.
+5. AD-002 R-7 stays in force: retain the **original** proving `call_site` package identity and
+   source bytes; QSL recompiles them, checks the same `package_id`, and validates scalar
+   node/operator membership in the selected function. Retain the proving source/package tie;
+   neither fresh oracle generation nor a synthetic predicate selection substitutes for it.
 
 AD-002's existing CG replay-call list still constrains CG: the planned builder makes no execution
-call, and the driver executes through QSL's public replay facade. This contract neither adds a
-fourth CG executor nor claims a new call-site selection. If QSL-641 cannot retain R-6/R-7 or the
+call, and the driver executes the generated artifact and separately calls QSL's public scalar replay
+facade. This contract neither adds a fourth CG executor nor claims a new call-site selection. If QSL-641 cannot retain R-6/R-7 or the
 facade allocation, the scalar route remains gated pending an explicit owning-contract decision;
 this document grants no architecture exception.
 
@@ -260,14 +328,19 @@ The builder's operand-domain check precedes every replay, as
 [FR-024](./FR-024-counterexample-envelope-intake.md) already requires. A decoded value outside
 the Kani assumed domain is a CG setup defect and `Failed`. QSL's own range validation is an
 envelope backstop whose non-fault refusal keeps its QSL code; it does not authorize bypassing
-the CG check. The existing envelope and architecture requirements remain authoritative while the scalar route is gated.
+the CG check. The existing envelope and architecture requirements remain authoritative while the
+scalar route is gated.
 
 ## Dependencies
 
-- **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) owns the proved projection and literal bindings; [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md) owns capture bounds; [FR-022](../../routed/functional/FR-022-routed-generation.md) supplies scalar
+- **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) owns the proved
+  projection and literal bindings; [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)
+  owns capture bounds; [FR-022](../../routed/functional/FR-022-routed-generation.md) supplies scalar
   identities; [FR-024](./FR-024-counterexample-envelope-intake.md) owns QSL envelope submission;
   [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) owns terminal readings;
-  QSL-641 owns the missing scalar arm, native-observation seam, scalar identity recipe, original-package validation and legal scalar settlement causes.
+  CG owns the scalar preimage and retained producer/converter contracts; the driver owns observation
+  authentication; QSL-641 owns the amended full-report claim API. Measured QSL FR-357 owns exact
+  evaluation, original-package validation and scalar terminal causes.
 - **Related**: [FR-016](./FR-016-witness-native-replay.md) owns existing playback/function replay
   rules; [AD-002](../../assurance/AD-002-cg-qsl-replay-seam.md) retains QSL evaluation ownership.
 - **Downstream**: [TC-047](../matrix/TC-047-routed-scalar-replay-binding.md), planned public

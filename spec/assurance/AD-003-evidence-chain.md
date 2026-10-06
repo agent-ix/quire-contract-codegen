@@ -14,6 +14,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-032
+    type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-033
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-030
@@ -186,6 +188,34 @@ authored).
   node and its occurrence key) and are kept, so that no function-path identity changes
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
+- E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns the scalar preimage,
+  as ADR-013 O-09 delegates the scalar item's preimage to its owner. Only the claimed
+  scalar/application node id, its authentic occurrence key, existing obligation kind and
+  arguments as actual parameter-operand node ids with the actual harness declared domains enter
+  it. Arguments ascend by authoritative declared parameter identifier (O-09); the checked
+  correspondence to persisted draw order and positional operator operands is retained separately.
+  Literals retain their singleton harness domains (FR-015 AC-16), but gain no fabricated
+  parameter ids; unrelated enclosing-function parameters are absent. The existing E-1 member
+  and domain encoding through `core::canonical` applies; scalar allocation adds no member and
+  changes no function/frame preimage. Source spans, native outcomes, transcript, canonical
+  generated-content identity, operator labels, renderer counters, build/tool/version fields and
+  the full CG generation record stay outside this preimage.
+  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns the acceptance criteria
+  and the residual metadata gate: the current scalar record lacks occurrence, existing kind and
+  parameter node ids. O-09 supplies no scalar repeated-parameter correspondence rule; independent
+  draws of one parameter cannot be silently collapsed into one binding. Missing or ambiguous
+  authoritative metadata refuses without minting an identity; CG never derives checker ids or
+  invents an occurrence. Decoder and original-limits context work remains independent.
+  The same-artifact content identity is a separate canonical proof-content tie. The driver
+  executes the same proved generated artifact at decoded operands and retained renderer limits,
+  authenticates its typed observation against CG's retained generation/proving record, then
+  completes CG's checked plan. This trusts the driver's actual execution/authentication; an
+  unchecked digest/outcome echo or regenerated oracle is insufficient. QSL never sees the
+  artifact and does not authenticate it: it carries the `DigestRecord` and evaluates exact
+  semantics. Before any scalar settlement, CG compares every member of the report's full claim
+  with the retained sent claim, plus the retained run tie, including refusal, exact `Incomplete`,
+  generated fault and divergence. Report `claim()` on every outcome remains an upstream CODE
+  gate; agreement-only claim identity and opaque obligation-digest equality are insufficient.
 - E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
   only the exact claimed equality/inequality node, its occurrence key obtained from the recompiled
   original package, the obligation kind and one argument per distinct parameter-operand node ID
@@ -339,8 +369,10 @@ crate CG's lock selects.
   the obligation kind and the arguments (parameter node id and declared domain), source span
   excluded. The postcondition state-clause path takes a caller `[u8; 32]`
   (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
-  request's slot is gone (AD-002), replaced by the function-contract identity. The state-clause
-  path's is open (FR-024, Open questions Q-1).
+  request's slot is gone (AD-002), replaced by the function-contract identity. The scalar path's
+  fixed member allocation and driver observation boundary are now specified
+  by FR-032/E-1, but its authoritative metadata and full-report claim API remain CODE-gated.
+  The state-clause path's is open (FR-024, Open questions Q-1).
   The work is larger than one missing field. Three identity structs exist and none carries what
   O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
   occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,

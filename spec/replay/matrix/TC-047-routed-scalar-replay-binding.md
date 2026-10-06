@@ -15,8 +15,9 @@ relationships:
 Planned public-consumer coverage of
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md), distinguishing lowering parity
 failure from source-property refutation. No implementation or passing replay is claimed. The
-completed QSL route is gated on QSL-641's typed scalar arm, native generated-oracle observation
-contract and named harness-defect terminal cause.
+completed CG route is CODE-gated on QSL-641's amended full-claim reports, authoritative scalar
+identity metadata, retained generation/proving context and checked driver-observation contract.
+The measured QSL operator API and scalar terminal causes do not close those gates.
 
 ## Test Procedure
 
@@ -55,21 +56,46 @@ contract and named harness-defect terminal cause.
    scalar-node membership mismatches through the upstream typed refusal. Operand correspondence
    remains governed by [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-16.
    Execute the same proved oracle artifact natively over those operands and limits, following the
-   upstream observation contract, and retain the typed outcome. Attempt
-   replay without that observation, with another artifact's observation and with a regenerated
-   correct oracle replacing the proved arithmetic mutation.
+   driver authentication contract, and retain the typed outcome and its checked completion.
+   CG supplies the original generation/proving record; the driver authenticates the observation
+   against that record's canonical proved content, decoded vector and retained limits. Attempt
+   replay with a bare echoed outcome/digest, without authenticated observation, with another
+   artifact's observation and with a regenerated correct oracle replacing the proved arithmetic
+   mutation. Each must refuse before QSL evaluation; QSL receives no artifact and cannot be
+   credited with authenticating the driver's execution.
 5. Call QSL's scalar arm in the public consumer, then pass its result to the CG converter.
    Compare generated/exact divergence, agreement despite retained Kani falsification, a QSL
-   non-fault refusal and an executor fault. Check all four supported integer operators and
+   non-fault refusal and an executor fault. Distinguish native `Incomplete`/execution fault
+   (`GeneratedFault`, `Failed`) from exact limit exhaustion (`Incomplete(ResourceExhausted)`);
+   verify `RefusedInput` keeps `invalid_runtime_input` and other QSL refusals follow the typed map.
+   Check all four supported integer operators and
    refuse an undefined/incomplete generated outcome as agreement; those outcomes do not
-   satisfy [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-37. Change the actual generated arithmetic, not the
+   satisfy [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md) AC-37. Change the
+   actual generated arithmetic, not the
    claimed replay verdict. Error-path seam observations may use a recording/failing executor;
    the positive evaluation must use QSL and the actual generated artifact.
-6. Bind another scalar result/run to the first binding and require no settlement; repeat by
-   changing node, operator, operands, result range and limits individually. Pass valid converter
+6. For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and
+   other `Refused` report, compare its full `claim()` to the exact retained sent claim before
+   terminal conversion. Bind another result/run to the first binding and require no settlement;
+   repeat by changing only obligation identity, node, canonical generated-content identity,
+   operator, operand value/range, result range and limits. Keep the obligation digest equal
+   for the other mutations to prove digest-only checking cannot pass. A missing report claim
+   refuses too; agreement-only identity is insufficient. These tests await the actual upstream
+   amended spec/API; do not fabricate a full report or substitute agreement for other outcomes. Pass
+   valid converter
    settlements to `run_terminal_value`; repeat with no settlement to reuse
    [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace executable
    tests to each criterion they actually assert; this document alone provides no coverage.
+7. Independently inspect the scalar canonical preimage through CG's one canonical encoder:
+   authenticate application node/occurrence and parameter-operand node ids from the proving
+   package, retain the actual harness domains and existing kind, and order arguments by the
+   authoritative declared parameter identifier. Check a literal remains a singleton operand
+   without becoming a parameter argument and exclude unrelated enclosing-function parameters.
+   Change each included member and require an identity change; change source span, native
+   outcome and canonical generated-content identity and require the same obligation identity.
+   Try absent occurrence/kind/parameter correspondence and require typed refusal with no
+   identity. A repeated parameter drawn independently at two positions remains a CODE gate
+   until its authoritative binding rule is resolved. No invented metadata closes that check.
 
 ## Expected Results
 
@@ -78,11 +104,12 @@ contract and named harness-defect terminal cause.
 | FR-032-AC-1 | Public typed consumer uses scalar identity; an otherwise valid request reaches unsupported-capability after ordered setup checks, with no settlement | Require function identity or admit a synthetic predicate as the scalar route |
 | FR-032-AC-2 | Adapter-decoded playback uses persisted order; builder rejects above 8 MiB before parsing | Decode in alphabetic order, ignore another harness name or discard extra bytes |
 | FR-032-AC-3 | Operand endpoints and request operator/ranges agree with the harness/package; limits match original generation context, including AD-002 identities | Skip a bound check, replace operator/node, use result bounds for a literal or swap operands |
-| FR-032-AC-4 | Same-proved-artifact observation is required and tied to operands/limits/content | Treat playback as a generated result or accept fresh regeneration that removes the mutation |
+| FR-032-AC-4 | Driver authenticates same-proved-artifact observation against CG's retained record and checked completion ties operands/limits/content | Accept an unchecked outcome/digest echo, treat playback as a generated result or accept fresh regeneration that removes the mutation |
 | FR-032-AC-5 | Driver executes the proved artifact and calls QSL between builder and converter; QSL measures the current four-operator completed-value/refused-outside-range projection | Execute inside the CG builder, substitute a local evaluator, stub the positive verdict, accept `Undefined`/`Incomplete` as agreement or add unproved refusal-cause/accounting-counter equality |
-| FR-032-AC-6 | Another scalar result/run yields no settlement for this binding | Remove the result/run-to-scalar binding check or omit result range/limits from it |
-| FR-032-AC-7 | Lowering divergence is `Failed`, agreement is named harness-defect `Inconclusive`, QSL refusal retains its code and faults are `Failed`; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
+| FR-032-AC-6 | Full report claim and run match the retained sent claim on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/content/operator/operand range/result range/limits on a refusal, exact Incomplete, generated fault or divergence |
+| FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
+| FR-032-AC-9 | Fixed O-09 members and authoritative ascending parameter order; literal is no parameter, missing metadata refuses, domains are those actually harnessed | Invent an occurrence/parameter id, include enclosing unrelated parameters or a content/outcome/tracking field, use generated-name order, or narrow a harness domain |
 
 All checks are planned; completed-route observations have the same explicit upstream gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never
