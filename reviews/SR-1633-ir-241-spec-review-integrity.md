@@ -66,3 +66,9 @@ Round 3 (rebase regression; the exact head is in the private tracker marker): no
 this method's scope. Its examined spec and test paths carry the same patch as in round 2. The
 rebased matrix keeps `main`'s FR-025-AC-9 row beside the PR's FR-028 rows, and the spec files
 validate. The rebase's one compile regression is recorded as SR-1630 FND-014.
+
+Round 9 (rebase onto `main` with the IR-639 guardian spec (#299); the exact head is in the
+private tracker marker): no integrity regression. #299 adds a planned IR-639 refinement-lifecycle
+section and matrix rows. The PR's FR-028-AC-21 PARTIAL marker and Description sentence (startup
+caller-death supervision deferred to IR-639) stay consistent with that addition, and the PR's
+FR-028 and matrix patch is unchanged. The deferral stays open until IR-639's code is delivered.

@@ -370,3 +370,32 @@ fixed, 1 deferred (FND-011, deferred to IR-639; the guardian is not implemented,
 incomplete) and 0 open. Actual evidence for this head: `RUSTDOCFLAGS=-Dwarnings cargo doc
 --locked --no-deps --document-private-items` exited 0. Full CI must be re-run, including the
 default test lane it never reached, and the second Linux Kani run has not been released.
+
+Round 9 (rebase onto `main` with the IR-639 guardian spec (#299) and the QSL update (#300), plus
+the procfs parse fix; the exact head is in the private tracker marker): clean, with no new
+findings and no outcome changes.
+
+- **Rebase.** With hunk positions stripped, every non-review file's PR patch, `Cargo.lock`
+  included, is identical to the round-8 product. The lockfile only adds `cfg_aliases`,
+  `command-fds` and `nix` (once each) and removes nothing from `main`, so the QSL and other
+  first-party git sources stay at `main`'s revisions. All 36 request literals carry `ceilings`.
+- **Fix.** `parse_process` now reads only the unused process-group field as `i32`. Linux
+  `do_task_stat` starts `pgid` and `sid` at -1 and `ppid` at 0, and overwrites them only when
+  `lock_task_sighand` succeeds, so a task in release (state `X`) prints -1. The old `u32` parse
+  refused that valid line as "invalid procfs process ancestry". PID, parent, start and size
+  parsing are unchanged, and non-numeric values still fail closed. A dying child with parent 0
+  is skipped by the existing parent check; its own children have already been reparented to the
+  owned namespace init and are still reached from it.
+- **Test.** `released_sighand_signed_group_preserves_owned_rss_and_identity_checks` takes an
+  owned root from live 64 KiB to that released state, keeps the observed peak, and still refuses
+  a malformed parent and a changed start. The unsigned-group mutant fails it at the
+  released-state observation with exactly the message the failed Kani run showed.
+- **Root cause.** The real-Kani failure's raw procfs sample was not captured, so this round does
+  not claim it is proven; the next Kani run must confirm it.
+- **Status.** The latest SR-1630 to SR-1633 outcomes stay 20 fixed, 1 deferred (FND-011, deferred
+  to IR-639; the guardian spec has merged but the guardian code does not exist, so IR-241 is
+  incomplete) and 0 open.
+- **Evidence.** The focused job at this head exited 0: the three earlier regression tests, 62
+  runner tests, 49 state-frame and 9 ceiling integration tests, `make deny` and narrow clippy.
+  The second Linux Kani run at the previous head failed (24 passed, 1 failed). A new full CI run
+  and a new planner-released Kani run are still required, and neither has run.

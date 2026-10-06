@@ -105,3 +105,8 @@ Round 3 (rebase regression; the exact head is in the private tracker marker): no
 this method's scope. Its examined spec and test paths carry the same patch as in round 2. The
 rebased matrix keeps `main`'s FR-025-AC-9 row beside the PR's FR-028 rows, and the spec files
 validate. The rebase's one compile regression is recorded as SR-1630 FND-014.
+
+Round 9 (the exact head is in the private tracker marker): no gap regression. The new procfs
+regression test traces FR-028-AC-21, and it does exercise AC-21's continuous observation: an
+owned tree in release must still be observed, not refused. FR-028 and TC-039 carry the same PR
+patch as before, and the slice criteria stay tagged. Plan completion: not assessed.
