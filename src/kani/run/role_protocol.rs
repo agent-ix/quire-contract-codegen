@@ -24,6 +24,8 @@ pub(super) struct RunSettings {
     pub(super) identity: BuildIdentity,
     pub(super) authority: RunAuthority,
     pub(super) deadline: RoleDeadline,
+    /// C’s original finite bootstrap cap, bounded by the original identity deadline.
+    pub(super) setup_deadline: RoleDeadline,
     pub(super) caller_uid: u32,
     pub(super) caller_gid: u32,
     pub(super) memory_bytes: NonZeroU64,

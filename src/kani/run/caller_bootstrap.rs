@@ -28,7 +28,7 @@ use super::{
     publication::{Publication, Stage},
     report_storage::PreparedReportRead,
     role_command::HelperRole,
-    role_deadline::DeadlineError,
+    role_deadline::{DeadlineError, RoleDeadline},
     role_protocol::{
         LauncherControl, LauncherReply, OuterArmReply, OuterPhaseCommand, OuterPhaseReply,
         RunSettings,
@@ -165,7 +165,11 @@ impl CallerBootstrap {
         let deadline = settings
             .deadline
             .local()
-            .map_err(CallerBootstrapError::Deadline)?;
+            .map_err(CallerBootstrapError::Deadline)?
+            .min(bootstrap.setup_deadline());
+        // A supplied numeric label cannot replace the genuine original C setup clock.
+        settings.setup_deadline =
+            RoleDeadline::from_original(deadline).map_err(CallerBootstrapError::Deadline)?;
         let build_identity = settings.identity;
         let authority = settings.authority;
         let caller_uid = settings.caller_uid;
