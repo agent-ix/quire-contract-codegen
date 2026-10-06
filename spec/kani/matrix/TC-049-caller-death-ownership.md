@@ -24,6 +24,13 @@ private sequence prefixes; positive post-Dispatch scenarios use the ordinary fea
 The mandatory AC-24 private lease-EOF oracle uses that same documented opt-in fixture operation.
 [TC-039](./TC-039-bounded-proof-ceilings.md) retains its broader ceiling/refinement scenarios.
 
+The merged PR #295 recipe has a known Bootstrap implementation gap tracked by
+[IR-652](https://linear.app/agent-ix/issue/IR-652): caller death can kill the monitor after its
+parent-death signal arms but before the internal `child_wait` handoff, leaving INIT blocked before
+the public gate. Startup-info reader loss can also abort that handoff. Early-stage facts below do
+not establish measured INIT teardown or repair this gap; IR-652 separately owns lifecycle delivery.
+Later initialized-stage pin/EOF/namespace teardown tests remain mandatory.
+
 ## Test Procedure
 
 1. Use the separate named guardian-feature-off Cargo invocation to build the normal package library
@@ -59,9 +66,12 @@ The mandatory AC-24 private lease-EOF oracle uses that same documented opt-in fi
    require sealed monitor-created/no-claim/gate-held/no-Dispatch facts, caller and pinned monitor
    death, closed original-caller gate/lease ownership and no backend marker under bounded
    observation. Do not infer guardian EOF exit or INIT death from monitor readiness or pipe EOF.
-   Separately analyze the unchanged cleanup guarantee through actual trusted gate-EOF bootstrap,
-   exclusive lease loss, bounded guardian refusal and namespace-INIT teardown, including actual
-   parent-death installation order. Held gate does not establish a stable descendant snapshot
+   Record the present PR #295 monitor-PDEATH/internal-child_wait leak as the named IR-652 gap; these
+   facts do not measure INIT teardown or satisfy its repair. Separately analyze the unchanged
+   cleanup guarantee under IR-652 through actual trusted gate-EOF bootstrap, exclusive lease loss,
+   bounded guardian refusal and namespace-INIT teardown, including INIT creation, internal map/setup
+   handoff before the public gate and actual parent-death installation order. Do not assume monitor
+   death releases that internal wait. Held gate does not establish a stable descendant snapshot
    because bwrap may fork during setup; no after-death PID reopen/host scan supplies missing INIT
    authority. This is stage-only Test plus separately required Analysis, not full namespace-teardown
    coverage. ClaimedGated positively retains gate; ClaimedBootstrap does not label its released gate
@@ -75,8 +85,8 @@ The mandatory AC-24 private lease-EOF oracle uses that same documented opt-in fi
    startup-group owned. The successful self-kill operation cannot return or fabricate a dead caller
    result. The surviving harness judges raw witness/pins/marker before its own emergency cleanup.
    The queued-pidfd probe establishes only the Linux descriptor facility; actual caller Rust stage
-   coverage, reporter inheritance exclusion, positive INIT tests and Bootstrap source/lifecycle
-   Analysis remain CODE gates.
+   coverage, reporter inheritance exclusion, positive INIT tests and Bootstrap lifecycle
+   repair/Analysis under IR-652 remain CODE gates.
 3. Kill the actual guardian INIT through its pinned pidfd before its peer/Ready claim, in InitReady,
    and immediately after Dispatch. Require no pre-Dispatch backend marker and kernel cancellation of
    post-Dispatch descendants. With a live original caller, even confirmed teardown beside valid
