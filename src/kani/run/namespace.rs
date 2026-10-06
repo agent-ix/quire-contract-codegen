@@ -369,6 +369,17 @@ impl OuterMonitorOwner {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl GuardianIdentity for OuterMonitorOwner {
+    fn verify_ready(
+        &self,
+        sender: super::control::PeerCredentials,
+        mapped_uid: u32,
+    ) -> Result<(), ReadyIdentityError> {
+        self.namespace.verify_ready(sender, mapped_uid)
+    }
+}
+
 /// A production-only fact sealed from actual I pidfd termination plus actual retained M reap.
 /// It names the original collector writer, so another run's settlement cannot seal this report.
 #[cfg(target_os = "linux")]
