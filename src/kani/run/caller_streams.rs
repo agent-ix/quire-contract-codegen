@@ -1,0 +1,198 @@
+//! C's prepared bounded captures and actual original reader-thread ownership.
+//!
+//! Output pipes and full capture reservations exist before L. Once reader creation starts,
+//! failures retain any already-created JoinHandle in this same owner. Whole-chain settlement
+//! must precede joining; neither a stop flag nor dropping this object proves writer EOF.
+
+use std::{
+    fs::File,
+    io,
+    os::fd::OwnedFd,
+    sync::{atomic::AtomicBool, Arc},
+    thread::JoinHandle,
+};
+
+use rustix::pipe::{pipe_with, PipeFlags};
+
+use super::launch::{CaptureFlags, Captured, PreparedCapture};
+
+pub(super) struct CallerStreams {
+    stdout_prepared: Option<PreparedCapture>,
+    stderr_prepared: Option<PreparedCapture>,
+    stdout_reader: Option<File>,
+    stderr_reader: Option<File>,
+    pub(super) stdout: Option<JoinHandle<Captured>>,
+    pub(super) stderr: Option<JoinHandle<Captured>>,
+    pub(super) flags: CaptureFlags,
+    pub(super) stdout_text: Option<PreparedCaptureText>,
+    pub(super) stderr_text: Option<PreparedCaptureText>,
+    reservation: u64,
+    started: bool,
+}
+
+impl CallerStreams {
+    pub(super) fn prepare(limit: usize) -> io::Result<(Self, OwnedFd, OwnedFd)> {
+        let stdout = PreparedCapture::prepare(limit)?;
+        let stderr = PreparedCapture::prepare(limit)?;
+        let stdout_text = PreparedCaptureText::prepare(limit)?;
+        let stderr_text = PreparedCaptureText::prepare(limit)?;
+        let reservation = stdout
+            .reserved_bytes()?
+            .checked_add(stderr.reserved_bytes()?)
+            .and_then(|bytes| bytes.checked_add(stdout_text.reserved_bytes().ok()?))
+            .and_then(|bytes| bytes.checked_add(stderr_text.reserved_bytes().ok()?))
+            .and_then(|bytes| bytes.checked_add(u64::try_from(std::mem::size_of::<Self>()).ok()?))
+            .and_then(|bytes| {
+                bytes.checked_add(u64::try_from(2 * std::mem::size_of::<AtomicBool>()).ok()?)
+            })
+            .ok_or_else(|| io::Error::other("caller capture reservation overflow"))?;
+        let (stdout_reader, stdout_writer) = pipe_with(PipeFlags::CLOEXEC)?;
+        let (stderr_reader, stderr_writer) = pipe_with(PipeFlags::CLOEXEC)?;
+        Ok((
+            Self {
+                stdout_prepared: Some(stdout),
+                stderr_prepared: Some(stderr),
+                stdout_reader: Some(File::from(stdout_reader)),
+                stderr_reader: Some(File::from(stderr_reader)),
+                stdout: None,
+                stderr: None,
+                flags: CaptureFlags {
+                    stop: Arc::new(AtomicBool::new(false)),
+                    failed: Arc::new(AtomicBool::new(false)),
+                },
+                stdout_text: Some(stdout_text),
+                stderr_text: Some(stderr_text),
+                reservation,
+                started: false,
+            },
+            stdout_writer,
+            stderr_writer,
+        ))
+    }
+
+    pub(super) fn reserved_bytes(&self) -> u64 {
+        self.reservation
+    }
+
+    /// Call only after storing the actual L spawner. This records each successful thread before
+    /// attempting the next one; a later failure cannot discard the first retained JoinHandle.
+    pub(super) fn start(&mut self) -> io::Result<()> {
+        if self.started {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "capture creation already attempted",
+            ));
+        }
+        self.started = true;
+        let stdout = self
+            .stdout_prepared
+            .take()
+            .ok_or_else(|| io::Error::other("prepared stdout capture unavailable"))?;
+        let reader = self
+            .stdout_reader
+            .take()
+            .ok_or_else(|| io::Error::other("owned stdout pipe unavailable"))?;
+        self.stdout = Some(stdout.spawn(reader, &self.flags)?);
+        let stderr = self
+            .stderr_prepared
+            .take()
+            .ok_or_else(|| io::Error::other("prepared stderr capture unavailable"))?;
+        let reader = self
+            .stderr_reader
+            .take()
+            .ok_or_else(|| io::Error::other("owned stderr pipe unavailable"))?;
+        self.stderr = Some(stderr.spawn(reader, &self.flags)?);
+        Ok(())
+    }
+}
+
+/// Full byte-capture UTF8 expansion storage. At most three UTF8 bytes replace each invalid
+/// source byte; this exact finite capacity is reserved and charged before any role is launched.
+pub(super) struct PreparedCaptureText {
+    text: String,
+    source_limit: usize,
+}
+
+impl PreparedCaptureText {
+    fn prepare(source_limit: usize) -> io::Result<Self> {
+        let capacity = source_limit
+            .checked_mul(3)
+            .ok_or_else(|| io::Error::other("capture text reservation overflow"))?;
+        let mut text = String::new();
+        text.try_reserve_exact(capacity).map_err(io::Error::other)?;
+        Ok(Self { text, source_limit })
+    }
+
+    fn reserved_bytes(&self) -> io::Result<u64> {
+        let bytes = self
+            .text
+            .capacity()
+            .checked_add(std::mem::size_of::<Self>())
+            .ok_or_else(|| io::Error::other("capture text reservation overflow"))?;
+        u64::try_from(bytes).map_err(io::Error::other)
+    }
+
+    /// Same standard UTF8 validation/replacement semantics, written into the already owned
+    /// String. No intermediate lossy Cow/String may allocate another full output after launch.
+    pub(super) fn decode(mut self, mut bytes: &[u8]) -> io::Result<String> {
+        if bytes.len() > self.source_limit {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "capture exceeds prepared text bound",
+            ));
+        }
+        while !bytes.is_empty() {
+            match std::str::from_utf8(bytes) {
+                Ok(valid) => {
+                    self.text.push_str(valid);
+                    break;
+                }
+                Err(error) => {
+                    let valid = bytes
+                        .get(..error.valid_up_to())
+                        .ok_or_else(|| io::Error::other("capture UTF8 prefix is unavailable"))?;
+                    self.text.push_str(
+                        std::str::from_utf8(valid)
+                            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+                    );
+                    self.text.push('\u{fffd}');
+                    let consumed = match error.error_len() {
+                        Some(invalid) => error
+                            .valid_up_to()
+                            .checked_add(invalid)
+                            .ok_or_else(|| io::Error::other("capture UTF8 position overflow"))?,
+                        None => bytes.len(),
+                    };
+                    bytes = bytes
+                        .get(consumed..)
+                        .ok_or_else(|| io::Error::other("capture UTF8 remainder is unavailable"))?;
+                }
+            }
+        }
+        Ok(self.text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trace: FR-034-AC-18, FR-034-AC-34.
+    #[test]
+    fn reserved_capture_text_preserves_standard_lossy_output_without_accepting_over_limit() {
+        for bytes in [
+            b"valid".as_slice(),
+            b"a\xffb\xe2\x82",
+            b"\xf0\x80\x80\x80",
+            b"\xed\xa0\x80",
+        ] {
+            let text = PreparedCaptureText::prepare(bytes.len()).unwrap();
+            assert_eq!(text.decode(bytes).unwrap(), String::from_utf8_lossy(bytes));
+        }
+        let text = PreparedCaptureText::prepare(1).unwrap();
+        assert_eq!(
+            text.decode(b"ab").unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
+}

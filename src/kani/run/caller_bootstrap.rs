@@ -8,22 +8,29 @@ use std::{
     io,
     os::fd::{AsFd, OwnedFd},
     process::{Command, Stdio},
+    sync::Arc,
     time::Instant,
 };
 
 use rustix::process::{pidfd_open, PidfdFlags};
 
 use super::{
-    control::{role_pair, ControlError, GuardianEndpoint, PreparedFrame, RoleCaller},
+    caller_streams::CallerStreams,
+    control::{
+        role_pair, ControlError, FrameStorage, GuardianEndpoint, PreparedFrame, PreparedReceive,
+        RoleCaller,
+    },
     creator,
     outer_setup::NamespaceIdentity,
     protocol::{current_build_identity, BuildIdentity, RunAuthority},
+    publication::Publication,
     report_storage::PreparedReportRead,
     role_command::HelperRole,
     role_deadline::DeadlineError,
     role_protocol::{LauncherControl, OuterArmReply, RunSettings},
-    spawner::{RetainedSpawner, SpawnIdentity, SPAWNER_STACK_BYTES},
-    stages::Bootstrap,
+    spawner::{RetainedSpawner, SpawnIdentity},
+    stages::{Bootstrap, PreparedDispatch},
+    stdin::OriginalStdin,
 };
 
 #[derive(Debug)]
@@ -33,7 +40,6 @@ pub(super) enum CallerBootstrapError {
     Deadline(DeadlineError),
     SettingsMismatch,
     ReservationUnrepresentable,
-    MissingReservation,
     LaunchAlreadyAttempted,
     MissingLauncher,
     EndpointsConsumed,
@@ -58,7 +64,6 @@ impl std::error::Error for CallerBootstrapError {
             Self::Deadline(error) => Some(error),
             Self::SettingsMismatch
             | Self::ReservationUnrepresentable
-            | Self::MissingReservation
             | Self::LaunchAlreadyAttempted
             | Self::MissingLauncher
             | Self::EndpointsConsumed
@@ -81,6 +86,12 @@ pub(super) struct CallerBootstrap {
     outer_endpoint: Option<OwnedFd>,
     start_frame: PreparedFrame,
     pub(super) report_read: Option<PreparedReportRead>,
+    pub(super) dispatch: Option<PreparedDispatch>,
+    pub(super) stdin: OriginalStdin,
+    pub(super) streams: CallerStreams,
+    pub(super) publication: Arc<Publication>,
+    receive: PreparedReceive,
+    named_buffers: u64,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
     identity: Option<SpawnIdentity>,
@@ -95,17 +106,17 @@ pub(super) struct CallerBootstrap {
 }
 
 impl CallerBootstrap {
-    /// C supplies its already prepared complete run-buffer bound and bounded capture writers.
-    /// The local reservation check is a necessary lower bound, not a substitute for that complete
-    /// calculation: captures, metadata, controls, fixed state and thread overhead must all be
-    /// charged by the orchestration before this method is called. No public caller can set it.
+    /// Assemble actual named C run buffers before creating L. Settings cannot supply or override
+    /// this charge: it is computed from the retained reservations and serialized once afterwards.
+    /// Opaque incidental std/libc runtime allocations are not assigned a fabricated capacity.
     pub(super) fn prepare(
-        settings: RunSettings,
+        mut settings: RunSettings,
         bootstrap: Bootstrap,
         inner_endpoint: GuardianEndpoint,
-        stdout: Stdio,
-        stderr: Stdio,
-        report_read: PreparedReportRead,
+        dispatch: PreparedDispatch,
+        stdin: OriginalStdin,
+        capture_limit: usize,
+        publication: Arc<Publication>,
     ) -> Result<Self, CallerBootstrapError> {
         if settings.authority != bootstrap.authority()
             || settings.identity != current_build_identity()
@@ -118,7 +129,6 @@ impl CallerBootstrap {
             .deadline
             .local()
             .map_err(CallerBootstrapError::Deadline)?;
-        let declared = settings.caller_run_buffers;
         let build_identity = settings.identity;
         let authority = settings.authority;
         let caller_uid = settings.caller_uid;
@@ -130,35 +140,53 @@ impl CallerBootstrap {
         let (outer_control, outer_endpoint) = role_pair().map_err(CallerBootstrapError::Control)?;
         let caller_pin = pidfd_open(rustix::process::getpid(), PidfdFlags::NONBLOCK)
             .map_err(|error| CallerBootstrapError::Io(error.into()))?;
+        let (streams, stdout, stderr) =
+            CallerStreams::prepare(capture_limit).map_err(CallerBootstrapError::Io)?;
+        let report_read = PreparedReportRead::prepare()
+            .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
+        let receive = PreparedReceive::prepare().map_err(CallerBootstrapError::Control)?;
+        let frame_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
+        let helper_capacity = u64::try_from(settings.helper.capacity())
+            .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let mut command = HelperRole::Launcher
             .command(&settings.helper, launcher_endpoint)
             .map_err(CallerBootstrapError::Io)?;
-        command.stdout(stdout).stderr(stderr);
-        let start_frame = PreparedFrame::encode(&LauncherControl::Start { settings })
-            .map_err(CallerBootstrapError::Control)?;
-        let minimum = u64::try_from(std::mem::size_of::<Self>())
-            .ok()
-            .and_then(|bytes| {
-                u64::try_from(SPAWNER_STACK_BYTES)
-                    .ok()
-                    .and_then(|stack| bytes.checked_add(stack))
-            })
-            .and_then(|bytes| {
-                start_frame
-                    .reserved_bytes()
-                    .ok()
-                    .and_then(|frame| bytes.checked_add(frame))
-            })
-            .and_then(|bytes| {
-                report_read
-                    .reserved_bytes()
-                    .ok()
-                    .and_then(|report| bytes.checked_add(report))
-            })
-            .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
-        if declared < minimum {
-            return Err(CallerBootstrapError::MissingReservation);
+        command
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr));
+        let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
+            .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
+        let reservations = [
+            RetainedSpawner::reserved_bytes().map_err(CallerBootstrapError::Io)?,
+            frame_storage
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
+            receive
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
+            bootstrap
+                .reserved_bytes()
+                .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
+            dispatch
+                .reserved_bytes()
+                .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
+            report_read
+                .reserved_bytes()
+                .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
+            streams.reserved_bytes(),
+            helper_capacity,
+            u64::try_from(std::mem::size_of::<Publication>())
+                .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
+        ];
+        for bytes in reservations {
+            named_buffers = named_buffers
+                .checked_add(bytes)
+                .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         }
+        settings.caller_run_buffers = named_buffers;
+        let start_frame = frame_storage
+            .encode(&LauncherControl::Start { settings })
+            .map_err(CallerBootstrapError::Control)?;
         Ok(Self {
             inner_bootstrap: bootstrap,
             outer_control,
@@ -168,6 +196,12 @@ impl CallerBootstrap {
             outer_endpoint: Some(outer_endpoint.into_child_mapping()),
             start_frame,
             report_read: Some(report_read),
+            dispatch: Some(dispatch),
+            stdin,
+            streams,
+            publication,
+            receive,
+            named_buffers,
             command: Some(command),
             spawner: None,
             identity: None,
@@ -193,6 +227,7 @@ impl CallerBootstrap {
             .take()
             .ok_or(CallerBootstrapError::LaunchAlreadyAttempted)?;
         self.spawner = Some(RetainedSpawner::spawn(command).map_err(CallerBootstrapError::Io)?);
+        self.streams.start().map_err(CallerBootstrapError::Io)?;
         let identity = self
             .spawner
             .as_ref()
@@ -247,14 +282,16 @@ impl CallerBootstrap {
         let received = self
             .outer_control
             .transport()
-            .receive::<OuterArmReply>(OuterArmReply::rights_count, self.deadline)
+            .receive_prepared::<OuterArmReply>(
+                &mut self.receive,
+                OuterArmReply::rights_count,
+                self.deadline,
+            )
             .map_err(CallerBootstrapError::Control)?;
-        let [pin]: [OwnedFd; 1] = received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
-            CallerBootstrapError::Control(ControlError::RightsCount {
-                expected: 1,
-                received: rights.len(),
-            })
-        })?;
+        let pin = received
+            .rights
+            .pop()
+            .ok_or(CallerBootstrapError::MissingOuterPin)?;
         self.outer_pin = Some(pin);
         let pin = self
             .outer_pin
@@ -296,6 +333,10 @@ impl CallerBootstrap {
         }
         self.outer_namespace = Some(namespace);
         Ok(namespace)
+    }
+
+    pub(super) fn named_buffer_reservation(&self) -> u64 {
+        self.named_buffers
     }
 
     pub(super) fn launcher(&self) -> Result<&RetainedSpawner, CallerBootstrapError> {

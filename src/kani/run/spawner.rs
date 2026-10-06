@@ -59,6 +59,15 @@ pub(super) struct RetainedSpawner {
 }
 
 impl RetainedSpawner {
+    /// Named retained custody state plus the explicitly requested creator stack. Opaque std/
+    /// pthread allocator, TLS and stack-guard overhead are not represented as measured capacity.
+    pub(super) fn reserved_bytes() -> io::Result<u64> {
+        let bytes = std::mem::size_of::<Shared>()
+            .checked_add(SPAWNER_STACK_BYTES)
+            .ok_or_else(|| io::Error::other("creator custody reservation overflow"))?;
+        u64::try_from(bytes).map_err(io::Error::other)
+    }
+
     /// Caller must reserve the explicit stack and this bounded custody allocation before entry.
     /// No helper identity or inherited descriptor is synthesized here: Command is the real L.
     pub(super) fn spawn(mut command: Command) -> io::Result<Self> {

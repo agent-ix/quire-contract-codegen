@@ -25,6 +25,7 @@ pub(super) struct Bootstrap {
     lease: CallerLease,
     authority: RunAuthority,
     setup_deadline: Instant,
+    hello: PreparedFrame,
 }
 
 /// The independently retained RunOwner has claimed INIT and opened only trusted bootstrap.
@@ -52,11 +53,16 @@ pub(super) struct PreparedDispatch {
     authority: RunAuthority,
     stdin: StdinControl,
     frame: PreparedFrame,
+    metadata_reservation: u64,
 }
 
 impl PreparedDispatch {
     pub(super) fn reserved_bytes(&self) -> Result<u64, StageError> {
-        self.frame.reserved_bytes().map_err(StageError::Control)
+        self.frame
+            .reserved_bytes()
+            .map_err(StageError::Control)?
+            .checked_add(self.metadata_reservation)
+            .ok_or(StageError::Control(ControlError::EncodedBytesExceeded))
     }
 }
 
@@ -120,9 +126,17 @@ impl Bootstrap {
                 lease,
                 authority,
                 setup_deadline,
+                hello: PreparedFrame::encode(&CallerControl::Hello {
+                    identity: current_build_identity(),
+                    authority,
+                })?,
             },
             endpoint,
         ))
+    }
+
+    pub(super) fn reserved_bytes(&self) -> Result<u64, StageError> {
+        self.hello.reserved_bytes().map_err(StageError::Control)
     }
 
     pub(super) fn setup_deadline(&self) -> Instant {
@@ -143,6 +157,30 @@ impl Bootstrap {
             OriginalStdin::Open(_) => StdinControl::Open,
             OriginalStdin::Closed => StdinControl::Closed,
         };
+        // Charge the peak of actual named preparation metadata as well as the retained frame.
+        // Serialization consumes these values before L exists; no late unbounded recipe clone
+        // is introduced by the authenticated Dispatch transition.
+        let mut metadata_reservation = command
+            .reserved_bytes()
+            .map_err(|error| StageError::Control(ControlError::Io(error)))?;
+        let cleanup_storage = cleanup_paths
+            .capacity()
+            .checked_mul(std::mem::size_of::<OsString>())
+            .ok_or(StageError::Control(ControlError::EncodedBytesExceeded))?;
+        metadata_reservation = metadata_reservation
+            .checked_add(
+                u64::try_from(cleanup_storage)
+                    .map_err(|_| StageError::Control(ControlError::EncodedBytesExceeded))?,
+            )
+            .ok_or(StageError::Control(ControlError::EncodedBytesExceeded))?;
+        for path in &cleanup_paths {
+            metadata_reservation = metadata_reservation
+                .checked_add(
+                    u64::try_from(path.capacity())
+                        .map_err(|_| StageError::Control(ControlError::EncodedBytesExceeded))?,
+                )
+                .ok_or(StageError::Control(ControlError::EncodedBytesExceeded))?;
+        }
         let frame = PreparedFrame::encode(&CallerControl::Dispatch {
             authority: self.authority,
             command,
@@ -153,19 +191,15 @@ impl Bootstrap {
             authority: self.authority,
             stdin,
             frame,
+            metadata_reservation,
         })
     }
 
     /// Called only after the separate owner validates INIT and binds its memory observer.
     pub(super) fn claimed(self) -> Result<ClaimedBootstrap, StageError> {
-        self.lease.transport().send(
-            &CallerControl::Hello {
-                identity: current_build_identity(),
-                authority: self.authority,
-            },
-            &[],
-            self.setup_deadline,
-        )?;
+        self.lease
+            .transport()
+            .send_prepared(&self.hello, &[], self.setup_deadline)?;
         Ok(ClaimedBootstrap(self))
     }
 
