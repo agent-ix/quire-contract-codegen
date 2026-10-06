@@ -40,8 +40,12 @@ syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # The already locked nix supplies PID-zero-safe SO_PEERCRED; rustix retains owned rights.
-nix = { version = "=0.31.3", default-features = false, features = ["socket"] }
+nix = { version = "=0.31.3", default-features = false, features = ["socket", "process", "sched", "mount"] }
 quire-guardian-build-epoch = { path = "guardian-build-epoch" }
+
+[target.'cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64")))'.dependencies]
+# O installs the per-run pipe-capacity restriction before spawning any writer-bearing child.
+seccompiler = { version = "0.5", default-features = false }
 
 [dev-dependencies]
 jsonschema = { version = "=0.17.1", default-features = false, features = ["draft202012"] }
