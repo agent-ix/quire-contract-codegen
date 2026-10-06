@@ -65,3 +65,9 @@ Round 3 re-check of the next fix-round candidate of PR #298, covering every find
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-006 | still-open | Recorded this round; no fix has landed. interface-001 line 139 names IR-241 and FR-029 Outputs line 92 names IR-635 for the same interim `TerminalPairError` variants. |
+
+Round 4 re-check of the next fix-round candidate of PR #298, covering every finding whose latest outcome was still open or unset, and regressions in the fix. Findings whose latest outcome is already `fixed` need no new row. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | The attribution now agrees across every maintained artifact. IR-241 owns the proof-subject and verified-strength inputs and the interim `NonProductionProof`/`ShadowCounterexample` variants; IR-635 owns only the widened inconclusive/cover-unsatisfied `refinement_failed` case and the parity route. FR-029 says this in Inputs, Outputs ("IR-635 does not reassign ownership of the variants"), the AC-21 prefix and Status. interface-001 keeps "planned, IR-241: NonProductionProof / ShadowCounterexample" and its semantics names both tickets, as do the kani matrix row and TC-048 step 8. Only attribution changed: every FR-029 criterion body is identical to the previous candidate apart from the AC-21 ownership prefix, and the QSL-640 gate is unchanged. The matrix still lists the planned criteria untagged and AC-6 and AC-15 tagged only by their ordinary-map tests. No added line is over 100 columns, no link is broken and no token is split. |
