@@ -306,6 +306,15 @@ fn start(
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> Result<BoundedLaunch, KaniExecutionRefusal> {
+    // The namespace helper's successful spawn cannot establish that its backend exists.
+    // Refuse an absent launcher before helper dispatch, retaining the launcher's typed fault.
+    fs::metadata(&request.installation.launcher).map_err(|error| {
+        KaniExecutionRefusal::Tool(KaniToolError::Io {
+            tool: KaniTool::Launcher,
+            path: request.installation.launcher.clone(),
+            error,
+        })
+    })?;
     let mut ceilings = request.harness.view().ceilings;
     ceilings.wall_clock = timeout;
     run_bounded_launcher(command, ceilings, harnesses).map_err(|error| match error {

@@ -621,7 +621,7 @@ mod tests {
         .expect("a checked node id");
         KaniScalarObligationHarness {
             identity: ScalarObligationIdentity {
-                ceilings: crate::kani::test_support::proof_ceilings(),
+                ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
                 node_id,
                 operation_identity: "quire.op.integer.add".to_owned(),
                 oracle_symbol: "oracle".to_owned(),

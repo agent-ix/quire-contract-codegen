@@ -412,7 +412,8 @@ fn valid_pid(pid: u32) -> io::Result<Pid> {
         .ok_or_else(|| unavailable("invalid namespace process id"))
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(test)]
+#[cfg(target_os = "linux")]
 mod tests {
     use super::*;
     use crate::kani::test_support::discover_scratch;

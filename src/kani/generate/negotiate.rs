@@ -1113,7 +1113,7 @@ mod tests {
 
     fn render_probe_request<'a>(items: &'a [ObligationItem<'a>]) -> KaniObligationRequest<'a> {
         KaniObligationRequest {
-            ceilings: crate::kani::test_support::proof_ceilings(),
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
             items,
             subject_path: "render_probe::subject",
             unwind: 4,
