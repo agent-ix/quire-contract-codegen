@@ -13,7 +13,7 @@ use super::{
     outer_setup::{self, LauncherNamespace, NamespaceIdentity, PreparedOuter, SetupError},
     protocol::BuildIdentity,
     role_deadline::DeadlineError,
-    role_protocol::{LauncherControl, OuterBootstrap, RunSettings},
+    role_protocol::{InnerBootstrap, LauncherControl, OuterBootstrap, RunSettings},
     spawner::SPAWNER_STACK_BYTES,
 };
 
@@ -31,6 +31,7 @@ pub(super) struct PreparedLauncher {
 #[derive(Debug)]
 pub(super) enum BootstrapError {
     Control(ControlError),
+    Report(super::report_storage::ReportError),
     Creator(io::Error),
     Setup(SetupError),
     Deadline(DeadlineError),
@@ -43,6 +44,10 @@ pub(super) enum BootstrapError {
     ReplayedAuthority,
     LauncherObservation(io::Error),
     LauncherObservationConsumed,
+    InnerIdentityMismatch,
+    OuterNamespaceMismatch,
+    WriterMappingMismatch,
+    InheritedParentDeath,
 }
 
 impl std::fmt::Display for BootstrapError {
@@ -55,6 +60,7 @@ impl std::error::Error for BootstrapError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Control(error) => Some(error),
+            Self::Report(error) => Some(error),
             Self::Creator(error) | Self::LauncherObservation(error) => Some(error),
             Self::Setup(error) => Some(error),
             Self::Deadline(error) => Some(error),
@@ -65,7 +71,11 @@ impl std::error::Error for BootstrapError {
             | Self::ChargeUnrepresentable
             | Self::UnexpectedControl
             | Self::ReplayedAuthority
-            | Self::LauncherObservationConsumed => None,
+            | Self::LauncherObservationConsumed
+            | Self::InnerIdentityMismatch
+            | Self::OuterNamespaceMismatch
+            | Self::WriterMappingMismatch
+            | Self::InheritedParentDeath => None,
         }
     }
 }
@@ -340,5 +350,117 @@ impl OuterSetup {
         } else {
             Ok(())
         }
+    }
+}
+
+/// I's authenticated O-origin bootstrap, separate from its original exclusive C lease.
+/// This state grants no backend Dispatch; that remains the unchanged typed C/I protocol.
+pub(super) struct InnerInput {
+    pub(super) settings: RunSettings,
+    pub(super) outer_pin: OwnedFd,
+    pub(super) caller_pin: OwnedFd,
+    pub(super) outer_bootstrap: RoleEndpoint,
+    pub(super) caller_lease: GuardianEndpoint,
+    pub(super) writer: File,
+}
+
+impl InnerInput {
+    /// Runs only at actual single-thread inner PID1 entry before creating any backend.
+    /// O's original pipe identity is authenticated before acquiring/closing the exact slot.
+    pub(super) fn receive(
+        identity: BuildIdentity,
+        initial_deadline: Instant,
+    ) -> Result<Self, BootstrapError> {
+        outer_setup::require_single_thread().map_err(BootstrapError::Setup)?;
+        if rustix::process::getpid().as_raw_nonzero().get() != 1
+            || rustix::process::getuid().as_raw() != 0
+            || rustix::process::getgid().as_raw() != 0
+        {
+            return Err(BootstrapError::InnerIdentityMismatch);
+        }
+        let entry = RoleEntry::from_entry_stdin().map_err(BootstrapError::Control)?;
+        let received = entry
+            .receive::<InnerBootstrap>(InnerBootstrap::rights_count, initial_deadline)
+            .map_err(BootstrapError::Control)?;
+        if !received.control.expected_report_mapping() {
+            return Err(BootstrapError::WriterMappingMismatch);
+        }
+        let InnerBootstrap::Start {
+            settings,
+            outer_namespace,
+            report,
+            report_slot: _,
+        } = received.control;
+        let [outer_pin, caller_pin, lease]: [OwnedFd; 3] =
+            received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
+                BootstrapError::Control(ControlError::RightsCount {
+                    expected: 3,
+                    received: rights.len(),
+                })
+            })?;
+        let outer_bootstrap = entry
+            .authenticate(&outer_pin)
+            .map_err(BootstrapError::Control)?;
+        if settings.identity != identity {
+            return Err(BootstrapError::BuildIdentityMismatch);
+        }
+        if !settings.helper.is_absolute() {
+            return Err(BootstrapError::HelperNotAbsolute);
+        }
+        settings
+            .deadline
+            .local()
+            .map_err(BootstrapError::Deadline)?;
+        creator::require_live(&outer_pin).map_err(BootstrapError::Creator)?;
+        creator::require_live(&caller_pin).map_err(BootstrapError::Creator)?;
+        let creator = outer_bootstrap
+            .transport()
+            .creator_credentials()
+            .map_err(BootstrapError::Control)?;
+        if creator.uid != 0 || creator.gid != 0 {
+            return Err(BootstrapError::OriginalIdentityMismatch);
+        }
+        if NamespaceIdentity::read("/proc/self/ns/pid").map_err(BootstrapError::Creator)?
+            == outer_namespace
+        {
+            return Err(BootstrapError::OuterNamespaceMismatch);
+        }
+        let caller_lease =
+            GuardianEndpoint::from_received(lease, &caller_pin).map_err(BootstrapError::Control)?;
+        outer_bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(BootstrapError::Control)?;
+        // O's positively owned namespace contains I independently of M. Fatal inherited inner
+        // PDEATH cannot replace the live-C lease EOF oracle or abort its pre-escalation facts.
+        rustix::process::set_parent_process_death_signal(None)
+            .map_err(|error| BootstrapError::Creator(error.into()))?;
+        if rustix::process::parent_process_death_signal()
+            .map_err(|error| BootstrapError::Creator(error.into()))?
+            .is_some()
+        {
+            return Err(BootstrapError::InheritedParentDeath);
+        }
+        creator::require_live(&outer_pin).map_err(BootstrapError::Creator)?;
+        let writer =
+            super::report_storage::acquire_inner_writer(&report).map_err(BootstrapError::Report)?;
+        settings
+            .deadline
+            .local()
+            .map_err(BootstrapError::Deadline)?;
+        creator::require_live(&outer_pin).map_err(BootstrapError::Creator)?;
+        creator::require_live(&caller_pin).map_err(BootstrapError::Creator)?;
+        outer_bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(BootstrapError::Control)?;
+        Ok(Self {
+            settings,
+            outer_pin,
+            caller_pin,
+            outer_bootstrap,
+            caller_lease,
+            writer,
+        })
     }
 }
