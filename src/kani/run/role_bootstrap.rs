@@ -102,15 +102,8 @@ pub(super) fn prepare_launcher(
         .authenticate(&caller_pin)
         .map_err(BootstrapError::Control)?;
     let original_deadline = settings
-        .deadline
-        .local()
+        .startup_deadline()
         .map_err(BootstrapError::Deadline)?
-        .min(
-            settings
-                .setup_deadline
-                .local()
-                .map_err(BootstrapError::Deadline)?,
-        )
         .min(initial_deadline);
     if settings.identity != identity {
         // This authenticated C→L pair exists before unshare or any child. Preserve typed stale-
@@ -158,8 +151,7 @@ pub(super) fn prepare_launcher(
         return Err(BootstrapError::CallerStackNotCharged);
     }
     settings
-        .deadline
-        .local()
+        .startup_deadline()
         .map_err(BootstrapError::Deadline)?;
     creator::validate_parent_thread(&creator_pin, &caller_pin).map_err(BootstrapError::Creator)?;
     let inner_endpoint =
@@ -174,8 +166,7 @@ pub(super) fn prepare_launcher(
     )
     .map_err(BootstrapError::Setup)?;
     settings
-        .deadline
-        .local()
+        .startup_deadline()
         .map_err(BootstrapError::Deadline)?;
     bootstrap
         .transport()
@@ -254,22 +245,11 @@ impl OuterInput {
         let inner_endpoint =
             GuardianEndpoint::from_received(inner, &caller_pin).map_err(BootstrapError::Control)?;
         let original = settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(BootstrapError::Deadline)?;
         let observation = bootstrap
             .transport()
-            .receive::<OuterBootstrap>(
-                OuterBootstrap::rights_count,
-                original
-                    .min(
-                        settings
-                            .setup_deadline
-                            .local()
-                            .map_err(BootstrapError::Deadline)?,
-                    )
-                    .min(initial_deadline),
-            )
+            .receive::<OuterBootstrap>(OuterBootstrap::rights_count, original.min(initial_deadline))
             .map_err(BootstrapError::Control)?;
         let OuterBootstrap::LauncherObservation { authority } = observation.control else {
             return Err(BootstrapError::UnexpectedControl);
@@ -333,15 +313,8 @@ impl OuterInput {
     pub(super) fn into_parts(mut self) -> Result<OuterParts, BootstrapError> {
         let deadline = self
             .settings
-            .deadline
-            .local()
-            .map_err(BootstrapError::Deadline)?
-            .min(
-                self.settings
-                    .setup_deadline
-                    .local()
-                    .map_err(BootstrapError::Deadline)?,
-            );
+            .startup_deadline()
+            .map_err(BootstrapError::Deadline)?;
         let (stat, status) = self
             .launcher_observation
             .take()
@@ -477,8 +450,7 @@ impl InnerInput {
             .local()
             .map_err(BootstrapError::Deadline)?;
         settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(BootstrapError::Deadline)?;
         creator::require_live(&outer_pin).map_err(BootstrapError::Creator)?;
         creator::require_live(&caller_pin).map_err(BootstrapError::Creator)?;
@@ -514,8 +486,7 @@ impl InnerInput {
         let writer =
             super::report_storage::acquire_inner_writer(&report).map_err(BootstrapError::Report)?;
         settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(BootstrapError::Deadline)?;
         creator::require_live(&outer_pin).map_err(BootstrapError::Creator)?;
         creator::require_live(&caller_pin).map_err(BootstrapError::Creator)?;

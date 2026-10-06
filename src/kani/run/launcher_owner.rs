@@ -89,8 +89,7 @@ impl LauncherOwner {
     pub(super) fn prepare(input: PreparedLauncher) -> Result<Self, LauncherError> {
         input
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(LauncherError::Deadline)?;
         let (bootstrap, endpoint) = role_pair().map_err(LauncherError::Control)?;
         let command = HelperRole::Outer
@@ -145,8 +144,7 @@ impl LauncherOwner {
         let deadline = self
             .input
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(LauncherError::Deadline)?
             .min(
                 self.input
@@ -247,8 +245,7 @@ impl LauncherOwner {
         let deadline = self
             .input
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(LauncherError::Deadline)?
             .min(
                 self.input
@@ -322,8 +319,7 @@ impl LauncherOwner {
             .map_err(LauncherError::Deadline)?;
         self.input
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(LauncherError::Deadline)?;
         if rustix::process::parent_process_death_signal()
             .map_err(|error| LauncherError::Io(error.into()))?

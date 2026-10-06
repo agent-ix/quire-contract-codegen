@@ -116,6 +116,7 @@ pub(super) struct CallerBootstrap {
     spawner: Option<RetainedSpawner>,
     identity: Option<SpawnIdentity>,
     deadline: Instant,
+    identity_deadline: Option<Instant>,
     build_identity: BuildIdentity,
     authority: RunAuthority,
     caller_uid: u32,
@@ -162,11 +163,12 @@ impl CallerBootstrap {
         {
             return Err(CallerBootstrapError::SettingsMismatch);
         }
-        let deadline = settings
-            .deadline
-            .local()
-            .map_err(CallerBootstrapError::Deadline)?
-            .min(bootstrap.setup_deadline());
+        let identity_deadline = settings
+            .identity_deadline()
+            .map_err(CallerBootstrapError::Deadline)?;
+        let deadline = identity_deadline.map_or(bootstrap.setup_deadline(), |deadline| {
+            deadline.min(bootstrap.setup_deadline())
+        });
         // A supplied numeric label cannot replace the genuine original C setup clock.
         settings.setup_deadline =
             RoleDeadline::from_original(deadline).map_err(CallerBootstrapError::Deadline)?;
@@ -273,6 +275,7 @@ impl CallerBootstrap {
             spawner: None,
             identity: None,
             deadline,
+            identity_deadline,
             build_identity,
             authority,
             caller_uid,
@@ -614,6 +617,12 @@ impl CallerBootstrap {
         self.inner_bootstrap
             .take()
             .ok_or(CallerBootstrapError::InnerBootstrapConsumed)
+    }
+
+    /// The original identity clock is independent from the finite startup cap. None has its
+    /// original never-elapsing meaning, never a deadline synthesized at backend completion.
+    pub(super) fn identity_deadline(&self) -> Option<Instant> {
+        self.identity_deadline
     }
 
     pub(super) fn named_buffer_reservation(&self) -> u64 {

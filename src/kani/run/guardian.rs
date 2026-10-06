@@ -139,8 +139,7 @@ pub(super) fn prepare_inner_backend(
     input.outer_bootstrap.transport().refuse_observable_eof()?;
     let deadline = input
         .settings
-        .deadline
-        .local()
+        .startup_deadline()
         .map_err(io::Error::other)?
         .min(
             input

@@ -58,7 +58,7 @@ pub(super) struct ResourceLedger {
     caller_buffers: u64,
     backing: BackingReserve,
     pipe: PipeIdentity,
-    deadline: Instant,
+    deadline: Option<Instant>,
     last_sample: Option<MemoryTick>,
     peak_tree_rss: Option<u64>,
     peak_conservative: Option<u64>,
@@ -73,9 +73,9 @@ impl ResourceLedger {
         caller_buffers: u64,
         backing: BackingReserve,
         pipe: PipeIdentity,
-        deadline: Instant,
+        deadline: Option<Instant>,
     ) -> Result<Self, ChargeError> {
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             return Err(ChargeError::Deadline);
         }
         let minimum =
@@ -133,7 +133,10 @@ impl ResourceLedger {
             // Preserve the executor's memory-before-deadline priority for an independently
             // established overage. Neither this sample nor partial content may become a proof.
             MemoryTick::Exhausted(sample)
-        } else if Instant::now() >= self.deadline {
+        } else if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
             return Err(ChargeError::Deadline);
         } else {
             MemoryTick::WithinCeiling(sample)
@@ -157,7 +160,10 @@ impl ResourceLedger {
             None => return Err(ChargeError::MissingSetupSample),
             Some(MemoryTick::WithinCeiling(_)) => {}
         }
-        if Instant::now() >= self.deadline {
+        if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
             return Err(ChargeError::Deadline);
         }
         Ok(())
