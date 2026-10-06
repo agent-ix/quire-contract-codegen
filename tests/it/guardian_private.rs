@@ -360,6 +360,16 @@ fn exact_shared_claimed_prefix_caller_and_group_death_transfer_actual_init_autho
             else {
                 panic!("claimed prefix must transfer validated INIT");
             };
+            if witness.prefix == GuardianFixturePrefix::InitReady {
+                assert_ne!(
+                    identity.group, witness.caller.group,
+                    "actual Ready guardian group is isolated"
+                );
+                assert_ne!(
+                    identity.session, witness.caller.session,
+                    "actual Ready guardian session is isolated"
+                );
+            }
             assert_ne!(
                 identity.namespace,
                 fs::read_link("/proc/self/ns/pid")
