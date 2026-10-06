@@ -418,7 +418,9 @@ fn parse_process(text: &str) -> io::Result<Process> {
         .next()
         .and_then(|value| value.parse().ok())
         .ok_or_else(malformed)?;
-    let _group: u32 = fields
+    // Linux leaves this unused group field at -1 when an exiting task has no sighand.
+    // Ownership is still checked from the PID, start tick and parent, not this group value.
+    let _group: i32 = fields
         .next()
         .and_then(|value| value.parse().ok())
         .ok_or_else(malformed)?;
@@ -446,6 +448,60 @@ fn parse_process(text: &str) -> io::Result<Process> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-028-AC-21.
+    #[test]
+    fn released_sighand_signed_group_preserves_owned_rss_and_identity_checks() {
+        let root = crate::kani::test_support::discover_scratch("memory-signed-group");
+        let directory = root.join("42");
+        fs::create_dir_all(directory.join("task/42")).unwrap();
+        fs::write(directory.join("task/42/children"), []).unwrap();
+        let mut fields = ["0"; 22];
+        fields[0] = "S";
+        fields[1] = "1";
+        fields[2] = "42";
+        fields[19] = "200";
+        fields[20] = "1048576";
+        fields[21] = "16";
+        let stat = |fields: &[&str]| format!("42 (owned) {}", fields.join(" "));
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        fs::write(directory.join("status"), "VmRSS:\t64 kB\nThreads:\t1\n").unwrap();
+        let mut observer = MemoryObserver {
+            root: root.clone(),
+            known: BTreeMap::from([(42, 200)]),
+            observation: MemoryObservation {
+                mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        };
+        assert_eq!(observer.observe(42).unwrap(), 64 * 1024);
+
+        // do_task_stat can keep pgid=-1 when the exiting task has lost its sighand.
+        fields[0] = "X";
+        fields[1] = "0";
+        fields[2] = "-1";
+        fields[20] = "0";
+        fields[21] = "0";
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        fs::write(directory.join("status"), "State:\tX (dead)\nThreads:\t1\n").unwrap();
+        assert_eq!(observer.observe(42).unwrap(), 0);
+        assert_eq!(observer.observation().peak_resident_bytes, Some(64 * 1024));
+
+        fields[1] = "not-a-parent";
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        assert_eq!(
+            observer.observe(42).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fields[1] = "0";
+        fields[19] = "201";
+        fs::write(directory.join("stat"), stat(&fields)).unwrap();
+        assert_eq!(
+            observer.observe(42).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     /// Trace: FR-028-AC-21.
     #[test]
