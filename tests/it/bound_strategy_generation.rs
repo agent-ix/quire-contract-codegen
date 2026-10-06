@@ -169,6 +169,27 @@ fn generate(
     .unwrap()
 }
 
+/// Trace: TC-017, FR-008-AC-3; TC-003, NFR-002-AC-3.
+#[test]
+fn wide_ir_domain_refuses_the_i64_strategy() {
+    for maximum in [i128::from(i64::MAX) + 1, i128::from(u64::MAX), i128::MAX] {
+        let mut projection = version_projection();
+        projection["bindings"][0]["expression"]["values"][0]["value_type"]["maximum"] =
+            json!(maximum.to_string());
+        let package = decode(&projection);
+        let refusal = generate_bound_strategy(&BoundStrategyRequest {
+            package: &package,
+            clause: &clause_ref(),
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+        })
+        .unwrap_err();
+        assert_eq!(refusal.code, StrategyErrorCode::UnsupportedClause);
+    }
+}
+
 fn generate_projection_population(
     value: &Value,
     clause: &ClauseRef,

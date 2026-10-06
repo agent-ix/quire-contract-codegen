@@ -338,10 +338,17 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
             "the primary read declaration is not a bounded integer",
         ));
     };
-    let domain = Domain {
-        minimum: value.minimum(),
-        maximum: value.maximum(),
+    let (Ok(minimum), Ok(maximum)) = (
+        i64::try_from(value.minimum()),
+        i64::try_from(value.maximum()),
+    ) else {
+        return Err(relation_diagnostic(
+            clause,
+            expression,
+            "the declared integer domain is not representable as i64",
+        ));
     };
+    let domain = Domain { minimum, maximum };
     let operator = map_operator(*operator);
     let relation = match partner {
         Some(_) => Relation::between_reads(operator),
@@ -360,6 +367,13 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
                     clause,
                     expression,
                     "the non-read comparison operand is not an integer literal",
+                )
+            })?;
+            let literal = i64::try_from(literal).map_err(|_| {
+                relation_diagnostic(
+                    clause,
+                    expression,
+                    "the comparison literal is not representable as i64",
                 )
             })?;
             Relation::with_literal(operator, position, literal)
@@ -438,7 +452,7 @@ fn explicit_relation_locus(clause: &BoundClause) -> Option<&Expression> {
     None
 }
 
-fn integer_literal(expression: &Expression) -> Option<i64> {
+fn integer_literal(expression: &Expression) -> Option<i128> {
     match expression.kind() {
         ExpressionKind::IntegerLiteral { value, .. } => Some(*value),
         _ => None,

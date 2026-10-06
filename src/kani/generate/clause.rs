@@ -257,12 +257,11 @@ pub(super) fn abi(contexts: &[(&ClauseOracle, SlotContext)]) -> Result<Abi, Unsu
                 RustValueType::Boolean => (KaniPrimitiveType::Boolean, None),
                 RustValueType::Integer(value) => (
                     KaniPrimitiveType::I64,
-                    Some(KaniIntegerBounds {
-                        domain: value.domain(),
-                        minimum: value.minimum(),
-                        maximum: value.maximum(),
-                        overflow: value.overflow(),
-                    }),
+                    Some(KaniIntegerBounds::from_model(value).ok_or(
+                        UnsupportedObligation::ClauseLowering {
+                            generation_code: GenerationErrorCode::UnsupportedDependency,
+                        },
+                    )?),
                 ),
             };
             match bindings.get_mut(&identifier) {

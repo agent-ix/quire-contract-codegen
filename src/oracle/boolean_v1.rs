@@ -583,9 +583,25 @@ fn analyze_node(
         ));
     }
     let typed_value = rust_value_type(typed_node.value_type());
+    if let Some(RustValueType::Integer(value)) = &typed_value {
+        if i64::try_from(value.minimum()).is_err() || i64::try_from(value.maximum()).is_err() {
+            return Err(unsupported_node(
+                request,
+                expression,
+                "the integer type's bounds are not representable as i64",
+            ));
+        }
+    }
     let analyzed = match expression.kind() {
         ExpressionKind::BooleanLiteral { .. } => RustValueType::Boolean,
-        ExpressionKind::IntegerLiteral { value_type, .. } => {
+        ExpressionKind::IntegerLiteral { value, value_type } => {
+            if i64::try_from(*value).is_err() {
+                return Err(unsupported_node(
+                    request,
+                    expression,
+                    "the integer literal is not representable as i64",
+                ));
+            }
             if typed_node.value_type() != &ValueType::integer(value_type.clone()) {
                 return Err(unsupported_node(
                     request,
@@ -1307,8 +1323,8 @@ impl<'a> Renderer<'a> {
     }
 }
 
-fn integer_literal_source(value: i64) -> String {
-    if value == i64::MIN {
+fn integer_literal_source(value: i128) -> String {
+    if value == i128::from(i64::MIN) {
         "i64::MIN".to_owned()
     } else {
         format!("{value}_i64")
