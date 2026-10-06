@@ -52,3 +52,9 @@ Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedc
 | --- | --- | --- |
 | FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: AC-36 and TC-049 step 23 no longer require caller stdout/stderr socket cases; fd1/fd2 are verified as executor-created capture pipes by mapping/inventory Analysis, and AC-36's verification method is now Test, Analysis. |
 | FND-002 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: Closed stdin is an explicit OriginalStdin::Closed tag captured before controls exist, and an inspection error on OriginalStdin::Open (EBADF included) refuses; the two cases no longer share one observable. The definition of the tag itself is raised separately as FND-003. |
+
+Round 2, reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run f90d3cf1-e644-4114-8208-665e32c34e50, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | 004c864626720341f3e06994f3d17494bbd6aa44: OriginalStdin is now a planned internal bootstrap value captured by C, explicitly not a public KaniExecutionRequest field. Line 262 now reads 'When C captures OriginalStdin::Closed at entry'. Initial authoritative absence (EBADF) or an original CLOEXEC fd0 at C's capture boundary is Closed. A later inspection error on a captured Open pin refuses. A failed or unstable capture refuses. The two observations no longer conflict, and safe capture is stated as an UNRUN CODE gate, not current support. |

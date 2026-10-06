@@ -50,3 +50,17 @@ Round 1, reviewed at 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee (base 5d3eaa2bbedc
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee: L now creates NEWNET and the confined private root before O; O validates both before M; the setup capability list (line 90) adds NEWNET; the unchanged exact inner argv's --bind / / is defined to bind O's confined root, never the host root. Continuous pathname exclusion is assigned to the backend-only seccomp policy. |
+
+Round 2, reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run f90d3cf1-e644-4114-8208-665e32c34e50, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-002 | fixed | 004c864626720341f3e06994f3d17494bbd6aa44: A two-row boundary table now separates the two failures. Policy/filter/privilege installation failure happens before positive Dispatch and is reported over the authenticated startup channel as typed unavailable admission. Exec failure of the actual recipe happens after Dispatch and is handled by the existing bounded backend-failure rules (AC-10 already lists backend exec failure), with no synthetic evidence, no new kind and no retroactive pre-Dispatch reclassification. TC-049 step 22 now tests the two cases separately. |
+
+## New findings (disposition pass 2)
+
+Reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | TC-049 step 22's post-Dispatch recipe exec failure case names 'missing/non-executable recipe program' as its trigger. Those inputs never reach Dispatch: start (src/kani/run/execute.rs:355-358) calls KaniInstallation::require_executable (src/kani/run/tool.rs:66-84) before launch, which refuses a missing path or a file with no execute bit as KaniToolError::Io before any backend spawn. The named case therefore yields the existing pre-Dispatch Tool refusal, or else needs a timing race that TC-049 forbids. Name a trigger that passes the existing check and fails at the actual exec, such as an executable regular file with an invalid format or a missing ELF interpreter, or state that the existing pre-check stays and how the post-Dispatch path is reached. | spec/kani/matrix/TC-049-caller-death-ownership.md:436-438 |
