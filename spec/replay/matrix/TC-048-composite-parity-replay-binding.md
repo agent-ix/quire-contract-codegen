@@ -20,8 +20,8 @@ Planned public-consumer scenarios for
 [FR-033](../functional/FR-033-composite-parity-replay-binding.md),
 [FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
 [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-27. All
-completed-route checks are GATED on actual QSL-640 node-parity/value/settlement API delivery, not a
-spec-only merge. This scenario artifact claims no executable coverage. FR-028 AC-17/24 retain the
+completed-route checks are GATED until CG consumes the QSL-640 node-parity/value/settlement API
+delivered in QSL #645; a spec-only merge does not satisfy that gate. This scenario artifact claims no executable coverage. FR-028 AC-17/24 retain the
 strength/ceiling evidence checked here; native execution and backend controls use their named lanes
 and never replace positive QSL evaluation with a verdict double.
 
@@ -53,7 +53,7 @@ and never replace positive QSL evaluation with a verdict double.
    authoritative equality duplicate rules, not only byte-identical values. No copied upstream
    schema/fixture or executable is used. Exercise these operand refusals without retained
    Disagreed; step 10 checks the separate disagreement-first case. Union text decode is present in
-   the measured unmerged upstream code, but union replay conversion remains unsupported until
+   QSL's delivered value decoder, but union replay conversion remains unsupported until
    checker union admission is delivered; do not count a decode as successful union replay.
 4. Submit arbitrary public input at the configured encoded-byte limit and one byte over. Observe the
    byte guard before parsing/unescaping. Exhaust checked occurrence and work counters separately.
@@ -93,13 +93,14 @@ and never replace positive QSL evaluation with a verdict double.
    separately; it cannot enter the completed sampled path.
 8. Feed each QSL result/record through the public converter and terminal map. Read actual record
    category/cause for Proved0. Cross-bind another run/result and alter node, operation, operand,
-   domain, limits or proof-content identity; each returns no settlement. Keep QSL refusal codes,
-   executor faults and CG defect causes typed. Before QSL-640 delivery, also exercise inconclusive
+   domain, limits or proof-content identity; each CG precheck or failed report binding returns no
+   report terminal value. Keep QSL refusal codes, executor faults and CG defect causes typed. Until
+   CG consumes the delivered QSL parity facade, also exercise inconclusive
    and cover-unsatisfied shadows with retained refinement_failed: each takes typed interim
    NonProductionProof carrying that strength and returns no terminal value. IR-241 owns the refusal
    variant and verified-strength input; IR-635 owns the widened interim case. Cases without
-   disagreement take ordinary inconclusive rows. After delivery, the disagreement-first
-   Failed/CgDefect rule applies. While the upstream gate holds, an otherwise valid request reaches
+   disagreement take ordinary inconclusive rows. After CG consumer delivery, the disagreement-first
+   Failed/CgDefect rule applies. While the CG consumer gate holds, an otherwise valid request reaches
    the unavailable-capability refusal; malformed earlier setup reaches its own refusal. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.
 
@@ -111,13 +112,21 @@ and never replace positive QSL evaluation with a verdict double.
    independently and require identity mismatch. Change only CG abstractions, size budget, static
    closure pair-node count or unexercised behaviours and require the same O-09 digest while the
    full FR-015 AC-76 record retains those changes. Mutate the static pair-node count in that record,
-   not the runtime occurrence-pair count that step 5/F-6 compares. After QSL-640 delivers the owning
+   not the runtime occurrence-pair count that step 5/F-7 compares. After QSL-640 delivers the owning
    content-binding API, replace the proved artifact or original context while retaining O-09 and
    require refusal through that delivered API. This artifact-replacement test remains mandatory;
    before delivery it stays gated, with no invented API or extra CG tracking digest. Existing
    function/frame preimage vectors remain equal.
-10. Submit a changed source/package/node/occurrence/bound/O-09 request with Disagreed and require
-    common claim refusal before any settlement. On the same valid claim, combine Disagreed with
+10. Submit a changed source/package/node/occurrence/bound/O-09 request with Disagreed. A CG
+    precheck rejection returns no report/terminal value; if CG invokes QSL, its common-step
+    non-fault `Refused` result returns a binding-valid report with Inconclusive(ReplayRefused) and
+    QSL's code before F-1. Cause a QSL common-step `Fault` and `Admission(Fault)` in separate
+    cases; each binding-valid report returns Failed, never ReplayRefused. Change each full
+    `CompositeIdentity` member independently in a returned report: obligation, node, occurrence,
+    operator, obligation kind, harness bounds, limits, content identity, falsified operands,
+    shadow verdict and pair count, native observation/cause and refinement, then verified SUCCESS
+    count and refinement. Every mismatched or missing report returns a typed CG refusal with no
+    terminal value; the matching report binds. On the same valid claim, combine Disagreed with
     operand refusal (a composite field `x` declared `Int[0, 9]` but supplied as `x: 12`), missing
     native observation,
     native fault, exact-limit/refinement-ceiling and agreeing replay:
@@ -125,11 +134,13 @@ and never replace positive QSL evaluation with a verdict double.
     native evidence. Without disagreement, missing required native observation refuses the replay
     continuing beyond F-1. Combine an out-of-domain operand with native Incomplete and with native
     ExecutionFault, each also under a request admission limit, an exact-evaluation limit and
-    CeilingReached: F-2 is GeneratedFault/Failed retaining its NativeCause before admission.
+    CeilingReached: F-2 is GeneratedFault/Failed retaining its NativeCause. QSL FR-358 owns the
+    internal no-admission/no-exact-evaluation rule; assert CG's typed report and terminal value.
     With Completed native, make one operand fail admission and set CeilingReached: F-3 is
     RefusedInput/ReplayRefused with operand index and QSL code. Exhaust the request's accounting
     limit while admitting an otherwise valid operand and set CeilingReached: F-4 is
-    Incomplete/Admission with counter, configured limit and count reached, and no exact evaluation.
+    Incomplete/Admission with counter, configured limit and count reached. QSL FR-358 owns the
+    internal no-exact-evaluation rule; assert CG's Admission report stage and terminal value.
     Exhaust QSL's exact limit after admission and set CeilingReached: F-5 is
     Incomplete/ExactEvaluation; with sufficient limits, CeilingReached reaches F-6
     Incomplete/RefinementCeiling. Assert F-4, F-5 and F-6 have the same ResourceExhausted terminal
@@ -151,8 +162,8 @@ and never replace positive QSL evaluation with a verdict double.
 | FR-033-AC-8 | QSL derives complete declared-key coverage and literal singleton bounds | Treat empty/omitted/unbounded keys as covered, accept duplicate/unknown key or enum undeclared variant/DeclaredDomain |
 | FR-029-AC-17 and AC-19 to AC-27; FR-028-AC-17/24 | Closed strengths; cross-outcome disagreement wins, then verified refinement ceiling, ordinary vacuous record, exhausted+covered, completed Tested; all shadow-inconclusive rows and actual record category preserved | Delete a strength row, let zero defeat disagreement/ceiling, promote Proved0 or label a stopped refinement sampled/Tested |
 | FR-033-AC-11 | O-09 exact claim preimage excludes full CG record extras; separate same-artifact content tie preserved, existing function/frame vectors unchanged | Hash the CG size budget/static pair-node count into O-09, duplicate a self-comparison parameter, skip delivered artifact-replacement refusal or invent a second tracking digest |
-| FR-033-AC-12/13 | Common claim refusal before Disagreed; shared Refinement on both paths; ordered falsified rows preserve actual native cause and separate resource stages | Settle another claim as Failed, hide disagreement behind admission/agreement, compare native instead of shadow, collapse limit stages or send backend ceilings through replay |
-| FR-033-AC-9 | Same-binding converter and truthful typed capability/refusal/fault readings | Accept another result, invent QSL code/cause or bridge through predicate replay |
+| FR-033-AC-12/13 | CG precheck yields no report value; QSL common-step Refused report precedes Disagreed; shared Refinement on both paths; ordered falsified rows preserve actual native cause and separate resource stages | Settle another claim as Failed, hide disagreement behind admission/agreement, compare native instead of shadow, collapse limit stages or send backend ceilings through replay |
+| FR-033-AC-9 | Full `CompositeIdentity` binding and truthful typed capability/refusal/fault readings | Accept one changed observation member; drop QSL Refused report's terminal value; label common-step Fault ReplayRefused; invent QSL code/cause or bridge through predicate replay |
 
 Unimplemented canonical conversions, family harnesses or legal cause representations remain reported
 gaps. The future terminal payload names have the semantic meaning in FR-029, and the owning

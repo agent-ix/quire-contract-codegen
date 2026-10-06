@@ -48,7 +48,10 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 16. Delegate the planned composite strength projection and QSL FR-358 F-1 to F-7 terminal
     scenarios to [TC-048](../../replay/matrix/TC-048-composite-parity-replay-binding.md), which
     verifies FR-029 AC-17 and AC-19 to AC-27 through the IR-666 code consumer. Keep ordinary input
-    pairing separate from the distinct verified/falsified composite settlement input.
+    pairing separate from the distinct verified/falsified composite settlement input. Include a CG
+    precheck refusal and a mismatched report (neither has a terminal value), then binding-valid QSL
+    common-step non-fault, `Fault` and `Admission(Fault)` `Refused` reports (each has a terminal
+    value). Change one observation member to fail full `CompositeIdentity` binding.
 17. Map the `falsified` state-clause run of `deposit_debiting`, whose post-state value lies outside
     its field's declared range, with the exact unclamped post snapshot (FR-029-AC-18, planned,
     pending QSL-634, IR-460).
@@ -88,7 +91,10 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
     F-2 native GeneratedFault before F-3 RefusedInput, distinct F-4 Admission/F-5 ExactEvaluation/
     F-6 RefinementCeiling stages, F-7 comparison, ordinary shadow-inconclusive rows, vacuous record
     category and completed parity Proved/Tested outcomes. Interim nonproduction and shadow
-    counterexample refusals remain until CG consumes the delivered QSL facade.
+    counterexample refusals remain until CG consumes the delivered QSL facade. CG prechecks and
+    wrong-claim reports yield no terminal value; binding-valid QSL common-step non-fault `Refused`
+    yields Inconclusive(ReplayRefused) with QSL code, while `Fault` and `Admission(Fault)` yield
+    Failed. Changing one observation member cannot bind as the same report (FR-029-AC-27).
 17. The post snapshot holds the exact unclamped value and CG refuses nothing itself, and the run is
     `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, planned, pending
     QSL-634, IR-460). Not built: QSL-634 is not merged, and until it lands the run reads

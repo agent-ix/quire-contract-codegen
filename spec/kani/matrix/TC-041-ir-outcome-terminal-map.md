@@ -46,8 +46,11 @@ cause, and that the map is one match with no wildcard arm.
     exact limit reached after admission with CeilingReached; and CeilingReached with sufficient
     limits. Inspect the operand index/code and each incomplete report stage and counter.
 16. With all earlier rows absent, change the retained shadow verdict and pair count independently,
-    then make both agree. Supply a common-step refusal, a missing report and a report whose
-    `CompositeIdentity` changes one observation member. Inspect the terminal record and category.
+    then make both agree. Supply a binding-valid QSL common-step non-fault `Refused` report and
+    separate `Fault` and `Admission(Fault)` reports, each in competition with Disagreed. Also
+    exercise a CG precheck refusal, a missing report and a report whose `CompositeIdentity`
+    changes one observation member. Inspect whether a report and terminal record exist, and the
+    actual result, QSL code and category when they do.
 
 ## Expected Results
 
@@ -70,18 +73,20 @@ cause, and that the map is one match with no wildcard arm.
 13. `TerminalPairError::MissingSettlement` for the counterexample and `UnexpectedSettlement` for each
     other kind, with no terminal value (FR-030-AC-14).
 14. Disagreed is F-1 Failed/CgDefect. Each native stop is F-2 GeneratedFault/Failed with its own
-    NativeCause, before admission or exact evaluation despite every later competing condition
-    (FR-030-AC-15).
+    NativeCause despite every later competing condition. CG asserts result and terminal evidence;
+    QSL FR-358 owns skipped internal admission and exact work (FR-030-AC-15).
 15. The invalid operand is F-3 RefusedInput/ReplayRefused with its index and QSL code. Admission
-    accounting is F-4 Incomplete(ResourceExhausted)/Admission with its request counter and no exact
-    evaluation. Exact exhaustion is F-5 Incomplete(ResourceExhausted)/ExactEvaluation, and only
+    accounting is F-4 Incomplete(ResourceExhausted)/Admission with its request counter. QSL FR-358
+    owns skipped internal exact work. Exact exhaustion is F-5 Incomplete(ResourceExhausted)/ExactEvaluation, and only
     after exact evaluation completes does CeilingReached become F-6
     Incomplete(ResourceExhausted)/RefinementCeiling. The three report stages remain distinct and no
     case is Tested or Refuted (FR-030-AC-16).
 16. Verdict and count divergence each give F-7 Failed/CgDefect; agreement gives
-    Inconclusive(ScalarAgrees) with CompositeEquality/Equality. A QSL common-step refusal wins
-    over Disagreed and yields Inconclusive(ReplayRefused) with its QSL code. Missing or wrong-claim
-    reports yield no terminal value; the valid composite report is not `UnexpectedSettlement`
+    Inconclusive(ScalarAgrees) with CompositeEquality/Equality. A binding-valid QSL common-step
+    non-fault `Refused` report wins over Disagreed and yields Inconclusive(ReplayRefused) with its
+    QSL code; `Fault` and `Admission(Fault)` reports yield Failed, never ReplayRefused. A CG
+    precheck refusal, missing report or wrong-claim report yields no terminal value, including when
+    one observation member changes; the valid composite report is not `UnexpectedSettlement`
     (FR-030-AC-17).
 
 ## Status
