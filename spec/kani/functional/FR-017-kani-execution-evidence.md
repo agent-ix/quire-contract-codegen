@@ -93,12 +93,34 @@ the run and everything read back from it.
   for a precondition harness, whose only property is its non-vacuity cover, the generator shall
   instead classify the run by its cover summary alone, as verified, cover-unsatisfied or
   inconclusive under the cover rules above.
-- The generator shall launch Kani with `-Z unstable-options --export-json <file>`, the file in the
-  request's target directory under a name unique to that launch (the process id and a process-wide
-  sequence), and shall remove only that file, before launching and after reading it. Runs sharing a
-  target directory, in this process or in others at the same time, therefore never write, remove
-  or read each other's report, and a file left by an earlier run is never read as this run's
-  verdict.
+- The generator shall append `-Z`, `unstable-options`, `--export-json`, and `/proc/self/fd/N`, in
+  that exact order after the unchanged harness options. `N` is the actual child-only mapped
+  anonymous report-pipe writer descriptor, at least 5. Evidence records these actual argument bytes,
+  not a synthetic target-directory pathname. All other argument bytes, stdin, environment and cwd
+  remain unchanged.
+- The generator shall use per-run unnamed kernel report storage and the collector obligations in
+  FR-034 AC-32 and AC-33. The generator shall create no target-directory report, pathname reader or
+  named fallback. This explicitly replaces the internal named-report allocation.
+- When actual pipe EOF contains zero bytes, the generator shall treat the run as exporting no
+  report: successful exit refuses as missing report; unsuccessful exit is `NoVerdict`, except an
+  independently established resource/deadline stop retains its existing resource classification.
+- When nonempty bytes end at actual EOF, the generator shall parse the complete bytes under the
+  existing schema rules. An independently established memory/resource or deadline stop takes
+  precedence over partial/malformed content, preserving the single-run resource outcome and
+  existing whole-batch resource/deadline refusal with no member classified. Otherwise, an
+  incomplete/malformed partial write refuses regardless of process exit; a valid full report
+  retains existing exit/report classification rules. EOF alone neither proves Completed nor
+  authorizes classification before confirmed owned cleanup.
+- When the live collector observes report-limit overflow, the generator shall cancel owned execution
+  and classify a single run as `KaniRunOutcome::Inconclusive` with
+  `KaniInconclusiveReason::MemoryExhausted` (`memory_exhausted`). Evidence shall name the 16 MiB
+  report-allocation cap separately from the original whole-run memory ceiling; no tree peak is
+  fabricated. A batch shall retain whole-batch memory-exhausted refusal with no member classified.
+  FR-029 maps this source reason to QSL `Incomplete(ResourceExhausted)`, never `Failed`. This is an
+  explicit outcome delta from the superseded named-reader `TooLarge` refusal, not a reinterpretation
+  of the unchanged legacy reader's current behavior.
+- When Completed is authenticated, the generator shall follow FR-034 AC-33's ordered final handoff,
+  verified immutable descriptor read and cleanup under the original deadline before classification.
 - The generator shall run the launcher as the leader of its own process group and, when the run
   does not conclude within the timeout, kill that group, so that the solver and every other
   process the launcher started in it are killed with it.
@@ -217,11 +239,12 @@ the run and everything read back from it.
   typed report, and `playback.rs` for the console's playback block, a payload), and shall classify every run from that report's fields and never from
   console text. The verdict, the check and cover counts and the unwinding failures come from
   Kani's exported report, whose members and status vocabulary `report.rs` reads exactly.
-  A report that is absent after a successful exit, unreadable, over the read bound, not the one
+  A report that is absent after a successful exit, unreadable, not the one
   schema version the module reads, malformed or of an unknown check status, that (for a single run)
   does not hold exactly one harness result, or whose harness states success while it lists a failed, errored, undetermined or
   unknown check, is a typed refusal with a stable cause and never an outcome: it is not classified
-  inconclusive. A run that exited unsuccessfully and exported no report is `NoVerdict`.
+  inconclusive. Live report-limit overflow instead uses the explicit resource-stop rule above.
+  A run that exited unsuccessfully and exported no report is `NoVerdict`.
 - The generator shall retain, in the evidence and in the classified run, every check the report
   lists, each with its position in the report, its class, its source file and line and its status,
   so a consumer attributes each successful check to source. A line Kani states as unknown is absent;
@@ -260,7 +283,7 @@ the run and everything read back from it.
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
 | FR-017-AC-17 | A run that times out has the whole group the launcher leads killed, a real grandchild included. | Test (TC-027) |
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result in a single run, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
-| FR-017-AC-19 | The launch exports its report after the harness options; its report file name is unique to the launch, so a report another run left or is writing in the same target directory is never read, removed or overwritten by this run, and the run removes its own file; a report over the read bound is refused and not truncated. | Test (TC-027) |
+| FR-017-AC-19 | The generator appends `-Z unstable-options --export-json /proc/self/fd/N` after unchanged harness options, with actual child-only anonymous pipe writer N >= 5, and records the actual argv bytes. It uses per-run unnamed report authority, never a named target-directory report or fallback. FR-034 AC-32/33 own collector bounds, resource-stop classification, kernel lifetime and immutable final handoff. Zero-byte EOF means no exported report; nonempty partial/malformed content is refused under AC-18 unless an independently established resource/deadline stop takes precedence with the existing single-run or whole-batch classification. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
 | FR-017-AC-21 | N harnesses with equal option vectors (the harness selection removed) and equal request timeout T start exactly one launcher process whose argument vector holds one `--harness <module::harness> --exact` pair per member in request order, `--harness-timeout` T, then the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes; one harness starts one process with the single-run argument vector. The group's outer bound is N times T, never elapsing when the product does not fit, and a group killed at it leaves no report and is refused as timed out with no member classified. A T that rounded up exceeds 4294967295 seconds (a `Duration::MAX` request) launches without `--harness-timeout`. A group that exits successfully with no report is refused with the missing-report refusal and classifies no member; one that exits unsuccessfully with no report (an argument error, a failed build) has every member inconclusive `NoVerdict`. Requests that name another launcher, crate directory or target directory are never grouped. | Test (TC-043) |
 | FR-017-AC-22 | Over a real or captured batch report, members are matched by `module::harness` path (two members with the bare symbol `check` stay distinct), and each member's outcome, checks and SUCCESS count come from its own entry: a falsified member beside a verified member leaves the verified member verified; a Success member in a non-zero exit with no Failure entry is inconclusive, and with one Failure entry is verified; a Failure entry with no checks and exit status `timeout` is inconclusive timed-out naming T while the others keep their results; a Failure entry with no checks and no timeout is inconclusive with no counterexample; each member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and checks plus the group's argument vector, the member list, a statement that it was a batch, and the exit code. | Test (TC-043) |
