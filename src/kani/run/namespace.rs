@@ -625,6 +625,9 @@ signal.pause()
             pidfd_open(valid_pid(grandchild).unwrap(), PidfdFlags::empty()).unwrap();
         assert!(!ready(&orphan_handle));
         assert!(!ready(&grandchild_handle));
+        // Pin INIT while the backend still holds it alive. Opening its numeric PID
+        // after backend exit races with INIT's legitimate termination.
+        let init_handle = pidfd_open(valid_pid(init).unwrap(), PidfdFlags::empty()).unwrap();
         fs::write(directory.join("backend-exit"), []).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
@@ -645,7 +648,6 @@ signal.pause()
             );
             std::thread::yield_now();
         }
-        let init_handle = pidfd_open(valid_pid(init).unwrap(), PidfdFlags::empty()).unwrap();
         owner.cleanup().unwrap();
         let orphan_stopped = ready(&orphan_handle);
         let grandchild_stopped = ready(&grandchild_handle);
