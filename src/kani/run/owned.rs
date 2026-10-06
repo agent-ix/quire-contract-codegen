@@ -660,7 +660,8 @@ fn stage_refusal(error: StageError) -> BoundedLaunchError {
             ControlError::EncodedBytesExceeded => GuardianFailureKind::ControlLimit,
             ControlError::InvalidEncoding(_)
             | ControlError::Truncated
-            | ControlError::UnknownAncillary => GuardianFailureKind::MalformedControl,
+            | ControlError::UnknownAncillary
+            | ControlError::ReceivePoisoned => GuardianFailureKind::MalformedControl,
             ControlError::MissingCredentials
             | ControlError::RepeatedCredentials
             | ControlError::ChangedCredentials

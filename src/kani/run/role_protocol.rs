@@ -136,3 +136,27 @@ impl InnerBootstrap {
         }
     }
 }
+
+/// Ordinary private C→O startup transitions. Each authorization names the original run;
+/// no command changes the original deadline, grants Dispatch or carries fixture observations.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum OuterPhaseCommand {
+    BeginMonitor { authority: RunAuthority },
+    ClaimInner { authority: RunAuthority },
+    ReleaseGate { authority: RunAuthority },
+}
+
+impl OuterPhaseCommand {
+    pub(super) fn rights_count(&self) -> usize {
+        0
+    }
+
+    pub(super) fn authority(&self) -> RunAuthority {
+        match self {
+            Self::BeginMonitor { authority }
+            | Self::ClaimInner { authority }
+            | Self::ReleaseGate { authority } => *authority,
+        }
+    }
+}

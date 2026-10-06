@@ -95,6 +95,7 @@ pub(super) struct CallerBootstrap {
     pub(super) streams: CallerStreams,
     pub(super) publication: Arc<Publication>,
     receive: PreparedReceive,
+    identity_records: creator::PreparedIdentity,
     named_buffers: u64,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
@@ -149,6 +150,8 @@ impl CallerBootstrap {
         let report_read = PreparedReportRead::prepare()
             .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
         let receive = PreparedReceive::prepare().map_err(CallerBootstrapError::Control)?;
+        let identity_records =
+            creator::PreparedIdentity::prepare().map_err(CallerBootstrapError::Io)?;
         let frame_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let helper_capacity = u64::try_from(settings.helper.capacity())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
@@ -178,6 +181,9 @@ impl CallerBootstrap {
                 .reserved_bytes()
                 .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
             streams.reserved_bytes(),
+            identity_records
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Io)?,
             helper_capacity,
             u64::try_from(std::mem::size_of::<Publication>())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
@@ -205,6 +211,7 @@ impl CallerBootstrap {
             streams,
             publication,
             receive,
+            identity_records,
             named_buffers,
             command: Some(command),
             spawner: None,
@@ -351,10 +358,14 @@ impl CallerBootstrap {
         {
             return Err(CallerBootstrapError::ArmMismatch);
         }
-        let pid = creator::validate_child_process(pin, &launcher.launcher_pin)
+        let pid = self
+            .identity_records
+            .validate_child_process(pin, &launcher.launcher_pin)
             .map_err(CallerBootstrapError::Io)?;
         if sender.pid != pid
-            || NamespaceIdentity::read(&format!("/proc/{pid}/ns/pid"))
+            || self
+                .identity_records
+                .child_namespace(pid)
                 .map_err(CallerBootstrapError::Io)?
                 != namespace
         {
