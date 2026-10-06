@@ -14,6 +14,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-032
+    type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-033
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-030
@@ -145,8 +147,9 @@ authored).
   as RFC 8785 JSON in CG's one canonical-encoding place by `quire_canonical`, never by
   `serde_json`;
   the value changes when any included member changes and does not when the span changes. The
-  V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it. The
-  function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
+  V1 contract and frame paths (`StateFrameIdentity`) use this parameter-domain shape; the scalar
+  operation-application path uses the positional allocation below through the same canonical
+  encoding authority. The function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
   too, with the checked function node id and its `declaration` occurrence key in place of the
   clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
   harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
@@ -186,6 +189,83 @@ authored).
   node and its occurrence key) and are kept, so that no function-path identity changes
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
+- E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
+  operation-application preimage under measured merged QSL change #650. ADR-013 O-09,
+  FR-357 and `qsl-replay/src/execute/parity_identity.rs` agree on tagged `domain` entries.
+  CG shall construct the owning `ParityPreimage` and call public `parity_obligation`, the
+  shared scalar/composite mint function using ADR-013 section 2's `quire-canonical` encoder.
+  QSL owns that sole parity encoder; CG calls it through its existing dependency and adds
+  no obligation-canonical-byte encoder. The FR-032 vector is a cross-check only.
+  `operator_parity.rs` authenticates application/operator/function membership, occurrence
+  and positional operands before verifying the digest. Mismatch refuses
+  `ScalarIdentity::Obligation` with claimed/recomputed digests; encoder refusal returns
+  `ScalarIdentity::Encoding` without an identity (`stale_dependency`/`revision-mismatch`).
+  The driver calls `replay_operator_parity(wire, claim, replay_limits)`, `ReplayLimits` last
+  under merged change #645; this byte guard is distinct from claim `ScalarLimits` and is
+  not a full-claim identity member. Both contexts must be retained.
+  This is source inspection, not passing-test evidence; actual CG conformance remains gated.
+  Function/clause carry-only contracts and existing function/frame encoding remain unchanged.
+  The subject is the claimed operator's FR-322 application node id with its authentic O-07
+  `CheckedOccurrence` key (node, `expression` role, ordinal), the scalar kind allocated once
+  by FR-032 (typed generation source CODE-gated), and one argument per operand position in operand/harness draw order. Each entry is its position
+  ordinal, typed `OperandIdentity` and actual harness operand range. Its tagged representation
+  is `GraphChild { node_id }` for an actual graph reference (parameter, subterm or an existing
+  literal node), or `InlineLiteral { node_id, occurrence_key, position }` using the authentic
+  application node id, selected occurrence key and position ordinal. The inline literal's value
+  is carried by its singleton range (FR-015 AC-16); QSL emits no extra literal node for it.
+  The typed identifier member holds this representation without fabricating a checked node id.
+  Repeated independent draws of one parameter remain distinct positional
+  entries. Scalar entries are neither identifier-sorted nor deduplicated by node id; unrelated
+  enclosing-function parameters are absent. Function/frame preimages and identifier ordering
+  remain unchanged. The exact scalar preimage, minted through the shared owning function, is
+  `{arguments, node, obligation_kind, occurrence_key}`; occurrence is `{ordinal, role}`, and
+  ordered arguments are `{domain, operand, position}` with scalar domain
+  `{lower, tag: "range", upper}`, both inclusive bounds as decimal strings.
+  Operand is `{node_id, tag: "graph_child"}` or
+  `{node_id, occurrence_key, position, tag: "inline_literal"}` using the application id/key in
+  the inline arm. Node ids are lowercase hex; ordinals/positions numeric; SHA-256 hashes the
+  RFC 8785 bytes with no added digest-label preimage member. Independent CG conformance checks must match that QSL
+  encoding; no copied encoder or additional CG member enters it. Source spans, native
+  outcomes, transcript, generated-content identity, operator label, renderer counters and
+  build/tool/version fields remain excluded.
+  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns acceptance criteria
+  and the metadata/accessor gate. IR's `CheckedPackageV2::graph()` exposes authentic node ids
+  and occurrences, and `source_map()` the source map, but the public node body remains JSON;
+  no public typed scalar ordered-operand identity/range accessor was measured. IR-648 in
+  Contract IR owns that `CheckedPackageV2` accessor and blocks IR-631 CODE admission; its
+  specification and implementation remain to be measured. The model-field
+  accessor and wrapped optional leaf walk do not provide one. CG must retain the sole authentic
+  expression occurrence and operand metadata. Zero/multiple
+  expression occurrences refuse without a chosen ordinal; multi-occurrence replay awaits
+  generation-owned selection/retention. Current clause-role `ObligationKind` supplies no
+  scalar wire kind: FR-032 owns its sole allocation; typed generation source/retention
+  remains CODE-gated. IR-648 must expose that same tagged
+  identity; the inline arm names application/occurrence/position and needs no literal node.
+  Missing or ambiguous metadata/kind refuses without minting an identity.
+  Merged QSL authenticates the occurrence, operand count, each graph-child reference and
+  inline literal value/singleton range before digest verification, and encoding errors refuse
+  without an identity. Graph-child range correspondence to the declared proving domain remains
+  a CG validation obligation with positional provenance: own bounded-domain parameters or
+  subterms use the checked derived interval, literals use the actual singleton, and untyped
+  nonliteral subterms use the enclosing scalar claim's first checked result bound as current
+  generation does. Missing provenance or a widened range refuses; QSL's child-identity check
+  alone does not establish it.
+  Literal and repeated-parameter semantics are resolved; authentic metadata access, retention
+  and actual consumer conformance remain CODE gates. Decoder/context work is independent.
+  The same-artifact content identity is a separate canonical proof-content tie. The driver
+  executes the same proved generated artifact at decoded operands and retained renderer limits,
+  authenticates its typed observation against CG's retained generation/proving record, then
+  completes CG's checked plan. This trusts the driver's actual execution/authentication; an
+  unchecked digest/outcome echo or regenerated oracle is insufficient. QSL never sees the
+  artifact and does not authenticate it: it carries the `DigestRecord` and evaluates exact
+  semantics. Before any scalar settlement, CG compares every member of the report's full claim
+  with the retained sent claim at the immutable-report/retained-binding converter boundary,
+  plus checked driver completion's actual wire/run context against the original proving
+  package/function/source/dependencies/limits. The report and O-09 do not bind that wire;
+  an equal echoed claim is insufficient. This independent R-7 retention/check is CODE-gated
+  and applies on every outcome, including refusal, exact `Incomplete`,
+  generated fault and divergence. Report `claim()` on every outcome is measured in merged
+  change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
 - E-1 composite extension (PLANNED/GATED, IR-635/QSL-640). CG's composite O-09 preimage contains
   only the exact claimed equality/inequality node, its occurrence key obtained from the recompiled
   original package, the obligation kind and one argument per distinct parameter-operand node ID
@@ -339,14 +419,16 @@ crate CG's lock selects.
   the obligation kind and the arguments (parameter node id and declared domain), source span
   excluded. The postcondition state-clause path takes a caller `[u8; 32]`
   (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
-  request's slot is gone (AD-002), replaced by the function-contract identity. The state-clause
-  path's is open (FR-024, Open questions Q-1).
+  request's slot is gone (AD-002), replaced by the function-contract identity. The scalar path's
+  positional allocation and driver observation boundary are now specified
+  by FR-032/E-1, but its authoritative metadata and full-report claim API remain CODE-gated.
+  The state-clause path's is open (FR-024, Open questions Q-1).
   The work is larger than one missing field. Three identity structs exist and none carries what
   O-09 needs. `KaniObligationIdentity` holds a `ClauseRef`, not the clause node id, and no
   occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
   `integer_bounds`, `dependencies`) has no parameter node id. `ScalarObligationIdentity` holds a
   node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
-  `maximum`) has no parameter node id. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
+  `maximum`) has no typed operand identity. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
   node id, the operation scope and the property, and it is the identity of the frame harness whose
   counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
   own, because `OperationSite` carries the frame's, but it records no draw order for the state
