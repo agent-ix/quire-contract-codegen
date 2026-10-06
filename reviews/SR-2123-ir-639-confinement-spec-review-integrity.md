@@ -75,6 +75,12 @@ Round 9, reviewed at e0353e146eaf911a16129cdfb4ae5c7c80a30935 (prior c5786732cbf
 | --- | --- | --- |
 | FND-005 | fixed | e0353e146eaf911a16129cdfb4ae5c7c80a30935: PreRoleTimeout now covers both pre-role timeout stops: an expired original deadline (including zero), and a finite workdeadline (T minus R_eff) that has elapsed while the original deadline is still live. Workdeadline cancellation, settlement and candidate classification are kept, no L/O is created and no Dispatch is authorized after either cutoff, AC-20 ordering is unchanged and no new reason or outcome is added. The TC-049 constructor row (line 617) and a new pre-role workdeadline case (lines 630-633) match it, including the existing CleanupUnconfirmed override. |
 
+Round 10, reviewed at 97a335b1c73df8fcbb2a2dd23fe77239bec64646 (prior e0353e146eaf911a16129cdfb4ae5c7c80a30935, base 5d3eaa2bbedcfbd59d8bd3d8df681b70e74cad60); session dbb8a12e-b532-45a6-a5bd-451efbb27322, run 01a2d284-565d-46e5-b9a1-80caf21335f8, model claude-opus-5-5.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | 97a335b1c73df8fcbb2a2dd23fe77239bec64646: The observation of L is now allocated. O's fresh private proc is no longer assumed to expose L. O must obtain a fresh L RSS sample at setup and every original accounting tick from an authenticated source that stays valid under the private proc view. That source is bound to the original run, the actual owned L pidfd, recorded start/TGID and checked liveness, with no proxy, omission or backend-reachable self-report. Zero is allowed only under the existing identity-matched address-space release rule (src/kani/run/memory.rs:412). C's named buffer caps reach O through authenticated C-origin authority with checked arithmetic. O combines all four terms at setup, before writer exposure or Dispatch, and at every tick. Loss after admission follows MemoryUnobserved to MemoryObservationFailed with no evidence (src/kani/run/execute.rs:778-779), and loss before Dispatch keeps the typed unavailable admission. No mid-run NotObserved reason is added. Authority stays CLOEXEC and unreachable from the backend, O's private proc/PID view is kept, and TC-049 adds independent positive and adverse PLANNED/UNRUN oracles. The spec states properties only and leaves the mechanism to a feasibility-proven CODE choice. |
+
 ## New findings (disposition pass 2)
 
 Reviewed at 004c864626720341f3e06994f3d17494bbd6aa44 (prior 622ecfb2cd8ea9fb9489e4839686f2f258f2bfee).
