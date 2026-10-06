@@ -13,6 +13,11 @@ repository = "https://github.com/agent-ix/quire-contract-codegen"
 name = "quire_contract_codegen"
 path = "src/lib.rs"
 
+[features]
+# TC-049 private-boundary observations only; production driver exclusion belongs to IR-649.
+default = []
+guardian-test-support = []
+
 [dependencies]
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
 # The model items (`CheckedPackageV2`, `RequirementRef`, ...) come from quire-contract-model, a crate in

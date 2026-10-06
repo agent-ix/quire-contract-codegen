@@ -132,6 +132,11 @@ pub(super) struct PeerCredentials {
 }
 
 impl<'fd> Transport<'fd> {
+    #[cfg(feature = "guardian-test-support")]
+    pub(super) fn fixture_reporter(descriptor: &'fd OwnedFd) -> Self {
+        Self(descriptor.as_fd(), CredentialsPolicy::ExclusiveCreator)
+    }
+
     /// The helper borrows its known-valid mapped stdin, never adopts an arbitrary raw number.
     pub(super) fn from_guardian_stdin(stdin: &'fd std::io::Stdin) -> Result<Self, ControlError> {
         rustix::io::fcntl_setfd(stdin, rustix::io::FdFlags::CLOEXEC)?;

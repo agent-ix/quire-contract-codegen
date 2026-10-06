@@ -22,10 +22,11 @@ use super::{
         LaunchOutcome, CAPTURE_LIMIT,
     },
     memory::MemoryObserver,
-    namespace::{BackendCommand, NamespaceOwner, ReadyIdentityError},
+    namespace::{BackendCommand, GatedClaim, NamespaceOwner, ReadyIdentityError},
     protocol::{BackendExit, GuardianRefusal},
+    publication::{Publication, Stage},
     report_file::read_report,
-    stages::{Bootstrap, Dispatched, StageError},
+    stages::{Bootstrap, ClaimedBootstrap, Dispatched, InitReady, StageError},
     stdin::OriginalStdin,
 };
 
@@ -40,6 +41,7 @@ struct RunOwner {
     stderr: Option<thread::JoinHandle<Captured>>,
     flags: CaptureFlags,
     deadline: Option<Instant>,
+    publication: Arc<Publication>,
 }
 
 /// Recorded before independent INIT cancellation, with the live RunOwner still retained.
@@ -62,6 +64,7 @@ impl RunOwner {
         namespace: NamespaceOwner,
         deadline: Option<Instant>,
         limit: usize,
+        publication: Arc<Publication>,
     ) -> io::Result<Self> {
         command
             .stdout(Stdio::piped())
@@ -75,6 +78,7 @@ impl RunOwner {
             stdout: None,
             stderr: None,
             deadline,
+            publication,
             flags: CaptureFlags {
                 stop: Arc::new(AtomicBool::new(false)),
                 failed: Arc::new(AtomicBool::new(false)),
@@ -108,6 +112,8 @@ impl RunOwner {
     /// The only production lease-close observation. No signal or monitor reap occurs here.
     fn close_lease_and_observe(&self, lease: CallerLease) -> LeaseCloseObservation {
         drop(lease);
+        self.publication.lease_closed();
+        self.publication.publish(Stage::LeaseClosing);
         let cap = Instant::now() + LEASE_CLOSE_CAP;
         let deadline = self.deadline.map_or(cap, |deadline| deadline.min(cap));
         loop {
@@ -178,75 +184,51 @@ pub(super) fn run(
     deadline: Option<Instant>,
     observer: &mut MemoryObserver,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
-    // Resolve the supplied file directly; a relative path never enters executable PATH search.
-    let helper = if helper.is_absolute() {
-        helper.to_owned()
-    } else {
-        std::env::current_dir()
-            .map_err(BoundedLaunchError::Io)?
-            .join(helper)
-    };
-    let helper_metadata = std::fs::metadata(&helper).map_err(|error| {
-        refusal(
-            if error.kind() == io::ErrorKind::NotFound {
-                GuardianFailureKind::MissingHelper
-            } else {
-                GuardianFailureKind::UnusableHelper
-            },
-            error.to_string(),
-        )
-    })?;
-    if !helper_metadata.is_file() || helper_metadata.permissions().mode() & 0o111 == 0 {
-        return Err(refusal(
-            GuardianFailureKind::UnusableHelper,
-            "configured guardian must be an explicit executable file".to_owned(),
-        ));
-    }
-    let (bootstrap, endpoint) = Bootstrap::new(deadline).map_err(stage_refusal)?;
-    let (command, namespace) = NamespaceOwner::prepare(&helper, endpoint)
-        .map_err(|error| refusal(GuardianFailureKind::ControlUnavailable, error.to_string()))?;
+    let helper = resolve_helper(helper)?;
     let limit = CAPTURE_LIMIT.saturating_mul(harnesses.get());
-    let mut owner =
-        RunOwner::spawn(command, namespace, deadline, limit).map_err(BoundedLaunchError::Io)?;
-    let startup = (|| {
-        let gated = owner
-            .namespace
-            .claim_gated(deadline, bootstrap.setup_deadline(), observer)
-            .map_err(|error| {
-                refusal(GuardianFailureKind::InitIdentityMismatch, error.to_string())
-            })?;
-        let init = owner
-            .namespace
-            .release_bootstrap_gate(gated, deadline, bootstrap.setup_deadline())
-            .map_err(|error| {
-                refusal(GuardianFailureKind::InitIdentityMismatch, error.to_string())
-            })?;
-        let ready = bootstrap
-            .claimed()
-            .map_err(stage_refusal)?
-            .authenticate(&owner.namespace)
-            .map_err(stage_refusal)?;
-        let dispatched = ready
-            .send_dispatch(recipe, stdin, vec![report_path.as_os_str().to_owned()])
-            .and_then(|pending| pending.acknowledge(&owner.namespace))
-            .map_err(stage_refusal)?;
-        Ok::<(Dispatched, u32), BoundedLaunchError>((dispatched, init))
-    })();
-    let (dispatched, init) = match startup {
+    let started = match start_sequence(
+        recipe,
+        &helper,
+        stdin,
+        report_path,
+        deadline,
+        observer,
+        limit,
+        Stage::Dispatched,
+    ) {
         Ok(started) => started,
-        Err(error) => {
-            let settled = owner.settle();
-            require_cleanup(&settled)?;
-            if expired(deadline) {
-                return Ok(BoundedLaunch {
-                    outcome: LaunchOutcome::TimedOut,
-                    memory: observer.observation(),
-                    report: Ok(None),
-                });
-            }
-            return Err(error);
+        Err(error)
+            if expired(deadline)
+                && !matches!(
+                    error,
+                    BoundedLaunchError::Guardian {
+                        kind: GuardianFailureKind::CleanupUnconfirmed,
+                        ..
+                    }
+                ) =>
+        {
+            return Ok(BoundedLaunch {
+                outcome: LaunchOutcome::TimedOut,
+                memory: observer.observation(),
+                report: Ok(None),
+            });
         }
+        Err(error) => return Err(error),
     };
+    let Started {
+        owner: Some(mut owner),
+        state: SequenceState::Dispatched(dispatched),
+        init: Some(init),
+        publication,
+    } = started
+    else {
+        return Err(refusal(
+            GuardianFailureKind::UnexpectedControl,
+            "incomplete production stage sequence".to_owned(),
+        ));
+    };
+    // The complete sequence transfers its same publication ownership with the run handles.
+    owner.publication = publication;
     let waiting = wait(
         &owner,
         &dispatched,
@@ -409,6 +391,208 @@ pub(super) fn run(
     })
 }
 
+fn resolve_helper(helper: &Path) -> Result<std::path::PathBuf, BoundedLaunchError> {
+    // Resolve the supplied file directly; a relative path never enters executable PATH search.
+    let helper = if helper.is_absolute() {
+        helper.to_owned()
+    } else {
+        std::env::current_dir()
+            .map_err(BoundedLaunchError::Io)?
+            .join(helper)
+    };
+    let helper_metadata = std::fs::metadata(&helper).map_err(|error| {
+        refusal(
+            if error.kind() == io::ErrorKind::NotFound {
+                GuardianFailureKind::MissingHelper
+            } else {
+                GuardianFailureKind::UnusableHelper
+            },
+            error.to_string(),
+        )
+    })?;
+    if !helper_metadata.is_file() || helper_metadata.permissions().mode() & 0o111 == 0 {
+        return Err(refusal(
+            GuardianFailureKind::UnusableHelper,
+            "configured guardian must be an explicit executable file".to_owned(),
+        ));
+    }
+    Ok(helper)
+}
+
+/// The single production sequence. A fixture selects a prefix as ordinary data.
+enum SequenceState {
+    BeforeMonitor {
+        command: Command,
+        namespace: NamespaceOwner,
+        bootstrap: Bootstrap,
+    },
+    Bootstrap(Bootstrap),
+    ClaimedGated {
+        bootstrap: Bootstrap,
+        gated: GatedClaim,
+    },
+    ClaimedBootstrap(ClaimedBootstrap),
+    InitReady(InitReady),
+    Dispatched(Dispatched),
+}
+
+impl SequenceState {
+    fn stage(&self) -> Stage {
+        match self {
+            Self::BeforeMonitor { .. } => Stage::BeforeMonitor,
+            Self::Bootstrap(_) => Stage::Bootstrap,
+            Self::ClaimedGated { .. } => Stage::ClaimedGated,
+            Self::ClaimedBootstrap(_) => Stage::ClaimedBootstrap,
+            Self::InitReady(_) => Stage::InitReady,
+            Self::Dispatched(_) => Stage::Dispatched,
+        }
+    }
+}
+
+struct Started {
+    owner: Option<RunOwner>,
+    state: SequenceState,
+    init: Option<u32>,
+    publication: Arc<Publication>,
+}
+
+fn start_sequence(
+    recipe: BackendCommand,
+    helper: &Path,
+    stdin: &OriginalStdin,
+    report_path: &Path,
+    deadline: Option<Instant>,
+    observer: &mut MemoryObserver,
+    limit: usize,
+    until: Stage,
+) -> Result<Started, BoundedLaunchError> {
+    let (bootstrap, endpoint) = Bootstrap::new(deadline).map_err(stage_refusal)?;
+    let (command, namespace) = NamespaceOwner::prepare(helper, endpoint)
+        .map_err(|error| refusal(GuardianFailureKind::ControlUnavailable, error.to_string()))?;
+    let publication = Arc::new(Publication::default());
+    let mut state = SequenceState::BeforeMonitor {
+        command,
+        namespace,
+        bootstrap,
+    };
+    let mut owner: Option<RunOwner> = None;
+    let mut init = None;
+    let mut recipe = Some(recipe);
+    loop {
+        publication.publish(state.stage());
+        if publication.stage() != Some(state.stage()) {
+            drop(state);
+            if let Some(retained) = &mut owner {
+                require_cleanup(&retained.settle())?;
+            }
+            return Err(refusal(
+                GuardianFailureKind::UnexpectedControl,
+                "shared stage publication unavailable".to_owned(),
+            ));
+        }
+        if state.stage() == until {
+            return Ok(Started {
+                owner,
+                state,
+                init,
+                publication,
+            });
+        }
+        let advance = (|| {
+            Ok::<_, BoundedLaunchError>(match state {
+                SequenceState::BeforeMonitor {
+                    command,
+                    namespace,
+                    bootstrap,
+                } => {
+                    owner = Some(
+                        RunOwner::spawn(
+                            command,
+                            namespace,
+                            deadline,
+                            limit,
+                            Arc::clone(&publication),
+                        )
+                        .map_err(BoundedLaunchError::Io)?,
+                    );
+                    SequenceState::Bootstrap(bootstrap)
+                }
+                SequenceState::Bootstrap(bootstrap) => {
+                    let retained = retained_owner(&mut owner)?;
+                    let gated = retained
+                        .namespace
+                        .claim_gated(deadline, bootstrap.setup_deadline(), observer)
+                        .map_err(|error| {
+                            refusal(GuardianFailureKind::InitIdentityMismatch, error.to_string())
+                        })?;
+                    SequenceState::ClaimedGated { bootstrap, gated }
+                }
+                SequenceState::ClaimedGated { bootstrap, gated } => {
+                    let retained = retained_owner(&mut owner)?;
+                    init = Some(
+                        retained
+                            .namespace
+                            .release_bootstrap_gate(gated, deadline, bootstrap.setup_deadline())
+                            .map_err(|error| {
+                                refusal(
+                                    GuardianFailureKind::InitIdentityMismatch,
+                                    error.to_string(),
+                                )
+                            })?,
+                    );
+                    SequenceState::ClaimedBootstrap(bootstrap.claimed().map_err(stage_refusal)?)
+                }
+                SequenceState::ClaimedBootstrap(claimed) => {
+                    let retained = retained_owner(&mut owner)?;
+                    SequenceState::InitReady(
+                        claimed
+                            .authenticate(&retained.namespace)
+                            .map_err(stage_refusal)?,
+                    )
+                }
+                SequenceState::InitReady(ready) => {
+                    let retained = retained_owner(&mut owner)?;
+                    let command = recipe.take().ok_or_else(|| {
+                        refusal(
+                            GuardianFailureKind::UnexpectedControl,
+                            "backend recipe already consumed".to_owned(),
+                        )
+                    })?;
+                    let dispatched = ready
+                        .send_dispatch(command, stdin, vec![report_path.as_os_str().to_owned()])
+                        .and_then(|pending| pending.acknowledge(&retained.namespace))
+                        .map_err(stage_refusal)?;
+                    SequenceState::Dispatched(dispatched)
+                }
+                SequenceState::Dispatched(_) => {
+                    return Err(refusal(
+                        GuardianFailureKind::UnexpectedControl,
+                        "requested stage is outside startup sequence".to_owned(),
+                    ))
+                }
+            })
+        })();
+        match advance {
+            Ok(next) => state = next,
+            Err(error) => {
+                if let Some(retained) = &mut owner {
+                    require_cleanup(&retained.settle())?;
+                }
+                return Err(error);
+            }
+        }
+    }
+}
+
+fn retained_owner(owner: &mut Option<RunOwner>) -> Result<&mut RunOwner, BoundedLaunchError> {
+    owner.as_mut().ok_or_else(|| {
+        refusal(
+            GuardianFailureKind::UnexpectedControl,
+            "stage has no retained monitor owner".to_owned(),
+        )
+    })
+}
+
 fn wait(
     owner: &RunOwner,
     dispatched: &Dispatched,
@@ -506,4 +690,15 @@ fn stage_refusal(error: StageError) -> BoundedLaunchError {
         },
     };
     refusal(kind, format!("{error}"))
+}
+
+#[cfg(feature = "guardian-test-support")]
+#[path = "fixture_execution.rs"]
+mod fixtures;
+
+#[cfg(feature = "guardian-test-support")]
+pub(super) fn fixture(
+    request: super::fixture::GuardianFixtureRequest<'_>,
+) -> Result<super::fixture::GuardianFixtureObservation, super::fixture::GuardianFixtureError> {
+    fixtures::run(request)
 }
