@@ -648,27 +648,30 @@ not relax ownership, writer closure, EOF, seals, ceilings, lease or original dea
 ### Cross-namespace named accounting inputs (FR-034-AC-32)
 
 This independent Test and source-flow Analysis is PLANNED/UNRUN. Positively establish that actual L
-is not directly visible in O's fresh private proc, while O still obtains fresh L RSS from the two
-original read-only stat/status descriptions opened by L before namespace changes. Require the
-existing exclusive authenticated L-to-O bootstrap, exact two observation rights, same actual L
-pidfd, original run authority and PID/start binding; verify fresh stat-before/status/stat-after and
-live-pin checks at setup and every original tick. Independently substitute a foreign/stale file,
-replay another run's observation, omit one description, change access/type or break L pin/identity
-binding; each must refuse before writer/Dispatch or cancel under existing observation rules.
-Missing live L RSS shall never become zero or omission without actual identity-matched MM-release
-proof. Compare against an independent real L observation through the harness's retained owned
-identity; no backend-provided scalar or ambient PID lookup supplies the positive control.
+is not directly visible in O's fresh private proc, while O still obtains actual fresh L RSS at setup
+and EACH original accounting tick from its selected authenticated source. Require original run
+binding, actual owned L pidfd, recorded start/TGID identity and checked liveness. Independently
+substitute a foreign/stale source, replay another run's observation, omit an input or break L
+pin/identity/liveness binding; each must refuse before writer/Dispatch or cancel under existing
+observation rules. Missing live L RSS shall never become zero or omission without actual
+identity-matched MM-release proof. Compare against an independent real L observation through the
+harness's retained owned identity; no backend-provided scalar or ambient PID lookup supplies the
+positive control. The selected Safe observation implementation shall be feasibility-tested first;
+this procedure allocates properties and does not mandate a particular transport or descriptor count.
 
-Trace C's named per-run control/capture/diagnostic caps through authenticated C-to-L settings and
-unchanged run-bound forwarding to O. Require those actual finite caps, original deadline/ceiling and
-checked arithmetic; a stack floor alone does not establish the named buffer bound. O shall combine
-that immutable bound with fresh L/private-tree RSS and actual pipe/memfd reservations at setup and
-every tick. Separate missing/underdeclared named-cap, wrong-run, omitted-L and missing-backing mutants
-must fail their named oracle; existing complete within-ceiling setup sample must precede writer
-exposure and Dispatch. Verify no retained host-view observation/control description reaches M/I or
-backend/descendants, and O retains fresh private proc rather than mounting host proc. Runtime evidence
-must cover later ticks and final settlement; bootstrap success/one sample alone is insufficient.
-All failure checks preserve existing classification, original timer and owned cleanup obligations.
+Trace C's named per-run control/capture/diagnostic caps through authenticated C-origin authority
+bound to the original run/ceiling/deadline. Require actual finite own caps and checked arithmetic;
+a stack floor or C RSS alone does not establish the named buffer bound. O shall combine that bound
+with fresh authenticated L/private-tree RSS and actual pipe/memfd reservations at setup and every
+tick. Separate missing/underdeclared named-cap, wrong-run, omitted-L and missing-backing mutants
+must fail their named oracle; complete within-ceiling setup sampling precedes writer exposure and
+Dispatch. Unavailable L observation after admission shall yield existing MemoryObservationFailed
+execution error without evidence, never a mid-run NotObserved; unavailable observation capability
+before Dispatch retains typed unavailable admission. Verify no host observation/control authority
+is reachable by arbitrary backend/descendants and O retains required private proc/PID isolation.
+Runtime evidence must cover later ticks and final settlement; bootstrap success/one sample alone
+is insufficient. All failure checks preserve existing classification, original timer and owned
+cleanup obligations.
 
 ## Expected Results
 
