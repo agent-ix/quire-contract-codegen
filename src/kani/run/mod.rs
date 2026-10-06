@@ -39,6 +39,8 @@ mod outer_sampling;
 #[cfg(target_os = "linux")]
 mod outer_setup;
 #[cfg(target_os = "linux")]
+mod owner_protection;
+#[cfg(target_os = "linux")]
 mod pipe_policy;
 #[cfg(target_os = "linux")]
 mod report_storage;

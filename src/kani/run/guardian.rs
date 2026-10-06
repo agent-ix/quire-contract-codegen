@@ -137,6 +137,7 @@ pub(super) fn prepare_inner_backend(
     super::creator::require_live(&input.outer_pin)?;
     super::creator::require_live(&input.caller_pin)?;
     input.outer_bootstrap.transport().refuse_observable_eof()?;
+    super::owner_protection::protect_inner()?;
     let deadline = input
         .settings
         .startup_deadline()
@@ -382,6 +383,7 @@ impl InnerBackend {
         }
         super::creator::require_live(&self.input.outer_pin)?;
         super::creator::require_live(&self.input.caller_pin)?;
+        super::owner_protection::require_protected()?;
         self.input
             .outer_bootstrap
             .transport()
