@@ -312,5 +312,14 @@ impl OuterTerminalReply {
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum CallerTerminalControl {
-    ReadCompleted { authority: RunAuthority, bytes: u64 },
+    /// C authenticated I Completed and closed its original lease. This carries its already
+    /// started settlement cutoff, including the original None admission's one first-stop R.
+    CompletedClose {
+        authority: RunAuthority,
+        deadline: RoleDeadline,
+    },
+    ReadCompleted {
+        authority: RunAuthority,
+        bytes: u64,
+    },
 }
