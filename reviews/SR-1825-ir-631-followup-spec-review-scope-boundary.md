@@ -35,3 +35,11 @@ I checked how responsibility is split among CG (preimage, retention, setup, conv
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | AC-7 makes QSL's internal order a CG criterion: native `Incomplete`/execution fault becomes `GeneratedFault` "before QSL operand admission, even with an out-of-range operand". Merged FR-357 does not specify that order. It states operand admission "before any evaluation" and native-fault `Failed` "without running the comparison", and the order exists only in `scalar.rs::compare` source. CG's own setup refuses out-of-range operands before dispatch (AC-3, FR-024), so CG's pipeline cannot reach this case. A CG test of it calls QSL directly and tests QSL. Keep AC-7 to CG's conversion of each outcome, and leave the order to FR-357 or a QSL ticket. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:298 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `832633d7afa778e8a3688601595beb5d38917cb5` (run 733cf463-44a3-4ff9-83f7-a1a0a32f9463, model claude-opus-5-5). Each finding was verified against the spec text at that commit, not against the author's receipt. The reviewed content of `f84c4fc93fe4ba5f8460e60bb8e75998d5cbcfd8` was confirmed unchanged after the rebase onto main. The planned criteria remain unrun; no implementation, mutation coverage or settlement proof is claimed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 832633d7afa778e8a3688601595beb5d38917cb5: AC-7 no longer asserts the native-fault-before-admission order; FR-032 labels it a QSL source observation and attribution only, and TC-047 step 8 drops the combined out-of-range test. |

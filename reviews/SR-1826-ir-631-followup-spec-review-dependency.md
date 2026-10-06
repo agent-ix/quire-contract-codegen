@@ -40,3 +40,11 @@ I checked that the enablement work (IR-648 accessor, CG retention, driver authen
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | FR-032's body now depends normatively on merged QSL FR-357: its operator facade, `claim()` on every outcome, the parity preimage and the scalar terminal causes. TC-047 steps 5 to 8 test against it too. Yet FR-032's `relationships` still name only `quire-spec-language/ADR-013` upstream. A `quire extract` or blast-radius query from FR-357 will not reach FR-032, so a later FR-357 change does not flag this requirement. Add `ix://agent-ix/quire-spec-language/FR-357` with `depends_on`. | spec/replay/functional/FR-032-routed-scalar-replay-binding.md:5-23 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `832633d7afa778e8a3688601595beb5d38917cb5` (run 733cf463-44a3-4ff9-83f7-a1a0a32f9463, model claude-opus-5-5). Each finding was verified against the spec text at that commit, not against the author's receipt. The reviewed content of `f84c4fc93fe4ba5f8460e60bb8e75998d5cbcfd8` was confirmed unchanged after the rebase onto main. The planned criteria remain unrun; no implementation, mutation coverage or settlement proof is claimed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 832633d7afa778e8a3688601595beb5d38917cb5: FR-032 relationships now include ix://agent-ix/quire-spec-language/FR-357 as depends_on. |

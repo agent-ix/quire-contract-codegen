@@ -48,3 +48,11 @@ DuplicateInverseEdge: inverse label 'part_of' declared by verbs ["aggregates", "
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The PR adds FR-032-AC-9 and AC-10 and replaces the QSL-641 gate with CG code gates, but the matrix indexes are unchanged. The FR-032 row of `spec/replay/matrix/tests.md` still reads "FR-032-AC-1 through FR-032-AC-8" and "Gated on QSL-641 scalar arm, … legal scalar settlement causes". The TC-047 row lists AC-1 to AC-8 only. `spec/tests.md` still says "FR-032-AC-1 to AC-8 (TC-047) … Gated on QSL-641". A reader of either index misses two criteria and is pointed at a gate the PR says is closed. Update both indexes to AC-1 to AC-10 and the current code gates. | spec/replay/matrix/tests.md:20, spec/replay/matrix/tests.md:34, spec/tests.md:20 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `832633d7afa778e8a3688601595beb5d38917cb5` (run 733cf463-44a3-4ff9-83f7-a1a0a32f9463, model claude-opus-5-5). Each finding was verified against the spec text at that commit, not against the author's receipt. The reviewed content of `f84c4fc93fe4ba5f8460e60bb8e75998d5cbcfd8` was confirmed unchanged after the rebase onto main. The planned criteria remain unrun; no implementation, mutation coverage or settlement proof is claimed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 832633d7afa778e8a3688601595beb5d38917cb5: spec/replay/matrix/tests.md rows 20 and 34 and spec/tests.md row 20 now list FR-032-AC-1 to AC-14 and the current CODE gates instead of QSL-641. |

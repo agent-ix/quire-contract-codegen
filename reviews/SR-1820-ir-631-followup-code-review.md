@@ -62,3 +62,11 @@ I loaded the Rust review checklist before reading any Rust source. I ran no carg
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | TC-047 step 6 requires "corrupting the returned report while retaining the actual sent claim". The merged public API makes that impossible: `OperatorParityReport` has private fields, a `pub(crate)` constructor, no `Deserialize`, and `claim()` returns `&OperatorIdentity`. Only `replay_operator_parity` builds a report, and it copies the sent claim verbatim. The same step also forbids fabricating a full report, and FR-032 never defines the converter's input boundary (a report, a decoded form, or a separate `OperatorIdentity` plus result). The required mismatch therefore cannot be produced, and the check can only be met by testing claim B against claim A, which is the "another result/run" case it already lists. FR-032 should define the converter input where a mismatch is observable, and TC-047 should mutate the retained sent claim, or that boundary, instead of the report. | spec/replay/matrix/TC-047-routed-scalar-replay-binding.md:80-94, spec/replay/functional/FR-032-routed-scalar-replay-binding.md:135-142 |
+
+## Dispositions
+
+Round 1 re-check of fix commit `832633d7afa778e8a3688601595beb5d38917cb5` (run 733cf463-44a3-4ff9-83f7-a1a0a32f9463, model claude-opus-5-5). Each finding was verified against the spec text at that commit, not against the author's receipt. The reviewed content of `f84c4fc93fe4ba5f8460e60bb8e75998d5cbcfd8` was confirmed unchanged after the rebase onto main. The planned criteria remain unrun; no implementation, mutation coverage or settlement proof is claimed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 832633d7afa778e8a3688601595beb5d38917cb5: TC-047 step 6 now passes the immutable public report with the retained expected OperatorIdentity and mutates one retained member at a time; FR-032 adds a Converter Boundary section that never constructs, deserializes or alters the report. |
