@@ -132,14 +132,6 @@ pub(super) fn run(
         &mut observer,
         reporter.descriptor,
     );
-    // Every live success/refusal/observation failure immediately follows with the same cleanup.
-    let settled = retained.settle();
-    let cleanup = match (&settled.cleanup, &settled.monitor) {
-        (Ok(()), Ok(_)) => GuardianFixtureCleanup::Confirmed,
-        (Err(error), _) | (_, Err(error)) => GuardianFixtureCleanup::Unconfirmed {
-            detail: error.to_string(),
-        },
-    };
     let raw = match observed {
         Ok(raw) => raw,
         Err(error) => RawObservation {
@@ -160,6 +152,14 @@ pub(super) fn run(
                 GuardianFixtureError::Coordination(failure) => failure,
                 _ => GuardianFixtureFailure::Stage,
             }),
+        },
+    };
+    // Every live success/refusal/observation failure immediately follows with the same cleanup.
+    let settled = retained.settle();
+    let cleanup = match (&settled.cleanup, &settled.monitor) {
+        (Ok(()), Ok(_)) => GuardianFixtureCleanup::Confirmed,
+        (Err(error), _) | (_, Err(error)) => GuardianFixtureCleanup::Unconfirmed {
+            detail: error.to_string(),
         },
     };
     Ok(GuardianFixtureObservation {
@@ -579,12 +579,11 @@ fn wait_worker(
                         continue;
                     }
                     let status = bounded(&PathBuf::from(format!("/proc/{pid}/status")))?;
-                    let status = std::str::from_utf8(&status).map_err(|_| {
-                        GuardianFixtureError::Coordination(GuardianFixtureFailure::Worker)
-                    })?;
+                    // Process names in status are opaque bytes; decode only numeric NSpid.
                     let namespace_pid = status
-                        .lines()
-                        .find_map(|line| line.strip_prefix("NSpid:"))
+                        .split(|byte| *byte == b'\n')
+                        .find_map(|line| line.strip_prefix(b"NSpid:"))
+                        .and_then(|value| std::str::from_utf8(value).ok())
                         .and_then(|value| value.split_whitespace().last())
                         .and_then(|value| value.parse::<u32>().ok());
                     if namespace_pid != Some(acknowledgement.namespace_pid) {
