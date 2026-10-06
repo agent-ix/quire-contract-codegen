@@ -8,13 +8,26 @@ use std::{
     fs::File,
     io,
     os::fd::OwnedFd,
-    sync::{atomic::AtomicBool, Arc},
-    thread::JoinHandle,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
 use rustix::pipe::{pipe_with, PipeFlags};
 
-use super::launch::{CaptureFlags, Captured, PreparedCapture};
+use super::{
+    caller_bootstrap::CallerRoleSettlement,
+    launch::{finish_capture, CaptureFailure, CaptureFlags, Captured, PreparedCapture},
+};
+
+/// Real reader-thread results after owned process writers and creator have settled.
+pub(super) struct SettledCaptures {
+    pub(super) stdout: Captured,
+    pub(super) stderr: Captured,
+}
 
 pub(super) struct CallerStreams {
     stdout_prepared: Option<PreparedCapture>,
@@ -103,6 +116,58 @@ impl CallerStreams {
             .ok_or_else(|| io::Error::other("owned stderr pipe unavailable"))?;
         self.stderr = Some(stderr.spawn(reader, &self.flags)?);
         Ok(())
+    }
+    /// The genuine C role token precedes the stop flag; all child/mapping writer descriptions
+    /// are then gone. A requested stop is not a reader join. Retain both handles on expiry and
+    /// consume them only after positive is_finished observations within the same cutoff.
+    pub(super) fn settle(&mut self, roles: CallerRoleSettlement) -> io::Result<SettledCaptures> {
+        self.flags.stop.store(true, Ordering::Release);
+        let cutoff = roles.cutoff();
+        while self
+            .stdout
+            .as_ref()
+            .is_some_and(|reader| !reader.is_finished())
+            || self
+                .stderr
+                .as_ref()
+                .is_some_and(|reader| !reader.is_finished())
+        {
+            let remaining = cutoff
+                .checked_duration_since(Instant::now())
+                .filter(|remaining| !remaining.is_zero())
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::TimedOut, "owned capture join unconfirmed")
+                })?;
+            thread::park_timeout(remaining.min(Duration::from_millis(20)));
+        }
+        if Instant::now() >= cutoff {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "owned capture settlement cutoff elapsed",
+            ));
+        }
+        let absent = || {
+            Err(CaptureFailure::Unread {
+                detail: "the capture reader was not created".to_owned(),
+            })
+        };
+        let stdout = self
+            .stdout
+            .take()
+            .map(finish_capture)
+            .unwrap_or_else(absent);
+        let stderr = self
+            .stderr
+            .take()
+            .map(finish_capture)
+            .unwrap_or_else(absent);
+        if Instant::now() >= cutoff {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "owned capture joins exceeded settlement cutoff",
+            ));
+        }
+        Ok(SettledCaptures { stdout, stderr })
     }
 }
 
