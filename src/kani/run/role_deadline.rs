@@ -21,6 +21,9 @@ pub(super) enum DeadlineError {
     Unrepresentable,
     InvalidClock,
     StopNotStarted,
+    StopBeforeRun,
+    FutureStop,
+    RegressingStop,
 }
 
 impl std::fmt::Display for DeadlineError {
@@ -70,6 +73,157 @@ impl RoleDeadline {
         local
             .checked_add(remaining)
             .ok_or(DeadlineError::Unrepresentable)
+    }
+}
+
+/// Absolute kernel-clock instant, distinct from an absolute deadline. Neither namespaces nor
+/// receipt time may replace the actual producing role's event instant.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct MonotonicInstant {
+    seconds: u64,
+    nanoseconds: u32,
+}
+
+impl MonotonicInstant {
+    pub(super) fn now() -> Result<Self, DeadlineError> {
+        let time = monotonic()?;
+        Ok(Self {
+            seconds: time.as_secs(),
+            nanoseconds: time.subsec_nanos(),
+        })
+    }
+
+    fn duration(self) -> Result<Duration, DeadlineError> {
+        if self.nanoseconds >= 1_000_000_000 {
+            return Err(DeadlineError::InvalidClock);
+        }
+        Ok(Duration::new(self.seconds, self.nanoseconds))
+    }
+
+    fn deadline_after(self, reserve: Duration) -> Result<RoleDeadline, DeadlineError> {
+        let deadline = self
+            .duration()?
+            .checked_add(reserve)
+            .ok_or(DeadlineError::Unrepresentable)?;
+        Ok(RoleDeadline {
+            seconds: deadline.as_secs(),
+            nanoseconds: deadline.subsec_nanos(),
+        })
+    }
+}
+
+/// The original event producer. A forwarded stamp retains its producer, not the receiver's role.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(super) enum StopOrigin {
+    Caller,
+    Outer,
+    Inner,
+}
+
+impl StopOrigin {
+    fn slot(self) -> usize {
+        match self {
+            Self::Caller => 0,
+            Self::Outer => 1,
+            Self::Inner => 2,
+        }
+    }
+}
+
+/// Mandatory typed payload on an authenticated existing production control. Missing payloads
+/// refuse through ordinary schema decoding; this record itself grants no sender/run authority.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct StopStamp {
+    pub(super) origin: StopOrigin,
+    instant: MonotonicInstant,
+}
+
+impl StopStamp {
+    /// Capture at the actual trigger, before later frame preparation or forwarding work.
+    pub(super) fn capture(origin: StopOrigin) -> Result<Self, DeadlineError> {
+        Ok(Self {
+            origin,
+            instant: MonotonicInstant::now()?,
+        })
+    }
+}
+
+/// Fixed storage for one run's earliest genuine trigger and per-origin monotonic validation.
+/// Call only after existing credential, run, role and exact ancillary checks. A delayed valid
+/// earlier producer can shorten the bound; no second event or delayed receipt can extend it.
+pub(super) struct StopTimeline {
+    started: MonotonicInstant,
+    last: [Option<MonotonicInstant>; 3],
+    earliest: Option<StopStamp>,
+}
+
+impl StopTimeline {
+    pub(super) fn prepare(started: MonotonicInstant) -> Result<Self, DeadlineError> {
+        started.duration()?;
+        Ok(Self {
+            started,
+            last: [None; 3],
+            earliest: None,
+        })
+    }
+
+    pub(super) fn observe(&mut self, stamp: StopStamp) -> Result<StopStamp, DeadlineError> {
+        self.observe_at(stamp, MonotonicInstant::now()?)
+    }
+
+    fn observe_at(
+        &mut self,
+        stamp: StopStamp,
+        now: MonotonicInstant,
+    ) -> Result<StopStamp, DeadlineError> {
+        stamp.instant.duration()?;
+        now.duration()?;
+        if stamp.instant < self.started {
+            return Err(DeadlineError::StopBeforeRun);
+        }
+        if stamp.instant > now {
+            return Err(DeadlineError::FutureStop);
+        }
+        let last = self
+            .last
+            .get_mut(stamp.origin.slot())
+            .ok_or(DeadlineError::InvalidClock)?;
+        if last.is_some_and(|previous| stamp.instant < previous) {
+            return Err(DeadlineError::RegressingStop);
+        }
+        *last = Some(stamp.instant);
+        let earliest = self.earliest.map_or(stamp, |previous| {
+            if stamp.instant < previous.instant {
+                stamp
+            } else {
+                previous
+            }
+        });
+        self.earliest = Some(earliest);
+        Ok(earliest)
+    }
+
+    /// Return the absolute earliest-trigger bound, clipped to the original finite T. No local
+    /// conversion or receiving role's current time contributes a new allowance.
+    pub(super) fn deadline(
+        &self,
+        reserve: Duration,
+        original: IdentityDeadline,
+    ) -> Result<RoleDeadline, DeadlineError> {
+        let trigger = self.earliest.ok_or(DeadlineError::StopNotStarted)?;
+        let stop = trigger.instant.deadline_after(reserve)?;
+        match original {
+            IdentityDeadline::NeverElapses => Ok(stop),
+            IdentityDeadline::Finite { deadline } => {
+                if stop.no_later_than(deadline)? {
+                    Ok(stop)
+                } else {
+                    Ok(deadline)
+                }
+            }
+        }
     }
 }
 
@@ -166,6 +320,103 @@ impl ExecutionClock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stamp(origin: StopOrigin, seconds: u64) -> StopStamp {
+        StopStamp {
+            origin,
+            instant: MonotonicInstant {
+                seconds,
+                nanoseconds: 0,
+            },
+        }
+    }
+
+    /// Trace: FR-034-AC-38.
+    #[test]
+    fn delayed_outer_trigger_shortens_caller_bound_without_restart() {
+        let mut timeline = StopTimeline::prepare(stamp(StopOrigin::Caller, 10).instant).unwrap();
+        timeline
+            .observe_at(
+                stamp(StopOrigin::Caller, 20),
+                stamp(StopOrigin::Caller, 22).instant,
+            )
+            .unwrap();
+        let original = IdentityDeadline::NeverElapses;
+        assert_eq!(
+            timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
+            21
+        );
+        timeline
+            .observe_at(
+                stamp(StopOrigin::Outer, 12),
+                stamp(StopOrigin::Caller, 22).instant,
+            )
+            .unwrap();
+        assert_eq!(
+            timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
+            13
+        );
+        timeline
+            .observe_at(
+                stamp(StopOrigin::Caller, 23),
+                stamp(StopOrigin::Caller, 24).instant,
+            )
+            .unwrap();
+        assert_eq!(
+            timeline.deadline(SETTLE_RESERVE, original).unwrap().seconds,
+            13
+        );
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-38.
+    #[test]
+    fn invalid_stamps_cannot_poison_the_retained_earliest_trigger() {
+        let mut timeline = StopTimeline::prepare(stamp(StopOrigin::Caller, 10).instant).unwrap();
+        let now = stamp(StopOrigin::Caller, 30).instant;
+        assert_eq!(
+            timeline.observe_at(stamp(StopOrigin::Outer, 9), now),
+            Err(DeadlineError::StopBeforeRun)
+        );
+        assert_eq!(
+            timeline.observe_at(stamp(StopOrigin::Outer, 31), now),
+            Err(DeadlineError::FutureStop)
+        );
+        timeline
+            .observe_at(stamp(StopOrigin::Outer, 20), now)
+            .unwrap();
+        assert_eq!(
+            timeline.observe_at(stamp(StopOrigin::Outer, 19), now),
+            Err(DeadlineError::RegressingStop)
+        );
+        let mut invalid = stamp(StopOrigin::Inner, 12);
+        invalid.instant.nanoseconds = 1_000_000_000;
+        assert_eq!(
+            timeline.observe_at(invalid, now),
+            Err(DeadlineError::InvalidClock)
+        );
+        assert_eq!(
+            timeline
+                .deadline(SETTLE_RESERVE, IdentityDeadline::NeverElapses)
+                .unwrap()
+                .seconds,
+            21
+        );
+        let clipped = RoleDeadline {
+            seconds: 20,
+            nanoseconds: 500_000_000,
+        };
+        assert_eq!(
+            timeline
+                .deadline(
+                    SETTLE_RESERVE,
+                    IdentityDeadline::Finite { deadline: clipped }
+                )
+                .unwrap()
+                .nanoseconds,
+            clipped.nanoseconds
+        );
+        assert!(serde_json::from_str::<StopStamp>(r#"{"origin":"Outer"}"#).is_err());
+    }
 
     /// Trace: FR-034-AC-38.
     #[test]
