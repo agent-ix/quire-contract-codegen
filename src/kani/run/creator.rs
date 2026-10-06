@@ -5,6 +5,7 @@
 //! retained dedicated nonleader thread and transfers that thread's actual pidfd before setup.
 
 use std::{
+    fmt::Write as _,
     fs::File,
     io::{self, Read},
     os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
@@ -125,36 +126,121 @@ pub(super) fn validate_parent_thread(thread: &OwnedFd, process: &OwnedFd) -> io:
     require_live(process)
 }
 
-/// Bind a received process capability to an already retained actual parent in this proc view.
-/// Both pins must remain live across the bounded identity read; numbers alone grant no authority.
-pub(super) fn validate_child_process(child: &OwnedFd, parent: &OwnedFd) -> io::Result<i32> {
-    require_live(child)?;
-    require_live(parent)?;
-    let child_metadata = rustix::fs::fstat(child)?;
-    let parent_metadata = rustix::fs::fstat(parent)?;
-    if child_metadata.st_dev != parent_metadata.st_dev {
-        return Err(io::Error::other("child capability is not an actual pidfd"));
-    }
-    let child_pid = descriptor_pid(child)?;
-    let parent_pid = descriptor_pid(parent)?;
-    if child_pid <= 0 || parent_pid <= 0 || child_pid == parent_pid {
-        return Err(io::Error::other(
-            "child capability has no distinct live process identity",
-        ));
-    }
-    let status = read_bounded(&format!("/proc/{child_pid}/status"))?;
-    if unique_number(&status, b"Pid:")? != child_pid
-        || unique_number(&status, b"Tgid:")? != child_pid
-        || unique_number(&status, b"PPid:")? != parent_pid
-    {
-        return Err(io::Error::other(
-            "child capability is not the retained parent's process",
-        ));
-    }
-    require_live(child)?;
-    require_live(parent)?;
-    Ok(child_pid)
+/// C's identity records and numeric proc paths are reserved before L exists. The same scratch
+/// is reused for both pidfd records and the child status, without retaining data across reads.
+pub(super) struct PreparedIdentity {
+    bytes: Vec<u8>,
+    path: String,
 }
+
+impl PreparedIdentity {
+    pub(super) fn prepare() -> io::Result<Self> {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(PROC_BYTES + 1)
+            .map_err(io::Error::other)?;
+        bytes.resize(PROC_BYTES + 1, 0);
+        let mut path = String::new();
+        // All generated paths contain only a fixed prefix/suffix and one positive i32 number.
+        // Reserve the complete maximum before any role spawn; arbitrary paths are not accepted.
+        path.try_reserve_exact(64).map_err(io::Error::other)?;
+        Ok(Self { bytes, path })
+    }
+
+    pub(super) fn reserved_bytes(&self) -> io::Result<u64> {
+        let bytes = self
+            .bytes
+            .capacity()
+            .checked_add(self.path.capacity())
+            .ok_or_else(|| io::Error::other("caller identity reservation overflow"))?;
+        u64::try_from(bytes)
+            .map_err(|_| io::Error::other("caller identity reservation exceeds platform"))
+    }
+
+    /// Bind the actual received process capability to its retained parent in C's proc view.
+    /// Neither a recycled numeric PID nor a record from another parent satisfies both live pins.
+    pub(super) fn validate_child_process(
+        &mut self,
+        child: &OwnedFd,
+        parent: &OwnedFd,
+    ) -> io::Result<i32> {
+        require_live(child)?;
+        require_live(parent)?;
+        let child_metadata = rustix::fs::fstat(child)?;
+        let parent_metadata = rustix::fs::fstat(parent)?;
+        if child_metadata.st_dev != parent_metadata.st_dev {
+            return Err(io::Error::other("child capability is not an actual pidfd"));
+        }
+        let child_pid = self.descriptor_pid(child)?;
+        let parent_pid = self.descriptor_pid(parent)?;
+        if child_pid <= 0 || parent_pid <= 0 || child_pid == parent_pid {
+            return Err(io::Error::other(
+                "child capability has no distinct live process identity",
+            ));
+        }
+        self.path.clear();
+        write!(&mut self.path, "/proc/{child_pid}/status").map_err(io::Error::other)?;
+        let status = self.read_record()?;
+        if unique_number(status, b"Pid:")? != child_pid
+            || unique_number(status, b"Tgid:")? != child_pid
+            || unique_number(status, b"PPid:")? != parent_pid
+        {
+            return Err(io::Error::other(
+                "child capability is not the retained parent's process",
+            ));
+        }
+        require_live(child)?;
+        require_live(parent)?;
+        Ok(child_pid)
+    }
+
+    pub(super) fn child_namespace(
+        &mut self,
+        pid: i32,
+    ) -> io::Result<super::outer_setup::NamespaceIdentity> {
+        if pid <= 0 {
+            return Err(io::Error::other(
+                "namespace child identity must be positive",
+            ));
+        }
+        self.path.clear();
+        write!(&mut self.path, "/proc/{pid}/ns/pid").map_err(io::Error::other)?;
+        super::outer_setup::NamespaceIdentity::read(&self.path)
+    }
+
+    fn descriptor_pid(&mut self, descriptor: &OwnedFd) -> io::Result<i32> {
+        self.path.clear();
+        write!(
+            &mut self.path,
+            "/proc/self/fdinfo/{}",
+            descriptor.as_raw_fd()
+        )
+        .map_err(io::Error::other)?;
+        unique_number(self.read_record()?, b"Pid:")
+    }
+
+    fn read_record(&mut self) -> io::Result<&[u8]> {
+        let mut file = File::open(&self.path)?;
+        let mut length = 0;
+        while length < self.bytes.len() {
+            match file.read(&mut self.bytes[length..]) {
+                Ok(0) => break,
+                Ok(count) => length += count,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        if length > PROC_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "creator proc record exceeds bound",
+            ));
+        }
+        Ok(&self.bytes[..length])
+    }
+}
+
+const PROC_BYTES: usize = 16_384;
 
 fn descriptor_pid(descriptor: &OwnedFd) -> io::Result<i32> {
     let info = read_bounded(&format!("/proc/self/fdinfo/{}", descriptor.as_raw_fd()))?;
@@ -162,7 +248,6 @@ fn descriptor_pid(descriptor: &OwnedFd) -> io::Result<i32> {
 }
 
 fn read_bounded(path: &str) -> io::Result<Vec<u8>> {
-    const PROC_BYTES: usize = 16_384;
     let file = File::open(path)?;
     let mut bytes = Vec::new();
     file.take(16_385).read_to_end(&mut bytes)?;

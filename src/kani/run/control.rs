@@ -61,6 +61,7 @@ pub(super) enum ControlError {
     RightsNotCloexec,
     UnexpectedCredentials,
     CreatorMismatch,
+    ReceivePoisoned,
     RightsCount { expected: usize, received: usize },
 }
 
@@ -413,6 +414,15 @@ impl<'fd> Transport<'fd> {
             &mut buffer.rights,
             deadline,
         )?;
+        self.finish_receive(buffer, credentials, expected_rights)
+    }
+
+    fn finish_receive<'buffer, T: DeserializeOwned>(
+        &self,
+        buffer: &'buffer mut PreparedReceive,
+        credentials: Option<PeerCredentials>,
+        expected_rights: impl FnOnce(&T) -> usize,
+    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
         self.refuse_observable_eof()?;
         let control =
             serde_json::from_slice(&buffer.payload).map_err(ControlError::InvalidEncoding)?;
@@ -445,76 +455,93 @@ impl<'fd> Transport<'fd> {
     ) -> Result<(), ControlError> {
         while !bytes.is_empty() {
             self.wait(PollFlags::IN, deadline)?;
-            let mut storage = [MaybeUninit::uninit(); ANCILLARY_BYTES];
-            let mut ancillary = RecvAncillaryBuffer::new(&mut storage);
-            let received = match recvmsg(
-                self.0,
-                &mut [IoSliceMut::new(bytes)],
-                &mut ancillary,
-                RecvFlags::DONTWAIT | RecvFlags::CMSG_CLOEXEC,
-            ) {
-                Ok(received) => received,
-                Err(rustix::io::Errno::AGAIN | rustix::io::Errno::INTR) => continue,
-                Err(error) => return Err(error.into()),
-            };
-            // Even this early refusal drops/drains every safely owned delivered descriptor;
-            // Linux closes any rights discarded because the ancillary buffer was too small.
-            if received
-                .flags
-                .intersects(ReturnFlags::TRUNC | ReturnFlags::CTRUNC)
-            {
-                return Err(ControlError::Truncated);
+            if let Some(count) = self.read_chunk(bytes, credentials, rights)? {
+                bytes = bytes.get_mut(count..).ok_or(ControlError::Truncated)?;
             }
-            if received.bytes == 0 {
-                return Err(ControlError::Eof);
-            }
-            let mut chunk_credentials = None;
-            for record in ancillary.drain() {
-                match record {
-                    RecvAncillaryMessage::ScmCredentials(value) => {
-                        if matches!(self.1, CredentialsPolicy::ExclusiveCreator) {
-                            return Err(ControlError::UnexpectedCredentials);
-                        }
-                        let value = PeerCredentials {
-                            pid: value.pid.as_raw_pid(),
-                            uid: value.uid.as_raw(),
-                            gid: value.gid.as_raw(),
-                        };
-                        if chunk_credentials.replace(value).is_some() {
-                            return Err(ControlError::RepeatedCredentials);
-                        }
-                    }
-                    RecvAncillaryMessage::ScmRights(descriptors) => {
-                        for descriptor in descriptors {
-                            if rights.len() == RECEIVED_RIGHTS {
-                                return Err(ControlError::ExcessRights);
-                            }
-                            if !rustix::io::fcntl_getfd(&descriptor)?
-                                .contains(rustix::io::FdFlags::CLOEXEC)
-                            {
-                                return Err(ControlError::RightsNotCloexec);
-                            }
-                            rights.push(descriptor);
-                        }
-                    }
-                    _ => return Err(ControlError::UnknownAncillary),
-                }
-            }
-            match self.1 {
-                CredentialsPolicy::ActualSender => {
-                    let sender = chunk_credentials.ok_or(ControlError::MissingCredentials)?;
-                    if credentials.is_some_and(|previous| previous != sender) {
-                        return Err(ControlError::ChangedCredentials);
-                    }
-                    *credentials = Some(sender);
-                }
-                CredentialsPolicy::ExclusiveCreator => {}
-            }
-            bytes = bytes
-                .get_mut(received.bytes..)
-                .ok_or(ControlError::Truncated)?;
         }
         Ok(())
+    }
+
+    /// One nonblocking chunk with the same owned ancillary validation for both receive modes.
+    /// EOF wins before and after the syscall, including queued but unauthorizable frame bytes.
+    fn read_chunk(
+        &self,
+        bytes: &mut [u8],
+        credentials: &mut Option<PeerCredentials>,
+        rights: &mut Vec<OwnedFd>,
+    ) -> Result<Option<usize>, ControlError> {
+        self.refuse_observable_eof()?;
+        let mut storage = [MaybeUninit::uninit(); ANCILLARY_BYTES];
+        let mut ancillary = RecvAncillaryBuffer::new(&mut storage);
+        let received = match recvmsg(
+            self.0,
+            &mut [IoSliceMut::new(bytes)],
+            &mut ancillary,
+            RecvFlags::DONTWAIT | RecvFlags::CMSG_CLOEXEC,
+        ) {
+            Ok(received) => received,
+            Err(rustix::io::Errno::AGAIN | rustix::io::Errno::INTR) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        // Even this early refusal drops/drains every safely owned delivered descriptor;
+        // Linux closes any rights discarded because the ancillary buffer was too small.
+        if received
+            .flags
+            .intersects(ReturnFlags::TRUNC | ReturnFlags::CTRUNC)
+        {
+            return Err(ControlError::Truncated);
+        }
+        if received.bytes == 0 {
+            return Err(ControlError::Eof);
+        }
+        let mut chunk_credentials = None;
+        for record in ancillary.drain() {
+            match record {
+                RecvAncillaryMessage::ScmCredentials(value) => {
+                    if matches!(self.1, CredentialsPolicy::ExclusiveCreator) {
+                        return Err(ControlError::UnexpectedCredentials);
+                    }
+                    let value = PeerCredentials {
+                        pid: value.pid.as_raw_pid(),
+                        uid: value.uid.as_raw(),
+                        gid: value.gid.as_raw(),
+                    };
+                    if chunk_credentials.replace(value).is_some() {
+                        return Err(ControlError::RepeatedCredentials);
+                    }
+                }
+                RecvAncillaryMessage::ScmRights(descriptors) => {
+                    for descriptor in descriptors {
+                        if rights.len() == RECEIVED_RIGHTS {
+                            return Err(ControlError::ExcessRights);
+                        }
+                        if !rustix::io::fcntl_getfd(&descriptor)?
+                            .contains(rustix::io::FdFlags::CLOEXEC)
+                        {
+                            return Err(ControlError::RightsNotCloexec);
+                        }
+                        rights.push(descriptor);
+                    }
+                }
+                _ => return Err(ControlError::UnknownAncillary),
+            }
+        }
+        match self.1 {
+            CredentialsPolicy::ActualSender => {
+                let sender = chunk_credentials.ok_or(ControlError::MissingCredentials)?;
+                if credentials.is_some_and(|previous| previous != sender) {
+                    return Err(ControlError::ChangedCredentials);
+                }
+                *credentials = Some(sender);
+            }
+            CredentialsPolicy::ExclusiveCreator => {}
+        }
+
+        if received.bytes > bytes.len() {
+            return Err(ControlError::Truncated);
+        }
+        self.refuse_observable_eof()?;
+        Ok(Some(received.bytes))
     }
 
     fn wait(&self, interest: PollFlags, deadline: Instant) -> Result<(), ControlError> {
@@ -627,6 +654,104 @@ impl PreparedFrame {
 pub(super) struct PreparedReceive {
     payload: Vec<u8>,
     rights: Vec<OwnedFd>,
+}
+
+/// O's incremental frame owner. Partial frames retain owned rights and credentials between
+/// normal accounting ticks; no partial read is restarted or promoted to an authorization.
+pub(super) struct IncrementalReceive {
+    buffer: PreparedReceive,
+    header: [u8; 4],
+    header_read: usize,
+    length: Option<usize>,
+    payload_read: usize,
+    credentials: Option<PeerCredentials>,
+    active: bool,
+    poisoned: bool,
+}
+
+impl IncrementalReceive {
+    pub(super) fn prepare() -> Result<Self, ControlError> {
+        Ok(Self {
+            buffer: PreparedReceive::prepare()?,
+            header: [0; 4],
+            header_read: 0,
+            length: None,
+            payload_read: 0,
+            credentials: None,
+            active: false,
+            poisoned: false,
+        })
+    }
+
+    /// At most one recvmsg per call. A successful incomplete result requires another ordinary
+    /// actor/accounting tick; errors poison the decoder and can never resume a half-accepted frame.
+    pub(super) fn advance<'buffer, T: DeserializeOwned>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        if self.poisoned {
+            return Err(ControlError::ReceivePoisoned);
+        }
+        self.poisoned = true;
+        if Instant::now() >= deadline {
+            return Err(ControlError::Deadline);
+        }
+        if !self.active {
+            self.buffer.rights.clear();
+            self.header_read = 0;
+            self.length = None;
+            self.payload_read = 0;
+            self.credentials = None;
+            self.active = true;
+        }
+        if self.header_read < self.header.len() {
+            if let Some(count) = transport.read_chunk(
+                &mut self.header[self.header_read..],
+                &mut self.credentials,
+                &mut self.buffer.rights,
+            )? {
+                self.header_read = self
+                    .header_read
+                    .checked_add(count)
+                    .ok_or(ControlError::Truncated)?;
+            }
+            if self.header_read == self.header.len() {
+                let length = usize::try_from(u32::from_be_bytes(self.header))
+                    .map_err(|_| ControlError::EncodedBytesExceeded)?;
+                if length == 0 || length > CONTROL_BYTES {
+                    return Err(ControlError::EncodedBytesExceeded);
+                }
+                self.buffer.payload.resize(length, 0);
+                self.length = Some(length);
+            }
+            self.poisoned = false;
+            return Ok(None);
+        }
+        let length = self.length.ok_or(ControlError::ReceivePoisoned)?;
+        if let Some(count) = transport.read_chunk(
+            &mut self.buffer.payload[self.payload_read..],
+            &mut self.credentials,
+            &mut self.buffer.rights,
+        )? {
+            self.payload_read = self
+                .payload_read
+                .checked_add(count)
+                .ok_or(ControlError::Truncated)?;
+        }
+        if self.payload_read != length {
+            self.poisoned = false;
+            return Ok(None);
+        }
+        // Set successful progress before lending the owned rights. A decoding/validation failure
+        // permanently poisons this owner, while a caller may explicitly take valid rights.
+        let received =
+            transport.finish_receive(&mut self.buffer, self.credentials, expected_rights)?;
+        self.active = false;
+        self.poisoned = false;
+        Ok(Some(received))
+    }
 }
 
 pub(super) struct PreparedReceived<'buffer, T> {
@@ -755,6 +880,95 @@ mod tests {
         assert_eq!(received.control, Message { authorized: false });
         assert!(received.rights.is_empty());
         assert_eq!(receive.reserved_bytes().unwrap(), reservation);
+    }
+
+    /// Trace: FR-034-AC-4, FR-034-AC-15, FR-034-AC-16.
+    #[test]
+    fn incremental_receiver_retains_partial_header_and_actual_owned_rights() {
+        let (caller, endpoint) = private_pair().unwrap();
+        let source = std::fs::File::open("/dev/null").unwrap();
+        let frame = PreparedFrame::encode(&Message { authorized: true }).unwrap();
+        let mut receive = IncrementalReceive::prepare().unwrap();
+        let mut storage = [MaybeUninit::uninit(); ANCILLARY_BYTES];
+        let mut ancillary = SendAncillaryBuffer::new(&mut storage);
+        let rights = [source.as_fd()];
+        assert!(ancillary.push(SendAncillaryMessage::ScmRights(&rights)));
+        assert_eq!(
+            sendmsg(
+                &endpoint.0,
+                &[IoSlice::new(&frame.bytes[..1])],
+                &mut ancillary,
+                SendFlags::NOSIGNAL
+            )
+            .unwrap(),
+            1
+        );
+        assert!(receive
+            .advance::<Message>(&caller.transport(), |_| 1, deadline())
+            .unwrap()
+            .is_none());
+        // No bytes are available: a finite tick does not restart or forget the earlier right.
+        assert!(receive
+            .advance::<Message>(&caller.transport(), |_| 1, deadline())
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            rustix::io::write(&endpoint.0, &frame.bytes[1..]).unwrap(),
+            frame.bytes.len() - 1
+        );
+        // Header completion is its own tick; payload must await the next normal actor tick.
+        assert!(receive
+            .advance::<Message>(&caller.transport(), |_| 1, deadline())
+            .unwrap()
+            .is_none());
+        let received = receive
+            .advance::<Message>(&caller.transport(), |_| 1, deadline())
+            .unwrap()
+            .unwrap();
+        assert_eq!(received.control, Message { authorized: true });
+        assert_eq!(
+            received.credentials.unwrap().pid,
+            rustix::process::getpid().as_raw_pid()
+        );
+        let delivered = received.rights.pop().unwrap();
+        let original = rustix::fs::fstat(&source).unwrap();
+        let actual = rustix::fs::fstat(&delivered).unwrap();
+        assert_eq!(
+            (original.st_dev, original.st_ino),
+            (actual.st_dev, actual.st_ino)
+        );
+        assert!(rustix::io::fcntl_getfd(&delivered)
+            .unwrap()
+            .contains(rustix::io::FdFlags::CLOEXEC));
+    }
+
+    /// Trace: FR-034-AC-4, FR-034-AC-15.
+    #[test]
+    fn incremental_receiver_rejects_eof_over_queued_authorization_and_cannot_resume() {
+        let (caller, endpoint) = private_pair().unwrap();
+        let frame = PreparedFrame::encode(&Message { authorized: false }).unwrap();
+        assert_eq!(
+            rustix::io::write(&endpoint.0, &frame.bytes[..1]).unwrap(),
+            1
+        );
+        let mut receive = IncrementalReceive::prepare().unwrap();
+        assert!(receive
+            .advance::<Message>(&caller.transport(), |_| 0, deadline())
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            rustix::io::write(&endpoint.0, &frame.bytes[1..]).unwrap(),
+            frame.bytes.len() - 1
+        );
+        drop(endpoint);
+        assert!(matches!(
+            receive.advance::<Message>(&caller.transport(), |_| 0, deadline()),
+            Err(ControlError::Eof)
+        ));
+        assert!(matches!(
+            receive.advance::<Message>(&caller.transport(), |_| 0, deadline()),
+            Err(ControlError::ReceivePoisoned)
+        ));
     }
 
     fn deadline() -> Instant {
