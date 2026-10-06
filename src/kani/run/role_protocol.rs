@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     outer_setup::NamespaceIdentity,
-    protocol::{BuildIdentity, RunAuthority},
+    protocol::{BuildIdentity, GuardianRefusal, RunAuthority},
     report_storage::{PipeIdentity, REPORT_SLOT},
     role_deadline::RoleDeadline,
 };
@@ -42,6 +42,27 @@ impl LauncherControl {
         match self {
             Self::Start { .. } => 4,
         }
+    }
+}
+
+/// Authenticated L-origin bootstrap status. Neither status grants backend authorization.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum LauncherReply {
+    Ready {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+    },
+    Refused {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+        reason: GuardianRefusal,
+    },
+}
+
+impl LauncherReply {
+    pub(super) fn rights_count(&self) -> usize {
+        0
     }
 }
 
