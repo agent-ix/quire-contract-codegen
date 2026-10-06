@@ -77,7 +77,7 @@ impl MemoryObserver {
         };
         // Reading a directory alone is insufficient: verify both ancestry and resident bytes.
         let own = std::process::id();
-        let own_process = parse_process(&fs::read(root.join(own.to_string()).join("stat"))?)?;
+        let own_process = parse_process(&read_proc_file(root.join(own.to_string()).join("stat"))?)?;
         observer
             .resident_bytes(own, own_process.start)?
             .ok_or_else(|| {
@@ -103,7 +103,9 @@ impl MemoryObserver {
 
     #[cfg(target_os = "linux")]
     pub(super) fn bind_root(&mut self, pid: u32, start: u64) -> io::Result<()> {
-        let process = parse_process(&fs::read(self.root.join(pid.to_string()).join("stat"))?)?;
+        let process = parse_process(&read_proc_file(
+            self.root.join(pid.to_string()).join("stat"),
+        )?)?;
         if process.start != start {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -134,7 +136,7 @@ impl MemoryObserver {
                 "outer observation is not running in actual PID1",
             ));
         }
-        let process = parse_process(&fs::read(self.root.join("1/stat"))?)?;
+        let process = parse_process(&read_proc_file(self.root.join("1/stat"))?)?;
         self.bind_root(pid, process.start)?;
         outer.require_creator_live().map_err(io::Error::other)
     }
@@ -225,7 +227,7 @@ impl MemoryObserver {
                 continue;
             }
             let directory = self.root.join(pid.to_string());
-            let process = match fs::read(directory.join("stat")) {
+            let process = match read_proc_file(directory.join("stat")) {
                 Ok(text) => parse_process(&text)?,
                 Err(error) if process_disappeared(&error) => continue,
                 Err(error) => return Err(error),
@@ -246,7 +248,7 @@ impl MemoryObserver {
                     continue;
                 }
                 let parent_stat =
-                    match fs::read(self.root.join(parent_pid.to_string()).join("stat")) {
+                    match read_proc_file(self.root.join(parent_pid.to_string()).join("stat")) {
                         Ok(text) => parse_process(&text)?,
                         Err(error) if process_disappeared(&error) => continue,
                         Err(error) => return Err(error),
@@ -260,7 +262,7 @@ impl MemoryObserver {
                 Err(error) if process_disappeared(&error) => {
                     // A reaped child can vanish after its stat was read. A live leader whose
                     // workers still exist is different: missing task ancestry stays fail-closed.
-                    match fs::read(directory.join("stat")) {
+                    match read_proc_file(directory.join("stat")) {
                         Err(error) if process_disappeared(&error) => continue,
                         Err(error) => return Err(error),
                         Ok(stat) => {
@@ -330,24 +332,22 @@ impl MemoryObserver {
             Err(error) if process_disappeared(&error) => return Ok(None),
             Err(error) => return Err(error),
         };
-        let mut stat = Vec::new();
-        match stat_file.read_to_end(&mut stat) {
-            Ok(_) => {}
+        let stat = match read_proc_record(&mut stat_file) {
+            Ok(stat) => stat,
             Err(error) if process_disappeared(&error) => return Ok(None),
             Err(error) => return Err(error),
-        }
+        };
         let process = parse_process(&stat)?;
         if process.start != start {
             return Ok(None);
         }
-        let mut status = Vec::new();
-        match status_file.read_to_end(&mut status) {
-            Ok(_) => {}
+        let status = match read_proc_record(&mut status_file) {
+            Ok(status) => status,
             Err(error) if process_disappeared(&error) => {
                 return Self::missing_status(&directory, start)
             }
             Err(error) => return Err(error),
-        }
+        };
         if let Some(bytes) = status_rss(&status)? {
             return Ok(Some(bytes));
         }
@@ -420,9 +420,8 @@ impl MemoryObserver {
                 if latest.start != start {
                     return Ok(None);
                 }
-                let mut text = Vec::new();
-                match pinned.read_to_end(&mut text) {
-                    Ok(_) => {}
+                let text = match read_proc_record(&mut pinned) {
+                    Ok(text) => text,
                     Err(error) if process_disappeared(&error) => continue,
                     Err(error) => {
                         return Err(io::Error::new(
@@ -430,11 +429,11 @@ impl MemoryObserver {
                             format!("live worker RSS unavailable: {error}"),
                         ))
                     }
-                }
+                };
                 if let Some(bytes) = status_rss(&text)? {
                     return Ok(Some(bytes));
                 }
-                let task_stat = match fs::read(worker.path().join("stat")) {
+                let task_stat = match read_proc_file(worker.path().join("stat")) {
                     Ok(stat) => parse_process(&stat)?,
                     Err(error) if process_disappeared(&error) => continue,
                     Err(error) => return Err(error),
@@ -453,7 +452,7 @@ impl MemoryObserver {
             if fresh_stat.start != start {
                 return Ok(None);
             }
-            let fresh_status = match fs::read(directory.join("status")) {
+            let fresh_status = match read_proc_file(directory.join("status")) {
                 Ok(status) => status,
                 Err(error) if process_disappeared(&error) => {
                     return Self::missing_status(&directory, start)
@@ -506,20 +505,22 @@ impl MemoryObserver {
                 Err(error) => return Err(error),
             }
         }
-        let mut status = Vec::new();
-        match status_file.read_to_end(&mut status) {
-            Ok(0) => return Self::empty_pinned_process_file(directory, start),
-            Ok(_) => {}
+        let _status = match read_proc_record(status_file) {
+            Ok(bytes) if bytes.is_empty() => {
+                return Self::empty_pinned_process_file(directory, start)
+            }
+            Ok(bytes) => bytes,
             Err(error) if process_disappeared(&error) => return Ok(false),
             Err(error) => return Err(error),
-        }
-        let mut stat = Vec::new();
-        match stat_file.read_to_end(&mut stat) {
-            Ok(0) => return Self::empty_pinned_process_file(directory, start),
-            Ok(_) => {}
+        };
+        let stat = match read_proc_record(stat_file) {
+            Ok(bytes) if bytes.is_empty() => {
+                return Self::empty_pinned_process_file(directory, start)
+            }
+            Ok(bytes) => bytes,
             Err(error) if process_disappeared(&error) => return Ok(false),
             Err(error) => return Err(error),
-        }
+        };
         if parse_process(&stat)?.start != start {
             return Ok(false);
         }
@@ -642,24 +643,47 @@ fn status_role_identity(status: &[u8], key: &[u8]) -> io::Result<u32> {
         .ok_or_else(malformed)
 }
 
-#[cfg(target_os = "linux")]
-fn read_pinned_role_file(file: &mut fs::File) -> io::Result<Vec<u8>> {
-    const FILE_BYTES: usize = 16_384;
-    file.seek(SeekFrom::Start(0))?;
-    let mut bytes = Vec::with_capacity(FILE_BYTES + 1);
-    file.take(u64::try_from(FILE_BYTES + 1).map_err(io::Error::other)?)
+// Proc records are untrusted observation input. Refuse an oversized record rather than
+// allocating until EOF, accepting a truncated ancestry/RSS sample, or substituting zero.
+// This bounds one record only; the O owner separately bounds its census workspace.
+const PROC_RECORD_BYTES: usize = 16_384;
+
+fn read_proc_file(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+    read_proc_record(&mut fs::File::open(path)?)
+}
+
+fn read_proc_record(file: &mut fs::File) -> io::Result<Vec<u8>> {
+    let limit = PROC_RECORD_BYTES.checked_add(1).ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "procfs record bound overflow")
+    })?;
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(limit).map_err(io::Error::other)?;
+    file.take(u64::try_from(limit).map_err(io::Error::other)?)
         .read_to_end(&mut bytes)?;
-    if bytes.is_empty() || bytes.len() > FILE_BYTES {
+    if bytes.len() > PROC_RECORD_BYTES {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "retained launcher observation missing or oversized",
+            "procfs observation record exceeds its finite input bound",
+        ));
+    }
+    Ok(bytes)
+}
+
+#[cfg(target_os = "linux")]
+fn read_pinned_role_file(file: &mut fs::File) -> io::Result<Vec<u8>> {
+    file.seek(SeekFrom::Start(0))?;
+    let bytes = read_proc_record(file)?;
+    if bytes.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "retained launcher observation missing",
         ));
     }
     Ok(bytes)
 }
 
 fn read_process_if_present(path: &Path) -> io::Result<Option<Process>> {
-    match fs::read(path) {
+    match read_proc_file(path) {
         Ok(stat) => parse_process(&stat).map(Some),
         Err(error) if process_disappeared(&error) => Ok(None),
         Err(error) => Err(error),
@@ -705,8 +729,10 @@ fn status_threads(status: &[u8]) -> io::Result<u64> {
 }
 
 fn read_task_children(task: &Path) -> io::Result<Option<String>> {
-    match fs::read_to_string(task.join("children")) {
-        Ok(children) => Ok(Some(children)),
+    match read_proc_file(task.join("children")) {
+        Ok(children) => String::from_utf8(children)
+            .map(Some)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error)),
         Err(error) if process_disappeared(&error) => match fs::metadata(task) {
             Err(error) if process_disappeared(&error) => Ok(None),
             Err(error) => Err(error),
@@ -877,6 +903,35 @@ mod tests {
             observer.observe(42).unwrap_err().kind(),
             io::ErrorKind::InvalidData
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Trace: FR-028-AC-21, FR-034-AC-32.
+    #[test]
+    fn oversized_proc_record_refuses_before_accepting_valid_prefix() {
+        let root = crate::kani::test_support::discover_scratch("memory-record-bound");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("status");
+        let mut bytes = b"VmRSS:\t64 kB\nThreads:\t1\n".to_vec();
+        bytes.resize(PROC_RECORD_BYTES, b' ');
+        fs::write(&path, &bytes).unwrap();
+        assert_eq!(
+            status_rss(&read_proc_file(&path).unwrap()).unwrap(),
+            Some(64 * 1024)
+        );
+        bytes.push(b' ');
+        fs::write(&path, &bytes).unwrap();
+        assert_eq!(
+            read_proc_file(&path).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::write(root.join("children"), &bytes).unwrap();
+        assert_eq!(
+            read_task_children(&root).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        fs::write(root.join("children"), []).unwrap();
+        assert_eq!(read_task_children(&root).unwrap(), Some(String::new()));
         fs::remove_dir_all(root).unwrap();
     }
 
