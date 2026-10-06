@@ -255,6 +255,61 @@ fn supervise(
     supervise_admitted(transport, admitted, startup_deadline)
 }
 
+/// Single-thread I's real direct-backend wait state, shared by the ordinary supervision core
+/// and the O/C control actor. A reaped PID matches only the actual unreaped spawned backend;
+/// duplicate completion is refusal, not a second successful backend exit.
+struct BackendReaper {
+    pid: Pid,
+    completed: bool,
+}
+
+impl BackendReaper {
+    fn from_child(child: &std::process::Child) -> Result<Self, GuardianError> {
+        let pid = i32::try_from(child.id())
+            .ok()
+            .and_then(Pid::from_raw)
+            .ok_or(GuardianError::Refusal(
+                GuardianRefusal::BackendObservationFailed,
+            ))?;
+        Ok(Self {
+            pid,
+            completed: false,
+        })
+    }
+
+    /// Bounded real waitpid work; descendant exits do not become direct-backend completion.
+    fn tick(&mut self) -> Result<Option<BackendExit>, GuardianError> {
+        for _ in 0..REAP_WORK {
+            let (pid, status) = match waitpid(None, WaitOptions::NOHANG) {
+                Ok(Some(status)) => status,
+                Ok(None) | Err(rustix::io::Errno::CHILD) => return Ok(None),
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(error) => return Err(GuardianError::Io(error.into())),
+            };
+            if pid != self.pid {
+                continue;
+            }
+            if self.completed {
+                return Err(GuardianError::Refusal(
+                    GuardianRefusal::BackendObservationFailed,
+                ));
+            }
+            let outcome = if let Some(code) = status.exit_status() {
+                BackendExit::Code(code)
+            } else if let Some(signal) = status.terminating_signal() {
+                BackendExit::Signal(signal)
+            } else {
+                return Err(GuardianError::Refusal(
+                    GuardianRefusal::BackendObservationFailed,
+                ));
+            };
+            self.completed = true;
+            return Ok(Some(outcome));
+        }
+        Ok(None)
+    }
+}
+
 fn supervise_admitted(
     transport: &Transport<'_>,
     admitted: BackendAdmission,
@@ -269,18 +324,12 @@ fn supervise_admitted(
     let child = backend
         .spawn()
         .map_err(|_| GuardianError::Refusal(GuardianRefusal::BackendSpawnFailed))?;
-    let backend_pid = i32::try_from(child.id())
-        .ok()
-        .and_then(Pid::from_raw)
-        .ok_or(GuardianError::Refusal(
-            GuardianRefusal::BackendObservationFailed,
-        ))?;
+    let mut reaper = BackendReaper::from_child(&child)?;
     transport.send(
         &GuardianControl::Dispatched { authority },
         &[],
         startup_deadline,
     )?;
-    let mut completed = false;
     loop {
         // No post-Dispatch input is authorized. Pending controls refuse; EOF exits INIT.
         match transport.pending_control(SUPERVISION_TICK) {
@@ -289,35 +338,12 @@ fn supervise_admitted(
             Ok(true) => return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl)),
             Ok(false) => {}
         }
-        for _ in 0..REAP_WORK {
-            let (pid, status) = match waitpid(None, WaitOptions::NOHANG) {
-                Ok(Some(status)) => status,
-                Ok(None) | Err(rustix::io::Errno::CHILD) => break,
-                Err(rustix::io::Errno::INTR) => continue,
-                Err(error) => return Err(GuardianError::Io(error.into())),
-            };
-            if pid == backend_pid {
-                let outcome = if let Some(code) = status.exit_status() {
-                    BackendExit::Code(code)
-                } else if let Some(signal) = status.terminating_signal() {
-                    BackendExit::Signal(signal)
-                } else {
-                    return Err(GuardianError::Refusal(
-                        GuardianRefusal::BackendObservationFailed,
-                    ));
-                };
-                if completed {
-                    return Err(GuardianError::Refusal(
-                        GuardianRefusal::BackendObservationFailed,
-                    ));
-                }
-                transport.send(
-                    &GuardianControl::Completed { authority, outcome },
-                    &[],
-                    Instant::now() + BOOTSTRAP_CAP,
-                )?;
-                completed = true;
-            }
+        if let Some(outcome) = reaper.tick()? {
+            transport.send(
+                &GuardianControl::Completed { authority, outcome },
+                &[],
+                Instant::now() + BOOTSTRAP_CAP,
+            )?;
         }
         // After completion remain INIT and retain descendants until the caller closes its lease.
         // The live caller bounded-reads the report before close; a vanished caller owns no result.
