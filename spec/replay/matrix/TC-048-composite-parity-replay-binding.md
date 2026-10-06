@@ -19,7 +19,7 @@ relationships:
 Planned public-consumer scenarios for
 [FR-033](../functional/FR-033-composite-parity-replay-binding.md),
 [FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
-[FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-27. All
+[FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-28. All
 completed-route checks are GATED until CG consumes the QSL-640 node-parity/value/settlement API
 delivered in QSL #645; a spec-only merge does not satisfy that gate. This scenario artifact claims no executable coverage. FR-028 AC-17/24 retain the
 strength/ceiling evidence checked here; native execution and backend controls use their named lanes
@@ -79,7 +79,7 @@ and never replace positive QSL evaluation with a verdict double.
    produce QSL's typed refusal naming that key, not covered/Proved. Other listed
    non-Boolean leaf families stay uncovered/Tested while no authoritative whole-domain bound kind
    exists; a maximum text length or decimal range alone cannot count as complete coverage.
-7. Enumerate every FR-028 AC-17 strength through FR-029 AC-17 and AC-19 to AC-27, retaining
+7. Enumerate every FR-028 AC-17 strength through FR-029 AC-17 and AC-19 to AC-28, retaining
    independent refinement evidence. Verify the same four-state Refinement is supplied on both paths.
    Test disagreement for verified, falsified (including agreeing replay), inconclusive and
    cover-unsatisfied outcomes, including zero checks. Test verified CeilingReached with covered
@@ -118,10 +118,15 @@ and never replace positive QSL evaluation with a verdict double.
    before delivery it stays gated, with no invented API or extra CG tracking digest. Existing
    function/frame preimage vectors remain equal.
 10. Submit a changed source/package/node/occurrence/bound/O-09 request with Disagreed. A CG
-    precheck rejection returns no report/terminal value; if CG invokes QSL, its common-step
-    non-fault `Refused` result returns a binding-valid report with Inconclusive(ReplayRefused) and
-    QSL's code before F-1. Cause a QSL common-step `Fault` and `Admission(Fault)` in separate
-    cases; each binding-valid report returns Failed, never ReplayRefused. Change each full
+    precheck rejection returns no report/terminal value. For a reachable QSL `prepare` refusal,
+    send a valid wire request through the public facade with a replay input-byte limit below its
+    encoded size, then pass the actual report to CG's public converter with the same sent identity.
+    Its bound non-fault `Refused` result returns Inconclusive(ReplayRefused) with QSL's code before
+    F-1, even with Disagreed. Then use
+    a valid `prepare` and an operand that would fail admission with Disagreed; F-1 wins because
+    admission follows it. Inspect QSL's public `terminal_value` mapping and CG's pass-through for
+    any actual `Fault` or `Admission(Fault)` report: each maps to Failed, but no invariant-fault
+    report or public triggering input is fabricated. Change each full
     `CompositeIdentity` member independently in a returned report: obligation, node, occurrence,
     operator, obligation kind, harness bounds, limits, content identity, falsified operands,
     shadow verdict and pair count, native observation/cause and refinement, then verified SUCCESS
@@ -162,8 +167,8 @@ and never replace positive QSL evaluation with a verdict double.
 | FR-033-AC-8 | QSL derives complete declared-key coverage and literal singleton bounds | Treat empty/omitted/unbounded keys as covered, accept duplicate/unknown key or enum undeclared variant/DeclaredDomain |
 | FR-029-AC-17 and AC-19 to AC-27; FR-028-AC-17/24 | Closed strengths; cross-outcome disagreement wins, then verified refinement ceiling, ordinary vacuous record, exhausted+covered, completed Tested; all shadow-inconclusive rows and actual record category preserved | Delete a strength row, let zero defeat disagreement/ceiling, promote Proved0 or label a stopped refinement sampled/Tested |
 | FR-033-AC-11 | O-09 exact claim preimage excludes full CG record extras; separate same-artifact content tie preserved, existing function/frame vectors unchanged | Hash the CG size budget/static pair-node count into O-09, duplicate a self-comparison parameter, skip delivered artifact-replacement refusal or invent a second tracking digest |
-| FR-033-AC-12/13 | CG precheck yields no report value; QSL common-step Refused report precedes Disagreed; shared Refinement on both paths; ordered falsified rows preserve actual native cause and separate resource stages | Settle another claim as Failed, hide disagreement behind admission/agreement, compare native instead of shadow, collapse limit stages or send backend ceilings through replay |
-| FR-033-AC-9 | Full `CompositeIdentity` binding and truthful typed capability/refusal/fault readings | Accept one changed observation member; drop QSL Refused report's terminal value; label common-step Fault ReplayRefused; invent QSL code/cause or bridge through predicate replay |
+| FR-033-AC-12/13 | CG precheck yields no report value; QSL `prepare` Refused report precedes Disagreed, while later admission refusal follows it; shared Refinement and ordered F rows preserve actual native cause and separate resource stages | Settle another claim as Failed, hide disagreement behind admission/agreement, compare native instead of shadow, collapse limit stages or send backend ceilings through replay |
+| FR-033-AC-9; FR-029-AC-28 | Full `CompositeIdentity` binding and truthful typed capability/refusal/fault readings; QSL public terminal mapping and CG pass-through inspected for invariant faults | Accept one changed observation member; drop QSL Refused report's terminal value; label an actual bound Fault report ReplayRefused; invent a fault report, QSL code/cause or predicate replay route |
 
 Unimplemented canonical conversions, family harnesses or legal cause representations remain reported
 gaps. The future terminal payload names have the semantic meaning in FR-029, and the owning
