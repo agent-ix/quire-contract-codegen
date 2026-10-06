@@ -756,6 +756,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
     let (package, clause) = twin.emitted_package(BALANCE);
     let generated = quire_contract_codegen::generate_state_frame_obligations(
         &quire_contract_codegen::StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
             package: &package,
             clause: &clause,
             state_path: "crate::subject::Account",
