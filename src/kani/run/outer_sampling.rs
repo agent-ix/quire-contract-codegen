@@ -18,9 +18,9 @@ use super::{
         PreparedFrame, RoleCaller, RoleEndpoint,
     },
     memory::{LauncherMemory, MemoryObserver},
-    namespace::{GatedClaim, OuterMonitorOwner},
+    namespace::{GatedClaim, InnerSettlement, OuterMonitorOwner},
     outer_setup::PreparedOuter,
-    report_storage::{ReportCollector, ReportError},
+    report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
     role_deadline::DeadlineError,
     role_protocol::{InnerBootstrap, OuterPhaseCommand, OuterPhaseReply, RunSettings},
@@ -37,6 +37,7 @@ pub(super) enum SamplingError {
     InnerLeaseConsumed,
     PhaseAuthorityMismatch,
     UnexpectedPhase,
+    SettlementReportMismatch,
 }
 
 impl std::fmt::Display for SamplingError {
@@ -56,7 +57,8 @@ impl std::error::Error for SamplingError {
             Self::InvalidMonitorTransition
             | Self::InnerLeaseConsumed
             | Self::PhaseAuthorityMismatch
-            | Self::UnexpectedPhase => None,
+            | Self::UnexpectedPhase
+            | Self::SettlementReportMismatch => None,
         }
     }
 }
@@ -92,6 +94,12 @@ enum InnerMonitorState {
 }
 
 impl InnerMonitor {
+    pub(super) fn poll_settled(&mut self) -> Result<Option<InnerSettlement>, SamplingError> {
+        self.monitor
+            .poll_settled()
+            .map_err(SamplingError::Observation)
+    }
+
     /// Record the attempt before spawn: any error retains the actual monitor owner and cannot
     /// retry a second process. This owner must survive until the outer run confirms settlement.
     pub(super) fn spawn(
@@ -154,8 +162,7 @@ impl InnerMonitor {
         };
         let deadline = sampling
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(SamplingError::Deadline)?;
         self.monitor
             .namespace()
@@ -182,8 +189,7 @@ impl InnerMonitor {
         }
         let deadline = sampling
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(SamplingError::Deadline)?
             .min(startup_deadline);
         let lease = self
@@ -276,8 +282,7 @@ impl OuterPhases {
             }
             let deadline = sampling
                 .settings
-                .deadline
-                .local()
+                .startup_deadline()
                 .map_err(SamplingError::Deadline)?
                 .min(startup_deadline);
             let rights = reply.pin.as_ref().map(|pin| [pin.as_fd()]);
@@ -346,8 +351,7 @@ impl OuterPhases {
         }
         let deadline = sampling
             .settings
-            .deadline
-            .local()
+            .startup_deadline()
             .map_err(SamplingError::Deadline)?
             .min(startup_deadline);
         let Some(received) = self
@@ -434,7 +438,9 @@ impl OuterSampling {
             .setup_deadline
             .local()
             .map_err(SamplingError::Deadline)?;
-        let deadline = settings.deadline.local().map_err(SamplingError::Deadline)?;
+        let deadline = settings
+            .identity_deadline()
+            .map_err(SamplingError::Deadline)?;
         let collector = ReportCollector::prepare(outer).map_err(SamplingError::Report)?;
         let mut tree =
             MemoryObserver::prepare(Path::new("/proc")).map_err(SamplingError::Observation)?;
@@ -493,12 +499,11 @@ impl OuterSampling {
         let launcher = self.launcher.sample().map_err(SamplingError::Observation)?;
         let deadline = self
             .settings
-            .deadline
-            .local()
+            .identity_deadline()
             .map_err(SamplingError::Deadline)?;
         let tree = self
             .tree
-            .observe_before(1, deadline)
+            .observe_until(1, deadline)
             .map_err(SamplingError::Observation)?;
         let tick = self
             .ledger
@@ -509,11 +514,10 @@ impl OuterSampling {
         }
         let deadline = self
             .settings
-            .deadline
-            .local()
+            .identity_deadline()
             .map_err(SamplingError::Deadline)?;
         self.collector
-            .drain_tick(Some(deadline))
+            .drain_tick(deadline)
             .map_err(SamplingError::Report)?;
         outer
             .require_creator_live()
@@ -593,6 +597,40 @@ impl OuterSampling {
             .claim_gated_tick(startup_deadline, &mut self.tree)
             .map_err(SamplingError::Observation)?;
         Ok((tick, claim))
+    }
+
+    /// Real writer EOF is a separate condition from authenticated backend completion or I/M exit.
+    /// The actor continues ordinary accounting/draining ticks until it observes this actual read.
+    pub(super) fn report_eof(&self) -> bool {
+        self.collector.eof()
+    }
+
+    /// Consume the collector only after its own genuine I/M settlement and actual writer EOF.
+    /// This returns sealed bytes/measurements to the retained O owner, not execution evidence or
+    /// permission for C to return before actual O/L/thread settlement and bounded report reading.
+    pub(super) fn seal_after_inner_settlement(
+        self,
+        settlement: InnerSettlement,
+    ) -> Result<(SealedReport, MeasuredPeaks), SamplingError> {
+        if !settlement.matches_report(self.collector.identity()) {
+            return Err(SamplingError::SettlementReportMismatch);
+        }
+        self.ledger
+            .require_writer_exposure(self.collector.identity(), self.collector.reserve())
+            .map_err(SamplingError::Charge)?;
+        let peaks = self
+            .ledger
+            .measured_peaks()
+            .map_err(SamplingError::Charge)?;
+        let deadline = self
+            .settings
+            .identity_deadline()
+            .map_err(SamplingError::Deadline)?;
+        let report = self
+            .collector
+            .seal(deadline)
+            .map_err(SamplingError::Report)?;
+        Ok((report, peaks))
     }
 
     /// Actual complete measured peaks only. This is not a settled evidence constructor.

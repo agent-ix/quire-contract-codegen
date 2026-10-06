@@ -190,7 +190,16 @@ impl MemoryObserver {
     /// deadline nor the owner's work/settlement allocation, and does not alter prior peak data.
     #[cfg(target_os = "linux")]
     pub(super) fn observe_before(&mut self, launcher: u32, deadline: Instant) -> io::Result<u64> {
-        self.observation_deadline = Some(deadline);
+        self.observe_until(launcher, Some(deadline))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn observe_until(
+        &mut self,
+        launcher: u32,
+        deadline: Option<Instant>,
+    ) -> io::Result<u64> {
+        self.observation_deadline = deadline;
         let result = self.observe(launcher);
         self.observation_deadline = None;
         result

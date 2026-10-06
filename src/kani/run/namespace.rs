@@ -231,6 +231,9 @@ pub(super) struct OuterMonitorOwner {
     command: Option<Command>,
     child: Option<Child>,
     pin: Option<OwnedFd>,
+    exit: Option<std::process::ExitStatus>,
+    report: super::report_storage::PipeIdentity,
+    settlement_published: bool,
     namespace: NamespaceOwner,
 }
 
@@ -243,12 +246,16 @@ impl OuterMonitorOwner {
         collector: &mut super::report_storage::ReportCollector,
         ledger: &super::resource_ledger::ResourceLedger,
     ) -> io::Result<Self> {
+        let report = collector.identity();
         let (command, namespace) =
             NamespaceOwner::prepare_outer(outer, helper, bootstrap, collector, ledger)?;
         Ok(Self {
             command: Some(command),
             child: None,
             pin: None,
+            exit: None,
+            report,
+            settlement_published: false,
             namespace,
         })
     }
@@ -289,6 +296,41 @@ impl OuterMonitorOwner {
         outer.require_creator_live().map_err(io::Error::other)
     }
 
+    /// Read-only positive settlement of the genuine claimed inner namespace and direct M Child.
+    /// An unclaimed INIT cannot be reconstructed from M exit; that path requires actual outer
+    /// namespace cancellation/confirmation by C. Signal delivery, EOF and Drop never create this.
+    pub(super) fn poll_settled(&mut self) -> io::Result<Option<InnerSettlement>> {
+        if self.settlement_published {
+            return Err(unavailable("inner settlement already consumed"));
+        }
+        if self.child.is_none() || self.namespace.init.is_none() {
+            return Err(unavailable(
+                "inner settlement requires actual monitor and INIT custody",
+            ));
+        }
+        let terminated = self.namespace.init_terminated()?;
+        if self.exit.is_none() {
+            self.exit = self
+                .child
+                .as_mut()
+                .ok_or_else(|| unavailable("nested monitor Child is absent"))?
+                .try_wait()?;
+            if self.exit.is_some() {
+                // Once positively reaped, the raw wrapper number is no longer group authority.
+                // Retained INIT authority remains actual pidfd; unclaimed paths never use this.
+                self.namespace.wrapper = None;
+            }
+        }
+        if !terminated || self.exit.is_none() {
+            return Ok(None);
+        }
+        self.namespace.cleaned = true;
+        self.settlement_published = true;
+        Ok(Some(InnerSettlement {
+            report: self.report,
+        }))
+    }
+
     /// Clone only this retained direct Child's actual capability for an authenticated O reply.
     pub(super) fn monitor_capability(&self) -> io::Result<OwnedFd> {
         let pin = self
@@ -324,6 +366,20 @@ impl OuterMonitorOwner {
 
     pub(super) fn child(&mut self) -> Option<&mut Child> {
         self.child.as_mut()
+    }
+}
+
+/// A production-only fact sealed from actual I pidfd termination plus actual retained M reap.
+/// It names the original collector writer, so another run's settlement cannot seal this report.
+#[cfg(target_os = "linux")]
+pub(super) struct InnerSettlement {
+    report: super::report_storage::PipeIdentity,
+}
+
+#[cfg(target_os = "linux")]
+impl InnerSettlement {
+    pub(super) fn matches_report(&self, report: super::report_storage::PipeIdentity) -> bool {
+        self.report == report
     }
 }
 

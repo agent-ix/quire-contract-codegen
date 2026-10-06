@@ -12,7 +12,7 @@ use super::{
     outer_setup::NamespaceIdentity,
     protocol::{BuildIdentity, GuardianRefusal, RunAuthority},
     report_storage::{PipeIdentity, REPORT_SLOT},
-    role_deadline::RoleDeadline,
+    role_deadline::{IdentityDeadline, RoleDeadline},
 };
 
 /// C-origin settings, forwarded without replacing the original deadline or run authority.
@@ -23,13 +23,32 @@ pub(super) struct RunSettings {
     pub(super) helper: PathBuf,
     pub(super) identity: BuildIdentity,
     pub(super) authority: RunAuthority,
-    pub(super) deadline: RoleDeadline,
+    pub(super) deadline: IdentityDeadline,
     /// C’s original finite bootstrap cap, bounded by the original identity deadline.
     pub(super) setup_deadline: RoleDeadline,
     pub(super) caller_uid: u32,
     pub(super) caller_gid: u32,
     pub(super) memory_bytes: NonZeroU64,
     pub(super) caller_run_buffers: u64,
+}
+
+impl RunSettings {
+    /// None preserves the original never-elapsing admission (including checked_add overflow).
+    /// A finite transferred deadline that actually expires remains an error, never None.
+    pub(super) fn identity_deadline(
+        &self,
+    ) -> Result<Option<std::time::Instant>, super::role_deadline::DeadlineError> {
+        self.deadline.local()
+    }
+
+    pub(super) fn startup_deadline(
+        &self,
+    ) -> Result<std::time::Instant, super::role_deadline::DeadlineError> {
+        let cap = self.setup_deadline.local()?;
+        Ok(self
+            .identity_deadline()?
+            .map_or(cap, |deadline| deadline.min(cap)))
+    }
 }
 
 #[derive(Deserialize, Serialize)]
