@@ -1102,8 +1102,8 @@ fn resolve_type(
             resolve_scalar(bounds, type_id, node)
         }
         // A bounded type as QSL emits it: the `bounded_domain` node is itself the member's
-        // type, over its base scalar. Only its own bound is read, never a sibling's over the
-        // same base (FR-018 Behavior, FR-018-AC-16).
+        // type, over its base scalar or sequence. Only its own bound is read, never a sibling's
+        // over the same base (FR-018 Behavior, FR-018-AC-16).
         Some(CheckedNodeTag::BoundedDomain) => {
             let base = lookup(graph, &node.semantic_type)?;
             let unsupported = || CompositeEqualityRefusal::Unsupported {
@@ -1123,9 +1123,7 @@ fn resolve_type(
                         Some(node),
                     );
                 }
-                return Err(CompositeEqualityRefusal::UnreadableBound {
-                    bound: type_id.clone(),
-                });
+                return Err(unsupported());
             }
             if CheckedNodeTag::from_wire(&base.node_tag) != Some(CheckedNodeTag::ScalarType) {
                 return Err(unsupported());
@@ -1426,7 +1424,8 @@ fn resolve_collection(
         "sequence" => CollectionKind::Sequence,
         "set" => CollectionKind::Set,
         "bag" => CollectionKind::Bag,
-        _ => CollectionKind::OrderedSet,
+        "ordered_set" => CollectionKind::OrderedSet,
+        _ => return Err(malformed()),
     };
     Ok(ValueType::collection(CollectionType::new(
         kind,
@@ -2253,11 +2252,19 @@ mod tests {
                 "non_integer" => nodes[4].body["members"][0]["value"]["value_kind"] = json!("text"),
                 _ => unreachable!(),
             }
-            assert!(
-                matches!(
-                    resolve_shape(&nodes, &node_id('c')).err(),
-                    Some(CompositeEqualityRefusal::UnreadableBound { .. })
-                ),
+            let expected = if mutation == "non_sequence" {
+                CompositeEqualityRefusal::Unsupported {
+                    unsupported_node_id: node_id('e'),
+                    node_tag: "bounded_domain",
+                }
+            } else {
+                CompositeEqualityRefusal::UnreadableBound {
+                    bound: node_id('e'),
+                }
+            };
+            assert_eq!(
+                resolve_shape(&nodes, &node_id('c')).err(),
+                Some(expected),
                 "{mutation}"
             );
             assert!(
