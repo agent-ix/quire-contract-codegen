@@ -492,7 +492,12 @@ oracle and one-CODE-PR gate.
     original errno and the actual production admission function. Pipes, regular files, terminal and
     /dev/null are admitted stdin controls. Initial authoritative absent fd0 (EBADF) or original
     exec-CLOEXEC gives internal Closed and is preserved; transport clone CLOEXEC does not reclassify
-    original Open. Failed/stale capture refuses when safe stable ownership cannot be established.
+    original Open. Keep caller fd0/fd1/fd2 stable throughout setup as the trusted-caller precondition.
+    Require typed refusal for actually observed inconsistent lstat/fstat metadata, unexpected EBADF
+    after Open or nonmatching expected type. Concurrent caller close/rebind/replacement is caller
+    contract breach outside backend fault domain; no assertion requires detecting every ambient
+    mutation or preventing such a race. Authenticated self-proc/safe absent capture remains UNRUN;
+    unavailable safe capture refuses, with no raw descriptor adoption or public request field.
     Later captured-Open inspection EBADF/error refuses, never becomes Closed or probes child fd0.
     Echo raw original argv0/non-report argv/environment/cwd/input bytes through normal matched
     artifacts to detect rewriting/reopening. Admission-site Unavailable is independent of errno;
