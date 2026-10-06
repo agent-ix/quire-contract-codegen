@@ -177,45 +177,52 @@ preserve these distinctions; it must never yield `Reproduced`, `Refuted` or `Ver
 
 ## Scalar Obligation Identity
 
-CG owns the scalar `ObligationIdentity` preimage. QSL's
-[ADR-013 O-09](ix://agent-ix/quire-spec-language/ADR-013) delegates the scalar item's preimage
-to its owner and carries the resulting opaque identity unchanged; it does not mint or validate
-that digest. This scalar allocation fixes only O-09's members: the claimed scalar/application
-node id, its authentic occurrence key, the existing obligation kind, and `arguments` containing
-actual parameter-operand node ids with the actual declared domains/bounds used by the harness.
-The occurrence key is the authoritative node/role/ordinal key; source regions and spans are
-excluded. CG shall obtain node ids, the occurrence and operand-to-parameter correspondence from
-the checked/emitted proving package and retain them through generation/proving, never mint them
-from symbols, operand positions or a chosen ordinal.
+CG owns and mints the scalar `ObligationIdentity`; QSL carries it as opaque. The scalar
+operation-application allocation below is the QSL-stated owning rule supplied through planning,
+**pending measurement of pushed upstream normative text**. The inspected ADR-013 O-09 still
+only delegates the scalar item's preimage to its owner. This document does not claim the
+positional amendment has already landed there; CODE waits for the actual amended owning spec.
 
-Arguments ascend by their authoritative declared parameter identifier, as O-09 specifies;
-they are keyed by actual parameter node id, not generated `arg_0` names. This identity order
-must not replace the persisted symbolic playback call order or the operator's positional operand
-order. The checked correspondence joins those orders. A literal's drawn value still decodes and
-has its singleton bound under FR-015 AC-16, but it is not a parameter: neither an inline literal
-nor a reference to a literal `value` node gains a fabricated parameter id. Only actual
-parameter operands enter `arguments`; unrelated parameters of the enclosing function are not
-scalar operands and do not enter this scalar-item preimage.
+The scalar subject is the claimed operator's FR-322 application node id and its authentic
+O-07 occurrence key: that node id with the selected `CheckedOccurrence`'s role `expression`
+and ordinal. The preimage contains only that subject, occurrence, the existing obligation kind,
+and `arguments`. There is **one argument per operand position**, in operand/harness draw order.
+Each argument contains its position ordinal, authentic operand node id and actual operand range
+used by the harness. A parameter reference names the parameter node id; a literal names its
+own literal node id with singleton range (FR-015 AC-16); a subterm names that subterm's node id.
+Repeated independent draws of the same parameter remain distinct position entries. CG shall
+neither sort these scalar entries by parameter identifier nor deduplicate their node ids.
+Unrelated enclosing-function parameters are absent. This positional scalar rule does not
+change function/frame identity members, encoding or their existing identifier ordering.
 
-CG shall encode these fixed members through its existing one canonical place
-(`core::canonical`, RFC 8785 via `quire-canonical`), following AD-003 E-1's established member
-and domain spelling. No CG-specific member, transcript, decoded native outcome, generated-content
-digest, operator label, solver, limit counter, build or tool/version tracking field enters the
-obligation preimage. The node identifies the application; the full replay claim separately
-carries its operator, decoded operands and their ranges, result range, retained renderer limits
-and canonical generated-content identity. Claim identity and same-artifact authentication
-remain distinct from the O-09 obligation digest.
+CG shall obtain these node ids, the selected occurrence and positional operand correspondence
+from the authoritative checked/emitted proving package and retain them through generation and
+proving. No generated symbol, operand index used as a node id, chosen occurrence ordinal or
+application id reused as an operand substitutes for that metadata. Position is an argument
+member, not a replacement identity for its operand node. The existing persisted draw order
+and operator operand order must correspond exactly to the retained positional arguments.
 
-The current scalar record has no authentic occurrence key or parameter node ids, and carries
-no existing obligation-kind member. The fixed member rule does not establish a producer for
-those facts. In particular, O-09 does not specify the scalar literal/parameter correspondence
-or repeated-parameter binding rule; if the same actual parameter is drawn independently at two
-operand positions, CG cannot assume those draws form one declared-parameter binding. CODE is
-gated on measuring the authoritative scalar metadata and resolving that correspondence and
-existing kind, with the owning contracts, before minting an admitted identity. Missing or
-ambiguous essential metadata yields a typed setup refusal and no identity; a generated symbol,
-application id reused as a parameter, invented occurrence or function-contract digest is never
-a substitute. This residual uncertainty does not block the independent decoder/context work.
+CG shall encode this owning scalar shape through its existing one canonical place
+(`core::canonical`, RFC 8785 via `quire-canonical`); the scalar positional member encoding must
+follow the measured amended owning contract before CODE admission. No additional CG member,
+transcript, native outcome, generated-content digest, operator label, solver, renderer counter,
+build or tool/version tracking field enters the preimage. Source regions/spans are excluded.
+The full replay claim separately carries its operator, decoded operands/ranges, result range,
+retained renderer limits and canonical generated-content identity. It and same-artifact
+observation authentication remain distinct from the O-09 obligation digest.
+
+Measured IR `CheckedPackageV2::graph()` exposes nodes with authoritative `node_id` and
+`occurrences`, and `source_map()` exposes their source map; `CheckedOccurrence` supplies role
+and ordinal. The current CG scalar record does not retain its selected expression occurrence
+or operand node ids. IR's public node `body` is still a JSON value; no public typed accessor
+for the scalar application's ordered operands, their identities and ranges was measured.
+The model-field accessor and wrapped optional operation-leaf walk do not supply that scalar
+accessor. In particular, an inline literal term does not by itself establish a literal node id.
+CODE remains gated on the actual authoritative metadata/accessor contract and on retaining the
+occurrence selected for the proved item. Missing or ambiguous occurrence, operand identity/range
+or existing kind yields typed setup refusal and no minted identity. The positional rule resolves
+literal and repeated-parameter semantics; no ambiguity gate for those semantics remains.
+Decoder and original-limits context work can proceed independently.
 
 ## Setup Refusal Precedence
 
@@ -246,7 +253,7 @@ Cross-binding converter failures return no settlement rather than settling anoth
 | FR-032-AC-6 | PLANNED (IR-631) / GATED (QSL-641). For every `Diverged`, `Agrees`, `GeneratedFault`, `RefusedInput`, exact `Incomplete` and other `Refused` outcome, the converter compares the report's full claim to the retained sent claim before conversion; a missing claim, another result/run, or changing only the obligation, node, canonical generated-content identity, operator, operand value/range, result range or limits yields typed binding refusal and no settlement. Obligation-digest equality alone and agreement-only identity cannot pass. | Test |
 | FR-032-AC-7 | PLANNED (IR-631) / GATED (QSL-641). QSL's divergence between generated and authoritative exact outcomes becomes a CG lowering fault and `Failed`; agreement despite Kani falsification becomes `Inconclusive(ScalarAgrees)`; native `Incomplete`/execution fault becomes `GeneratedFault` and `Failed`, while exact `Incomplete` becomes `Incomplete(ResourceExhausted)`. `RefusedInput` preserves `invalid_runtime_input`; other typed QSL refusals follow the existing refusal map and non-fault refusals retain their code. This scalar route never returns `Reproduced`, `Refuted` or `Verified`. | Test |
 | FR-032-AC-8 | PLANNED (IR-631) / GATED (QSL-641). The real QSL-emitted `x + 1` with input `Int[0,9]` and result `Int[0,10]` exercises routed generation, actual Kani arithmetic-mutation playback and same-proved-artifact native observation. A separate bounded-addition fixture with both operands and result in `[-1000,1000]` exercises an admitted operand pair whose exact result is outside the result range. The expected exact result is derived from the actual retained playback, and its correct refusal is never labelled a source violation. The fixture ranges and witness domain/result-range relation are asserted before that observation; no unreachable case or assumed solver choice counts as coverage. | Test |
-| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (authoritative scalar metadata). Independent canonical-preimage checks include only the authentic claimed node/occurrence, existing kind and actual parameter-operand node ids with the harness's actual declared domains in authoritative ascending identifier order. Changing any included member changes the identity; changing source span, native outcome or artifact-content identity does not. Literal singleton operands have no fabricated parameter argument; unrelated enclosing-function parameters are absent. Missing occurrence, parameter correspondence or existing kind yields typed setup refusal and no minted identity; repeated independent draws of one parameter remain gated until their binding rule is resolved. | Test |
+| FR-032-AC-9 | PLANNED (IR-631) / CODE-GATED (pushed owning scalar rule and authoritative metadata access). Independent canonical-preimage checks include only the claimed application node, authentic expression occurrence, existing kind and one argument per operand position in actual draw order, each with position ordinal, authentic operand node id and harness operand range. Literal operands use their own node id and singleton range; parameter references use parameter node ids; subterms use subterm ids. Two independent draws of one parameter retain two position entries. Changing any included member changes identity; changing source span, native outcome or artifact-content identity does not. Missing occurrence, operand metadata or kind refuses with no identity. Identifier sorting or node-id deduplication cannot pass; unrelated enclosing-function parameters remain absent. | Test |
 
 ## Intent and Existing Coverage
 
@@ -297,9 +304,9 @@ The positive operator-level route has these explicit **CODE gates**:
    scalar node, canonical generated-content `DigestRecord`, operator, ordered operands with
    their ranges, result range and retained limits. The function-parity report requirement is an
    upstream consistency gate and authorizes no CG function-parity implementation here.
-2. CG generation must retain the authoritative scalar metadata needed by the fixed O-09
-   preimage and original renderer-limit/proving record. The occurrence, parameter correspondence,
-   repeated-parameter rule and existing kind gaps in Scalar Obligation Identity remain explicit;
+2. CG generation must retain the authoritative scalar metadata needed by the owning positional O-09
+   preimage and original renderer-limit/proving record. The selected occurrence, typed positional
+   operand identity/range access and existing kind retention gaps remain explicit;
    QSL-641 does not supply a CG-owned preimage by naming an opaque digest.
 3. The driver must implement same-proved-artifact execution and observation authentication;
    CG must supply the retained generation/proving record and checked completion/conversion seam.

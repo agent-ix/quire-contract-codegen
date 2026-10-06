@@ -147,8 +147,9 @@ authored).
   as RFC 8785 JSON in CG's one canonical-encoding place by `quire_canonical`, never by
   `serde_json`;
   the value changes when any included member changes and does not when the span changes. The
-  V1 contract path, the scalar path and the frame path (`StateFrameIdentity`) all use it. The
-  function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
+  V1 contract and frame paths (`StateFrameIdentity`) use this parameter-domain shape; the scalar
+  operation-application path uses the positional allocation below through the same canonical
+  encoding authority. The function path (`call_site` over a `QualifiedName`, ADR-013 O-09 as amended by QSL-352) uses it
   too, with the checked function node id and its `declaration` occurrence key in place of the
   clause's, both read from `FunctionSite` and never derived by CG, and the existing `ObligationKind` of the
   harness replayed (O-09 adds no subject tag and no new kind: one identity per kind the function
@@ -188,24 +189,31 @@ authored).
   node and its occurrence key) and are kept, so that no function-path identity changes
   (FR-024-AC-20). If QSL later recomputes or compares the identity, QSL pins the spelling and CG
   follows in a follow-up; until then the spelling is CG's own and interim.
-- E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns the scalar preimage,
-  as ADR-013 O-09 delegates the scalar item's preimage to its owner. Only the claimed
-  scalar/application node id, its authentic occurrence key, existing obligation kind and
-  arguments as actual parameter-operand node ids with the actual harness declared domains enter
-  it. Arguments ascend by authoritative declared parameter identifier (O-09); the checked
-  correspondence to persisted draw order and positional operator operands is retained separately.
-  Literals retain their singleton harness domains (FR-015 AC-16), but gain no fabricated
-  parameter ids; unrelated enclosing-function parameters are absent. The existing E-1 member
-  and domain encoding through `core::canonical` applies; scalar allocation adds no member and
-  changes no function/frame preimage. Source spans, native outcomes, transcript, canonical
-  generated-content identity, operator labels, renderer counters, build/tool/version fields and
-  the full CG generation record stay outside this preimage.
-  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns the acceptance criteria
-  and the residual metadata gate: the current scalar record lacks occurrence, existing kind and
-  parameter node ids. O-09 supplies no scalar repeated-parameter correspondence rule; independent
-  draws of one parameter cannot be silently collapsed into one binding. Missing or ambiguous
-  authoritative metadata refuses without minting an identity; CG never derives checker ids or
-  invents an occurrence. Decoder and original-limits context work remains independent.
+- E-1 scalar allocation (PLANNED/CODE-GATED, IR-631). CG owns and mints the scalar
+  operation-application preimage; QSL carries it as opaque. The following is the QSL-stated
+  owning rule supplied through planning, pending measurement of pushed upstream normative
+  text; the inspected ADR-013 O-09 currently delegates the scalar item's preimage to its owner.
+  The subject is the claimed operator's FR-322 application node id with its authentic O-07
+  `CheckedOccurrence` key (node, `expression` role, ordinal), the existing obligation kind and
+  one argument per operand position in operand/harness draw order. Each entry is its position
+  ordinal, authentic operand node id and actual harness operand range: a parameter reference's
+  parameter id, a literal's own literal node id with singleton range (FR-015 AC-16), or a
+  subterm's node id. Repeated independent draws of one parameter remain distinct positional
+  entries. Scalar entries are neither identifier-sorted nor deduplicated by node id; unrelated
+  enclosing-function parameters are absent. Function/frame preimages and identifier ordering
+  remain unchanged. The scalar positional encoding uses `core::canonical` and waits for the
+  actual amended owning contract; no additional CG member enters it. Source spans, native
+  outcomes, transcript, generated-content identity, operator label, renderer counters and
+  build/tool/version fields remain excluded.
+  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns acceptance criteria
+  and the metadata/accessor gate. IR's `CheckedPackageV2::graph()` exposes authentic node ids
+  and occurrences, and `source_map()` the source map, but the public node body remains JSON;
+  no public typed scalar ordered-operand identity/range accessor was measured. The model-field
+  accessor and wrapped optional leaf walk do not provide one. CG must retain the actual selected
+  expression occurrence and authentic operand metadata; an inline literal term alone establishes
+  no literal node id. Missing or ambiguous metadata/kind refuses without minting an identity.
+  Literal and repeated-parameter semantics are resolved by the positional rule; its normative
+  upstream merge and actual metadata access remain CODE gates. Decoder/context work is independent.
   The same-artifact content identity is a separate canonical proof-content tie. The driver
   executes the same proved generated artifact at decoded operands and retained renderer limits,
   authenticates its typed observation against CG's retained generation/proving record, then
@@ -370,7 +378,7 @@ crate CG's lock selects.
   excluded. The postcondition state-clause path takes a caller `[u8; 32]`
   (`StateClauseReplayInputs::obligation_identity`); the function path's transcript digest in the
   request's slot is gone (AD-002), replaced by the function-contract identity. The scalar path's
-  fixed member allocation and driver observation boundary are now specified
+  positional allocation and driver observation boundary are now specified
   by FR-032/E-1, but its authoritative metadata and full-report claim API remain CODE-gated.
   The state-clause path's is open (FR-024, Open questions Q-1).
   The work is larger than one missing field. Three identity structs exist and none carries what
@@ -378,7 +386,7 @@ crate CG's lock selects.
   occurrence key; its `ObligationBinding` (`identifier`, `role`, `primitive_type`,
   `integer_bounds`, `dependencies`) has no parameter node id. `ScalarObligationIdentity` holds a
   node id but no occurrence key, and its `ScalarObligationArgument` (`identifier`, `minimum`,
-  `maximum`) has no parameter node id. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
+  `maximum`) has no operand node id. `StateFrameIdentity` (`kani/identity.rs`) holds the clause
   node id, the operation scope and the property, and it is the identity of the frame harness whose
   counterexample goes into an envelope (`src/replay/frame.rs`). It needs no occurrence key of its
   own, because `OperationSite` carries the frame's, but it records no draw order for the state

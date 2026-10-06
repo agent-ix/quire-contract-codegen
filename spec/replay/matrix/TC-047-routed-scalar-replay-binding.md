@@ -86,16 +86,19 @@ The measured QSL operator API and scalar terminal causes do not close those gate
    settlements to `run_terminal_value`; repeat with no settlement to reuse
    [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-15. Trace executable
    tests to each criterion they actually assert; this document alone provides no coverage.
-7. Independently inspect the scalar canonical preimage through CG's one canonical encoder:
-   authenticate application node/occurrence and parameter-operand node ids from the proving
-   package, retain the actual harness domains and existing kind, and order arguments by the
-   authoritative declared parameter identifier. Check a literal remains a singleton operand
-   without becoming a parameter argument and exclude unrelated enclosing-function parameters.
-   Change each included member and require an identity change; change source span, native
-   outcome and canonical generated-content identity and require the same obligation identity.
-   Try absent occurrence/kind/parameter correspondence and require typed refusal with no
-   identity. A repeated parameter drawn independently at two positions remains a CODE gate
-   until its authoritative binding rule is resolved. No invented metadata closes that check.
+7. Once the QSL-stated positional rule is measured in the pushed owning normative spec and
+   authoritative metadata access is available, independently inspect the scalar preimage through
+   CG's one canonical encoder. Use the claimed operator application node and its actual selected
+   expression occurrence. Retain one argument per operand/harness draw position, each with its
+   position ordinal, authentic operand node id and actual range. A literal uses its own literal
+   node and singleton range; a parameter reference uses its parameter node; a subterm uses its
+   subterm node. Draw one parameter independently at two positions and assert two distinct
+   position entries; identifier sorting and node-id deduplication must fail. Exclude unrelated
+   enclosing-function parameters. Change each included member and require an identity change;
+   changing source span, native outcome and generated-content identity leaves it unchanged.
+   Missing selected occurrence, authentic operand identity/range or existing kind refuses with
+   no identity. IR graph/source-map access supplies node occurrence data, but raw JSON or an
+   inline literal without its own node id does not close the typed scalar accessor CODE gate.
 
 ## Expected Results
 
@@ -109,7 +112,7 @@ The measured QSL operator API and scalar terminal causes do not close those gate
 | FR-032-AC-6 | Full report claim and run match the retained sent claim on every outcome, or no settlement | Check only the obligation digest or agreement; omit node/content/operator/operand range/result range/limits on a refusal, exact Incomplete, generated fault or divergence |
 | FR-032-AC-7 | Divergence/generated fault is `Failed`, agreement is `Inconclusive(ScalarAgrees)`, exact exhaustion is `Incomplete(ResourceExhausted)` and typed QSL refusal keeps its code; never `Refuted`/`Verified` | Convert every Kani falsification to `Reproduced`, fabricate a predicate disagreement or turn a fault into a data refusal |
 | FR-032-AC-8 | Increment emission/result range is observed; the separate bounded-addition check derives the exact result from actual retained in-domain operands and asserts it is outside `[-1000,1000]`, with correct refusal/harness-defect agreement rather than source violation | Use a hand-built function harness, assume `(600,600)` instead of reading actual playback, substitute increment as the unreachable refusal case, relabel expected refusal as source falsification or accept wrong emitted fixture ranges |
-| FR-032-AC-9 | Fixed O-09 members and authoritative ascending parameter order; literal is no parameter, missing metadata refuses, domains are those actually harnessed | Invent an occurrence/parameter id, include enclosing unrelated parameters or a content/outcome/tracking field, use generated-name order, or narrow a harness domain |
+| FR-032-AC-9 | QSL-stated scalar positional shape, pending pushed owning spec: actual application/expression occurrence/kind and one ordinal/node/range entry per operand draw; literals singleton, repeated parameter draws distinct | Invent occurrence/operand ids, sort by identifier, deduplicate repeated nodes, omit a literal position, add unrelated function parameters/content/outcome/tracking fields or narrow a harness range |
 
 All checks are planned; completed-route observations have the same explicit upstream gates as
 [FR-032](../functional/FR-032-routed-scalar-replay-binding.md). Scalar lowering replay never
