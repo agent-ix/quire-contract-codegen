@@ -87,6 +87,7 @@ impl BackendCommand {
 
     /// Real POSIX command capture for report tests, with no resource-enforcement attestation.
     #[cfg(test)]
+    #[cfg(not(target_os = "linux"))]
     pub(super) fn report_test_command(&self) -> Command {
         let mut command = Command::new(&self.program);
         self.configure(&mut command);
@@ -185,73 +186,77 @@ impl NamespaceOwner {
     }
 
     /// Claim the namespace init before releasing any backend instruction.
+    #[cfg(target_os = "linux")]
     pub(super) fn dispatch(
         &mut self,
-        _deadline: Option<Instant>,
-        _observer: &mut super::memory::MemoryObserver,
+        deadline: Option<Instant>,
+        observer: &mut super::memory::MemoryObserver,
     ) -> io::Result<u32> {
-        #[cfg(target_os = "linux")]
+        let startup_limit = Instant::now() + Duration::from_secs(5);
+        let startup_deadline =
+            deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
+        let info = self.startup_information(deadline, startup_deadline)?;
+        let handle = pidfd_open(valid_pid(info.child)?, PidfdFlags::empty())?;
+        let directory = PathBuf::from("/proc").join(info.child.to_string());
+        let status = fs::read_to_string(directory.join("status"))?;
+        let parent = status
+            .lines()
+            .find_map(|line| line.strip_prefix("PPid:"))
+            .and_then(|pid| pid.trim().parse::<i32>().ok());
+        let nspid = status
+            .lines()
+            .find_map(|line| line.strip_prefix("NSpid:"))
+            .and_then(|ids| ids.split_whitespace().last());
+        let namespace = fs::read_link(directory.join("ns/pid"))?;
+        let caller_namespace = fs::read_link("/proc/self/ns/pid")?;
+        if parent != self.wrapper.map(|pid| pid.as_raw_nonzero().get())
+            || nspid != Some("1")
+            || namespace == caller_namespace
+            || namespace != format!("pid:[{}]", info.namespace)
         {
-            let startup_limit = Instant::now() + Duration::from_secs(5);
-            let startup_deadline =
-                _deadline.map_or(startup_limit, |deadline| deadline.min(startup_limit));
-            let info = self.startup_information(_deadline, startup_deadline)?;
-            let handle = pidfd_open(valid_pid(info.child)?, PidfdFlags::empty())?;
-            let directory = PathBuf::from("/proc").join(info.child.to_string());
-            let status = fs::read_to_string(directory.join("status"))?;
-            let parent = status
-                .lines()
-                .find_map(|line| line.strip_prefix("PPid:"))
-                .and_then(|pid| pid.trim().parse::<i32>().ok());
-            let nspid = status
-                .lines()
-                .find_map(|line| line.strip_prefix("NSpid:"))
-                .and_then(|ids| ids.split_whitespace().last());
-            let namespace = fs::read_link(directory.join("ns/pid"))?;
-            let caller_namespace = fs::read_link("/proc/self/ns/pid")?;
-            if parent != self.wrapper.map(|pid| pid.as_raw_nonzero().get())
-                || nspid != Some("1")
-                || namespace == caller_namespace
-                || namespace != format!("pid:[{}]", info.namespace)
-            {
-                return Err(unavailable(
-                    "namespace init identity did not match its owned monitor",
-                ));
-            }
-            let stat = fs::read_to_string(directory.join("stat"))?;
-            let start = stat
-                .rsplit_once(')')
-                .and_then(|(_, fields)| fields.split_whitespace().nth(19))
-                .and_then(|ticks| ticks.parse::<u64>().ok())
-                .ok_or_else(|| unavailable("namespace init start identity missing"))?;
-            let mut readiness = [PollFd::new(&handle, PollFlags::IN)];
-            poll(
-                &mut readiness,
-                Some(&Timespec {
-                    tv_sec: 0,
-                    tv_nsec: 0,
-                }),
-            )?;
-            if !readiness[0].revents().is_empty() {
-                return Err(unavailable("namespace init died before claim"));
-            }
-            // Retain the claimed handle before releasing the gate. No later pid reuse changes it.
-            self.init = Some((info.child, start, handle));
-            _observer.bind_root(info.child, start)?;
-            if Instant::now() >= startup_deadline {
-                return Err(startup_expiry(_deadline));
-            }
-            self.gate
-                .as_mut()
-                .ok_or_else(|| unavailable("namespace startup gate missing"))?
-                .write_all(&[1])?;
-            self.gate.take();
-            Ok(info.child)
+            return Err(unavailable(
+                "namespace init identity did not match its owned monitor",
+            ));
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            Err(unavailable("PID namespaces unavailable"))
+        let stat = fs::read_to_string(directory.join("stat"))?;
+        let start = stat
+            .rsplit_once(')')
+            .and_then(|(_, fields)| fields.split_whitespace().nth(19))
+            .and_then(|ticks| ticks.parse::<u64>().ok())
+            .ok_or_else(|| unavailable("namespace init start identity missing"))?;
+        let mut readiness = [PollFd::new(&handle, PollFlags::IN)];
+        poll(
+            &mut readiness,
+            Some(&Timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            }),
+        )?;
+        if !readiness[0].revents().is_empty() {
+            return Err(unavailable("namespace init died before claim"));
         }
+        // Retain the claimed handle before releasing the gate. No later pid reuse changes it.
+        self.init = Some((info.child, start, handle));
+        observer.bind_root(info.child, start)?;
+        if Instant::now() >= startup_deadline {
+            return Err(startup_expiry(deadline));
+        }
+        self.gate
+            .as_mut()
+            .ok_or_else(|| unavailable("namespace startup gate missing"))?
+            .write_all(&[1])?;
+        self.gate.take();
+        Ok(info.child)
+    }
+
+    /// Unsupported targets cannot dispatch a PID-namespace backend.
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn dispatch(
+        &mut self,
+        _: Option<Instant>,
+        _: &mut super::memory::MemoryObserver,
+    ) -> io::Result<u32> {
+        Err(unavailable("PID namespaces unavailable"))
     }
 
     #[cfg(target_os = "linux")]
