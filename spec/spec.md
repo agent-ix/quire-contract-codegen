@@ -68,7 +68,7 @@ generators, the input model, the backend adapter, Kani tractability and the gene
 | Real-Kani lane gating | NFR-006 | TC-045 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | Terminal-value maps (kani) | FR-029 and FR-030 terminal-value maps | TC-040, TC-041 |
-| Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope, [FR-032](replay/functional/FR-032-routed-scalar-replay-binding.md) planned scalar binding and proposition preservation | TC-026, TC-035, [TC-047](replay/matrix/TC-047-routed-scalar-replay-binding.md) planned/gated |
+| Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope, [FR-032](replay/functional/FR-032-routed-scalar-replay-binding.md) planned scalar binding and proposition preservation, [FR-033](replay/functional/FR-033-composite-parity-replay-binding.md) planned composite equality parity | TC-026, TC-035, [TC-047](replay/matrix/TC-047-routed-scalar-replay-binding.md) and [TC-048](replay/matrix/TC-048-composite-parity-replay-binding.md) planned/gated |
 | Capability settlement and routing | FR-019 settlement, FR-022 routed generation | TC-030, TC-033 |
 
 FR-018 and FR-014 refuse the

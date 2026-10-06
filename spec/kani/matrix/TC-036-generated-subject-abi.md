@@ -32,6 +32,11 @@ yield no harness.
 8. Generate a harness over a state-reading obligation and read the subject call and the pre-state
    copy with `syn`.
 
+9. For planned composite leaf bindings, use
+   [TC-048](../../replay/matrix/TC-048-composite-parity-replay-binding.md)
+   to check original-node/path/domain/draw ordering and missing/duplicate/conflicting leaf refusals
+   with no harness (FR-025-AC-9).
+
 ## Expected Results
 
 1. The binding order equals the `arguments` order in every harness, and that order ascends by
@@ -49,10 +54,13 @@ yield no harness.
    the pre-state assertion reads the copy and the post-state assertion reads the value after the
    call (FR-025-AC-8).
 
+9. Original composite leaf bindings and literal singleton identity/value satisfy FR-025-AC-9;
+   TC-048 defines the reconstruction scenario, with no fabricated machine composite argument.
+
 ## Status
 
 Planned. Step 1's order equality is asserted only for the precondition, postcondition and invariant
 harnesses of the V1 `BoundClause` arm (`tests/it/kani_argument_order.rs`, traced to
 FR-016-AC-8); the ascending check and the scalar-claim harness are not. Steps 2 and 6 are planned,
 because `ObligationBinding` carries no parameter node id at this revision. Steps 3 to 5, 7 and 8 are
-planned.
+planned. Step 9 is planned (IR-635) and has no executable coverage.
