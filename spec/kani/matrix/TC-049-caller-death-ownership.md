@@ -264,18 +264,30 @@ AC-31 through AC-34 remain mandatory UNRUN CODE gates, with no implementation co
 
 15. Run FR-017 AC-19's actual cargo/Kani 0.68 descriptor export, hard writer cap, concurrent pipe/
     kernel-backing accounting, slow collector, actual EOF/all writer copies, sealing, final handoff
-    and all-owner death scenarios. O concurrently services controls/report/deadline/accounting;
-    no completion wait cycle or deadline reset is allowed. Confirm overflow yields existing
-    Incomplete(ResourceExhausted), never Failed or truncated acceptance. Pipe incompatibility stops
-    CODE and requires measured spec revision; never select another storage mode at runtime.
-16. Positively validate actual host/outer/inner pidfd identity translation, original
-caller-exclusive
-    lease liveness immediately before spawn/Dispatch, credential changes/rearm, real observer and
-    original ceiling/deadline across every role. C/group, L, O and I death each has an owned bounded
-    settlement path; actual C death must not be replaced by controller bootstrap EOF. During live-C
-    AC-24 observation retain O/L handles and separate report control, withholding outer escalation
-    until immutable raw observations are sealed. Require the ignored-EOF mutant to fail unchanged.
-    The nine successful scratch cases cover feasibility only; these production gates are UNRUN.
+    and all-owner death scenarios. O concurrently services controls/report/deadline/accounting; no
+    completion wait cycle or deadline reset is allowed. Confirm overflow yields single-run
+    KaniRunOutcome::Inconclusive with MemoryExhausted; batches keep whole-batch memory-exhausted
+    refusal with no member classified, while FR-029 maps ResourceExhausted, never Failed or
+    truncated acceptance. Pipe incompatibility stops CODE and requires measured spec revision; never
+    select another storage mode at runtime.
+
+16. Positively validate actual host/outer/inner pidfd identity translation, original caller-exclusive
+    lease liveness immediately before
+    spawn/Dispatch, credential changes/rearm, real observer and original ceiling/deadline across
+    every role. C/group, L, O and I death each has an owned bounded settlement path; actual C death
+    must not be replaced by controller bootstrap EOF. During live-C AC-24 observation retain O/L
+    handles and separate report control, withholding outer escalation until immutable raw
+    observations are sealed. Require the ignored-EOF mutant to fail unchanged. The nine successful
+    scratch cases cover feasibility only; these production gates are UNRUN.
+
+17. Measure actual ordinary-caller inherited profile/unshare/mount permission independently of the
+    codex-node scratch label; record typed refusal where bwrap-only execution formerly succeeded.
+    Keep the actual C spawning thread alive through L settlement; exit it while C lives and require
+    owned cleanup and typed ownership failure, never successful evidence. Verify O closes its report
+    spawn writer, C/L inherit none, and M termination closes any inherited writer before final EOF.
+    Inspect the exact nested flags and fd3/fd4/N mapping/owners. Attempt pipe growth past reserved
+    capacity; missing enforceable bound gives capability refusal before Dispatch. Apply each missing
+    consumer F_GET_SEALS seal and require refusal before read. These tests remain UNRUN.
 
 ## Expected Results
 
@@ -291,8 +303,14 @@ caller-exclusive
 | FR-034-AC-20/21/22 | Original deadline and expired-deadline outcome persist; setup cap distinct; bounded observation refuses ambiguity | Reset deadline; setup refusal falsely timed out; hang capture |
 | FR-034-AC-23/24 | Real helper, exact preclaim Bootstrap stage facts distinguished from separate cleanup Analysis, positive claimed-INIT pins and production typed lease-close boundary before INIT escalation | Ignored EOF keeps worker or accepts closed-lease Dispatch; emergency teardown masks failure |
 | FR-034-AC-27/28/29/30 | Opt-in single observation operation, immutable pre-escalation raw facts and harness predicate, unconditional cleanup, same normal artifacts and CG publication and separately owned driver exclusion | Default export; controller pause; changed production stage; false oracle after cleanup; cfg-test epoch override; feature enabled in production |
+| FR-034-AC-31 | Actual outer pin and whole-tree termination at exact bwrap handoff failure; ordinary caller capabilities and creating-thread lifetime observed | Old295 orphaned unclaimed INIT; profile-only availability assumption; parent-thread exit misclassified as success |
+| FR-034-AC-32 | Hard writer retention bound and defined conservative charge; actual Kani pipe roundtrip; slow/overflow cases stop under original deadline | Unmapped backing counted as zero; resizable pipe exceeds reservation; backend/collector deadlock; report cap becomes Failed or truncated pass |
+| FR-034-AC-33 | O spawn writer closed, M and inner writers terminated, actual EOF, verified four seals and final descriptor read; final-close backing reclamation | Extra monitor writer prevents EOF; forged seal claim; report residue after all owners die |
+| FR-034-AC-34 | Separate lease/report controls and live C retained outer ownership; ignored-EOF fails before outer escalation | Outer kill masks mandatory EOF mutant; deadline/ceiling reset or missing charge accepted |
 
-Scenario prose or research probes establish no executable coverage. Native refinement remains
-planned until its actual typed entry is delivered. Host destruction and uninterruptible tasks cannot
-justify fabricated teardown; live-caller unavailable confirmation refuses. Caller-group signals and
-direct guardian death are included lifecycle cases, not excluded double faults.
+AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
+production assertions are implemented. Scenario prose or research probes establish no executable
+coverage. Native refinement remains planned until its actual typed entry is delivered. Host
+destruction and uninterruptible tasks cannot justify fabricated teardown; live-caller unavailable
+confirmation refuses. Caller-group signals and direct guardian death are included lifecycle cases,
+not excluded double faults.

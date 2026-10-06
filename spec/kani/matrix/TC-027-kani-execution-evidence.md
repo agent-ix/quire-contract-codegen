@@ -50,20 +50,32 @@ JSON or source inspection of Kani's `std::fs::write` export.
 
 Write exactly the report cap and then beyond it before Completed; inspect collector bounds and
 concurrent pipe-capacity/kernel-backing charge, including unmapped backing. Over-limit writes must
-cancel owned execution and yield `Incomplete(ResourceExhausted)`, never `Failed` or a truncated
-valid report. Slow the collector and fill the pipe while control and deadline events remain live;
-both slow and over-cap cases must end within the original deadline without writer/collector
-wait cycles. Verify every writer copy, including reopened procfd handles and descendants, closes
-before actual EOF; no idle interval substitutes for EOF. Assert ordering of authenticated Completed,
-original lease closure, confirmed inner teardown, bounded drain, immutable seals and final OwnedFd
-handoff/read. The separate report/control channel remains usable after lease closure. Fail consumer
-reading before Completed and require bounded cancellation of O/I and final kernel storage release.
-Kill caller, launcher, outer supervisor and guardian in separate and all-owner cases; kernel storage
-has no pathname residue and is reclaimed after the last actual descriptor closes.
-Concurrent-accounting,
-seal races, inheritance/EOF and all-owner-death assertions are mandatory UNRUN CODE gates.
-A success report listing a failed, errored, undetermined or unknown check remains refused under
-FR-017-AC-18; class spelling remains governed by FR-017-AC-20.
+cancel owned execution and yield single-run `KaniRunOutcome::Inconclusive` with
+`KaniInconclusiveReason::MemoryExhausted`; record the report cap separately from the identity memory
+ceiling. Batches retain whole-batch memory-exhausted refusal with no member classification. FR-029
+maps ResourceExhausted; neither Failed nor truncated acceptance is allowed. Slow the collector and
+fill the pipe while control and deadline events remain live; both slow and over-cap cases must end
+within the original deadline without writer/collector wait cycles. Verify every writer copy,
+including reopened procfd handles and descendants, closes before actual EOF, including O's closed
+spawn writer and M termination/reap; no idle interval substitutes for EOF. Assert ordering of
+authenticated Completed, original lease closure, confirmed inner teardown, bounded drain,
+WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS check and final OwnedFd handoff/read. The
+separate report/control channel remains usable after lease closure. Fail consumer reading before
+Completed and require bounded cancellation of O/I and final kernel storage release. Kill caller,
+launcher, outer supervisor and guardian in separate and all-owner cases; kernel storage has no
+pathname residue and is reclaimed after the last actual descriptor closes. Concurrent accounting,
+seal races, inheritance/EOF and all-owner-death assertions are mandatory UNRUN CODE gates. Test
+zero-byte EOF with successful and unsuccessful exits: missing-report refusal and NoVerdict
+respectively, retaining independently established resource stops. Test partial/malformed nonempty
+bytes before backend death: typed report refusal, never NoVerdict merely from nonzero exit. Test
+valid nonempty report with normal/nonzero exits against existing classification rules. Reject a
+received descriptor missing each seal independently before any consumer read. Compare actual owned
+RSS plus finite caller-run buffers, reserved page-rounded pipe capacity and maximum memfd backing to
+the original ceiling; attempt writer pipe resizing beyond the reservation and require capability
+refusal if its bound cannot be enforced. No undercount is accepted from i_size, st_blocks, sparse
+backing, unmapped pages or absent/overflowed accounting quantities. A success report listing a
+failed, errored, undetermined or unknown check remains refused under FR-017-AC-18; class spelling
+remains governed by FR-017-AC-20.
 
 The output cap, capture failure, group cleanup and batching (FR-017-AC-14, FR-017-AC-21 to
 FR-017-AC-25) are verified by TC-043, not here.

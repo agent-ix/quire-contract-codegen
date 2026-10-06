@@ -23,13 +23,13 @@ containment code is merged; guardian ownership and its verification remain plann
 does not depend on completing all parent IR-241 work, which IR-639 itself blocks.
 
 Planned CODE: the selected IR-652 allocation adds a dedicated single-thread launcher and a trusted
-outer PID-namespace INIT around the unchanged inner bubblewrap/guardian namespace. The merged
-PR #295 monitor can die after clone but before its internal `child_wait` handoff, orphaning blocked
-inner INIT; a startup-info reader failure can trigger the same window. Outer INIT's kernel-owned
-namespace closes that process-containment gap independently of inner INIT claim. Fatal inherited
-parent-death signals cannot execute report unlink code; FR-017 therefore replaces its internal
-named report with bounded unnamed kernel storage rather than relying on a surviving cleanup owner.
-Neither gap is repaired by this SPEC-only amendment.
+outer PID-namespace INIT around the inner bubblewrap/guardian namespace. The merged PR #295 monitor
+can die after clone but before its internal `child_wait` handoff, orphaning blocked inner INIT; a
+startup-info reader failure can trigger the same window. Outer INIT's kernel-owned namespace closes
+that process-containment gap independently of inner INIT claim. Fatal inherited parent-death signals
+cannot execute report unlink code; FR-017 therefore replaces its internal named report with bounded
+unnamed kernel storage rather than relying on a surviving cleanup owner. Neither gap is repaired by
+this SPEC-only amendment.
 
 Nine safe scratch scenarios measured nested mapping/private proc, outer PID-1 parent-death
 containment, pinned inner identities and bootstrap EOF. They do not establish actual original
@@ -59,40 +59,68 @@ research success is not executable requirement coverage.
 
 The **bounded executor C** is the original caller. Its actual unreaped Child is the dedicated
 single-thread **launcher L**. L creates the outer user/PID/private-mount namespaces and spawns the
-trusted **outer supervisor O**, actual outer PID 1. O owns the actual unreaped bubblewrap
-**monitor M**; bubblewrap creates **guardian I**, actual inner namespace PID 1. C retains positively
+trusted **outer supervisor O**, actual outer PID 1. O owns the actual unreaped bubblewrap **monitor
+M**; bubblewrap creates **guardian I**, actual inner namespace PID 1. C retains positively
 authenticated host pidfds/identities through this C→L→O→M→I chain; I remains M's inner child, not
 C's fictional direct Child. One ownership set covers the entire FR-017 batch, with two additional
 process roles L/O, private proc/mount setup and bounded control/descriptor state. All roles,
-startup,
-collection and kernel report backing remain inside the original FR-028 ceiling/deadline allocation.
-M retains the existing `process_group(0)` separation. O and I establish distinct sessions/groups
-outside C's terminal/session before production authorization.
+startup, collection and kernel report backing remain inside the original FR-028 ceiling/deadline
+allocation. M retains the existing `process_group(0)` separation. O and I establish distinct
+sessions/groups outside C's terminal/session before production authorization.
 
 ### Outer containment and capability allocation
 
-L shall arm its actual C parent-death signal and positively verify original-exclusive bootstrap
-liveness before namespace setup. Credential/mapping changes require rearm plus parent/liveness
-revalidation before O creation. O shall receive only its bootstrap endpoint, become actual PID 1,
-arm and verify parent-death protection, and positively confirm its original authority before ANY
-bwrap spawn. Before that arm, there is no inner child: L loss closes the exclusive bootstrap writer,
-and bounded EOF refusal ends O. Arm failure or absent/replayed authority cannot create M.
-After arm, L death kills O and the kernel tears down every outer-namespace descendant, including
-an unclaimed I and nested/escaped backend children. O death itself has the same kernel backstop;
-I death tears down its inner descendants. A live C confirms positively owned pinned termination
-before conclusions; unavailable confirmation refuses. No reused PID, host scan, monitor exit,
-signal success or inner gate EOF supplies authority or teardown proof.
+The original spawning C thread shall remain live until L is settled; synchronous execution shall
+retain that thread, and an asynchronous adapter shall retain a joined dedicated spawner through the
+run rather than return its thread to a pool. PR_SET_PDEATHSIG observes the actual creating thread,
+not merely C process lifetime. Unexpected spawning-thread exit while C lives shall produce typed
+ownership/setup failure with confirmed owned cleanup, never a proof from successful output. L shall
+arm its actual C parent-death signal and positively verify original-exclusive bootstrap liveness
+before namespace setup. Credential/mapping changes require rearm plus parent/liveness revalidation
+before O creation. O shall receive only its bootstrap endpoint, become actual PID 1, arm and verify
+parent-death protection, and positively confirm its original authority before ANY bwrap spawn.
+Before that arm, there is no inner child: L loss closes the exclusive bootstrap writer, and bounded
+EOF refusal ends O. Arm failure or absent/replayed authority cannot create M. After arm, L death
+kills O and the kernel tears down every outer-namespace descendant, including an unclaimed I and
+nested/escaped backend children. O death itself has the same kernel backstop; I death tears down its
+inner descendants. A live C confirms positively owned pinned termination before conclusions;
+unavailable confirmation refuses. No reused PID, host scan, monitor exit, signal success or inner
+gate EOF supplies authority or teardown proof.
 
 Setup requires caller-context permission for safe NEWUSER/NEWPID/NEWNS, verified UID/GID mappings
 and setgroups policy, private mount identity, private propagation and fresh outer proc view, nested
-installed bwrap, safe pidfds/descriptor mapping, and original resource-observer readiness. Before
-ANY mount, verify NEWNS succeeded and mount identity differs from the original host namespace;
-only that private namespace may change propagation or mount proc. O's proc PID view must agree
-with its namespace and bwrap's identity lookups. Namespace/mapping/profile or identity failure gives
-typed pre-Dispatch refusal without host-policy/service/configuration mutations or weaker mode.
-The compiled caller's inherited security profile is a capability prerequisite, not permission
-inferred solely from the bwrap binary. All creator/L/O deaths and mapping/arm races require exact
-positive barriers and bounded owned cleanup; no timing-only assertion proves liveness.
+installed bwrap, safe pidfds/descriptor mapping, and original resource-observer readiness. L/O/I
+are first-party role entries of the explicitly supplied matching package helper; each role uses
+that same verified source/build identity, with no extra PATH executable or copied helper. Before
+ANY mount, verify NEWNS succeeded and mount identity differs from the original host namespace; only
+that private namespace may change propagation or mount proc. O's proc PID view must agree with its
+namespace and bwrap's identity lookups. Namespace/mapping/profile or identity failure gives typed
+pre-Dispatch refusal without host-policy/service/configuration mutations or weaker mode. The
+compiled caller's inherited security profile is a capability prerequisite, not permission inferred
+solely from the bwrap binary. This is an availability cost: a caller profile denying L
+user/private-mount namespace creation refuses runs that previously succeeded when bwrap alone had
+permission. Scratch success under `codex-node (unconfined)` does not prove ordinary-unconfined
+caller availability on hosts with restricted unprivileged user namespaces. A real ordinary-caller
+permission measurement is required before CODE, with actual inherited label and errno, no profile
+workaround or policy mutation. All creator/L/O deaths and mapping/arm races require exact positive
+barriers and bounded owned cleanup; no timing-only assertion proves liveness.
+
+Nested M shall execute installed bwrap with `--unshare-user --unshare-pid --bind / /` `--dev-bind
+/dev /dev --proc /proc --info-fd 3 --block-fd 4 --` followed by the actual first-party I
+command/arguments. M keeps `process_group(0)`. The new recipe omits `--die-with-parent`: outer PID-1
+teardown supplies M/I containment, while fatal inherited inner PDEATH must not bypass the live-C
+lease oracle. The outer user mapping is only UID/GID 0 to actual caller UID/GID, with verified
+setgroups policy; nested bwrap mapping/privilege behavior must pass installed-tool verification. O
+owns the bounded info reader and exclusive block-gate writer; M receives only info writer fd3 and
+gate reader fd4. They are CLOEXEC outside intended child mapping; O releases the gate only after
+validated I/observer ownership. C authenticates the chain over separate bounded controls rather than
+pretending to own M's direct Child. Flags allocate one inner user/PID namespace, inner proc mount,
+bind/dev-bind view, one bounded info pipe and one gate pipe; all descriptors/setup remain charged. O
+creates report pipe/memfd; C/L have no report writer. O child-only maps report writer N >= 5 into
+I/M, distinct from info/gate/control mappings, and immediately closes its own spawn copy after
+successful mapping/spawn. M can retain a writer: require actual M termination/reap as well as inner
+teardown before final EOF drain. Reopened procfd and descendant writer copies are included. O
+retains report reader/memfd; C receives only final sealed memfd authority over separate controls.
 
 Separate bootstrap, original-exclusive guardian lease and final report/control channels have
 separate owners and EOF meanings. Only C ever holds the original guardian-lease writer. L/O/M
@@ -146,8 +174,8 @@ retains bounded outer cancellation, without resetting the deadline.
 - If owned teardown is unconfirmed, then the bounded executor shall refuse any proof conclusion.
 - The guardian shall restrict cancellation to its own namespace descendants.
 - The bounded executor shall use an anonymous pair without a publicly bindable rendezvous.
-- Report lifetime shall use unnamed kernel storage; other assigned artifacts retain explicit cleanup
-  owners.
+- The bounded executor shall use unnamed kernel report storage.
+- The surviving assigned actor shall clean other temporary artifacts within its explicit ownership.
 - The live owner shall reap its actual direct child after confirmed owned cleanup while it remains
   live.
 - Setup documentation shall explain explicit matched helper delivery for library consumers.
@@ -232,16 +260,13 @@ when it observes EOF. No atomic prediction of future caller death is claimed.
 
 Private typed ownership separates a non-clonable `CallerLease`, which owns only the executor stream,
 from `RunOwner`, which retains the actual unreaped launcher Child, authenticated outer/monitor/inner
-pins, captures
-and original deadline. Both stay in the original caller; this separation neither exports the lease
-nor
-transfers ownership of the outer chain. Explicit cancellation in InitReady or Dispatched invokes the
-production
-`close_lease_and_observe` operation: it consumes and closes `CallerLease`, disables further caller
-Dispatch, and retains `RunOwner` while observing claimed INIT termination. No independent INIT
-cancellation or escalation signal is sent during this LeaseClosing phase. Pending guardian
-authorization still obeys observable EOF precedence. The same operation handles cancellation before
-and after Dispatch, not a test-only hook.
+pins, captures and original deadline. Both stay in the original caller; this separation neither
+exports the lease nor transfers ownership of the outer chain. Explicit cancellation in InitReady or
+Dispatched invokes the production `close_lease_and_observe` operation: it consumes and closes
+`CallerLease`, disables further caller Dispatch, and retains `RunOwner` while observing claimed INIT
+termination. No independent INIT cancellation or escalation signal is sent during this LeaseClosing
+phase. Pending guardian authorization still obeys observable EOF precedence. The same operation
+handles cancellation before and after Dispatch, not a test-only hook.
 
 LeaseClosing has a finite observation cap clamped to the remaining original identity deadline. Its
 private typed `LeaseCloseObservation` distinguishes confirmed guardian termination, escalation
@@ -475,26 +500,50 @@ prove cargo inheritance or absence of a seek/reread expectation. A failed real r
 and requires a measured spec revision, never a runtime fallback or named compatibility mode.
 
 O's normal bounded event loop concurrently handles report readiness, controls, deadline and
-accounting while the backend runs. It never blocks waiting for backend completion while that
-backend waits for pipe capacity. Retained memfd has a hard 16 MiB plus one detection-byte maximum;
-Safe descriptor ownership excludes leaked writable memfd aliases; unavailable sealing, allocation or
+accounting while the backend runs. It never blocks waiting for backend completion while that backend
+waits for pipe capacity. Retained memfd has a hard 16 MiB plus one detection-byte maximum; Safe
+descriptor ownership excludes leaked writable memfd aliases; unavailable sealing, allocation or
 conservative backing accounting causes typed refusal and bounded owned cancellation. The measured
-pipe capacity is finite and included even when unused; backing is never assumed free.
-Actual bounded pipe capacity and all kernel memfd backing are concurrently charged to the original
-whole-run ceiling, including unmapped shmem that process RSS misses. Over-limit input cancels owned
-execution and returns existing `Incomplete(ResourceExhausted)`, never `Failed` or truncated success.
-Slow collection and backpressure must terminate within the original deadline, not deadlock.
+pipe capacity is finite and included even when unused; backing is never assumed free. Actual bounded
+pipe capacity and all kernel memfd backing are concurrently charged to the original whole-run
+ceiling, including unmapped shmem that process RSS misses. Over-limit input cancels owned execution
+and yields single-run `KaniRunOutcome::Inconclusive` with `KaniInconclusiveReason::MemoryExhausted`;
+evidence names the report cap independently of the identity ceiling. Batches keep whole-batch
+memory-exhausted refusal with no member classification. FR-029 maps the reason to
+`Incomplete(ResourceExhausted)`, never `Failed`; malformed content remains refusal, never truncated
+acceptance. Slow collection and backpressure must terminate within the original deadline, not
+deadlock.
 
-Authenticated Completed → original lease close → confirmed inner teardown/all writer handles
-closed → bounded drain to actual EOF → WRITE/GROW/SHRINK seals → consumer OwnedFd read is mandatory.
-Reopened procfd writers and descendant copies count as writers. A quiet pipe is not EOF. The final
-control/report handoff survives original lease closure; it is not that lease endpoint. Reads retain
-the 16 MiB content cap, stable descriptor identity and original deadline. Classification follows
-confirmed cleanup. Reader failure before Completed cancels O/I and releases kernel storage within
-bounded cleanup. Killing every storage owner closes kernel-held pipe/memfd references with the
-contained tree; final close reclaims backing without any dead actor executing Drop/unlink.
-Other temporary artifacts retain explicit surviving-owner cleanup; all-owner death may leave those
-files, never this unnamed report, and never waives kernel descendant cancellation.
+The conservative charge oracle is `owned_RSS + caller_run_buffers + pipe_reserve + memfd_reserve`.
+`owned_RSS` sums positively observed RSS of L/O/M/I and every owned backend descendant without
+omitting unsampled live workers; ambiguous observation refuses under FR-028. `caller_run_buffers`
+uses the declared finite upper allocation bound of C's per-run controls/captures, not unrelated C
+memory. `pipe_reserve` is page-rounded actual F_GETPIPE_SZ measured before writer exposure; resizing
+authority must be excluded or a conservative finite maximum capacity pre-reserved before Dispatch. A
+writer able to grow capacity beyond that reservation invalidates accounting and requires refusal; a
+runtime test attempts that actual resize. `memfd_reserve` is page-rounded 16 MiB + 1 reserved BEFORE
+writing, rather than racy i_size or st_blocks. It conservatively includes mapped memfd pages again;
+no subtraction/deduplication may create an undercount. Page size and checked arithmetic are
+verified; absent quantity, failed bound or overflow refuses setup/observation. Compare the checked
+sum to the original memory ceiling at setup and every original observer tick; crossing cancels under
+existing memory-exhausted rules. The hard collector bound ensures backing never exceeds its
+pre-reserved maximum between samples. Evidence distinguishes this conservative total from actually
+observed tree peak RSS. Capability, backing-reservation validity and sampling coverage must be
+tested, never presumed from read size.
+
+Authenticated Completed → original lease close → confirmed inner teardown, M termination/reap and
+all writer handles closed → bounded drain to actual EOF → WRITE/GROW/SHRINK/SEAL seals → consumer
+F_GET_SEALS verification → consumer OwnedFd read is mandatory. Reopened procfd writers and
+descendant copies count as writers. A quiet pipe is not EOF. The final control/report handoff
+survives original lease closure; it is not that lease endpoint. C shall inspect F_GET_SEALS on the
+actual received descriptor and require WRITE, GROW, SHRINK and SEAL_SEAL; missing/unavailable seals
+cause typed refusal and owned cleanup before read. Reads retain the 16 MiB content cap, stable
+descriptor identity and original deadline. Classification follows confirmed cleanup. Reader failure
+before Completed cancels O/I and releases kernel storage within bounded cleanup. Killing every
+storage owner closes kernel-held pipe/memfd references with the contained tree; final close reclaims
+backing without any dead actor executing Drop/unlink. Other temporary artifacts retain explicit
+surviving-owner cleanup; all-owner death may leave those files, never this unnamed report, and never
+waives kernel descendant cancellation.
 
 ## Acceptance Criteria
 
@@ -513,7 +562,7 @@ files, never this unnamed report, and never waives kernel descendant cancellatio
 | FR-034-AC-11 | Guardian SIGKILL, abort or OOM-equivalent death during bootstrap, InitReady or immediately after Dispatch cannot release an unowned production backend: the guardian is INIT, and its death tears down that namespace. With a live original caller, guardian failure always yields a typed refusal and never verified/falsified evidence, even after confirmed teardown and beside a valid success report. | Test |
 | FR-034-AC-12 | Every startup refusal, completion and cancellation settles actual owned roles before conclusions. Anonymous controls and report pipe/memfd have no persistent names and end at final close. All report-owner death reclaims kernel report backing without Drop/unlink; other assigned artifacts retain surviving-owner cleanup and truthful all-owner-death limits. No dead actor is claimed to reap or unlink. | Test |
 | FR-034-AC-13 | The bounded executor requires an explicit path to this package's actual Cargo executable quire-kani-guardian, built and supplied with the library from the same package source/build inputs. A missing, non-executable or unusable helper gives a typed setup refusal before backend Dispatch, with no PATH/global discovery, copied executable, shell substitute or alternate launcher. Cargo library dependency resolution alone is not helper delivery. | Test |
-| FR-034-AC-14 | Setup docs require the matched package helper roles, safe caller-context user/PID/private-mount permissions, verified mapping/setgroups/private proc, nested installed bwrap and pidfd/observer facilities. The compiled caller security profile is checked, not inferred from binary mode. Missing capability gives typed pre-Dispatch refusal without host-policy mutation or weaker mode. Added L/O roles and bounded controls/storage are charged to existing ceilings. | Inspection |
+| FR-034-AC-14 | Setup docs require the matched package helper roles, safe caller-context user/PID/private-mount permissions, verified mapping/setgroups/private proc, nested installed bwrap and pidfd/observer facilities. The compiled caller security profile is checked, not inferred from binary mode. Caller-profile restriction can refuse runs formerly available through bwrap-only permission; ordinary-caller availability requires actual measurement. Missing capability gives typed pre-Dispatch refusal without host-policy mutation or weaker mode. Added L/O roles and bounded controls/storage are charged to existing ceilings. | Test, Inspection |
 | FR-034-AC-15 | Typed private controls reject malformed and unknown fields and enforce finite encoded-byte, pending-message and startup-work bounds. Ancillary descriptor count/type is exact, received descriptors are CLOEXEC, and unknown/extra/truncated ancillary data refuses while closing all received descriptors. Invalid/overlimit control or EOF cancels or refuses rather than authorizing Dispatch. | Test |
 | FR-034-AC-16 | Only the original caller holds the pair's executor endpoint. Guardian receives only its control end as fd0 through safe CLOEXEC child-only mapping, borrows it with a safe descriptor API and receives actual backend stdin separately as OwnedFd through safe ancillary rights. Backend fd0 restores that original stdin or closed state, while the control/lease descriptor is excluded from backend and unrelated exec inheritance. No arbitrary raw-fd adoption or unsafe exception occurs. | Test |
 | FR-034-AC-17 | Backend receives unchanged raw argument bytes except the explicitly allocated internal report locator: harness options then -Z unstable-options --export-json /proc/self/fd/N with actual mapped N >=3. Evidence records that exact argv. Inherited stdin, inherited/overridden environment and cwd remain unchanged. | Test |
@@ -530,10 +579,9 @@ files, never this unnamed report, and never waives kernel descendant cancellatio
 | FR-034-AC-28 | The live-caller fixture seals raw stage/lease-close and pinned-worker/marker observations before immediate unchanged cleanup on success, refusal and observation failure. The intentional-death form seals/transfers its exact-prefix typed witness before self-kill and does not return; the surviving harness judges it before separate emergency cleanup. One shared all-stages/prefix-as-data sequence invokes the same functions/order. BeforeMonitor/Bootstrap/ClaimedGated/ClaimedBootstrap/InitReady/LeaseClosing publication is unconditional, monotonic and read-only, adding no production I/O, callback, pause or feature branch. LeaseClosing seals actual close/publication ordinals without late fill and follows actual close. Lost/overflowed observations, report-inheritance exclusion failure and failed coordination are typed failures. No library oracle, inferred Bootstrap INIT death or later cleanup masks either harness predicate. | Test, Inspection |
 | FR-034-AC-29 | The packaged caller fixture and real helper link the same normal library artifact through consumer-manifest package selection with matching target/profile/features/compiler flags. Separate named feature-off/on invocations avoid self dev-dependency feature unification. No cfg-test library or identity override is accepted. The bounded executor refuses feature mismatch in both directions before Dispatch; feature-off consumer compilation verifies absence of the fixture operation. | Test |
 | FR-034-AC-30 | CG publishes the test-only feature contract and allocates production-driver dependency-edge exclusion to IR-649's QSL driver work. The contract requires all downstream production-build profiles to reject direct or transitively unified guardian-test-support. CG inspection verifies the published allocation and checks; downstream assertion evidence is owned by IR-649. | Inspection |
-
-| FR-034-AC-31 | Real production fixtures fail the merged PR #295 recipe at exact post-clone/pre-internal-child_wait caller death and natural M/info-reader failure, and pass only with confirmed actual outer INIT and unclaimed inner/escaped descendant termination. Exercise C/group, L, O and I death before/after parent-death arm with positive barriers; pre-arm has no inner child and exclusive EOF gives bounded refusal. Original-exclusive-lease race, actual host/outer identity translation, mapping/private-proc capability refusal, real observer and original-deadline assertions are mandatory CODE gates, presently UNRUN. Existing stage-only witnesses and nine scratch cases do not cover them. | Test, Analysis |
-| FR-034-AC-32 | The bounded O event loop collects anonymous report pipe into memfd without a backend/collector completion wait cycle. A hard 16 MiB plus one detection-byte retention bound and actual pipe-capacity/kernel-backing charge apply while writing against the original ceiling; unmapped shmem is not zero. Beyond cap yields owned cancellation and Incomplete(ResourceExhausted), never Failed or truncated acceptance. Slow/over-cap writers finish or refuse within the original deadline. Genuine installed cargo/Kani 0.68 roundtrip validates mapped FD inheritance and no seek/reread dependency; failure stops CODE pending measured spec revision, with no runtime fallback. These gates are UNRUN. | Test, Analysis |
-| FR-034-AC-33 | Authenticated Completed precedes original-lease close and confirmed inner teardown closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK seals and stable actual OwnedFd consumer reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are UNRUN. | Test, Analysis |
+| FR-034-AC-31 | Real production fixtures fail the merged PR #295 recipe at exact post-clone/pre-internal-child_wait caller death and natural M/info-reader failure, and pass only with confirmed actual outer INIT and unclaimed inner/escaped descendant termination. Exercise C/group, L, O and I death before/after parent-death arm with positive barriers; pre-arm has no inner child and exclusive EOF gives bounded refusal. Original-exclusive-lease race, actual host/outer identity translation, mapping/private-proc capability refusal, real observer, ordinary-caller capability measurement, spawning-thread lifetime and original-deadline assertions are mandatory CODE gates, required before CODE delivery. Existing stage-only witnesses and nine scratch cases do not cover them. | Test |
+| FR-034-AC-32 | The bounded O event loop collects anonymous report pipe into memfd without a backend/collector completion wait cycle. A hard 16 MiB plus one detection-byte retention bound and the defined owned_RSS + caller_run_buffers + page-rounded F_GETPIPE_SZ + page-rounded pre-reserved memfd maximum comparison applies while writing against the original ceiling; unmapped shmem is not zero. Beyond cap yields owned cancellation and single-run KaniRunOutcome::Inconclusive with MemoryExhausted; batches keep whole-batch memory-exhausted refusal, with no member classified. Evidence names the report cap separately; FR-029 maps ResourceExhausted, never Failed or truncated acceptance. Slow/over-cap writers finish or refuse within the original deadline. Genuine installed cargo/Kani 0.68 roundtrip validates mapped FD inheritance and no seek/reread dependency; failure stops CODE pending measured spec revision, with no runtime fallback. | Test |
+| FR-034-AC-33 | Authenticated Completed precedes original-lease close, confirmed inner teardown and M termination/reap closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS verification and stable actual OwnedFd reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are required before CODE delivery. | Test |
 | FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks the sealed AC-24 pre-escalation EOF oracle; ignored-EOF still fails its named raw predicate before cleanup. Missing conservative backing accounting or immutable sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
 
 ## Dependencies

@@ -82,7 +82,7 @@ mod tests {
     /// The exported report is read bounded: a file over the limit is refused, and a report that
     /// was never written is `None`.
     ///
-    /// Trace: FR-017-AC-19, TC-027
+    /// Trace: TC-027
     #[test]
     fn tc_027_the_report_is_read_bounded_and_refused_not_truncated() {
         let directory = discover_scratch("report-bound");

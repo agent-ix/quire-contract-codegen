@@ -93,27 +93,31 @@ the run and everything read back from it.
   for a precondition harness, whose only property is its non-vacuity cover, the generator shall
   instead classify the run by its cover summary alone, as verified, cover-unsatisfied or
   inconclusive under the cover rules above.
-- The generator shall append `-Z`, `unstable-options`, `--export-json`, and
-  `/proc/self/fd/N`, in that exact order after the unchanged harness options. `N` is the actual
-  child-only mapped anonymous report-pipe writer descriptor, at least 3. Evidence records these
-  actual argument bytes, not a synthetic target-directory pathname. All other argument bytes,
-  stdin, environment and cwd remain unchanged.
-- The report is internal per-run unnamed kernel storage: a bounded anonymous pipe collected into
-  a sealing-capable memfd by the trusted outer supervisor specified in FR-034. No target-directory
-  report is created, reopened, removed or accepted. Concurrent runs cannot substitute each other's
-  descriptor authority. This replaces the internal named-report allocation; no named compatibility
-  reader, fallback or externally supplied report pathname is provided.
-- While backend completion is pending, the collector shall retain at most 16 MiB plus one overflow-detection
-  byte in memfd. It shall concurrently charge actual pipe capacity and kernel memfd backing against
-  the original whole-run memory ceiling; unmapped shared storage is not accounted as zero RSS.
-  Crossing the 16 MiB report limit shall cancel owned execution and yield the existing
-  `Incomplete(ResourceExhausted)` outcome, never `Failed` or acceptance of truncated content.
-- Authenticated Completed precedes original-lease closure and confirmed owned inner teardown.
-  After all writer handles close, bounded drain to actual pipe EOF precedes WRITE/GROW/SHRINK
-  sealing and consumer reads through the retained actual memfd OwnedFd. The final report/control
-  handoff is separate from the closed original lease. Collection, accounting, drain, sealing,
-  reading and cleanup retain the original deadline without resetting it. Parsing/classification
-  follows confirmed cleanup and bounded stable-descriptor reading, never pathname reopening.
+- The generator shall append `-Z`, `unstable-options`, `--export-json`, and `/proc/self/fd/N`, in
+  that exact order after the unchanged harness options. `N` is the actual child-only mapped
+  anonymous report-pipe writer descriptor, at least 3. Evidence records these actual argument bytes,
+  not a synthetic target-directory pathname. All other argument bytes, stdin, environment and cwd
+  remain unchanged.
+- The generator shall use per-run unnamed kernel report storage and the collector obligations in
+  FR-034 AC-32 and AC-33. The generator shall create no target-directory report, pathname reader or
+  named fallback. This explicitly replaces the internal named-report allocation.
+- When actual pipe EOF contains zero bytes, the generator shall treat the run as exporting no
+  report: successful exit refuses as missing report; unsuccessful exit is `NoVerdict`, except an
+  independently established resource/deadline stop retains its existing resource classification.
+- When nonempty bytes end at actual EOF, the generator shall parse the complete bytes under the
+  existing schema rules. An incomplete/malformed partial write refuses regardless of process exit; a
+  valid full report retains the existing exit/report classification rules. EOF alone neither proves
+  Completed nor authorizes classification before confirmed owned cleanup.
+- When the live collector observes report-limit overflow, the generator shall cancel owned execution
+  and classify a single run as `KaniRunOutcome::Inconclusive` with
+  `KaniInconclusiveReason::MemoryExhausted` (`memory_exhausted`). Evidence shall name the 16 MiB
+  report-allocation cap separately from the original whole-run memory ceiling; no tree peak is
+  fabricated. A batch shall retain whole-batch memory-exhausted refusal with no member classified.
+  FR-029 maps this source reason to QSL `Incomplete(ResourceExhausted)`, never `Failed`. This is an
+  explicit outcome delta from the superseded named-reader `TooLarge` refusal, not a reinterpretation
+  of the unchanged legacy reader's current behavior.
+- When Completed is authenticated, the generator shall follow FR-034 AC-33's ordered final handoff,
+  verified immutable descriptor read and cleanup under the original deadline before classification.
 - The generator shall run the launcher as the leader of its own process group and, when the run
   does not conclude within the timeout, kill that group, so that the solver and every other
   process the launcher started in it are killed with it.
@@ -232,11 +236,12 @@ the run and everything read back from it.
   typed report, and `playback.rs` for the console's playback block, a payload), and shall classify every run from that report's fields and never from
   console text. The verdict, the check and cover counts and the unwinding failures come from
   Kani's exported report, whose members and status vocabulary `report.rs` reads exactly.
-  A report that is absent after a successful exit, unreadable, over the read bound, not the one
+  A report that is absent after a successful exit, unreadable, not the one
   schema version the module reads, malformed or of an unknown check status, that (for a single run)
   does not hold exactly one harness result, or whose harness states success while it lists a failed, errored, undetermined or
   unknown check, is a typed refusal with a stable cause and never an outcome: it is not classified
-  inconclusive. A run that exited unsuccessfully and exported no report is `NoVerdict`.
+  inconclusive. Live report-limit overflow instead uses the explicit resource-stop rule above.
+  A run that exited unsuccessfully and exported no report is `NoVerdict`.
 - The generator shall retain, in the evidence and in the classified run, every check the report
   lists, each with its position in the report, its class, its source file and line and its status,
   so a consumer attributes each successful check to source. A line Kani states as unknown is absent;
@@ -275,7 +280,7 @@ the run and everything read back from it.
 | FR-017-AC-16 | The launcher's capture threads are stopped and joined on every outcome: they return what the launcher wrote before it ended, stop while a write end is still held open, and stop within their drain limit while a straggler keeps writing, so a process holding a pipe open does not delay the return. | Test (TC-027) |
 | FR-017-AC-17 | A run that times out has the whole group the launcher leads killed, a real grandchild included. | Test (TC-027) |
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result in a single run, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
-| FR-017-AC-19 | Actual argv appends `-Z unstable-options --export-json /proc/self/fd/N` after unchanged harness options, with N the actual child-only anonymous pipe writer at least 3; evidence records the actual bytes. Per-run pipe-to-memfd storage has no persistent pathname and is reclaimed at final close even after every owner dies. Before Completed, retained memfd is bounded to 16 MiB plus one detection byte and actual pipe capacity plus kernel backing are charged concurrently to the original whole-run ceiling. Over-limit reports cancel owned execution and yield Incomplete(ResourceExhausted), never Failed or truncated acceptance. Authenticated Completed, original lease close, confirmed inner teardown/all writers closed, bounded actual-EOF drain, immutable seals and stable OwnedFd read occur in that order under the original deadline. Another run's or stale named report is never used. | Test (TC-027) |
+| FR-017-AC-19 | The generator appends `-Z unstable-options --export-json /proc/self/fd/N` after unchanged harness options, with actual child-only anonymous pipe writer N >= 3, and records the actual argv bytes. It uses per-run unnamed report authority, never a named target-directory report or fallback. FR-034 AC-32/33 own collector bounds, resource-stop classification, kernel lifetime and immutable final handoff. Zero-byte EOF means no exported report; nonempty partial/malformed content is refused under AC-18. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
 | FR-017-AC-21 | N harnesses with equal option vectors (the harness selection removed) and equal request timeout T start exactly one launcher process whose argument vector holds one `--harness <module::harness> --exact` pair per member in request order, `--harness-timeout` T, then the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes; one harness starts one process with the single-run argument vector. The group's outer bound is N times T, never elapsing when the product does not fit, and a group killed at it leaves no report and is refused as timed out with no member classified. A T that rounded up exceeds 4294967295 seconds (a `Duration::MAX` request) launches without `--harness-timeout`. A group that exits successfully with no report is refused with the missing-report refusal and classifies no member; one that exits unsuccessfully with no report (an argument error, a failed build) has every member inconclusive `NoVerdict`. Requests that name another launcher, crate directory or target directory are never grouped. | Test (TC-043) |
 | FR-017-AC-22 | Over a real or captured batch report, members are matched by `module::harness` path (two members with the bare symbol `check` stay distinct), and each member's outcome, checks and SUCCESS count come from its own entry: a falsified member beside a verified member leaves the verified member verified; a Success member in a non-zero exit with no Failure entry is inconclusive, and with one Failure entry is verified; a Failure entry with no checks and exit status `timeout` is inconclusive timed-out naming T while the others keep their results; a Failure entry with no checks and no timeout is inconclusive with no counterexample; each member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and checks plus the group's argument vector, the member list, a statement that it was a batch, and the exit code. | Test (TC-043) |

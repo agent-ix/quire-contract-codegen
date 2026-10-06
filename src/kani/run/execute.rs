@@ -1155,7 +1155,7 @@ mod tests {
     /// A run's report is read from the file the launch names, the previous run's file is never
     /// read in its place, and a successful exit without a report is refused.
     ///
-    /// Trace: FR-017-AC-18, FR-017-AC-19, TC-027
+    /// Trace: FR-017-AC-18, TC-027
     #[test]
     fn tc_027_execution_reads_only_the_report_its_own_run_exported() {
         let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
@@ -1185,7 +1185,7 @@ mod tests {
     /// The command exports the report to the request's target directory after the harness
     /// identity's options, which are passed unchanged.
     ///
-    /// Trace: FR-017-AC-6, FR-017-AC-19, TC-027
+    /// Trace: FR-017-AC-6, TC-027
     #[test]
     fn tc_027_the_launch_exports_the_report_after_the_harness_options() {
         let harness = state_frame_harness(
@@ -1228,7 +1228,7 @@ mod tests {
     /// Two runs sharing a target directory at the same time each read their own report: the
     /// report of a run that is still going is neither read nor removed by another.
     ///
-    /// Trace: FR-017-AC-19, TC-027
+    /// Trace: TC-027
     #[test]
     fn tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports() {
         let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
