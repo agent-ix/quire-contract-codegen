@@ -105,3 +105,11 @@ Round 6 delta check of 4ee3522dc78bafd0233051d6fc1cf56ccc332135 (previous a7389c
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-008 | low | The new TC-049 closing paragraph for steps 18-21 has a hard-wrap fragment at line 422 ("available. If exact authentication,"). Reflow the paragraph. | spec/kani/matrix/TC-049-caller-death-ownership.md:421-423 |
+
+## Dispositions, round 7
+
+Round 7 reviewed 0766e758561b0cec559fa9fd4ab8883114ed21f3 (previous 4ee3522dc78bafd0233051d6fc1cf56ccc332135; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 45b7af19-3b04-474a-a347-2926d38fc82f. Only the disposition-pass-6 finding was open; every earlier finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-008 | fixed | 0766e758561b0cec559fa9fd4ab8883114ed21f3: The TC-049 closing paragraph for steps 18-21 is reflowed into full lines of at most 100 columns with natural sentence continuation; the whole file is word-for-word identical to 4ee3522 after whitespace normalization, so meaning is unchanged, and it ends with a newline. |
