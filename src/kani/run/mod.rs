@@ -38,6 +38,8 @@ mod resource_ledger;
 #[cfg(target_os = "linux")]
 mod role_bootstrap;
 #[cfg(target_os = "linux")]
+mod role_command;
+#[cfg(target_os = "linux")]
 mod role_deadline;
 #[cfg(target_os = "linux")]
 mod role_protocol;

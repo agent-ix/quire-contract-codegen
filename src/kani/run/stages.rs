@@ -8,7 +8,7 @@ use std::{
 };
 
 use super::{
-    control::{private_pair, CallerLease, ControlError, GuardianEndpoint, Received},
+    control::{private_pair, CallerLease, ControlError, GuardianEndpoint, PreparedFrame, Received},
     namespace::{BackendCommand, NamespaceOwner, ReadyIdentityError},
     protocol::{
         current_build_identity, BackendExit, CallerControl, GuardianControl, GuardianRefusal,
@@ -44,6 +44,20 @@ pub(super) struct Dispatched {
 /// The bounded production Dispatch frame was sent; acknowledgement is still required.
 pub(super) struct PendingDispatch {
     ready: InitReady,
+}
+
+/// C-owned authorization bytes may be allocated before any helper role is launched. Encoding
+/// does not send or authorize anything; only the authenticated InitReady transition sends them.
+pub(super) struct PreparedDispatch {
+    authority: RunAuthority,
+    stdin: StdinControl,
+    frame: PreparedFrame,
+}
+
+impl PreparedDispatch {
+    pub(super) fn reserved_bytes(&self) -> Result<u64, StageError> {
+        self.frame.reserved_bytes().map_err(StageError::Control)
+    }
 }
 
 #[derive(Debug)]
@@ -115,6 +129,33 @@ impl Bootstrap {
         self.setup_deadline
     }
 
+    pub(super) fn authority(&self) -> RunAuthority {
+        self.authority
+    }
+
+    pub(super) fn prepare_dispatch(
+        &self,
+        command: BackendCommand,
+        stdin: &OriginalStdin,
+        cleanup_paths: Vec<OsString>,
+    ) -> Result<PreparedDispatch, StageError> {
+        let stdin = match stdin {
+            OriginalStdin::Open(_) => StdinControl::Open,
+            OriginalStdin::Closed => StdinControl::Closed,
+        };
+        let frame = PreparedFrame::encode(&CallerControl::Dispatch {
+            authority: self.authority,
+            command,
+            stdin,
+            cleanup_paths,
+        })?;
+        Ok(PreparedDispatch {
+            authority: self.authority,
+            stdin,
+            frame,
+        })
+    }
+
     /// Called only after the separate owner validates INIT and binds its memory observer.
     pub(super) fn claimed(self) -> Result<ClaimedBootstrap, StageError> {
         self.lease.transport().send(
@@ -173,19 +214,30 @@ impl InitReady {
         stdin: &OriginalStdin,
         cleanup_paths: Vec<OsString>,
     ) -> Result<PendingDispatch, StageError> {
-        let (stdin_control, rights) = match stdin {
-            OriginalStdin::Open(descriptor) => (StdinControl::Open, vec![descriptor.as_fd()]),
-            OriginalStdin::Closed => (StdinControl::Closed, Vec::new()),
+        let prepared = self
+            .bootstrap
+            .prepare_dispatch(command, stdin, cleanup_paths)?;
+        self.send_prepared_dispatch(prepared, stdin)
+    }
+
+    pub(super) fn send_prepared_dispatch(
+        self,
+        prepared: PreparedDispatch,
+        stdin: &OriginalStdin,
+    ) -> Result<PendingDispatch, StageError> {
+        if prepared.authority != self.bootstrap.authority {
+            return Err(StageError::AuthorityMismatch);
+        }
+        let (stdin_control, descriptor) = match stdin {
+            OriginalStdin::Open(descriptor) => (StdinControl::Open, Some(descriptor.as_fd())),
+            OriginalStdin::Closed => (StdinControl::Closed, None),
         };
-        let transport = self.bootstrap.lease.transport();
-        transport.send(
-            &CallerControl::Dispatch {
-                authority: self.bootstrap.authority,
-                command,
-                stdin: stdin_control,
-                cleanup_paths,
-            },
-            &rights,
+        if prepared.stdin != stdin_control {
+            return Err(StageError::UnexpectedControl);
+        }
+        self.bootstrap.lease.transport().send_prepared(
+            &prepared.frame,
+            descriptor.as_slice(),
             self.bootstrap.setup_deadline,
         )?;
         Ok(PendingDispatch { ready: self })

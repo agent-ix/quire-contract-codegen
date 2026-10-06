@@ -73,6 +73,42 @@ impl BackendCommand {
         self.directory = Some(directory.as_ref().as_os_str().to_owned());
         self
     }
+
+    /// Actual retained recipe allocation in C, including unused Vec/OsString capacity. I's
+    /// later Command construction is inside the owned RSS tree; this measures only C's recipe.
+    #[cfg(target_os = "linux")]
+    pub(super) fn reserved_bytes(&self) -> io::Result<u64> {
+        let overflow = || {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "backend recipe allocation cannot be represented",
+            )
+        };
+        let mut total = std::mem::size_of::<Self>()
+            .checked_add(self.program.capacity())
+            .and_then(|total| {
+                self.arguments
+                    .capacity()
+                    .checked_mul(std::mem::size_of::<OsString>())
+                    .and_then(|arguments| total.checked_add(arguments))
+            })
+            .and_then(|total| {
+                self.environment
+                    .capacity()
+                    .checked_mul(std::mem::size_of::<(OsString, OsString)>())
+                    .and_then(|environment| total.checked_add(environment))
+            })
+            .ok_or_else(overflow)?;
+        for value in self.arguments.iter().chain(self.directory.iter()).chain(
+            self.environment
+                .iter()
+                .flat_map(|(name, value)| [name, value]),
+        ) {
+            total = total.checked_add(value.capacity()).ok_or_else(overflow)?;
+        }
+        u64::try_from(total).map_err(|_| overflow())
+    }
+
     /// Apply the same argv, working directory and inherited-environment additions to a command.
     #[cfg(any(test, target_os = "linux"))]
     pub(super) fn configure(&self, command: &mut Command) {
