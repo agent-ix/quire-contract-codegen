@@ -86,21 +86,24 @@ claim marks its operation `caller_declared`, and the claim map carries the typed
 blocked item "operation identity not consumed by codegen's generators".
 Downstream obligations must not treat a caller-declared operation as checked.
 
-A declaration is read from the `composite_type` node's body. Its body is an
-`aggregate`; this encoding is defined by this generator, not by V2:
+A declaration is read from the `composite_type` node's `aggregate` body. The
+generator interprets these checked semantic term structures; QSpec's recursive
+record fixture supplies the optional-field and bounded-sequence forms:
 
 | Form | Members |
 |------|---------|
-| `record` | one `binding` per field in declaration order: its `name` is the field name, its value a `reference` to the field's type node; a field whose bound node is an `option` composite type is `Presence::Optional`, every other field `Presence::Required` |
+| `record` | one `binding` per field in declaration order: its `name` is the field name. A required field's value is a `reference` to its type node. An optional field's value is an `aggregate` containing one `binding` named `optional`, whose value is a `reference` to an `option` composite node; the payload of that node is the field's `ValueType`, and the field is `Presence::Optional` |
 | `tuple` | one `reference` per position, in declaration order |
 | `option` | one `reference` to the payload type node |
-| `sequence`, `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
-| `collection_bounds` | two `binding` members, `min` and `max`, each carrying a canonical decimal `integer` literal |
+| `sequence` | one `reference` to the element type node; a `collection_bounds` `bounded_domain` node whose `semantic_type` is this sequence node supplies its cardinality when the field references that bound node |
+| `set`, `bag`, `ordered_set` | a `reference` to the element type node, then a `reference` to the `collection_bounds` domain node |
+| `collection_bounds` | two `binding` members, `min` and `max`, each carrying a canonical decimal `integer` literal; for a bound over `sequence`, its `semantic_type` names the sequence node |
 
 A member's type node is a `scalar_type` leaf, whose bounds are the `bounded_domain`
-nodes over it, or a `bounded_domain` node itself, as QSL emits a bounded type (a
-`text_bounds` node binds the text profile the checked operation catalog's leaf rule
-reads). FR-018-AC-16 states how the second form is read.
+nodes over it, a `bounded_domain` node itself, or a composite node. A scalar
+`bounded_domain` reads as FR-018-AC-16 states; `collection_bounds` over a
+`sequence` reads as FR-018-AC-27 states. A `text_bounds` node binds the text
+profile the checked operation catalog's leaf rule reads.
 
 The runtime `NodeKey` of a declaration is `NodeKey::from_hex` of its V2 node id,
 in the `NODE_KEY_DOMAIN` domain.
@@ -149,8 +152,9 @@ in the `NODE_KEY_DOMAIN` domain.
   output.
 - The generator shall reconstruct each item's operand types with a separate
   `COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT` of 65,536 units. Entering the root type node or
-  following one member, option-payload, or collection-element reference to a
-  type node consumes one unit; the counter is shared by that item's two operands
+  following one member, option-payload, or collection-element reference or a
+  bounded-domain `semantic_type` edge to a type node consumes one unit; the
+  counter is shared by that item's two operands
   and conversion targets, and resets for the next item. A repeated reference
   consumes a new unit even when its node was previously resolved or memoized;
   an in-progress record back-edge also consumes its reference-entry unit before
@@ -168,11 +172,29 @@ in the `NODE_KEY_DOMAIN` domain.
   `CompositeEqualityRefusal::TypeResolutionCycle { type_node_id }`, naming the
   repeated node. A long acyclic chain shall reach the work refusal above without
   a panic or process abort.
-- When a member's type node is a `bounded_domain` node, the generator shall read
-  the member as the type of that node's base `scalar_type`, bounded by that
-  node's own `binding` members and by no sibling bound over the same base.
-- If a member's type node is a `bounded_domain` node whose base is not a
-  `scalar_type`, or whose base scalar reads no bound form (boolean or enum),
+- For the QSpec List record, the generator shall read `next` through its
+  `binding(next, aggregate([binding(optional, reference Option<List>)]))`
+  structure, follow the option node's sole payload reference to List, and emit
+  `FieldDeclaration` with the List `NodeKey` and `Presence::Optional`. A missing
+  or differently named nested binding, more than one nested member, or a
+  nested reference that does not name an option node shall refuse the item as
+  malformed rather than treating the field as required.
+- For the QSpec Tree record, the generator shall follow `kids`' direct reference
+  to `collection_bounds`, use that bounded-domain node's `semantic_type` to
+  find `Sequence<Tree>`, read its one element reference back to Tree, and form
+  `Sequence(Tree, CardinalityBound(0, 3))` from the domain's named `min` and
+  `max` bindings. Missing, duplicate, or ill-typed bounds and a domain whose
+  `semantic_type` is not a sequence shall refuse the item with a typed cause;
+  neither shall be read as an unbounded sequence.
+- When a member's type node is a scalar `bounded_domain` node, the generator shall
+  read the member as the type of that node's base `scalar_type`, bounded
+  by that node's own `binding` members and by no sibling bound over the same base.
+  A `collection_bounds` node whose `semantic_type` is a `sequence` node instead
+  reads as a sequence of that node's sole referenced element type, bounded by
+  the domain node's own `min` and `max` bindings.
+- If a member's type node is a `bounded_domain` node whose base is neither a
+  `scalar_type` nor a `sequence` with `collection_bounds`, or whose base scalar
+  reads no bound form (boolean or enum),
   then the generator shall refuse the item as unsupported, naming the bound
   node; if the node's form is not the one its base reads (`integer_range` over
   `integer`, `rational_range` over `rational`, `decimal_range` over `decimal`,
@@ -321,7 +343,7 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-13 | Every claim-map entry carries the node id, IR id, package id, source map, claims, reconstructed declaration keys and selected schedule of its item, and its declaration keys equal `NodeKey::from_hex` of the V2 node ids its operand types reach. | Test (TC-029) |
 | FR-018-AC-14 | The `bounded_domain` nodes an operand type reaches (`integer_range`, `rational_range`, `decimal_range`, `text_bounds`, `collection_bounds`) are read from `binding` members looked up by name as FR-014 lists them, in any order; a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-029) |
 | FR-018-AC-15 | A `binary` node's operand is read through its `reference`: a reference to a `convert` expression node is read as the type of what it converts, following nested conversions to the first node that is not a conversion, and a reference to any other node, including a non-`convert` application, as that node's own `semantic_type`. A descriptor whose `source_type` is the read type generates, and any other source is refused as an operand-type disagreement at that position, reporting the read type as found. | Test (TC-029) |
-| FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. A member whose type is a `float_rounding` `bounded_domain` over a float scalar reads as that float, and the equality is refused as `IllTypedCause::OperatorIneligible`. | Test (TC-029) |
+| FR-018-AC-16 | A tuple position whose type node is a `text_bounds` `bounded_domain` node generates the declaration `Text(min, max, profile)` read from that node's own members, an integer, decimal or rational `bounded_domain` member reads as the same type as a member naming its base scalar, and a second bound over the same base is never read: naming either of two `text_bounds` nodes over one text scalar reads that node's own `min` and `max`. A `bounded_domain` member whose form does not fit its base scalar is refused as missing the form the base reads, and one over a boolean scalar, over QSL's enum declaration or over a record is refused as unsupported `bounded_domain`, naming the bound node, in every case with no code emitted for the item. A `collection_bounds` domain over a sequence follows AC-27. A member whose type is a `float_rounding` `bounded_domain` over a float scalar reads as that float, and the equality is refused as `IllTypedCause::OperatorIneligible`. | Test (TC-029) |
 | FR-018-AC-17 | The `src/lib.rs` that `generate_composite_equality_oracles` returns for the TC-029 step 1 package (every generated item) contains zero occurrences of the panic tokens FR-018-AC-19 lists, no `.ok()`, `.unwrap_or(` or `.unwrap_or_default(` anywhere, and no `[` index or slice expression directly after an identifier character, `)` or `]`; every reconstruction helper in it returns `Result<_, ReconstructionError>`, and each of `rebuild_integer`, `rebuild_interval`, `rebuild_rational`, `rebuild_decimal`, `rebuild_text` and `rebuild_cardinality` turns a failed constructor or parse into exactly the matching variant (`Integer`, `Interval`, `Rational`, `Decimal`, `Text`, `Cardinality`) through one `map_err` to it, with no other variant and no `or_else`, `or`, `ok`, `unwrap_or`, `map_or` or `match` over the failure, so a failure is never recovered, widened or reported as another cause; every call of one is followed by `?` or a `match` whose `Err` arm yields `EnvironmentError::Reconstruction` or `Outcome::Refused(Refusal::CheckedInvariant)`, `EnvironmentError` has the variants `Declaration(InvalidDeclaration)` and `Reconstruction(ReconstructionError)`, `ReconstructionError` has the unit variants `Integer`, `Interval`, `Rational`, `Decimal`, `Text` and `Cardinality`, and no call of `IntegerInterval::new`, `RationalDomain::new`, `TextType::new`, `CardinalityBound::new`, `DecimalType::new` or an integer `.parse()` appears outside a reconstruction helper. | Test (TC-029) |
 | FR-018-AC-18 | `render_value_type` called with `ValueType::Quantity` and with `ValueType::Reference` returns `Err(RenderError::UnsupportedValueType { family })` with `family` equal to `"quantity"` and `"reference"` respectively and does not panic, and the item-boundary mapping turns `RenderError::UnsupportedValueType` into `CompositeEqualityRefusal::Unsupported` with `node_tag` equal to `family` and `unsupported_node_id` equal to the item's expression node id, emitting no code for the item and leaving its siblings unchanged, while `RenderError::Generation(OracleGenerationError::UnknownRuntimeVariant { .. })` still fails the whole call. No request reaches these arms through `generate_composite_equality_oracles`: a quantity operand is refused earlier as `CompositeEqualityRefusal::Unsupported { node_tag: "quantity" }` and a reference operand by Contract IR (FR-018-AC-7), each a per-item refusal that leaves its siblings unchanged, so the criterion is asserted by a unit test in the module's own `#[cfg(test)]` tests. | Test (TC-029) |
 | FR-018-AC-19 | The non-test code of `src/oracle/equality/mod.rs` (comments and every `#[cfg(test)]` item removed wherever the item sits, string literals the generator emits counted) contains zero panic tokens: the identifiers `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however written (called, with whitespace before the paren, named on a path such as `Option::unwrap`, or imported); the macros `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`, `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, with any whitespace before the `!` and any path prefix; and the identifier `abort` anywhere except as a method call (`.abort()`), so `process::abort` and a bare `abort` after an import are both counted. | Test (TC-029) |
@@ -330,7 +352,9 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-22 | For every pair of operand values in the item's refinement domain (FR-028-AC-16: every case where the domain fits the case cap, the boundary and seeded cases otherwise; every presence state of an option and of an optional field included) of an item whose leaves are Boolean or bounded integers, the generated oracle called with its own environment and a `Meter` whose every limit is `u64::MAX` returns `Outcome::Completed` with the verdict of QSpec FR-149 for the item's operator and admits exactly `equality.plan-form`, `equality.plan`, one `equality.pair` per node of the occurrence-pair tree, then `equality.result-retain`; no such pair returns `Refused` or `Incomplete`. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-23 | For every item of the TC-029 corpus whose leaves are Boolean or bounded integers, the claim-map closure's member names, presence and each integer leaf's inclusive bounds equal those of an independent read of the checked package (the V2 composite and `bounded_domain` nodes read through Contract IR's reader, never through the generator's reconstruction); a closure that dropped a member, narrowed a bound by one or read an optional member as required fails the check. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-24 | Type reconstruction of QSpec's `positive-recursive-records.json` List (through `Option<List>`) and Tree (through `Sequence<Tree>` bounded `[0,3]`) closes each back-edge at the in-progress record key, generates equality items built over both record types, and terminates; a synthetic unclosed `Option` self-cycle and a `Sequence` self-cycle each refuse as `TypeResolutionCycle` naming the repeated type node, without a panic, stack overflow or generated symbol. PLANNED (IR-643). | Test (TC-029) |
-| FR-018-AC-25 | The per-item type-resolution counter charges one unit for each root type-node entry or followed type-node reference, including a repeated or memoized reference, across both operands and conversion targets, independently of Contract IR lowering; an acyclic chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack exhaustion or generated symbols, while a sibling needing at most 65,536 entries still generates. PLANNED (IR-643). | Test (TC-029) |
+| FR-018-AC-25 | The per-item type-resolution counter charges one unit for each root type-node entry or followed type-node reference or bounded-domain `semantic_type` edge, including a repeated or memoized reference, across both operands and conversion targets, independently of Contract IR lowering; an acyclic chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack exhaustion or generated symbols, while a sibling needing at most 65,536 entries still generates. PLANNED (IR-643). | Test (TC-029) |
+| FR-018-AC-26 | Reading the QSpec List `next` field as `binding(next, aggregate([binding(optional, reference Option<List>)]))` yields exactly one `FieldDeclaration` named `next`, with `Presence::Optional` and payload type `ValueType::Composite(List NodeKey)`; removing or renaming `optional`, adding a second nested member, or targeting a non-option node refuses only that item as malformed, never as a required field or a generated oracle. PLANNED (IR-643). | Test (TC-029) |
+| FR-018-AC-27 | Reading the QSpec Tree `kids` field's direct reference to `collection_bounds` follows that node's `semantic_type` to `Sequence<Tree>`, reads its sole element reference as the Tree `NodeKey`, and reconstructs cardinality `[0,3]` from that bound node's named `min` and `max`; changing the semantic type to a non-sequence, dropping or duplicating either bound, or making either value non-integer refuses only that item with a typed cause and emits no code, never silently yielding an unbounded collection. PLANNED (IR-643). | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -371,6 +395,8 @@ without one is not written.
 | FR-018-AC-23 | Check the closure against the generator's own reconstruction (the check of AC-21 alone), so a reader that narrows a bound or reads `T?` as `T` shrinks the shadow's domain, the refinement domain and the oracle's declaration together and every check agrees. |
 | FR-018-AC-24 | Recurse from `Option` into itself without tracking an unclosed type, or reject every repeated node including the List and Tree record back-edges; the former overflows the stack and the latter refuses valid recursive records. |
 | FR-018-AC-25 | Reuse the Contract IR lowering counter for reconstruction, charge only record declarations while skipping option and sequence edges, or recurse through 65,537 acyclic entries before checking the budget; a large item then completes or overflows the stack instead of yielding the named per-item refusal. |
+| FR-018-AC-26 | Expect `next`'s value to be a direct reference and reject QSpec's nested optional binding, or ignore the wrapper and treat the field as required; the List item refuses or generates with the wrong presence. |
+| FR-018-AC-27 | Expect an inline second bounds reference in the Sequence body, or reject every bounded domain whose semantic type is not scalar; the QSpec Tree item refuses. Ignoring a missing bound instead generates an unbounded collection. |
 
 ## Dependencies
 
