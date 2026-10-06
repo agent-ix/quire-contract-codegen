@@ -65,3 +65,9 @@ Round 2 re-check of the next fix-round candidate of PR #298, covering every find
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-003 | fixed | The map is now total before QSL-640. FR-029 Behavior adds: "Before actual QSL-640 delivery, a bounded-shadow `inconclusive` or `cover-unsatisfied` outcome with retained `refinement_failed` takes the typed interim `NonProductionProof` refusal carrying that strength and yields no terminal value. Outcomes without retained disagreement still take the ordinary inconclusive rows." FR-029-AC-21 lists all four interim cases, and TC-048 step 8 exercises them. The paragraph says it does not weaken the delivered disagreement-first `Failed`/`CgDefect` rule, which AC-24 keeps gated, and it claims no available QSL cause. FND-004 records a remaining Outputs inconsistency. |
+
+Round 3 re-check of the next fix-round candidate of PR #298, covering every finding whose latest outcome was still open or unset, and regressions in the fix. Findings whose latest outcome is already `fixed` need no new row. The fixing commit is recorded in the private ticket marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | The FR-029 Outputs bullet now says interim `TerminalPairError::NonProductionProof` "carries the proof strength for a verified outcome whose strength is not `production_proved`, and for a `bounded_shadow` `inconclusive` or `cover-unsatisfied` outcome with retained `refinement_failed`". `ShadowCounterexample` "refuses a falsified `bounded_shadow` outcome", and neither returns a terminal value while the QSL-640 route is unavailable. This matches the Behavior interim paragraph, FR-029-AC-21 and TC-048 step 8. Outcomes without retained disagreement still take the ordinary rows. The gated AC-24 disagreement-first `Failed`/`CgDefect` rule after delivery is unchanged. No criterion text changed this round, and the matrix still lists AC-17, AC-19 to AC-27 and FR-033 as untagged. |
