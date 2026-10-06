@@ -18,8 +18,11 @@ use super::{
         PreparedFrame, RoleCaller, RoleEndpoint,
     },
     memory::{LauncherMemory, MemoryObserver},
-    namespace::{GatedClaim, InnerSettlement, OuterMonitorOwner},
+    namespace::{
+        GatedClaim, GuardianIdentity, InnerSettlement, OuterMonitorOwner, ReadyIdentityError,
+    },
     outer_setup::PreparedOuter,
+    protocol::{BackendExit, GuardianControl},
     report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
     role_deadline::DeadlineError,
@@ -38,6 +41,9 @@ pub(super) enum SamplingError {
     PhaseAuthorityMismatch,
     UnexpectedPhase,
     SettlementReportMismatch,
+    InnerIdentity(ReadyIdentityError),
+    InnerCompletionAuthority,
+    UnexpectedInnerEvent,
 }
 
 impl std::fmt::Display for SamplingError {
@@ -54,11 +60,14 @@ impl std::error::Error for SamplingError {
             Self::Report(error) => Some(error),
             Self::Charge(error) => Some(error),
             Self::Deadline(error) => Some(error),
+            Self::InnerIdentity(error) => Some(error),
             Self::InvalidMonitorTransition
             | Self::InnerLeaseConsumed
             | Self::PhaseAuthorityMismatch
             | Self::UnexpectedPhase
-            | Self::SettlementReportMismatch => None,
+            | Self::SettlementReportMismatch
+            | Self::InnerCompletionAuthority
+            | Self::UnexpectedInnerEvent => None,
         }
     }
 }
@@ -213,6 +222,114 @@ impl InnerMonitor {
             self.state = InnerMonitorState::Bootstrapped;
         }
         Ok((tick, sent))
+    }
+}
+
+/// O independently receives actual I's backend events over the already retained private role
+/// pair. C's lease and textual reports do not substitute for these authenticated completion facts.
+pub(super) struct InnerCompletion {
+    receive: IncrementalReceive,
+    state: InnerCompletionState,
+    frame_deadline: Option<Instant>,
+}
+
+enum InnerCompletionState {
+    AwaitDispatch,
+    Dispatched,
+    Completed(BackendExit),
+}
+
+pub(super) enum CompletionProgress {
+    Pending,
+    Dispatched,
+    Completed(BackendExit),
+    Exhausted,
+}
+
+impl InnerCompletion {
+    /// Allocate before M/writer exposure; subsequent decoding reuses these actual owned buffers.
+    pub(super) fn prepare() -> Result<Self, SamplingError> {
+        Ok(Self {
+            receive: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
+            state: InnerCompletionState::AwaitDispatch,
+            frame_deadline: None,
+        })
+    }
+
+    /// Fresh normal accounting precedes each one-chunk frame attempt, including partial Completed.
+    /// A completed backend remains inside live I until the unchanged original C lease closes.
+    pub(super) fn tick(
+        &mut self,
+        sampling: &mut OuterSampling,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+        monitor: &InnerMonitor,
+    ) -> Result<CompletionProgress, SamplingError> {
+        let tick = sampling.tick(outer, caller)?;
+        if matches!(tick, MemoryTick::Exhausted(_)) {
+            return Ok(CompletionProgress::Exhausted);
+        }
+        if !matches!(monitor.state, InnerMonitorState::Bootstrapped) {
+            return Err(SamplingError::InvalidMonitorTransition);
+        }
+        if let InnerCompletionState::Completed(outcome) = self.state {
+            return Ok(CompletionProgress::Completed(outcome));
+        }
+        // A normal never-elapsing backend may legitimately have no event for arbitrarily long.
+        // Once the first frame byte is received, its finite control cap is retained, never reset.
+        // Every attempt itself is nonblocking and followed by a fresh normal accounting tick.
+        let cap = Instant::now()
+            .checked_add(std::time::Duration::from_secs(3))
+            .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
+        let cap = self.frame_deadline.unwrap_or(cap);
+        let deadline = sampling
+            .settings
+            .identity_deadline()
+            .map_err(SamplingError::Deadline)?
+            .map_or(cap, |deadline| deadline.min(cap));
+        let Some(received) = self
+            .receive
+            .advance::<GuardianControl>(&monitor.control.transport(), |_| 0, deadline)
+            .map_err(SamplingError::Control)?
+        else {
+            if self.frame_deadline.is_none() && self.receive.has_partial_frame() {
+                self.frame_deadline = Some(deadline);
+            }
+            return Ok(CompletionProgress::Pending);
+        };
+        self.frame_deadline = None;
+        let sender = received
+            .credentials
+            .ok_or(SamplingError::Control(ControlError::MissingCredentials))?;
+        monitor
+            .monitor
+            .verify_ready(sender, 0)
+            .map_err(SamplingError::InnerIdentity)?;
+        match (&self.state, received.control) {
+            (InnerCompletionState::AwaitDispatch, GuardianControl::Dispatched { authority })
+                if authority == sampling.settings.authority =>
+            {
+                self.state = InnerCompletionState::Dispatched;
+                Ok(CompletionProgress::Dispatched)
+            }
+            (
+                InnerCompletionState::Dispatched,
+                GuardianControl::Completed { authority, outcome },
+            ) if authority == sampling.settings.authority => {
+                self.state = InnerCompletionState::Completed(outcome);
+                Ok(CompletionProgress::Completed(outcome))
+            }
+            (InnerCompletionState::AwaitDispatch, GuardianControl::Dispatched { .. })
+            | (InnerCompletionState::Dispatched, GuardianControl::Completed { .. }) => {
+                Err(SamplingError::InnerCompletionAuthority)
+            }
+            (
+                InnerCompletionState::AwaitDispatch
+                | InnerCompletionState::Dispatched
+                | InnerCompletionState::Completed(_),
+                _,
+            ) => Err(SamplingError::UnexpectedInnerEvent),
+        }
     }
 }
 
@@ -609,11 +726,18 @@ impl OuterSampling {
     /// This returns sealed bytes/measurements to the retained O owner, not execution evidence or
     /// permission for C to return before actual O/L/thread settlement and bounded report reading.
     pub(super) fn seal_after_inner_settlement(
-        self,
+        mut self,
         settlement: InnerSettlement,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
     ) -> Result<(SealedReport, MeasuredPeaks), SamplingError> {
         if !settlement.matches_report(self.collector.identity()) {
             return Err(SamplingError::SettlementReportMismatch);
+        }
+        // This is a normal final whole-tree/actual-L sample after actual I/M settlement,
+        // not a caller-only relabel, suppressed tick or fixture-controlled sampling barrier.
+        if matches!(self.tick(outer, caller)?, MemoryTick::Exhausted(_)) {
+            return Err(SamplingError::Charge(ChargeError::ResourceExhausted));
         }
         self.ledger
             .require_writer_exposure(self.collector.identity(), self.collector.reserve())

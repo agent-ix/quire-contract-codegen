@@ -748,6 +748,10 @@ impl IncrementalReceive {
         })
     }
 
+    pub(super) fn has_partial_frame(&self) -> bool {
+        self.active && (self.header_read != 0 || self.payload_read != 0)
+    }
+
     /// At most one recvmsg per call. A successful incomplete result requires another ordinary
     /// actor/accounting tick; errors poison the decoder and can never resume a half-accepted frame.
     pub(super) fn advance<'buffer, T: DeserializeOwned>(
