@@ -89,3 +89,11 @@ Round 5 scoped amendment reviewed a7389cc1af4562e05b545bdd73fef24ef39177c3 (prio
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-005 | low | I must validate the reopened File's "device/inode identity ... against that mapping", but the spec never says where the expected identity comes from. Reopening /proc/self/fd/N reaches the same pipe inode as slot N, so comparing the new File with slot N (or its proc link) always matches and cannot detect a wrong or substituted descriptor at N. Require O to deliver the pipe's expected device/inode, with N, over the authenticated control channel, and I to compare against that. | spec/kani/functional/FR-034-caller-death-ownership.md:128-138 |
+
+## Dispositions, round 6
+
+Round 6 reviewed 4ee3522dc78bafd0233051d6fc1cf56ccc332135 (previous a7389cc1af4562e05b545bdd73fef24ef39177c3; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 039881fb-9c31-4f07-a12e-f8a7ab68f286. Only the disposition-pass-5 findings were open; every earlier finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | 4ee3522dc78bafd0233051d6fc1cf56ccc332135: O now captures the expected device/inode from its originally created pipe before child mapping and sends it with N over authenticated original-run/O control; I compares the new File against that independent expectation, and self-comparison of N with its proc link or a caller-supplied expectation is explicitly excluded. |

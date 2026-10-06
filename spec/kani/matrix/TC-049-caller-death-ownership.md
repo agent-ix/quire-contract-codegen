@@ -417,13 +417,13 @@ The independent AC-24 ignored-inner-lease-EOF oracle is never retired or masked 
     Restore controls; no report-to-stdio mapping, named fallback or C memfd proc reopening is used.
 
 Steps 18–21 are PLANNED/UNRUN Test procedures for the existing writer-entry obligations, not new
-criteria or a claim that the current fixture operation exposes these boundaries. Use actual
-ordinary production/protocol/kernel descriptor seams in internal production stage 1 where
-available. If exact authentication,
-original-slot close/no-reuse or inheritance observations require a fixture extension, record the
-measured missing seam and carry that evidence to IR-655 stage 2 with SPEC merged before fixture
-CODE. No new DTO/rights/hook/cap is allocated here. Mixed whole criteria remain untagged until all
-assertions are actual, alongside the unchanged independent AC-24 EOF oracle and one-CODE-PR gate.
+criteria or a claim that the current fixture operation exposes these boundaries. Use actual ordinary
+production/protocol/kernel descriptor seams in internal production stage 1 where available. If exact
+authentication, original-slot close/no-reuse or inheritance observations require a fixture
+extension, record the measured missing seam and carry that evidence to IR-655 stage 2 with SPEC
+merged before fixture CODE. No new DTO/rights/hook/cap is allocated here. Mixed whole criteria
+remain untagged until all assertions are actual, alongside the unchanged independent AC-24 EOF
+oracle and one-CODE-PR gate.
 
 ## Expected Results
 

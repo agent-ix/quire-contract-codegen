@@ -67,3 +67,11 @@ Round 5 scoped amendment reviewed a7389cc1af4562e05b545bdd73fef24ef39177c3 (prio
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | medium | The amendment adds testable obligations for I's report-writer entry. Authentication, identity or access failure must refuse before Dispatch; the original slot is closed once, with no reuse; the writer maps only into the backend at N; unrelated execs inherit no writer; and the reopen must work under the nested mapped UID. TC-049 was not changed and has no step that would fail if I skipped validation, closed the wrong slot or leaked the writer to an unrelated exec. Step 17 only inspects flags and the fd 3/4/N mapping, and step 9's unrelated-exec check covers the lease and bootstrap descriptors, not the report writer. Add TC-049 procedure steps (UNRUN) for these predicates. | spec/kani/functional/FR-034-caller-death-ownership.md:128-150, spec/kani/matrix/TC-049-caller-death-ownership.md:241-245, spec/kani/matrix/TC-049-caller-death-ownership.md:376-382 |
+
+## Dispositions, round 6
+
+Round 6 reviewed 4ee3522dc78bafd0233051d6fc1cf56ccc332135 (previous a7389cc1af4562e05b545bdd73fef24ef39177c3; PR not open). Reviewer: claude-opus-5-5, session 8dfb2e4c-0a0e-4cdf-b7f0-98e42705d45a, run 039881fb-9c31-4f07-a12e-f8a7ab68f286. Only the disposition-pass-5 findings were open; every earlier finding's latest row is already fixed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | 4ee3522dc78bafd0233051d6fc1cf56ccc332135: TC-049 steps 18-21 add UNRUN procedures: a nested-mapped-UID positive control; authority, replay, identity, substitution, type, access and unavailable-N refusals before Dispatch with no marker; skipped-validation mutants; one-time original-slot close with an owned sentinel detecting wrong-slot or post-reuse close; backend-N export and unrelated-exec exclusion by identity; extra-holder EOF. Missing seams are carried to IR-655 stage 2, with no new criterion or DTO. |
