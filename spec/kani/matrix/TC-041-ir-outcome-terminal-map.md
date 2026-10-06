@@ -51,7 +51,7 @@ cause, and that the map is one match with no wildcard arm.
     then make both agree. Through the public QSL facade, send a valid wire request with a replay
     input-byte limit below its encoded size to obtain a `prepare` non-fault `Refused` result with
     Disagreed; pass that actual report to CG's public converter and require full claim binding and
-    F-1 precedence. With a valid `prepare`, pair
+    F-1 precedence (FR-029-AC-28). With a valid `prepare`, pair
     Disagreed with an operand that would fail admission and verify F-1 wins. Inspect the public QSL
     terminal mapping and CG pass-through for `Fault` and `Admission(Fault)` reports without
     fabricating a report or claiming a public input can trigger an invariant fault. Also
@@ -95,7 +95,7 @@ cause, and that the map is one match with no wildcard arm.
     `Fault` or `Admission(Fault)` report would yield Failed, never ReplayRefused. A CG
     precheck refusal, missing report or wrong-claim report yields no terminal value, including when
     one observation member changes; the valid composite report is not `UnexpectedSettlement`
-    (FR-030-AC-17).
+    (FR-029-AC-28; FR-030-AC-17).
 
 ## Status
 
