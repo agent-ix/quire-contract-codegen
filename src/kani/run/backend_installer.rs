@@ -324,9 +324,7 @@ impl InstallerEntry {
                 | PolicyFailureCause::NotBackend
                 | PolicyFailureCause::ProtectionUnverified
         ) {
-            self.failure_context
-                .capture_context(cause)
-                .map_err(InstallerEntryError::Representation)?;
+            self.failure_context.capture_context(cause);
         }
         PreparedFrame::encode(&InstallerReply::Refused {
             identity: self.settings.identity,

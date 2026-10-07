@@ -295,18 +295,15 @@ impl PreparedStartupContext {
     ) -> Result<StartupCause, RepresentationError> {
         self.text.clear();
         let cause = StartupIoCause::capture(error)?;
-        self.capture_display(error)?;
+        self.capture_optional_display(error);
         Ok(StartupCause::Io(cause))
     }
 
-    /// Non-I/O typed failure metadata is chosen separately by its concrete enum arm. Context
-    /// captures only the genuine diagnostic; it never supplies an I/O kind or capability.
-    pub(super) fn capture_context(
-        &mut self,
-        error: &impl fmt::Display,
-    ) -> Result<(), RepresentationError> {
+    /// Capture optional diagnostics only after the owner has retained its typed cause.
+    /// Formatting or retention failure omits text and never replaces that cause.
+    pub(super) fn capture_context(&mut self, error: &impl fmt::Display) {
         self.text.clear();
-        self.capture_display(error)
+        self.capture_optional_display(error);
     }
 
     /// Capture actual public installation variants exhaustively. Backend compilation errors
@@ -331,8 +328,16 @@ impl PreparedStartupContext {
                 return Err(RepresentationError::NonInstallationBackendCause)
             }
         };
-        self.capture_display(error)?;
+        self.capture_optional_display(error);
         Ok(StartupCause::Seccompiler(cause))
+    }
+
+    fn capture_optional_display(&mut self, error: &impl fmt::Display) {
+        // FR-034 cross-role representation: diagnostics are optional only AFTER required
+        // metadata has been captured. capture_display clears partial text on either failure.
+        if self.capture_display(error).is_err() {
+            self.text.clear();
+        }
     }
 
     fn capture_display(&mut self, error: &impl fmt::Display) -> Result<(), RepresentationError> {
@@ -360,8 +365,9 @@ impl PreparedStartupContext {
         StartupContextSeed(self)
     }
 
-    /// Decode byte-sequence context into the same actual retained String capacity. At most four
-    /// UTF-8 bytes are staged on the stack; malformed/incomplete UTF-8 and overflow refuse.
+    /// Decode required byte-array structure into the retained optional diagnostic. At most four
+    /// UTF-8 bytes are staged on the stack. Invalid/incomplete UTF-8 or retention excess drops
+    /// the whole diagnostic; every remaining member must still decode as u8.
     pub(super) fn bytes_seed(&mut self) -> StartupBytesSeed<'_> {
         self.text.clear();
         StartupBytesSeed(self)
@@ -432,31 +438,39 @@ impl<'de> de::Visitor<'de> for StartupBytesSeed<'_> {
     fn visit_seq<A: de::SeqAccess<'de>>(self, mut sequence: A) -> Result<(), A::Error> {
         let mut staged = [0_u8; 4];
         let mut length = 0_usize;
+        let mut omitted = false;
         while let Some(byte) = sequence.next_element::<u8>()? {
-            let slot = staged
-                .get_mut(length)
-                .ok_or_else(|| A::Error::custom("invalid UTF-8 context"))?;
+            // Even after rendering fails, SeqAccess continues to enforce every required u8
+            // and enclosing-array boundary. A malformed element never becomes omitted text.
+            if omitted {
+                continue;
+            }
+            let Some(slot) = staged.get_mut(length) else {
+                self.0.text.clear();
+                omitted = true;
+                continue;
+            };
             *slot = byte;
-            length = length
-                .checked_add(1)
-                .ok_or_else(|| A::Error::custom(RepresentationError::ContextExceeded))?;
-            let current = staged
-                .get(..length)
-                .ok_or_else(|| A::Error::custom("invalid UTF-8 context"))?;
+            length += 1; // At most the four-byte staging array, established by get_mut above.
+            let Some(current) = staged.get(..length) else {
+                self.0.text.clear();
+                omitted = true;
+                continue;
+            };
             match std::str::from_utf8(current) {
-                Ok(text) => {
-                    if text.len() > self.0.limit.saturating_sub(self.0.text.len()) {
-                        return Err(A::Error::custom(RepresentationError::ContextExceeded));
-                    }
+                Ok(text) if text.len() <= self.0.limit.saturating_sub(self.0.text.len()) => {
                     self.0.text.push_str(text);
                     length = 0;
                 }
-                Err(error) if error.error_len().is_none() => {}
-                Err(_) => return Err(A::Error::custom("invalid UTF-8 context")),
+                Err(error) if error.error_len().is_none() && length < staged.len() => {}
+                Ok(_) | Err(_) => {
+                    self.0.text.clear();
+                    omitted = true;
+                }
             }
         }
-        if length != 0 {
-            return Err(A::Error::custom("incomplete UTF-8 context"));
+        if length != 0 || omitted {
+            self.0.text.clear();
         }
         Ok(())
     }
@@ -522,4 +536,57 @@ pub(super) fn check_scratch_free_json(bytes: &[u8]) -> Result<(), StartupJsonErr
         return Err(StartupJsonError::UnclosedString);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-39
+    #[test]
+    fn retained_os_cause_survives_optional_display_bound_and_formatting_failure() {
+        let original = io::Error::from_raw_os_error(nix::libc::EPERM);
+        let mut context = PreparedStartupContext::new(0).unwrap();
+        let reserved = context.reserved_bytes();
+        let cause = context.capture_io(&original).unwrap();
+        assert!(context.context().is_empty());
+        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+            panic!("diagnostic retention changed the original domain");
+        };
+        assert_eq!(error.raw_os_error(), original.raw_os_error());
+        assert_eq!(error.kind(), original.kind());
+        assert_eq!(fidelity, ProjectionFidelity::OsCodeAndKind);
+        assert_eq!(context.reserved_bytes(), reserved);
+
+        #[derive(Debug)]
+        struct FormattingFailure;
+        impl fmt::Display for FormattingFailure {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("partial diagnostic")?;
+                Err(fmt::Error)
+            }
+        }
+        impl std::error::Error for FormattingFailure {}
+        let mut context = PreparedStartupContext::new(64).unwrap();
+        let reserved = context.reserved_bytes();
+        let cause = context.capture_io(&original).unwrap();
+        assert!(!context.context().is_empty());
+        context.capture_context(&FormattingFailure);
+        assert!(context.context().is_empty());
+        assert_eq!(context.reserved_bytes(), reserved);
+        let ProjectedStartupCause::Io { error, .. } = cause.project().unwrap() else {
+            panic!("diagnostic formatting changed retained cause metadata");
+        };
+        assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
+        let original = io::Error::new(io::ErrorKind::PermissionDenied, FormattingFailure);
+        let cause = context.capture_io(&original).unwrap();
+        assert!(context.context().is_empty());
+        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+            panic!("optional formatter failure changed required metadata");
+        };
+        assert_eq!(error.kind(), original.kind());
+        assert_eq!(error.raw_os_error(), None);
+        assert_eq!(fidelity, ProjectionFidelity::KindOnly);
+        assert_eq!(context.reserved_bytes(), reserved);
+    }
 }
