@@ -19,13 +19,14 @@ use super::{
     caller_prepare::{self, PreparationError},
     caller_result,
     caller_streams::SettledCaptures,
-    launch::{BoundedLaunch, BoundedLaunchError, CAPTURE_LIMIT},
+    launch::{BoundedLaunch, BoundedLaunchError, LaunchOutcome, CAPTURE_LIMIT},
+    memory::{MemoryMechanism, MemoryObservation},
     namespace::BackendCommand,
     protocol::BackendExit,
     publication::{Publication, Stage},
     resource_ledger::MeasuredPeaks,
     role_deadline::{DeadlineError, ExecutionClock},
-    role_protocol::LauncherSettlementMode,
+    role_protocol::{LauncherSettlementMode, OwnerStopCause},
     stdin::OriginalStdin,
 };
 use crate::kani::identity::ProofCeilings;
@@ -231,6 +232,65 @@ impl CallerExecution {
             .streams
             .settle(roles)
             .map_err(CallerExecutionError::Io)
+    }
+
+    /// Preserve a genuine independent O resource/work stop even beside C cancellation or
+    /// provisional report bytes. Actual normal roles, stream end and captures precede assembly.
+    pub(super) fn finish_owner_stopped(
+        &mut self,
+    ) -> Result<(BoundedLaunch, MeasuredPeaks), CallerExecutionError> {
+        if !self.bootstrap.owner_stop_pending() {
+            return Err(CallerExecutionError::Bootstrap(
+                CallerBootstrapError::TerminalTransition,
+            ));
+        }
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        if self.roles.is_none() {
+            self.roles = Some(
+                self.bootstrap
+                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::ObserveOuterExit)
+                    .map_err(CallerExecutionError::Bootstrap)?,
+            );
+        }
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        let (cause, peaks) = loop {
+            if let Some(stop) = self
+                .bootstrap
+                .finish_owner_stop_after_roles(roles)
+                .map_err(CallerExecutionError::Bootstrap)?
+            {
+                break stop;
+            }
+            self.pause_until(roles.cutoff())?;
+        };
+        // Actual capture joins still matter even when genuine resource/timeout precedence
+        // discards their bytes and the provisional report. No capture flag substitutes for EOF.
+        let captures = self
+            .bootstrap
+            .streams
+            .settle(roles)
+            .map_err(CallerExecutionError::Io)?;
+        drop(captures);
+        drop(self.report.take());
+        let outcome = match cause {
+            OwnerStopCause::ResourceExhausted => LaunchOutcome::MemoryExhausted,
+            OwnerStopCause::TimedOut => LaunchOutcome::TimedOut,
+        };
+        Ok((
+            BoundedLaunch {
+                report: Ok(None),
+                outcome,
+                memory: MemoryObservation {
+                    mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                    peak_resident_bytes: Some(peaks.tree_rss_bytes),
+                },
+            },
+            peaks,
+        ))
     }
 
     /// Genuine I-completion report path only. A late authenticated stop remains a different

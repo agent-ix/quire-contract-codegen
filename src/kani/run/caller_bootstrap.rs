@@ -2497,4 +2497,104 @@ mod tests {
         assert_eq!(detail, "O=17 L=11 wait=pending");
         assert_eq!(detail.capacity(), capacity);
     }
+    /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38
+    #[test]
+    fn complete_phase_after_eof_retains_cleanup_right_without_publishing_a_stage() {
+        use super::{CallerBootstrap, CallerBootstrapError, CallerPhase};
+        use crate::kani::run::{
+            control::RoleEndpoint,
+            namespace::BackendCommand,
+            protocol::current_build_identity,
+            publication::Publication,
+            role_deadline::{ExecutionClock, IdentityDeadline, RoleDeadline},
+            role_protocol::{OuterPhaseReply, OuterTerminalReply, RunSettings},
+            stages::Bootstrap,
+            stdin::OriginalStdin,
+        };
+        use std::{num::NonZeroU64, os::fd::AsFd, sync::Arc, time::Duration};
+        // This exercises only C's real private framer/custody/publication boundary. No helper
+        // is launched, no O namespace is simulated as production, and no cleanup is attested.
+        let mut clock = ExecutionClock::prepare(None, Duration::from_secs(1)).unwrap();
+        let (bootstrap, inner_endpoint) = Bootstrap::new(None).unwrap();
+        let stdin = OriginalStdin::capture_original().unwrap();
+        let dispatch = bootstrap
+            .prepare_dispatch(BackendCommand::new("/bin/true"), &stdin, Vec::new())
+            .unwrap();
+        let authority = bootstrap.authority();
+        let settings = RunSettings {
+            helper: std::env::current_exe().unwrap(),
+            identity: current_build_identity(),
+            authority,
+            deadline: IdentityDeadline::NeverElapses,
+            started: clock.started(),
+            settlement_reserve: clock.reserve(),
+            work_deadline: IdentityDeadline::NeverElapses,
+            setup_deadline: RoleDeadline::from_original(bootstrap.setup_deadline()).unwrap(),
+            caller_uid: rustix::process::getuid().as_raw(),
+            caller_gid: rustix::process::getgid().as_raw(),
+            memory_bytes: NonZeroU64::new(1_073_741_824).unwrap(),
+            caller_run_buffers: 0,
+        };
+        let publication = Arc::new(Publication::default());
+        let mut caller = CallerBootstrap::prepare(
+            settings,
+            bootstrap,
+            inner_endpoint,
+            dispatch,
+            stdin,
+            0,
+            Arc::clone(&publication),
+            &clock,
+        )
+        .unwrap();
+        let endpoint =
+            RoleEndpoint::from_received(caller.outer_endpoint.take().unwrap(), &caller.caller_pin)
+                .unwrap();
+        caller.outer_pin = Some(caller.caller_pin.try_clone().unwrap());
+        caller.outer_pid = Some(rustix::process::getpid().as_raw_nonzero().get());
+        caller.phase = CallerPhase::AwaitMonitor;
+        assert!(caller.cancel_close_step(&mut clock).unwrap());
+        let cutoff = clock.settlement_deadline().unwrap();
+        let cancel = endpoint
+            .transport()
+            .receive::<crate::kani::run::role_protocol::CallerTerminalControl>(|_| 0, cutoff)
+            .unwrap();
+        assert!(
+            matches!(cancel.control, crate::kani::run::role_protocol::CallerTerminalControl::CancelClose { authority: actual, .. } if actual == authority)
+        );
+        endpoint
+            .transport()
+            .send(
+                &OuterPhaseReply::MonitorSpawned { authority },
+                &[caller.caller_pin.as_fd()],
+                cutoff,
+            )
+            .unwrap();
+        endpoint
+            .transport()
+            .send(
+                &OuterTerminalReply::Cancelled {
+                    authority,
+                    stop: clock.caller_stop_stamp().unwrap(),
+                },
+                &[],
+                cutoff,
+            )
+            .unwrap();
+        drop(endpoint);
+        assert!(!caller.cancellation_reply_step(&mut clock).unwrap());
+        assert!(!caller.cancellation_reply_step(&mut clock).unwrap());
+        assert!(caller.cancel_phase_pin.is_some());
+        assert!(caller.phase == CallerPhase::AwaitMonitor);
+        assert_eq!(publication.stage(), None);
+        assert!(!caller.cancellation_reply_step(&mut clock).unwrap());
+        assert!(caller.cancellation_reply_step(&mut clock).unwrap());
+        assert_eq!(publication.stage(), None);
+        // A complete receipt and EOF still cannot fabricate a normal actual O Child wait.
+        let roles = super::CallerRoleSettlement { cutoff, authority };
+        assert!(matches!(
+            caller.finish_cancellation_after_roles(&roles),
+            Err(CallerBootstrapError::OuterExitAbnormal)
+        ));
+    }
 }
