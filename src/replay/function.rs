@@ -135,7 +135,6 @@ pub fn replay_falsification(
 /// The one function that renders a backend-witness transcript (FR-024-AC-2): the assertion block
 /// `qsl-replay` admits, built from decoded values only and never from backend-native text. Each
 /// binding is a name (a parameter node id, or a state field) and the integer decoded for it.
-/// Entries are emitted in ascending name order, as QSL requires for parameter node ids.
 /// Every transcript this crate passes to [`Witness::parse`] comes from here.
 ///
 /// # Errors
@@ -147,8 +146,6 @@ pub(crate) fn render_witness(
     check_text: &str,
     bindings: &[(&str, i128)],
 ) -> Result<Witness, MalformedTranscript> {
-    let mut bindings = bindings.to_vec();
-    bindings.sort_unstable_by(|left, right| left.0.cmp(right.0));
     let bindings = bindings
         .iter()
         .map(|(name, integer)| format!("{name}={integer}"))
@@ -176,7 +173,7 @@ fn replay_falsification_through(
     {
         return Err(SpineReplayError::FieldDelimiter);
     }
-    let bindings = values
+    let mut bindings = values
         .iter()
         .map(|(argument, value)| {
             let parameter = parameters
@@ -197,6 +194,8 @@ fn replay_falsification_through(
             Ok((parameter.node_id, integer))
         })
         .collect::<Result<Vec<_>, SpineReplayError>>()?;
+    // QSL joins function witness entries by parameter node id and requires ascending id order.
+    bindings.sort_unstable_by(|left, right| left.0.cmp(right.0));
     let witness = render_witness(harness, check_text, &bindings)?;
     match execute(request(ReplaySource::Witness(witness))) {
         Ok(ReplayResult::Witness(result)) => Ok(result),
