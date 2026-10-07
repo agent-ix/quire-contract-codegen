@@ -86,6 +86,16 @@ pub(super) fn run(role: HelperRole, identity: BuildIdentity) -> Result<(), Helpe
 
 fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntryError> {
     let input = OuterInput::receive(identity, initial).map_err(HelperEntryError::Bootstrap)?;
+    let parts = match input.into_parts() {
+        Ok(parts) => parts,
+        Err(failure) => {
+            // SAME pre-Arm owner and original cause remain together at this boundary.
+            // No authenticated L/C negative publication route exists yet, so this remains
+            // a helper failure rather than fake Armed/normal-settlement permission.
+            let _retained_input = failure.input;
+            return Err(HelperEntryError::Bootstrap(failure.error));
+        }
+    };
     let OuterParts {
         settings,
         caller_pin,
@@ -94,7 +104,7 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
         launcher_memory,
         negative_storage,
         setup,
-    } = input.into_parts().map_err(HelperEntryError::Bootstrap)?;
+    } = parts;
     let guard = setup.prepare().map_err(HelperEntryError::Bootstrap)?;
     // Actual O has armed its original L parent and prepared private namespaces before either
     // endpoint receives its positively owned capability. No M exists at this boundary.

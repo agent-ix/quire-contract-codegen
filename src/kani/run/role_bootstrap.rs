@@ -266,6 +266,13 @@ pub(super) struct OuterInput {
     negative_storage: super::control::FrameStorage,
 }
 
+/// A failed pre-Arm split retains the SAME authenticated owner and unchanged original error.
+/// Returned input is cleanup custody, not permission to retry admission or publish Armed.
+pub(super) struct OuterInputFailure {
+    pub(super) input: OuterInput,
+    pub(super) error: BootstrapError,
+}
+
 impl OuterInput {
     /// Receive only the two allocated L-origin frames. No M or writer-bearing child exists.
     pub(super) fn receive(
@@ -441,21 +448,11 @@ impl OuterInput {
     /// borrows only that context, so moving I's endpoint into its intended child needs neither
     /// self-referential storage nor an extra endpoint alias. Original L proc descriptions are
     /// consumed before O replaces its private proc; missing data cannot become zero RSS.
-    pub(super) fn into_parts(mut self) -> Result<OuterParts, BootstrapError> {
-        let deadline = self
-            .settings
-            .startup_deadline()
-            .map_err(BootstrapError::Deadline)?;
-        let (stat, status) = self
-            .launcher_observation
-            .take()
-            .ok_or(BootstrapError::LauncherObservationConsumed)?;
-        let pin = self
-            .launcher_pin
-            .try_clone()
-            .map_err(BootstrapError::Creator)?;
-        let launcher_memory =
-            LauncherMemory::bind(pin, stat, status).map_err(BootstrapError::LauncherObservation)?;
+    pub(super) fn into_parts(mut self) -> Result<OuterParts, OuterInputFailure> {
+        let (deadline, launcher_memory) = match self.prepare_parts() {
+            Ok(parts) => parts,
+            Err(error) => return Err(OuterInputFailure { input: self, error }),
+        };
         Ok(OuterParts {
             settings: self.settings,
             caller_pin: self.caller_pin,
@@ -472,6 +469,32 @@ impl OuterInput {
                 deadline,
             },
         })
+    }
+
+    fn prepare_parts(&mut self) -> Result<(Instant, LauncherMemory), BootstrapError> {
+        let deadline = self
+            .settings
+            .startup_deadline()
+            .map_err(BootstrapError::Deadline)?;
+        // Preserve the original consumed-before-clone error precedence, but retain actual
+        // proc descriptions if cloning fails. No new descriptor or missing file is invented.
+        if self.launcher_observation.is_none() {
+            return Err(BootstrapError::LauncherObservationConsumed);
+        }
+        let pin = self
+            .launcher_pin
+            .try_clone()
+            .map_err(BootstrapError::Creator)?;
+        let (stat, status) = self
+            .launcher_observation
+            .take()
+            .ok_or(BootstrapError::LauncherObservationConsumed)?;
+        // bind owns its arguments: an Err may have consumed/dropped those actual three
+        // descriptors. The returned original input still retains its original L pin and
+        // both control/lease endpoints; no observation or successful bind is fabricated.
+        let launcher_memory =
+            LauncherMemory::bind(pin, stat, status).map_err(BootstrapError::LauncherObservation)?;
+        Ok((deadline, launcher_memory))
     }
 }
 
