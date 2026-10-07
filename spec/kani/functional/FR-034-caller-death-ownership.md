@@ -1187,6 +1187,82 @@ A complete conservative-charge observation shall cover every named formula term 
 owned tree; it is not whole-C memory or a complete caller runtime allocation bound. No whole-C RSS
 proxy, requested-stack proxy, raised budget or fallback shall supply missing named accounting.
 
+### Supported-build proof of named native workspace
+
+For each exact consumer build configuration claimed to conform to the named
+`caller_run_buffers` accounting above, CG's CODE verification SHALL establish a
+finite conservative bound on the actual native workspace used by its named per-run
+control/capture operations. This is a build conformance gate, not a new runtime
+admission capability. An absent, incomplete or stale proof SHALL leave that exact
+configuration UNPROVEN and SHALL fail its native-accounting conformance claim.
+The guardian cannot determine this proof's availability by inspecting its own build;
+no runtime refusal, public cause, request field or changed timeout is allocated here.
+Matching the actual library/helper artifact alone shall not establish the bound.
+
+A configuration shall identify the actual consumer manifest/package selection,
+target triple and ABI, resolved Cargo profile settings, feature selection, compiler
+selected by the existing build environment, codegen/linker/CPU flags, linked runtime
+and allocator. The proof shall identify the exact source head and that actual build
+configuration/compiler in operational evidence; CG SHALL repeat the analysis after
+any of them or the resulting executable changes. Such operational attribution shall
+not introduce a committed source pin, checksum catalog or copied dependency artifact.
+The caller/helper shall still satisfy the matched normal-artifact delivery rules
+above; feature-off production and feature-on verification are separate configurations.
+One configuration's proof shall not stand for a different profile, feature selection,
+compiler, target or flags, including a consumer overriding this package's profiles.
+
+The initial evidence configuration is Linux `x86_64-unknown-linux-gnu` on luna,
+using this package's shipped `make build` release settings (`lto = "thin"`,
+`codegen-units = 1`), the compiler selected by `rust-toolchain.toml`, and no default
+features or enabled `guardian-test-support`. The analysis shall record the actual
+resolved settings and flags, including the actual panic strategy; this allocation
+is not evidence that an executable has been built or its native workspace proved.
+The Linux little-endian aarch64/riscv64 native-policy implementations remain eligible
+but UNPROVEN for this accounting claim until their own current exact-configuration
+proofs exist. Other consumer configurations are not prohibited by this allocation;
+only a configuration with a complete current proof may claim conformance.
+
+The CODE verification SHALL use stable objdump disassembly of the actual final
+linked executable after the release LTO/linker passes, from the same build inputs
+as delivery. Crate-level emit-asm/emit-obj or pre-link assembly shall not substitute
+for the final executable's post-inline call graph. The analysis shall state the
+named caller control/capture operation roots and follow their reachable machine-code
+calls through all relevant success, refusal, cancellation and error paths. It shall
+enumerate every reachable indirect-call target, or prove an indirect site unreachable;
+an unresolved target SHALL leave the bound UNPROVEN. It shall reject reachable
+recursive call cycles for this method, including cycles through external callees.
+Source-level absence of recursion or the size of a Rust decoder struct is insufficient.
+
+For the resolved panic strategy, the analysis shall include actual unwind/landing-pad
+and cleanup paths where reachable, or establish from the linked artifact that they
+are absent under abort. It shall account for tail calls using actual stack adjustment
+and frame replacement, and shall derive the maximum simultaneously live native-stack
+sum over the complete reachable graph. Library/runtime/libc/allocator frames reached
+by those named operations shall have explicit finite bound sources when they
+contribute to that workspace. A missing frame, dynamic stack adjustment, external
+callee bound or unwind edge SHALL leave the affected bound UNPROVEN; no guessed
+reserve or requested-thread-stack size may close the gap.
+
+The CODE verification SHALL inventory the actual capacity and simultaneous lifetime
+of each named retained heap allocation and each named temporary heap allocation on
+those paths, including temporary overlap during decoding, formatting and collection.
+The accounting shall include the established maximum native-stack workspace and
+those actual heap capacities in the named caller-buffer bound before exposure, using
+checked arithmetic. Conservative duplicate counting is allowed; subtracting a named
+live quantity without a justified lifetime proof is not. A requested capacity alone
+shall not substitute for a larger actual allocation capacity. The existing fault-domain
+exclusions for incidental caller allocations outside named terms remain unchanged;
+an allocation already holding named control/capture state cannot be relabelled incidental.
+No numerical ceiling, raised product budget or additional transient exclusion is
+allocated by this method.
+
+A conforming operational analysis shall state its roots, complete edge/target inventory,
+frame and heap bounds, relevant lifetimes and checked sum, together with any unresolved
+fact. If any required path or quantity lacks an actual bound, then the entire claimed
+named-workspace bound SHALL remain UNPROVEN rather than be completed by an opaque
+reserve. Prior Tests, artifact matching, a debug build or a proof for another build
+shall not supply completion credit for this Analysis.
+
 Every emitted `KaniExecutionEvidence` shall carry the mandatory field
 `charged_peak: ChargedPeakObservation`. The planned typed variants are
 `Observed { bytes: u64 }` and `NotObserved { reason: ChargedPeakNotObservedReason }`.
@@ -1397,6 +1473,16 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
 | FR-034-AC-39 | PLANNED/UNRUN. Native guardian/backend-installer policy support is source/cfg Analysis; unreachable unsupported-native support is not a fabricated runtime Test. Actual installation failures are separate production Tests when available, otherwise unavailable/UNRUN with no Test completion credit. Planned mandatory admission context distinguishes BackendIpcExclusion capability support/filter installation from TrustedOwnerProtection privilege installation, retaining typed cause provenance without message parsing or fabricated errno. The policy terminates the calling process on an unsupported syscall audit architecture; every native x86_64 policy also terminates it for x32 syscall-number/aliases regardless of kernel x32 support. Native entry, exec and descendants retain these rules. Real applicable compat/x32 tests require an unconfined actual-syscall effect control and genuine omission mutant; unavailable workload/tooling/kernel controls yield zero whole-criterion completion credit, not assertion-skipping success. This establishes no immutable target-image identity or universal incompatible-image exec/entry rejection. Actual unsuccessful/no-report termination retains NoVerdict after whole-chain settlement and existing deadline/capture/resource precedence; CleanupUnconfirmed and all other report rules remain unchanged. Path/content/PATH/interpreter/loader/binfmt_misc residuals add no stability precondition, recipe change, descriptor leak or unfiltered retry. | Test, Analysis |
 | FR-034-AC-40 | PLANNED/UNRUN. Only declared trusted role/operation/phase causes use the cross-role representation. Actual kind/errno, independently authenticated optional finite provenance and loss survive privately; public projection applies only to existing io::Error-cause-bearing refusals. Post-admission observation/settlement detail-only results keep their existing shape/mapping, private finite facts/loss and diagnostic-only text, with no public marker/carrier/downcast promise or Tool reclassification; generic original custom sources/chains are lost explicitly, including valid original boxed declared operational categories but excluding required encoding/checking faults, with typed public KaniCrossRoleCauseLoss detectable by get_ref/downcast on no-errno opaque projections. Loss-free OS and payload-free causes remain unmarked; OS projection preserves public errno directly. The closed named-kind domain requires exhaustive actual sender/build source Analysis before CODE delivery; adding an emitted no-errno kind requires producer-side reviewed encoding support first. Genuine admission errors keep site-first Unavailable regardless of kind/errno; a complete bounded authenticated required-representation fault report with no prior representable original cause gives actual InvalidData/no-errno integrity in an existing I/O-cause-bearing result (no loss marker), retaining the actual sender predicate, not original replay; absent reports supply no invented received fault; unknown/malformed/incomplete cause metadata at an independently authenticated negative admission site yields Unavailable with that site's admission context and actual local InvalidData/no-errno KaniCauseMetadataIntegrityError recognized by get_ref/downcast, not original producer replay or a loss marker. Genuine original payload-free/local custom InvalidData must not be misidentified as integrity by kind or source-presence heuristics. Unauthenticated site faults retain the specified startup/protocol path; no Dispatch or evidence. Optional diagnostic failure preserves the retained original cause. Actual producer conversions determine kind/source presence without normalization or allocation-kind/layout inference. Local original sources, stronger AC-39 public-source/provenance duties, existing charges, cutoffs and settlement precedence remain. Public API/refusal rustdoc states the existing I/O-cause-carrier scope versus private-only detail results, get_ref/downcast detection of both KaniCrossRoleCauseLoss and KaniCauseMetadataIntegrityError, required sender-representation fault recognition versus valid original causes, and absence of an original-source/stage-query promise for those projected types. Standalone Analysis and genuine available transport/consumer Tests remain PLANNED/UNRUN with no prior-row credit, forced allocation failure, new refusal catalog, acknowledgment, budget or NotObserved reason. | Test, Analysis |
+| FR-034-AC-41 | PLANNED/UNRUN (IR-682). For a named native-accounting conformance claim, the analysis identifies the exact consumer build configuration and compiler actually used, including resolved profile/features/target/flags/runtime/allocator. A proof for a different configuration cannot establish that claim. | Analysis |
+| FR-034-AC-42 | PLANNED/UNRUN (IR-682). The proof is derived from stable objdump disassembly of the actual final linked executable after LTO/linking. A crate-level or pre-link emit-asm/emit-obj result cannot pass as that final-artifact proof. | Analysis |
+| FR-034-AC-43 | PLANNED/UNRUN (IR-682). The named operation roots and every reachable direct or indirect call target are accounted for. An unresolved reachable indirect target leaves the native-workspace bound UNPROVEN. | Analysis |
+| FR-034-AC-44 | PLANNED/UNRUN (IR-682). A reachable recursive call cycle, including one through an external callee, leaves the native-workspace bound UNPROVEN under this nonrecursive method. | Analysis |
+| FR-034-AC-45 | PLANNED/UNRUN (IR-682). The native-stack bound is the maximum simultaneously live stack sum over the reachable paths, accounting for actual tail-call frame replacement and dynamic adjustments. An unresolved frame or adjustment cannot be filled by a guessed reserve. | Analysis |
+| FR-034-AC-46 | PLANNED/UNRUN (IR-682). The analysis covers the actual linked panic strategy: reachable unwind/landing-pad and cleanup paths contribute to the stack bound, or the final artifact establishes their absence under abort. Assuming the strategy from a source profile default fails. | Analysis |
+| FR-034-AC-47 | PLANNED/UNRUN (IR-682). Each relevant external library/runtime/libc/allocator frame contributing to the named native workspace has an explicit finite bound source. A missing source leaves the whole named-workspace claim UNPROVEN without changing the existing incidental-allocation exclusions. | Analysis |
+| FR-034-AC-48 | PLANNED/UNRUN (IR-682). The named heap inventory covers actual retained and temporary allocation capacities and their simultaneous lifetimes. A larger actual capacity or overlapping temporary omitted from the checked caller-buffer sum fails the conformance claim. | Analysis |
+| FR-034-AC-49 | PLANNED/UNRUN (IR-682). A change to the source head, exact configuration/compiler or resulting executable invalidates the former proof and requires analysis again. A stale proof or merely matching caller/helper artifact does not satisfy native-accounting conformance. | Analysis |
+| FR-034-AC-50 | PLANNED/UNRUN (IR-682). Missing or incomplete native-workspace proof leaves the exact configuration UNPROVEN and its conformance claim fails. This build gate introduces no runtime refusal/public capability or evidence of completed Analysis; the initial release configuration and other eligible configurations remain UNPROVEN until their own proofs exist. | Analysis |
 
 ## Dependencies
 

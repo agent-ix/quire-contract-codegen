@@ -899,6 +899,51 @@ Runtime evidence must cover later ticks and final settlement; bootstrap success/
 is insufficient. All failure checks preserve existing classification, original timer and owned
 cleanup obligations.
 
+### Supported-build named native workspace (FR-034-AC-41 through FR-034-AC-50)
+
+These are PLANNED/UNRUN Analysis procedures. They allocate no runtime fixture,
+new refusal or completed native-accounting evidence. Existing memory observation,
+settlement and report Tests remain required independently.
+
+1. For the initial luna Linux x86_64 GNU release configuration, record the actual
+   consumer manifest/package selection, resolved profile/features/target/ABI,
+   compiler selected by the existing build environment and actual flags/linker,
+   runtime and allocator. Require the normal matched library/helper artifact rules;
+   keep feature-on verification separate from feature-off production. Treat any
+   other profile/flags/compiler/target as a separate claim. Read resolved values;
+   do not assume the panic strategy or a consumer profile from Cargo defaults.
+2. Obtain stable objdump disassembly of the actual delivered final linked executable
+   after thin LTO and linker passes. Reject pre-link assembly, crate-level emit-asm
+   or emit-obj as substitutes. Identify the roots for every named caller control/
+   capture operation, including success, refusal, cancellation and error paths.
+3. Construct the complete reachable machine-code call graph. Enumerate indirect
+   targets or establish an unreachable indirect site. Mark any unknown target or
+   recursive strongly connected component UNPROVEN; a source-level nonrecursive
+   decoder cannot establish this condition by itself. Document every tail-call
+   stack adjustment and frame replacement rather than summing source frames.
+4. Derive maximum simultaneously live native-stack usage. Follow actual unwind,
+   landing-pad and cleanup paths, or establish their absence in an abort build.
+   Require explicit finite sources for external/runtime/libc/allocator frames that
+   contribute to the named workspace. An unresolved dynamic stack adjustment,
+   callee bound or edge fails the whole conformance claim; do not add a reserve.
+5. Inventory each named heap allocation's actual capacity and lifetime, including
+   retained buffers and temporary decoding/formatting/collection overlap. Derive
+   the checked caller-buffer sum with the maximum native-stack contribution.
+   Inspect that no named live allocation is silently omitted or reclassified under
+   the unchanged incidental-caller exclusions. A requested capacity is insufficient
+   if the actual allocation is larger; justified conservative overcount is permitted.
+6. Attempt to reuse that proof after each kind of source/configuration/compiler/
+   executable change. Require a new analysis before a conformance claim. An
+   unavailable or incomplete proof remains UNPROVEN; no runtime refusal, public
+   cause, request field or changed budget is manufactured. Evidence stays bound
+   operationally to the exact build, without a committed pin/checksum catalog.
+
+Expected pass: a complete reproducible operational analysis accounts for every
+required path and named stack/heap quantity for its exact current build. Expected
+failure: any missing/stale quantity, path or build attribution yields UNPROVEN and
+no native-accounting conformance credit. Other eligible targets remain UNPROVEN
+until their own analyses; this procedure does not certify whole-C runtime memory.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
