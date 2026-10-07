@@ -498,9 +498,10 @@ impl CallerBootstrap {
             super::outer_reply::decode_bytes().map_err(CallerBootstrapError::Control)?,
             u64::try_from(startup_context.reserved_bytes())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
-            super::startup_envelope::inner_startup_decode_bytes()
-                .map_err(CallerBootstrapError::Control)?,
-            super::startup_envelope::inner_event_decode_bytes()
+            super::inner_reply_decode::decode_bytes().map_err(|source| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(source))
+            })?,
+            super::startup_envelope::inner_reply_view_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             super::stages::CallerLeaseClient::metadata_reservation()
                 .map_err(CallerBootstrapError::Stage)?,
@@ -1879,7 +1880,13 @@ impl CallerBootstrap {
                 &client.transport(),
                 super::startup_envelope::InnerEventHeader::rights_count,
                 cutoff,
-                super::startup_envelope::decode_inner_event,
+                |payload| {
+                    super::startup_envelope::decode_inner_event(
+                        payload,
+                        &mut self.startup_context,
+                        &mut self.decode_scratch,
+                    )
+                },
             )
             .map_err(CallerBootstrapError::Control)?
         else {

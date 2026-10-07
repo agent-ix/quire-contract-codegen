@@ -51,6 +51,8 @@ mod caller_streams;
 #[cfg(target_os = "linux")]
 mod helper_entry;
 #[cfg(target_os = "linux")]
+mod inner_reply_decode;
+#[cfg(target_os = "linux")]
 mod installer_reply_decode;
 #[cfg(target_os = "linux")]
 mod launcher_owner;
