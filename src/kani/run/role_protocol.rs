@@ -120,9 +120,27 @@ pub(super) fn startup_deadline_from_parts(
     Ok(work.local()?.map_or(cap, |deadline| deadline.min(cap)))
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum LauncherControl {
+// The owning declaration supplies both emitted fields and parsed variant field order.
+macro_rules! bootstrap_controls {
+    ($name:ident, $kind:ident { $($(#[$attribute:meta])* $variant:ident { $($field:ident: $value:ty),+ $(,)? }),+ $(,)? }) => {
+        #[derive(Deserialize, Serialize)]
+        #[serde(tag = "kind", deny_unknown_fields)]
+        pub(super) enum $name { $($(#[$attribute])* $variant { $($field: $value),+ }),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum $kind { $($variant),+ }
+        impl $kind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+            pub(super) fn declared_fields(self) -> &'static [&'static str] {
+                match self { $(Self::$variant => &[$(stringify!($field)),+]),+ }
+            }
+        }
+    };
+}
+
+bootstrap_controls! { LauncherControl, LauncherControlKind {
     /// Rights: actual creating-thread pin, actual C process pin, I lease endpoint, O endpoint.
     Start { settings: RunSettings },
     /// Same original settlement cutoff; this is not a fresh allowance at L.
@@ -133,7 +151,7 @@ pub(super) enum LauncherControl {
     },
     /// C has consumed actual O custody while L remained live on the original endpoint.
     Retire { authority: RunAuthority },
-}
+}}
 
 impl LauncherControl {
     pub(super) fn rights_count(&self) -> usize {
@@ -144,12 +162,20 @@ impl LauncherControl {
     }
 }
 
-/// Private whole-owner settlement selection, never a public caller cancellation handle.
-#[derive(Clone, Copy, Deserialize, Serialize)]
-pub(super) enum LauncherSettlementMode {
-    ObserveOuterExit,
-    CancelOuter,
+macro_rules! settlement_modes {
+    ($($variant:ident),+ $(,)?) => {
+        /// Private whole-owner settlement selection, never a public caller cancellation handle.
+        #[derive(Clone, Copy, Deserialize, Serialize)]
+        pub(super) enum LauncherSettlementMode { $($variant),+ }
+        impl LauncherSettlementMode {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+settlement_modes!(ObserveOuterExit, CancelOuter);
 
 /// Trusted L reports only custody established from its retained actual Child wait result.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -185,9 +211,7 @@ impl LauncherReply {
     }
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum OuterBootstrap {
+bootstrap_controls! { OuterBootstrap, OuterBootstrapKind {
     /// Rights: actual L process pin, actual C process pin, O endpoint, I lease endpoint.
     Start {
         settings: RunSettings,
@@ -197,7 +221,7 @@ pub(super) enum OuterBootstrap {
     },
     /// Rights: actual L stat/status files, opened before private proc replacement.
     LauncherObservation { authority: RunAuthority },
-}
+}}
 
 impl OuterBootstrap {
     pub(super) fn rights_count(&self) -> usize {
@@ -230,9 +254,7 @@ impl OuterArmReply {
     }
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum InnerBootstrap {
+bootstrap_controls! { InnerBootstrap, InnerBootstrapKind {
     /// Rights: actual O process pin, actual C process pin, original I lease endpoint.
     Start {
         settings: RunSettings,
@@ -240,7 +262,7 @@ pub(super) enum InnerBootstrap {
         report: PipeIdentity,
         report_slot: i32,
     },
-}
+}}
 
 impl InnerBootstrap {
     pub(super) fn rights_count(&self) -> usize {
