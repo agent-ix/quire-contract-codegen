@@ -89,6 +89,7 @@ pub(super) struct CallerExecution {
     report: Option<Vec<u8>>,
     roles: Option<CallerRoleSettlement>,
     lease_closed: bool,
+    work_expired: bool,
     limit: usize,
     harnesses: NonZeroUsize,
 }
@@ -141,6 +142,7 @@ impl CallerExecution {
             report: None,
             roles: None,
             lease_closed: false,
+            work_expired: false,
             limit,
             harnesses,
         })
@@ -160,10 +162,20 @@ impl CallerExecution {
     /// One actual nonblocking actor step; None retains the original no-work-cutoff admission.
     pub(super) fn advance(&mut self) -> Result<CallerDriveProgress, CallerExecutionError> {
         let cutoff = self.clock.progress_cutoff();
-        let progress = self
+        let progress = match self
             .driver
             .step(&mut self.bootstrap, &mut self.clock, cutoff)
-            .map_err(CallerExecutionError::Progress)?;
+        {
+            Ok(progress) => progress,
+            Err(error) => {
+                if matches!(error, CallerDriveError::WorkExpired) {
+                    // The actual driver captured C's first trigger before returning this error.
+                    // Generic local failure/cancellation cannot select a timeout outcome.
+                    self.work_expired = true;
+                }
+                return Err(CallerExecutionError::Progress(error));
+            }
+        };
         match progress {
             CallerDriveProgress::Dispatched => {
                 self.bootstrap.publication.publish(Stage::Dispatched)
@@ -245,6 +257,43 @@ impl CallerExecution {
             .streams
             .settle(roles)
             .map_err(CallerExecutionError::Io)
+    }
+
+    /// Classify only C's retained genuine work-expiry candidate after authenticated cancellation,
+    /// final actual O measurements and every normal role/EOF/capture/creator settlement. A real
+    /// independently established owner stop retains its original resource/timeout precedence.
+    pub(super) fn finish_cancelled_timeout(
+        &mut self,
+    ) -> Result<(BoundedLaunch, MeasuredPeaks), CallerExecutionError> {
+        if !self.work_expired {
+            return Err(CallerExecutionError::Bootstrap(
+                CallerBootstrapError::TerminalTransition,
+            ));
+        }
+        if self.bootstrap.owner_stop_pending() {
+            return self.finish_owner_stopped();
+        }
+        let captures = self.finish_cancelled()?;
+        drop(captures);
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        let peaks = self
+            .bootstrap
+            .settled_cancellation_peaks(roles)
+            .map_err(CallerExecutionError::Bootstrap)?;
+        drop(self.report.take());
+        Ok((
+            BoundedLaunch {
+                report: Ok(None),
+                outcome: LaunchOutcome::TimedOut,
+                memory: MemoryObservation {
+                    mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                    peak_resident_bytes: Some(peaks.tree_rss_bytes),
+                },
+            },
+            peaks,
+        ))
     }
 
     /// Preserve a genuine independent O resource/work stop even beside C cancellation or

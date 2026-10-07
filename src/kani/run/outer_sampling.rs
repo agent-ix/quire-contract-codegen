@@ -638,6 +638,10 @@ impl OuterRunOwner {
             .encode(&OuterTerminalReply::Cancelled {
                 authority: sampling.settings.authority,
                 stop,
+                peaks: sampling
+                    .ledger
+                    .measured_peaks()
+                    .map_err(SamplingError::Charge)?,
             })
             .map_err(SamplingError::Control)?;
         let due = started
@@ -1150,6 +1154,7 @@ impl TerminalDelivery {
                     OuterTerminalReply::Cancelled {
                         authority: self.sampling.settings.authority,
                         stop,
+                        peaks,
                     }
                 } else {
                     OuterTerminalReply::Committed {

@@ -352,10 +352,12 @@ pub(super) enum OwnerStopCause {
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum OuterTerminalReply {
     /// Provisional receipt of authenticated caller cancellation after actual M settlement.
-    /// No report, observation or classification authority is created; C still confirms actual
-    /// normal O/L/capture/creator settlement inside the original cutoff.
+    /// Required peaks come from successful complete O observations; they remain provisional.
+    /// No report or classification authority is created; C still confirms actual normal
+    /// O/L/capture/creator settlement inside the original cutoff.
     Cancelled {
         authority: RunAuthority,
+        peaks: MeasuredPeaks,
         stop: StopStamp,
     },
     ReportDescriptor {
@@ -410,6 +412,7 @@ pub(super) enum CallerTerminalControl {
 pub(super) enum CancellationHeader {
     Cancelled {
         authority: RunAuthority,
+        peaks: MeasuredPeaks,
         stop: StopStamp,
     },
     OwnerStop {
@@ -576,12 +579,15 @@ struct CancellationReplySelector {
 struct CancelledReply {
     kind: CancellationReplyKind,
     authority: RunAuthority,
+    peaks: MeasuredPeaks,
     stop: StopStamp,
 }
 
 /// Admit only an exact cancellation receipt or the existing exact resource/timeout commit.
 /// Ordinary startup/report decoders deliberately continue to reject Cancelled; no EOF waiver,
 /// second framer, I completion, observation substitute or report permission follows this result.
+/// Peak fields are mandatory scalar metadata; actual complete observation and live measurement
+/// bounds are authenticated by the actor, never inferred from schema acceptance.
 pub(super) fn decode_cancellation_commit(
     payload: &[u8],
 ) -> Result<CancellationHeader, super::control::ControlError> {
@@ -602,6 +608,7 @@ pub(super) fn decode_cancellation_commit(
             }
             Ok(CancellationHeader::Cancelled {
                 authority: reply.authority,
+                peaks: reply.peaks,
                 stop: reply.stop,
             })
         }
@@ -628,6 +635,7 @@ pub(super) fn decode_cancellation_commit(
 
 /// Fixed scalar close/cancellation decode storage, charged before L or writer exposure. Original
 /// frame/right storage is separate; no dynamic context or serde Content accumulator is reserved.
+/// The record/result sizes include the required peak fields, without a separately copied ceiling.
 pub(super) fn cancellation_decode_bytes() -> Result<u64, super::control::ControlError> {
     use super::control::ControlError;
     let total = std::mem::size_of::<CallerCloseSelector>()
@@ -1062,14 +1070,24 @@ mod tests {
             assert!(decode_cancellation_progress(&trailing[..trailing.len() / 2]).is_err());
         }
         let stop = StopStamp::capture(StopOrigin::Caller).unwrap();
-        let cancelled =
-            serde_json::to_vec(&OuterTerminalReply::Cancelled { authority, stop }).unwrap();
+        let peaks = MeasuredPeaks {
+            tree_rss_bytes: 7,
+            charged_bytes: 19,
+        };
+        let cancelled = serde_json::to_vec(&OuterTerminalReply::Cancelled {
+            authority,
+            peaks,
+            stop,
+        })
+        .unwrap();
         let receipt = decode_cancellation_progress(&cancelled).unwrap();
         assert_eq!(receipt.rights_count(), 0);
         assert!(
             matches!(receipt, CancellationProgress::Terminal(CancellationHeader::Cancelled {
-            authority: actual, stop: actual_stop,
-        }) if actual == authority && actual_stop == stop)
+            authority: actual, peaks: actual_peaks, stop: actual_stop,
+        }) if actual == authority && actual_stop == stop
+            && actual_peaks.tree_rss_bytes == peaks.tree_rss_bytes
+            && actual_peaks.charged_bytes == peaks.charged_bytes)
         );
         for cause in [OwnerStopCause::ResourceExhausted, OwnerStopCause::TimedOut] {
             let stop_commit = serde_json::to_vec(&OuterTerminalReply::Committed {
@@ -1189,10 +1207,18 @@ mod tests {
 
     /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.
     #[test]
-    fn cancellation_receipt_has_no_report_or_measurement_authority() {
+    fn cancellation_receipt_requires_exact_peaks_without_report_authority() {
         let authority = RunAuthority::fresh().unwrap();
         let stop = StopStamp::capture(StopOrigin::Caller).unwrap();
-        let receipt = OuterTerminalReply::Cancelled { authority, stop };
+        let peaks = MeasuredPeaks {
+            tree_rss_bytes: 7,
+            charged_bytes: 19,
+        };
+        let receipt = OuterTerminalReply::Cancelled {
+            authority,
+            peaks,
+            stop,
+        };
         assert_eq!(receipt.rights_count(), 0);
         let original = serde_json::to_value(receipt).unwrap();
         let bytes = serde_json::to_vec(&original).unwrap();
@@ -1200,6 +1226,7 @@ mod tests {
         assert_eq!(header.rights_count(), 0);
         let CancellationHeader::Cancelled {
             authority: actual,
+            peaks: actual_peaks,
             stop: actual_stop,
         } = header
         else {
@@ -1207,10 +1234,12 @@ mod tests {
         };
         assert_eq!(actual, authority);
         assert_eq!(actual_stop, stop);
+        assert_eq!(actual_peaks.tree_rss_bytes, peaks.tree_rss_bytes);
+        assert_eq!(actual_peaks.charged_bytes, peaks.charged_bytes);
         assert!(decode_outer_startup(&bytes).is_err());
         assert!(decode_report_start(&bytes).is_err());
         assert!(decode_terminal_commit(&bytes).is_err());
-        for field in ["kind", "authority", "stop"] {
+        for field in ["kind", "authority", "peaks", "stop"] {
             let mut missing = original.clone();
             missing.as_object_mut().unwrap().remove(field);
             assert!(decode_cancellation_commit(&serde_json::to_vec(&missing).unwrap()).is_err());
@@ -1218,11 +1247,26 @@ mod tests {
             malformed[field] = serde_json::Value::Null;
             assert!(decode_cancellation_commit(&serde_json::to_vec(&malformed).unwrap()).is_err());
         }
-        for field in ["peaks", "cause", "bytes", "disposition", "deadline"] {
+        for field in ["cause", "bytes", "disposition", "deadline"] {
             let mut extra = original.clone();
             extra[field] = serde_json::Value::Null;
             assert!(decode_cancellation_commit(&serde_json::to_vec(&extra).unwrap()).is_err());
         }
+        for field in ["tree_rss_bytes", "charged_bytes"] {
+            let mut missing = original.clone();
+            missing["peaks"].as_object_mut().unwrap().remove(field);
+            let encoded = serde_json::to_vec(&missing).unwrap();
+            assert!(decode_cancellation_commit(&encoded).is_err());
+            assert!(decode_cancellation_progress(&encoded).is_err());
+            let mut malformed = original.clone();
+            malformed["peaks"][field] = serde_json::Value::Null;
+            let encoded = serde_json::to_vec(&malformed).unwrap();
+            assert!(decode_cancellation_commit(&encoded).is_err());
+            assert!(decode_cancellation_progress(&encoded).is_err());
+        }
+        let mut extra_peak = original.clone();
+        extra_peak["peaks"]["unknown"] = 1.into();
+        assert!(decode_cancellation_commit(&serde_json::to_vec(&extra_peak).unwrap()).is_err());
         let encoded = serde_json::to_string(&original).unwrap();
         let conflicting = encoded.replacen("{", "{\"kind\":\"Committed\",", 1);
         assert!(decode_cancellation_commit(conflicting.as_bytes()).is_err());
