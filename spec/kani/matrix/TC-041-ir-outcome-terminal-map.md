@@ -99,8 +99,11 @@ cause, and that the map is one match with no wildcard arm.
 
 ## Status
 
-Steps 1 to 13 are implemented in `tests/it/terminal_map.rs`; steps 14 to 16 are planned for the
-IR-666 code consumer after QSL #645 and IR-665's gate repair. Step 7's inspection is a `syn`
+Steps 1 to 13 are implemented in `tests/it/terminal_map.rs`. IR-666's public converter tests
+exercise steps 14 to 16 against genuine QSL F-1 to F-7 reports, including native causes, limit
+stages, complete identity binding and the `prepare` refusal. The original-artifact builder,
+same-artifact native execution and production invocation remain planned under IR-635. Step 7's
+inspection is a `syn`
 test over `kani/terminal.rs`. Step 9 maps a `Counterexample` with `ReplaySettlement::Fault`, with
 each fault wrapper FR-029-AC-10 lists (built from QSL's constructible `InternalFault`, QSL
 bcca433), and with each CG-raised failure FR-029-AC-11 lists, in one test traced to FR-030-AC-10.
