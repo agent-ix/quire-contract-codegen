@@ -249,24 +249,6 @@ impl BackendInstallerControl {
     }
 }
 
-/// Positive installation, not mere helper spawn or transport EOF, admits I's Ready transition.
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum BackendInstallerReply {
-    PolicyReady {
-        identity: BuildIdentity,
-        authority: RunAuthority,
-    },
-}
-
-impl BackendInstallerReply {
-    pub(super) fn rights_count(&self) -> usize {
-        match self {
-            Self::PolicyReady { .. } => 0,
-        }
-    }
-}
-
 /// Ordinary private C→O startup transitions. Each authorization names the original run;
 /// no command changes the original deadline, grants Dispatch or carries fixture observations.
 #[derive(Deserialize, Serialize)]

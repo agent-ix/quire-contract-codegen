@@ -10,6 +10,7 @@
 
 use std::{collections::TryReserveError, fmt, io};
 
+use serde::de::Error as _;
 use serde::{de, Deserialize, Serialize};
 
 use super::control::CONTROL_BYTES;
@@ -275,6 +276,16 @@ impl PreparedStartupContext {
         &self.text
     }
 
+    /// Exact original UTF-8 as a borrowed JSON byte sequence. Dynamic context then requires no
+    /// JSON string-unescaping scratch; the whole envelope still needs separate lexical bounds.
+    pub(super) fn context_bytes(&self) -> &[u8] {
+        self.text.as_bytes()
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.text.clear();
+    }
+
     /// Capture the original error without allocating its Display into an intermediate String.
     pub(super) fn capture_io(
         &mut self,
@@ -284,6 +295,16 @@ impl PreparedStartupContext {
         let cause = StartupIoCause::capture(error)?;
         self.capture_display(error)?;
         Ok(StartupCause::Io(cause))
+    }
+
+    /// Non-I/O typed failure metadata is chosen separately by its concrete enum arm. Context
+    /// captures only the genuine diagnostic; it never supplies an I/O kind or capability.
+    pub(super) fn capture_context(
+        &mut self,
+        error: &impl fmt::Display,
+    ) -> Result<(), RepresentationError> {
+        self.text.clear();
+        self.capture_display(error)
     }
 
     /// Capture actual public installation variants exhaustively. Backend compilation errors
@@ -336,6 +357,13 @@ impl PreparedStartupContext {
         self.text.clear();
         StartupContextSeed(self)
     }
+
+    /// Decode byte-sequence context into the same actual retained String capacity. At most four
+    /// UTF-8 bytes are staged on the stack; malformed/incomplete UTF-8 and overflow refuse.
+    pub(super) fn bytes_seed(&mut self) -> StartupBytesSeed<'_> {
+        self.text.clear();
+        StartupBytesSeed(self)
+    }
 }
 
 struct BoundedWriter<'a> {
@@ -380,4 +408,116 @@ impl<'de> de::Visitor<'de> for StartupContextSeed<'_> {
         self.0.text.push_str(value);
         Ok(())
     }
+}
+
+pub(super) struct StartupBytesSeed<'a>(&'a mut PreparedStartupContext);
+
+impl<'de> de::DeserializeSeed<'de> for StartupBytesSeed<'_> {
+    type Value = ();
+
+    fn deserialize<D: de::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        deserializer.deserialize_seq(self)
+    }
+}
+
+impl<'de> de::Visitor<'de> for StartupBytesSeed<'_> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("bounded original UTF-8 startup context as bytes")
+    }
+
+    fn visit_seq<A: de::SeqAccess<'de>>(self, mut sequence: A) -> Result<(), A::Error> {
+        let mut staged = [0_u8; 4];
+        let mut length = 0_usize;
+        while let Some(byte) = sequence.next_element::<u8>()? {
+            let slot = staged
+                .get_mut(length)
+                .ok_or_else(|| A::Error::custom("invalid UTF-8 context"))?;
+            *slot = byte;
+            length = length
+                .checked_add(1)
+                .ok_or_else(|| A::Error::custom(RepresentationError::ContextExceeded))?;
+            let current = staged
+                .get(..length)
+                .ok_or_else(|| A::Error::custom("invalid UTF-8 context"))?;
+            match std::str::from_utf8(current) {
+                Ok(text) => {
+                    if text.len() > self.0.limit.saturating_sub(self.0.text.len()) {
+                        return Err(A::Error::custom(RepresentationError::ContextExceeded));
+                    }
+                    self.0.text.push_str(text);
+                    length = 0;
+                }
+                Err(error) if error.error_len().is_none() => {}
+                Err(_) => return Err(A::Error::custom("invalid UTF-8 context")),
+            }
+        }
+        if length != 0 {
+            return Err(A::Error::custom("incomplete UTF-8 context"));
+        }
+        Ok(())
+    }
+}
+
+/// Scratch-excluding admission of the private startup envelope's canonical producer subset.
+/// The producer emits only static unescaped string labels, integral metadata and UTF-8 context
+/// as a byte sequence. This is not a replacement JSON/schema decoder: serde still validates
+/// exact fields/types and trailing input after this finite allocation-free preflight.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum StartupJsonError {
+    EncodedBound,
+    EscapedString,
+    NonIntegralNumber,
+    IntegerOverflow,
+    UnclosedString,
+}
+
+impl fmt::Display for StartupJsonError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "private startup JSON refused: {self:?}")
+    }
+}
+
+/// Prevent serde_json's private scratch Vec from allocating for escaped strings or malformed
+/// numeric overflow/float paths, including dependency feature unification with float_roundtrip.
+/// Ordinary unescaped slice strings and checked integral tokens use its borrowed/stack paths.
+/// Error-formatting/runtime internals remain opaque incidental allocations, not caller buffers.
+pub(super) fn check_scratch_free_json(bytes: &[u8]) -> Result<(), StartupJsonError> {
+    if bytes.is_empty() || bytes.len() > CONTROL_BYTES {
+        return Err(StartupJsonError::EncodedBound);
+    }
+    let mut string = false;
+    let mut integer: Option<u64> = None;
+    for byte in bytes {
+        if string {
+            match byte {
+                b'\\' => return Err(StartupJsonError::EscapedString),
+                b'"' => string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => {
+                string = true;
+                integer = None;
+            }
+            b'0'..=b'9' => {
+                integer = Some(
+                    integer
+                        .unwrap_or(0)
+                        .checked_mul(10)
+                        .and_then(|value| value.checked_add(u64::from(*byte - b'0')))
+                        .ok_or(StartupJsonError::IntegerOverflow)?,
+                );
+            }
+            b'.' | b'e' | b'E' => return Err(StartupJsonError::NonIntegralNumber),
+            _ => integer = None,
+        }
+    }
+    if string {
+        return Err(StartupJsonError::UnclosedString);
+    }
+    Ok(())
 }
