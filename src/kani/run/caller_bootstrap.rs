@@ -1600,10 +1600,14 @@ impl CallerBootstrap {
         self.require_startup_owners(cutoff)?;
         let Some(received) = self
             .outer_receive
-            .advance::<OuterPhaseReply>(
+            .advance_decode(
                 &self.outer_control.transport(),
                 OuterPhaseReply::rights_count,
                 cutoff,
+                |payload| {
+                    super::launcher_reply_decode::phase(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?
         else {
@@ -1659,10 +1663,14 @@ impl CallerBootstrap {
         let received = self
             .outer_control
             .transport()
-            .receive_prepared::<OuterPhaseReply>(
+            .receive_prepared_decode(
                 &mut self.receive,
                 OuterPhaseReply::rights_count,
                 self.deadline,
+                |payload| {
+                    super::launcher_reply_decode::phase(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?;
         let control = received.control;
