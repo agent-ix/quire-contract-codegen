@@ -102,6 +102,11 @@ impl SamplingPreparation {
     }
 
     fn prepare_resources(&mut self, outer: &PreparedOuter<'_>) -> Result<(), SamplingError> {
+        // The outer owner retained its terminal reservation before entering this constructor.
+        // Check the original T-R_eff cutoff while this SAME builder still proves that no
+        // observation has been attempted. Setup-cap/original-T expiry is a separate check;
+        // neither its error nor a later receipt can elect exhausted original work.
+        self.require_work_live()?;
         self.settings
             .setup_deadline
             .local()
@@ -138,6 +143,7 @@ impl SamplingPreparation {
             cause,
         })?;
 
+        self.require_work_live()?;
         self.settings
             .setup_deadline
             .local()
@@ -158,6 +164,18 @@ impl SamplingPreparation {
         );
         self.stops =
             Some(StopTimeline::prepare(self.settings.started).map_err(SamplingError::Deadline)?);
-        Ok(())
+        // Do not transfer to OuterSampling and take its first complete observation after
+        // work expired during construction. Err returns this original builder and every
+        // returned object; the owner captures the original stop before publishing the error.
+        self.require_work_live()
+    }
+
+    fn require_work_live(&self) -> Result<(), SamplingError> {
+        // None is the original never-elapsing work admission, not an absent observation or
+        // a new setup/settlement allowance. A finite expired bound remains typed Expired.
+        self.settings
+            .work_deadline()
+            .map(|_| ())
+            .map_err(SamplingError::Deadline)
     }
 }
