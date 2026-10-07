@@ -424,7 +424,7 @@ impl CallerLeaseClient {
     pub(super) fn send_step(
         &mut self,
         stdin: &OriginalStdin,
-        cutoff: Instant,
+        cutoff: Option<Instant>,
     ) -> Result<bool, StageError> {
         if self.failed || !matches!(self.state, CallerLeaseState::Sending) {
             return Err(StageError::UnexpectedControl);
@@ -444,7 +444,7 @@ impl CallerLeaseClient {
             .dispatch
             .as_mut()
             .ok_or(StageError::UnexpectedControl)?
-            .advance(
+            .advance_optional(
                 &self.ready.bootstrap.lease.transport(),
                 descriptor.as_slice(),
                 cutoff,

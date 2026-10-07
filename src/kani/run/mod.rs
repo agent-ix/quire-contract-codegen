@@ -34,6 +34,8 @@ mod caller_driver;
 #[cfg(target_os = "linux")]
 mod caller_prepare;
 #[cfg(target_os = "linux")]
+mod caller_result;
+#[cfg(target_os = "linux")]
 mod caller_streams;
 #[cfg(target_os = "linux")]
 mod helper_entry;
