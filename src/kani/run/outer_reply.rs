@@ -16,7 +16,10 @@ use super::{
     resource_ledger::MeasuredPeaks,
     role_control_scalar_decode,
     role_deadline::StopStamp,
-    role_protocol::{OuterPhaseReply, OuterStartupControl, StartupReplyKind as ReplyKind},
+    role_protocol::{
+        CancellationHeader, CancellationProgress, OuterPhaseReply, OuterReplyKind as ReplyKind,
+        OuterStartupControl, OuterTerminalReply, ReportStartHeader, TerminalDisposition,
+    },
     role_scalar_decode,
     startup_cause::PreparedStartupContext,
 };
@@ -24,6 +27,14 @@ use super::{
 pub(super) enum OuterReply {
     Startup(OuterStartupControl),
     Failure(FailureHeader),
+}
+
+// Parsed frame facts are shared, while each public(super) entrypoint below admits only its
+// original state-specific subset. This object owns no receive cursor or actor authority.
+enum Frame {
+    Startup(OuterStartupControl),
+    Failure(FailureHeader),
+    Terminal(OuterTerminalReply),
 }
 
 impl OuterReply {
@@ -53,6 +64,7 @@ enum ReplyField {
     Start,
     Namespace,
     Peaks,
+    Bytes,
 }
 
 impl ReplyField {
@@ -73,6 +85,8 @@ impl ReplyField {
             Ok(Self::Namespace)
         } else if text.equals("peaks") {
             Ok(Self::Peaks)
+        } else if text.equals("bytes") {
+            Ok(Self::Bytes)
         } else {
             Err(field_error(DecodeCause::UnknownField))
         }
@@ -89,6 +103,7 @@ struct ReplyFields {
     start: Option<u64>,
     namespace: Option<NamespaceIdentity>,
     peaks: Option<MeasuredPeaks>,
+    bytes: Option<u64>,
 }
 
 fn field_error(cause: DecodeCause) -> DecodeError {
@@ -99,7 +114,7 @@ fn required<T>(value: Option<T>) -> Result<T, DecodeError> {
 }
 
 impl ReplyFields {
-    fn finish(self) -> Result<OuterReply, DecodeError> {
+    fn finish(self) -> Result<Frame, DecodeError> {
         let authority = required(self.authority)?;
         match required(self.kind)? {
             ReplyKind::MonitorSpawned | ReplyKind::GateReleased => {
@@ -109,27 +124,30 @@ impl ReplyFields {
                     || self.start.is_some()
                     || self.namespace.is_some()
                     || self.peaks.is_some()
+                    || self.bytes.is_some()
                 {
                     return Err(field_error(DecodeCause::UnknownField));
                 }
                 let phase = match required(self.kind)? {
                     ReplyKind::MonitorSpawned => OuterPhaseReply::MonitorSpawned { authority },
                     ReplyKind::GateReleased => OuterPhaseReply::GateReleased { authority },
-                    ReplyKind::InnerClaimed | ReplyKind::Committed => {
-                        return Err(field_error(DecodeCause::InvalidValue))
-                    }
+                    ReplyKind::InnerClaimed
+                    | ReplyKind::Committed
+                    | ReplyKind::ReportDescriptor
+                    | ReplyKind::Cancelled => return Err(field_error(DecodeCause::InvalidValue)),
                 };
-                Ok(OuterReply::Startup(OuterStartupControl::Phase(phase)))
+                Ok(Frame::Startup(OuterStartupControl::Phase(phase)))
             }
             ReplyKind::InnerClaimed => {
                 if self.identity.is_some()
                     || self.stop.is_some()
                     || self.disposition.is_some()
                     || self.peaks.is_some()
+                    || self.bytes.is_some()
                 {
                     return Err(field_error(DecodeCause::UnknownField));
                 }
-                Ok(OuterReply::Startup(OuterStartupControl::Phase(
+                Ok(Frame::Startup(OuterStartupControl::Phase(
                     OuterPhaseReply::InnerClaimed {
                         authority,
                         start: required(self.start)?,
@@ -137,12 +155,53 @@ impl ReplyFields {
                     },
                 )))
             }
+            ReplyKind::ReportDescriptor => {
+                if self.identity.is_some()
+                    || self.stop.is_some()
+                    || self.disposition.is_some()
+                    || self.start.is_some()
+                    || self.namespace.is_some()
+                    || self.peaks.is_some()
+                {
+                    return Err(field_error(DecodeCause::UnknownField));
+                }
+                Ok(Frame::Terminal(OuterTerminalReply::ReportDescriptor {
+                    authority,
+                    bytes: required(self.bytes)?,
+                }))
+            }
+            ReplyKind::Cancelled => {
+                if self.identity.is_some()
+                    || self.disposition.is_some()
+                    || self.start.is_some()
+                    || self.namespace.is_some()
+                    || self.bytes.is_some()
+                {
+                    return Err(field_error(DecodeCause::UnknownField));
+                }
+                Ok(Frame::Terminal(OuterTerminalReply::Cancelled {
+                    authority,
+                    peaks: required(self.peaks)?,
+                    stop: required(self.stop)?,
+                }))
+            }
             ReplyKind::Committed => {
-                if self.start.is_some() || self.namespace.is_some() {
+                if self.start.is_some() || self.namespace.is_some() || self.bytes.is_some() {
                     return Err(field_error(DecodeCause::UnknownField));
                 }
                 let stop = required(self.stop)?;
                 match required(self.disposition)? {
+                    Disposition::Report => {
+                        if self.identity.is_some() {
+                            return Err(field_error(DecodeCause::UnknownField));
+                        }
+                        Ok(Frame::Terminal(OuterTerminalReply::Committed {
+                            authority,
+                            peaks: required(self.peaks)?,
+                            stop,
+                            disposition: TerminalDisposition::Report,
+                        }))
+                    }
                     Disposition::OperationalFailure {
                         operation,
                         state,
@@ -151,7 +210,7 @@ impl ReplyFields {
                         if self.peaks.is_some() {
                             return Err(field_error(DecodeCause::UnknownField));
                         }
-                        Ok(OuterReply::Failure(FailureHeader {
+                        Ok(Frame::Failure(FailureHeader {
                             identity: required(self.identity)?,
                             authority,
                             stop,
@@ -164,7 +223,7 @@ impl ReplyFields {
                         if self.identity.is_some() {
                             return Err(field_error(DecodeCause::UnknownField));
                         }
-                        Ok(OuterReply::Startup(OuterStartupControl::OwnerStop {
+                        Ok(Frame::Startup(OuterStartupControl::OwnerStop {
                             authority,
                             peaks: required(self.peaks)?,
                             stop,
@@ -175,7 +234,7 @@ impl ReplyFields {
                         if self.identity.is_some() {
                             return Err(field_error(DecodeCause::UnknownField));
                         }
-                        Ok(OuterReply::Startup(OuterStartupControl::SetupRefused {
+                        Ok(Frame::Startup(OuterStartupControl::SetupRefused {
                             authority,
                             peaks: required(self.peaks)?,
                             stop,
@@ -190,13 +249,13 @@ impl ReplyFields {
 
 /// One exact typed union walk, with no selector skip that precedes a required cause visitor.
 /// Same original framer supplies this bounded payload; authentication/state remain actor duties.
-pub(super) fn decode(
+fn frame(
     payload: &[u8],
     context: &mut PreparedStartupContext,
     scratch: &mut Scratch,
-) -> Result<OuterReply, ControlError> {
-    context.clear();
-    let mut parse = || -> Result<OuterReply, DecodeError> {
+) -> Result<Frame, ControlError> {
+    context.begin_metadata_frame();
+    let mut parse = || -> Result<Frame, DecodeError> {
         let mut decoder = Decoder::new(payload, scratch)?;
         let mut object = decoder.begin_object()?;
         let mut fields = ReplyFields::default();
@@ -238,6 +297,7 @@ pub(super) fn decode(
                     fields.peaks,
                     role_control_scalar_decode::peaks(&mut decoder)
                 ),
+                ReplyField::Bytes => once!(fields.bytes, decoder.unsigned()),
             }
         }
         let reply = fields.finish()?;
@@ -248,14 +308,165 @@ pub(super) fn decode(
     outer_failure_decode::checked(result, context).map_err(|source| context.grammar_error(source))
 }
 
+fn unexpected_frame() -> ControlError {
+    ControlError::InvalidGrammar(field_error(DecodeCause::InvalidValue))
+}
+
+/// Original startup subset only. Complete cancellation/report data cannot advance a phase.
+pub(super) fn decode(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<OuterReply, ControlError> {
+    match frame(payload, context, scratch)? {
+        Frame::Startup(reply) => Ok(OuterReply::Startup(reply)),
+        Frame::Failure(header) => Ok(OuterReply::Failure(header)),
+        Frame::Terminal(_) => Err(unexpected_frame()),
+    }
+}
+
+fn cancellation(frame: Frame) -> Result<CancellationHeader, ControlError> {
+    match frame {
+        Frame::Terminal(OuterTerminalReply::Cancelled {
+            authority,
+            peaks,
+            stop,
+        }) => Ok(CancellationHeader::Cancelled {
+            authority,
+            peaks,
+            stop,
+        }),
+        Frame::Startup(OuterStartupControl::OwnerStop {
+            authority,
+            peaks,
+            stop,
+            cause,
+        }) => Ok(CancellationHeader::OwnerStop {
+            authority,
+            peaks,
+            stop,
+            cause,
+        }),
+        Frame::Startup(
+            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. },
+        )
+        | Frame::Failure(_)
+        | Frame::Terminal(
+            OuterTerminalReply::ReportDescriptor { .. } | OuterTerminalReply::Committed { .. },
+        ) => Err(unexpected_frame()),
+    }
+}
+
+/// Exact cancellation receipt/real owner-stop data; never report/setup/phase authority.
+pub(super) fn cancellation_commit(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<CancellationHeader, ControlError> {
+    cancellation(frame(payload, context, scratch)?)
+}
+
+/// Queued complete phase fields are decoded solely for the caller's cleanup state.
+pub(super) fn cancellation_progress(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<CancellationProgress, ControlError> {
+    match frame(payload, context, scratch)? {
+        Frame::Startup(OuterStartupControl::Phase(phase)) => Ok(CancellationProgress::Phase(phase)),
+        other => cancellation(other).map(CancellationProgress::Terminal),
+    }
+}
+
+/// Report read begins only with an actual descriptor or genuine owner-stop transaction.
+pub(super) fn report_start(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<ReportStartHeader, ControlError> {
+    match frame(payload, context, scratch)? {
+        Frame::Terminal(OuterTerminalReply::ReportDescriptor { authority, bytes }) => {
+            Ok(ReportStartHeader::Descriptor { authority, bytes })
+        }
+        Frame::Startup(OuterStartupControl::OwnerStop {
+            authority,
+            peaks,
+            stop,
+            cause,
+        }) => Ok(ReportStartHeader::OwnerStop {
+            authority,
+            peaks,
+            stop,
+            cause,
+        }),
+        Frame::Startup(
+            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. },
+        )
+        | Frame::Failure(_)
+        | Frame::Terminal(
+            OuterTerminalReply::Cancelled { .. } | OuterTerminalReply::Committed { .. },
+        ) => Err(unexpected_frame()),
+    }
+}
+
+/// Report commit or real owner-stop only; neither cancellation nor setup refusal is a report.
+pub(super) fn terminal_commit(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<OuterTerminalReply, ControlError> {
+    match frame(payload, context, scratch)? {
+        Frame::Terminal(
+            reply @ OuterTerminalReply::Committed {
+                disposition: TerminalDisposition::Report,
+                ..
+            },
+        ) => Ok(reply),
+        Frame::Startup(OuterStartupControl::OwnerStop {
+            authority,
+            peaks,
+            stop,
+            cause,
+        }) => Ok(OuterTerminalReply::Committed {
+            authority,
+            peaks,
+            stop,
+            disposition: TerminalDisposition::OwnerStop { cause },
+        }),
+        Frame::Startup(
+            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. },
+        )
+        | Frame::Failure(_)
+        | Frame::Terminal(
+            OuterTerminalReply::Cancelled { .. }
+            | OuterTerminalReply::ReportDescriptor { .. }
+            | OuterTerminalReply::Committed {
+                disposition:
+                    TerminalDisposition::OwnerStop { .. } | TerminalDisposition::SetupRefused { .. },
+                ..
+            },
+        ) => Err(unexpected_frame()),
+    }
+}
+
 /// Fixed union schema records only; primitive, scalar, cause and shared disposition charges are separate.
 pub(super) fn decode_bytes() -> Result<u64, ControlError> {
     let terms = [
         size_of::<ReplyFields>(),
         size_of::<ReplyKind>(),
         size_of::<ReplyField>(),
+        size_of::<Frame>(),
         size_of::<OuterReply>(),
-        size_of::<Result<OuterReply, DecodeError>>(),
+        size_of::<Result<Frame, DecodeError>>(),
+        size_of::<CancellationHeader>(),
+        size_of::<CancellationProgress>(),
+        size_of::<ReportStartHeader>(),
+        size_of::<OuterTerminalReply>(),
+        size_of::<Result<OuterReply, ControlError>>(),
+        size_of::<Result<CancellationHeader, ControlError>>(),
+        size_of::<Result<CancellationProgress, ControlError>>(),
+        size_of::<Result<ReportStartHeader, ControlError>>(),
+        size_of::<Result<OuterTerminalReply, ControlError>>(),
         size_of::<ObjectState>(),
         size_of::<Text<'static>>(),
         size_of::<FailureState>(),
@@ -284,10 +495,7 @@ mod tests {
         protocol::{current_build_identity, RunAuthority},
         resource_ledger::MeasuredPeaks,
         role_deadline::{StopOrigin, StopStamp},
-        role_protocol::{
-            decode_outer_startup, OuterPhaseReply, OuterTerminalReply, OwnerStopCause,
-            TerminalDisposition,
-        },
+        role_protocol::{OuterPhaseReply, OuterTerminalReply, OwnerStopCause, TerminalDisposition},
         startup_envelope::PolicyFailureCause,
     };
 
@@ -339,6 +547,14 @@ mod tests {
                     .unwrap()
             ));
         }
+    }
+
+    fn decode_outer_startup(payload: &[u8]) -> Result<OuterStartupControl, ControlError> {
+        super::super::role_protocol::decode_outer_startup(
+            payload,
+            &mut PreparedStartupContext::new(0).unwrap(),
+            &mut Scratch::default(),
+        )
     }
 
     fn authority() -> RunAuthority {
@@ -504,54 +720,48 @@ mod tests {
                 disposition,
             })
             .unwrap();
-            // These forms are admitted by the original scalar derived enum/Option grammar,
-            // although the production serializer emits a string and omits the opposite member.
+            // The measured former scalar/Option grammar admits these forms. Its obsolete
+            // serde body has now been removed; this unit exercises the selected fixed parser,
+            // while the owning tag derive separately remains the unit-map grammar oracle.
             packet["kind"] = serde_json::json!({"Committed": null});
             let name = packet["disposition"]["kind"].as_str().unwrap().to_owned();
             packet["disposition"]["kind"] = serde_json::json!({name: null});
             packet["disposition"][opposite] = serde_json::Value::Null;
+            assert!(matches!(
+                serde_json::from_value::<ReplyKind>(packet["kind"].clone()).unwrap(),
+                ReplyKind::Committed
+            ));
             let bytes = serde_json::to_vec(&packet).unwrap();
-            let old = decode_outer_startup(&bytes).unwrap();
             let mut context = PreparedStartupContext::new(0).unwrap();
             let new = parse(&bytes, &mut context).unwrap();
-            match (old, new) {
+            match (disposition, new) {
                 (
-                    OuterStartupControl::OwnerStop {
-                        cause,
-                        authority: old_authority,
-                        peaks: old_peaks,
-                        stop: old_stop,
-                    },
+                    TerminalDisposition::OwnerStop { cause },
                     OuterReply::Startup(OuterStartupControl::OwnerStop {
                         cause: actual,
-                        authority,
-                        peaks,
-                        stop,
+                        authority: actual_authority,
+                        peaks: actual_peaks,
+                        stop: actual_stop,
                     }),
                 ) => {
                     assert_eq!(actual, cause);
-                    assert_eq!(authority, old_authority);
-                    assert_eq!(peaks, old_peaks);
-                    assert_eq!(stop, old_stop);
+                    assert_eq!(actual_authority, authority);
+                    assert_eq!(actual_peaks, peaks);
+                    assert_eq!(actual_stop, stop);
                 }
                 (
-                    OuterStartupControl::SetupRefused {
-                        failure,
-                        authority: old_authority,
-                        peaks: old_peaks,
-                        stop: old_stop,
-                    },
+                    TerminalDisposition::SetupRefused { failure },
                     OuterReply::Startup(OuterStartupControl::SetupRefused {
                         failure: actual,
-                        authority,
-                        peaks,
-                        stop,
+                        authority: actual_authority,
+                        peaks: actual_peaks,
+                        stop: actual_stop,
                     }),
                 ) => {
                     assert_eq!(actual, failure);
-                    assert_eq!(authority, old_authority);
-                    assert_eq!(peaks, old_peaks);
-                    assert_eq!(stop, old_stop);
+                    assert_eq!(actual_authority, authority);
+                    assert_eq!(actual_peaks, peaks);
+                    assert_eq!(actual_stop, stop);
                 }
                 _ => panic!("original admitted stop changed branch"),
             }
@@ -575,6 +785,51 @@ mod tests {
             )
             .is_err());
         }
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-39
+    #[test]
+    fn receipts_without_context_preserve_the_pending_original_policy_diagnostic() {
+        let mut context = PreparedStartupContext::new(64).unwrap();
+        let original = io::Error::new(io::ErrorKind::PermissionDenied, "actual I policy context");
+        context.capture_io(&original).unwrap();
+        let reserved = context.reserved_bytes();
+        let authority = authority();
+        let stop = StopStamp::capture(StopOrigin::Backend).unwrap();
+        let peaks = MeasuredPeaks {
+            tree_rss_bytes: 17,
+            charged_bytes: 31,
+        };
+        let refused = serde_json::to_vec(&OuterTerminalReply::Committed {
+            authority,
+            peaks,
+            stop,
+            disposition: TerminalDisposition::SetupRefused {
+                failure: PolicyFailureCause::ProtectionUnverified,
+            },
+        })
+        .unwrap();
+        *context.metadata_fault_slot() = Some(CauseIntegrityPredicate::MalformedCauseMetadata);
+        let decoded = parse(&refused, &mut context).unwrap();
+        assert!(matches!(
+            decoded,
+            OuterReply::Startup(OuterStartupControl::SetupRefused { .. })
+        ));
+        assert_eq!(context.context(), original.to_string());
+        assert_eq!(context.reserved_bytes(), reserved);
+        assert!(context.metadata_fault_slot().is_none());
+        let cancelled = serde_json::to_vec(&OuterTerminalReply::Cancelled {
+            authority,
+            peaks,
+            stop,
+        })
+        .unwrap();
+        let actual =
+            cancellation_commit(&cancelled, &mut context, &mut Scratch::default()).unwrap();
+        assert!(matches!(actual, CancellationHeader::Cancelled { .. }));
+        assert_eq!(context.context(), original.to_string());
+        assert_eq!(context.reserved_bytes(), reserved);
+        assert!(context.metadata_fault_slot().is_none());
     }
 
     /// Trace: FR-034-AC-15
@@ -603,8 +858,18 @@ mod tests {
             assert!(context.context().is_empty());
             assert_eq!(context.reserved_bytes(), capacity);
             assert!(decode_outer_startup(&bytes).is_err());
-            assert!(crate::kani::run::role_protocol::decode_report_start(&bytes).is_err());
-            assert!(crate::kani::run::role_protocol::decode_terminal_commit(&bytes).is_err());
+            assert!(crate::kani::run::role_protocol::decode_report_start(
+                &bytes,
+                &mut context,
+                &mut Scratch::default()
+            )
+            .is_err());
+            assert!(crate::kani::run::role_protocol::decode_terminal_commit(
+                &bytes,
+                &mut context,
+                &mut Scratch::default()
+            )
+            .is_err());
         }
     }
 

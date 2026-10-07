@@ -457,207 +457,31 @@ impl CancellationProgress {
     }
 }
 
-#[derive(Deserialize)]
-enum CancellationProgressKind {
-    MonitorSpawned,
-    InnerClaimed,
-    GateReleased,
-    Cancelled,
-    Committed,
-}
-
-#[derive(Deserialize)]
-struct CancellationProgressSelector {
-    kind: CancellationProgressKind,
-}
-
-/// Decode a complete original in-flight phase for cleanup custody, or an exact cancellation
-/// terminal alternative. Strict ordinary decoders are unchanged; no partial-frame resync or
-/// additional framer exists, and receipt decoding alone confirms no actor or role settlement.
+/// State-specific cleanup-only subset of the sole fixed O->C union decoder.
 pub(super) fn decode_cancellation_progress(
     payload: &[u8],
+    context: &mut super::startup_cause::PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<CancellationProgress, super::control::ControlError> {
-    use super::control::ControlError;
-    use serde::de::Error as _;
-    super::startup_cause::check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    let selector: CancellationProgressSelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selector.kind {
-        CancellationProgressKind::MonitorSpawned
-        | CancellationProgressKind::InnerClaimed
-        | CancellationProgressKind::GateReleased => match decode_outer_startup(payload)? {
-            OuterStartupControl::Phase(phase) => Ok(CancellationProgress::Phase(phase)),
-            OuterStartupControl::OwnerStop { .. } | OuterStartupControl::SetupRefused { .. } => {
-                Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                    "unexpected cancellation phase",
-                )))
-            }
-        },
-        CancellationProgressKind::Cancelled | CancellationProgressKind::Committed => {
-            decode_cancellation_commit(payload).map(CancellationProgress::Terminal)
-        }
-    }
+    super::outer_reply::cancellation_progress(payload, context, scratch)
 }
 
-/// Actual fixed selector/result plus the largest existing nested scalar decode reservation.
-/// Original payload, ancillary and retained rights storage remain charged by the same framer.
-pub(super) fn cancellation_progress_decode_bytes() -> Result<u64, super::control::ControlError> {
-    use super::control::ControlError;
-    let nested = outer_startup_decode_bytes()?.max(cancellation_decode_bytes()?);
-    let fixed = std::mem::size_of::<CancellationProgressSelector>()
-        .checked_add(std::mem::size_of::<CancellationProgress>())
-        .and_then(|bytes| u64::try_from(bytes).ok())
-        .ok_or(ControlError::EncodedBytesExceeded)?;
-    fixed
-        .checked_add(nested)
-        .ok_or(ControlError::EncodedBytesExceeded)
-}
-
-#[derive(Deserialize)]
-enum CallerCloseKind {
-    CompletedClose,
-    CancelClose,
-}
-
-#[derive(Deserialize)]
-struct CallerCloseSelector {
-    kind: CallerCloseKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CallerCloseReply {
-    kind: CallerCloseKind,
-    authority: RunAuthority,
-    deadline: RoleDeadline,
-    stop: StopStamp,
-}
-
-/// Decode the exact scalar close alternatives on the existing C/O channel. ReadCompleted is
-/// admitted only by its separate existing ACK state. Sender/run/origin/cutoff checks are actor
-/// duties and are never implied by this parser accepting complete JSON.
+/// Exact scalar close-only view of O's existing sole fixed C-control grammar.
+/// No phase/read ACK or actor authorization follows this parsed value.
 pub(super) fn decode_caller_close(
     payload: &[u8],
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<CallerTerminalControl, super::control::ControlError> {
-    use super::control::ControlError;
-    use serde::de::Error as _;
-    super::startup_cause::check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    let selector: CallerCloseSelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    let reply: CallerCloseReply =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match (selector.kind, reply.kind) {
-        (CallerCloseKind::CompletedClose, CallerCloseKind::CompletedClose) => {
-            Ok(CallerTerminalControl::CompletedClose {
-                authority: reply.authority,
-                deadline: reply.deadline,
-                stop: reply.stop,
-            })
-        }
-        (CallerCloseKind::CancelClose, CallerCloseKind::CancelClose) => {
-            Ok(CallerTerminalControl::CancelClose {
-                authority: reply.authority,
-                deadline: reply.deadline,
-                stop: reply.stop,
-            })
-        }
-        (CallerCloseKind::CompletedClose, CallerCloseKind::CancelClose)
-        | (CallerCloseKind::CancelClose, CallerCloseKind::CompletedClose) => {
-            Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                "conflicting caller close kind",
-            )))
-        }
-    }
+    super::outer_caller::decode_close(payload, scratch)
 }
 
-#[derive(Deserialize)]
-enum CancellationReplyKind {
-    Cancelled,
-    Committed,
-}
-
-#[derive(Deserialize)]
-struct CancellationReplySelector {
-    kind: CancellationReplyKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CancelledReply {
-    kind: CancellationReplyKind,
-    authority: RunAuthority,
-    peaks: MeasuredPeaks,
-    stop: StopStamp,
-}
-
-/// Admit only an exact cancellation receipt or the existing exact resource/timeout commit.
-/// Ordinary startup/report decoders deliberately continue to reject Cancelled; no EOF waiver,
-/// second framer, I completion, observation substitute or report permission follows this result.
-/// Peak fields are mandatory scalar metadata; actual complete observation and live measurement
-/// bounds are authenticated by the actor, never inferred from schema acceptance.
+/// Exact cancellation receipt or genuine owner-stop only; no phase/report permission.
 pub(super) fn decode_cancellation_commit(
     payload: &[u8],
+    context: &mut super::startup_cause::PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<CancellationHeader, super::control::ControlError> {
-    use super::control::ControlError;
-    use serde::de::Error as _;
-    super::startup_cause::check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    let selector: CancellationReplySelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selector.kind {
-        CancellationReplyKind::Cancelled => {
-            let reply: CancelledReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, CancellationReplyKind::Cancelled) {
-                return Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                    "conflicting cancellation kind",
-                )));
-            }
-            Ok(CancellationHeader::Cancelled {
-                authority: reply.authority,
-                peaks: reply.peaks,
-                stop: reply.stop,
-            })
-        }
-        CancellationReplyKind::Committed => match decode_outer_startup(payload)? {
-            OuterStartupControl::OwnerStop {
-                authority,
-                peaks,
-                stop,
-                cause,
-            } => Ok(CancellationHeader::OwnerStop {
-                authority,
-                peaks,
-                stop,
-                cause,
-            }),
-            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. } => {
-                Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                    "unexpected cancellation disposition",
-                )))
-            }
-        },
-    }
-}
-
-/// Fixed scalar close/cancellation decode storage, charged before L or writer exposure. Original
-/// frame/right storage is separate; no dynamic context or serde Content accumulator is reserved.
-/// The record/result sizes include the required peak fields, without a separately copied ceiling.
-pub(super) fn cancellation_decode_bytes() -> Result<u64, super::control::ControlError> {
-    use super::control::ControlError;
-    let total = std::mem::size_of::<CallerCloseSelector>()
-        .checked_add(std::mem::size_of::<CallerCloseReply>())
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CallerTerminalControl>()))
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CancellationReplySelector>()))
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CancelledReply>()))
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CancellationHeader>()))
-        .ok_or(ControlError::EncodedBytesExceeded)?;
-    u64::try_from(total)
-        .map_err(|_| ControlError::EncodedBytesExceeded)?
-        .checked_add(outer_startup_decode_bytes()?)
-        .ok_or(ControlError::EncodedBytesExceeded)
+    super::outer_reply::cancellation_commit(payload, context, scratch)
 }
 
 /// Exact alternatives on C's one original startup stream. OwnerStop can shorten the original
@@ -691,11 +515,11 @@ impl OuterStartupControl {
     }
 }
 
-macro_rules! startup_reply_kinds {
+macro_rules! outer_reply_kinds {
     ($($variant:ident),+ $(,)?) => {
         #[derive(Clone, Copy, Deserialize)]
-        pub(super) enum StartupReplyKind { $($variant),+ }
-        impl StartupReplyKind {
+        pub(super) enum OuterReplyKind { $($variant),+ }
+        impl OuterReplyKind {
             pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
                 $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
                 None
@@ -704,148 +528,25 @@ macro_rules! startup_reply_kinds {
     };
 }
 
-startup_reply_kinds! { MonitorSpawned, InnerClaimed, GateReleased, Committed }
+// One complete O->C frame-tag inventory. Each receiver still selects its own exact context;
+// adding a parsed tag does not authorize that tag in startup/report/cancellation.
+outer_reply_kinds! { MonitorSpawned, InnerClaimed, GateReleased, Committed, ReportDescriptor, Cancelled }
 
-// Flat borrowed/scalar decoding avoids serde's internally-tagged Content accumulator. First
-// select the tag without owning ignored fields, then enforce that selected variant's exact map.
-#[derive(Deserialize)]
-struct StartupReplySelector {
-    kind: StartupReplyKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SimplePhaseReply {
-    kind: StartupReplyKind,
-    authority: RunAuthority,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ClaimedPhaseReply {
-    kind: StartupReplyKind,
-    authority: RunAuthority,
-    start: u64,
-    namespace: NamespaceIdentity,
-}
-
-#[derive(Deserialize)]
-enum StopDispositionKind {
-    OwnerStop,
-    SetupRefused,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StopDisposition {
-    kind: StopDispositionKind,
-    cause: Option<OwnerStopCause>,
-    failure: Option<super::startup_envelope::PolicyFailureCause>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StopCommittedReply {
-    kind: StartupReplyKind,
-    authority: RunAuthority,
-    peaks: MeasuredPeaks,
-    stop: StopStamp,
-    disposition: StopDisposition,
-}
-
-/// Decode only a phase reply or the existing complete typed nonreport commit. No fallback to
-/// report/Ready/Dispatch parsing exists. Preflight bounds integer/string parser scratch paths;
-/// every second pass checks the exact selected schema, duplicate fields and complete JSON EOF.
+/// Original startup subset of the sole fixed union; terminal/report frames remain refused.
 pub(super) fn decode_outer_startup(
     payload: &[u8],
+    context: &mut super::startup_cause::PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<OuterStartupControl, super::control::ControlError> {
-    use super::control::ControlError;
-    use serde::de::Error as _;
-    let invalid = || {
-        ControlError::InvalidEncoding(serde_json::Error::custom("unexpected outer startup reply"))
-    };
-    super::startup_cause::check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    let selected: StartupReplySelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selected.kind {
-        StartupReplyKind::MonitorSpawned | StartupReplyKind::GateReleased => {
-            let reply: SimplePhaseReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            let phase = match reply.kind {
-                StartupReplyKind::MonitorSpawned => OuterPhaseReply::MonitorSpawned {
-                    authority: reply.authority,
-                },
-                StartupReplyKind::GateReleased => OuterPhaseReply::GateReleased {
-                    authority: reply.authority,
-                },
-                StartupReplyKind::InnerClaimed | StartupReplyKind::Committed => {
-                    return Err(invalid())
-                }
-            };
-            Ok(OuterStartupControl::Phase(phase))
-        }
-        StartupReplyKind::InnerClaimed => {
-            let reply: ClaimedPhaseReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, StartupReplyKind::InnerClaimed) {
-                return Err(invalid());
-            }
-            Ok(OuterStartupControl::Phase(OuterPhaseReply::InnerClaimed {
-                authority: reply.authority,
-                start: reply.start,
-                namespace: reply.namespace,
-            }))
-        }
-        StartupReplyKind::Committed => {
-            let reply: StopCommittedReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, StartupReplyKind::Committed) {
-                return Err(invalid());
-            }
-            match (
-                reply.disposition.kind,
-                reply.disposition.cause,
-                reply.disposition.failure,
-            ) {
-                (StopDispositionKind::OwnerStop, Some(cause), None) => {
-                    Ok(OuterStartupControl::OwnerStop {
-                        authority: reply.authority,
-                        peaks: reply.peaks,
-                        stop: reply.stop,
-                        cause,
-                    })
-                }
-                (StopDispositionKind::SetupRefused, None, Some(failure)) => {
-                    Ok(OuterStartupControl::SetupRefused {
-                        authority: reply.authority,
-                        peaks: reply.peaks,
-                        stop: reply.stop,
-                        failure,
-                    })
-                }
-                _ => Err(invalid()),
-            }
-        }
+    match super::outer_reply::decode(payload, context, scratch)? {
+        super::outer_reply::OuterReply::Startup(reply) => Ok(reply),
+        super::outer_reply::OuterReply::Failure(_) => Err(
+            super::control::ControlError::InvalidGrammar(super::guardian_decode::DecodeError::new(
+                super::guardian_decode::DecodeSite::Field,
+                super::guardian_decode::DecodeCause::InvalidValue,
+            )),
+        ),
     }
-}
-
-/// Fixed owning scalar decode/storage reservation, separate from the already retained frame
-/// payload/right buffers. No String/Vec/Content accumulator belongs to this schema decoder.
-pub(super) fn outer_startup_decode_bytes() -> Result<u64, super::control::ControlError> {
-    let packet = [
-        std::mem::size_of::<SimplePhaseReply>(),
-        std::mem::size_of::<ClaimedPhaseReply>(),
-        std::mem::size_of::<StopCommittedReply>(),
-    ]
-    .into_iter()
-    .max()
-    .ok_or(super::control::ControlError::EncodedBytesExceeded)?;
-    let total = packet
-        .checked_add(std::mem::size_of::<StartupReplySelector>())
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<OuterStartupControl>()))
-        .ok_or(super::control::ControlError::EncodedBytesExceeded)?;
-    u64::try_from(total).map_err(|_| super::control::ControlError::EncodedBytesExceeded)
 }
 
 /// Exact alternatives after actual I completion/lease close. A nonreport stop remains
@@ -875,146 +576,53 @@ impl ReportStartHeader {
     }
 }
 
-#[derive(Deserialize)]
-enum ReportReplyKind {
-    ReportDescriptor,
-    Committed,
-}
-
-#[derive(Deserialize)]
-struct ReportReplySelector {
-    kind: ReportReplyKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DescriptorReply {
-    kind: ReportReplyKind,
-    authority: RunAuthority,
-    bytes: u64,
-}
-
+/// Descriptor or genuine owner-stop only, on the actual report-start cursor.
 pub(super) fn decode_report_start(
     payload: &[u8],
+    context: &mut super::startup_cause::PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<ReportStartHeader, super::control::ControlError> {
-    use super::control::ControlError;
-    use serde::de::Error as _;
-    super::startup_cause::check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    let selector: ReportReplySelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selector.kind {
-        ReportReplyKind::ReportDescriptor => {
-            let reply: DescriptorReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, ReportReplyKind::ReportDescriptor) {
-                return Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                    "expected report descriptor",
-                )));
-            }
-            Ok(ReportStartHeader::Descriptor {
-                authority: reply.authority,
-                bytes: reply.bytes,
-            })
-        }
-        ReportReplyKind::Committed => match decode_outer_startup(payload)? {
-            OuterStartupControl::OwnerStop {
-                authority,
-                peaks,
-                stop,
-                cause,
-            } => Ok(ReportStartHeader::OwnerStop {
-                authority,
-                peaks,
-                stop,
-                cause,
-            }),
-            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. } => {
-                Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                    "expected resource or timeout stop after completion",
-                )))
-            }
-        },
-    }
+    super::outer_reply::report_start(payload, context, scratch)
 }
 
-#[derive(Deserialize)]
-enum ReportDispositionKind {
-    Report,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ReportDisposition {
-    kind: ReportDispositionKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ReportCommit {
-    kind: ReportReplyKind,
-    authority: RunAuthority,
-    peaks: MeasuredPeaks,
-    stop: StopStamp,
-    disposition: ReportDisposition,
-}
-
+/// Exact Report/OwnerStop terminal subset with no parse-and-retry or fallback decoder.
 pub(super) fn decode_terminal_commit(
     payload: &[u8],
+    context: &mut super::startup_cause::PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<OuterTerminalReply, super::control::ControlError> {
-    use super::control::ControlError;
-    use serde::de::Error as _;
-    super::startup_cause::check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    // Both schemas own only fixed scalar values. Trying the exact Report schema first adds no
-    // internally-tagged Content accumulator or decoded String/context allocation.
-    if let Ok(reply) = serde_json::from_slice::<ReportCommit>(payload) {
-        if matches!(reply.kind, ReportReplyKind::Committed)
-            && matches!(reply.disposition.kind, ReportDispositionKind::Report)
-        {
-            return Ok(OuterTerminalReply::Committed {
-                authority: reply.authority,
-                peaks: reply.peaks,
-                stop: reply.stop,
-                disposition: TerminalDisposition::Report,
-            });
-        }
-    }
-    match decode_outer_startup(payload)? {
-        OuterStartupControl::OwnerStop {
-            authority,
-            peaks,
-            stop,
-            cause,
-        } => Ok(OuterTerminalReply::Committed {
-            authority,
-            peaks,
-            stop,
-            disposition: TerminalDisposition::OwnerStop { cause },
-        }),
-        OuterStartupControl::SetupRefused { .. } | OuterStartupControl::Phase(_) => {
-            Err(ControlError::InvalidEncoding(serde_json::Error::custom(
-                "unexpected terminal disposition",
-            )))
-        }
-    }
-}
-
-/// Retained scalar decoder/selector stack storage is reserved before L; JSON payload bytes
-/// are already charged by the original framer. These exact schemas allocate no context strings.
-pub(super) fn report_decode_bytes() -> Result<u64, super::control::ControlError> {
-    let total = std::mem::size_of::<ReportReplySelector>()
-        .checked_add(std::mem::size_of::<DescriptorReply>())
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<ReportCommit>()))
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<ReportStartHeader>()))
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<OuterTerminalReply>()))
-        .ok_or(super::control::ControlError::EncodedBytesExceeded)?;
-    u64::try_from(total).map_err(|_| super::control::ControlError::EncodedBytesExceeded)
+    super::outer_reply::terminal_commit(payload, context, scratch)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! parsed {
+        ($name:ident, $result:ty) => {
+            fn $name(payload: &[u8]) -> Result<$result, super::super::control::ControlError> {
+                super::$name(
+                    payload,
+                    &mut super::super::startup_cause::PreparedStartupContext::new(0).unwrap(),
+                    &mut super::super::guardian_decode::Scratch::default(),
+                )
+            }
+        };
+    }
+    fn decode_caller_close(
+        payload: &[u8],
+    ) -> Result<CallerTerminalControl, super::super::control::ControlError> {
+        super::decode_caller_close(
+            payload,
+            &mut super::super::guardian_decode::Scratch::default(),
+        )
+    }
+
+    parsed!(decode_outer_startup, OuterStartupControl);
+    parsed!(decode_cancellation_progress, CancellationProgress);
+    parsed!(decode_cancellation_commit, CancellationHeader);
+    parsed!(decode_report_start, ReportStartHeader);
+    parsed!(decode_terminal_commit, OuterTerminalReply);
     use crate::kani::run::role_deadline::StopOrigin;
 
     /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.

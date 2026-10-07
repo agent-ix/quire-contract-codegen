@@ -482,6 +482,9 @@ impl CallerBootstrap {
             super::role_control_scalar_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
+            super::installer_reply_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
             super::role_scalar_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
@@ -493,8 +496,6 @@ impl CallerBootstrap {
             super::outer_failure::decode_bytes().map_err(CallerBootstrapError::Control)?,
             super::cause_metadata::decode_bytes().map_err(CallerBootstrapError::Control)?,
             super::outer_reply::decode_bytes().map_err(CallerBootstrapError::Control)?,
-            super::role_protocol::cancellation_progress_decode_bytes()
-                .map_err(CallerBootstrapError::Control)?,
             u64::try_from(startup_context.reserved_bytes())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             super::startup_envelope::inner_startup_decode_bytes()
@@ -503,9 +504,6 @@ impl CallerBootstrap {
                 .map_err(CallerBootstrapError::Control)?,
             super::stages::CallerLeaseClient::metadata_reservation()
                 .map_err(CallerBootstrapError::Stage)?,
-            super::role_protocol::outer_startup_decode_bytes()
-                .map_err(CallerBootstrapError::Control)?,
-            super::role_protocol::report_decode_bytes().map_err(CallerBootstrapError::Control)?,
             u64::try_from(std::mem::size_of::<ExecutionClock>())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             launcher_receive
@@ -1817,6 +1815,7 @@ impl CallerBootstrap {
                     super::startup_envelope::decode_inner_startup(
                         payload,
                         &mut self.startup_context,
+                        &mut self.decode_scratch,
                     )
                 },
             )
@@ -1990,11 +1989,13 @@ impl CallerBootstrap {
         let (control, sender, pin) = if self.cancel_terminal_cursor {
             let Some(received) = self
                 .terminal_receive
-                .advance_decode(
-                    &self.outer_control.transport(),
-                    cutoff,
-                    super::role_protocol::decode_cancellation_commit,
-                )
+                .advance_decode(&self.outer_control.transport(), cutoff, |payload| {
+                    super::role_protocol::decode_cancellation_commit(
+                        payload,
+                        &mut self.startup_context,
+                        &mut self.decode_scratch,
+                    )
+                })
                 .map_err(CallerBootstrapError::Control)?
             else {
                 return Ok(false);
@@ -2011,7 +2012,13 @@ impl CallerBootstrap {
                     &self.outer_control.transport(),
                     CancellationProgress::rights_count,
                     Some(cutoff),
-                    super::role_protocol::decode_cancellation_progress,
+                    |payload| {
+                        super::role_protocol::decode_cancellation_progress(
+                            payload,
+                            &mut self.startup_context,
+                            &mut self.decode_scratch,
+                        )
+                    },
                     // This exact cleanup-only union follows actual C cancellation. A full phase
                     // grants custody only; ordinary startup phase EOF refusal remains unchanged.
                     |_| true,
@@ -2288,7 +2295,13 @@ impl CallerBootstrap {
                     &self.outer_control.transport(),
                     super::role_protocol::ReportStartHeader::rights_count,
                     cutoff,
-                    super::role_protocol::decode_report_start,
+                    |payload| {
+                        super::role_protocol::decode_report_start(
+                            payload,
+                            &mut self.startup_context,
+                            &mut self.decode_scratch,
+                        )
+                    },
                     super::role_protocol::ReportStartHeader::clock_only,
                 )
                 .map_err(CallerBootstrapError::Control)?;
@@ -2394,11 +2407,13 @@ impl CallerBootstrap {
         self.terminal_phase = CallerTerminalPhase::Refused;
         let Some(received) = self
             .terminal_receive
-            .advance_decode(
-                &self.outer_control.transport(),
-                cutoff,
-                super::role_protocol::decode_terminal_commit,
-            )
+            .advance_decode(&self.outer_control.transport(), cutoff, |payload| {
+                super::role_protocol::decode_terminal_commit(
+                    payload,
+                    &mut self.startup_context,
+                    &mut self.decode_scratch,
+                )
+            })
             .map_err(CallerBootstrapError::Control)?
         else {
             self.terminal_phase = CallerTerminalPhase::AwaitCommit;

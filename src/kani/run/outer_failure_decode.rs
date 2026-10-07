@@ -89,6 +89,7 @@ struct StateFields {
 
 /// Raw exact startup dispositions; none supplies phase/measurement/settlement authority.
 pub(super) enum Disposition {
+    Report,
     OperationalFailure {
         operation: CauseOperation,
         state: FailureState,
@@ -104,6 +105,7 @@ pub(super) enum Disposition {
 
 #[derive(Clone, Copy)]
 enum DispositionKind {
+    Report,
     OperationalFailure,
     OwnerStop,
     SetupRefused,
@@ -111,7 +113,9 @@ enum DispositionKind {
 
 impl DispositionKind {
     fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
-        if text.equals("OperationalFailure") {
+        if text.equals("Report") {
+            Ok(Self::Report)
+        } else if text.equals("OperationalFailure") {
             Ok(Self::OperationalFailure)
         } else if text.equals("OwnerStop") {
             Ok(Self::OwnerStop)
@@ -258,6 +262,18 @@ pub(super) fn disposition(
         }
     }
     match missing(fields.kind)? {
+        DispositionKind::Report => {
+            if fields.operation.is_some()
+                || fields.state.is_some()
+                || fields.representation.is_some()
+                || fields.context.is_some()
+                || fields.cause.is_some()
+                || fields.failure.is_some()
+            {
+                return Err(field_error(DecodeCause::UnknownField));
+            }
+            Ok(Disposition::Report)
+        }
         DispositionKind::OperationalFailure => {
             if fields.cause.is_some() || fields.failure.is_some() {
                 return Err(field_error(DecodeCause::UnknownField));
@@ -294,7 +310,9 @@ pub(super) fn disposition(
                         failure: missing(fields.failure.flatten())?,
                     })
                 }
-                DispositionKind::OperationalFailure => Err(field_error(DecodeCause::InvalidValue)),
+                DispositionKind::OperationalFailure | DispositionKind::Report => {
+                    Err(field_error(DecodeCause::InvalidValue))
+                }
             }
         }
     }
