@@ -161,7 +161,7 @@ pub(super) struct CallerBootstrap {
     identity_records: RefCell<creator::PreparedIdentity>,
     named_buffers: u64,
     memory_bytes: std::num::NonZeroU64,
-    pending_owner_stop: Option<(OwnerStopCause, MeasuredPeaks)>,
+    pending_owner_stop: Option<PendingOwnerStop>,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
     identity: Option<SpawnIdentity>,
@@ -275,6 +275,17 @@ impl CallerPhaseAction {
             Self::ReleaseGate => (2, CallerPhase::ClaimedGated, CallerPhase::AwaitGate),
         }
     }
+}
+
+enum OwnerStopReceiver {
+    Startup,
+    Terminal,
+}
+
+struct PendingOwnerStop {
+    cause: OwnerStopCause,
+    peaks: MeasuredPeaks,
+    receiver: OwnerStopReceiver,
 }
 
 enum CallerTerminalPhase {
@@ -433,6 +444,7 @@ impl CallerBootstrap {
                 .map_err(CallerBootstrapError::Stage)?,
             super::role_protocol::outer_startup_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
+            super::role_protocol::report_decode_bytes().map_err(CallerBootstrapError::Control)?,
             u64::try_from(std::mem::size_of::<ExecutionClock>())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             launcher_receive
@@ -746,7 +758,11 @@ impl CallerBootstrap {
                 if Instant::now() >= original {
                     return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
                 }
-                self.pending_owner_stop = Some((cause, peaks));
+                self.pending_owner_stop = Some(PendingOwnerStop {
+                    cause,
+                    peaks,
+                    receiver: OwnerStopReceiver::Startup,
+                });
                 self.phase_failed = true;
                 self.inner_auth_failed = true;
                 // No final/proof token is minted. The caller must settle under this same shortened
@@ -820,17 +836,29 @@ impl CallerBootstrap {
         ) {
             return Err(CallerBootstrapError::OuterExitAbnormal);
         }
-        if !self
-            .outer_receive
-            .confirm_end(&self.outer_control.transport(), roles.cutoff)
-            .map_err(CallerBootstrapError::Control)?
+        let ended = match self
+            .pending_owner_stop
+            .as_ref()
+            .ok_or(CallerBootstrapError::TerminalTransition)?
+            .receiver
         {
+            OwnerStopReceiver::Startup => self
+                .outer_receive
+                .confirm_end(&self.outer_control.transport(), roles.cutoff),
+            OwnerStopReceiver::Terminal => self
+                .terminal_receive
+                .confirm_end(&self.outer_control.transport(), roles.cutoff),
+        }
+        .map_err(CallerBootstrapError::Control)?;
+        if !ended {
             return Ok(None);
         }
-        self.pending_owner_stop
+        let pending = self
+            .pending_owner_stop
             .take()
-            .map(Some)
-            .ok_or(CallerBootstrapError::TerminalTransition)
+            .ok_or(CallerBootstrapError::TerminalTransition)?;
+        self.terminal_phase = CallerTerminalPhase::Finished;
+        Ok(Some((pending.cause, pending.peaks)))
     }
 
     /// Finish only an authenticated original policy-negative transaction after the actual normal
@@ -1771,11 +1799,13 @@ impl CallerBootstrap {
     }
 
     /// The whole RunOwner invokes this only after authenticated backend Completed and actual
-    /// original I lease close. Descriptor reception retains strict EOF precedence. Reading bytes
+    /// original I lease close. The SAME original O framer can receive either a strict-EOF
+    /// descriptor or a complete clock-only stop. An actual stop returns OwnerStopObserved;
+    /// it does not authorize any report or phase. Reading bytes
     /// grants no classification: the final complete metrics frame and all settlement still follow.
     pub(super) fn read_terminal_report(
         &mut self,
-        clock: &ExecutionClock,
+        clock: &mut ExecutionClock,
     ) -> Result<Option<Vec<u8>>, CallerBootstrapError> {
         if !matches!(self.terminal_phase, CallerTerminalPhase::AwaitDescriptor)
             || !matches!(self.phase, CallerPhase::ClaimedBootstrap)
@@ -1800,35 +1830,71 @@ impl CallerBootstrap {
             .send_prepared(&start, &[], cutoff)
             .map_err(CallerBootstrapError::Control)?;
         let ack_storage = start.into_storage();
-        let received = self
-            .outer_control
-            .transport()
-            .receive_prepared::<OuterTerminalReply>(
-                &mut self.receive,
-                OuterTerminalReply::rights_count,
-                cutoff,
-            )
-            .map_err(CallerBootstrapError::Control)?;
-        let sender = received
-            .credentials
-            .ok_or(CallerBootstrapError::MissingSender)?;
-        let OuterTerminalReply::ReportDescriptor { authority, bytes } = received.control else {
-            return Err(CallerBootstrapError::TerminalReplyMismatch);
+        let (header, sender, descriptor) = loop {
+            let received = self
+                .outer_receive
+                .advance_clock_only_decode(
+                    &self.outer_control.transport(),
+                    super::role_protocol::ReportStartHeader::rights_count,
+                    cutoff,
+                    super::role_protocol::decode_report_start,
+                    super::role_protocol::ReportStartHeader::clock_only,
+                )
+                .map_err(CallerBootstrapError::Control)?;
+            if let Some(received) = received {
+                break (
+                    received.control,
+                    received
+                        .credentials
+                        .ok_or(CallerBootstrapError::MissingSender)?,
+                    received.rights.pop(),
+                );
+            }
+            self.outer_control
+                .transport()
+                .wait_terminal_readable(cutoff)
+                .map_err(CallerBootstrapError::Control)?;
         };
-        let descriptor = received
-            .rights
-            .pop()
-            .ok_or(CallerBootstrapError::TerminalReplyMismatch)?;
         if sender.pid
             != self
                 .outer_pid
                 .ok_or(CallerBootstrapError::MissingOuterPin)?
             || sender.uid != self.caller_uid
             || sender.gid != self.caller_gid
-            || authority != self.authority
         {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         }
+        let (authority, bytes, descriptor) = match header {
+            super::role_protocol::ReportStartHeader::Descriptor { authority, bytes } => {
+                if authority != self.authority {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                (
+                    authority,
+                    bytes,
+                    descriptor.ok_or(CallerBootstrapError::TerminalReplyMismatch)?,
+                )
+            }
+            super::role_protocol::ReportStartHeader::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            } => {
+                if descriptor.is_some() {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                self.retain_terminal_stop(
+                    clock,
+                    authority,
+                    peaks,
+                    stop,
+                    cause,
+                    OwnerStopReceiver::Startup,
+                )?;
+                return Err(CallerBootstrapError::OwnerStopObserved);
+            }
+        };
         creator::require_live(
             self.outer_pin
                 .as_ref()
@@ -1871,7 +1937,11 @@ impl CallerBootstrap {
         self.terminal_phase = CallerTerminalPhase::Refused;
         let Some(received) = self
             .terminal_receive
-            .advance::<OuterTerminalReply>(&self.outer_control.transport(), cutoff)
+            .advance_decode(
+                &self.outer_control.transport(),
+                cutoff,
+                super::role_protocol::decode_terminal_commit,
+            )
             .map_err(CallerBootstrapError::Control)?
         else {
             self.terminal_phase = CallerTerminalPhase::AwaitCommit;
@@ -1899,8 +1969,22 @@ impl CallerBootstrap {
         {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         }
-        if disposition != super::role_protocol::TerminalDisposition::Report {
-            return Err(CallerBootstrapError::TerminalReplyMismatch);
+        match disposition {
+            super::role_protocol::TerminalDisposition::OwnerStop { cause } => {
+                self.retain_terminal_stop(
+                    clock,
+                    authority,
+                    peaks,
+                    stop,
+                    cause,
+                    OwnerStopReceiver::Terminal,
+                )?;
+                return Ok(true);
+            }
+            super::role_protocol::TerminalDisposition::SetupRefused { .. } => {
+                return Err(CallerBootstrapError::TerminalReplyMismatch)
+            }
+            super::role_protocol::TerminalDisposition::Report => {}
         }
         clock
             .adopt_stop(stop, self.identity_clock)
@@ -1911,6 +1995,42 @@ impl CallerBootstrap {
             .map_err(CallerBootstrapError::Io)?;
         self.terminal_phase = CallerTerminalPhase::ReceivedCommit(peaks);
         Ok(true)
+    }
+
+    /// Retain an authenticated candidate only. A report FD/read may already exist: its bytes
+    /// remain provisional and the caller must discard them after this actual stop transaction.
+    fn retain_terminal_stop(
+        &mut self,
+        clock: &mut ExecutionClock,
+        authority: RunAuthority,
+        peaks: MeasuredPeaks,
+        stop: super::role_deadline::StopStamp,
+        cause: OwnerStopCause,
+        receiver: OwnerStopReceiver,
+    ) -> Result<(), CallerBootstrapError> {
+        if authority != self.authority
+            || self.pending_owner_stop.is_some()
+            || peaks.charged_bytes < peaks.tree_rss_bytes
+            || (matches!(cause, OwnerStopCause::ResourceExhausted)
+                && peaks.charged_bytes <= self.memory_bytes.get())
+        {
+            return Err(CallerBootstrapError::TerminalReplyMismatch);
+        }
+        let cutoff = clock
+            .adopt_stop(stop, self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)?;
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+        }
+        creator::require_live(&self.launcher_identity()?.launcher_pin)
+            .map_err(CallerBootstrapError::Io)?;
+        self.pending_owner_stop = Some(PendingOwnerStop {
+            cause,
+            peaks,
+            receiver,
+        });
+        self.terminal_phase = CallerTerminalPhase::Refused;
+        Ok(())
     }
 
     /// Even a syntactically complete commit cannot supply measurements after abnormal O exit.
