@@ -144,8 +144,10 @@ nothing says so.
   classification with the descriptor's advertised (kind, mode) pairs.
 - For a bounded extent, the process-provider arm shall compare every explicit
   `extent.bounds[].kind` with manifest `domains`, including when the descriptor
-  advertises `unbounded` only for the item's kind. An empty `bounds` passes
-  this check (QSpec FR-290-AC-13).
+  advertises `unbounded` only for the item's kind. If such an admitted
+  unbounded-only descriptor omits `domains`, the arm shall treat it as covering
+  no bound kind for this check. An empty `bounds` passes this check (QSpec
+  FR-290-AC-13; FR-331-AC-22).
 - When a bounded extent has an unadvertised `bounds[].kind`, the process arm
   shall settle it `unsupported`, warned, with
   `unsupported_projection`/`unsupported-requested-capability`, naming the

@@ -41,13 +41,14 @@ PV-4).
    | --- | --- | --- |
    | bounded, `bounds` empty | `bounded` for kind | `supported` |
    | bounded, `bounds` empty | both modes for kind | `supported` |
-   | bounded, `bounds` empty | `unbounded` only for kind | `unsupported`, `unsupported_projection`/`unsupported-requested-capability` |
+   | bounded, `bounds` empty | `unbounded` only for kind | `unsupported`, warned, `unsupported_projection`/`unsupported-requested-capability` |
    | bounded, `bounds[].kind` all in `domains` | `bounded` for kind | `supported` |
    | bounded, `bounds[].kind` all in `domains` | both modes for kind | `supported` |
    | bounded, one `bounds[].kind` absent from `domains` | `bounded` for kind | `unsupported`, warned, `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate |
    | bounded, one `bounds[].kind` absent from `domains` | both modes for kind | `unsupported`, warned, `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate |
-   | bounded, covered domain | `unbounded` only for kind | `unsupported`, `unsupported_projection`/`unsupported-requested-capability` |
+   | bounded, covered domain | `unbounded` only for kind, with `domains` present | `unsupported`, warned, `unsupported_projection`/`unsupported-requested-capability` |
    | bounded, one `bounds[].kind` absent from `domains` | `unbounded` only for kind | `unsupported`, warned, `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate |
+   | bounded, non-empty `bounds` | `unbounded` only for kind, with `domains` omitted | `unsupported`, warned, `unsupported_projection`/`unsupported-requested-capability` naming the offending bound kind and candidate; omitted `domains` covers no bound kind |
    | unbounded, `finite_bound_available=false` | `unbounded` for kind, with unrelated or omitted `domains` | `supported` |
    | unbounded, `finite_bound_available=true` | both modes for kind, with one `domains[].kind` unadvertised | `supported` |
    | unbounded, `finite_bound_available=true`, `integer` and `collection` domains | `bounded` only for kind; `domains` contains both | `requires-bound` |
