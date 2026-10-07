@@ -242,6 +242,106 @@ pub(super) fn decode(
     Ok(header)
 }
 
+/// I forwards only an authenticated pre-recipe installer refusal. The same bounded Refused
+/// transaction retains the original producer stamp; I's receipt is not a new trigger.
+pub(super) enum InnerStartupHeader {
+    Ready(super::protocol::GuardianControl),
+    Refused {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+        stop: StopStamp,
+        failure: PolicyFailureCause,
+    },
+}
+
+impl InnerStartupHeader {
+    pub(super) fn rights_count(&self) -> usize {
+        0
+    }
+}
+
+#[derive(Deserialize)]
+enum InnerReplyKind {
+    Ready,
+    Refused,
+}
+
+#[derive(Deserialize)]
+struct InnerReplySelector {
+    kind: InnerReplyKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InnerReadyReply {
+    kind: InnerReplyKind,
+    identity: BuildIdentity,
+    authority: RunAuthority,
+    mapped_uid: u32,
+    creator_pid: i32,
+}
+
+/// Flat schemas avoid serde's internally tagged Content accumulator. The context decoder
+/// borrows the original frame and copies only validated UTF-8 into C's pre-L reservation.
+pub(super) fn decode_inner_startup(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+) -> Result<InnerStartupHeader, ControlError> {
+    context.clear();
+    check_scratch_free_json(payload).map_err(|error| {
+        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
+    })?;
+    let selector: InnerReplySelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selector.kind {
+        InnerReplyKind::Ready => {
+            let ready: InnerReadyReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(ready.kind, InnerReplyKind::Ready) {
+                return Err(ControlError::InvalidEncoding(
+                    <serde_json::Error as de::Error>::custom("expected exact I Ready"),
+                ));
+            }
+            Ok(InnerStartupHeader::Ready(
+                super::protocol::GuardianControl::Ready {
+                    identity: ready.identity,
+                    authority: ready.authority,
+                    mapped_uid: ready.mapped_uid,
+                    creator_pid: ready.creator_pid,
+                },
+            ))
+        }
+        InnerReplyKind::Refused => match decode(payload, context)? {
+            InstallerReplyHeader::Refused {
+                identity,
+                authority,
+                stop,
+                failure,
+            } => Ok(InnerStartupHeader::Refused {
+                identity,
+                authority,
+                stop,
+                failure,
+            }),
+            InstallerReplyHeader::PolicyReady { .. } => Err(ControlError::InvalidEncoding(
+                <serde_json::Error as de::Error>::custom("expected exact I refusal"),
+            )),
+        },
+    }
+}
+
+/// Fixed decoder-owned values coexist during selection and return; the context capacity is
+/// charged separately from these owning metadata values by the retained caller before L.
+pub(super) fn inner_startup_decode_bytes() -> Result<u64, ControlError> {
+    let bytes = std::mem::size_of::<InnerReplySelector>()
+        .checked_add(
+            std::mem::size_of::<InnerReadyReply>().max(std::mem::size_of::<InstallerReplyHeader>()),
+        )
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<InnerStartupHeader>()))
+        .ok_or(ControlError::EncodedBytesExceeded)?;
+    u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,6 +351,97 @@ mod tests {
         startup_cause::{ProjectedStartupCause, ProjectionFidelity, StartupJsonError},
     };
     use std::io;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38, FR-034-AC-39
+    #[test]
+    fn inner_startup_preserves_forwarded_original_os_refusal_and_strict_ready_schema() {
+        let original = io::Error::from_raw_os_error(nix::libc::EPERM);
+        let mut producer = PreparedStartupContext::new(CONTEXT_BYTES).unwrap();
+        let cause = producer.capture_io(&original).unwrap();
+        let identity = current_build_identity();
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Backend).unwrap();
+        let refusal = serde_json::to_vec(&InstallerReply::Refused {
+            identity,
+            authority,
+            stop,
+            failure: PolicyFailureCause::Privilege { cause },
+            context: producer.context_bytes(),
+        })
+        .unwrap();
+        let mut receiver = PreparedStartupContext::new(CONTEXT_BYTES).unwrap();
+        let capacity = receiver.reserved_bytes();
+        let InnerStartupHeader::Refused {
+            identity: actual_identity,
+            authority: actual_authority,
+            stop: actual_stop,
+            failure: PolicyFailureCause::Privilege { cause },
+        } = decode_inner_startup(&refusal, &mut receiver).unwrap()
+        else {
+            panic!("I relay changed refusal into admission or lost its original site");
+        };
+        assert_eq!(actual_identity, identity);
+        assert_eq!(actual_authority, authority);
+        assert_eq!(actual_stop, stop);
+        assert_eq!(receiver.context(), original.to_string());
+        assert_eq!(receiver.reserved_bytes(), capacity);
+        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+            panic!("relayed OS error changed domains");
+        };
+        assert_eq!(error.raw_os_error(), original.raw_os_error());
+        assert_eq!(error.kind(), original.kind());
+        assert_eq!(fidelity, ProjectionFidelity::OsCodeAndKind);
+        let ready = serde_json::to_vec(&super::super::protocol::GuardianControl::Ready {
+            identity,
+            authority,
+            mapped_uid: 0,
+            creator_pid: 0,
+        })
+        .unwrap();
+        assert!(
+            matches!(decode_inner_startup(&ready, &mut receiver).unwrap(),
+            InnerStartupHeader::Ready(super::super::protocol::GuardianControl::Ready {
+                identity: actual_identity, authority: actual_authority,
+                mapped_uid: 0, creator_pid: 0,
+            }) if actual_identity == identity && actual_authority == authority)
+        );
+        assert!(receiver.context().is_empty());
+        assert_eq!(receiver.reserved_bytes(), capacity);
+        let original_ready: serde_json::Value = serde_json::from_slice(&ready).unwrap();
+        for field in ["identity", "authority", "mapped_uid", "creator_pid"] {
+            let mut missing = original_ready.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(
+                decode_inner_startup(&serde_json::to_vec(&missing).unwrap(), &mut receiver)
+                    .is_err()
+            );
+            let mut wrong = original_ready.clone();
+            wrong[field] = serde_json::Value::String("wrong".to_owned());
+            assert!(
+                decode_inner_startup(&serde_json::to_vec(&wrong).unwrap(), &mut receiver).is_err()
+            );
+        }
+        let mut extra = original_ready;
+        extra["failure"] = serde_json::Value::String("not-admission".to_owned());
+        assert!(decode_inner_startup(&serde_json::to_vec(&extra).unwrap(), &mut receiver).is_err());
+        let positive_installer = serde_json::to_vec(&InstallerReply::PolicyReady {
+            identity,
+            authority,
+        })
+        .unwrap();
+        assert!(decode_inner_startup(&positive_installer, &mut receiver).is_err());
+        let mut refusal_without_stamp: serde_json::Value =
+            serde_json::from_slice(&refusal).unwrap();
+        refusal_without_stamp
+            .as_object_mut()
+            .unwrap()
+            .remove("stop");
+        assert!(decode_inner_startup(
+            &serde_json::to_vec(&refusal_without_stamp).unwrap(),
+            &mut receiver
+        )
+        .is_err());
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38
     #[test]
