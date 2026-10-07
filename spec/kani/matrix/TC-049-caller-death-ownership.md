@@ -609,7 +609,7 @@ oracle and one-CODE-PR gate.
     observations do not prove target-image ABI or installation success.
     Analysis must distinguish actual unsupported support provenance (semantic Unsupported with no
     raw errno) from original OS install errno/kind and finite reconstructible non-OS variant/sites.
-    Inspect authenticated run/build, owned pre-recipe PID/state and original stamp custody before
+    Inspect authenticated run/build and owned pre-recipe PID/state custody before
     classification. A kind-only projection or Display/message discriminator fails the allocation;
     do not demand an unavailable public stage query or universal original boxed-chain fidelity.
     Positively distinguish NNP Prctl/privilege/protection failures (TrustedOwnerProtection) from

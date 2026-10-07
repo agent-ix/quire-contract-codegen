@@ -656,7 +656,7 @@ For a non-OS installation error, C shall retain only its finite actually reconst
 dependency variant/fields as typed private provenance and, where representable, typed public
 io-error source. No Display/message parsing shall distinguish support, privilege or filter sites.
 The private transport shall bind that provenance to the authenticated run/build, actual owned
-pre-recipe PID/state and original stop stamp before C classifies the refusal. A kind-only transport
+pre-recipe PID/state before C classifies the refusal. A kind-only transport
 projection does not satisfy typed-origin retention and remains a CODE gap. For these new ABI-admission errors, this allocation promises
 neither arbitrary boxed-error/downcast-chain or object reconstruction nor an external post-return
 stage query; any such original-chain fidelity loss remains explicit rather than forged. It adds no
@@ -679,7 +679,7 @@ mandatory; an ABI mismatch permits no unfiltered retry or weaker policy.
 The exact original recipe continues to use its admitted pathname, argv0, arguments, environment,
 cwd and stdio. This contract imposes no executable/interpreter/loader stability precondition and
 claims no binding of a prior file/header inspection to the eventual executed bytes. Path replacement,
-content mutation, PATH/execvp resolution, script interpreter resolution, ELF PT_INTERP resolution
+content mutation, PATH/execvp resolution, script interpreter resolution, ELF PT_INTERP resolution,
 loader selection and kernel binfmt_misc interpreter/handler resolution can differ between
 observation and actual exec. A registered native emulator can translate a foreign image into native
 syscalls; the filter enforces those actual native syscalls, not an inferred guest-image ABI.
