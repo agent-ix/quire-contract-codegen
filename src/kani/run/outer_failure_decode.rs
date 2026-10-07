@@ -93,6 +93,7 @@ struct StateFields {
 /// Raw exact startup dispositions; none supplies phase/measurement/settlement authority.
 pub(super) enum Disposition {
     Report,
+    StartupTimeoutBeforeObservation,
     OperationalFailure {
         operation: CauseOperation,
         state: FailureState,
@@ -109,6 +110,7 @@ pub(super) enum Disposition {
 #[derive(Clone, Copy)]
 enum DispositionKind {
     Report,
+    StartupTimeoutBeforeObservation,
     OperationalFailure,
     OwnerStop,
     SetupRefused,
@@ -118,6 +120,9 @@ impl DispositionKind {
     fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
         if text.equals("Report") {
             Ok(Self::Report)
+        } else if super::outer_failure::ConstructorTimeoutDisposition::metadata_text(text).is_some()
+        {
+            Ok(Self::StartupTimeoutBeforeObservation)
         } else if text.equals("OperationalFailure") {
             Ok(Self::OperationalFailure)
         } else if text.equals("OwnerStop") {
@@ -265,7 +270,7 @@ pub(super) fn disposition(
         }
     }
     match missing(fields.kind)? {
-        DispositionKind::Report => {
+        DispositionKind::Report | DispositionKind::StartupTimeoutBeforeObservation => {
             if fields.operation.is_some()
                 || fields.state.is_some()
                 || fields.representation.is_some()
@@ -275,7 +280,15 @@ pub(super) fn disposition(
             {
                 return Err(field_error(DecodeCause::UnknownField));
             }
-            Ok(Disposition::Report)
+            match missing(fields.kind)? {
+                DispositionKind::Report => Ok(Disposition::Report),
+                DispositionKind::StartupTimeoutBeforeObservation => {
+                    Ok(Disposition::StartupTimeoutBeforeObservation)
+                }
+                DispositionKind::OperationalFailure
+                | DispositionKind::OwnerStop
+                | DispositionKind::SetupRefused => Err(field_error(DecodeCause::InvalidValue)),
+            }
         }
         DispositionKind::OperationalFailure => {
             if fields.cause.is_some() || fields.failure.is_some() {
@@ -313,7 +326,9 @@ pub(super) fn disposition(
                         failure: missing(fields.failure.flatten())?,
                     })
                 }
-                DispositionKind::OperationalFailure | DispositionKind::Report => {
+                DispositionKind::OperationalFailure
+                | DispositionKind::Report
+                | DispositionKind::StartupTimeoutBeforeObservation => {
                     Err(field_error(DecodeCause::InvalidValue))
                 }
             }

@@ -97,6 +97,53 @@ impl FailureHeader {
     }
 }
 
+/// Parsed constructor-work timeout facts, never an absence or settlement witness. Only O's
+/// retained pre-observation constructor work producer may emit this distinct disposition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct ConstructorTimeoutHeader {
+    pub(super) identity: BuildIdentity,
+    pub(super) authority: RunAuthority,
+    pub(super) stop: StopStamp,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind")]
+pub(super) enum ConstructorTimeoutCommit {
+    Committed {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+        stop: StopStamp,
+        disposition: ConstructorTimeoutDisposition,
+    },
+}
+
+macro_rules! constructor_timeout_disposition {
+    ($variant:ident) => {
+        #[derive(Serialize)]
+        #[serde(tag = "kind")]
+        pub(super) enum ConstructorTimeoutDisposition {
+            $variant,
+        }
+        impl ConstructorTimeoutDisposition {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                text.equals(stringify!($variant)).then_some(Self::$variant)
+            }
+        }
+    };
+}
+constructor_timeout_disposition! { StartupTimeoutBeforeObservation }
+
+impl ConstructorTimeoutHeader {
+    pub(super) fn commit(self) -> ConstructorTimeoutCommit {
+        ConstructorTimeoutCommit::Committed {
+            identity: self.identity,
+            authority: self.authority,
+            stop: self.stop,
+            disposition: ConstructorTimeoutDisposition::StartupTimeoutBeforeObservation,
+        }
+    }
+}
+
 /// Typed output uses the existing negative commit tag, without copying measured fields.
 #[derive(Serialize)]
 #[serde(tag = "kind")]

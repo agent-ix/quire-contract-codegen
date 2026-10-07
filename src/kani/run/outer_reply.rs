@@ -9,7 +9,7 @@ use std::mem::{size_of, size_of_val};
 use super::{
     control::ControlError,
     guardian_decode::{DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text},
-    outer_failure::{FailureHeader, FailureRepresentation, FailureState},
+    outer_failure::{ConstructorTimeoutHeader, FailureHeader, FailureRepresentation, FailureState},
     outer_failure_decode::{self, Disposition},
     outer_setup::NamespaceIdentity,
     protocol::{BuildIdentity, RunAuthority},
@@ -27,6 +27,7 @@ use super::{
 pub(super) enum OuterReply {
     Startup(OuterStartupControl),
     Failure(FailureHeader),
+    ConstructorTimeout(ConstructorTimeoutHeader),
 }
 
 // Parsed frame facts are shared, while each public(super) entrypoint below admits only its
@@ -34,6 +35,7 @@ pub(super) enum OuterReply {
 enum Frame {
     Startup(OuterStartupControl),
     Failure(FailureHeader),
+    ConstructorTimeout(ConstructorTimeoutHeader),
     Terminal(OuterTerminalReply),
 }
 
@@ -42,6 +44,7 @@ impl OuterReply {
         match self {
             Self::Startup(reply) => reply.rights_count(),
             Self::Failure(reply) => reply.rights_count(),
+            Self::ConstructorTimeout(_) => 0,
         }
     }
 
@@ -49,7 +52,7 @@ impl OuterReply {
     pub(super) fn clock_only(&self) -> bool {
         match self {
             Self::Startup(reply) => reply.clock_only(),
-            Self::Failure(_) => true,
+            Self::Failure(_) | Self::ConstructorTimeout(_) => true,
         }
     }
 }
@@ -202,6 +205,16 @@ impl ReplyFields {
                             disposition: TerminalDisposition::Report,
                         }))
                     }
+                    Disposition::StartupTimeoutBeforeObservation => {
+                        if self.peaks.is_some() {
+                            return Err(field_error(DecodeCause::UnknownField));
+                        }
+                        Ok(Frame::ConstructorTimeout(ConstructorTimeoutHeader {
+                            identity: required(self.identity)?,
+                            authority,
+                            stop,
+                        }))
+                    }
                     Disposition::OperationalFailure {
                         operation,
                         state,
@@ -321,6 +334,7 @@ pub(super) fn decode(
     match frame(payload, context, scratch)? {
         Frame::Startup(reply) => Ok(OuterReply::Startup(reply)),
         Frame::Failure(header) => Ok(OuterReply::Failure(header)),
+        Frame::ConstructorTimeout(header) => Ok(OuterReply::ConstructorTimeout(header)),
         Frame::Terminal(_) => Err(unexpected_frame()),
     }
 }
@@ -351,9 +365,24 @@ fn cancellation(frame: Frame) -> Result<CancellationHeader, ControlError> {
             OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. },
         )
         | Frame::Failure(_)
+        | Frame::ConstructorTimeout(_)
         | Frame::Terminal(
             OuterTerminalReply::ReportDescriptor { .. } | OuterTerminalReply::Committed { .. },
         ) => Err(unexpected_frame()),
+    }
+}
+
+/// Original C work-expiry cleanup only; ordinary cancellation/report entrypoints continue
+/// refusing this constructor disposition. The actor authenticates actual pre-Dispatch state.
+pub(super) fn constructor_timeout_progress(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<CancellationProgress, ControlError> {
+    match frame(payload, context, scratch)? {
+        Frame::ConstructorTimeout(header) => Ok(CancellationProgress::ConstructorTimeout(header)),
+        Frame::Startup(OuterStartupControl::Phase(phase)) => Ok(CancellationProgress::Phase(phase)),
+        other => cancellation(other).map(CancellationProgress::Terminal),
     }
 }
 
@@ -403,6 +432,7 @@ pub(super) fn report_start(
             OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. },
         )
         | Frame::Failure(_)
+        | Frame::ConstructorTimeout(_)
         | Frame::Terminal(
             OuterTerminalReply::Cancelled { .. } | OuterTerminalReply::Committed { .. },
         ) => Err(unexpected_frame()),
@@ -437,6 +467,7 @@ pub(super) fn terminal_commit(
             OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. },
         )
         | Frame::Failure(_)
+        | Frame::ConstructorTimeout(_)
         | Frame::Terminal(
             OuterTerminalReply::Cancelled { .. }
             | OuterTerminalReply::ReportDescriptor { .. }
@@ -469,6 +500,7 @@ pub(super) fn decode_bytes() -> Result<u64, ControlError> {
         size_of::<Result<OuterTerminalReply, ControlError>>(),
         size_of::<ObjectState>(),
         size_of::<Text<'static>>(),
+        size_of::<ConstructorTimeoutHeader>(),
         size_of::<FailureState>(),
         size_of::<FailureRepresentation>(),
     ];
@@ -508,6 +540,150 @@ mod tests {
             context,
             &mut super::super::guardian_decode::Scratch::default(),
         )
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-32
+    #[test]
+    fn constructor_timeout_has_no_measurement_and_only_its_cleanup_context_accepts_it() {
+        // Raw schema facts only; this test supplies no role/stage/absence/settlement proof.
+        let header = ConstructorTimeoutHeader {
+            identity: current_build_identity(),
+            authority: RunAuthority::fresh().unwrap(),
+            stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
+        };
+        let original = serde_json::to_value(header.commit()).unwrap();
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let mut context = PreparedStartupContext::new(16).unwrap();
+        let OuterReply::ConstructorTimeout(actual) = parse(&bytes, &mut context).unwrap() else {
+            panic!("constructor timeout changed branch");
+        };
+        assert_eq!(actual, header);
+        assert_eq!(OuterReply::ConstructorTimeout(actual).rights_count(), 0);
+        assert!(OuterReply::ConstructorTimeout(actual).clock_only());
+        let CancellationProgress::ConstructorTimeout(actual) =
+            constructor_timeout_progress(&bytes, &mut context, &mut Scratch::default()).unwrap()
+        else {
+            panic!("work cleanup lost constructor timeout");
+        };
+        assert_eq!(actual, header);
+        assert!(cancellation_progress(&bytes, &mut context, &mut Scratch::default()).is_err());
+        assert!(cancellation_commit(&bytes, &mut context, &mut Scratch::default()).is_err());
+        assert!(report_start(&bytes, &mut context, &mut Scratch::default()).is_err());
+        assert!(terminal_commit(&bytes, &mut context, &mut Scratch::default()).is_err());
+        assert!(
+            super::super::outer_failure::decode(&bytes, &mut Scratch::default(), &mut context)
+                .is_err()
+        );
+        for field in ["identity", "authority", "stop", "disposition"] {
+            let mut missing = original.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(parse(&serde_json::to_vec(&missing).unwrap(), &mut context).is_err());
+            let mut null = original.clone();
+            null[field] = serde_json::Value::Null;
+            assert!(parse(&serde_json::to_vec(&null).unwrap(), &mut context).is_err());
+        }
+        for field in ["peaks", "context", "representation", "operation", "state"] {
+            let mut extra = original.clone();
+            if field == "peaks" {
+                extra[field] = serde_json::json!({"tree_rss_bytes": 0, "charged_bytes": 0});
+            } else {
+                extra["disposition"][field] = serde_json::Value::Null;
+            }
+            assert!(parse(&serde_json::to_vec(&extra).unwrap(), &mut context).is_err());
+        }
+        let text = serde_json::to_string(&original).unwrap();
+        assert!(parse(format!("{text} {{}}").as_bytes(), &mut context).is_err());
+        assert!(parse(&bytes[..bytes.len() - 1], &mut context).is_err());
+        let duplicate = text.replacen("\"disposition\":", "\"identity\":null,\"disposition\":", 1);
+        assert!(parse(duplicate.as_bytes(), &mut context).is_err());
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-38
+    #[test]
+    fn queued_constructor_timeout_drains_same_partial_cursor_after_peer_eof_without_phase_authority(
+    ) {
+        use super::super::control::{role_pair, IncrementalReceive};
+        use std::time::{Duration, Instant};
+        let header = ConstructorTimeoutHeader {
+            identity: current_build_identity(),
+            authority: RunAuthority::fresh().unwrap(),
+            stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
+        };
+        let cutoff = Instant::now().checked_add(Duration::from_secs(3)).unwrap();
+        let (caller, sender) = role_pair().unwrap();
+        sender
+            .transport()
+            .send(&header.commit(), &[], cutoff)
+            .unwrap();
+        let mut receive = IncrementalReceive::prepare().unwrap();
+        let reserved = receive.reserved_bytes().unwrap();
+        let mut context = PreparedStartupContext::new(0).unwrap();
+        let mut scratch = Scratch::default();
+        assert!(receive
+            .advance_clock_only_optional(
+                &caller.transport(),
+                CancellationProgress::rights_count,
+                Some(cutoff),
+                |payload| constructor_timeout_progress(payload, &mut context, &mut scratch),
+                |_| true,
+            )
+            .unwrap()
+            .is_none());
+        assert!(receive.has_partial_frame());
+        drop(sender);
+        let received = receive
+            .advance_clock_only_optional(
+                &caller.transport(),
+                CancellationProgress::rights_count,
+                Some(cutoff),
+                |payload| constructor_timeout_progress(payload, &mut context, &mut scratch),
+                |_| true,
+            )
+            .unwrap()
+            .unwrap();
+        assert!(received.rights.is_empty());
+        assert!(received.credentials.is_some());
+        let CancellationProgress::ConstructorTimeout(actual) = received.control else {
+            panic!("queued timeout granted another branch");
+        };
+        assert_eq!(actual, header);
+        assert!(!receive.has_partial_frame());
+        assert_eq!(receive.reserved_bytes().unwrap(), reserved);
+        assert!(receive.confirm_end(&caller.transport(), cutoff).unwrap());
+        // The same late EOF cannot authorize an ordinary phase on the startup decoder.
+        let (caller, sender) = role_pair().unwrap();
+        sender
+            .transport()
+            .send(
+                &OuterPhaseReply::GateReleased {
+                    authority: header.authority,
+                },
+                &[],
+                cutoff,
+            )
+            .unwrap();
+        drop(sender);
+        let mut phase = IncrementalReceive::prepare().unwrap();
+        assert!(phase
+            .advance_clock_only_optional(
+                &caller.transport(),
+                OuterReply::rights_count,
+                Some(cutoff),
+                |payload| decode(payload, &mut context, &mut scratch),
+                OuterReply::clock_only,
+            )
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            phase.advance_clock_only_optional(
+                &caller.transport(),
+                OuterReply::rights_count,
+                Some(cutoff),
+                |payload| decode(payload, &mut context, &mut scratch),
+                OuterReply::clock_only,
+            ),
+            Err(ControlError::Eof)
+        ));
     }
 
     /// Trace: FR-034-AC-15
@@ -683,7 +859,9 @@ mod tests {
                     assert_eq!(peaks.charged_bytes, 31);
                     assert_eq!(failure, PolicyFailureCause::ProtectionUnverified);
                 }
-                OuterReply::Startup(OuterStartupControl::Phase(_)) | OuterReply::Failure(_) => {
+                OuterReply::Startup(OuterStartupControl::Phase(_))
+                | OuterReply::Failure(_)
+                | OuterReply::ConstructorTimeout(_) => {
                     panic!("measured negative changed domain")
                 }
             }

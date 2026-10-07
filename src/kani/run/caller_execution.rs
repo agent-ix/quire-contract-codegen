@@ -85,7 +85,8 @@ pub(super) enum PolicyTerminalOutcome {
 
 /// Settled negative selection retains observation facts privately; the public observation
 /// refusal has diagnostic text only, with no reconstructed I/O carrier or evidence.
-pub(super) enum OperationalTerminalOutcome {
+pub(super) enum StartupNegativeOutcome {
+    ConstructorTimedOut,
     Refused(BoundedLaunchError),
     ObservationFailed {
         failure: super::outer_failure::FailureHeader,
@@ -121,7 +122,10 @@ impl CallerExecution {
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<CallerDriver>()))
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<ExecutionClock>()))
             .and_then(|bytes| bytes.checked_add(std::mem::size_of::<PolicyTerminalOutcome>()))
-            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<OperationalTerminalOutcome>()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<StartupNegativeOutcome>()))
+            .and_then(|bytes| {
+                bytes.checked_add(std::mem::size_of::<super::caller_public::CancellationResult>())
+            })
             .and_then(|bytes| {
                 bytes.checked_add(std::mem::size_of::<super::launch::BoundedProductionLaunch>())
             })
@@ -360,19 +364,45 @@ impl CallerExecution {
     /// C retains its original local candidate outside this finite progress operation. Publish
     /// original cancellation authority completely before actually closing its I lease.
     pub(super) fn cancel_step(&mut self) -> Result<bool, CallerExecutionError> {
-        if !self
-            .bootstrap
-            .cancel_close_step(&mut self.clock)
-            .map_err(CallerExecutionError::Bootstrap)?
+        let constructor_work =
+            self.work_expired && !self.dispatched && self.bootstrap.constructor_work_stage();
+        if constructor_work
+            && self
+                .bootstrap
+                .constructor_work_reply_step(&mut self.clock)
+                .map_err(CallerExecutionError::Bootstrap)?
         {
-            return Ok(false);
+            return Ok(true);
+        }
+        let sent = self.bootstrap.cancel_close_step(&mut self.clock);
+        match sent {
+            Ok(false) => return Ok(false),
+            Ok(true) => {}
+            Err(CallerBootstrapError::Control(super::control::ControlError::Eof))
+                if constructor_work && self.bootstrap.cancellation_send_unstarted() =>
+            {
+                // Expected normal O exit may race the quiet receive check. Only the SAME
+                // complete bounded authenticated cleanup frame can recover its candidate;
+                // empty/partial/malformed EOF is still an error, never cancellation proof.
+                return self
+                    .bootstrap
+                    .constructor_work_reply_step(&mut self.clock)
+                    .map_err(CallerExecutionError::Bootstrap);
+            }
+            Err(error) => return Err(CallerExecutionError::Bootstrap(error)),
         }
         if !self.lease_closed {
             self.close_original_lease()?;
         }
-        self.bootstrap
-            .cancellation_reply_step(&mut self.clock)
-            .map_err(CallerExecutionError::Bootstrap)
+        if constructor_work {
+            self.bootstrap
+                .constructor_work_reply_step(&mut self.clock)
+                .map_err(CallerExecutionError::Bootstrap)
+        } else {
+            self.bootstrap
+                .cancellation_reply_step(&mut self.clock)
+                .map_err(CallerExecutionError::Bootstrap)
+        }
     }
 
     /// A cancellation receipt is not cleanup. Retain the actual normal O/L/creator proof even
@@ -564,12 +594,12 @@ impl CallerExecution {
         ))
     }
 
-    /// The preparation-negative carries no measurements or report. The original O cause is
-    /// projected only after actual normal O/L/creator/EOF and real capture joins by the retained
-    /// earliest cutoff. Missing/abnormal custody leaves this owner unsettled and refuses.
-    pub(super) fn finish_operational_failure(
+    /// Both preparation-negative alternatives carry no measurements or report. Original O
+    /// I/O projection or constructor timeout selection occurs only after actual normal
+    /// O/L/creator/EOF and real capture joins by the retained earliest cutoff. Missing/abnormal custody leaves this owner unsettled and refuses.
+    pub(super) fn finish_startup_negative(
         &mut self,
-    ) -> Result<OperationalTerminalOutcome, CallerExecutionError> {
+    ) -> Result<StartupNegativeOutcome, CallerExecutionError> {
         if !self.lease_closed {
             self.close_original_lease()?;
         }
@@ -586,7 +616,7 @@ impl CallerExecution {
         loop {
             if self
                 .bootstrap
-                .finish_operational_failure_after_roles(roles)
+                .finish_startup_negative_after_roles(roles)
                 .map_err(CallerExecutionError::Bootstrap)?
             {
                 break;
@@ -604,6 +634,13 @@ impl CallerExecution {
             return Err(CallerExecutionError::Deadline(DeadlineError::Expired));
         }
         self.settled = true;
+        if self
+            .bootstrap
+            .constructor_timeout_after_roles()
+            .map_err(CallerExecutionError::Bootstrap)?
+        {
+            return Ok(StartupNegativeOutcome::ConstructorTimedOut);
+        }
         let failure = self
             .bootstrap
             .operational_failure_after_roles()
@@ -615,7 +652,7 @@ impl CallerExecution {
     // This helper itself grants no role, stage, settlement or evidence authority.
     fn select_operational_failure(
         failure: super::outer_failure::FailureHeader,
-    ) -> Result<OperationalTerminalOutcome, CallerExecutionError> {
+    ) -> Result<StartupNegativeOutcome, CallerExecutionError> {
         // Admission is retained from the actual producer's historical complete within-ceiling
         // sample, not inferred from a C phase/optional peaks. Only the independently known
         // observation sites select this existing detail-only public result.
@@ -635,12 +672,12 @@ impl CallerExecution {
                 } => Some(super::startup_cause::RepresentationError::NonInstallationBackendCause),
                 super::outer_failure::FailureRepresentation::Integrity { .. } => None,
             };
-            return Ok(OperationalTerminalOutcome::ObservationFailed {
+            return Ok(StartupNegativeOutcome::ObservationFailed {
                 failure,
                 metadata_refusal,
             });
         }
-        Self::project_preparation_failure(failure).map(OperationalTerminalOutcome::Refused)
+        Self::project_preparation_failure(failure).map(StartupNegativeOutcome::Refused)
     }
 
     fn project_preparation_failure(
@@ -998,14 +1035,14 @@ mod tests {
         let original = io::Error::new(io::ErrorKind::Other, "original custom observation");
         let mut negative = failure(&original);
         negative.operation = CauseOperation::TreeObservation;
-        let OperationalTerminalOutcome::Refused(BoundedLaunchError::Unavailable { cause, .. }) =
+        let StartupNegativeOutcome::Refused(BoundedLaunchError::Unavailable { cause, .. }) =
             CallerExecution::select_operational_failure(negative).unwrap()
         else {
             panic!("pre-admission observation lost its actual unavailable carrier");
         };
         assert_eq!(cause.kind(), original.kind());
         negative.state.observation_admitted = true;
-        let OperationalTerminalOutcome::ObservationFailed {
+        let StartupNegativeOutcome::ObservationFailed {
             failure,
             metadata_refusal,
         } = CallerExecution::select_operational_failure(negative).unwrap()
@@ -1017,7 +1054,7 @@ mod tests {
         negative.representation = FailureRepresentation::Integrity {
             predicate: super::super::cross_role_cause::CauseIntegrityPredicate::UnknownKindMetadata,
         };
-        let OperationalTerminalOutcome::ObservationFailed {
+        let StartupNegativeOutcome::ObservationFailed {
             failure,
             metadata_refusal,
         } = CallerExecution::select_operational_failure(negative).unwrap()

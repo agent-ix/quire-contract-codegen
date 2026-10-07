@@ -76,7 +76,7 @@ pub(super) enum CallerBootstrapError {
     OuterExitAbnormal,
     OwnerStopObserved,
     PolicyRefusalObserved,
-    OperationalFailureObserved,
+    StartupNegativeObserved,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -120,7 +120,7 @@ impl std::error::Error for CallerBootstrapError {
             | Self::OuterExitAbnormal
             | Self::OwnerStopObserved
             | Self::PolicyRefusalObserved
-            | Self::OperationalFailureObserved => None,
+            | Self::StartupNegativeObserved => None,
         }
     }
 }
@@ -162,7 +162,8 @@ pub(super) struct CallerBootstrap {
     pending_setup_refusal: Option<super::startup_envelope::PolicyFailureCause>,
     policy_refusal_settled: bool,
     pending_operational_failure: Option<super::outer_failure::FailureHeader>,
-    operational_failure_settled: bool,
+    pending_constructor_timeout: Option<super::outer_failure::ConstructorTimeoutHeader>,
+    startup_negative_settled: bool,
     terminal_receive: TerminalReceive,
     read_ack_storage: Option<FrameStorage>,
     cancel_storage: Option<FrameStorage>,
@@ -643,7 +644,8 @@ impl CallerBootstrap {
             pending_setup_refusal: None,
             policy_refusal_settled: false,
             pending_operational_failure: None,
-            operational_failure_settled: false,
+            pending_constructor_timeout: None,
+            startup_negative_settled: false,
             terminal_receive,
             read_ack_storage: Some(read_ack_storage),
             cancel_storage: Some(cancel_storage),
@@ -796,6 +798,7 @@ impl CallerBootstrap {
             || self.pending_owner_stop.is_some()
             || self.pending_setup_refusal.is_some()
             || self.pending_operational_failure.is_some()
+            || self.pending_constructor_timeout.is_some()
         {
             return Err(CallerBootstrapError::TerminalTransition);
         }
@@ -835,6 +838,10 @@ impl CallerBootstrap {
         let pin = received.rights.pop();
         let control = match control {
             super::outer_reply::OuterReply::Startup(control) => control,
+            super::outer_reply::OuterReply::ConstructorTimeout(header) => {
+                self.retain_constructor_timeout(clock, header, sender, pin.is_some())?;
+                return Err(CallerBootstrapError::StartupNegativeObserved);
+            }
             super::outer_reply::OuterReply::Failure(failure) => {
                 // Preparation has no I producer or positive Dispatch. O's actual retained
                 // capability was authenticated at Armed; this full negative shortens only the
@@ -874,7 +881,7 @@ impl CallerBootstrap {
                 self.pending_operational_failure = Some(failure);
                 self.phase_failed = true;
                 self.inner_auth_failed = true;
-                return Err(CallerBootstrapError::OperationalFailureObserved);
+                return Err(CallerBootstrapError::StartupNegativeObserved);
             }
         };
         match control {
@@ -1056,13 +1063,14 @@ impl CallerBootstrap {
 
     /// A complete negative is provisional until real normal O/L/creator settlement and the
     /// SAME original cursor's exact stream end. No missing measurement is classified here.
-    pub(super) fn finish_operational_failure_after_roles(
+    pub(super) fn finish_startup_negative_after_roles(
         &mut self,
         roles: &CallerRoleSettlement,
     ) -> Result<bool, CallerBootstrapError> {
         if roles.authority != self.authority
             || Instant::now() >= roles.cutoff
-            || self.pending_operational_failure.is_none()
+            || (self.pending_operational_failure.is_none()
+                && self.pending_constructor_timeout.is_none())
         {
             return Err(CallerBootstrapError::TerminalTransition);
         }
@@ -1081,7 +1089,7 @@ impl CallerBootstrap {
         {
             return Ok(false);
         }
-        self.operational_failure_settled = true;
+        self.startup_negative_settled = true;
         Ok(true)
     }
 
@@ -1090,11 +1098,79 @@ impl CallerBootstrap {
     pub(super) fn operational_failure_after_roles(
         &self,
     ) -> Result<super::outer_failure::FailureHeader, CallerBootstrapError> {
-        if !self.operational_failure_settled {
+        if !self.startup_negative_settled {
             return Err(CallerBootstrapError::TerminalTransition);
         }
         self.pending_operational_failure
             .ok_or(CallerBootstrapError::TerminalTransition)
+    }
+
+    /// Provisional only; exact role/EOF confirmation and real capture joins remain required.
+    pub(super) fn constructor_timeout_pending(&self) -> bool {
+        self.pending_constructor_timeout.is_some()
+    }
+
+    pub(super) fn constructor_timeout_after_roles(&self) -> Result<bool, CallerBootstrapError> {
+        if !self.startup_negative_settled {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        Ok(self.pending_constructor_timeout.is_some())
+    }
+
+    fn retain_constructor_timeout(
+        &mut self,
+        clock: &mut ExecutionClock,
+        header: super::outer_failure::ConstructorTimeoutHeader,
+        sender: super::control::PeerCredentials,
+        has_right: bool,
+    ) -> Result<(), CallerBootstrapError> {
+        if self.startup_finished
+            || self.pending_operational_failure.is_some()
+            || self.pending_constructor_timeout.is_some()
+            || self.policy_refusal.is_some()
+            || self.monitor_pin.is_some()
+            || self.inner_pin.is_some()
+            || self.cancel_phase_pin.is_some()
+            || self
+                .phase_send
+                .as_ref()
+                .is_some_and(IncrementalSend::has_partial_frame)
+            || self
+                .cancel_close
+                .as_ref()
+                .is_some_and(IncrementalSend::has_partial_frame)
+            || !matches!(
+                self.phase,
+                CallerPhase::BeforeMonitor | CallerPhase::AwaitMonitor
+            )
+            || header.identity != self.build_identity
+            || header.authority != self.authority
+            || header.stop.origin != super::role_deadline::StopOrigin::Outer
+            || self.outer_pin.is_none()
+            || sender.pid
+                != self
+                    .outer_pid
+                    .ok_or(CallerBootstrapError::MissingOuterPin)?
+            || sender.uid != self.caller_uid
+            || sender.gid != self.caller_gid
+            || has_right
+            || !self
+                .identity_work_clock
+                .expired_at(header.stop)
+                .map_err(CallerBootstrapError::Deadline)?
+        {
+            return Err(CallerBootstrapError::TerminalReplyMismatch);
+        }
+        let cutoff = clock
+            .adopt_stop(header.stop, self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)?;
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+        }
+        self.pending_constructor_timeout = Some(header);
+        self.phase_failed = true;
+        self.inner_auth_failed = true;
+        Ok(())
     }
 
     /// Stores actual spawner custody BEFORE any wait/pin/control error. A failed handshake must
@@ -2034,10 +2110,61 @@ impl CallerBootstrap {
         &mut self,
         clock: &mut ExecutionClock,
     ) -> Result<bool, CallerBootstrapError> {
-        if !self.cancel_close_sent || clock.original_deadline() != self.identity_deadline {
+        self.cancellation_progress_step(clock, false)
+    }
+
+    pub(super) fn constructor_work_stage(&self) -> bool {
+        !self.startup_finished && !self.cancel_terminal_cursor
+    }
+
+    /// No partially emitted cancellation frame can be abandoned for a queued constructor
+    /// receipt. A poisoned zero-progress sender stays owned until actual settlement.
+    pub(super) fn cancellation_send_unstarted(&self) -> bool {
+        self.cancel_close
+            .as_ref()
+            .is_some_and(|send| !send.has_partial_frame())
+    }
+
+    /// Genuine original C work expiry before Dispatch permits provisional constructor timeout
+    /// custody on the SAME startup framer, including a queued complete frame before close-send.
+    pub(super) fn constructor_work_reply_step(
+        &mut self,
+        clock: &mut ExecutionClock,
+    ) -> Result<bool, CallerBootstrapError> {
+        if !self
+            .identity_work_clock
+            .expired_at(
+                clock
+                    .caller_stop_stamp()
+                    .map_err(CallerBootstrapError::Deadline)?,
+            )
+            .map_err(CallerBootstrapError::Deadline)?
+            || self.startup_finished
+            || self.cancel_terminal_cursor
+        {
             return Err(CallerBootstrapError::TerminalTransition);
         }
-        if self.cancel_received || self.pending_owner_stop.is_some() {
+        // Actual driver work-stop made this path irreversible; no receive here may resume
+        // startup or authorize Dispatch, even if no complete frame is available yet.
+        self.phase_failed = true;
+        self.inner_auth_failed = true;
+        self.cancellation_progress_step(clock, true)
+    }
+
+    fn cancellation_progress_step(
+        &mut self,
+        clock: &mut ExecutionClock,
+        constructor_work: bool,
+    ) -> Result<bool, CallerBootstrapError> {
+        if (!self.cancel_close_sent && !constructor_work)
+            || clock.original_deadline() != self.identity_deadline
+        {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        if self.cancel_received
+            || self.pending_owner_stop.is_some()
+            || self.pending_constructor_timeout.is_some()
+        {
             return Ok(true);
         }
         let (cutoff, _) = self.settlement_clock(clock)?;
@@ -2068,11 +2195,19 @@ impl CallerBootstrap {
                     CancellationProgress::rights_count,
                     Some(cutoff),
                     |payload| {
-                        super::role_protocol::decode_cancellation_progress(
-                            payload,
-                            &mut self.startup_context,
-                            &mut self.decode_scratch,
-                        )
+                        if constructor_work {
+                            super::outer_reply::constructor_timeout_progress(
+                                payload,
+                                &mut self.startup_context,
+                                &mut self.decode_scratch,
+                            )
+                        } else {
+                            super::role_protocol::decode_cancellation_progress(
+                                payload,
+                                &mut self.startup_context,
+                                &mut self.decode_scratch,
+                            )
+                        }
                     },
                     // This exact cleanup-only union follows actual C cancellation. A full phase
                     // grants custody only; ordinary startup phase EOF refusal remains unchanged.
@@ -2108,6 +2243,18 @@ impl CallerBootstrap {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         }
         match control {
+            CancellationProgress::ConstructorTimeout(header) => {
+                if !constructor_work {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                self.retain_constructor_timeout(
+                    clock,
+                    header,
+                    sender,
+                    self.cancel_phase_pin.is_some(),
+                )?;
+                Ok(true)
+            }
             CancellationProgress::Phase(reply) => {
                 if self.cancel_phase_drained || reply.authority() != self.authority {
                     return Err(CallerBootstrapError::UnexpectedPhase);
@@ -2135,6 +2282,9 @@ impl CallerBootstrap {
                 stop,
                 peaks,
             }) => {
+                if !self.cancel_close_sent {
+                    return Err(CallerBootstrapError::TerminalTransition);
+                }
                 if authority != self.authority || peaks.charged_bytes < peaks.tree_rss_bytes {
                     return Err(CallerBootstrapError::TerminalReplyMismatch);
                 }

@@ -492,6 +492,7 @@ impl CancellationHeader {
 /// carries only cleanup custody here: it grants no phase advancement, Dispatch or report read.
 /// The actor authenticates the original O/run and exact in-flight phase before taking any rights.
 pub(super) enum CancellationProgress {
+    ConstructorTimeout(super::outer_failure::ConstructorTimeoutHeader),
     Phase(OuterPhaseReply),
     Terminal(CancellationHeader),
 }
@@ -499,6 +500,7 @@ pub(super) enum CancellationProgress {
 impl CancellationProgress {
     pub(super) fn rights_count(&self) -> usize {
         match self {
+            Self::ConstructorTimeout(_) => 0,
             Self::Phase(phase) => phase.rights_count(),
             Self::Terminal(terminal) => terminal.rights_count(),
         }

@@ -11,7 +11,7 @@ use super::{
     caller_driver::{CallerDriveError, CallerDriveProgress},
     caller_error,
     caller_execution::{
-        CallerExecution, CallerExecutionError, OperationalTerminalOutcome, PolicyTerminalOutcome,
+        CallerExecution, CallerExecutionError, PolicyTerminalOutcome, StartupNegativeOutcome,
     },
     caller_prepare::PreparationError,
     execute::{
@@ -82,10 +82,13 @@ pub(super) fn run(
             return cancelled_result(&mut owner, detail, error, CancelCandidate::CaptureFailed);
         }
         Err(CallerExecutionError::Progress(CallerDriveError::Bootstrap(
-            CallerBootstrapError::OperationalFailureObserved,
-        ))) => match owner.finish_operational_failure() {
-            Ok(OperationalTerminalOutcome::Refused(error)) => return Err(error),
-            Ok(OperationalTerminalOutcome::ObservationFailed {
+            CallerBootstrapError::StartupNegativeObserved,
+        ))) => match owner.finish_startup_negative() {
+            Ok(StartupNegativeOutcome::ConstructorTimedOut) => {
+                return Ok(constructor_timeout_result())
+            }
+            Ok(StartupNegativeOutcome::Refused(error)) => return Err(error),
+            Ok(StartupNegativeOutcome::ObservationFailed {
                 failure,
                 metadata_refusal,
             }) => {
@@ -114,6 +117,30 @@ pub(super) fn run(
     }
 }
 
+fn constructor_timeout_result() -> BoundedProductionLaunch {
+    // Called only after the actual constructor-timeout transaction and whole-chain joins.
+    // There was no complete O observation; the availability probe supplies no peak proxy.
+    BoundedProductionLaunch {
+        launch: BoundedLaunch {
+            report: Ok(None),
+            outcome: LaunchOutcome::TimedOut,
+            memory: MemoryObservation {
+                mechanism: super::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                peak_resident_bytes: None,
+            },
+        },
+        charged_peak: ChargedPeakObservation::NotObserved {
+            reason: ChargedPeakNotObservedReason::StartupTimeoutBeforeObservation,
+        },
+    }
+}
+
+pub(super) enum CancellationResult {
+    Measured(BoundedLaunch, super::resource_ledger::MeasuredPeaks),
+    ConstructorTimedOut,
+    OriginalError,
+}
+
 enum CancelCandidate {
     WorkExpired,
     CaptureFailed,
@@ -131,7 +158,7 @@ fn cancelled_result(
     }
     let cancelled = (|| {
         if matches!(candidate, CancelCandidate::LocalError) && owner.finish_uncreated_error()? {
-            return Ok(None);
+            return Ok(CancellationResult::OriginalError);
         }
         loop {
             if owner.cancel_step()? {
@@ -143,22 +170,42 @@ fn cancelled_result(
                 .map_err(CallerExecutionError::Deadline)?;
             owner.pause_until(cutoff)?;
         }
+        if owner.bootstrap.constructor_timeout_pending() {
+            return match owner.finish_startup_negative()? {
+                StartupNegativeOutcome::ConstructorTimedOut => {
+                    Ok(CancellationResult::ConstructorTimedOut)
+                }
+                StartupNegativeOutcome::Refused(_)
+                | StartupNegativeOutcome::ObservationFailed { .. } => Err(
+                    CallerExecutionError::Bootstrap(CallerBootstrapError::TerminalTransition),
+                ),
+            };
+        }
         if owner.bootstrap.owner_stop_pending() {
-            return owner.finish_owner_stopped().map(Some);
+            return owner
+                .finish_owner_stopped()
+                .map(|(launch, peaks)| CancellationResult::Measured(launch, peaks));
         }
         match candidate {
-            CancelCandidate::WorkExpired => owner.finish_cancelled_timeout().map(Some),
-            CancelCandidate::CaptureFailed => owner.finish_cancelled_capture().map(Some),
+            CancelCandidate::WorkExpired => owner
+                .finish_cancelled_timeout()
+                .map(|(launch, peaks)| CancellationResult::Measured(launch, peaks)),
+            CancelCandidate::CaptureFailed => owner
+                .finish_cancelled_capture()
+                .map(|(launch, peaks)| CancellationResult::Measured(launch, peaks)),
             CancelCandidate::LocalError => {
                 let captures = owner.finish_cancelled()?;
                 drop(captures);
-                Ok(None)
+                Ok(CancellationResult::OriginalError)
             }
         }
     })();
     match cancelled {
-        Ok(Some((launch, peaks))) => Ok(BoundedProductionLaunch::from_measured(launch, peaks)),
-        Ok(None) => Err(local_error(owner, original)),
+        Ok(CancellationResult::Measured(launch, peaks)) => {
+            Ok(BoundedProductionLaunch::from_measured(launch, peaks))
+        }
+        Ok(CancellationResult::ConstructorTimedOut) => Ok(constructor_timeout_result()),
+        Ok(CancellationResult::OriginalError) => Err(local_error(owner, original)),
         Err(failure) => {
             if owner.is_settled() {
                 return Err(local_error(owner, original));

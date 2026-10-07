@@ -641,6 +641,64 @@ impl OuterRunPreparation {
     }
 
     fn prepare_failure_delivery(&mut self) -> Result<(), SamplingError> {
+        // Only this retained constructor can have elected original work expiry without
+        // attempting an observation. Admission=false or missing peaks cannot select it.
+        let constructor_stop = self
+            .resources
+            .as_ref()
+            .and_then(|resources| resources.sampling_preparation.as_ref())
+            .and_then(SamplingPreparation::work_stop);
+        if let Some(event) = constructor_stop {
+            let stop = event.map_err(SamplingError::Deadline)?;
+            if self.failure_stop().map_err(SamplingError::Deadline)? != Some(stop) {
+                return Err(SamplingError::InvalidTerminalTransition);
+            }
+            let resources = self
+                .resources
+                .as_mut()
+                .ok_or(SamplingError::InvalidMonitorTransition)?;
+            if resources.sampling.is_some() || resources.monitor.is_some() {
+                return Err(SamplingError::InvalidTerminalTransition);
+            }
+            let preparation = resources
+                .sampling_preparation
+                .as_ref()
+                .ok_or(SamplingError::InvalidMonitorTransition)?;
+            let settings = preparation.settings();
+            if !settings
+                .work_deadline
+                .expired_at(stop)
+                .map_err(SamplingError::Deadline)?
+            {
+                return Err(SamplingError::InvalidTerminalTransition);
+            }
+            let header = super::outer_failure::ConstructorTimeoutHeader {
+                identity: settings.identity,
+                authority: settings.authority,
+                stop,
+            };
+            let mut timeline =
+                StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?;
+            timeline.observe(stop).map_err(SamplingError::Deadline)?;
+            let cutoff = observation_deadline(settings, &timeline)?
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            let storage = resources
+                .terminal
+                .as_mut()
+                .and_then(|terminal| terminal.commit.take())
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            let frame = storage
+                .encode(&header.commit())
+                .map_err(SamplingError::Control)?;
+            self.failure_delivery = Some(PreparationFailureDelivery {
+                cutoff,
+                send: IncrementalSend::new(frame),
+                monitor_settled: false,
+                collector_stopped: false,
+                committed: false,
+            });
+            return Ok(());
+        }
         let header = match self.failure_cause.as_ref() {
             Some(Ok(header)) => *header,
             Some(Err(error)) => {
