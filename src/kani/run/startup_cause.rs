@@ -187,20 +187,40 @@ impl StartupIoCause {
         self.payload
     }
 
-    fn project(
-        self,
-        provenance: RemoteCauseProvenance,
-    ) -> Result<(io::Error, ProjectionFidelity), RepresentationError> {
-        let kind = self.kind.named();
+    /// Validate required captured facts without constructing an I/O carrier or loss marker.
+    /// Detail-only observation failures retain the actual result privately after settlement.
+    pub(super) fn validate_metadata(self) -> Result<(), RepresentationError> {
         match self.raw_os_error {
             Some(errno) => {
                 if self.payload != StartupPayload::NoCustomPayload {
                     return Err(RepresentationError::OsPayloadMismatch);
                 }
-                let error = io::Error::from_raw_os_error(errno);
-                if kind.is_some_and(|kind| error.kind() != kind) {
+                if self
+                    .kind
+                    .named()
+                    .is_some_and(|kind| io::Error::from_raw_os_error(errno).kind() != kind)
+                {
                     return Err(RepresentationError::OsKindMismatch);
                 }
+            }
+            None => {
+                self.kind
+                    .named()
+                    .ok_or(RepresentationError::MissingOsCode)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn project(
+        self,
+        provenance: RemoteCauseProvenance,
+    ) -> Result<(io::Error, ProjectionFidelity), RepresentationError> {
+        self.validate_metadata()?;
+        let kind = self.kind.named();
+        match self.raw_os_error {
+            Some(errno) => {
+                let error = io::Error::from_raw_os_error(errno);
                 Ok((error, ProjectionFidelity::OsCodeAndKind))
             }
             None => {

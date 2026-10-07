@@ -65,7 +65,10 @@ impl std::error::Error for CallerExecutionError {
             Self::Assembly(BoundedLaunchError::Io(error)) => Some(error),
             Self::Assembly(BoundedLaunchError::BoundaryIo { cause, .. }) => Some(cause),
             Self::Assembly(BoundedLaunchError::Unavailable { cause, .. }) => Some(cause),
-            Self::Assembly(BoundedLaunchError::Guardian { .. }) => None,
+            Self::Assembly(
+                BoundedLaunchError::Guardian { .. }
+                | BoundedLaunchError::MemoryObservationFailed { .. },
+            ) => None,
         }
     }
 }
@@ -77,6 +80,16 @@ pub(super) enum PolicyTerminalOutcome {
     OwnerStopped {
         launch: BoundedLaunch,
         peaks: MeasuredPeaks,
+    },
+}
+
+/// Settled negative selection retains observation facts privately; the public observation
+/// refusal has diagnostic text only, with no reconstructed I/O carrier or evidence.
+pub(super) enum OperationalTerminalOutcome {
+    Refused(BoundedLaunchError),
+    ObservationFailed {
+        failure: super::outer_failure::FailureHeader,
+        metadata_refusal: Option<super::startup_cause::RepresentationError>,
     },
 }
 
@@ -108,6 +121,7 @@ impl CallerExecution {
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<CallerDriver>()))
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<ExecutionClock>()))
             .and_then(|bytes| bytes.checked_add(std::mem::size_of::<PolicyTerminalOutcome>()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<OperationalTerminalOutcome>()))
             .and_then(|bytes| {
                 bytes.checked_add(std::mem::size_of::<super::launch::BoundedProductionLaunch>())
             })
@@ -555,7 +569,7 @@ impl CallerExecution {
     /// earliest cutoff. Missing/abnormal custody leaves this owner unsettled and refuses.
     pub(super) fn finish_operational_failure(
         &mut self,
-    ) -> Result<BoundedLaunchError, CallerExecutionError> {
+    ) -> Result<OperationalTerminalOutcome, CallerExecutionError> {
         if !self.lease_closed {
             self.close_original_lease()?;
         }
@@ -594,7 +608,39 @@ impl CallerExecution {
             .bootstrap
             .operational_failure_after_roles()
             .map_err(CallerExecutionError::Bootstrap)?;
-        Self::project_preparation_failure(failure)
+        Self::select_operational_failure(failure)
+    }
+
+    // Pure selection after the caller has authenticated and positively settled the transaction.
+    // This helper itself grants no role, stage, settlement or evidence authority.
+    fn select_operational_failure(
+        failure: super::outer_failure::FailureHeader,
+    ) -> Result<OperationalTerminalOutcome, CallerExecutionError> {
+        // Admission is retained from the actual producer's historical complete within-ceiling
+        // sample, not inferred from a C phase/optional peaks. Only the independently known
+        // observation sites select this existing detail-only public result.
+        if failure.state.observation_admitted
+            && matches!(
+                failure.operation,
+                super::cross_role_cause::CauseOperation::LauncherObservation
+                    | super::cross_role_cause::CauseOperation::TreeObservation
+            )
+        {
+            let metadata_refusal = match failure.representation {
+                super::outer_failure::FailureRepresentation::Original {
+                    cause: super::startup_cause::StartupCause::Io(cause),
+                } => cause.validate_metadata().err(),
+                super::outer_failure::FailureRepresentation::Original {
+                    cause: super::startup_cause::StartupCause::Seccompiler(_),
+                } => Some(super::startup_cause::RepresentationError::NonInstallationBackendCause),
+                super::outer_failure::FailureRepresentation::Integrity { .. } => None,
+            };
+            return Ok(OperationalTerminalOutcome::ObservationFailed {
+                failure,
+                metadata_refusal,
+            });
+        }
+        Self::project_preparation_failure(failure).map(OperationalTerminalOutcome::Refused)
     }
 
     fn project_preparation_failure(
@@ -922,7 +968,7 @@ mod tests {
     use crate::kani::run::{
         cross_role_cause::{CauseOperation, KaniCrossRoleCauseLoss},
         execute::KaniStartupAdmissionCause,
-        outer_failure::{FailureHeader, FailureRepresentation},
+        outer_failure::{FailureHeader, FailureRepresentation, FailureState},
         protocol::current_build_identity,
         role_deadline::{StopOrigin, StopStamp},
         startup_cause::StartupCause,
@@ -934,7 +980,7 @@ mod tests {
             authority: serde_json::from_value(serde_json::to_value([0_u8; 32]).unwrap()).unwrap(),
             stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
             operation: CauseOperation::ReportCreation,
-            state: super::outer_failure::FailureState {
+            state: FailureState {
                 observation_admitted: false,
                 original_work_expired: false,
             },
@@ -942,6 +988,44 @@ mod tests {
                 cause: StartupCause::capture_io(original).unwrap(),
             },
         }
+    }
+
+    /// Trace: FR-034-AC-40.
+    #[test]
+    fn admitted_observation_selection_keeps_cause_private_and_preserves_integrity() {
+        // Selector only. Real O admission, transport authentication, freshness and settlement
+        // require production witnesses; this test does not manufacture any of those tokens.
+        let original = io::Error::new(io::ErrorKind::Other, "original custom observation");
+        let mut negative = failure(&original);
+        negative.operation = CauseOperation::TreeObservation;
+        let OperationalTerminalOutcome::Refused(BoundedLaunchError::Unavailable { cause, .. }) =
+            CallerExecution::select_operational_failure(negative).unwrap()
+        else {
+            panic!("pre-admission observation lost its actual unavailable carrier");
+        };
+        assert_eq!(cause.kind(), original.kind());
+        negative.state.observation_admitted = true;
+        let OperationalTerminalOutcome::ObservationFailed {
+            failure,
+            metadata_refusal,
+        } = CallerExecution::select_operational_failure(negative).unwrap()
+        else {
+            panic!("admitted observation was reclassified as Tool or admission Unavailable");
+        };
+        assert_eq!(failure, negative);
+        assert!(metadata_refusal.is_none());
+        negative.representation = FailureRepresentation::Integrity {
+            predicate: super::super::cross_role_cause::CauseIntegrityPredicate::UnknownKindMetadata,
+        };
+        let OperationalTerminalOutcome::ObservationFailed {
+            failure,
+            metadata_refusal,
+        } = CallerExecution::select_operational_failure(negative).unwrap()
+        else {
+            panic!("observation integrity gained a public I/O carrier");
+        };
+        assert_eq!(failure, negative);
+        assert!(metadata_refusal.is_none());
     }
 
     /// Trace: FR-034-AC-40

@@ -228,6 +228,10 @@ pub(super) enum BoundedLaunchError {
         cause: io::Error,
     },
     Io(io::Error),
+    /// Existing detail-only execution refusal after actual admitted observation failure.
+    MemoryObservationFailed {
+        detail: String,
+    },
     /// Actual C-side configured helper executable I/O, with its original path and error.
     BoundaryIo {
         path: std::path::PathBuf,

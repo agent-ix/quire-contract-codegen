@@ -154,7 +154,10 @@ pub(super) fn into_original_io(error: CallerExecutionError) -> io::Error {
         | Execution::Progress(_)
         | Execution::Bootstrap(_)
         | Execution::Deadline(_)
-        | Execution::Assembly(BoundedLaunchError::Guardian { .. })
+        | Execution::Assembly(
+            BoundedLaunchError::Guardian { .. }
+            | BoundedLaunchError::MemoryObservationFailed { .. },
+        )
         | Execution::PolicyProjection(_)) => io::Error::other(original),
     }
 }
