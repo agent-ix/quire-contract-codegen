@@ -1317,10 +1317,14 @@ impl CallerBootstrap {
         let received = self
             .outer_control
             .transport()
-            .receive_prepared::<OuterArmReply>(
+            .receive_prepared_decode(
                 &mut self.receive,
                 OuterArmReply::rights_count,
                 self.deadline,
+                |payload| {
+                    super::launcher_reply_decode::arm(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?;
         let pin = received
@@ -1368,10 +1372,14 @@ impl CallerBootstrap {
             .map_err(CallerBootstrapError::Control)?;
         let Some(received) = self
             .outer_receive
-            .advance::<OuterArmReply>(
+            .advance_decode(
                 &self.outer_control.transport(),
                 OuterArmReply::rights_count,
                 cutoff,
+                |payload| {
+                    super::launcher_reply_decode::arm(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?
         else {
