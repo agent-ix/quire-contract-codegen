@@ -52,6 +52,7 @@ fn checked<T>(
             | DecodeCause::InvalidNumber
             | DecodeCause::IntegerOverflow
             | DecodeCause::RecursionLimit
+            | DecodeCause::NumberOutOfRange
             | DecodeCause::TrailingBytes
             | DecodeCause::UnknownField
             | DecodeCause::DuplicateField

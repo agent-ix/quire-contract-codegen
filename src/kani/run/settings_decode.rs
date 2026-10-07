@@ -157,7 +157,8 @@ fn deadline_map<'input>(
         } else {
             // TaggedContentVisitor consumes arbitrary content before selecting the variant.
             // Only this no-cause schema permits staging; it grants no fault-slot precedence.
-            // Selected Content depth is preserved; numeric conversion parity remains unproven.
+            // Selected Content depth and finite numeric candidate are preserved;
+            // universal cross-library conversion parity remains unproven.
             let value = decoder.content_value()?;
             let known = IdentityDeadlineKind::Finite
                 .declared_fields()

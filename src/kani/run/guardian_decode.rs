@@ -52,6 +52,7 @@ pub(super) enum DecodeCause {
     InvalidValue,
     StorageBound,
     RecursionLimit,
+    NumberOutOfRange,
 }
 
 /// An actual fixed decoder/check error with no dynamic payload or reconstructed source.
@@ -273,9 +274,9 @@ impl Iterator for TextChars<'_> {
 #[derive(Clone, Copy)]
 enum ScanProfile {
     Syntax,
-    // Only the original Content container-entry semantics are established here.
-    // Numeric conversion parity remains unproven; numbers retain syntax validation.
-    ContentDepth,
+    // Container depth plus finite numeric admission under the supported float_roundtrip
+    // dependency context. Universal conversion equivalence remains an evidence obligation.
+    ContentCandidate,
 }
 
 struct ScanState {
@@ -287,6 +288,38 @@ struct ScanState {
 struct NumberToken<'input> {
     bytes: &'input [u8],
     integral: bool,
+}
+
+impl NumberToken<'_> {
+    fn admit_content_number(&self) -> Result<(), DecodeError> {
+        let text = std::str::from_utf8(self.bytes)
+            .map_err(|_| DecodeError::new(DecodeSite::Value, DecodeCause::InvalidUtf8))?;
+        if self.integral {
+            // Owning deserialize_any keeps fitting positive integers as u64 and fitting
+            // negatives as i64. Negative zero and overflow use its floating conversion.
+            let integer = if self.bytes.first() == Some(&b'-') {
+                self.bytes != b"-0" && text.parse::<i64>().is_ok()
+            } else {
+                text.parse::<u64>().is_ok()
+            };
+            if integer {
+                return Ok(());
+            }
+        }
+        // The token has already passed JSON syntax on the original cursor. FromStr has a
+        // fixed error and fixed-storage conversion; no serde error or alternate JSON scanner runs.
+        let value = text
+            .parse::<f64>()
+            .map_err(|_| DecodeError::new(DecodeSite::Value, DecodeCause::InvalidNumber))?;
+        if value.is_finite() {
+            Ok(())
+        } else {
+            Err(DecodeError::new(
+                DecodeSite::Value,
+                DecodeCause::NumberOutOfRange,
+            ))
+        }
+    }
 }
 
 /// The next scalar/container category only, without validating or consuming its value.
@@ -613,11 +646,11 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
         self.scan_value(ScanProfile::Syntax)
     }
 
-    /// Preserve selected Content container depth, including original typed parents.
-    /// This is deliberately partial: numeric admission still validates syntax only, not
-    /// serde_json's feature-dependent finite conversion. It supplies no full Content parity.
+    /// Preserve selected Content depth and finite numeric admission, including typed parents.
+    /// Numeric admission uses Rust's nearest/ties-even conversion under the supported owning
+    /// float_roundtrip context. Universal cross-library equivalence remains unproven.
     pub(super) fn content_value(&mut self) -> Result<ValueSlice<'input>, DecodeError> {
-        self.profile = ScanProfile::ContentDepth;
+        self.profile = ScanProfile::ContentCandidate;
         self.scan_value(self.profile)
     }
 
@@ -686,7 +719,13 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
             }
             b't' | b'f' => self.boolean().map(|_| ()),
             b'n' => self.null(),
-            b'-' | b'0'..=b'9' => self.number(DecodeSite::Value).map(|_| ()),
+            b'-' | b'0'..=b'9' => {
+                let token = self.number(DecodeSite::Value)?;
+                if matches!(scan.profile, ScanProfile::ContentCandidate) {
+                    token.admit_content_number()?;
+                }
+                Ok(())
+            }
             _ => Err(DecodeError::new(
                 DecodeSite::Value,
                 DecodeCause::UnexpectedToken,
@@ -699,7 +738,7 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
         scan: &mut ScanState,
         state: ContainerState,
     ) -> Result<(), DecodeError> {
-        if matches!(scan.profile, ScanProfile::ContentDepth) {
+        if matches!(scan.profile, ScanProfile::ContentCandidate) {
             // Owning serde_json starts remaining_depth at 128 and refuses entry when
             // decrement reaches zero. Count the original schema ancestors, not a new root.
             let entered = self
@@ -1013,6 +1052,11 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<NumberToken<'static>>(),
         size_of::<ScanState>(),
         size_of::<ScanProfile>(),
+        size_of::<&str>(),
+        size_of::<Result<u64, std::num::ParseIntError>>(),
+        size_of::<Result<i64, std::num::ParseIntError>>(),
+        size_of::<Result<f64, std::num::ParseFloatError>>(),
+        size_of::<f64>(),
         size_of::<usize>(),
         size_of::<DecodeError>(),
         size_of::<ValueKind>(),
@@ -1439,6 +1483,59 @@ mod tests {
             if let Err(error) = fixed_content {
                 assert_eq!(error.cause(), DecodeCause::RecursionLimit);
             }
+        }
+    }
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn selected_content_numeric_range_matches_owning_float_roundtrip_admission() {
+        // Independently derived decimal neighbors of 2^1024 - 2^970, the overflow midpoint.
+        let below = "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497791";
+        let midpoint = "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792";
+        let above = "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497793";
+        let cases = [
+            ("0", true),
+            ("-0", true),
+            ("18446744073709551615", true),
+            ("18446744073709551616", true),
+            ("-9223372036854775808", true),
+            ("-9223372036854775809", true),
+            ("1.7976931348623157e308", true),
+            ("1.7976931348623159e308", false),
+            ("1e9999", false),
+            ("-1e9999", false),
+            ("0e999999999999999999999999999999", true),
+            ("1e-999999999999999999999999999999", true),
+            ("2.4703282292062327e-324", true),
+            (below, true),
+            (midpoint, false),
+            (above, false),
+        ];
+        for (number, admitted) in cases {
+            let original = serde_json::from_str::<serde_json::Value>(number);
+            assert_eq!(original.is_ok(), admitted, "owning {number}");
+            let mut scratch = Scratch::default();
+            let mut decoder = Decoder::new(number.as_bytes(), &mut scratch).unwrap();
+            let fixed = decoder.content_value();
+            assert_eq!(fixed.is_ok(), original.is_ok(), "selected {number}");
+            if let Err(error) = fixed {
+                assert_eq!(error.cause(), DecodeCause::NumberOutOfRange);
+            }
+            // Direct IgnoredAny remains syntax-only even when Content refuses the value.
+            assert!(serde_json::from_str::<serde::de::IgnoredAny>(number).is_ok());
+            let mut decoder = Decoder::new(number.as_bytes(), &mut scratch).unwrap();
+            decoder.value().unwrap();
+            decoder.finish().unwrap();
+        }
+        for (number, admitted) in [
+            (format!("{}.{}", below, "0".repeat(512)), true),
+            (format!("{}.{}1", midpoint, "0".repeat(512)), false),
+            ("9".repeat(512), false),
+        ] {
+            let original = serde_json::from_str::<serde_json::Value>(&number);
+            assert_eq!(original.is_ok(), admitted, "long owning {number}");
+            let mut scratch = Scratch::default();
+            let mut decoder = Decoder::new(number.as_bytes(), &mut scratch).unwrap();
+            assert_eq!(decoder.content_value().is_ok(), original.is_ok());
         }
     }
 }

@@ -229,7 +229,8 @@ fn custody_map<'input>(
         } else {
             // Owning TaggedContentVisitor first validates generic content. NotCreated may
             // ignore any valid map member; Reaped subsequently checks its one exact schema.
-            // Selected Content depth is preserved; numeric conversion parity remains unproven.
+            // Selected Content depth and finite numeric candidate are preserved;
+            // universal cross-library conversion parity remains unproven.
             let value = decoder.content_value()?;
             let known = OuterChildSettlementKind::Reaped
                 .declared_fields()
