@@ -141,21 +141,31 @@ impl InnerStartupHeader {
     }
 }
 
-#[derive(Deserialize)]
-enum InnerReplyKind {
-    Ready,
-    Refused,
+macro_rules! inner_frame_kinds {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Clone, Copy, Deserialize)]
+        pub(super) enum InnerFrameKind { $($variant),+ }
+
+        impl InnerFrameKind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+
+inner_frame_kinds! { Ready, Dispatched, Completed, Refused }
 
 #[derive(Deserialize)]
 struct InnerReplySelector {
-    kind: InnerReplyKind,
+    kind: InnerFrameKind,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InnerReadyReply {
-    kind: InnerReplyKind,
+    kind: InnerFrameKind,
     identity: BuildIdentity,
     authority: RunAuthority,
     mapped_uid: u32,
@@ -176,10 +186,10 @@ pub(super) fn decode_inner_startup(
     let selector: InnerReplySelector =
         serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
     match selector.kind {
-        InnerReplyKind::Ready => {
+        InnerFrameKind::Ready => {
             let ready: InnerReadyReply =
                 serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(ready.kind, InnerReplyKind::Ready) {
+            if !matches!(ready.kind, InnerFrameKind::Ready) {
                 return Err(ControlError::InvalidEncoding(
                     <serde_json::Error as de::Error>::custom("expected exact I Ready"),
                 ));
@@ -193,7 +203,12 @@ pub(super) fn decode_inner_startup(
                 },
             ))
         }
-        InnerReplyKind::Refused => match decode(payload, context, scratch)? {
+        InnerFrameKind::Dispatched | InnerFrameKind::Completed => {
+            Err(ControlError::InvalidEncoding(
+                <serde_json::Error as de::Error>::custom("expected exact I startup reply"),
+            ))
+        }
+        InnerFrameKind::Refused => match decode(payload, context, scratch)? {
             InstallerReplyHeader::Refused {
                 identity,
                 authority,
@@ -232,27 +247,21 @@ impl InnerEventHeader {
 }
 
 #[derive(Deserialize)]
-enum InnerEventKind {
-    Dispatched,
-    Completed,
-}
-
-#[derive(Deserialize)]
 struct InnerEventSelector {
-    kind: InnerEventKind,
+    kind: InnerFrameKind,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DispatchedReply {
-    kind: InnerEventKind,
+    kind: InnerFrameKind,
     authority: RunAuthority,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CompletedReply {
-    kind: InnerEventKind,
+    kind: InnerFrameKind,
     authority: RunAuthority,
     outcome: super::protocol::BackendExit,
     stop: StopStamp,
@@ -265,10 +274,13 @@ pub(super) fn decode_inner_event(payload: &[u8]) -> Result<InnerEventHeader, Con
     let selector: InnerEventSelector =
         serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
     match selector.kind {
-        InnerEventKind::Dispatched => {
+        InnerFrameKind::Ready | InnerFrameKind::Refused => Err(ControlError::InvalidEncoding(
+            <serde_json::Error as de::Error>::custom("expected exact I event"),
+        )),
+        InnerFrameKind::Dispatched => {
             let reply: DispatchedReply =
                 serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, InnerEventKind::Dispatched) {
+            if !matches!(reply.kind, InnerFrameKind::Dispatched) {
                 return Err(ControlError::InvalidEncoding(
                     <serde_json::Error as de::Error>::custom("expected exact I Dispatched"),
                 ));
@@ -277,10 +289,10 @@ pub(super) fn decode_inner_event(payload: &[u8]) -> Result<InnerEventHeader, Con
                 authority: reply.authority,
             })
         }
-        InnerEventKind::Completed => {
+        InnerFrameKind::Completed => {
             let reply: CompletedReply =
                 serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, InnerEventKind::Completed) {
+            if !matches!(reply.kind, InnerFrameKind::Completed) {
                 return Err(ControlError::InvalidEncoding(
                     <serde_json::Error as de::Error>::custom("expected exact I Completed"),
                 ));
@@ -323,15 +335,8 @@ impl InnerOwnerHeader {
 }
 
 #[derive(Deserialize)]
-enum InnerOwnerKind {
-    Dispatched,
-    Completed,
-    Refused,
-}
-
-#[derive(Deserialize)]
 struct InnerOwnerSelector {
-    kind: InnerOwnerKind,
+    kind: InnerFrameKind,
 }
 
 pub(super) fn decode_inner_owner(
@@ -345,10 +350,13 @@ pub(super) fn decode_inner_owner(
     let selector: InnerOwnerSelector =
         serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
     match selector.kind {
-        InnerOwnerKind::Dispatched | InnerOwnerKind::Completed => {
+        InnerFrameKind::Ready => Err(ControlError::InvalidEncoding(
+            <serde_json::Error as de::Error>::custom("expected exact I owner event"),
+        )),
+        InnerFrameKind::Dispatched | InnerFrameKind::Completed => {
             decode_inner_event(payload).map(InnerOwnerHeader::Event)
         }
-        InnerOwnerKind::Refused => match decode(payload, context, scratch)? {
+        InnerFrameKind::Refused => match decode(payload, context, scratch)? {
             InstallerReplyHeader::Refused {
                 identity,
                 authority,
