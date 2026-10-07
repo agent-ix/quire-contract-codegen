@@ -45,6 +45,12 @@ macro_rules! io_kinds {
                 }
             }
 
+            /// Match a validated borrowed token against this same owning declaration.
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $( if text.equals(stringify!($kind)) { return Some(Self::$kind); } )+
+                if text.equals("OsDerived") { Some(Self::OsDerived) } else { None }
+            }
+
             fn named(self) -> Option<io::ErrorKind> {
                 match self {
                     $(Self::$kind => Some(io::ErrorKind::$kind),)+
@@ -113,6 +119,12 @@ macro_rules! payload_kinds {
                     $(stringify!($payload) => Some(Self::$payload),)+
                     _ => None,
                 }
+            }
+
+            /// Decode without heap unescaping or a second payload inventory.
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $( if text.equals(stringify!($payload)) { return Some(Self::$payload); } )+
+                None
             }
         }
     };
@@ -239,23 +251,52 @@ impl StartupIoCause {
     }
 }
 
-/// Actual apply_filter installation causes, distinct from context and role/site selection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) enum StartupSeccompilerCause {
+// One declaration supplies each external enum's serialized variants and decoder labels.
+// Tags are private parsing facts only: they grant no installation, site or sender authority.
+macro_rules! cause_variants {
+    ($name:ident, $tag:ident; $(
+        $variant:ident $(($payload:ty))? $({ $($field:ident: $field_type:ty),+ $(,)? })?
+    ),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) enum $name {
+            $( $variant $(($payload))? $({ $($field: $field_type),+ })?, )+
+        }
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub(super) enum $tag { $( $variant, )+ }
+
+        impl $tag {
+            /// Exact owning variant-label authority, without allocating unknown input text.
+            pub(super) fn metadata_name(name: &str) -> Option<Self> {
+                match name {
+                    $( stringify!($variant) => Some(Self::$variant), )+
+                    _ => None,
+                }
+            }
+
+            /// Match decoded characters using the same original variant declaration.
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $( if text.equals(stringify!($variant)) { return Some(Self::$variant); } )+
+                None
+            }
+        }
+    };
+}
+
+// Actual apply_filter installation causes, distinct from context and role/site selection.
+cause_variants!(StartupSeccompilerCause, StartupSeccompilerTag;
     EmptyFilter,
     Prctl(StartupIoCause),
     Seccomp(StartupIoCause),
     ThreadSync { pid: std::os::raw::c_long },
-}
+);
 
-/// Allocation-free metadata. The original Display is retained separately in prepared storage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) enum StartupCause {
+// Allocation-free metadata; original Display is retained in separate prepared storage.
+cause_variants!(StartupCause, StartupCauseTag;
     Io(StartupIoCause),
     Seccompiler(StartupSeccompilerCause),
-}
+);
 
 /// Projection fidelity is never a claim that an arbitrary original source chain survived.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
