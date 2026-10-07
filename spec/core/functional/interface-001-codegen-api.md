@@ -160,8 +160,16 @@ operations:
     inputs: [BackendProviderEnvelope]
     output: ItemSettlement list | EnvelopeRefusal
     semantics: settles every item of the envelope in request order against a closed backend kind; an item naming a backend nothing here can settle for settles as invalid-request/unknown-backend inside the Ok list, never as one that can; the whole envelope is refused only for an unsupported contract_version or capability_vocabulary (FR-019)
+  - name: BackendKind::from_descriptor
+    inputs: [CG BackendDescriptor reference]
+    output: Option<BackendKind>
+    semantics: classifies by typed origin and identity; Linked kani gives Kani, unknown Linked gives None, and Process gives Process of the descriptor's exact identity (FR-019)
+  - name: RoutedGenerationItem::from_descriptor
+    inputs: [request_index usize, node_id CheckedNodeId, backend Candidate, CG BackendDescriptor reference]
+    output: RoutedGenerationItem | RoutedItemConstructionError (DescriptorBackendMismatch{backend, descriptor} | UnknownLinkedBackend{backend})
+    semantics: checks that backend identity equals descriptor identity and derives the private kind through BackendKind::from_descriptor; the driver cannot inject a hand-built Process kind (FR-022)
   - name: generate_routed
-    inputs: [admitted CheckedPackageV2 reference, RoutedGenerationItem list (request_index usize, node_id CheckedNodeId, backend Candidate, kind BackendKind), GenerationContexts (optional kani KaniGenerationContext of subject_path and unwind u32; Process needs no context)]
+    inputs: [admitted CheckedPackageV2 reference, RoutedGenerationItem list (request_index usize, node_id CheckedNodeId, backend Candidate, private kind BackendKind), GenerationContexts (optional kani KaniGenerationContext of subject_path and unwind u32; Process needs no context)]
     output: RoutedGeneration (items, one RoutedItemOutput of request_index, backend and KindOutput per routed item in ascending request_index; rejected BackendKind list; claim_map Option<ClaimMap<ExactScalarClaim>>, Some after a Kani group; oracle_artifacts Option<Vec<Artifact>>, the FR-014 oracle crate of that group, Some after a Kani group) | RoutedGenerationError (DuplicateRequestIndex{request_index} | BackendKindDisagrees{request_index, backend, routed, converted Option<BackendKind>} | MissingKindContext{kind} | DuplicateHarness{harness HarnessPath (module ModuleSymbol, harness HarnessSymbol)} | KaniRecordCountMismatch{records usize, items usize} | KaniDuplicatePositionOutOfRange{first_index usize, items usize} | Kani(KaniObligationError) | Oracle(OracleGenerationError))
     semantics: runs each routed item's backend-kind generation arm over an exhaustive BackendKind match without re-settling, re-selecting or re-routing a backend; the Kani arm derives each node's claim with derive_exact_scalar_items and generate_exact_scalar_oracles, then runs negotiate_kani_obligations over the routed Kani items in ascending request_index, with every record index rewritten to the driver's request index and harnesses joined by harness_symbol, both done by route_records (two harnesses with one symbol refuse the call as DuplicateHarness, and a record count other than the group's item count as KaniRecordCountMismatch, and a DuplicateItem position outside the group as KaniDuplicatePositionOutOfRange), and returns the generated oracle crate unchanged; no FR-019 Disposition is constructed (FR-022)
   - name: generate_exact_function_oracles

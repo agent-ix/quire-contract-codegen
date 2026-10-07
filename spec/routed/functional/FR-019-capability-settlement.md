@@ -97,6 +97,17 @@ nothing says so.
   candidate set, its order or a disposition.
 - If an item has exactly one candidate, then that candidate's arm shall settle
   it under the advertised-mode rules.
+- CG shall expose `BackendKind::from_descriptor(&BackendDescriptor) ->
+  Option<BackendKind>` as its public descriptor-to-kind conversion. It shall
+  return `Some(Kani)` for a linked descriptor whose identity is the built-in
+  `kani`, `None` for an unknown linked identity, and `Some(Process(id))` for a
+  process-origin descriptor with its exact identity even when that text is
+  `kani`. It shall read origin and identity, never infer process origin from
+  identity text.
+- When a request names a registered process descriptor, CG shall classify that
+  named candidate with `from_descriptor` and reach its `Process(id)` arm.
+- CG shall not classify a named process descriptor with the built-in
+  `from_identity` lookup.
 - If an item's extent is unbounded and its one Kani candidate advertises `bounded`
   only, then the Kani arm shall settle it `requires-bound` when a finite bound
   is available.
@@ -184,15 +195,8 @@ lives"). The IR-633 origin slice did not add `BackendKind::Process`, change its
 serialization or settle a process item; IR-629 owns those behavioral changes.
 
 Measured present fact: `BackendKind::from_identity` (`src/routed/capability.rs`) returns
-`Some(Kani)` for `kani` and `None` for every other identity. IR-629 keeps it as the built-in
-lookup, while CG's `unroutable_named_backend` and `negotiate_single_candidate` shall classify a
-registered candidate from its descriptor's typed origin and identity. A named process backend
-whose descriptor is present shall reach `Process(id)` even when its identity text is `kani`;
-only a truly unregistered or unclassified linked identity settles `unknown-backend`.
-CG shall expose a descriptor-to-kind conversion that reads the CG descriptor's
-typed origin and identity and constructs `Process(id)` for process origin. The
-driver calls that CG conversion when supplying a routed generation item's kind;
-it does not construct `Process(id)` or infer origin from identity text.
+`Some(Kani)` for `kani` and `None` for every other identity. IR-629 keeps it as
+the built-in lookup; the behavior above owns the origin-aware conversion.
 
 Adding the variant breaks the public `BackendKind` enum for every exhaustive match outside this crate. The
 quire-driver lane's pre-negotiation conversion is the paired adaptation (QSL ADR-029 Amendments, ADR-012
@@ -205,7 +209,7 @@ of their arms):
    (kind, mode) pairs from the manifest. QSpec FR-331 defines manifest `bounds`
    as run-limit defaults, so they are not admission inputs. QSL-654 adds the
    explicit domain kind to each bounded `ProofBound`, which this arm reads
-   instead of deriving one from a `DomainKey` (AC-12 and AC-19).
+   instead of deriving one from a `DomainKey` (AC-12, AC-19 and AC-23).
 2. QSL ADR-029 PV-1 and PV-4 make the descriptor's typed origin the classification input;
    `Process(BackendId)` carries the plugin identity as data and `from_identity` remains the
    built-in lookup. IR-629 owns that variant and its exhaustive dispatch (AC-11).
@@ -221,7 +225,7 @@ of their arms):
    regardless of registration order. Neither reaches CG as a candidate; CG does not resolve that
    conflict from identity text.
 
-Every criterion below that needs the new variant, FR-019-AC-11 to AC-13 and AC-16 to AC-22, remains IR-629 work and
+Every criterion below that needs the new variant, FR-019-AC-11 to AC-13 and AC-16 to AC-23, remains IR-629 work and
 requires its exhaustive arms to compile. FR-019-AC-14 is a property of the return type.
 
 ## Acceptance Criteria
@@ -241,10 +245,11 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-16 | PLANNED (IR-629). An unbounded process item settles `supported` when its descriptor advertises `unbounded` for its kind, regardless of whether any `extent.domains[].kind` belongs to manifest `domains`. | Test (TC-046) |
 | FR-019-AC-17 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item settles `requires-bound` exactly when `finite_bound_available` is true and every `extent.domains[].kind` is advertised. | Test (TC-046) |
 | FR-019-AC-18 | PLANNED (IR-629). Given the same process advertisements and item extent, changing only backend identity, manifest position, manifest run-limit defaults or ambient state leaves the disposition and cause unchanged apart from the backend named in the output. | Test (TC-046) |
-| FR-019-AC-19 | PLANNED (IR-629; bounded row depends on QSL-654). The process arm reads explicit extent domain kinds, never derives one from `DomainKey`, and changing only a bounded proof bound's numeric maximum leaves its domain-coverage decision unchanged. | Test (TC-046) |
-| FR-019-AC-20 | PLANNED (IR-629). CG's process descriptor carries the FR-331 manifest's advertised (kind, mode) pairs, `domains` and `bounds` beside the IR-633 `id` and `origin` projection; changing manifest `domains` changes domain coverage, while changing only `bounds` run-limit defaults does not. | Test (TC-046) |
+| FR-019-AC-19 | PLANNED (IR-629; bounded row depends on QSL-654). The process arm reads each explicit `extent.bounds[].kind` and never derives a domain kind from `DomainKey`; two otherwise equal bounded items with the same `DomainKey` and different explicit kinds can settle differently under one manifest `domains` set. | Test (TC-046) |
+| FR-019-AC-20 | PLANNED (IR-629). CG's process descriptor retains the FR-331 manifest's advertised (kind, mode) pairs, `domains` and `bounds` beside the IR-633 `id` and `origin` projection. | Test (TC-046) |
 | FR-019-AC-21 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with any unadvertised `extent.domains[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`, regardless of `finite_bound_available`. | Test (TC-046) |
 | FR-019-AC-22 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with every `extent.domains[].kind` advertised and `finite_bound_available=false` settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`. | Test (TC-046) |
+| FR-019-AC-23 | PLANNED (IR-629; bounded row depends on QSL-654). Changing only a bounded item's proof-bound numeric maximum leaves its process-provider `supported` or `unsupported` disposition and cause unchanged. | Test (TC-046) |
 | FR-019-AC-13 | Settling a process-provider item reaches no plugin: a descriptor whose identity names a non-existent executable settles identically to one with an ordinary identity, apart from the backend each names, and starts nothing, and a descriptor whose identity names an executable that records its own start leaves no record. A mutant arm that starts or resolves the identity as a process either changes the first disposition or leaves the record, and fails this. | Test (TC-046) |
 | FR-019-AC-14 | The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result or artifact member, so settling returns none of them. A change that returns one does not compile against that type. | Analysis |
 | FR-019-AC-15 | PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` projecting exactly QSL layer R's `Linked` and `Process` meanings (QSL FR-288, ADR-029 PV-1); layer R owns that vocabulary. The driver projects each descriptor from `Registry::descriptors()` once into CG's descriptor, copying `id` and advertised pairs unchanged and mapping `origin()` exhaustively, `Linked` to `Linked` and `Process` to `Process`, with no wildcard or origin inference from identity, manifest or provider bytes or a side map. Two registry descriptors identical except for origin produce CG descriptors identical except for origin; a linked Kani descriptor remains `Linked`. The CG dependency graph adds no direct `qsl-route` edge and the FR-331 wire gains no origin field. | Test (TC-030) |
@@ -253,7 +258,8 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 
 - **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), the
   `quire-spec-language` registry that computes `candidates`, and QSL-654's
-  QSpec FR-331/schema addition of required `ProofBound.kind` with its producer.
+  QSpec FR-331/schema addition of required `ProofBound.kind` with its producer
+  and ADR-029 PV-4 reword of the domain-check scope and bounded admission rule.
 - **Downstream**: [TC-030](../matrix/TC-030-capability-settlement.md),
   [TC-046](../matrix/TC-046-process-provider-settlement.md); quire-driver
   IR-609's pre-negotiation conversion and adaptation to the new variant;

@@ -39,3 +39,21 @@ inputs in a way that excludes the input it then compares.
 | FND-002 | medium | The FR-022 traversal-order obligation ("traverse Kani first, then process groups in bytewise order") cannot be observed. `items` are re-sorted by request index, `rejected` can only hold Kani, and the process arm emits nothing. Any traversal order gives identical output, so FR-022-AC-17's clause and TC-046 step 4's "inspect the group traversal" cannot fail. | spec/routed/functional/FR-022-routed-generation.md:169-173, 268 |
 | FND-003 | low | FR-022-AC-17 is compound. It covers the empty output, the absence of any adapter, execution or terminal path, retention without context or membership in `ALL`, and permutation invariance. | spec/routed/functional/FR-022-routed-generation.md:268 |
 | FND-004 | low | "`BackendKind::ALL` shall list the finite built-in kinds only" makes a constant the actor, not the generator. Also, "settle an item from the candidate's descriptor ... and the requested item's full `extent` alone" excludes the item's capability kind, which the next bullet compares. | spec/routed/functional/FR-019-capability-settlement.md:118-127 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | New shall-obligations (classify named candidates by origin; expose a descriptor-to-kind conversion) sit in a 'Measured present fact' paragraph, not in Behavior, and the conversion has no name or signature. | spec/routed/functional/FR-019-capability-settlement.md:186-195 |
+| FND-006 | low | FR-019-AC-20 (and to a lesser degree AC-19) is compound: descriptor members, domains affecting coverage, and bounds not affecting it. | spec/routed/functional/FR-019-capability-settlement.md:245, 244 |
+
+## Dispositions
+
+Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-002 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-003 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |

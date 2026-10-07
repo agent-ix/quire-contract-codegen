@@ -46,3 +46,23 @@ carry. Several restatements of the changed types were left stale.
 | FND-004 | low | The ADR-002 Amendment says the process arm settles from the manifest and "the item's extent classification". FR-019 reads `bounds[].kind` and `domains[].kind`, which go beyond the classification. | spec/decisions/ADR-002-backend-adapter-boundary.md:91 |
 | FND-005 | low | interface-001 still describes `GenerationContexts` as "one Option field per BackendKind". FR-022 removed that rule for `Process`. interface-001 is not updated. | spec/core/functional/interface-001-codegen-api.md:164 |
 | FND-006 | low | The `spec/tests.md` Routed summary drops the earlier "FR-026 is planned". FR-026-AC-1 and AC-4 (TC-037, Planned) now appear in neither the planned list nor the open list. | spec/tests.md:19 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | interface-001 does not list CG's new public descriptor-to-kind conversion that the driver must call. | spec/core/functional/interface-001-codegen-api.md:159-166 |
+| FND-008 | low | For a Process(id) identity mismatch, the value of BackendKindDisagrees.converted is unspecified. | spec/routed/functional/FR-022-routed-generation.md:269 |
+
+## Dispositions
+
+Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-002 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-003 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-005 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-006 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |

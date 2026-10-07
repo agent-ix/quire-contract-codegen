@@ -39,3 +39,21 @@ labels do not match what is actually gated.
 | FND-003 | low | The TC-046 step 2 table omits these cells: bounded with empty `bounds` on an `unbounded`-only advertisement; unbounded, `finite_bound_available=false`, uncovered domain, on `bounded`-only; and both modes advertised, for both bounded and unbounded items. It also has no row for a named process backend. | spec/routed/matrix/TC-046-process-provider-settlement.md:33-41 |
 | FND-004 | low | The gating labels are inaccurate. All of FR-019-AC-12 is "gated on QSL-654", but only the non-empty bounded-domain rows need `ProofBound.kind`. The unbounded rows and the invariance rows can be tested with CG's in-process types now. FR-022-AC-17 and FR-026-AC-5 are Planned in the matrix but lack the "PLANNED (IR-629)" prefix that AC-11 and AC-12 carry. | spec/routed/functional/FR-019-capability-settlement.md:230; spec/routed/functional/FR-022-routed-generation.md:268; spec/routed/functional/FR-026-backend-adapter-contract.md:62 |
 | FND-005 | low | FR-026-AC-5 asserts that no adapter trait is implemented for `Process(id)`, which is a compile-time absence, yet its verification is Test (TC-046). TC-046 has no step that could fail if such an impl existed. | spec/routed/functional/FR-026-backend-adapter-contract.md:62; spec/routed/matrix/TC-046-process-provider-settlement.md:67-71 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | TC-046 has no row for a bounded item with an uncovered bounds[].kind on a provider advertising both modes, so a mutant that skips the domain check whenever 'unbounded' is advertised survives. | spec/routed/matrix/TC-046-process-provider-settlement.md:33-47 |
+
+## Dispositions
+
+Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-002 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-003 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-005 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |

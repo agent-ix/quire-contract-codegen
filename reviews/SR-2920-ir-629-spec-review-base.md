@@ -54,3 +54,21 @@ unspecified, and diverges from the driver's mapping checklist.
 | FND-003 | medium | A named process backend is not specified. The "Measured present fact" paragraph still says `unroutable_named_backend`'s use of `from_identity` is unchanged ("This specification changes none of it"). So an item that names a process backend, which is required once two providers advertise one kind, settles `invalid-request`/`unknown-backend`. No AC or TC-046 step covers it. | spec/routed/functional/FR-019-capability-settlement.md:179-185, 229 |
 | FND-004 | medium | No spec states who produces `BackendKind::Process(id)` for `RoutedGenerationItem.kind`. FR-019 returns only a `Disposition` naming a backend string. FR-022 takes the kind from its routed input. The driver spec on main says "The driver does not construct `BackendKind::Process`", and its FR-001 step 4 still converts every `BackendId` through `from_identity`. | spec/routed/functional/FR-022-routed-generation.md:47-50, 174-175 |
 | FND-005 | low | The driver's mapping checklist says to preserve manifest domains AND bounds in CG's process descriptor. FR-019 Inputs give the descriptor domains only. The FR-019 projection section and FR-019-AC-15 still list only id, pairs and origin as the copied members. | spec/routed/functional/FR-019-capability-settlement.md:154-158, 233 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | Nothing enforces 'driver does not construct Process(id)': the variant is public, and FR-022 checks only that the identity matches. | spec/routed/functional/FR-022-routed-generation.md:108-110, 269 |
+
+## Dispositions
+
+Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | still-open | FR-019 Inputs (lines 47-48) now says 'QSL-654 owns the matching PV-4 wording update', but QSL-654's Linear deliverables (re-read this pass) are only ProofBound.kind in FR-331, the schema, the vectors and the QSL emitter. They include no ADR-029 PV-4 reword. PV-4 on QSL main is unchanged and still says 'A bounded item routes when the manifest advertises the bounded mode with a bound that covers the item's'. The QSL-637 final-ruling comment named QSL-653, which is now an unrelated qsl-replay ticket. FR-019 Dependencies lists QSL-654 only for ProofBound.kind. Remaining fix, no CG semantic change: get the QSL owner to record the PV-4 reword on QSL-654 (or name the ticket that actually owns it), and list it under FR-019 Dependencies. |
+| FND-002 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-003 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-005 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
