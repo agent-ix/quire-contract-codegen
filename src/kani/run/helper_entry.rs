@@ -116,6 +116,7 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
             | OuterRunProgress::BackendDispatched
             | OuterRunProgress::BackendCompleted
             | OuterRunProgress::ResourceExhausted
+            | OuterRunProgress::SetupRefused
             | OuterRunProgress::OwnerStopped { .. } => {}
         }
         // The actor performs its due observation checks before each terminal send. This wait

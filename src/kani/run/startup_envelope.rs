@@ -21,7 +21,7 @@ use super::{
 pub(super) const CONTEXT_BYTES: usize = CONTROL_BYTES / 6 - 1;
 
 /// Actual policy failure discriminant, never selected by parsing its Display/context.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) enum PolicyFailureCause {
     UnsupportedArchitecture,
@@ -422,6 +422,68 @@ pub(super) fn inner_event_decode_bytes() -> Result<u64, ControlError> {
     u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
 }
 
+/// The original I-to-O stream permits a policy-negative event only before Dispatched. The
+/// receiving owner authenticates phase, build, run, actual I credentials and producer stamp.
+pub(super) enum InnerOwnerHeader {
+    Event(InnerEventHeader),
+    Refused {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+        stop: StopStamp,
+        failure: PolicyFailureCause,
+    },
+}
+
+impl InnerOwnerHeader {
+    pub(super) fn rights_count(&self) -> usize {
+        0
+    }
+}
+
+#[derive(Deserialize)]
+enum InnerOwnerKind {
+    Dispatched,
+    Completed,
+    Refused,
+}
+
+#[derive(Deserialize)]
+struct InnerOwnerSelector {
+    kind: InnerOwnerKind,
+}
+
+pub(super) fn decode_inner_owner(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+) -> Result<InnerOwnerHeader, ControlError> {
+    check_scratch_free_json(payload).map_err(|error| {
+        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
+    })?;
+    let selector: InnerOwnerSelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selector.kind {
+        InnerOwnerKind::Dispatched | InnerOwnerKind::Completed => {
+            decode_inner_event(payload).map(InnerOwnerHeader::Event)
+        }
+        InnerOwnerKind::Refused => match decode(payload, context)? {
+            InstallerReplyHeader::Refused {
+                identity,
+                authority,
+                stop,
+                failure,
+            } => Ok(InnerOwnerHeader::Refused {
+                identity,
+                authority,
+                stop,
+                failure,
+            }),
+            InstallerReplyHeader::PolicyReady { .. } => Err(ControlError::InvalidEncoding(
+                <serde_json::Error as de::Error>::custom("expected exact I owner refusal"),
+            )),
+        },
+    }
+}
+
 /// Fixed decoder-owned values coexist during selection and return; the context capacity is
 /// charged separately from these owning metadata values by the retained caller before L.
 pub(super) fn inner_startup_decode_bytes() -> Result<u64, ControlError> {
@@ -443,6 +505,60 @@ mod tests {
         startup_cause::{ProjectedStartupCause, ProjectionFidelity, StartupJsonError},
     };
     use std::io;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38, FR-034-AC-39
+    #[test]
+    fn inner_owner_negative_keeps_original_metadata_and_cannot_be_a_positive_event() {
+        let authority = RunAuthority::fresh().unwrap();
+        let identity = current_build_identity();
+        let stop = StopStamp::capture(StopOrigin::Backend).unwrap();
+        let mut original = PreparedStartupContext::new(CONTEXT_BYTES).unwrap();
+        let cause = original
+            .capture_io(&io::Error::from(rustix::io::Errno::PERM))
+            .unwrap();
+        let failure = PolicyFailureCause::Privilege { cause };
+        let encoded = serde_json::to_vec(&InstallerReply::Refused {
+            identity,
+            authority,
+            stop,
+            failure,
+            context: original.context().as_bytes(),
+        })
+        .unwrap();
+        let mut received = PreparedStartupContext::new(CONTEXT_BYTES).unwrap();
+        let capacity = received.reserved_bytes();
+        let InnerOwnerHeader::Refused {
+            identity: actual_identity,
+            authority: actual_authority,
+            stop: actual_stop,
+            failure: actual_failure,
+        } = decode_inner_owner(&encoded, &mut received).unwrap()
+        else {
+            panic!("negative event became positive authorization");
+        };
+        assert_eq!(actual_identity, identity);
+        assert_eq!(actual_authority, authority);
+        assert_eq!(actual_stop, stop);
+        assert_eq!(actual_failure, failure);
+        assert_eq!(received.context(), original.context());
+        assert_eq!(received.reserved_bytes(), capacity);
+        assert!(decode_inner_event(&encoded).is_err());
+        let original_value: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+        for field in ["identity", "authority", "stop", "failure", "context"] {
+            let mut malformed = original_value.clone();
+            malformed.as_object_mut().unwrap().remove(field);
+            assert!(
+                decode_inner_owner(&serde_json::to_vec(&malformed).unwrap(), &mut received)
+                    .is_err()
+            );
+        }
+        let mut extra = original_value;
+        extra
+            .as_object_mut()
+            .unwrap()
+            .insert("outcome".to_owned(), serde_json::json!({"Code":0}));
+        assert!(decode_inner_owner(&serde_json::to_vec(&extra).unwrap(), &mut received).is_err());
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-20, FR-034-AC-38
     #[test]
