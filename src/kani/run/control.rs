@@ -241,6 +241,23 @@ impl RoleEntry {
             .receive(expected_rights, deadline)
     }
 
+    /// Receive parsed borrowed facts into the role owner's retained original frame. Actual
+    /// creator authentication and descriptor checks must precede owned materialization.
+    pub(super) fn receive_prepared_decode<'buffer, T>(
+        &self,
+        buffer: &'buffer mut PreparedReceive,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
+    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
+        Transport(self.0.as_fd(), CredentialsPolicy::ExclusiveCreator).receive_prepared_decode(
+            buffer,
+            expected_rights,
+            deadline,
+            decode,
+        )
+    }
+
     pub(super) fn authenticate(
         self,
         actual_creator: &OwnedFd,
