@@ -31,6 +31,32 @@ use quire_contract_codegen::{
     ExactFunctionBody, ExactFunctionDeclaration, ExactFunctionItem, FunctionParameter,
 };
 
+impl FixtureIds {
+    /// Resolves every checked node key in one declaration against its admitted fixture.
+    pub fn resolve_function(
+        &self,
+        mut function: ExactFunctionDeclaration,
+    ) -> ExactFunctionDeclaration {
+        function.node_id = self.resolve(&function.node_id);
+        for parameter in &mut function.parameters {
+            parameter.type_node_id = self.resolve(&parameter.type_node_id);
+        }
+        function.result_type = self.resolve(&function.result_type);
+        function
+    }
+
+    /// Resolves a requested call and its arguments against the same admitted fixture.
+    pub fn resolve_call(&self, mut item: ExactFunctionItem) -> ExactFunctionItem {
+        item.call_node_id = self.resolve(&item.call_node_id);
+        item.argument_node_ids = item
+            .argument_node_ids
+            .iter()
+            .map(|argument| self.resolve(argument))
+            .collect();
+        item
+    }
+}
+
 // ---------------------------------------------------------------------------
 // FR-021's own node codes
 // ---------------------------------------------------------------------------

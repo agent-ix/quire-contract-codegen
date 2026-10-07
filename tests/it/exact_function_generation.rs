@@ -13,6 +13,7 @@ use quire_contract_codegen::{
     ExactFunctionRefusal, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
 use quire_contract_model::CheckedPackageV2;
+use std::ops::Deref;
 
 // Duplicated per consumer (also `exact_function_agreement.rs`) for structural consistency with
 // the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
@@ -54,19 +55,86 @@ fn main_items() -> Vec<ExactFunctionItem> {
     ]
 }
 
+struct FixturePackage {
+    checked: CheckedPackageV2,
+    ids: FixtureIds,
+}
+
+impl FixturePackage {
+    fn key(&self, code: u32) -> quire_contract_model::CheckedNodeId {
+        self.ids.resolve(&code_id(code))
+    }
+}
+
+impl Deref for FixturePackage {
+    type Target = CheckedPackageV2;
+
+    fn deref(&self) -> &Self::Target {
+        &self.checked
+    }
+}
+
+fn admit(builder: PackageBuilder) -> FixturePackage {
+    let (checked, ids) = builder.admit_resolved();
+    FixturePackage { checked, ids }
+}
+
+fn admit_with(
+    builder: &PackageBuilder,
+    limits: quire_contract_model::CheckedPackageReadLimits,
+) -> FixturePackage {
+    let (checked, ids) = builder.admit_with_resolved(limits);
+    FixturePackage { checked, ids }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct FixtureOracles {
+    output: quire_contract_codegen::ExactFunctionOracles,
+    ids: FixtureIds,
+}
+
+impl FixtureOracles {
+    fn key(&self, code: u32) -> quire_contract_model::CheckedNodeId {
+        self.ids.resolve(&code_id(code))
+    }
+}
+
+impl Deref for FixtureOracles {
+    type Target = quire_contract_codegen::ExactFunctionOracles;
+
+    fn deref(&self) -> &Self::Target {
+        &self.output
+    }
+}
+
 fn generate(
-    package: &CheckedPackageV2,
+    package: &FixturePackage,
     functions: &[quire_contract_codegen::ExactFunctionDeclaration],
     items: &[ExactFunctionItem],
-) -> quire_contract_codegen::ExactFunctionOracles {
-    generate_exact_function_oracles(package, functions, items).expect("generation succeeds")
+) -> FixtureOracles {
+    let functions = functions
+        .iter()
+        .cloned()
+        .map(|function| package.ids.resolve_function(function))
+        .collect::<Vec<_>>();
+    let items = items
+        .iter()
+        .cloned()
+        .map(|item| package.ids.resolve_call(item))
+        .collect::<Vec<_>>();
+    let output = generate_exact_function_oracles(&package.checked, &functions, &items)
+        .expect("generation succeeds");
+    FixtureOracles {
+        output,
+        ids: package.ids.clone(),
+    }
 }
 
 fn disposition_for(
-    oracles: &quire_contract_codegen::ExactFunctionOracles,
+    oracles: &FixtureOracles,
     call_code: u32,
 ) -> &ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal> {
-    let node_id = code_id(call_code);
+    let node_id = oracles.key(call_code);
     &oracles
         .claim_map
         .items
@@ -97,14 +165,6 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     let builder = byte_ceiling_package();
     let functions = byte_ceiling_functions();
     let items = byte_ceiling_items();
-    let body_nodes = functions
-        .iter()
-        .map(|function| function.node_id.clone())
-        .collect::<Vec<_>>();
-    let call_nodes = items
-        .iter()
-        .map(|item| item.call_node_id.clone())
-        .collect::<Vec<_>>();
     let byte_refusal = |claim: &quire_contract_codegen::ExactFunctionClaim| match &claim.result {
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::LoweringByteLimitExceeded { limit, consumed },
@@ -113,7 +173,15 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     };
 
     let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
-    let generous = builder.admit_with(limits_under(LARGEST_CEILING));
+    let generous = admit_with(&builder, limits_under(LARGEST_CEILING));
+    let body_nodes = functions
+        .iter()
+        .map(|function| generous.ids.resolve(&function.node_id))
+        .collect::<Vec<_>>();
+    let call_nodes = items
+        .iter()
+        .map(|item| generous.ids.resolve(&item.call_node_id))
+        .collect::<Vec<_>>();
     let profile = measuring_profile(false);
     let body_length = lowered_package_length(&generous, &body_nodes, &profile);
     let call_length = lowered_package_length(&generous, &call_nodes, &profile);
@@ -125,7 +193,7 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     );
 
     // Each lowering alone, under the same ceiling: both fail for bytes, with different `consumed`.
-    let package = builder.admit_with(limits_under(ceiling));
+    let package = admit_with(&builder, limits_under(ceiling));
     let consumed_alone =
         |requested: &[CheckedNodeId]| match &package.lower(requested, &profile).records[..] {
             [CompleteLoweringRecordV2::Failed {
@@ -164,7 +232,7 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     );
 
     // At the longer lowered package's own length neither lowering fails for bytes.
-    let exact = builder.admit_with(limits_under(body_length.max(call_length)));
+    let exact = admit_with(&builder, limits_under(body_length.max(call_length)));
     assert!(generate(&exact, &functions, &items)
         .claim_map
         .items
@@ -178,7 +246,7 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
 /// unchanged.
 #[test]
 fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = generate(&package, &main_functions(), &main_items());
     assert_eq!(oracles.claim_map.items.len(), main_items().len());
 
@@ -203,7 +271,7 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
         .claim_map
         .items
         .iter()
-        .filter(|claim| claim.node_id == code_id(ITEM_CALL_UNKNOWN_FUNCTION))
+        .filter(|claim| claim.node_id == oracles.key(ITEM_CALL_UNKNOWN_FUNCTION))
         .collect::<Vec<_>>();
     assert_eq!(unknown.len(), 1);
     assert!(matches!(
@@ -221,7 +289,7 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
 /// generator's own bookkeeping, not from the generated source text.
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = main_functions();
     let oracles = generate(&package, &functions, &main_items());
 
@@ -244,7 +312,7 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
         .claim_map
         .items
         .iter()
-        .filter(|claim| claim.node_id == code_id(ITEM_CALL_ADD))
+        .filter(|claim| claim.node_id == oracles.key(ITEM_CALL_ADD))
         .find_map(|claim| match &claim.result {
             ClaimDisposition::Generated(generated) if generated.function == "add_fn" => {
                 Some(generated)
@@ -271,7 +339,7 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
 /// requested here, so this test drives it as a direct second request.
 #[test]
 fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![function_capability("capability_fn")];
     let items = vec![item(ITEM_CALL_ADD, "capability_fn")];
     let oracles = generate(&package, &functions, &items);
@@ -288,7 +356,7 @@ fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
 /// `rt::CheckMode::Linked` and never `rt::CheckMode::Kernel`.
 #[test]
 fn tc_031_ac8_generated_source_never_names_check_mode_kernel() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = generate(&package, &main_functions(), &main_items());
     let lib = contents(&oracles, "src/lib.rs");
     assert!(lib.contains("rt::CheckMode::Linked"));
@@ -300,7 +368,7 @@ fn tc_031_ac8_generated_source_never_names_check_mode_kernel() {
 /// on quire-spec-language#120 for every item naming it.
 #[test]
 fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![function_ref_param("ref_fn")];
     let items = vec![item(ITEM_CALL_ADD, "ref_fn")];
     let oracles = generate(&package, &functions, &items);
@@ -322,7 +390,7 @@ fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
 /// split: `spec/oracle/matrix/tests.md`'s FR-018 row records the identical gap.)
 #[test]
 fn tc_031_ac11_model_and_state_are_distinct_blockers() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![
         function_model_param("model_fn"),
         function_state_param("state_fn"),
@@ -357,7 +425,7 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
 /// item bound to that function, without changing `unrelated_fn`'s item.
 #[test]
 fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![
         function_dangling_call("dangling_fn"),
         function_unrelated("unrelated_fn"),
@@ -385,7 +453,7 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
 /// isolated to its own item.
 #[test]
 fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![
         function_form_mismatch("bad_fn"),
         function_unrelated("unrelated_fn"),
@@ -411,7 +479,7 @@ fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
 /// node id requested twice under one binding refuses every copy.
 #[test]
 fn tc_031_ac1_duplicate_request_refuses_every_copy() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![function_add("add_fn")];
     let items = vec![item(ITEM_CALL_ADD, "add_fn"), item(ITEM_CALL_ADD, "add_fn")];
     let oracles = generate(&package, &functions, &items);
@@ -434,7 +502,7 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
 /// of `Integer`.
 #[test]
 fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
 
     // Arity: FN_ADD's real body needs two operands; declared with one.
     let arity_mismatch = quire_contract_codegen::ExactFunctionDeclaration {
@@ -500,7 +568,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
 /// wrong function's index") reproduced and proven fixed.
 #[test]
 fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![
         function_add("dup"),       // node FN_ADD
         function_unrelated("dup"), // node FN_UNRELATED, same name, different node
@@ -551,7 +619,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     // generator's own node-id sort gives -- re-derived here exactly as
     // `generate_exact_function_oracles` computes it, the same pattern
     // `tc_031_ac3`/`tc_031_ac15` already use, rather than hardcoded.
-    let mut survivor_node_ids = [code_id(FN_EQ), code_id(FN_CAPABILITY)];
+    let mut survivor_node_ids = [oracles.key(FN_EQ), oracles.key(FN_CAPABILITY)];
     survivor_node_ids.sort();
     let expected_index = |node_id: &quire_contract_model::CheckedNodeId| {
         survivor_node_ids
@@ -574,18 +642,18 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     match &solo_eq_entry.location.origin {
         quire_contract_codegen::RecordedOrigin::Body { function, index } => {
             assert_eq!(function, "solo_eq");
-            assert_eq!(*index, expected_index(&code_id(FN_EQ)));
+            assert_eq!(*index, expected_index(&oracles.key(FN_EQ)));
         }
     }
     match &solo_add_entry.location.origin {
         quire_contract_codegen::RecordedOrigin::Body { function, index } => {
             assert_eq!(function, "solo_add");
-            assert_eq!(*index, expected_index(&code_id(FN_CAPABILITY)));
+            assert_eq!(*index, expected_index(&oracles.key(FN_CAPABILITY)));
         }
     }
     assert_ne!(
-        expected_index(&code_id(FN_EQ)),
-        expected_index(&code_id(FN_CAPABILITY)),
+        expected_index(&oracles.key(FN_EQ)),
+        expected_index(&oracles.key(FN_CAPABILITY)),
         "the two survivors must occupy distinct indices"
     );
     assert!(matches!(
@@ -603,7 +671,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
 /// refused as `ArityMismatch`, naming both counts.
 #[test]
 fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![function_add("add_fn")];
     let items = vec![quire_contract_codegen::ExactFunctionItem {
         call_node_id: code_id(ITEM_CALL_ADD),
@@ -628,7 +696,7 @@ fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
 /// function is absent from the emitted `checked_package()`.
 #[test]
 fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![quire_contract_codegen::ExactFunctionDeclaration {
         node_id: code_id(FN_ADD),
         name: "negate_fn".to_owned(),
@@ -711,7 +779,7 @@ struct DuplicateNodeFixture {
 impl DuplicateNodeFixture {
     /// Check the fixture under every permutation of the declaration order (which includes both
     /// orders of the pair).
-    fn check(&self, package: &CheckedPackageV2) {
+    fn check(&self, package: &FixturePackage) {
         let requested: Vec<ExactFunctionItem> = self
             .items
             .iter()
@@ -731,7 +799,7 @@ impl DuplicateNodeFixture {
             .collect();
         let baseline = generate(package, &baseline_functions, &baseline_items);
 
-        let mut first: Option<quire_contract_codegen::ExactFunctionOracles> = None;
+        let mut first: Option<FixtureOracles> = None;
         for order in permutations(&self.functions) {
             let oracles = generate(package, &order, &requested);
             match &first {
@@ -742,11 +810,7 @@ impl DuplicateNodeFixture {
         }
     }
 
-    fn check_one(
-        &self,
-        oracles: &quire_contract_codegen::ExactFunctionOracles,
-        baseline: &quire_contract_codegen::ExactFunctionOracles,
-    ) {
+    fn check_one(&self, oracles: &FixtureOracles, baseline: &FixtureOracles) {
         let lib = contents(oracles, "src/lib.rs");
         let location_json = contents(oracles, "location-map.json");
         for name in &self.absent_names {
@@ -769,7 +833,7 @@ impl DuplicateNodeFixture {
                     disposition_for(oracles, *code),
                     ClaimDisposition::Refused {
                         refusal: ExactFunctionRefusal::DuplicateDeclaringNode { node_id }
-                    } if *node_id == code_id(FN_ADD)
+                    } if *node_id == oracles.key(FN_ADD)
                 ),
                 "item {code} is not DuplicateDeclaringNode: {:?}",
                 disposition_for(oracles, *code)
@@ -816,7 +880,7 @@ impl DuplicateNodeFixture {
 /// unchanged.
 #[test]
 fn tc_031_ac22_fixture_i_both_bodies_admissible() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     DuplicateNodeFixture {
         functions: vec![
             function_add("pair_one"),
@@ -842,7 +906,7 @@ fn tc_031_ac22_fixture_i_both_bodies_admissible() {
 /// one's own Stage 1 reason.
 #[test]
 fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     DuplicateNodeFixture {
         functions: vec![
             on_node(function_capability("pair_one"), FN_ADD),
@@ -868,7 +932,7 @@ fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
 /// items naming the shared name are `DuplicateDeclaringNode`, never `AmbiguousFunctionName`.
 #[test]
 fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     DuplicateNodeFixture {
         functions: vec![
             function_add("shared"),
@@ -891,7 +955,7 @@ fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
 /// item `UnknownCallee`, the distinct function's generated.
 #[test]
 fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let fixture = DuplicateNodeFixture {
         functions: vec![
             function_add("pair_one"),
@@ -933,8 +997,8 @@ fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee()
 /// smaller of the two node ids, under every order of the declarations.
 #[test]
 fn tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id() {
-    let package = ext_corpus_package().admit();
-    let smallest = std::cmp::min(code_id(FN_ADD), code_id(FN_EQ));
+    let package = admit(ext_corpus_package());
+    let smallest = std::cmp::min(package.key(FN_ADD), package.key(FN_EQ));
     let functions = vec![
         function_add("shared"),
         function_add("shared"),
@@ -959,7 +1023,7 @@ fn tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id() {
 /// `DuplicateDeclaringNode`: the refusal takes precedence over the duplicate-request collapse.
 #[test]
 fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_refusal() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = vec![function_add("pair_one"), function_add("pair_two")];
     let requested = vec![
         item(ITEM_CALL_ADD, "pair_one"),
@@ -976,7 +1040,7 @@ fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_re
                     &claim.result,
                     ClaimDisposition::Refused {
                         refusal: ExactFunctionRefusal::DuplicateDeclaringNode { node_id }
-                    } if *node_id == code_id(FN_ADD)
+                    } if *node_id == oracles.key(FN_ADD)
                 ),
                 "{:?}",
                 claim.result
@@ -987,7 +1051,7 @@ fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_re
 
 /// The dispositions of `oracles`' claim-map entries, in claim-map order.
 fn entries(
-    oracles: &quire_contract_codegen::ExactFunctionOracles,
+    oracles: &FixtureOracles,
 ) -> Vec<&ClaimDisposition<GeneratedExactFunctionClaim, ExactFunctionRefusal>> {
     oracles
         .claim_map
@@ -1008,10 +1072,10 @@ fn unknown(name: &str) -> ClaimDisposition<GeneratedExactFunctionClaim, ExactFun
 /// The entries for `names` requested on `ITEM_CALL_ADD` in each of the two request orders (the
 /// order given, then reversed), asserted identical to each other, and returned once.
 fn both_orders(
-    package: &CheckedPackageV2,
+    package: &FixturePackage,
     functions: &[quire_contract_codegen::ExactFunctionDeclaration],
     names: [&str; 2],
-) -> quire_contract_codegen::ExactFunctionOracles {
+) -> FixtureOracles {
     let forward = generate(
         package,
         functions,
@@ -1030,7 +1094,7 @@ fn both_orders(
 /// `UnknownFunction` entry naming it.
 #[test]
 fn tc_031_ac24_case_i_one_unknown_name_is_one_entry() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = generate(
         &package,
         &[function_add("add_fn")],
@@ -1044,7 +1108,7 @@ fn tc_031_ac24_case_i_one_unknown_name_is_one_entry() {
 /// identical under both request orders.
 #[test]
 fn tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = both_orders(
         &package,
         &[function_add("add_fn")],
@@ -1060,7 +1124,7 @@ fn tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order() {
 /// `DuplicateRequest` entry.
 #[test]
 fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = generate(
         &package,
         &[function_add("add_fn")],
@@ -1082,7 +1146,7 @@ fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
 /// requested alone.
 #[test]
 fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = [function_add("add_fn")];
     let oracles = both_orders(&package, &functions, ["add_fn", "zz_unknown"]);
     let solo_add = generate(&package, &functions, &[item(ITEM_CALL_ADD, "add_fn")]);
@@ -1107,7 +1171,7 @@ fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
 /// `Zz_unknown` (`Z` is 0x5A) before `aa_unknown` (`a` is 0x61), identical under both orders.
 #[test]
 fn tc_031_ac24_case_v_names_order_by_bytes_case_sensitively() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = both_orders(
         &package,
         &[function_add("add_fn")],
@@ -1126,15 +1190,15 @@ fn tc_031_ac24_case_v_names_order_by_bytes_case_sensitively() {
 /// orders before `z_multi` (N1). Identical under both request orders and every declaration order.
 #[test]
 fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
-    let package = ext_corpus_package().admit();
-    let (n1, n2) = if code_id(FN_ADD) < code_id(FN_EQ) {
+    let package = admit(ext_corpus_package());
+    let (n1, n2) = if package.key(FN_ADD) < package.key(FN_EQ) {
         (FN_ADD, FN_EQ)
     } else {
         (FN_EQ, FN_ADD)
     };
     let node_refusal = |code: u32| ClaimDisposition::Refused {
         refusal: ExactFunctionRefusal::DuplicateDeclaringNode {
-            node_id: code_id(code),
+            node_id: package.key(code),
         },
     };
     for (shared, pair_member, extra, expected) in [
@@ -1173,9 +1237,9 @@ fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
 /// and every declaration order.
 #[test]
 fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let mut codes = [FN_ADD, FN_EQ, FN_CALL_NESTED];
-    codes.sort_by_key(|code| code_id(*code));
+    codes.sort_by_key(|code| package.key(*code));
     let [n1, n2, n3] = codes;
     let functions = vec![
         on_node(function_add("a_pair"), n2),
@@ -1186,7 +1250,7 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
     ];
     let node_refusal = |code: u32| ClaimDisposition::Refused {
         refusal: ExactFunctionRefusal::DuplicateDeclaringNode {
-            node_id: code_id(code),
+            node_id: package.key(code),
         },
     };
     for order in permutations(&functions) {
@@ -1273,9 +1337,9 @@ fn tc_031_ac20_unknown_outcome_variant_refuses_checked_invariant() {
 
 /// The generator's current output for the main corpus, which
 /// `exact_function_agreement` builds and executes.
-pub(super) fn main_oracles() -> quire_contract_codegen::ExactFunctionOracles {
+pub(super) fn main_oracles() -> FixtureOracles {
     generate(
-        &ext_corpus_package().admit(),
+        &admit(ext_corpus_package()),
         &main_functions(),
         &main_items(),
     )
@@ -1283,8 +1347,8 @@ pub(super) fn main_oracles() -> quire_contract_codegen::ExactFunctionOracles {
 
 /// The generator's current output for the nested-call chain corpus (deeper
 /// than `MAX_CALL_DEPTH`), which `exact_function_agreement` executes for AC-7.
-pub(super) fn chain_oracles() -> quire_contract_codegen::ExactFunctionOracles {
-    let package = ext_corpus_package().admit();
+pub(super) fn chain_oracles() -> FixtureOracles {
+    let package = admit(ext_corpus_package());
     let mut functions = chain_functions();
     functions.push(function_add("add_fn")); // the chain's own last link calls this
     generate(&package, &functions, &[item(ITEM_CALL_CHAIN, "chain_0")])
@@ -1342,7 +1406,7 @@ pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &s
 /// id).
 #[test]
 fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = main_functions();
     let items = main_items();
 
@@ -1375,7 +1439,7 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
 /// standing in for a runtime result, and forbids unsafe code.
 #[test]
 fn tc_031_ac14_manifest_and_source_shape() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = generate(&package, &main_functions(), &main_items());
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains("publish = false"));
@@ -1408,7 +1472,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
 /// generator's own function ordering.
 #[test]
 fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let functions = main_functions();
     let oracles = generate(&package, &functions, &main_items());
 
@@ -1457,7 +1521,7 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
 /// occurrence of either field name slipped in some other way.
 #[test]
 fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
-    let package = ext_corpus_package().admit();
+    let package = admit(ext_corpus_package());
     let oracles = generate(&package, &main_functions(), &main_items());
     let lib = contents(&oracles, "src/lib.rs");
     // The header comment documents (in prose) that `Evaluation.location`/

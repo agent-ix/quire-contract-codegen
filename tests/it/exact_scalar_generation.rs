@@ -121,8 +121,8 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
     assert_eq!(refused.len(), TEXT_ADMISSIONS.len(), "the six admissions");
     for expression in refused {
         let code = expression.code;
-        let (result, wire) = refused_corpus_package(code).read();
-        let node_id = code_id(code);
+        let (result, wire, ids) = refused_corpus_package(code).read_resolved();
+        let node_id = ids.resolve(&code_id(code));
         let position = wire["semantic_graph"]["nodes"]
             .as_array()
             .expect("nodes")
@@ -1118,8 +1118,9 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
 
     let mut builder = corpus_package();
     integer_add_chain(&mut builder, CHAIN);
+    let (_, ids) = builder.admit_resolved();
     let requested = (0..CHAIN)
-        .map(|offset| code_id(CHAIN_BASE + offset))
+        .map(|offset| ids.resolve(&code_id(CHAIN_BASE + offset)))
         .collect::<Vec<_>>();
     let items = requested
         .iter()
@@ -1389,15 +1390,15 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
         bytes: 16 * 1024 * 1024,
         ..quire_contract_model::CheckedPackageReadLimits::bounded()
     };
+    let (package, ids) = builder.admit_with_resolved(limits);
     let items = codes
         .map(|code| ExactScalarItem {
-            node_id: code_id(code),
+            node_id: ids.resolve(&code_id(code)),
             operation: ExactScalarOperation::EnumComparison {
                 operator: ComparisonOperator::Equal,
             },
         })
         .collect::<Vec<_>>();
-    let package = builder.admit_with(limits);
     assert!(matches!(
         generate_exact_scalar_oracles(&package, &items),
         Err(OracleGenerationError::SourceTooLarge { bytes })

@@ -27,6 +27,10 @@ use quire_contract_model::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+#[path = "../checked_package_support/rekey.rs"]
+mod rekey;
+pub use rekey::FixtureIds;
+
 #[path = "codes.rs"]
 mod codes;
 pub use codes::*;
@@ -450,6 +454,21 @@ pub struct PackageBuilder {
     value: Value,
 }
 
+impl FixtureIds {
+    /// Resolves one request against the checked package built from the same fixture.
+    pub fn resolve_item(&self, mut item: CompositeEqualityItem) -> CompositeEqualityItem {
+        item.node_id = self.resolve(&item.node_id);
+        for operand in [&mut item.left, &mut item.right] {
+            operand.source_type = self.resolve(&operand.source_type);
+            operand.conversion_target = operand
+                .conversion_target
+                .as_ref()
+                .map(|target| self.resolve(target));
+        }
+        item
+    }
+}
+
 include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
@@ -523,6 +542,7 @@ impl PackageBuilder {
         } else {
             "declaration"
         };
+        let source = self.value["lock"]["sources"][0].clone();
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -541,9 +561,18 @@ impl PackageBuilder {
         }
         if let Some(declaration) = declaration_for(tag, form, label) {
             node["declaration"] = declaration;
+            // This declaration's region below names the selected source. The checked reader
+            // requires its SourceOwner to name that same source; application bodies are keyed
+            // from their operation and carry no owner.
+            if node["body"]["term"] != "application" {
+                node["owner"] = json!({
+                    "kind": "source",
+                    "authority": source["authority"],
+                    "identity": source["identity"],
+                });
+            }
         }
         nodes.push(node);
-        let source = self.value["lock"]["sources"][0].clone();
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
@@ -722,21 +751,36 @@ impl PackageBuilder {
 
     /// The wire document with its identity projection and package id refreshed.
     pub fn wire(&self) -> Value {
-        let mut package = self.value.clone();
-        let projection = package["semantic_graph"]["nodes"]
-            .as_array()
-            .expect("nodes")
-            .iter()
-            .cloned()
-            .map(|mut node| {
-                node.as_object_mut().expect("node").remove("occurrences");
-                node
-            })
-            .collect::<Vec<_>>();
-        package["identity_preimage"]["identity_projection"] = Value::Array(projection);
-        let preimage = serde_json::to_vec(&package["identity_preimage"]).expect("preimage");
-        package["package_id"]["digest"] = json!(sha256_hex(&preimage));
-        package
+        self.resolved_wire(CheckedPackageReadLimits::bounded()).wire
+    }
+
+    /// This fixture's wire and the map from its readable IDs to admitted IDs.
+    fn resolved_wire(&self, limits: CheckedPackageReadLimits) -> rekey::ResolvedWire {
+        rekey::resolve_wire(&self.value, &evidence(), limits)
+    }
+
+    /// Admits the package and returns its per-artifact ID resolver.
+    pub fn admit_resolved(&self) -> (CheckedPackageV2, FixtureIds) {
+        self.admit_with_resolved(CheckedPackageReadLimits::bounded())
+    }
+
+    /// Admits under explicit reader limits and returns this artifact's ID resolver.
+    pub fn admit_with_resolved(
+        &self,
+        limits: CheckedPackageReadLimits,
+    ) -> (CheckedPackageV2, FixtureIds) {
+        let rekey::ResolvedWire { outcome, ids, .. } = self.resolved_wire(limits);
+        match outcome {
+            CheckedPackageV2ReadResult::Admitted(package) => (*package, ids),
+            other => panic!("expected V2 admission, got {other:?}"),
+        }
+    }
+
+    /// Returns the reader result and wire with the IDs used by that wire.
+    pub fn read_resolved(&self) -> (CheckedPackageV2ReadResult, Value, FixtureIds) {
+        let rekey::ResolvedWire { wire, outcome, ids } =
+            self.resolved_wire(CheckedPackageReadLimits::bounded());
+        (outcome, wire, ids)
     }
 
     /// Registers `definition` under `role` in `lock.profile_selections` and the identity
@@ -785,10 +829,7 @@ impl PackageBuilder {
 
     /// The reader's verdict on this package, admitted or refused, with the wire it read.
     pub fn read(&self) -> (CheckedPackageV2ReadResult, Value) {
-        let wire = self.wire();
-        let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        let result =
-            CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence());
+        let (result, wire, _) = self.read_resolved();
         (result, wire)
     }
 
@@ -798,12 +839,7 @@ impl PackageBuilder {
 
     /// As [`Self::admit`], reading under `limits`.
     pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
-        let wire = self.wire();
-        let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(&bytes, limits, &evidence()) {
-            CheckedPackageV2ReadResult::Admitted(package) => *package,
-            other => panic!("expected V2 admission, got {other:?}"),
-        }
+        self.admit_with_resolved(limits).0
     }
 }
 
