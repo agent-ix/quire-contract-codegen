@@ -32,9 +32,10 @@ use super::{
     role_command::HelperRole,
     role_deadline::{DeadlineError, ExecutionClock, IdentityDeadline, RoleDeadline},
     role_protocol::{
-        CallerTerminalControl, LauncherControl, LauncherReply, LauncherSettlementMode,
-        OuterArmReply, OuterChildSettlement, OuterPhaseCommand, OuterPhaseReply,
-        OuterStartupControl, OuterTerminalReply, OwnerStopCause, RunSettings,
+        CallerTerminalControl, CancellationHeader, CancellationProgress, LauncherControl,
+        LauncherReply, LauncherSettlementMode, OuterArmReply, OuterChildSettlement,
+        OuterPhaseCommand, OuterPhaseReply, OuterStartupControl, OuterTerminalReply,
+        OwnerStopCause, RunSettings,
     },
     spawner::{RetainedSpawner, SpawnIdentity},
     stages::{Bootstrap, InitReady, PreparedDispatch, StageError, VerifiedInitReady},
@@ -160,6 +161,9 @@ pub(super) struct CallerBootstrap {
     cancel_storage: Option<FrameStorage>,
     cancel_close: Option<IncrementalSend>,
     cancel_close_sent: bool,
+    cancel_received: bool,
+    cancel_phase_drained: bool,
+    cancel_phase_pin: Option<OwnedFd>,
     terminal_phase: CallerTerminalPhase,
     identity_records: RefCell<creator::PreparedIdentity>,
     named_buffers: u64,
@@ -439,7 +443,7 @@ impl CallerBootstrap {
             super::caller_driver::CallerDriver::metadata_reservation()
                 .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
             super::caller_execution::CallerExecution::additional_metadata()?,
-            super::role_protocol::cancellation_decode_bytes()
+            super::role_protocol::cancellation_progress_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             u64::try_from(startup_context.reserved_bytes())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
@@ -562,6 +566,9 @@ impl CallerBootstrap {
             cancel_storage: Some(cancel_storage),
             cancel_close: None,
             cancel_close_sent: false,
+            cancel_received: false,
+            cancel_phase_drained: false,
+            cancel_phase_pin: None,
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
             identity_records: RefCell::new(identity_records),
             named_buffers,
@@ -1803,6 +1810,140 @@ impl CallerBootstrap {
             self.cancel_close_sent = true;
         }
         Ok(sent)
+    }
+
+    /// One cleanup-only step on the original startup framer after C irreversibly stopped.
+    /// Complete queued phase replies retain actual rights, never phase/stage/Dispatch authority.
+    /// A complete cancellation receipt is still provisional until normal actual role settlement.
+    pub(super) fn cancellation_reply_step(
+        &mut self,
+        clock: &mut ExecutionClock,
+    ) -> Result<bool, CallerBootstrapError> {
+        if !self.cancel_close_sent || clock.original_deadline() != self.identity_deadline {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        if self.cancel_received || self.pending_owner_stop.is_some() {
+            return Ok(true);
+        }
+        let (cutoff, _) = self.settlement_clock(clock)?;
+        let (control, sender, pin) = {
+            let Some(received) = self
+                .outer_receive
+                .advance_clock_only_optional(
+                    &self.outer_control.transport(),
+                    CancellationProgress::rights_count,
+                    Some(cutoff),
+                    super::role_protocol::decode_cancellation_progress,
+                    // This exact cleanup-only union follows actual C cancellation. A full phase
+                    // grants custody only; ordinary startup phase EOF refusal remains unchanged.
+                    |_| true,
+                )
+                .map_err(CallerBootstrapError::Control)?
+            else {
+                return Ok(false);
+            };
+            (
+                received.control,
+                received.credentials,
+                received.rights.pop(),
+            )
+        };
+        // Retain any actual received capability BEFORE fallible sender/state validation.
+        // It is not promoted to a validated monitor/INIT authority or used to signal a PID.
+        if pin.is_some() {
+            if self.cancel_phase_pin.is_some() {
+                return Err(CallerBootstrapError::UnexpectedPhase);
+            }
+            self.cancel_phase_pin = pin;
+        }
+        let sender = sender.ok_or(CallerBootstrapError::MissingSender)?;
+        if sender.pid
+            != self
+                .outer_pid
+                .ok_or(CallerBootstrapError::MissingOuterPin)?
+            || sender.uid != self.caller_uid
+            || sender.gid != self.caller_gid
+            || self.outer_pin.is_none()
+        {
+            return Err(CallerBootstrapError::TerminalReplyMismatch);
+        }
+        match control {
+            CancellationProgress::Phase(reply) => {
+                if self.cancel_phase_drained || reply.authority() != self.authority {
+                    return Err(CallerBootstrapError::UnexpectedPhase);
+                }
+                let expected = matches!(
+                    (&self.phase, &reply),
+                    (
+                        CallerPhase::AwaitMonitor,
+                        OuterPhaseReply::MonitorSpawned { .. }
+                    ) | (
+                        CallerPhase::AwaitClaim,
+                        OuterPhaseReply::InnerClaimed { .. }
+                    ) | (CallerPhase::AwaitGate, OuterPhaseReply::GateReleased { .. })
+                );
+                if !expected || (reply.rights_count() == 1) != self.cancel_phase_pin.is_some() {
+                    return Err(CallerBootstrapError::UnexpectedPhase);
+                }
+                // No change to self.phase, no publication and no lookup of an exited numeric
+                // PID. The authenticated original right remains owned until whole-chain proof.
+                self.cancel_phase_drained = true;
+                Ok(false)
+            }
+            CancellationProgress::Terminal(CancellationHeader::Cancelled { authority, stop }) => {
+                if authority != self.authority
+                    || stop
+                        != clock
+                            .caller_stop_stamp()
+                            .map_err(CallerBootstrapError::Deadline)?
+                {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                clock
+                    .adopt_stop(stop, self.identity_clock)
+                    .map_err(CallerBootstrapError::Deadline)?;
+                self.cancel_received = true;
+                Ok(true)
+            }
+            CancellationProgress::Terminal(CancellationHeader::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            }) => {
+                self.retain_terminal_stop(
+                    clock,
+                    authority,
+                    peaks,
+                    stop,
+                    cause,
+                    OwnerStopReceiver::Startup,
+                )?;
+                Ok(true)
+            }
+        }
+    }
+
+    /// Positive normal O/L/creator settlement and exact stream EOF are required even beside
+    /// a complete cancellation receipt. No report, measurements or candidate arise here.
+    pub(super) fn finish_cancellation_after_roles(
+        &mut self,
+        roles: &CallerRoleSettlement,
+    ) -> Result<bool, CallerBootstrapError> {
+        if !self.cancel_received || roles.authority != self.authority {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        if !matches!(
+            self.outer_settled,
+            Some(OuterChildSettlement::Reaped {
+                outcome: BackendExit::Code(0)
+            })
+        ) {
+            return Err(CallerBootstrapError::OuterExitAbnormal);
+        }
+        self.outer_receive
+            .confirm_end(&self.outer_control.transport(), roles.cutoff)
+            .map_err(CallerBootstrapError::Control)
     }
 
     /// Close only C's still-owned pre-Dispatch lease while retaining every process, capture and
