@@ -22,6 +22,7 @@ use super::{
         GatedClaim, GuardianIdentity, InnerSettlement, MonitorStopSettlement, OuterMonitorOwner,
         ReadyIdentityError,
     },
+    outer_caller::{OuterCallerControl, OuterCallerReceive},
     outer_setup::PreparedOuter,
     protocol::BackendExit,
     report_storage::{ReportCollector, ReportError, SealedReport},
@@ -106,6 +107,7 @@ pub(super) struct OuterRunOwner {
     sampling: Option<OuterSampling>,
     monitor: Option<InnerMonitor>,
     phases: OuterPhases,
+    caller_receive: OuterCallerReceive,
     completion: InnerCompletion,
     terminal_prepared: Option<TerminalPreparation>,
     terminal: Option<TerminalDelivery>,
@@ -153,6 +155,12 @@ impl OuterRunOwner {
             .startup_deadline()
             .map_err(SamplingError::Deadline)?;
         let phases = OuterPhases::prepare()?;
+        let caller_receive = OuterCallerReceive::prepare().map_err(SamplingError::Control)?;
+        // Check the actual retained payload/right/scalar reservation before any child exposure.
+        // These O-owned allocations are included in the fresh initial O RSS observation.
+        caller_receive
+            .reserved_bytes()
+            .map_err(SamplingError::Control)?;
         let completion = InnerCompletion::prepare()?;
         let terminal_prepared = TerminalPreparation::prepare()?;
         let mut sampling = OuterSampling::prepare(outer, launcher, settings)?;
@@ -169,6 +177,7 @@ impl OuterRunOwner {
             sampling: Some(sampling),
             monitor,
             phases,
+            caller_receive,
             completion,
             terminal_prepared: Some(terminal_prepared),
             terminal: None,
@@ -284,7 +293,7 @@ impl OuterRunOwner {
                 .terminal
                 .as_mut()
                 .ok_or(SamplingError::InvalidTerminalTransition)?
-                .tick(outer, caller)?
+                .tick(outer, caller, &mut self.caller_receive)?
             {
                 TerminalProgress::Pending => Ok(OuterRunProgress::Pending),
                 TerminalProgress::Committed => {
@@ -307,6 +316,7 @@ impl OuterRunOwner {
                         .as_mut()
                         .ok_or(SamplingError::InvalidMonitorTransition)?,
                     self.startup_deadline,
+                    &mut self.caller_receive,
                 )?;
                 if sampling.owner_stop.is_some() {
                     self.state = OuterRunState::OwnerStopped;
@@ -347,7 +357,13 @@ impl OuterRunOwner {
                     .terminal_prepared
                     .as_mut()
                     .ok_or(SamplingError::InvalidTerminalTransition)?
-                    .receive_completed_close(sampling, &self.completion, outer, caller)?;
+                    .receive_completed_close(
+                        sampling,
+                        &self.completion,
+                        outer,
+                        caller,
+                        &mut self.caller_receive,
+                    )?;
                 if sampling.owner_stop.is_some() {
                     return sampling.stop_progress();
                 }
@@ -480,7 +496,6 @@ impl TerminalSampling {
 pub(super) struct TerminalPreparation {
     descriptor: FrameStorage,
     commit: FrameStorage,
-    read_ack: IncrementalReceive,
     close_deadline: Option<Instant>,
     frame_deadline: Option<Instant>,
     poisoned: bool,
@@ -491,7 +506,6 @@ impl TerminalPreparation {
         Ok(Self {
             descriptor: FrameStorage::prepare().map_err(SamplingError::Control)?,
             commit: FrameStorage::prepare().map_err(SamplingError::Control)?,
-            read_ack: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
             close_deadline: None,
             frame_deadline: None,
             poisoned: false,
@@ -507,6 +521,7 @@ impl TerminalPreparation {
         completion: &InnerCompletion,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
+        receive: &mut OuterCallerReceive,
     ) -> Result<(MemoryTick, bool), SamplingError> {
         if self.poisoned
             || self.close_deadline.is_some()
@@ -526,22 +541,21 @@ impl TerminalPreparation {
         let cap = self.frame_deadline.unwrap_or(cap);
         let frame_deadline = observation_deadline(&sampling.settings, &sampling.stops)?
             .map_or(cap, |original| cap.min(original));
-        let Some(received) = self
-            .read_ack
-            .advance::<CallerTerminalControl>(&caller.transport(), |_| 0, frame_deadline)
+        let Some(received) = receive
+            .step(caller, Some(frame_deadline))
             .map_err(SamplingError::Control)?
         else {
-            if self.frame_deadline.is_none() && self.read_ack.has_partial_frame() {
+            if self.frame_deadline.is_none() && receive.has_partial_frame() {
                 self.frame_deadline = Some(frame_deadline);
             }
             self.poisoned = false;
             return Ok((tick, false));
         };
-        let CallerTerminalControl::CompletedClose {
+        let OuterCallerControl::Close(CallerTerminalControl::CompletedClose {
             authority,
             deadline,
             stop,
-        } = received.control
+        }) = received
         else {
             return Err(SamplingError::InvalidTerminalTransition);
         };
@@ -629,7 +643,6 @@ impl TerminalPreparation {
                 send: IncrementalSend::new(descriptor),
             },
             commit: Some(self.commit),
-            read_ack: self.read_ack,
             bytes: Some(bytes),
             deadline,
             disposition: TerminalDisposition::Report,
@@ -673,7 +686,6 @@ impl TerminalPreparation {
             },
             state: TerminalState::Commit,
             commit: Some(self.commit),
-            read_ack: self.read_ack,
             bytes: None,
             deadline,
             disposition,
@@ -725,7 +737,6 @@ pub(super) struct TerminalDelivery {
     sampling: TerminalSampling,
     state: TerminalState,
     commit: Option<FrameStorage>,
-    read_ack: IncrementalReceive,
     bytes: Option<u64>,
     deadline: Instant,
     disposition: TerminalDisposition,
@@ -738,12 +749,13 @@ impl TerminalDelivery {
         &mut self,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
+        receive: &mut OuterCallerReceive,
     ) -> Result<TerminalProgress, SamplingError> {
         if self.poisoned || matches!(self.state, TerminalState::Committed) {
             return Err(SamplingError::InvalidTerminalTransition);
         }
         self.poisoned = true;
-        let result = self.advance(outer, caller);
+        let result = self.advance(outer, caller, receive);
         if result.is_ok() {
             self.poisoned = false;
         }
@@ -804,6 +816,7 @@ impl TerminalDelivery {
         &mut self,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
+        receive: &mut OuterCallerReceive,
     ) -> Result<TerminalProgress, SamplingError> {
         if Instant::now() >= self.deadline {
             return Err(SamplingError::Deadline(DeadlineError::Expired));
@@ -883,15 +896,13 @@ impl TerminalDelivery {
                 Ok(TerminalProgress::Pending)
             }
             TerminalState::AwaitRead => {
-                let Some(received) = self
-                    .read_ack
-                    .advance::<CallerTerminalControl>(&caller.transport(), |_| 0, self.deadline)
+                let Some(received) = receive
+                    .step(caller, Some(self.deadline))
                     .map_err(SamplingError::Control)?
                 else {
                     return Ok(TerminalProgress::Pending);
                 };
-                let CallerTerminalControl::ReadCompleted { authority, bytes } = received.control
-                else {
+                let OuterCallerControl::ReadCompleted { authority, bytes } = received else {
                     return Err(SamplingError::InvalidTerminalTransition);
                 };
                 if authority != self.sampling.settings.authority {
@@ -1358,7 +1369,6 @@ impl InnerCompletion {
 /// One normal O startup controller, independent of the optional fixture feature. C drives the
 /// same production prefix by data; every wait returns to complete ordinary RSS/collector sampling.
 pub(super) struct OuterPhases {
-    receive: IncrementalReceive,
     phase: OuterPhase,
     pending_reply: Option<PhaseReply>,
 }
@@ -1391,7 +1401,6 @@ pub(super) enum PhaseProgress {
 impl OuterPhases {
     pub(super) fn prepare() -> Result<Self, SamplingError> {
         Ok(Self {
-            receive: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
             phase: OuterPhase::BeforeMonitor,
             pending_reply: None,
         })
@@ -1406,6 +1415,7 @@ impl OuterPhases {
         caller: &RoleEndpoint,
         monitor: &mut InnerMonitor,
         startup_deadline: Instant,
+        receive: &mut OuterCallerReceive,
     ) -> Result<PhaseProgress, SamplingError> {
         let startup_deadline = startup_deadline.min(
             sampling
@@ -1493,21 +1503,19 @@ impl OuterPhases {
             .startup_deadline()
             .map_err(SamplingError::Deadline)?
             .min(startup_deadline);
-        let Some(received) = self
-            .receive
-            .advance::<OuterPhaseCommand>(
-                &caller.transport(),
-                OuterPhaseCommand::rights_count,
-                deadline,
-            )
+        let Some(received) = receive
+            .step(caller, Some(deadline))
             .map_err(SamplingError::Control)?
         else {
             return Ok(PhaseProgress::Pending);
         };
-        if received.control.authority() != sampling.settings.authority {
+        let OuterCallerControl::Phase(command) = received else {
+            return Err(SamplingError::UnexpectedPhase);
+        };
+        if command.authority() != sampling.settings.authority {
             return Err(SamplingError::PhaseAuthorityMismatch);
         }
-        match (&self.phase, received.control) {
+        match (&self.phase, command) {
             (OuterPhase::BeforeMonitor, OuterPhaseCommand::BeginMonitor { .. }) => {
                 monitor.spawn(outer, deadline)?;
                 let pin = monitor
