@@ -262,6 +262,8 @@ pub(super) enum InnerAdmissionProgress {
     Ready,
     Dispatched,
     Refused,
+    /// Actual exclusive C lease EOF before Dispatch; no buffered frame may authorize work.
+    LeaseClosed,
 }
 
 /// I owns the actual trusted installer throughout admission, including every failed post-spawn
@@ -339,12 +341,11 @@ impl PendingInnerBackend {
             .input
             .as_ref()
             .ok_or(InnerAdmissionError::MissingOwnedState)?;
-        input
-            .caller_lease
-            .transport()
-            .refuse_observable_eof()
-            .map_err(GuardianError::Control)
-            .map_err(InnerAdmissionError::Guardian)?;
+        match input.caller_lease.transport().refuse_observable_eof() {
+            Ok(()) => {}
+            Err(ControlError::Eof) => return Ok(InnerAdmissionProgress::LeaseClosed),
+            Err(error) => return Err(InnerAdmissionError::Guardian(GuardianError::Control(error))),
+        }
         super::creator::require_live(&input.outer_pin)
             .map_err(GuardianError::Io)
             .map_err(InnerAdmissionError::Guardian)?;

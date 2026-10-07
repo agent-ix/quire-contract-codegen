@@ -18,13 +18,13 @@ use std::{
 use rustix::process::{pidfd_open, Pid, PidfdFlags, Signal};
 
 use super::{
-    control::{role_pair, ControlError, PreparedFrame, RoleCaller},
+    control::{role_pair, ControlError, IncrementalReceive, PreparedFrame, RoleCaller},
     creator,
     outer_setup::{NamespaceIdentity, PreparedOuter, SetupError},
     protocol::BackendExit,
     role_bootstrap::{BootstrapError, PreparedLauncher},
     role_command::HelperRole,
-    role_deadline::{DeadlineError, IdentityDeadline},
+    role_deadline::{DeadlineError, IdentityDeadline, StopOrigin, StopTimeline},
     role_protocol::{
         LauncherControl, LauncherReply, LauncherSettlementMode, OuterArmReply, OuterBootstrap,
         OuterChildSettlement, RunSettings,
@@ -102,6 +102,7 @@ pub(super) struct LauncherOwner {
     cancellation_attempted: bool,
     exit: Option<ExitStatus>,
     settlement_attempted: bool,
+    settlement_receive: IncrementalReceive,
 }
 
 impl LauncherOwner {
@@ -137,6 +138,7 @@ impl LauncherOwner {
             cancellation_attempted: false,
             exit: None,
             settlement_attempted: false,
+            settlement_receive: IncrementalReceive::prepare().map_err(LauncherError::Control)?,
         })
     }
 
@@ -348,6 +350,120 @@ impl LauncherOwner {
             return Err(LauncherError::SettlementAuthorityMismatch);
         }
         Ok(())
+    }
+
+    /// After arm, L owns no work budget and never applies its expired setup cap to ordinary
+    /// admitted backend work. It observes the real creator-thread/lease and retains O's Child
+    /// until C's authenticated original settlement transaction positively reaps and retires it.
+    pub(super) fn run_until_retired(&mut self) -> Result<(), LauncherError> {
+        let mut frame_cutoff = None;
+        loop {
+            self.input
+                .namespace
+                .require_single_thread()
+                .map_err(LauncherError::Setup)?;
+            if rustix::process::parent_process_death_signal()
+                .map_err(|error| LauncherError::Io(error.into()))?
+                != Some(Signal::KILL)
+            {
+                return Err(LauncherError::MissingParentArm);
+            }
+            // Check the positively retained actual creating thread, not merely C's TGID.
+            let creator_state = creator::require_live(&self.input.creator_pin);
+            let caller_state = self
+                .input
+                .bootstrap
+                .transport()
+                .pending_control(Duration::ZERO);
+            if creator_state.is_err() || matches!(caller_state, Err(ControlError::Eof)) {
+                let mut stop = StopTimeline::prepare(self.input.settings.started)
+                    .map_err(LauncherError::Deadline)?;
+                stop.capture_once(StopOrigin::Launcher)
+                    .map_err(LauncherError::Deadline)?;
+                let cutoff = stop
+                    .deadline(
+                        self.input.settings.settlement_reserve,
+                        self.input.settings.deadline,
+                    )
+                    .and_then(super::role_deadline::RoleDeadline::local)
+                    .map_err(LauncherError::Deadline)?;
+                self.cancel_outer()?;
+                while self.poll_outer_exit()?.is_none() {
+                    let remaining = cutoff
+                        .checked_duration_since(Instant::now())
+                        .filter(|remaining| !remaining.is_zero())
+                        .ok_or(LauncherError::Deadline(DeadlineError::Expired))?;
+                    thread::park_timeout(remaining.min(Duration::from_millis(20)));
+                }
+                if Instant::now() >= cutoff {
+                    return Err(LauncherError::Deadline(DeadlineError::Expired));
+                }
+                // This is actual L child settlement only, with no public conclusion. A failed
+                // creator inspection is not rewritten as proof of caller death/EOF.
+                return match creator_state {
+                    Err(error) => Err(LauncherError::Io(error)),
+                    Ok(()) => Err(LauncherError::Control(ControlError::Eof)),
+                };
+            }
+            let pending = caller_state.map_err(LauncherError::Control)?;
+            if let Some(original) = self
+                .input
+                .settings
+                .identity_deadline()
+                .map_err(LauncherError::Deadline)?
+            {
+                if Instant::now() >= original {
+                    return Err(LauncherError::Deadline(DeadlineError::Expired));
+                }
+            }
+            if pending || self.settlement_receive.has_partial_frame() {
+                // Freeze a finite frame-receive bound on its first observed data; retries never
+                // restart it. The decoded C request must still carry the genuine earlier cutoff.
+                let cutoff = match frame_cutoff {
+                    Some(cutoff) => cutoff,
+                    None => {
+                        let cap = Instant::now()
+                            .checked_add(self.input.settings.settlement_reserve)
+                            .ok_or(LauncherError::Deadline(DeadlineError::Unrepresentable))?;
+                        let cutoff = self
+                            .input
+                            .settings
+                            .identity_deadline()
+                            .map_err(LauncherError::Deadline)?
+                            .map_or(cap, |original| original.min(cap));
+                        frame_cutoff = Some(cutoff);
+                        cutoff
+                    }
+                };
+                if let Some(received) = self
+                    .settlement_receive
+                    .advance::<LauncherControl>(
+                        &self.input.bootstrap.transport(),
+                        LauncherControl::rights_count,
+                        cutoff,
+                    )
+                    .map_err(LauncherError::Control)?
+                {
+                    // SO_PEERCRED pins the exclusive endpoint; every received record also binds
+                    // C's actual PID/UID/GID. No rights or other command can request retirement.
+                    let sender = received.credentials.ok_or(LauncherError::MissingSender)?;
+                    let actual = self
+                        .input
+                        .bootstrap
+                        .transport()
+                        .creator_credentials()
+                        .map_err(LauncherError::Control)?;
+                    if sender.pid != actual.pid
+                        || sender.uid != actual.uid
+                        || sender.gid != actual.gid
+                    {
+                        return Err(LauncherError::SenderMismatch);
+                    }
+                    return self.settle_for_caller(received.control);
+                }
+            }
+            thread::park_timeout(Duration::from_millis(20));
+        }
     }
 
     pub(super) fn confirm_arm(&mut self) -> Result<NamespaceIdentity, LauncherError> {
