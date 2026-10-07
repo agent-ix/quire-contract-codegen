@@ -70,9 +70,25 @@ impl RunAuthority {
     }
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum CallerControl {
+macro_rules! caller_controls {
+    ($($variant:ident { $($field:ident: $value:ty),+ $(,)? }),+ $(,)?) => {
+        #[derive(Deserialize, Serialize)]
+        #[serde(tag = "kind", deny_unknown_fields)]
+        pub(super) enum CallerControl { $($variant { $($field: $value),+ }),+ }
+
+        #[derive(Clone, Copy)]
+        pub(super) enum CallerControlKind { $($variant),+ }
+
+        impl CallerControlKind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+
+caller_controls! {
     Hello {
         identity: BuildIdentity,
         authority: RunAuthority,
@@ -94,11 +110,7 @@ impl CallerControl {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum StdinControl {
-    Open,
-    Closed,
-}
+identity_variants!(StdinControl { Open, Closed });
 
 impl StdinControl {
     pub(super) fn rights_count(self) -> usize {

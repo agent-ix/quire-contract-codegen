@@ -37,15 +37,33 @@ use std::{
 #[cfg(all(test, target_os = "linux"))]
 use std::time::Duration;
 
-/// An internal command recipe with explicit environment inheritance and inherited stdin.
-/// Capture owns stdout/stderr; no caller-configured stream is silently reconstructed.
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct BackendCommand {
-    program: OsString,
-    arguments: Vec<OsString>,
-    directory: Option<OsString>,
-    environment: Vec<(OsString, OsString)>,
+macro_rules! backend_recipe_fields {
+    ($($variant:ident => $field:ident: $value:ty),+ $(,)?) => {
+        /// An internal command recipe with explicit environment inheritance and inherited stdin.
+        /// Capture owns stdout/stderr; no caller-configured stream is silently reconstructed.
+        #[derive(Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct BackendCommand { $($field: $value),+ }
+
+        #[cfg(target_os = "linux")]
+        #[derive(Clone, Copy)]
+        pub(super) enum BackendCommandField { $($variant),+ }
+
+        #[cfg(target_os = "linux")]
+        impl BackendCommandField {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($field)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+
+backend_recipe_fields! {
+    Program => program: OsString,
+    Arguments => arguments: Vec<OsString>,
+    Directory => directory: Option<OsString>,
+    Environment => environment: Vec<(OsString, OsString)>,
 }
 
 impl BackendCommand {
@@ -57,6 +75,23 @@ impl BackendCommand {
             environment: std::env::vars_os().collect(),
         }
     }
+    /// Assemble the exact owned values materialized by an authenticated private receiver.
+    /// No ambient environment, pathname resolution or recipe admission is supplied here.
+    #[cfg(target_os = "linux")]
+    pub(super) fn from_received_parts(
+        program: OsString,
+        arguments: Vec<OsString>,
+        directory: Option<OsString>,
+        environment: Vec<(OsString, OsString)>,
+    ) -> Self {
+        Self {
+            program,
+            arguments,
+            directory,
+            environment,
+        }
+    }
+
     pub(super) fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
         self.arguments.push(argument.as_ref().to_owned());
         self

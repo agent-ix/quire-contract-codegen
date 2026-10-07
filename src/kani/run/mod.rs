@@ -56,6 +56,10 @@ mod inner_reply_decode;
 mod installer_reply_decode;
 #[cfg(target_os = "linux")]
 mod launcher_owner;
+#[cfg(target_os = "linux")]
+mod native_os_decode;
+#[cfg(target_os = "linux")]
+mod recipe_decode;
 
 // Actual creator-thread liveness, including the retained outside L role.
 #[cfg(target_os = "linux")]
