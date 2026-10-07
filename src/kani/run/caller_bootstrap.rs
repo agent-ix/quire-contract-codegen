@@ -185,6 +185,8 @@ pub(super) struct CallerBootstrap {
     deadline: Instant,
     identity_deadline: Option<Instant>,
     identity_clock: IdentityDeadline,
+    // Original C-authenticated absolute work clock, distinct from the setup cap/min cutoff.
+    identity_work_clock: IdentityDeadline,
     settlement_transfer: Option<(Instant, RoleDeadline)>,
     build_identity: BuildIdentity,
     authority: RunAuthority,
@@ -393,6 +395,7 @@ impl CallerBootstrap {
         // it and make subsequent comparisons with the original ExecutionClock invalid.
         let identity_deadline = clock.original_deadline();
         let identity_clock = settings.deadline;
+        let identity_work_clock = settings.work_deadline;
         let deadline = clock
             .work_deadline()
             .map_or(bootstrap.setup_deadline(), |deadline| {
@@ -618,6 +621,7 @@ impl CallerBootstrap {
             deadline,
             identity_deadline,
             identity_clock,
+            identity_work_clock,
             settlement_transfer: None,
             build_identity,
             authority,
@@ -795,6 +799,17 @@ impl CallerBootstrap {
                     || sender.gid != self.caller_gid
                     || pin.is_some()
                     || self.policy_refusal.is_some()
+                {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                // Check the producer's work-election fact against the original authenticated
+                // C clock at that SAME event, before accepting clock/cause custody. A setup
+                // cap or receipt-time expiry cannot establish exhausted whole-run work.
+                if failure.state.original_work_expired
+                    != self
+                        .identity_work_clock
+                        .expired_at(failure.stop)
+                        .map_err(CallerBootstrapError::Deadline)?
                 {
                     return Err(CallerBootstrapError::TerminalReplyMismatch);
                 }

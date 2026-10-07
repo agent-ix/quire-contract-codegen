@@ -934,6 +934,10 @@ mod tests {
             authority: serde_json::from_value(serde_json::to_value([0_u8; 32]).unwrap()).unwrap(),
             stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
             operation: CauseOperation::ReportCreation,
+            state: super::outer_failure::FailureState {
+                observation_admitted: false,
+                original_work_expired: false,
+            },
             representation: FailureRepresentation::Original {
                 cause: StartupCause::capture_io(original).unwrap(),
             },

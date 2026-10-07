@@ -135,6 +135,10 @@ mod tests {
             authority: authority(),
             stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
             operation: CauseOperation::ProcSetup,
+            state: super::outer_failure::FailureState {
+                observation_admitted: false,
+                original_work_expired: false,
+            },
             representation: FailureRepresentation::Original {
                 cause: context
                     .capture_io(&io::Error::from_raw_os_error(1))

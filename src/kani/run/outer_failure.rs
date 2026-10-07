@@ -13,7 +13,8 @@ use super::{
     control::ControlError,
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
     protocol::{BuildIdentity, RunAuthority},
-    role_deadline::StopStamp,
+    role_deadline::{DeadlineError, StopStamp},
+    role_protocol::RunSettings,
     startup_cause::{
         check_scratch_free_json, PreparedStartupContext, StartupBytesSeed, StartupCause,
     },
@@ -28,6 +29,28 @@ pub(super) enum FailureRepresentation {
     Integrity { predicate: CauseIntegrityPredicate },
 }
 
+/// Genuine producer-owned observation capability and original work-clock election. Neither
+/// field supplies a current sample, a negative cause, positive Dispatch or settlement proof.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct FailureState {
+    pub(super) observation_admitted: bool,
+    pub(super) original_work_expired: bool,
+}
+
+impl FailureState {
+    pub(super) fn capture(
+        settings: &RunSettings,
+        stop: StopStamp,
+        observation_admitted: bool,
+    ) -> Result<Self, DeadlineError> {
+        Ok(Self {
+            observation_admitted,
+            original_work_expired: settings.work_deadline.expired_at(stop)?,
+        })
+    }
+}
+
 /// Fixed negative metadata; no measured peak, report descriptor or child-state proof.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct FailureHeader {
@@ -35,6 +58,7 @@ pub(super) struct FailureHeader {
     pub(super) authority: RunAuthority,
     pub(super) stop: StopStamp,
     pub(super) operation: CauseOperation,
+    pub(super) state: FailureState,
     pub(super) representation: FailureRepresentation,
 }
 
@@ -61,6 +85,7 @@ pub(super) enum NegativeCommit<'a> {
 pub(super) enum NegativeDisposition<'a> {
     OperationalFailure {
         operation: CauseOperation,
+        state: FailureState,
         representation: FailureRepresentation,
         context: &'a [u8],
     },
@@ -75,6 +100,7 @@ impl<'a> NegativeCommit<'a> {
             stop: header.stop,
             disposition: NegativeDisposition::OperationalFailure {
                 operation: header.operation,
+                state: header.state,
                 representation: header.representation,
                 context,
             },
@@ -107,6 +133,7 @@ enum CommitField {
 enum DispositionField {
     Kind,
     Operation,
+    State,
     Representation,
     Context,
 }
@@ -124,12 +151,14 @@ struct CommitFields {
 struct DispositionFields {
     kind: Option<DispositionKind>,
     operation: Option<CauseOperation>,
+    state: Option<FailureState>,
     representation: Option<FailureRepresentation>,
     context: bool,
 }
 
 struct DispositionMetadata {
     operation: CauseOperation,
+    state: FailureState,
     representation: FailureRepresentation,
 }
 
@@ -294,6 +323,7 @@ impl<'de> de::Visitor<'de> for CommitSeed<'_> {
                 .ok_or_else(|| A::Error::missing_field("authority"))?,
             stop: fields.stop.ok_or_else(|| A::Error::missing_field("stop"))?,
             operation: disposition.operation,
+            state: disposition.state,
             representation: disposition.representation,
         })
     }
@@ -329,6 +359,12 @@ impl<'de> de::Visitor<'de> for DispositionSeed<'_> {
                         return Err(A::Error::duplicate_field("operation"));
                     }
                     fields.operation = Some(map.next_value()?);
+                }
+                DispositionField::State => {
+                    if fields.state.is_some() {
+                        return Err(A::Error::duplicate_field("state"));
+                    }
+                    fields.state = Some(map.next_value()?);
                 }
                 DispositionField::Representation => {
                     if fields.representation.is_some() {
@@ -368,6 +404,9 @@ impl<'de> de::Visitor<'de> for DispositionSeed<'_> {
             operation: fields
                 .operation
                 .ok_or_else(|| A::Error::missing_field("operation"))?,
+            state: fields
+                .state
+                .ok_or_else(|| A::Error::missing_field("state"))?,
             representation,
         })
     }
@@ -406,6 +445,7 @@ pub(super) fn decode_bytes() -> Result<u64, ControlError> {
         .and_then(|bytes| bytes.checked_add(size_of::<FailureHeader>()))
         .and_then(|bytes| bytes.checked_add(size_of::<DispositionMetadata>()))
         .and_then(|bytes| bytes.checked_add(size_of::<FailureRepresentation>()))
+        .and_then(|bytes| bytes.checked_add(size_of::<FailureState>()))
         .and_then(|bytes| bytes.checked_add(size_of::<Option<CommitField>>()))
         .and_then(|bytes| bytes.checked_add(size_of::<Option<DispositionField>>()))
         .and_then(|bytes| {
@@ -440,6 +480,10 @@ mod tests {
             authority: serde_json::from_value(serde_json::to_value([0_u8; 32]).unwrap()).unwrap(),
             stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
             operation: CauseOperation::ProcSetup,
+            state: FailureState {
+                observation_admitted: false,
+                original_work_expired: false,
+            },
             representation: FailureRepresentation::Original {
                 cause: context
                     .capture_io(&io::Error::from_raw_os_error(1))
@@ -551,7 +595,7 @@ mod tests {
         let original = value(original());
         for nested in [false, true] {
             let fields: &[&str] = if nested {
-                &["kind", "operation", "representation", "context"]
+                &["kind", "operation", "state", "representation", "context"]
             } else {
                 &["kind", "identity", "authority", "stop", "disposition"]
             };
@@ -752,5 +796,43 @@ mod tests {
             changed["disposition"]["context"] = diagnostic;
             refuses(&changed);
         }
+    }
+}
+
+#[cfg(test)]
+mod state_tests {
+    use super::*;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-38
+    #[test]
+    fn failure_milestone_and_work_election_are_required_typed_facts() {
+        // Schema primitive only: genuine producer setup observation, authentication and
+        // actual cleanup are integration obligations, not established by these booleans.
+        let valid = serde_json::json!({
+            "observation_admitted": true, "original_work_expired": false
+        });
+        let decoded: FailureState = serde_json::from_value(valid.clone()).unwrap();
+        assert!(decoded.observation_admitted);
+        assert!(!decoded.original_work_expired);
+        for name in ["observation_admitted", "original_work_expired"] {
+            for replacement in [
+                None,
+                Some(serde_json::Value::Null),
+                Some(serde_json::json!(1)),
+                Some(serde_json::json!("false")),
+            ] {
+                let mut changed = valid.clone();
+                let fields = changed.as_object_mut().unwrap();
+                if let Some(value) = replacement {
+                    fields.insert(name.into(), value);
+                } else {
+                    fields.remove(name);
+                }
+                assert!(serde_json::from_value::<FailureState>(changed).is_err());
+            }
+        }
+        let mut extra = valid;
+        extra["peak"] = serde_json::json!(0);
+        assert!(serde_json::from_value::<FailureState>(extra).is_err());
     }
 }
