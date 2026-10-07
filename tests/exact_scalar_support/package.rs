@@ -38,6 +38,37 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
+const FIXTURE_MODEL: &str = "test/cg-exact-scalar";
+const FIXTURE_OBJECT: &str = "ix://test/cg-exact-scalar/Account";
+const FIXTURE_RELATIONSHIP: &str = "ix://test/cg-exact-scalar/relationship/Account-link-Account";
+
+/// The selected declaration to which the corpus's relationship nodes refer.
+fn fixture_model_document() -> Value {
+    json!({
+        "contractVersion": "2.0.0",
+        "package": {"identity": FIXTURE_MODEL, "version": "1"},
+        "constructs": [{
+            "kind": {"module": FIXTURE_MODEL, "name": "entity"},
+            "construct": {"meaning": "quire.meaning.model.object-type/v1"},
+        }],
+        "types": [{
+            "identity": FIXTURE_OBJECT, "displayName": "Account",
+            "kind": {"module": FIXTURE_MODEL, "name": "entity"},
+            "roles": [], "constraints": [], "extensions": [], "unknownPolicy": "reject",
+            "supertypes": [], "fields": [], "operations": [],
+            "relationships": [{
+                "identity": FIXTURE_RELATIONSHIP,
+                "category": "structural", "composite": false, "direction": "bidirectional",
+                "sourceEnd": {"type": FIXTURE_OBJECT, "role": "link",
+                    "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true}},
+                "targetEnd": {"type": FIXTURE_OBJECT,
+                    "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true}},
+                "origin": {"source": {"sourceIdentity": FIXTURE_OBJECT,
+                    "path": "models/Account.md", "startLine": 1, "startColumn": 1}},
+            }],
+        }],
+    })
+}
 /// The base package's enum declaration node key.
 pub fn enum_type() -> String {
     base_node_ids().enum_type
@@ -404,8 +435,17 @@ include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
     fn default() -> Self {
+        let mut value = base_package();
+        let document = fixture_model_document();
+        let selection = json!({
+            "identity": FIXTURE_MODEL,
+            "digest_domain": "sha256-jcs",
+            "digest": sha256_hex(&serde_json::to_vec(&document).expect("model document")),
+        });
+        value["lock"]["model_selections"] = json!([selection]);
+        value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
         Self {
-            value: base_package(),
+            value,
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
         }
@@ -467,6 +507,7 @@ impl PackageBuilder {
             ("state", "state_clause") => "claim",
             _ => "declaration",
         };
+        let source = self.value["lock"]["sources"][0].clone();
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -482,9 +523,22 @@ impl PackageBuilder {
         });
         if let Some(declaration) = declaration_for(tag, form, label) {
             node["declaration"] = declaration;
+            // These hand-built declarations belong to the selected `example` source.
+            // Application bodies derive their identity from their operation instead;
+            // the checked reader therefore requires no owner on those nodes.
+            if node["body"]["term"] != "application" {
+                node["owner"] = json!({
+                    "kind": "source",
+                    "authority": source["authority"],
+                    "identity": source["identity"],
+                });
+            }
+        } else if (tag, form) == ("relation", "relationship") {
+            node["owner"] = json!({
+                "kind": "model", "identity": FIXTURE_MODEL, "node": FIXTURE_RELATIONSHIP,
+            });
         }
         nodes.push(node);
-        let source = self.value["lock"]["sources"][0].clone();
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
@@ -1042,6 +1096,9 @@ impl PackageBuilder {
 fn evidence() -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    let document = fixture_model_document();
+    let bytes = serde_json::to_vec(&document).expect("model document");
+    evidence.insert_domain_package_document(sha256_hex(&bytes), bytes);
     evidence
 }
 
