@@ -435,7 +435,7 @@ impl LauncherOwner {
                         cutoff
                     }
                 };
-                if let Some(received) = self
+                let request = if let Some(received) = self
                     .settlement_receive
                     .advance::<LauncherControl>(
                         &self.input.bootstrap.transport(),
@@ -459,7 +459,14 @@ impl LauncherOwner {
                     {
                         return Err(LauncherError::SenderMismatch);
                     }
-                    return self.settle_for_caller(received.control);
+                    Some(received.control)
+                } else {
+                    None
+                };
+                // Release the receive buffer borrow only after authenticating this complete
+                // request; settlement keeps the actual child and control endpoints in self.
+                if let Some(request) = request {
+                    return self.settle_for_caller(request);
                 }
             }
             thread::park_timeout(Duration::from_millis(20));
