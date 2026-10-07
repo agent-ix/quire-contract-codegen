@@ -521,13 +521,15 @@ impl<'fd> Transport<'fd> {
 
     /// Framing/credentials/rights and EOF policy stay shared with ordinary typed controls. A
     /// role-specific decoder may borrow its prepared context without another owning String.
+    /// The payload borrow is tied to this original buffer, so a parsed recipe can retain bytes
+    /// through authentication/materialization without a second frame or an owning token copy.
     fn finish_receive_decode<'buffer, T>(
         &self,
         buffer: &'buffer mut PreparedReceive,
         credentials: Option<PeerCredentials>,
         expected_rights: impl FnOnce(&T) -> usize,
         eof: ReceiveEof,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
     ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
         self.check_receive_state(eof)?;
         let control = decode(&buffer.payload)?;
@@ -923,7 +925,7 @@ impl TerminalReceive {
         &'buffer mut self,
         transport: &Transport<'_>,
         deadline: Instant,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         if self.completed {
             return Err(ControlError::ProgressPoisoned);
@@ -1090,7 +1092,7 @@ impl IncrementalReceive {
         transport: &Transport<'_>,
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Instant,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         self.advance_decode_mode(
             transport,
@@ -1110,7 +1112,7 @@ impl IncrementalReceive {
         transport: &Transport<'_>,
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Instant,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
         clock_only: impl FnOnce(&T) -> bool,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         self.advance_decode_mode(
@@ -1137,7 +1139,7 @@ impl IncrementalReceive {
         transport: &Transport<'_>,
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Option<Instant>,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         self.advance_decode_mode(
             transport,
@@ -1155,7 +1157,7 @@ impl IncrementalReceive {
         transport: &Transport<'_>,
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Option<Instant>,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
         clock_only: impl FnOnce(&T) -> bool,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         self.advance_decode_mode(
@@ -1181,7 +1183,7 @@ impl IncrementalReceive {
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Option<Instant>,
         eof: ReceiveEof,
-        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         if self.poisoned {
             return Err(ControlError::ProgressPoisoned);
@@ -1332,6 +1334,45 @@ mod tests {
     #[serde(deny_unknown_fields)]
     struct Message {
         authorized: bool,
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn selected_decode_borrows_original_payload_while_retaining_actual_rights() {
+        use super::super::guardian_decode::{Decoder, Scratch, Text};
+        fn decode<'input>(payload: &'input [u8]) -> Result<Text<'input>, ControlError> {
+            let mut scratch = Scratch::default();
+            let mut decoder =
+                Decoder::new(payload, &mut scratch).map_err(ControlError::InvalidGrammar)?;
+            let text = decoder.string().map_err(ControlError::InvalidGrammar)?;
+            decoder.finish().map_err(ControlError::InvalidGrammar)?;
+            Ok(text)
+        }
+        let (caller, endpoint) = private_pair().unwrap();
+        let (reader, writer) = rustix::pipe::pipe().unwrap();
+        let mut receive = IncrementalReceive::prepare().unwrap();
+        let original_payload = receive.buffer.payload.as_ptr();
+        send_raw(&endpoint, br#""native bytes""#, &[writer.as_fd()]);
+        drop(writer);
+        assert!(receive
+            .advance_decode_optional(&caller.transport(), |_| 1, None, decode,)
+            .unwrap()
+            .is_none());
+        let received = receive
+            .advance_decode_optional(&caller.transport(), |_| 1, None, decode)
+            .unwrap()
+            .unwrap();
+        let text = received.control.as_unescaped_str().unwrap();
+        assert_eq!(text, "native bytes");
+        assert!(std::ptr::eq(
+            text.as_ptr(),
+            original_payload.wrapping_add(1)
+        ));
+        assert_eq!(received.rights.len(), 1);
+        assert_eq!(rustix::io::write(&received.rights[0], b"ack").unwrap(), 3);
+        let mut bytes = [0; 3];
+        assert_eq!(rustix::io::read(&reader, &mut bytes).unwrap(), 3);
+        assert_eq!(&bytes, b"ack");
     }
 
     /// Trace: FR-034-AC-15, FR-034-AC-38

@@ -127,6 +127,14 @@ pub(super) struct ArrayState {
     state: SequenceState,
 }
 
+/// A position in this immutable input; schema visitors may retain their consumed byte range.
+/// This mark grants no grammar, sender, frame/state or materialization authority.
+#[derive(Clone, Copy)]
+pub(super) struct CursorMark<'input> {
+    input: &'input [u8],
+    position: usize,
+}
+
 /// Exactly one validated borrowed value, excluding surrounding whitespace.
 #[derive(Clone, Copy)]
 pub(super) struct ValueSlice<'input> {
@@ -289,6 +297,31 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
                 DecodeCause::UnexpectedToken,
             )),
         }
+    }
+
+    /// Record this current input position without consuming or prevalidating a subtree.
+    pub(super) fn mark(&self) -> CursorMark<'input> {
+        CursorMark {
+            input: self.input,
+            position: self.position,
+        }
+    }
+
+    /// Borrow already consumed bytes from this SAME input, with checked range and identity.
+    /// The schema must have visited them successfully; the range itself proves no grammar.
+    pub(super) fn consumed_since(
+        &self,
+        mark: CursorMark<'input>,
+    ) -> Result<&'input [u8], DecodeError> {
+        if !std::ptr::eq(mark.input, self.input) {
+            return Err(DecodeError::new(
+                DecodeSite::Input,
+                DecodeCause::InvalidValue,
+            ));
+        }
+        self.input
+            .get(mark.position..self.position)
+            .ok_or_else(|| DecodeError::new(DecodeSite::Input, DecodeCause::InvalidValue))
     }
 
     pub(super) fn begin_object(&mut self) -> Result<ObjectState, DecodeError> {
@@ -861,6 +894,8 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<ObjectState>(),
         size_of::<ArrayState>(),
         size_of::<ValueSlice<'static>>(),
+        size_of::<CursorMark<'static>>(),
+        size_of::<Result<&'static [u8], DecodeError>>(),
         size_of::<Text<'static>>(),
         size_of::<Text<'static>>(),
         size_of::<TextChars<'static>>(),
@@ -889,6 +924,61 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn consumed_span_is_the_original_visited_range_without_a_subtree_scan() {
+        let input = br#"{"bytes":[1,255],"next":0}"#;
+        let mut scratch = Scratch::default();
+        let mut decoder = Decoder::new(input, &mut scratch).unwrap();
+        let mut object = decoder.begin_object().unwrap();
+        assert!(decoder
+            .next_field(&mut object)
+            .unwrap()
+            .unwrap()
+            .equals("bytes"));
+        let mark = decoder.mark();
+        let mut array = decoder.begin_array().unwrap();
+        assert!(decoder.next_element(&mut array).unwrap());
+        assert_eq!(decoder.unsigned().unwrap(), 1);
+        assert!(decoder.next_element(&mut array).unwrap());
+        assert_eq!(decoder.unsigned().unwrap(), 255);
+        assert!(!decoder.next_element(&mut array).unwrap());
+        let span = decoder.consumed_since(mark).unwrap();
+        assert_eq!(span, b"[1,255]");
+        assert!(std::ptr::eq(span.as_ptr(), input[9..16].as_ptr()));
+        assert!(decoder
+            .next_field(&mut object)
+            .unwrap()
+            .unwrap()
+            .equals("next"));
+        assert_eq!(decoder.unsigned().unwrap(), 0);
+        assert!(decoder.next_field(&mut object).unwrap().is_none());
+        decoder.finish().unwrap();
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn consumed_span_refuses_foreign_input_and_a_later_mark_on_a_fresh_cursor() {
+        let input = Vec::from(b"[1,2]".as_slice());
+        let other = input.clone();
+        let mut scratch = Scratch::default();
+        let mut foreign_scratch = Scratch::default();
+        let foreign = Decoder::new(&other, &mut foreign_scratch).unwrap();
+        let mut decoder = Decoder::new(&input, &mut scratch).unwrap();
+        assert_eq!(
+            decoder.consumed_since(foreign.mark()).unwrap_err().cause(),
+            DecodeCause::InvalidValue
+        );
+        decoder.value().unwrap();
+        let later = decoder.mark();
+        drop(decoder);
+        let fresh = Decoder::new(&input, &mut scratch).unwrap();
+        assert_eq!(
+            fresh.consumed_since(later).unwrap_err().cause(),
+            DecodeCause::InvalidValue
+        );
+    }
 
     fn cause(input: &[u8]) -> DecodeCause {
         let mut scratch = Scratch::default();
