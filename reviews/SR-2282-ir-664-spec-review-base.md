@@ -34,7 +34,7 @@ to implementation seams. The matrix-status problem is recorded once, in SR-2281 
 
 ## Dispositions
 
-Round 1, reviewed at the branch's third frozen head (fix commit e4231e1). The private-seam
+Round 1, reviewed at the branch's third frozen head (fix commit "IR-664: make boundary criteria atomic and trace checked seams"). The private-seam
 obligations are now constraints with direct TC-017/TC-025 tests: FR-008-CON-3, FR-008-CON-4,
 FR-015-CON-1 and FR-015-CON-2. FR-015-AC-82 is removed, and FR-008-AC-6 states only the public
 `UnsupportedClause` outcome. `quire validate` exits 0 over the ten changed spec documents and over
@@ -42,4 +42,4 @@ the `make spec` glob, with no warning on a changed document.
 
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
-| FND-001 | fixed | e4231e1 |
+| FND-001 | fixed | round-2 fix commit "IR-664: make boundary criteria atomic and trace checked seams" |

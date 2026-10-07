@@ -33,18 +33,28 @@ AC atomicity, and a missing status prefix.
 
 ## Dispositions
 
-Round 1, reviewed at the branch's third frozen head (fix commit e4231e1). Each new row now holds
+Round 1, reviewed at the branch's third frozen head (fix commit "IR-664: make boundary criteria atomic and trace checked seams"). Each new row now holds
 one obligation. Every constraint id is referenced by its TC procedure (TC-017 step 4, the TC-025
 paragraph), by its TC's Traces To column and by a matrix row, and each is tagged in the computed
 matrix.
 
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
-| FND-001 | fixed | e4231e1 |
-| FND-002 | fixed | e4231e1 |
+| FND-001 | fixed | round-2 fix commit "IR-664: make boundary criteria atomic and trace checked seams" |
+| FND-002 | fixed | round-2 fix commit "IR-664: make boundary criteria atomic and trace checked seams" |
 
 ## New findings (disposition pass 1)
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | low | FR-008-AC-6 now opens with `IMPLEMENTED (IR-664).`, but no other FR-008 criterion (AC-1 to AC-5) carries a status prefix; FR-008 keeps status only in spec/strategy/matrix/tests.md. The prefix belongs to FR-031's convention, not FR-008's. Drop it so the document follows one convention | spec/strategy/functional/FR-008-bound-domain-strategy-admission.md:130 |
+
+Round 2, reviewed at the branch's fourth frozen head (fix commit "IR-664: record reviewed findings
+and align strategy criterion style"; revision recorded in the IR-664 Linear marker). The FR-008-AC-6
+row differs from the previous head only by the removed `IMPLEMENTED (IR-664). ` prefix. The commit
+also adds this review set under `reviews/` and changes nothing else. `quire validate` exits 0 over
+the FR-008 document and over the `make spec` glob.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | round-3 fix commit "IR-664: record reviewed findings and align strategy criterion style" |

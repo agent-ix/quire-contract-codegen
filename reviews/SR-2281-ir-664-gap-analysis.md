@@ -50,7 +50,7 @@ not specified (FND-003).
 
 ## Dispositions
 
-Round 1, reviewed at the branch's second frozen head (fix commit caeb25e; revision recorded in
+Round 1, reviewed at the branch's second frozen head (fix commit "IR-664: close i64 boundary review findings and fixture ordering"; revision recorded in
 the IR-664 Linear marker). Static re-check against the code and the computed matrix: `quire matrix
 --format tsv`, before 558 rows and after 561 rows. The new rows are FR-015-AC-82 (tagged),
 FR-008-AC-6 (tagged) and FR-031-AC-28 (untagged; see FND-004). The other changed rows are
@@ -58,9 +58,9 @@ line-number shifts only.
 
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
-| FND-001 | fixed | caeb25e |
-| FND-002 | fixed | caeb25e |
-| FND-003 | fixed | caeb25e |
+| FND-001 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
+| FND-002 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
+| FND-003 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
 
 ## New findings (disposition pass 1)
 
@@ -68,7 +68,7 @@ line-number shifts only.
 | --- | --- | --- | --- |
 | FND-004 | medium | FR-031-AC-28 is untagged in the computed matrix, but spec/oracle/matrix/tests.md marks it "Covered (IR-664)". The test's tag line is `Trace: TC-003, NFR-002-AC-3; TC-044, FR-031-AC-28.`, and the trace reader binds only the group before the `;` (NFR-002-AC-3 is bound at that line; FR-031-AC-28 is not). The same applies to the `; TC-003, NFR-002-AC-3` tail of `wide_ir_domain_refuses_the_i64_strategy`. Failure: the matrix gate and every later reader see the new AC as unbacked while the status row claims coverage. Fix: put all ids in one comma list, or on a second `Trace:` line | tests/it/oracle_generation.rs:183, tests/it/bound_strategy_generation.rs:172, spec/oracle/matrix/tests.md:51 |
 
-Round 2, reviewed at the branch's third frozen head (fix commit e4231e1; 13 commits, 40 files,
+Round 2, reviewed at the branch's third frozen head (fix commit "IR-664: make boundary criteria atomic and trace checked seams"; 13 commits, 40 files,
 +1530/-498 against `main`; revision recorded in the IR-664 Linear marker). Computed matrix, `main`
 against head: 558 to 564 rows. FR-031-AC-28, FR-008-AC-6, FR-008-CON-3, FR-008-CON-4,
 FR-015-CON-1 and FR-015-CON-2 are all `tagged`. NFR-002-AC-3 moves from untagged to tagged.
@@ -80,4 +80,4 @@ clause span for all four out-of-range values.
 
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
-| FND-004 | fixed | e4231e1 |
+| FND-004 | fixed | round-2 fix commit "IR-664: make boundary criteria atomic and trace checked seams" |

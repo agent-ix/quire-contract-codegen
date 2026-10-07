@@ -75,7 +75,7 @@ FND-002 and FND-003 are cheap cleanups.
 
 ## Dispositions
 
-Round 1, reviewed at the branch's second frozen head (fix commit caeb25e; 12 commits, 40 files,
+Round 1, reviewed at the branch's second frozen head (fix commit "IR-664: close i64 boundary review findings and fixture ordering"; 12 commits, 40 files,
 +1488/-495 against current `main`; revision recorded in the IR-664 Linear marker). Static
 re-check: no build was run. Since the round-0 head, the lock and `rekey.rs` are byte-unchanged.
 The lock still holds one IR revision and one QSL revision. No test was deleted. No production
@@ -88,5 +88,5 @@ generator uses.
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | deferred | The PR body draft now declares every public API change this finding named, the forced QSL coupling, IR-666 items 1-2 being delivered here, and the driver impact (verified against the draft text). Re-scoping the IR-666 ticket is a planner action on IR-666, whose description still lists those items. That must happen before IR-666 is picked up; it is not a change to this branch |
-| FND-002 | fixed | caeb25e |
-| FND-003 | fixed | caeb25e |
+| FND-002 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
+| FND-003 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
