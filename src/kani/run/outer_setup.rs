@@ -25,11 +25,25 @@ use super::{
     creator,
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct NamespaceIdentity {
-    device: u64,
-    inode: u64,
+macro_rules! namespaceidentity_record {
+    ($($variant:ident => $visibility:vis $member:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct NamespaceIdentity { $($visibility $member: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum NamespaceField { $($variant),+ }
+        impl NamespaceField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($member)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+namespaceidentity_record! {
+    Device =>  device: u64,
+    Inode =>  inode: u64,
 }
 
 impl NamespaceIdentity {

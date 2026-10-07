@@ -8,11 +8,28 @@ use std::time::{Duration, Instant};
 use rustix::time::{clock_gettime, ClockId};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RoleDeadline {
-    seconds: u64,
-    nanoseconds: u32,
+macro_rules! clock_records {
+    ($($variant:ident => $visibility:vis $member:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct RoleDeadline { $($visibility $member: $value),+ }
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct MonotonicInstant { $($visibility $member: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum TimeField { $($variant),+ }
+        impl TimeField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($member)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+clock_records! {
+    Seconds =>  seconds: u64,
+    Nanoseconds =>  nanoseconds: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,13 +104,6 @@ impl RoleDeadline {
 
 /// Absolute kernel-clock instant, distinct from an absolute deadline. Neither namespaces nor
 /// receipt time may replace the actual producing role's event instant.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct MonotonicInstant {
-    seconds: u64,
-    nanoseconds: u32,
-}
-
 impl MonotonicInstant {
     /// Parsed original components; this does not establish liveness, freshness or origin.
     pub(super) const fn from_wire_parts(seconds: u64, nanoseconds: u32) -> Self {
@@ -177,11 +187,25 @@ impl StopOrigin {
 
 /// Mandatory typed payload on an authenticated existing production control. Missing payloads
 /// refuse through ordinary schema decoding; this record itself grants no sender/run authority.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct StopStamp {
-    pub(super) origin: StopOrigin,
-    instant: MonotonicInstant,
+macro_rules! stopstamp_record {
+    ($($variant:ident => $visibility:vis $member:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct StopStamp { $($visibility $member: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum StopField { $($variant),+ }
+        impl StopField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($member)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+stopstamp_record! {
+    Origin => pub(super) origin: StopOrigin,
+    Instant =>  instant: MonotonicInstant,
 }
 
 impl StopStamp {

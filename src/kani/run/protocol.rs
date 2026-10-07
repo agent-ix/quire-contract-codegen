@@ -100,6 +100,10 @@ macro_rules! caller_controls {
         pub(super) enum CallerControlKind { $($variant),+ }
 
         impl CallerControlKind {
+            /// Original internally tagged sequence body order from the same declaration.
+            pub(super) fn declared_fields(self) -> &'static [&'static str] {
+                match self { $(Self::$variant => &[$(stringify!($field)),+]),+ }
+            }
             pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
                 $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
                 None

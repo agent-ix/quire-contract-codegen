@@ -127,6 +127,45 @@ pub(super) struct ArrayState {
     state: SequenceState,
 }
 
+/// Visit an ordinary named record in its owning object or positional sequence grammar.
+/// The declaration supplies field order and lookup; custom map-only schemas do not use this.
+/// No subtree prevalidation, rewind, allocation or additional scratch is performed.
+pub(super) fn record<F: Copy>(
+    decoder: &mut Decoder<'_, '_>,
+    declared: &[F],
+    lookup: impl Fn(Text<'_>) -> Option<F>,
+    mut visit: impl FnMut(&mut Decoder<'_, '_>, F) -> Result<(), DecodeError>,
+) -> Result<(), DecodeError> {
+    let error = |cause| DecodeError::new(DecodeSite::Field, cause);
+    match decoder.peek_kind()? {
+        ValueKind::Object => {
+            let mut object = decoder.begin_object()?;
+            while let Some(name) = decoder.next_field(&mut object)? {
+                visit(
+                    decoder,
+                    lookup(name).ok_or_else(|| error(DecodeCause::UnknownField))?,
+                )?;
+            }
+        }
+        ValueKind::Array => {
+            let mut array = decoder.begin_array()?;
+            for field in declared {
+                if !decoder.next_element(&mut array)? {
+                    return Err(error(DecodeCause::MissingField));
+                }
+                visit(decoder, *field)?;
+            }
+            if decoder.next_element(&mut array)? {
+                return Err(error(DecodeCause::InvalidValue));
+            }
+        }
+        ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
+            return Err(error(DecodeCause::UnexpectedToken));
+        }
+    }
+    Ok(())
+}
+
 /// A position in this immutable input; schema visitors may retain their consumed byte range.
 /// This mark grants no grammar, sender, frame/state or materialization authority.
 #[derive(Clone, Copy)]

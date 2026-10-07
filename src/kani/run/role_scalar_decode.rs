@@ -11,12 +11,13 @@ use std::mem::{size_of, size_of_val};
 use super::{
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
     guardian_decode::{
-        ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text, ValueKind,
+        record, ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text,
+        ValueKind,
     },
     protocol::{
         BuildIdentity, BuildIdentityField, GuardianLifecycle, GuardianProtocol, RunAuthority,
     },
-    role_deadline::{MonotonicInstant, RoleDeadline, StopOrigin, StopStamp},
+    role_deadline::{MonotonicInstant, RoleDeadline, StopField, StopOrigin, StopStamp, TimeField},
 };
 
 fn field_error(cause: DecodeCause) -> DecodeError {
@@ -131,24 +132,6 @@ pub(super) fn authority(decoder: &mut Decoder<'_, '_>) -> Result<RunAuthority, D
     Ok(RunAuthority::from_wire_bytes(bytes32(decoder)?))
 }
 
-#[derive(Clone, Copy)]
-enum TimeField {
-    Seconds,
-    Nanoseconds,
-}
-
-impl TimeField {
-    fn from_text(name: Text<'_>) -> Result<Self, DecodeError> {
-        if name.equals("seconds") {
-            Ok(Self::Seconds)
-        } else if name.equals("nanoseconds") {
-            Ok(Self::Nanoseconds)
-        } else {
-            Err(field_error(DecodeCause::UnknownField))
-        }
-    }
-}
-
 #[derive(Default)]
 struct TimeFields {
     seconds: Option<u64>,
@@ -161,26 +144,32 @@ struct TimeParts {
 }
 
 fn time_parts(decoder: &mut Decoder<'_, '_>) -> Result<TimeParts, DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = TimeFields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        match TimeField::from_text(name)? {
-            TimeField::Seconds => {
-                if fields.seconds.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
+    record(
+        decoder,
+        TimeField::declared_order(),
+        TimeField::metadata_text,
+        |decoder, field| {
+            match field {
+                TimeField::Seconds => {
+                    if fields.seconds.is_some() {
+                        return Err(field_error(DecodeCause::DuplicateField));
+                    }
+                    fields.seconds = Some(decoder.unsigned()?);
                 }
-                fields.seconds = Some(decoder.unsigned()?);
-            }
-            TimeField::Nanoseconds => {
-                if fields.nanoseconds.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
+                TimeField::Nanoseconds => {
+                    if fields.nanoseconds.is_some() {
+                        return Err(field_error(DecodeCause::DuplicateField));
+                    }
+                    fields.nanoseconds =
+                        Some(u32::try_from(decoder.unsigned()?).map_err(|_| {
+                            DecodeError::new(DecodeSite::Unsigned, DecodeCause::IntegerOverflow)
+                        })?);
                 }
-                fields.nanoseconds = Some(u32::try_from(decoder.unsigned()?).map_err(|_| {
-                    DecodeError::new(DecodeSite::Unsigned, DecodeCause::IntegerOverflow)
-                })?);
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
     Ok(TimeParts {
         seconds: missing(fields.seconds)?,
         nanoseconds: missing(fields.nanoseconds)?,
@@ -205,24 +194,6 @@ pub(super) fn deadline(decoder: &mut Decoder<'_, '_>) -> Result<RoleDeadline, De
     ))
 }
 
-#[derive(Clone, Copy)]
-enum StopField {
-    Origin,
-    Instant,
-}
-
-impl StopField {
-    fn from_text(name: Text<'_>) -> Result<Self, DecodeError> {
-        if name.equals("origin") {
-            Ok(Self::Origin)
-        } else if name.equals("instant") {
-            Ok(Self::Instant)
-        } else {
-            Err(field_error(DecodeCause::UnknownField))
-        }
-    }
-}
-
 #[derive(Default)]
 struct StopFields {
     origin: Option<StopOrigin>,
@@ -231,27 +202,32 @@ struct StopFields {
 
 /// Consume one raw stamp; origin and instant remain claims requiring the owner's actual checks.
 pub(super) fn stop(decoder: &mut Decoder<'_, '_>) -> Result<StopStamp, DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = StopFields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        match StopField::from_text(name)? {
-            StopField::Origin => {
-                if fields.origin.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
+    record(
+        decoder,
+        StopField::declared_order(),
+        StopField::metadata_text,
+        |decoder, field| {
+            match field {
+                StopField::Origin => {
+                    if fields.origin.is_some() {
+                        return Err(field_error(DecodeCause::DuplicateField));
+                    }
+                    fields.origin = Some(
+                        StopOrigin::metadata_text(decoder.unit_variant()?)
+                            .ok_or_else(|| field_error(DecodeCause::InvalidValue))?,
+                    );
                 }
-                fields.origin = Some(
-                    StopOrigin::metadata_text(decoder.unit_variant()?)
-                        .ok_or_else(|| field_error(DecodeCause::InvalidValue))?,
-                );
-            }
-            StopField::Instant => {
-                if fields.instant.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
+                StopField::Instant => {
+                    if fields.instant.is_some() {
+                        return Err(field_error(DecodeCause::DuplicateField));
+                    }
+                    fields.instant = Some(monotonic(decoder)?);
                 }
-                fields.instant = Some(monotonic(decoder)?);
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
     Ok(StopStamp::from_wire_parts(
         missing(fields.origin)?,
         missing(fields.instant)?,
@@ -288,6 +264,9 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<&'static [BuildIdentityField]>(),
         size_of::<ValueKind>(),
         size_of::<TimeFields>(),
+        size_of::<ArrayState>(),
+        size_of::<&[TimeField]>(),
+        size_of::<&[StopField]>(),
         size_of::<TimeParts>(),
         size_of::<StopFields>(),
         size_of::<BuildIdentityField>(),
@@ -706,5 +685,39 @@ mod tests {
                 .cause(),
             DecodeCause::UnexpectedEnd
         );
+    }
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn positional_clocks_and_stamps_preserve_raw_owning_components() {
+        for bytes in [b"[7,9]".as_slice(), b"[7,1000000000]"] {
+            let owning: MonotonicInstant = serde_json::from_slice(bytes).unwrap();
+            assert_eq!(parse(bytes, monotonic).unwrap(), owning);
+            let owning: RoleDeadline = serde_json::from_slice(bytes).unwrap();
+            assert_eq!(parse(bytes, deadline).unwrap(), owning);
+        }
+        let bytes = br#"[{"Caller":null},[7,9]]"#;
+        let owning: StopStamp = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(parse(bytes, stop).unwrap(), owning);
+        for bytes in [
+            b"[]".as_slice(),
+            b"[7]",
+            b"[7,9,0]",
+            b"[7,-1]",
+            b"[7,4294967296]",
+        ] {
+            assert!(serde_json::from_slice::<RoleDeadline>(bytes).is_err());
+            assert!(parse(bytes, deadline).is_err());
+            assert!(serde_json::from_slice::<MonotonicInstant>(bytes).is_err());
+            assert!(parse(bytes, monotonic).is_err());
+        }
+        for bytes in [
+            b"[]".as_slice(),
+            br#"["Caller"]"#,
+            br#"["Caller",[7,9],null]"#,
+            br#"[[7,9],"Caller"]"#,
+        ] {
+            assert!(serde_json::from_slice::<StopStamp>(bytes).is_err());
+            assert!(parse(bytes, stop).is_err());
+        }
     }
 }

@@ -12,10 +12,11 @@ use super::{
     cause_decode,
     cross_role_cause::CauseIntegrityPredicate,
     guardian_decode::{
-        DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text, ValueKind,
+        record, ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text,
+        ValueKind,
     },
-    outer_setup::NamespaceIdentity,
-    resource_ledger::MeasuredPeaks,
+    outer_setup::{NamespaceField, NamespaceIdentity},
+    resource_ledger::{MeasuredPeaks, PeakField},
     role_protocol::OwnerStopCause,
     startup_envelope::{PolicyFailureCause, PolicyFailureTag},
 };
@@ -92,11 +93,22 @@ fn policy_body(
     if !tagged_map {
         return Err(error(DecodeCause::InvalidValue));
     }
+    if decoder.peek_kind()? == ValueKind::Array {
+        let mut body = decoder.begin_array()?;
+        if !decoder.next_element(&mut body)? {
+            return Err(error(DecodeCause::MissingField));
+        }
+        let cause = cause_decode::decode_policy(decoder, fault)?;
+        if decoder.next_element(&mut body)? {
+            return Err(error(DecodeCause::InvalidValue));
+        }
+        return Ok(cause);
+    }
     let mut body = decoder.begin_object()?;
     if !required(decoder, &mut body)?.equals("cause") {
         return Err(error(DecodeCause::UnknownField));
     }
-    let cause = cause_decode::decode(decoder, fault)?;
+    let cause = cause_decode::decode_policy(decoder, fault)?;
     close_single(decoder, &mut body)?;
     Ok(cause)
 }
@@ -164,31 +176,15 @@ struct PairFields {
     second: Option<u64>,
 }
 
-// Member names belong to these fixed DTO records; variants still belong to owning macros.
-macro_rules! pair_selector {
-    ($name:ident, $first:literal, $second:literal) => {
-        fn $name(text: Text<'_>) -> Result<PairField, DecodeError> {
-            if text.equals($first) {
-                Ok(PairField::First)
-            } else if text.equals($second) {
-                Ok(PairField::Second)
-            } else {
-                Err(error(DecodeCause::UnknownField))
-            }
-        }
-    };
-}
-pair_selector!(namespace_field, "device", "inode");
-pair_selector!(peaks_field, "tree_rss_bytes", "charged_bytes");
-
-fn pair(
+fn pair<F: Copy>(
     decoder: &mut Decoder<'_, '_>,
-    field: fn(Text<'_>) -> Result<PairField, DecodeError>,
+    order: &[F],
+    lookup: impl Fn(Text<'_>) -> Option<F>,
+    select: impl Fn(F) -> PairField,
 ) -> Result<(u64, u64), DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = PairFields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        let slot = match field(name)? {
+    record(decoder, order, lookup, |decoder, field| {
+        let slot = match select(field) {
             PairField::First => &mut fields.first,
             PairField::Second => &mut fields.second,
         };
@@ -196,7 +192,8 @@ fn pair(
             return Err(error(DecodeCause::DuplicateField));
         }
         *slot = Some(decoder.unsigned()?);
-    }
+        Ok(())
+    })?;
     Ok((
         fields
             .first
@@ -209,13 +206,29 @@ fn pair(
 
 /// Consume raw namespace numbers, without observing a path or descriptor.
 pub(super) fn namespace(decoder: &mut Decoder<'_, '_>) -> Result<NamespaceIdentity, DecodeError> {
-    let (device, inode) = pair(decoder, namespace_field)?;
+    let (device, inode) = pair(
+        decoder,
+        NamespaceField::declared_order(),
+        NamespaceField::metadata_text,
+        |field| match field {
+            NamespaceField::Device => PairField::First,
+            NamespaceField::Inode => PairField::Second,
+        },
+    )?;
     Ok(NamespaceIdentity::from_wire_parts(device, inode))
 }
 
 /// Consume raw peak numbers; ordering, samples and ceiling claims remain owner obligations.
 pub(super) fn peaks(decoder: &mut Decoder<'_, '_>) -> Result<MeasuredPeaks, DecodeError> {
-    let (tree_rss_bytes, charged_bytes) = pair(decoder, peaks_field)?;
+    let (tree_rss_bytes, charged_bytes) = pair(
+        decoder,
+        PeakField::declared_order(),
+        PeakField::metadata_text,
+        |field| match field {
+            PeakField::TreeRssBytes => PairField::First,
+            PeakField::ChargedBytes => PairField::Second,
+        },
+    )?;
     Ok(MeasuredPeaks {
         tree_rss_bytes,
         charged_bytes,
@@ -258,6 +271,9 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<bool>(),
         size_of::<PairField>(),
         size_of::<PairFields>(),
+        size_of::<ArrayState>(),
+        size_of::<&[NamespaceField]>(),
+        size_of::<&[PeakField]>(),
         size_of::<fn(Text<'_>) -> Result<PairField, DecodeError>>(),
         size_of::<&mut Option<u64>>(),
         size_of::<(u64, u64)>(),
@@ -289,6 +305,17 @@ mod tests {
         guardian_decode::Scratch,
         startup_cause::{StartupCause, StartupSeccompilerCause},
     };
+
+    fn parse<T>(
+        bytes: &[u8],
+        read: fn(&mut Decoder<'_, '_>) -> Result<T, DecodeError>,
+    ) -> Result<T, DecodeError> {
+        let mut scratch = Scratch::default();
+        let mut decoder = Decoder::new(bytes, &mut scratch)?;
+        let parsed = read(&mut decoder)?;
+        decoder.finish()?;
+        Ok(parsed)
+    }
 
     fn parse_policy(bytes: &[u8]) -> Result<PolicyFailureCause, DecodeError> {
         let mut scratch = Scratch::default();
@@ -509,5 +536,70 @@ mod tests {
                 .and_then(|_| decoder.finish())
                 .is_err());
         }
+    }
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn positional_namespace_and_peaks_match_the_owning_record_grammar() {
+        let bytes = b"[7,11]";
+        let owning: NamespaceIdentity = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(parse(bytes, namespace).unwrap(), owning);
+        let owning: MeasuredPeaks = serde_json::from_slice(bytes).unwrap();
+        let actual = parse(bytes, peaks).unwrap();
+        assert_eq!(actual.tree_rss_bytes, owning.tree_rss_bytes);
+        assert_eq!(actual.charged_bytes, owning.charged_bytes);
+        for bytes in [
+            b"[]".as_slice(),
+            b"[7]",
+            b"[7,11,0]",
+            b"[-1,11]",
+            b"[7,true]",
+        ] {
+            assert!(serde_json::from_slice::<NamespaceIdentity>(bytes).is_err());
+            assert!(parse(bytes, namespace).is_err());
+            assert!(serde_json::from_slice::<MeasuredPeaks>(bytes).is_err());
+            assert!(parse(bytes, peaks).is_err());
+        }
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn policy_derived_cause_forms_match_the_original_delegate_without_widening_seed_grammar() {
+        for bytes in [
+            br#"{"Preparation":[{"Io":[{"InvalidData":null},null,{"NoCustomPayload":null}]}]}"#.as_slice(),
+            br#"{"Filter":[{"Seccompiler":{"EmptyFilter":null}}]}"#,
+            br#"{"Filter":[{"Seccompiler":{"ThreadSync":[7]}}]}"#,
+            br#"{"Filter":{"cause":{"Seccompiler":{"Prctl":["PermissionDenied",1,"NoCustomPayload"]}}}}"#,
+        ] {
+            let owning: PolicyFailureCause = serde_json::from_slice(bytes).unwrap();
+            assert_eq!(parse_policy(bytes).unwrap(), owning);
+        }
+        for bytes in [
+            br#"{"Preparation":[]}"#.as_slice(),
+            br#"{"Preparation":[{"Io":["Other",null]}]}"#,
+            br#"{"Filter":[{"Seccompiler":{"ThreadSync":[7,8]}}]}"#,
+            br#"{"Preparation":[{"Io":["Other",null,"NoCustomPayload"]},null]}"#,
+        ] {
+            assert!(serde_json::from_slice::<PolicyFailureCause>(bytes).is_err());
+            assert!(parse_policy(bytes).is_err());
+        }
+        // The original generic map seed is intentionally a different selected authority.
+        let mut scratch = super::super::guardian_decode::Scratch::default();
+        let mut decoder =
+            Decoder::new(br#"{"Io":["Other",null,"NoCustomPayload"]}"#, &mut scratch).unwrap();
+        assert!(cause_decode::decode(&mut decoder, &mut None).is_err());
+    }
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn policy_unknown_kind_precedes_later_unit_body_syntax() {
+        let mut scratch = Scratch::default();
+        let mut decoder = Decoder::new(
+            br#"{"Preparation":[{"Io":[{"UnknownKind":false},null,"NoCustomPayload"]}]}"#,
+            &mut scratch,
+        )
+        .unwrap();
+        let mut fault = None;
+        let error = policy(&mut decoder, &mut fault).unwrap_err();
+        assert_eq!(error.cause(), DecodeCause::InvalidValue);
+        assert_eq!(fault, Some(CauseIntegrityPredicate::UnknownKindMetadata));
     }
 }
