@@ -797,7 +797,11 @@ impl FrameStorage {
     ) -> Result<PreparedFrame, ControlError> {
         let limit = CONTROL_BYTES
             .checked_add(4)
-            .ok_or(ControlError::EncodedBytesExceeded)?;
+            .ok_or(ControlError::EncodedBytesExceeded)?
+            .min(self.bytes.capacity());
+        if limit < 4 {
+            return Err(ControlError::EncodedBytesExceeded);
+        }
         self.bytes.extend_from_slice(&[0; 4]);
         let mut encoded = BoundedEncoding {
             bytes: self.bytes,
@@ -1297,6 +1301,19 @@ pub(super) struct PreparedReceived<'buffer, T> {
 }
 
 impl PreparedReceive {
+    /// Consume the original receive allocation only after its owner has taken every right
+    /// and finished using borrowed decoded facts. No allocation or descriptor alias is made.
+    /// Failure returns the SAME receiver with all payload/right custody intact.
+    pub(super) fn into_frame_storage(mut self) -> Result<FrameStorage, Self> {
+        if !self.rights.is_empty() || self.payload.capacity() < 4 {
+            return Err(self);
+        }
+        self.payload.clear();
+        Ok(FrameStorage {
+            bytes: self.payload,
+        })
+    }
+
     pub(super) fn prepare() -> Result<Self, ControlError> {
         let mut payload = Vec::new();
         payload
@@ -1653,6 +1670,66 @@ mod tests {
         assert_eq!(received.control, Message { authorized: false });
         assert!(received.rights.is_empty());
         assert_eq!(receive.reserved_bytes().unwrap(), reservation);
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-32
+    #[test]
+    fn consumed_receive_storage_refills_without_growth_and_retains_unconsumed_rights() {
+        // Actual bounded transport/storage primitives only; this grants no role authentication
+        // or positive whole-chain settlement claim.
+        let (caller, endpoint) = private_pair().unwrap();
+        let (reader, writer) = rustix::pipe::pipe_with(
+            rustix::pipe::PipeFlags::CLOEXEC | rustix::pipe::PipeFlags::NONBLOCK,
+        )
+        .unwrap();
+        let mut receive = PreparedReceive::prepare().unwrap();
+        let original_pointer = receive.payload.as_ptr();
+        let original_capacity = receive.payload.capacity();
+        guardian(&endpoint)
+            .send(&Message { authorized: true }, &[writer.as_fd()], deadline())
+            .unwrap();
+        drop(writer);
+        let received = caller
+            .transport()
+            .receive_prepared::<Message>(&mut receive, |_| 1, deadline())
+            .unwrap();
+        assert_eq!(received.control, Message { authorized: true });
+        assert_eq!(received.rights.len(), 1);
+        let mut receive = match receive.into_frame_storage() {
+            Ok(_) => panic!("an unconsumed actual right was discarded"),
+            Err(original) => original,
+        };
+        let mut byte = [0];
+        assert_eq!(
+            rustix::io::read(&reader, &mut byte).unwrap_err(),
+            Errno::AGAIN,
+            "failed conversion still owns the actual writer"
+        );
+        drop(receive.rights.pop().unwrap());
+        assert_eq!(rustix::io::read(&reader, &mut byte).unwrap(), 0);
+        let storage = match receive.into_frame_storage() {
+            Ok(storage) => storage,
+            Err(_) => panic!("all actual rights were consumed"),
+        };
+        assert_eq!(storage.bytes.as_ptr(), original_pointer);
+        assert_eq!(storage.bytes.capacity(), original_capacity);
+        let frame = storage.encode(&Message { authorized: false }).unwrap();
+        assert_eq!(frame.bytes.as_ptr(), original_pointer);
+        assert_eq!(frame.bytes.capacity(), original_capacity);
+        let payload = frame.bytes.get(4..).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Message>(payload).unwrap(),
+            Message { authorized: false },
+            "old receive bytes cannot prefix the new frame"
+        );
+        let small = FrameStorage {
+            bytes: Vec::with_capacity(8),
+        };
+        let oversized = "a".repeat(small.bytes.capacity());
+        assert!(matches!(
+            small.encode(&oversized),
+            Err(ControlError::EncodedBytesExceeded)
+        ));
     }
 
     /// Trace: FR-034-AC-4, FR-034-AC-15, FR-034-AC-16.

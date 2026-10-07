@@ -263,6 +263,7 @@ pub(super) struct OuterInput {
     original_pid: NamespaceIdentity,
     original_network: NamespaceIdentity,
     launcher_observation: Option<(File, File)>,
+    negative_storage: super::control::FrameStorage,
 }
 
 impl OuterInput {
@@ -416,6 +417,11 @@ impl OuterInput {
             .refuse_observable_eof()
             .map_err(BootstrapError::Control)?;
         creator::require_live(&launcher_pin).map_err(BootstrapError::Creator)?;
+        // Both authenticated original frames are consumed, their facts materialized and all
+        // actual rights transferred. Preserve this real allocation for later negative output.
+        let negative_storage = frame
+            .into_frame_storage()
+            .map_err(|_original| BootstrapError::UnexpectedControl)?;
         Ok(Self {
             settings,
             caller_pin,
@@ -427,6 +433,7 @@ impl OuterInput {
             original_pid,
             original_network,
             launcher_observation: Some((File::from(stat), File::from(status))),
+            negative_storage,
         })
     }
 
@@ -455,6 +462,7 @@ impl OuterInput {
             caller_control: self.caller_control,
             inner_endpoint: self.inner_endpoint,
             launcher_memory,
+            negative_storage: self.negative_storage,
             setup: OuterSetup {
                 launcher_pin: self.launcher_pin,
                 bootstrap: self.bootstrap,
@@ -473,6 +481,7 @@ pub(super) struct OuterParts {
     pub(super) caller_control: RoleEndpoint,
     pub(super) inner_endpoint: GuardianEndpoint,
     pub(super) launcher_memory: LauncherMemory,
+    pub(super) negative_storage: super::control::FrameStorage,
     pub(super) setup: OuterSetup,
 }
 

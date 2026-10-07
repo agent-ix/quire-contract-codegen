@@ -92,6 +92,7 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
         caller_control,
         inner_endpoint,
         launcher_memory,
+        negative_storage,
         setup,
     } = input.into_parts().map_err(HelperEntryError::Bootstrap)?;
     let guard = setup.prepare().map_err(HelperEntryError::Bootstrap)?;
@@ -99,7 +100,8 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
     // endpoint receives its positively owned capability. No M exists at this boundary.
     launcher_owner::publish_outer_arm(&guard, &settings, &caller_control, setup.deadline())
         .map_err(HelperEntryError::Launcher)?;
-    let mut preparation = OuterRunPreparation::new(launcher_memory, settings, inner_endpoint);
+    let mut preparation =
+        OuterRunPreparation::new(launcher_memory, settings, inner_endpoint, negative_storage);
     let mut owner = match preparation.prepare(&guard, &caller_control, &caller_pin) {
         Ok(owner) => owner,
         Err(original) => loop {

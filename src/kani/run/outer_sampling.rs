@@ -298,6 +298,7 @@ impl OuterRunPreparation {
         launcher: LauncherMemory,
         settings: RunSettings,
         inner_endpoint: GuardianEndpoint,
+        negative_storage: FrameStorage,
     ) -> Self {
         Self {
             resources: Some(OuterPreparationResources {
@@ -307,7 +308,7 @@ impl OuterRunPreparation {
                 phases: None,
                 caller_receive: None,
                 completion: None,
-                terminal: None,
+                terminal: Some(TerminalPreparation::new(negative_storage)),
                 monitor: None,
                 startup_deadline: None,
             }),
@@ -827,7 +828,11 @@ impl OuterRunPreparation {
             .reserved_bytes()
             .map_err(SamplingError::Control)?;
         resources.completion = Some(InnerCompletion::prepare()?);
-        resources.terminal = Some(TerminalPreparation::prepare()?);
+        resources
+            .terminal
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?
+            .prepare_descriptor()?;
         let preparation = resources
             .sampling_preparation
             .take()
@@ -1649,23 +1654,33 @@ impl TerminalSampling {
     }
 }
 
-/// Reserve all terminal protocol storage while O is still preparing, before any M/writer child.
-/// Its actual allocations remain in O's observed RSS; report backing retains its full reservation.
+/// Retain O's original negative-send allocation before fallible run preparation. Descriptor
+/// storage is prepared separately before any M/writer child. Actual live allocations remain
+/// in O's observed RSS; report backing retains its full reservation.
 pub(super) struct TerminalPreparation {
-    descriptor: FrameStorage,
+    descriptor: Option<FrameStorage>,
     commit: Option<FrameStorage>,
     close_deadline: Option<Instant>,
     poisoned: bool,
 }
 
 impl TerminalPreparation {
-    pub(super) fn prepare() -> Result<Self, SamplingError> {
-        Ok(Self {
-            descriptor: FrameStorage::prepare().map_err(SamplingError::Control)?,
-            commit: Some(FrameStorage::prepare().map_err(SamplingError::Control)?),
+    fn new(commit: FrameStorage) -> Self {
+        Self {
+            descriptor: None,
+            commit: Some(commit),
             close_deadline: None,
             poisoned: false,
-        })
+        }
+    }
+
+    /// Keep the original negative-send reservation even when descriptor allocation fails.
+    fn prepare_descriptor(&mut self) -> Result<(), SamplingError> {
+        if self.descriptor.is_some() || self.commit.is_none() || self.poisoned {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        self.descriptor = Some(FrameStorage::prepare().map_err(SamplingError::Control)?);
+        Ok(())
     }
 
     /// Receive C's settlement clock only with O's real authenticated I completion retained.
@@ -1741,6 +1756,7 @@ impl TerminalPreparation {
         let authority = sampling.settings.authority;
         let descriptor = self
             .descriptor
+            .ok_or(SamplingError::InvalidTerminalTransition)?
             .encode(&OuterTerminalReply::ReportDescriptor { authority, bytes })
             .map_err(SamplingError::Control)?;
         Ok(TerminalDelivery {
