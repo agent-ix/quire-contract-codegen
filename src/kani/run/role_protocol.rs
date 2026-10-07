@@ -222,6 +222,51 @@ impl InnerBootstrap {
     }
 }
 
+/// I's temporary authenticated channel to the same-PID trusted backend installer. The original
+/// environment stays metadata until policy admission and C's genuine positive Dispatch.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum BackendInstallerControl {
+    /// Rights: actual I process pin, original C process pin, owned original O report writer.
+    Start {
+        settings: RunSettings,
+        report: PipeIdentity,
+    },
+    /// Sent only after genuine C/I Dispatch. It starts no second backend process or budget.
+    Exec {
+        authority: RunAuthority,
+        command: super::namespace::BackendCommand,
+        stdin: super::protocol::StdinControl,
+    },
+}
+
+impl BackendInstallerControl {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::Start { .. } => 3,
+            Self::Exec { stdin, .. } => stdin.rights_count(),
+        }
+    }
+}
+
+/// Positive installation, not mere helper spawn or transport EOF, admits I's Ready transition.
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum BackendInstallerReply {
+    PolicyReady {
+        identity: BuildIdentity,
+        authority: RunAuthority,
+    },
+}
+
+impl BackendInstallerReply {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::PolicyReady { .. } => 0,
+        }
+    }
+}
+
 /// Ordinary private C→O startup transitions. Each authorization names the original run;
 /// no command changes the original deadline, grants Dispatch or carries fixture observations.
 #[derive(Deserialize, Serialize)]

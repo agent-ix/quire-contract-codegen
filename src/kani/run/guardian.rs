@@ -178,6 +178,20 @@ impl AuthenticatedHello {
         self.authority
     }
 
+    /// The production installer path cannot publish I Ready from spawn/EOF or a caller-supplied
+    /// boolean. Only its actual same-PID child's authenticated policy admission mints this token.
+    pub(super) fn publish_installed_ready(
+        self,
+        admission: super::backend_installer::InstallerAdmission,
+        transport: &Transport<'_>,
+        deadline: Instant,
+    ) -> Result<ReadyAdmission, GuardianError> {
+        if admission.authority() != self.authority {
+            return Err(GuardianError::Refusal(GuardianRefusal::ReplayedAuthority));
+        }
+        self.publish_ready(transport, deadline)
+    }
+
     /// The new I entry must authenticate policy-ready before this transition. This shared
     /// operation checks lease/identity readiness only; it does not establish policy success.
     fn publish_ready(
@@ -202,8 +216,241 @@ impl AuthenticatedHello {
     }
 }
 
-struct ReadyAdmission {
+pub(super) struct ReadyAdmission {
     authority: super::protocol::RunAuthority,
+}
+
+#[derive(Debug)]
+pub(super) enum InnerAdmissionError {
+    Guardian(GuardianError),
+    Installer(super::backend_installer::InstallerError),
+    MissingOwnedState,
+}
+
+impl std::fmt::Display for InnerAdmissionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "inner backend admission refused: {self:?}")
+    }
+}
+
+impl std::error::Error for InnerAdmissionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Guardian(error) => Some(error),
+            Self::Installer(error) => Some(error),
+            Self::MissingOwnedState => None,
+        }
+    }
+}
+
+enum InnerAdmissionState {
+    Prepared,
+    SendingStart,
+    AwaitPolicy,
+    AwaitDispatch(ReadyAdmission),
+    SendingExec,
+    Dispatched,
+    Transferred,
+}
+
+pub(super) enum InnerAdmissionProgress {
+    Pending,
+    Ready,
+    Dispatched,
+}
+
+/// I owns the actual trusted installer throughout admission, including every failed post-spawn
+/// operation. Positive policy receipt precedes I Ready, and C Dispatch precedes exact Exec.
+pub(super) struct PendingInnerBackend {
+    input: Option<super::role_bootstrap::InnerInput>,
+    installer: super::backend_installer::InstallerOwner,
+    hello: Option<AuthenticatedHello>,
+    dispatch: Option<PreparedInnerDispatch>,
+    artifacts: Option<GuardianArtifacts>,
+    handoff_child: Option<std::process::Child>,
+    deadline: Instant,
+    state: InnerAdmissionState,
+}
+
+impl PendingInnerBackend {
+    /// All fallible buffers/protection/authentication are prepared before the first child. An
+    /// error here creates no backend; later errors retain the actual child in this same owner.
+    pub(super) fn prepare(
+        input: super::role_bootstrap::InnerInput,
+    ) -> Result<Self, InnerAdmissionError> {
+        super::owner_protection::protect_inner()
+            .map_err(GuardianError::Io)
+            .map_err(InnerAdmissionError::Guardian)?;
+        let deadline = input
+            .settings
+            .startup_deadline()
+            .map_err(io::Error::other)
+            .map_err(GuardianError::Io)
+            .map_err(InnerAdmissionError::Guardian)?;
+        let hello = authenticate_hello(
+            &input.caller_lease.transport(),
+            input.settings.identity,
+            deadline,
+        )
+        .map_err(InnerAdmissionError::Guardian)?;
+        if hello.authority != input.settings.authority {
+            return Err(InnerAdmissionError::Guardian(GuardianError::Refusal(
+                GuardianRefusal::ReplayedAuthority,
+            )));
+        }
+        let dispatch = InnerBackend::prepare_dispatch_authority(hello.authority, deadline)
+            .map_err(InnerAdmissionError::Guardian)?;
+        let installer = super::backend_installer::InstallerOwner::prepare(&input)
+            .map_err(InnerAdmissionError::Installer)?;
+        Ok(Self {
+            input: Some(input),
+            installer,
+            hello: Some(hello),
+            dispatch: Some(dispatch),
+            artifacts: None,
+            handoff_child: None,
+            deadline,
+            state: InnerAdmissionState::Prepared,
+        })
+    }
+
+    pub(super) fn tick(&mut self) -> Result<InnerAdmissionProgress, InnerAdmissionError> {
+        let input = self
+            .input
+            .as_ref()
+            .ok_or(InnerAdmissionError::MissingOwnedState)?;
+        input
+            .caller_lease
+            .transport()
+            .refuse_observable_eof()
+            .map_err(GuardianError::Control)
+            .map_err(InnerAdmissionError::Guardian)?;
+        super::creator::require_live(&input.outer_pin)
+            .map_err(GuardianError::Io)
+            .map_err(InnerAdmissionError::Guardian)?;
+        super::creator::require_live(&input.caller_pin)
+            .map_err(GuardianError::Io)
+            .map_err(InnerAdmissionError::Guardian)?;
+        input
+            .outer_bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(GuardianError::Control)
+            .map_err(InnerAdmissionError::Guardian)?;
+        super::owner_protection::require_protected()
+            .map_err(GuardianError::Io)
+            .map_err(InnerAdmissionError::Guardian)?;
+        if Instant::now() >= self.deadline {
+            return Err(InnerAdmissionError::Guardian(GuardianError::Control(
+                ControlError::Deadline,
+            )));
+        }
+        match &self.state {
+            InnerAdmissionState::Prepared => {
+                self.installer
+                    .spawn()
+                    .map_err(InnerAdmissionError::Installer)?;
+                self.state = InnerAdmissionState::SendingStart;
+            }
+            InnerAdmissionState::SendingStart => {
+                if self
+                    .installer
+                    .send_start(input, self.deadline)
+                    .map_err(InnerAdmissionError::Installer)?
+                {
+                    self.state = InnerAdmissionState::AwaitPolicy;
+                }
+            }
+            InnerAdmissionState::AwaitPolicy => {
+                if let Some(admission) = self
+                    .installer
+                    .receive_policy_ready(input, self.deadline)
+                    .map_err(InnerAdmissionError::Installer)?
+                {
+                    let hello = self
+                        .hello
+                        .take()
+                        .ok_or(InnerAdmissionError::MissingOwnedState)?;
+                    let ready = hello
+                        .publish_installed_ready(
+                            admission,
+                            &input.caller_lease.transport(),
+                            self.deadline,
+                        )
+                        .map_err(InnerAdmissionError::Guardian)?;
+                    self.state = InnerAdmissionState::AwaitDispatch(ready);
+                    return Ok(InnerAdmissionProgress::Ready);
+                }
+            }
+            InnerAdmissionState::AwaitDispatch(ready) => {
+                // This is the original strict C-lease receiver, so EOF wins over buffered
+                // authorization. No private installer control substitutes for C Dispatch.
+                let recipe = receive_dispatch(
+                    &input.caller_lease.transport(),
+                    ReadyAdmission {
+                        authority: ready.authority,
+                    },
+                    self.deadline,
+                )
+                .map_err(InnerAdmissionError::Guardian)?;
+                self.installer
+                    .queue_exec(recipe.command, recipe.stdin)
+                    .map_err(InnerAdmissionError::Installer)?;
+                self.artifacts = Some(recipe.artifacts);
+                self.state = InnerAdmissionState::SendingExec;
+            }
+            InnerAdmissionState::SendingExec => {
+                if self
+                    .installer
+                    .send_exec(input, self.deadline)
+                    .map_err(InnerAdmissionError::Installer)?
+                {
+                    self.state = InnerAdmissionState::Dispatched;
+                    return Ok(InnerAdmissionProgress::Dispatched);
+                }
+            }
+            InnerAdmissionState::Dispatched => return Ok(InnerAdmissionProgress::Dispatched),
+            InnerAdmissionState::Transferred => return Err(InnerAdmissionError::MissingOwnedState),
+        }
+        Ok(InnerAdmissionProgress::Pending)
+    }
+
+    /// Move the same actual child into the normal I reaper only after genuine Dispatch. All
+    /// required fields are checked while ownership is retained; no fallible pin happens later.
+    pub(super) fn take_running(&mut self) -> Result<InnerBackend, InnerAdmissionError> {
+        if !matches!(self.state, InnerAdmissionState::Dispatched)
+            || self.input.is_none()
+            || self.dispatch.is_none()
+            || self.artifacts.is_none()
+        {
+            return Err(InnerAdmissionError::MissingOwnedState);
+        }
+        self.handoff_child = Some(
+            self.installer
+                .take_dispatched_child()
+                .map_err(InnerAdmissionError::Installer)?,
+        );
+        let input = self
+            .input
+            .take()
+            .ok_or(InnerAdmissionError::MissingOwnedState)?;
+        let dispatch = self
+            .dispatch
+            .take()
+            .ok_or(InnerAdmissionError::MissingOwnedState)?;
+        let artifacts = self
+            .artifacts
+            .take()
+            .ok_or(InnerAdmissionError::MissingOwnedState)?;
+        let child = self
+            .handoff_child
+            .take()
+            .ok_or(InnerAdmissionError::MissingOwnedState)?;
+        self.state = InnerAdmissionState::Transferred;
+        Ok(InnerBackend::from_installed_child(
+            input, child, artifacts, dispatch,
+        ))
+    }
 }
 
 fn authenticate_hello(
@@ -418,13 +665,15 @@ impl InnerBackend {
         admitted: &BackendAdmission,
         deadline: Instant,
     ) -> Result<PreparedInnerDispatch, GuardianError> {
+        Self::prepare_dispatch_authority(admitted.authority, deadline)
+    }
+
+    fn prepare_dispatch_authority(
+        authority: super::protocol::RunAuthority,
+        deadline: Instant,
+    ) -> Result<PreparedInnerDispatch, GuardianError> {
         Ok(PreparedInnerDispatch {
-            event: InnerEvent::prepare(
-                &GuardianControl::Dispatched {
-                    authority: admitted.authority,
-                },
-                deadline,
-            )?,
+            event: InnerEvent::prepare(&GuardianControl::Dispatched { authority }, deadline)?,
             owner_receive: IncrementalReceive::prepare()?,
         })
     }
@@ -437,11 +686,20 @@ impl InnerBackend {
         child: std::process::Child,
         dispatch: PreparedInnerDispatch,
     ) -> Self {
+        Self::from_installed_child(input, child, admitted.artifacts, dispatch)
+    }
+
+    fn from_installed_child(
+        input: super::role_bootstrap::InnerInput,
+        child: std::process::Child,
+        artifacts: GuardianArtifacts,
+        dispatch: PreparedInnerDispatch,
+    ) -> Self {
         Self {
             input,
             child,
             reaper: None,
-            _artifacts: admitted.artifacts,
+            _artifacts: artifacts,
             owner_receive: dispatch.owner_receive,
             state: InnerBackendState::Dispatching(dispatch.event),
             stops: None,
