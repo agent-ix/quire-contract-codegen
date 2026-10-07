@@ -87,7 +87,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-3 | Actual claimed-I pin and positive escaped-worker evidence at observable ClaimedBootstrap/InitReady/Dispatched caller-lease EOF; no fabricated dead-caller result. | Any initialized-boundary role/termination facts unavailable through ordinary seams remain explicitly owed; existing I pin never supplies independent O authority. Whole AC is tagged only after every required stage assertion. |
 | FR-034-AC-5 | Actual live C→L→O→M→I identity translations and ordinary setup refusal tests where observable; real normal-helper authentication, not helper identity override. | Needed role-labelled chain and independent termination witness beyond existing single M/I pin; unavailable inner/unclaimed/outer facts cannot be inferred. Whole AC stays untagged where these facts are owed. |
 | FR-034-AC-7 | Ordinary malformed/missing info, observable M failure and owned O cancellation/refusal; confirm positively pinned external O/tree termination where observable. | Exact internal-handoff failure/recovery and O-origin immutable gate/inner-confirm/M-reap order; no later C timestamp reconstructs it. Whole AC stays untagged. |
-| FR-034-AC-8/10/22 | Positive escaped-worker acknowledgement/live pins, observable C/O/I death, ordinary completion/refusal/deadline and independent-run protection; record dead pins before emergency cleanup. | The explicitly amended live-I birth-after-completed-ordinary-O-sample oracle below, genuine Completed and distinct O-origin inner-confirm/M-reap/outer-confirm observations, plus producer-bound I-confirm/M-reap/seal order. Outer confirmation and confirmed whole-outer-tree termination remain separately owed; inner settlement never supplies them. The former literal birth AFTER FINAL whole-run sample obligation is retired only as stated below; membership absence and later outer cleanup do not supply replacement parity. Whole mixed criteria stay untagged. |
+| FR-034-AC-8/10/22 | Positive escaped-worker acknowledgement/live pins, observable C/O/I death, ordinary completion/refusal/deadline and independent-run protection; record dead pins before emergency cleanup. | The explicitly amended live-I birth-after-completed-ordinary-O-sample oracle below, genuine Completed and distinct O-origin inner-confirm/M-reap/outer-confirm observations, plus producer-bound I-confirm/M-reap/seal order. Outer confirmation and confirmed whole-outer-tree termination remain separately owed; inner settlement never supplies them. The former literal birth AFTER FINAL whole-run sample obligation is retired only as stated below; membership absence and later outer cleanup do not supply replacement parity. Sampled-membership teardown authority is separately allocated to AC-55 source Analysis plus the unchanged AC-24 non-INIT-watcher runtime mutant, not a claimed unsampled-through-kill runtime window. Whole mixed criteria stay untagged. |
 | FR-034-AC-11 | Positively pinned guardian death at observable startup/Ready/post-Dispatch boundaries; live-C typed guardian failure even beside success output, with dead acknowledged worker before emergency cleanup. | Exact pre-peer/Ready or bootstrap windows and independent role/tree witnesses not observable through stage-1 seams. No later outer cleanup masks missing boundary evidence; whole AC stays untagged while owed. |
 | FR-034-AC-12 | Real unnamed report final-close/no-named-artifact lifetime, ordinary opposite-owner failures, bounded role settlement and honest other-artifact limits. | Exact startup refusal/retained-gate cleanup order and all-owner independent role/tree witness unavailable through current operation. Whole AC stays untagged. |
 | FR-034-AC-14 | Actual ordinary-caller inherited profile/errno and mapping/private-proc/pidfd capability refusals before Dispatch, no policy mutation/weaker mode; setup docs and role/storage costs. | No exact-window fixture allocation required for these predicates; any measured unavailable Test predicate remains expressly owed. |
@@ -119,8 +119,8 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-52 | PLANNED/UNRUN: Genuine I confirmation/strict pre-seal order (step28b). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
 | FR-034-AC-53 | PLANNED/UNRUN: Genuine retained M reap/strict pre-seal order (step28c). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
 | FR-034-AC-54 | PLANNED/UNRUN: Retained-gate I confirmation before close (step28d). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
-| FR-034-AC-55 | PLANNED/UNRUN: Unsampled-at-cleanup descendant death/sampled-membership mutant (step28e). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
-| FR-034-AC-56 | PLANNED/UNRUN: Published successful-Commit final-accounting schedule (step28f). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
+| FR-034-AC-55 | PLANNED/UNRUN: Final-source contained teardown authority/no sampled-membership kill path Analysis (step28e), paired with the independently owed AC-24 non-INIT-watcher Test. CG CODE author supplies exhaustive authority-path Analysis; independent CODE reviewer checks before CODE acceptance. Completion is zero until actual evidence, never inferred from a matrix method row. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
+| FR-034-AC-56 | PLANNED/UNRUN: Published successful-Commit final-accounting schedule (step28f). CG CODE author supplies per-predicate source/bounds Analysis; independent CODE reviewer checks before retirement/CODE acceptance. Completion is zero until actual evidence, never inferred from a matrix method row. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -878,14 +878,17 @@ Test credit and their existing Slice 2 obligation.
     d. AC-54: retain real original gate during I cancellation; require actual I-positive confirmation
        before gate close. Independently close early or omit actual confirmation with emission
        unchanged. Both must fail producer order despite no backend marker; restored order passes.
-    e. AC-55: in a case satisfying step a, retain actual complete accounting-event order proving
-       the child is in NO completed sample before cleanup begins, including observations begun
-       earlier but completed before that boundary. If this precondition fails, return typed fixture
-       failure. Preserve every later tick. Require BOTH dead pins and actual I/M settlement before
-       outer escalation. Independently substitute sampled-membership-only teardown without the
-       normal INIT/lease-EOF or outer-kill rescue; its omitted child must fail the pre-escalation
-       death predicate. Restore actual INIT teardown and pass. Genuine mutant isolation/authority
-       and live-to-dead witnesses are CODE gates; source prose is not executed evidence.
+    e. AC-55: source Analysis shall exhaustively enumerate actual contained cancellation and
+       settlement paths in the final implementation: claimed-I lease EOF/INIT exit or retained-INIT
+       signalling, unclaimed bootstrap recovery/cancellation, and L/O outer cancellation/settlement.
+       Require that observation/sample membership never supplies descendant kill-list authority.
+       A membership-dependent teardown path fails this Analysis regardless of current sample timing.
+       C lease close is not the actual kill/exit boundary, and O samples continue afterward; do not
+       assert a child-absence-through-control-kill runtime precondition. Retain BOTH live then dead
+       pins and genuine I/M settlement before escalation in the normal live-birth case. Independently
+       retain the actual AC-24 non-INIT-watcher adverse/restored Test; no outer cleanup rescue and
+       no source-only completion or sampled-membership-mutant execution credit. The CODE author
+       supplies actual final-source Analysis and the CODE reviewer accepts it separately from Test.
     f. AC-56: inspect published integrated source for actual I confirmation/M Child reap, writer EOF,
        immutable seal and final complete observation attached to successful report Commit. Check
        all later due ticks remain active. A final sample before settlement invalidates retirement.
@@ -1075,10 +1078,11 @@ not excluded double faults.
 | FR-034-AC-52 | O's genuine I-IN confirmation precedes matching seal. | Fabricated IN with real I live/emission unchanged fails provenance; actual late poll fails order. |
 | FR-034-AC-53 | O's genuine M Child reap precedes matching seal. | Fabricated reap with Child unreaped/emission unchanged fails provenance; actual late reap fails order. |
 | FR-034-AC-54 | I confirmation while original gate owned precedes actual close. | Early close and omitted confirmation independently fail; marker absence gives no order. |
-| FR-034-AC-55 | Child in NO completed pre-cleanup sample; BOTH live then dead pins before outer escalation. | Failed precondition is typed failure; sampled-membership-only teardown fails omitted-child death before rescue. |
+| FR-034-AC-55 | Independently accepted final-source authority-path Analysis excludes sampled-membership kill lists; actual INIT death remains descendant authority. | Any membership-authorized teardown path fails Analysis; AC-24 non-INIT-watcher Test stays independently owed/unrescued, with no source-only runtime credit. |
 | FR-034-AC-56 | Independently checked published-source final accounting after actual I/M/EOF/seal, with normal ticks. | Earlier final sample or missing Analysis invalidates retirement; no runtime Test credit. |
 
-No Implemented row supplies these criteria's backing. Distinct outer-confirm and confirmed whole
+No Implemented row supplies these criteria's backing. AC-55/56 Analysis completion is zero until
+actual independently checked evidence, never inferred from a matrix method row. Distinct outer-confirm and confirmed whole
 outer-tree termination remain owed. Per-predicate receipts and original trace obligations require
 independent CODE-review acceptance; all runtime Tests remain UNRUN.
 

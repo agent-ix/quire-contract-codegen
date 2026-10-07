@@ -1124,17 +1124,26 @@ pins and genuine authenticated I Completed before unchanged cleanup; M exit or a
 shall not substitute. These are construction preconditions, separately checked and reported, not
 inferred from sample-membership absence. Missing any precondition shall yield typed fixture failure.
 
-For the absent-from-samples teardown case, the operation shall additionally retain producer-bound
-complete accounting-event order showing the child in NO completed sample before cleanup starts.
-An in-flight observation completing before cleanup starts counts; receipt time or stage ordinals
-shall not decide membership/order. Later ordinary observations shall continue without suppression.
-If a completed sample includes the child before cleanup, this case shall fail its precondition,
-never pass or skip. With genuine live child and this precondition, the harness shall require BOTH
-formerly live pins dead after real I/M settlement and before outer escalation. An independent
-sampled-membership-only teardown mutant shall fail that death predicate while restored kernel INIT
-teardown passes. The mutant shall not borrow I lease-EOF teardown, a later outer kill or emergency
-cleanup to hide its omitted descendant. Genuine mutation isolation and positive pre-escalation
-witnesses are required; no feasibility or execution is claimed here.
+The sampled-membership-only teardown regression class shall be verified by source Analysis,
+not an unproved runtime child-absence window. Closing C's original lease starts a request for I
+termination; it is not a last-sample boundary. O shall continue ordinary samples while I observes
+EOF and while inner settlement/report EOF/delivery progress. No existing bound or event record
+is claimed to make the child absent from every completed sample up to an actual control kill.
+The fixture shall still retain BOTH live then dead pins before outer escalation and actual I/M
+settlement, without claiming that the child stayed unsampled until death.
+
+The CG CODE author shall supply exhaustive Analysis of the actual contained teardown authority
+paths, including claimed-I lease EOF/INIT exit and retained-INIT signalling, unclaimed bootstrap
+recovery/cancellation and L/O outer cancellation/settlement. The independent CODE reviewer shall
+check that sample membership is used only for accounting/observation, never as a descendant kill
+list or cancellation authority. Any path using observed PID membership for teardown shall fail
+this Analysis; absence of such a path in an earlier snapshot shall not complete final-source
+Analysis. Claimed namespace descendants shall remain cancelled through actual INIT death.
+This allocation preserves AC-8's absent-from-previous-samples guarantee. The independent AC-24
+non-INIT-watcher runtime mutant and its restored control shall remain mandatory and unrescued by
+outer cleanup. That Test remains owed until genuinely executed; source Analysis shall provide
+neither its completion nor sampled-membership-mutant runtime credit. No sampling pause, new
+control-kill seam or impossible child-absence acceptance precondition is allocated.
 
 The operation shall return immutable raw observations and separate cleanup results without judging
 an oracle. O shall produce confirmation records ONLY from actual retained-I pidfd poll returning IN
@@ -1167,11 +1176,13 @@ shall never be paired with another mutant or rescued by outer cancellation.
 
 Every original assertion, adverse patch and FR-028-AC-21/FR-017-AC-24 trace obligation shall remain
 until measured replacement parity. Parity requires restored controls to pass and each named
-independent adverse case to fail its specific predicate before emergency cleanup: sampled-membership
-teardown, fabricated live-I IN, fabricated M reap, I poll after seal, M reap after seal, gate close
+independent adverse case to fail its specific predicate before emergency cleanup: fabricated live-I IN, fabricated M reap, I poll after seal, M reap after seal, gate close
 before I confirmation, omitted gate-path I confirmation, and ignored inner EOF. The CG CODE author
 shall supply per-predicate runtime and source/bounds receipts; the independent CODE reviewer shall
-check each before accepting the single lifecycle CODE PR. Replacement trace bindings shall transfer
+check each before accepting the single lifecycle CODE PR. The sampled-membership regression class
+requires independently accepted final-source AC-55 Analysis plus the genuine AC-24 non-INIT-watcher
+adverse/restored Test; neither is inferred from a matrix row, and no sampled-membership runtime
+control is claimed. Replacement trace bindings shall transfer
 only with full genuine original assertions; no partial test may bind an entire mixed criterion.
 
 The fixture shall immediately invoke unchanged owned cleanup after observation success, refusal
@@ -1606,7 +1617,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-52 | PLANNED/UNRUN. O's independently validated actual retained-I pidfd-IN confirmation record strictly precedes the matching seal; the genuine-operation/order predicate rejects the named fabricated-live-I and late-poll controls. | Test, Analysis |
 | FR-034-AC-53 | PLANNED/UNRUN. O's independently validated actual retained M Child Some(status) reap record strictly precedes the matching seal; the genuine-operation/order predicate rejects the named fabricated-reap and late-reap controls. | Test, Analysis |
 | FR-034-AC-54 | PLANNED/UNRUN. During cancellation with the original gate retained, O's independently validated actual I confirmation precedes actual gate close; the producer-order predicate rejects early-close and omitted-confirmation controls. | Test, Analysis |
-| FR-034-AC-55 | PLANNED/UNRUN. Given genuine Completed, BOTH live pins and producer-bound absence of the child from every completed pre-cleanup sample, BOTH pins are dead before outer escalation after real I/M settlement; the sampled-membership-only teardown control fails the omitted-child death predicate. | Test, Analysis |
+| FR-034-AC-55 | PLANNED/UNRUN. Independently checked final-source Analysis establishes contained teardown authority through actual namespace INIT death and retained owner settlement, with no sampled-PID membership kill path; the separate AC-24 non-INIT-watcher runtime adverse/restored control remains owed. | Analysis |
 | FR-034-AC-56 | PLANNED/UNRUN. Published-source Analysis establishes O's final complete accounting after actual I confirmation, retained M reap, writer EOF and immutable seal for successful report Commit, with all later due ticks preserved; earlier final accounting invalidates literal-FINAL-oracle retirement. | Analysis |
 
 ## Dependencies
