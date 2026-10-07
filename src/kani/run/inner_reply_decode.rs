@@ -252,10 +252,95 @@ fn decode_inner(
     Ok(reply)
 }
 
+#[derive(Default)]
+struct OwnerFields {
+    kind: Option<super::role_protocol::InnerOwnerControlKind>,
+    authority: Option<RunAuthority>,
+    stop: Option<StopStamp>,
+}
+
+impl OwnerFields {
+    fn read(
+        &mut self,
+        decoder: &mut Decoder<'_, '_>,
+        field: impl Fn(&str) -> bool,
+    ) -> Result<(), DecodeError> {
+        if field("kind") {
+            once!(
+                self.kind,
+                super::role_protocol::InnerOwnerControlKind::metadata_text(decoder.string()?)
+                    .ok_or_else(|| error(DecodeCause::InvalidValue))
+            );
+        } else if field("authority") {
+            once!(self.authority, role_scalar_decode::authority(decoder));
+        } else if field("stop") {
+            once!(self.stop, role_scalar_decode::stop(decoder));
+        } else {
+            return Err(error(DecodeCause::UnknownField));
+        }
+        Ok(())
+    }
+}
+
+/// Parse only the existing O-to-I completion observation record. No original stop is adopted
+/// until the actor has checked its actual O channel, run authority and completion state.
+pub(super) fn owner(
+    payload: &[u8],
+    scratch: &mut Scratch,
+) -> Result<super::role_protocol::InnerOwnerControl, DecodeError> {
+    use super::{guardian_decode::ValueKind, role_protocol::InnerOwnerControlKind};
+    let mut decoder = Decoder::new(payload, scratch)?;
+    let mut fields = OwnerFields::default();
+    match decoder.peek_kind()? {
+        ValueKind::Object => {
+            let mut object = decoder.begin_object()?;
+            while let Some(name) = decoder.next_field(&mut object)? {
+                fields.read(&mut decoder, |field| name.equals(field))?;
+            }
+        }
+        ValueKind::Array => {
+            let mut array = decoder.begin_array()?;
+            if !decoder.next_element(&mut array)? {
+                return Err(error(DecodeCause::MissingField));
+            }
+            let kind = InnerOwnerControlKind::metadata_text(decoder.string()?)
+                .ok_or_else(|| error(DecodeCause::InvalidValue))?;
+            fields.kind = Some(kind);
+            for name in kind.declared_fields() {
+                if !decoder.next_element(&mut array)? {
+                    return Err(error(DecodeCause::MissingField));
+                }
+                fields.read(&mut decoder, |field| *name == field)?;
+            }
+            if decoder.next_element(&mut array)? {
+                return Err(error(DecodeCause::InvalidValue));
+            }
+        }
+        ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
+            return Err(error(DecodeCause::UnexpectedToken));
+        }
+    }
+    match required(fields.kind)? {
+        InnerOwnerControlKind::CompletionObserved => {
+            let result = super::role_protocol::InnerOwnerControl::CompletionObserved {
+                authority: required(fields.authority)?,
+                stop: required(fields.stop)?,
+            };
+            decoder.finish()?;
+            Ok(result)
+        }
+    }
+}
+
 /// Checked schema delta only; existing primitive/scalar/policy/cause/context charges are separate.
 /// Fixed call depth is not compiler frame or initializer/native-stack highwater evidence.
 pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
     let terms = [
+        size_of::<OwnerFields>(),
+        size_of::<super::role_protocol::InnerOwnerControlKind>(),
+        size_of::<super::role_protocol::InnerOwnerControl>(),
+        size_of::<Result<super::role_protocol::InnerOwnerControl, DecodeError>>(),
+        size_of::<super::guardian_decode::ArrayState>(),
         size_of::<Fields>(),
         size_of::<Field>(),
         size_of::<InnerFrameKind>(),
@@ -654,5 +739,44 @@ mod tests {
             refuses(&bytes, CauseIntegrityPredicate::IncompleteCauseMetadata).cause(),
             DecodeCause::UnexpectedEnd
         );
+    }
+    /// Trace: FR-034-AC15
+    #[test]
+    fn owner_observation_preserves_owning_records_and_refuses_incomplete_authority() {
+        use crate::kani::run::role_protocol::InnerOwnerControl;
+        let control = InnerOwnerControl::CompletionObserved {
+            authority: authority(),
+            stop: stop(),
+        };
+        let encoded = serde_json::to_string(&control).unwrap();
+        let authority_json = serde_json::to_string(&authority()).unwrap();
+        let stop_json = serde_json::to_string(&stop()).unwrap();
+        let cases = [
+            (encoded.clone(), true),
+            (format!("[\"CompletionObserved\",{authority_json},{stop_json}]"), true),
+            (format!("{{\"stop\":{stop_json},\"authority\":{authority_json},\"kind\":\"CompletionObserved\"}}"), true),
+            (format!("{{\"kind\":\"CompletionObserved\",\"authority\":{authority_json}}}"), false),
+            (format!("{{\"kind\":\"CompletionObserved\",\"authority\":null,\"stop\":{stop_json}}}"), false),
+            (format!("{{\"kind\":\"CompletionObserved\",\"authority\":{authority_json},\"authority\":{authority_json},\"stop\":{stop_json}}}"), false),
+            (format!("{{\"kind\":\"CompletionObserved\",\"authority\":{authority_json},\"stop\":{stop_json},\"extra\":0}}"), false),
+            (format!("[\"CompletionObserved\",{authority_json},{stop_json},0]"), false),
+            (format!("{encoded}?"), false),
+            (encoded.strip_suffix('}').unwrap().to_owned(), false),
+        ];
+        let mut scratch = Scratch::default();
+        for (bytes, accepted) in cases {
+            let owning = serde_json::from_str::<InnerOwnerControl>(&bytes);
+            let fixed = owner(bytes.as_bytes(), &mut scratch);
+            assert_eq!(owning.is_ok(), accepted, "owning: {bytes}");
+            assert_eq!(fixed.is_ok(), accepted, "fixed: {bytes}");
+            if accepted {
+                let InnerOwnerControl::CompletionObserved {
+                    authority: actual,
+                    stop: actual_stop,
+                } = fixed.unwrap();
+                assert_eq!(actual, authority());
+                assert_eq!(actual_stop, stop());
+            }
+        }
     }
 }

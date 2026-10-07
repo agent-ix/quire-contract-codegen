@@ -1011,12 +1011,17 @@ impl InnerBackend {
                     return Err(GuardianError::Refusal(GuardianRefusal::UnexpectedControl));
                 }
                 if event.outer_sent && !*observed {
-                    if let Some(received) = self
-                        .owner_receive
-                        .advance::<super::role_protocol::InnerOwnerControl>(
+                    if let Some(received) = self.owner_receive.advance_decode(
                         &self.input.outer_bootstrap.transport(),
                         super::role_protocol::InnerOwnerControl::rights_count,
                         event.deadline,
+                        |payload| {
+                            super::inner_reply_decode::owner(
+                                payload,
+                                &mut self.input.decode_scratch,
+                            )
+                            .map_err(super::control::ControlError::InvalidGrammar)
+                        },
                     )? {
                         let super::role_protocol::InnerOwnerControl::CompletionObserved {
                             authority,
