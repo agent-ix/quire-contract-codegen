@@ -37,8 +37,7 @@ pub(super) struct CallerStreams {
     pub(super) stdout: Option<JoinHandle<Captured>>,
     pub(super) stderr: Option<JoinHandle<Captured>>,
     pub(super) flags: CaptureFlags,
-    pub(super) stdout_text: Option<PreparedCaptureText>,
-    pub(super) stderr_text: Option<PreparedCaptureText>,
+    pub(super) combined_text: Option<PreparedCaptureText>,
     reservation: u64,
     started: bool,
 }
@@ -47,13 +46,15 @@ impl CallerStreams {
     pub(super) fn prepare(limit: usize) -> io::Result<(Self, OwnedFd, OwnedFd)> {
         let stdout = PreparedCapture::prepare(limit)?;
         let stderr = PreparedCapture::prepare(limit)?;
-        let stdout_text = PreparedCaptureText::prepare(limit)?;
-        let stderr_text = PreparedCaptureText::prepare(limit)?;
+        let combined_limit = limit
+            .checked_mul(2)
+            .and_then(|bytes| bytes.checked_add(1))
+            .ok_or_else(|| io::Error::other("combined capture reservation overflow"))?;
+        let combined_text = PreparedCaptureText::prepare(combined_limit)?;
         let reservation = stdout
             .reserved_bytes()?
             .checked_add(stderr.reserved_bytes()?)
-            .and_then(|bytes| bytes.checked_add(stdout_text.reserved_bytes().ok()?))
-            .and_then(|bytes| bytes.checked_add(stderr_text.reserved_bytes().ok()?))
+            .and_then(|bytes| bytes.checked_add(combined_text.reserved_bytes().ok()?))
             .and_then(|bytes| bytes.checked_add(u64::try_from(std::mem::size_of::<Self>()).ok()?))
             .and_then(|bytes| {
                 bytes.checked_add(u64::try_from(2 * std::mem::size_of::<AtomicBool>()).ok()?)
@@ -73,8 +74,7 @@ impl CallerStreams {
                     stop: Arc::new(AtomicBool::new(false)),
                     failed: Arc::new(AtomicBool::new(false)),
                 },
-                stdout_text: Some(stdout_text),
-                stderr_text: Some(stderr_text),
+                combined_text: Some(combined_text),
                 reservation,
                 started: false,
             },
@@ -199,7 +199,36 @@ impl PreparedCaptureText {
 
     /// Same standard UTF8 validation/replacement semantics, written into the already owned
     /// String. No intermediate lossy Cow/String may allocate another full output after launch.
-    pub(super) fn decode(mut self, mut bytes: &[u8]) -> io::Result<String> {
+    pub(super) fn decode(mut self, bytes: &[u8]) -> io::Result<String> {
+        self.append_lossy(bytes)?;
+        Ok(self.text)
+    }
+
+    /// Combine the two actual bounded captures into their pre-L reserved storage. No lossy
+    /// temporary String, joined byte Vec or post-launch growth is required.
+    pub(super) fn decode_joined(
+        mut self,
+        stdout: &[u8],
+        stderr: &[u8],
+        limit: usize,
+    ) -> io::Result<String> {
+        let combined = limit
+            .checked_mul(2)
+            .and_then(|bytes| bytes.checked_add(1))
+            .ok_or_else(|| io::Error::other("combined capture bound overflow"))?;
+        if stdout.len() > limit || stderr.len() > limit || combined > self.source_limit {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "capture exceeds prepared joined bound",
+            ));
+        }
+        self.append_lossy(stdout)?;
+        self.text.push('\n');
+        self.append_lossy(stderr)?;
+        Ok(self.text)
+    }
+
+    fn append_lossy(&mut self, mut bytes: &[u8]) -> io::Result<()> {
         if bytes.len() > self.source_limit {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -234,13 +263,31 @@ impl PreparedCaptureText {
                 }
             }
         }
-        Ok(self.text)
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-034-AC-18, FR-034-AC-34
+    #[test]
+    fn joined_capture_uses_its_original_reservation_and_preserves_stream_limits() {
+        let text = PreparedCaptureText::prepare(9).unwrap();
+        let capacity = text.text.capacity();
+        let joined = text.decode_joined(b"a\xff", b"b\xe2\x82", 4).unwrap();
+        assert_eq!(joined, "a\u{fffd}\nb\u{fffd}");
+        assert_eq!(joined.capacity(), capacity);
+        assert!(PreparedCaptureText::prepare(9)
+            .unwrap()
+            .decode_joined(b"12345", b"", 4)
+            .is_err());
+        assert!(PreparedCaptureText::prepare(8)
+            .unwrap()
+            .decode_joined(b"", b"", 4)
+            .is_err());
+    }
 
     /// Trace: FR-034-AC-18, FR-034-AC-34.
     #[test]
