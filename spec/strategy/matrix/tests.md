@@ -12,7 +12,9 @@ type: TestMatrix
 |---|---|---|---|
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | ✅ Covered |
-| FR-008 | FR-008-AC-6 | TC-017 | ✅ Covered (IR-664); both wide minimum and maximum endpoints refuse through the oracle as `UnsupportedClause`, with direct relation conversion refusing as `UnsupportedRelation` |
+| FR-008 | FR-008-AC-6 | TC-017 | ✅ Covered (IR-664); both wide minimum and maximum endpoints refuse the public strategy request as `UnsupportedClause` with the oracle code and span |
+| FR-008 | FR-008-CON-3 | TC-017 | ✅ Covered (IR-664); direct relation admission refuses wide endpoints as `UnsupportedRelation` |
+| FR-008 | FR-008-CON-4 | TC-017 | ✅ Covered (IR-664); direct literal conversion refuses values outside i64 as `UnsupportedRelation` |
 | FR-008 | FR-008-CON-1 | Inspection | ✅ Covered |
 | FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | ✅ Covered |
 | FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | ✅ Covered |
@@ -39,7 +41,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
 | TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6 | 🚧 Planned |
-| TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2 | ✅ Covered |
+| TC-017 | Verify bound-clause domain derivation and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-AC-6, FR-008-CON-2, FR-008-CON-3, FR-008-CON-4 | ✅ Covered |
 | TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6 | ✅ Covered |
 | TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | ✅ Covered |
 | TC-020 | Verify numeric conformance campaigns and rate reporting | Integration | P0 | FR-011-AC-1, FR-011-AC-2, FR-011-AC-3, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1 | ✅ Covered |

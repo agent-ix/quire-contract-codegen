@@ -367,7 +367,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-015-AC-82, TC-025.
+    /// Trace: FR-015-CON-1, TC-025.
     #[test]
     fn tc_025_clause_abi_refuses_both_outside_i64_endpoints() {
         let requirement = RequirementRef::parse("test/kani-abi", "FR-015", 1).unwrap();

@@ -369,13 +369,7 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
                     "the non-read comparison operand is not an integer literal",
                 )
             })?;
-            let literal = i64::try_from(literal).map_err(|_| {
-                relation_diagnostic(
-                    clause,
-                    expression,
-                    "the comparison literal is not representable as i64",
-                )
-            })?;
+            let literal = checked_relation_literal(clause, expression, literal)?;
             Relation::with_literal(operator, position, literal)
         }
     };
@@ -384,6 +378,21 @@ fn admit_relation(clause: &BoundClause) -> Result<AdmittedRelation, StrategyDiag
         domain,
         primary,
         partner,
+    })
+}
+
+// Implements: FR-008-CON-4
+fn checked_relation_literal(
+    clause: &BoundClause,
+    expression: &Expression,
+    literal: i128,
+) -> Result<i64, StrategyDiagnostic> {
+    i64::try_from(literal).map_err(|_| {
+        relation_diagnostic(
+            clause,
+            expression,
+            "the comparison literal is not representable as i64",
+        )
     })
 }
 
@@ -983,7 +992,7 @@ mod tests {
         package.clauses()[0].clone()
     }
 
-    /// Trace: FR-008-AC-6, TC-017.
+    /// Trace: FR-008-CON-3, TC-017.
     #[test]
     fn tc_017_direct_relation_admission_refuses_wide_integer_domain() {
         for (minimum, maximum) in [
@@ -998,6 +1007,23 @@ mod tests {
             };
             assert_eq!(refusal.code, StrategyErrorCode::UnsupportedRelation);
             assert!(refusal.source_span.is_some());
+        }
+    }
+
+    /// Trace: FR-008-CON-4, TC-017.
+    #[test]
+    fn tc_017_direct_literal_conversion_refuses_outside_i64() {
+        let clause = wide_clause(i128::MIN, i128::MAX);
+        let expression = clause.expression().expression();
+        for literal in [
+            i128::MIN,
+            i128::from(i64::MIN) - 1,
+            i128::from(i64::MAX) + 1,
+            i128::MAX,
+        ] {
+            let refusal = checked_relation_literal(&clause, expression, literal).unwrap_err();
+            assert_eq!(refusal.code, StrategyErrorCode::UnsupportedRelation);
+            assert_eq!(refusal.source_span.as_deref(), Some(expression.source()));
         }
     }
 }

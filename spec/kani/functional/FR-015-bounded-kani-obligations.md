@@ -538,6 +538,13 @@ families it names, each of which is owed a shadow or a production harness of its
 | a closure whose pair-node count exceeds the shadow size budget | `unsupported`, `ShadowShapeOverBudget` naming the count and the budget |
 | a descriptor `check_equality` refuses, or an item FR-018 refused | the refusal FR-018 recorded, unchanged, and no harness |
 
+## Constraints
+
+| ID | Constraint | Type | Validation |
+|----|------------|------|------------|
+| FR-015-CON-1 | Clause ABI construction SHALL check both endpoints of a bounded integer dependency before conversion to i64 and refuse one outside i64 as `UnsupportedDependency` in the clause-lowering detail, without producing a binding. | Integrity | Test (TC-025) |
+| FR-015-CON-2 | Subject binding SHALL check both endpoints of a bounded integer dependency before conversion to i64 and refuse one outside i64 as `UnsupportedBinding`, without producing a binding or harness. | Integrity | Test (TC-025) |
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -623,7 +630,6 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in its order, its `domains` equal the accessor ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names, asserted before replay. The accessor's ascending-name order does not reorder `state_fields`. A request naming a field absent from the accessor is refused; one omitting the clause's or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
 | FR-015-AC-80 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 | FR-015-AC-81 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A present listed model field with `member_type()` of `None`, a non-`IntRange` variant, or `IntRange` outside `i64` is recorded as unranged with `TypeNotRange` in `StateFrameIdentity` and its persisted record, even when no read names it; a present unread `IntRange` within `i64` is recorded in `domains` and is absent from the unranged list. Equal inputs produce byte-identical records; a record naming a field twice is invalid. The model declaration path records no `NoRead` reason. QSL-emission gaps for `None` and out-of-`i64` types are exercised by an admitted QSL-emitted graph with selected-model-document override and recomputed digests. | Test (TC-025) |
-| FR-015-AC-82 | A bounded integer dependency presented directly to clause ABI construction with either endpoint outside i64 is refused with `UnsupportedDependency` in its clause-lowering detail, and one presented directly to subject binding is refused with `UnsupportedBinding`; each refusal emits no binding or harness. These checks cover both `i64::MIN - 1` and `i128::MIN` and both `i64::MAX + 1` and `i128::MAX`, even though the public Boolean-oracle pipeline normally refuses the same declaration first under FR-031-AC-28. No endpoint is narrowed, clamped or wrapped. | Test (TC-025) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 

@@ -34,8 +34,10 @@ order with a located diagnostic and no bundle.
 3. Run bound oracle generation over the oracle-refused fixtures.
 4. For FR-008-AC-6, vary each declaration's minimum and maximum across the two just-outside-i64
    values and the i128 extremes. Assert the strategy's `UnsupportedClause` preserves the oracle's
-   `UnsupportedExpression` code and source span, without a bundle. Exercise direct relation
-   admission over an out-of-range declaration to assert `UnsupportedRelation`.
+   `UnsupportedExpression` code and source span, without a bundle. For FR-008-CON-3, call relation
+   admission directly with the same out-of-range declarations and assert `UnsupportedRelation`.
+   For FR-008-CON-4, call the production literal-conversion boundary with each just-outside-i64
+   value and i128 extreme and assert `UnsupportedRelation` with the clause's source span.
 
 ## Expected Results
 
@@ -49,4 +51,4 @@ order with a located diagnostic and no bundle.
 - Every refusal carries the full `ClauseRef`, and no refusal emits an artifact. Expression failures
   carry the exact offending span; `UnknownClause` and `UnsupportedClauseKind` carry no span.
 - No out-of-i64 declaration endpoint or literal is narrowed, clamped or admitted as an i64 strategy
-  value (FR-008-AC-6).
+  value (FR-008-CON-3, FR-008-CON-4).

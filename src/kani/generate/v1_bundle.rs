@@ -689,7 +689,7 @@ mod tests {
         SourceIdentity, SourceLocation, SourceRevision,
     };
 
-    /// Trace: FR-015-AC-82, TC-025.
+    /// Trace: FR-015-CON-2, TC-025.
     #[test]
     fn tc_025_subject_binding_refuses_both_outside_i64_endpoints() {
         let requirement = RequirementRef::parse("test/kani-subject", "FR-015", 1).unwrap();

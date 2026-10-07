@@ -180,7 +180,7 @@ fn integer_literal_wide(value: i128, value_type: &IntegerType, at: u64) -> Expre
     )
 }
 
-/// Trace: TC-003, NFR-002-AC-3; TC-044, FR-031-AC-28.
+/// Trace: TC-003, NFR-002-AC-3, TC-044, FR-031-AC-28.
 #[test]
 fn wide_ir_integer_bounds_refuse_an_i64_oracle_without_generated_source() {
     for (minimum, maximum, literal) in [

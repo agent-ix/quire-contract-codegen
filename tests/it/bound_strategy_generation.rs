@@ -169,7 +169,7 @@ fn generate(
     .unwrap()
 }
 
-/// Trace: TC-017, FR-008-AC-3, FR-008-AC-6; TC-003, NFR-002-AC-3.
+/// Trace: TC-017, FR-008-AC-3, FR-008-AC-6, TC-003, NFR-002-AC-3.
 #[test]
 fn wide_ir_domain_refuses_the_i64_strategy() {
     for (minimum, maximum) in [
