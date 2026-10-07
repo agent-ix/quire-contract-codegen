@@ -781,6 +781,12 @@ impl IncrementalSend {
         }
     }
 
+    /// Actual emitted-byte progress only. An interrupted protocol transaction cannot be replaced
+    /// by a different frame on the same stream after any prefix has already been sent.
+    pub(super) fn has_partial_frame(&self) -> bool {
+        self.offset != 0 && self.offset < self.frame.bytes.len()
+    }
+
     pub(super) fn advance(
         &mut self,
         transport: &Transport<'_>,
@@ -929,6 +935,33 @@ impl IncrementalReceive {
             .ok_or(ControlError::EncodedBytesExceeded)
     }
 
+    /// End check for a fully consumed provisional transaction, only after the original caller
+    /// separately confirms actual normal role settlement. Partial frames remain poisoned/refused.
+    pub(super) fn confirm_end(
+        &mut self,
+        transport: &Transport<'_>,
+        deadline: Instant,
+    ) -> Result<bool, ControlError> {
+        if self.poisoned || self.active {
+            return Err(ControlError::ProgressPoisoned);
+        }
+        if Instant::now() >= deadline {
+            return Err(ControlError::Deadline);
+        }
+        let mut byte = [0];
+        match transport.read_chunk_mode(
+            &mut byte,
+            &mut self.credentials,
+            &mut self.buffer.rights,
+            ReceiveEof::DrainTerminal,
+        ) {
+            Err(ControlError::Eof) => Ok(true),
+            Ok(None) => Ok(false),
+            Ok(Some(_)) => Err(ControlError::TrailingTerminalBytes),
+            Err(error) => Err(error),
+        }
+    }
+
     pub(super) fn has_partial_frame(&self) -> bool {
         self.active && (self.header_read != 0 || self.payload_read != 0)
     }
@@ -971,6 +1004,35 @@ impl IncrementalReceive {
             deadline,
             ReceiveEof::Refuse,
             decode,
+        )
+    }
+
+    /// Same original framer, restricted provisional stop/deadline inspection. The role decoder
+    /// must identify a complete typed clock-only stop; peer EOF still refuses every other frame.
+    /// Sender/run/cause/stamp authentication and irreversible cancellation belong to the retained
+    /// caller owner. This operation grants no phase, Dispatch, report or evidence authorization.
+    pub(super) fn advance_clock_only_decode<'buffer, T>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        clock_only: impl FnOnce(&T) -> bool,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        self.advance_decode_mode(
+            transport,
+            expected_rights,
+            deadline,
+            ReceiveEof::DrainTerminal,
+            |payload| {
+                let control = decode(payload)?;
+                match transport.refuse_observable_eof() {
+                    Ok(()) => {}
+                    Err(ControlError::Eof) if clock_only(&control) => {}
+                    Err(error) => return Err(error),
+                }
+                Ok(control)
+            },
         )
     }
 
@@ -1352,6 +1414,120 @@ mod tests {
         ));
         assert!(matches!(
             receive.advance::<Message>(&caller.transport(), |_| 0, deadline()),
+            Err(ControlError::ProgressPoisoned)
+        ));
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-38.
+    #[test]
+    fn clock_only_framer_preserves_strict_phase_eof_and_decodes_only_complete_stop() {
+        use super::super::{
+            protocol::RunAuthority,
+            resource_ledger::MeasuredPeaks,
+            role_deadline::{StopOrigin, StopStamp},
+            role_protocol::{
+                decode_outer_startup, OuterPhaseReply, OuterStartupControl, OuterTerminalReply,
+                OwnerStopCause, TerminalDisposition,
+            },
+        };
+        let authority = RunAuthority::fresh().unwrap();
+        for cause in [OwnerStopCause::ResourceExhausted, OwnerStopCause::TimedOut] {
+            let (caller, endpoint) = role_pair().unwrap();
+            let stop = StopStamp::capture(StopOrigin::Outer).unwrap();
+            let frame = PreparedFrame::encode(&OuterTerminalReply::Committed {
+                authority,
+                peaks: MeasuredPeaks {
+                    tree_rss_bytes: 11,
+                    charged_bytes: 23,
+                },
+                stop,
+                disposition: TerminalDisposition::OwnerStop { cause },
+            })
+            .unwrap();
+            endpoint
+                .transport()
+                .send_prepared(&frame, &[], deadline())
+                .unwrap();
+            drop(endpoint);
+            let mut receive = IncrementalReceive::prepare().unwrap();
+            assert!(receive
+                .advance_clock_only_decode(
+                    &caller.transport(),
+                    OuterStartupControl::rights_count,
+                    deadline(),
+                    decode_outer_startup,
+                    OuterStartupControl::clock_only,
+                )
+                .unwrap()
+                .is_none());
+            let received = receive
+                .advance_clock_only_decode(
+                    &caller.transport(),
+                    OuterStartupControl::rights_count,
+                    deadline(),
+                    decode_outer_startup,
+                    OuterStartupControl::clock_only,
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                received.credentials.unwrap().pid,
+                rustix::process::getpid().as_raw_pid()
+            );
+            assert!(received.rights.is_empty());
+            let OuterStartupControl::OwnerStop {
+                authority: actual_authority,
+                peaks,
+                stop: actual_stop,
+                cause: actual_cause,
+            } = received.control
+            else {
+                panic!("non-stop after EOF");
+            };
+            assert_eq!(actual_authority, authority);
+            assert_eq!(actual_stop, stop);
+            assert_eq!(actual_cause, cause);
+            assert_eq!((peaks.tree_rss_bytes, peaks.charged_bytes), (11, 23));
+            assert!(receive
+                .confirm_end(&caller.transport(), deadline())
+                .unwrap());
+        }
+        let (caller, endpoint) = role_pair().unwrap();
+        let frame = PreparedFrame::encode(&OuterPhaseReply::MonitorSpawned { authority }).unwrap();
+        endpoint
+            .transport()
+            .send_prepared(&frame, &[], deadline())
+            .unwrap();
+        drop(endpoint);
+        let mut receive = IncrementalReceive::prepare().unwrap();
+        assert!(receive
+            .advance_clock_only_decode(
+                &caller.transport(),
+                OuterStartupControl::rights_count,
+                deadline(),
+                decode_outer_startup,
+                OuterStartupControl::clock_only,
+            )
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            receive.advance_clock_only_decode(
+                &caller.transport(),
+                OuterStartupControl::rights_count,
+                deadline(),
+                decode_outer_startup,
+                OuterStartupControl::clock_only,
+            ),
+            Err(ControlError::Eof)
+        ));
+        assert!(matches!(
+            receive.advance_clock_only_decode(
+                &caller.transport(),
+                OuterStartupControl::rights_count,
+                deadline(),
+                decode_outer_startup,
+                OuterStartupControl::clock_only,
+            ),
             Err(ControlError::ProgressPoisoned)
         ));
     }

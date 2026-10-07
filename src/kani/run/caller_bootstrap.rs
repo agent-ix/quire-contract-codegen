@@ -37,7 +37,7 @@ use super::{
     role_protocol::{
         CallerTerminalControl, LauncherControl, LauncherReply, LauncherSettlementMode,
         OuterArmReply, OuterChildSettlement, OuterPhaseCommand, OuterPhaseReply,
-        OuterTerminalReply, RunSettings,
+        OuterStartupControl, OuterTerminalReply, OwnerStopCause, RunSettings,
     },
     spawner::{RetainedSpawner, SpawnIdentity},
     stages::{Bootstrap, InitReady, PreparedDispatch, StageError, VerifiedInitReady},
@@ -75,6 +75,7 @@ pub(super) enum CallerBootstrapError {
     TerminalTransition,
     TerminalReplyMismatch,
     OuterExitAbnormal,
+    OwnerStopObserved,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -114,7 +115,8 @@ impl std::error::Error for CallerBootstrapError {
             | Self::CleanupDetailConsumed
             | Self::TerminalTransition
             | Self::TerminalReplyMismatch
-            | Self::OuterExitAbnormal => None,
+            | Self::OuterExitAbnormal
+            | Self::OwnerStopObserved => None,
         }
     }
 }
@@ -154,6 +156,8 @@ pub(super) struct CallerBootstrap {
     terminal_phase: CallerTerminalPhase,
     identity_records: RefCell<creator::PreparedIdentity>,
     named_buffers: u64,
+    memory_bytes: std::num::NonZeroU64,
+    pending_owner_stop: Option<(OwnerStopCause, MeasuredPeaks)>,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
     identity: Option<SpawnIdentity>,
@@ -313,6 +317,7 @@ impl CallerBootstrap {
         // A supplied numeric label cannot replace the genuine original C setup clock.
         settings.setup_deadline =
             RoleDeadline::from_original(deadline).map_err(CallerBootstrapError::Deadline)?;
+        let memory_bytes = settings.memory_bytes;
         let build_identity = settings.identity;
         let authority = settings.authority;
         let caller_uid = settings.caller_uid;
@@ -366,6 +371,8 @@ impl CallerBootstrap {
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            super::role_protocol::outer_startup_decode_bytes()
+                .map_err(CallerBootstrapError::Control)?,
             u64::try_from(std::mem::size_of::<ExecutionClock>())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             launcher_receive
@@ -468,6 +475,8 @@ impl CallerBootstrap {
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
             identity_records: RefCell::new(identity_records),
             named_buffers,
+            memory_bytes,
+            pending_owner_stop: None,
             command: Some(command),
             spawner: None,
             identity: None,
@@ -503,13 +512,14 @@ impl CallerBootstrap {
     /// The positive result owns the original authenticated I lease, not a replacement endpoint.
     pub(super) fn startup_step(
         &mut self,
+        clock: &mut ExecutionClock,
         cutoff: Instant,
     ) -> Result<Option<InitReady>, CallerBootstrapError> {
         if self.startup_failed || self.startup_finished {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         self.startup_failed = true;
-        let result = self.advance_startup(cutoff.min(self.deadline));
+        let result = self.advance_startup(clock, cutoff.min(self.deadline));
         if result.is_ok() {
             self.startup_failed = false;
         }
@@ -518,6 +528,7 @@ impl CallerBootstrap {
 
     fn advance_startup(
         &mut self,
+        clock: &mut ExecutionClock,
         cutoff: Instant,
     ) -> Result<Option<InitReady>, CallerBootstrapError> {
         if Instant::now() >= cutoff {
@@ -538,6 +549,12 @@ impl CallerBootstrap {
             self.confirm_outer_arm_step(cutoff)?;
         }
         if !self.launcher_ready || matches!(self.phase, CallerPhase::AwaitArm) {
+            return Ok(None);
+        }
+        if self.receive_startup_control(clock, cutoff, true)? {
+            return Err(CallerBootstrapError::OwnerStopObserved);
+        }
+        if self.outer_receive.has_partial_frame() {
             return Ok(None);
         }
         match self.phase {
@@ -565,8 +582,6 @@ impl CallerBootstrap {
                         }
                     };
                     self.send_phase_step(action, cutoff)?;
-                } else {
-                    self.confirm_phase_step(cutoff)?;
                 }
             }
             CallerPhase::ClaimedBootstrap => {
@@ -581,6 +596,141 @@ impl CallerBootstrap {
             CallerPhase::AwaitArm => return Err(CallerBootstrapError::UnexpectedPhase),
         }
         Ok(None)
+    }
+
+    /// One original charged stream consumer for phases and provisional O stop clocks. Complete
+    /// OwnerStop after EOF can only shorten the original clock and poison further startup; it
+    /// grants no phase/report/evidence. All ordinary phase frames retain strict EOF precedence.
+    fn receive_startup_control(
+        &mut self,
+        clock: &mut ExecutionClock,
+        cutoff: Instant,
+        allow_phase: bool,
+    ) -> Result<bool, CallerBootstrapError> {
+        if clock.original_deadline() != self.identity_deadline || self.pending_owner_stop.is_some()
+        {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        let launcher = self.launcher_identity()?;
+        creator::require_live(&launcher.creator_pin).map_err(CallerBootstrapError::Io)?;
+        creator::require_live(&launcher.launcher_pin).map_err(CallerBootstrapError::Io)?;
+        self.launcher_control
+            .transport()
+            .refuse_observable_eof()
+            .map_err(CallerBootstrapError::Control)?;
+        if self.outer_pin.is_none() || self.outer_pid.is_none() {
+            return Err(CallerBootstrapError::MissingOuterPin);
+        }
+        let Some(received) = self
+            .outer_receive
+            .advance_clock_only_decode(
+                &self.outer_control.transport(),
+                OuterStartupControl::rights_count,
+                cutoff,
+                super::role_protocol::decode_outer_startup,
+                OuterStartupControl::clock_only,
+            )
+            .map_err(CallerBootstrapError::Control)?
+        else {
+            return Ok(false);
+        };
+        let sender = received
+            .credentials
+            .ok_or(CallerBootstrapError::MissingSender)?;
+        let control = received.control;
+        let pin = received.rights.pop();
+        match control {
+            OuterStartupControl::Phase(reply) => {
+                if !allow_phase || self.phase_send.is_some() {
+                    return Err(CallerBootstrapError::UnexpectedPhase);
+                }
+                self.require_startup_owners(cutoff)?;
+                self.accept_phase_reply(reply, Some(sender), pin, cutoff)?;
+                Ok(false)
+            }
+            OuterStartupControl::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            } => {
+                // O identity was positively bound at Armed and L still retains its actual Child.
+                // Do not reopen an exited PID or treat EOF itself as stop authority.
+                if sender.pid
+                    != self
+                        .outer_pid
+                        .ok_or(CallerBootstrapError::MissingOuterPin)?
+                    || sender.uid != self.caller_uid
+                    || sender.gid != self.caller_gid
+                    || authority != self.authority
+                    || pin.is_some()
+                    || peaks.charged_bytes < peaks.tree_rss_bytes
+                    || (matches!(cause, OwnerStopCause::ResourceExhausted)
+                        && peaks.charged_bytes <= self.memory_bytes.get())
+                {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                clock
+                    .adopt_stop(stop, self.identity_clock)
+                    .map_err(CallerBootstrapError::Deadline)?;
+                let original = clock
+                    .settlement_deadline()
+                    .map_err(CallerBootstrapError::Deadline)?;
+                if Instant::now() >= original {
+                    return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+                }
+                self.pending_owner_stop = Some((cause, peaks));
+                self.phase_failed = true;
+                self.inner_auth_failed = true;
+                // No final/proof token is minted. The caller must settle under this same shortened
+                // clock and then prove Code0 O wait plus L/captures/creator, including stream EOF.
+                Ok(true)
+            }
+        }
+    }
+
+    /// During irreversible cancellation, inspect only the complete authenticated original stop
+    /// on the SAME framer before waiting for L. The caller supplies its already active original
+    /// settlement cutoff; no phase can advance and no partial frame is restarted or skipped.
+    pub(super) fn receive_owner_stop_clock(
+        &mut self,
+        clock: &mut ExecutionClock,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        self.startup_failed = true;
+        self.phase_failed = true;
+        self.inner_auth_failed = true;
+        self.receive_startup_control(clock, cutoff, false)
+    }
+
+    /// Provisional candidate remains unavailable until real normal O custody and original role
+    /// settlement. Captures and classification are still the whole caller owner's later duties.
+    pub(super) fn finish_owner_stop_after_roles(
+        &mut self,
+        roles: &CallerRoleSettlement,
+    ) -> Result<Option<(OwnerStopCause, MeasuredPeaks)>, CallerBootstrapError> {
+        if roles.authority != self.authority || self.pending_owner_stop.is_none() {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        if !matches!(
+            self.outer_settled,
+            Some(OuterChildSettlement::Reaped {
+                outcome: BackendExit::Code(0)
+            })
+        ) {
+            return Err(CallerBootstrapError::OuterExitAbnormal);
+        }
+        if !self
+            .outer_receive
+            .confirm_end(&self.outer_control.transport(), roles.cutoff)
+            .map_err(CallerBootstrapError::Control)?
+        {
+            return Ok(None);
+        }
+        self.pending_owner_stop
+            .take()
+            .map(Some)
+            .ok_or(CallerBootstrapError::TerminalTransition)
     }
 
     /// Stores actual spawner custody BEFORE any wait/pin/control error. A failed handshake must
