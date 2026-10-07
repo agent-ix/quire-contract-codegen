@@ -186,7 +186,8 @@ fn mapped_uid(decoder: &mut Decoder<'_, '_>) -> Result<u32, DecodeError> {
         .map_err(|_| DecodeError::new(DecodeSite::Unsigned, DecodeCause::IntegerOverflow))
 }
 
-fn outcome(decoder: &mut Decoder<'_, '_>) -> Result<BackendExit, DecodeError> {
+/// Raw original exit scalar only; actual Child outcome, sender and custody proof remain actor-owned.
+pub(super) fn outcome(decoder: &mut Decoder<'_, '_>) -> Result<BackendExit, DecodeError> {
     let mut object = decoder.begin_object()?;
     let name = decoder
         .next_field(&mut object)?
