@@ -133,6 +133,8 @@ pub(super) struct CallerBootstrap {
     launcher_ready: bool,
     launcher_receive: IncrementalReceive,
     launcher_failed: bool,
+    startup_failed: bool,
+    startup_finished: bool,
     pub(super) report_read: Option<PreparedReportRead>,
     pub(super) dispatch: Option<PreparedDispatch>,
     pub(super) stdin: OriginalStdin,
@@ -445,6 +447,8 @@ impl CallerBootstrap {
             launcher_ready: false,
             launcher_receive,
             launcher_failed: false,
+            startup_failed: false,
+            startup_finished: false,
             report_read: Some(report_read),
             dispatch: Some(dispatch),
             stdin,
@@ -493,10 +497,101 @@ impl CallerBootstrap {
         })
     }
 
+    /// One ordinary C startup iteration over the retained L/O/I sources. This drives the exact
+    /// existing phase operations in order, while partial sends/receives return to the caller's
+    /// original clock/capture loop. No control wait creates another budget or pauses O sampling.
+    /// The positive result owns the original authenticated I lease, not a replacement endpoint.
+    pub(super) fn startup_step(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<Option<InitReady>, CallerBootstrapError> {
+        if self.startup_failed || self.startup_finished {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.startup_failed = true;
+        let result = self.advance_startup(cutoff.min(self.deadline));
+        if result.is_ok() {
+            self.startup_failed = false;
+        }
+        result
+    }
+
+    fn advance_startup(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<Option<InitReady>, CallerBootstrapError> {
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Control(ControlError::Deadline));
+        }
+        if self.spawner.is_none() {
+            // The actual owned spawner is installed before any fallible startup wait. Failure
+            // poisons this driver; neither retry nor an error return replaces that owner.
+            self.begin_launch_until(cutoff)?;
+            return Ok(None);
+        }
+        if !self.launcher_ready {
+            self.launch_step(cutoff)?;
+        }
+        if self.launcher_start_sent && matches!(self.phase, CallerPhase::AwaitArm) {
+            // L Ready and O Armed are independent sources. A quiet/partial L message cannot
+            // make C enter a blocking O authentication wait, or vice versa.
+            self.confirm_outer_arm_step(cutoff)?;
+        }
+        if !self.launcher_ready || matches!(self.phase, CallerPhase::AwaitArm) {
+            return Ok(None);
+        }
+        match self.phase {
+            CallerPhase::BeforeMonitor => {
+                self.send_phase_step(CallerPhaseAction::BeginMonitor, cutoff)?;
+            }
+            CallerPhase::Bootstrap => {
+                self.send_phase_step(CallerPhaseAction::ClaimInner, cutoff)?;
+            }
+            CallerPhase::ClaimedGated => {
+                self.send_phase_step(CallerPhaseAction::ReleaseGate, cutoff)?;
+            }
+            CallerPhase::AwaitMonitor | CallerPhase::AwaitClaim | CallerPhase::AwaitGate => {
+                if self.phase_send.is_some() {
+                    let action = match self.phase {
+                        CallerPhase::AwaitMonitor => CallerPhaseAction::BeginMonitor,
+                        CallerPhase::AwaitClaim => CallerPhaseAction::ClaimInner,
+                        CallerPhase::AwaitGate => CallerPhaseAction::ReleaseGate,
+                        CallerPhase::AwaitArm
+                        | CallerPhase::BeforeMonitor
+                        | CallerPhase::Bootstrap
+                        | CallerPhase::ClaimedGated
+                        | CallerPhase::ClaimedBootstrap => {
+                            return Err(CallerBootstrapError::UnexpectedPhase);
+                        }
+                    };
+                    self.send_phase_step(action, cutoff)?;
+                } else {
+                    self.confirm_phase_step(cutoff)?;
+                }
+            }
+            CallerPhase::ClaimedBootstrap => {
+                if self.inner_ready.is_none() && !self.authenticate_inner_step(cutoff)? {
+                    return Ok(None);
+                }
+                self.require_startup_owners(cutoff)?;
+                let ready = self.take_authenticated_inner()?;
+                self.startup_finished = true;
+                return Ok(Some(ready));
+            }
+            CallerPhase::AwaitArm => return Err(CallerBootstrapError::UnexpectedPhase),
+        }
+        Ok(None)
+    }
+
     /// Stores actual spawner custody BEFORE any wait/pin/control error. A failed handshake must
     /// be settled by this retained owner; no retry or replacement helper is attempted here.
     pub(super) fn begin_launch(&mut self) -> Result<(), CallerBootstrapError> {
-        if Instant::now() >= self.deadline {
+        self.begin_launch_until(self.deadline)
+    }
+
+    fn begin_launch_until(&mut self, cutoff: Instant) -> Result<(), CallerBootstrapError> {
+        let cutoff = cutoff.min(self.deadline);
+        if Instant::now() >= cutoff {
             return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
         }
         let command = self
@@ -509,7 +604,7 @@ impl CallerBootstrap {
             .spawner
             .as_ref()
             .ok_or(CallerBootstrapError::MissingLauncher)?
-            .wait_started(self.deadline)
+            .wait_started(cutoff)
             .map_err(CallerBootstrapError::Io)?;
         self.identity = Some(identity);
         Ok(())
@@ -1229,6 +1324,7 @@ impl CallerBootstrap {
         let ready = super::stages::verify_init_ready(self, control, sender, self.authority)
             .map_err(CallerBootstrapError::Stage)?;
         self.inner_ready = Some(ready);
+        self.require_startup_owners(cutoff)?;
         self.publication.publish(Stage::InitReady);
         Ok(true)
     }
