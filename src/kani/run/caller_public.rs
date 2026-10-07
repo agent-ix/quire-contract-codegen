@@ -10,7 +10,9 @@ use super::{
     caller_bootstrap::{CallerBootstrapError, PreparedCleanupDetail},
     caller_driver::{CallerDriveError, CallerDriveProgress},
     caller_error,
-    caller_execution::{CallerExecution, CallerExecutionError, PolicyTerminalOutcome},
+    caller_execution::{
+        CallerExecution, CallerExecutionError, OperationalTerminalOutcome, PolicyTerminalOutcome,
+    },
     caller_prepare::PreparationError,
     execute::{
         ChargedPeakNotObservedReason, ChargedPeakObservation, KaniStartupAdmissionCause,
@@ -82,7 +84,17 @@ pub(super) fn run(
         Err(CallerExecutionError::Progress(CallerDriveError::Bootstrap(
             CallerBootstrapError::OperationalFailureObserved,
         ))) => match owner.finish_operational_failure() {
-            Ok(error) => return Err(error),
+            Ok(OperationalTerminalOutcome::Refused(error)) => return Err(error),
+            Ok(OperationalTerminalOutcome::ObservationFailed {
+                failure,
+                metadata_refusal,
+            }) => {
+                return Err(BoundedLaunchError::MemoryObservationFailed {
+                    detail: detail.seal(format_args!(
+                        "settled observation failure: {failure:?}; actual metadata check: {metadata_refusal:?}"
+                    )),
+                });
+            }
             Err(error) => Err(error),
         },
         Err(CallerExecutionError::Progress(CallerDriveError::Bootstrap(

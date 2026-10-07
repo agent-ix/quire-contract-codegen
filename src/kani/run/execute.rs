@@ -520,6 +520,9 @@ fn start(
         BoundedLaunchError::Guardian { kind, detail } => {
             KaniExecutionRefusal::Guardian { kind, detail }
         }
+        BoundedLaunchError::MemoryObservationFailed { detail } => {
+            KaniExecutionRefusal::MemoryObservationFailed { detail }
+        }
     })
 }
 
