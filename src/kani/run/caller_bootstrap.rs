@@ -380,6 +380,10 @@ impl CallerBootstrap {
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             super::startup_envelope::inner_startup_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
+            super::startup_envelope::inner_event_decode_bytes()
+                .map_err(CallerBootstrapError::Control)?,
+            super::stages::CallerLeaseClient::metadata_reservation()
+                .map_err(CallerBootstrapError::Stage)?,
             super::role_protocol::outer_startup_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             u64::try_from(std::mem::size_of::<ExecutionClock>())
@@ -1529,6 +1533,35 @@ impl CallerBootstrap {
         self.require_startup_owners(cutoff)?;
         self.publication.publish(Stage::InitReady);
         Ok(true)
+    }
+
+    /// The SAME pre-L charged I framer transfers logically from Ready to ACK/Completed.
+    /// No blocking receive, second consumer or post-L buffer allocation enters C's loop.
+    pub(super) fn receive_inner_event_step(
+        &mut self,
+        client: &mut super::stages::CallerLeaseClient,
+        cutoff: Instant,
+    ) -> Result<super::stages::CallerLeaseProgress, CallerBootstrapError> {
+        self.require_startup_owners(cutoff)?;
+        let Some(received) = self
+            .inner_receive
+            .advance_decode(
+                &client.transport(),
+                super::startup_envelope::InnerEventHeader::rights_count,
+                cutoff,
+                super::startup_envelope::decode_inner_event,
+            )
+            .map_err(CallerBootstrapError::Control)?
+        else {
+            return Ok(super::stages::CallerLeaseProgress::Pending);
+        };
+        let sender = received
+            .credentials
+            .ok_or(CallerBootstrapError::MissingSender)?;
+        let control = received.control;
+        client
+            .accept_event(self, control, sender)
+            .map_err(CallerBootstrapError::Stage)
     }
 
     /// Negative setup metadata is provisional until actual role settlement. Borrowing the
