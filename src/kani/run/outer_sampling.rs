@@ -8,7 +8,6 @@
 use std::{
     io,
     os::fd::{AsFd, OwnedFd},
-    path::Path,
     time::Instant,
 };
 
@@ -24,6 +23,7 @@ use super::{
         ReadyIdentityError,
     },
     outer_caller::{OuterCallerControl, OuterCallerReceive},
+    outer_preparation::{SamplingParts, SamplingPreparation},
     outer_setup::PreparedOuter,
     protocol::BackendExit,
     report_storage::{ReportCollector, ReportError, SealedReport},
@@ -127,6 +127,8 @@ pub(super) struct OuterRunOwner {
     cancellation: Option<CallerCancellation>,
     state: OuterRunState,
     poisoned: bool,
+    // An owner stop before monitor preparation retains the original unexposed I endpoint.
+    _unexposed_inner_endpoint: Option<GuardianEndpoint>,
 }
 
 enum OuterRunState {
@@ -160,61 +162,170 @@ pub(super) enum OuterRunProgress {
     TerminalCommitted,
 }
 
-impl OuterRunOwner {
-    /// Prepare every actor buffer before M, then sample the actual L/O tree before acquiring the
-    /// report writer for its one prepared monitor recipe. No child is created in this operation.
+/// Actual pre-monitor construction custody. Failed construction leaves all returned resources
+/// and the original I endpoint here for the helper's negative settlement transaction. This state
+/// supplies neither a no-child witness nor a measurement; no preparation error authorizes retry.
+pub(super) struct OuterRunPreparation {
+    resources: Option<OuterPreparationResources>,
+    attempted: bool,
+}
+
+struct OuterPreparationResources {
+    sampling_preparation: Option<SamplingPreparation>,
+    sampling: Option<OuterSampling>,
+    inner_endpoint: Option<GuardianEndpoint>,
+    phases: Option<OuterPhases>,
+    caller_receive: Option<OuterCallerReceive>,
+    completion: Option<InnerCompletion>,
+    terminal: Option<TerminalPreparation>,
+    monitor: Option<InnerMonitor>,
+    startup_deadline: Option<Instant>,
+}
+
+impl OuterRunPreparation {
+    /// Capture ownership without allocating a buffer, cloning settings or starting any role.
+    pub(super) fn new(
+        launcher: LauncherMemory,
+        settings: RunSettings,
+        inner_endpoint: GuardianEndpoint,
+    ) -> Self {
+        Self {
+            resources: Some(OuterPreparationResources {
+                sampling_preparation: Some(SamplingPreparation::new(launcher, settings)),
+                sampling: None,
+                inner_endpoint: Some(inner_endpoint),
+                phases: None,
+                caller_receive: None,
+                completion: None,
+                terminal: None,
+                monitor: None,
+                startup_deadline: None,
+            }),
+            attempted: false,
+        }
+    }
+
+    /// One attempted activation. A failed step returns its original error while this SAME
+    /// preparation still owns every successfully returned object. No implicit settlement occurs.
     pub(super) fn prepare(
+        &mut self,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
         caller_pin: &OwnedFd,
-        inner_endpoint: GuardianEndpoint,
-        launcher: LauncherMemory,
-        settings: RunSettings,
-    ) -> Result<Self, SamplingError> {
-        let startup_deadline = settings
-            .startup_deadline()
-            .map_err(SamplingError::Deadline)?;
-        let phases = OuterPhases::prepare()?;
-        let caller_receive = OuterCallerReceive::prepare().map_err(SamplingError::Control)?;
-        // Check the actual retained payload/right/scalar reservation before any child exposure.
-        // These O-owned allocations are included in the fresh initial O RSS observation.
-        caller_receive
-            .reserved_bytes()
-            .map_err(SamplingError::Control)?;
-        let completion = InnerCompletion::prepare()?;
-        let terminal_prepared = TerminalPreparation::prepare()?;
-        let mut sampling = OuterSampling::prepare(outer, launcher, settings)?;
-        sampling.tick(outer, caller)?;
-        let stopped = sampling.owner_stop.is_some();
-        let monitor = if stopped {
-            // Preserve the actual complete sample/ledger instead of losing this independent
-            // setup owner stop as a generic startup error. No writer or child is exposed.
-            None
-        } else {
-            Some(sampling.prepare_inner_monitor(outer, caller_pin, inner_endpoint)?)
-        };
-        Ok(Self {
-            sampling: Some(sampling),
-            monitor,
-            phases,
-            caller_receive,
-            completion,
-            terminal_prepared: Some(terminal_prepared),
-            terminal: None,
-            inner_settlement: None,
-            startup_deadline,
-            caller_frame_deadline: None,
-            caller_pending: None,
-            cancellation: None,
-            state: if stopped {
-                OuterRunState::OwnerStopped
-            } else {
-                OuterRunState::Startup
-            },
-            poisoned: false,
-        })
+    ) -> Result<OuterRunOwner, SamplingError> {
+        if self.attempted {
+            return Err(SamplingError::InvalidMonitorTransition);
+        }
+        self.attempted = true;
+        self.prepare_resources(outer, caller, caller_pin)?;
+        let resources = self
+            .resources
+            .take()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        match resources {
+            OuterPreparationResources {
+                sampling_preparation: None,
+                sampling: Some(sampling),
+                inner_endpoint,
+                phases: Some(phases),
+                caller_receive: Some(caller_receive),
+                completion: Some(completion),
+                terminal: Some(terminal),
+                monitor,
+                startup_deadline: Some(startup_deadline),
+            } if sampling.owner_stop.is_some() || monitor.is_some() => {
+                let stopped = sampling.owner_stop.is_some();
+                Ok(OuterRunOwner {
+                    sampling: Some(sampling),
+                    monitor,
+                    phases,
+                    caller_receive,
+                    completion,
+                    terminal_prepared: Some(terminal),
+                    terminal: None,
+                    inner_settlement: None,
+                    startup_deadline,
+                    caller_frame_deadline: None,
+                    caller_pending: None,
+                    cancellation: None,
+                    state: if stopped {
+                        OuterRunState::OwnerStopped
+                    } else {
+                        OuterRunState::Startup
+                    },
+                    poisoned: false,
+                    _unexposed_inner_endpoint: inner_endpoint,
+                })
+            }
+            resources => {
+                self.resources = Some(resources);
+                Err(SamplingError::InvalidMonitorTransition)
+            }
+        }
     }
 
+    fn prepare_resources(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+        caller_pin: &OwnedFd,
+    ) -> Result<(), SamplingError> {
+        let resources = self
+            .resources
+            .as_mut()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        let original = resources
+            .sampling_preparation
+            .as_ref()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        resources.startup_deadline = Some(
+            original
+                .settings()
+                .startup_deadline()
+                .map_err(SamplingError::Deadline)?,
+        );
+        resources.phases = Some(OuterPhases::prepare()?);
+        resources.caller_receive =
+            Some(OuterCallerReceive::prepare().map_err(SamplingError::Control)?);
+        resources
+            .caller_receive
+            .as_ref()
+            .ok_or(SamplingError::InvalidMonitorTransition)?
+            .reserved_bytes()
+            .map_err(SamplingError::Control)?;
+        resources.completion = Some(InnerCompletion::prepare()?);
+        resources.terminal = Some(TerminalPreparation::prepare()?);
+        let preparation = resources
+            .sampling_preparation
+            .take()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        let parts = match preparation.prepare(outer) {
+            Ok(parts) => parts,
+            Err(failure) => {
+                resources.sampling_preparation = Some(failure.preparation);
+                return Err(failure.error);
+            }
+        };
+        resources.sampling = Some(OuterSampling::from_parts(parts));
+        let sampling = resources
+            .sampling
+            .as_mut()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        // Store complete sampling custody before its first fallible observation. Failure is
+        // not a zero peak or a StartupTimeoutBeforeObservation claim.
+        sampling.tick(outer, caller)?;
+        if sampling.owner_stop.is_none() {
+            resources.monitor = Some(sampling.prepare_inner_monitor(
+                outer,
+                caller_pin,
+                &mut resources.inner_endpoint,
+            )?);
+        }
+        Ok(())
+    }
+}
+
+impl OuterRunOwner {
     /// Errors retain this same actor/actual monitor owner for whole-chain cancellation. The helper
     /// executor cannot turn a failed/partial terminal step into normal O exit or classification.
     pub(super) fn tick(
@@ -1919,58 +2030,28 @@ impl OuterPhases {
 }
 
 impl OuterSampling {
-    /// O alone owns every report storage descriptor. Setup installs the per-O capacity filter
-    /// before any writer-bearing child, then checks actual private proc observation availability.
-    pub(super) fn prepare(
-        outer: &PreparedOuter<'_>,
-        launcher: LauncherMemory,
-        settings: RunSettings,
-    ) -> Result<Self, SamplingError> {
-        settings
-            .setup_deadline
-            .local()
-            .map_err(SamplingError::Deadline)?;
-        let deadline = settings
-            .identity_deadline()
-            .map_err(SamplingError::Deadline)?;
-        let collector = ReportCollector::prepare(outer).map_err(SamplingError::Report)?;
-        let mut tree =
-            MemoryObserver::prepare(Path::new("/proc")).map_err(|cause| SamplingError::Io {
-                operation: CauseOperation::ProcSetup,
-                cause,
-            })?;
-        tree.restrict_census(settings.memory_bytes)
-            .map_err(|cause| SamplingError::Io {
-                operation: CauseOperation::TreeObservation,
-                cause,
-            })?;
-        tree.bind_outer(outer).map_err(|cause| SamplingError::Io {
-            operation: CauseOperation::Identity,
-            cause,
-        })?;
-        settings
-            .setup_deadline
-            .local()
-            .map_err(SamplingError::Deadline)?;
-        let ledger = ResourceLedger::prepare(
-            settings.memory_bytes,
-            settings.caller_run_buffers,
-            collector.reserve(),
-            collector.identity(),
-            deadline,
-        )
-        .map_err(SamplingError::Charge)?;
-        Ok(Self {
+    /// Move the actual fully prepared resources. The retained preparation factory performs
+    /// no observation; the actor stores these before its separate initial fallible RSS tick.
+    fn from_parts(parts: SamplingParts) -> Self {
+        let SamplingParts {
             launcher,
             tree,
             ledger,
             collector,
-            stops: StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?,
+            settings,
+            stops,
+        } = parts;
+        Self {
+            launcher,
+            tree,
+            ledger,
+            collector,
+            settings,
+            stops,
             owner_stop: None,
             setup_refusal: None,
             caller_cancelled: false,
-            settings,
-        })
+        }
     }
 
     fn stop_progress(&self) -> Result<OuterRunProgress, SamplingError> {
@@ -2098,8 +2179,11 @@ impl OuterSampling {
         &mut self,
         outer: &PreparedOuter<'_>,
         caller_pin: &OwnedFd,
-        caller_lease: GuardianEndpoint,
+        caller_lease: &mut Option<GuardianEndpoint>,
     ) -> Result<InnerMonitor, SamplingError> {
+        if caller_lease.is_none() {
+            return Err(SamplingError::InnerLeaseConsumed);
+        }
         let (control, endpoint) = role_pair().map_err(SamplingError::Control)?;
         let frame = PreparedFrame::encode(&InnerBootstrap::Start {
             settings: self.settings.clone(),
@@ -2127,7 +2211,7 @@ impl OuterSampling {
             frame: IncrementalSend::new(frame),
             outer_pin,
             caller_pin,
-            caller_lease: Some(caller_lease),
+            caller_lease: caller_lease.take(),
             state: InnerMonitorState::Prepared,
         })
     }
