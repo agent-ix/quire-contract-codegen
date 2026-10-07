@@ -90,6 +90,7 @@ pub(super) struct OuterSampling {
     collector: ReportCollector,
     settings: RunSettings,
     stops: StopTimeline,
+    resource_stopped: bool,
 }
 
 /// One actual O actor composes the existing production phases, I completion and terminal
@@ -196,9 +197,19 @@ impl OuterRunOwner {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<OuterRunProgress, SamplingError> {
+        if self
+            .sampling
+            .as_ref()
+            .is_some_and(|sampling| sampling.resource_stopped)
+        {
+            // A later lower RSS sample cannot undo the genuine earlier resource stop or
+            // reopen startup/Dispatch/report progress while the same owner settles children.
+            self.state = OuterRunState::ResourceStopped;
+        }
         if matches!(self.state, OuterRunState::ResourceStopped) {
-            // No M exists, but C/L liveness and fresh O accounting still remain mandatory while
-            // the executor arranges the same original whole-chain resource-stop settlement.
+            // M may be absent, prepared or already spawned. Keep its same actual owner; this
+            // mode alone signals/reaps no child. C/L liveness, fresh accounting and bounded
+            // discarded-reader EOF work continue under the earliest original stop cutoff.
             self.sampling
                 .as_mut()
                 .ok_or(SamplingError::InvalidMonitorTransition)?
@@ -235,6 +246,10 @@ impl OuterRunOwner {
                         .ok_or(SamplingError::InvalidMonitorTransition)?,
                     self.startup_deadline,
                 )?;
+                if sampling.resource_stopped {
+                    self.state = OuterRunState::ResourceStopped;
+                    return Ok(OuterRunProgress::ResourceExhausted);
+                }
                 if matches!(progress, PhaseProgress::GateReleased) {
                     self.state = OuterRunState::Backend;
                 }
@@ -251,7 +266,10 @@ impl OuterRunOwner {
                 )? {
                     CompletionProgress::Pending => Ok(OuterRunProgress::Pending),
                     CompletionProgress::Dispatched => Ok(OuterRunProgress::BackendDispatched),
-                    CompletionProgress::Exhausted => Ok(OuterRunProgress::ResourceExhausted),
+                    CompletionProgress::Exhausted => {
+                        self.state = OuterRunState::ResourceStopped;
+                        Ok(OuterRunProgress::ResourceExhausted)
+                    }
                     CompletionProgress::Completed(_) => {
                         self.state = OuterRunState::AwaitCompletedClose;
                         Ok(OuterRunProgress::BackendCompleted)
@@ -1300,6 +1318,7 @@ impl OuterSampling {
             ledger,
             collector,
             stops: StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?,
+            resource_stopped: false,
             settings,
         })
     }
@@ -1338,12 +1357,25 @@ impl OuterSampling {
             self.stops
                 .capture_once(StopOrigin::Outer)
                 .map_err(SamplingError::Deadline)?;
-            return Ok(tick);
+            // The genuine independent complete sample selects stop mode. Closing only the
+            // collector's still-owned writer does not signal/reap M/I or prove writer EOF.
+            self.resource_stopped = true;
+            self.collector
+                .begin_owner_stop()
+                .map_err(SamplingError::Report)?;
         }
         let deadline = observation_deadline(&self.settings, &self.stops)?;
-        self.collector
-            .drain_tick(deadline)
-            .map_err(SamplingError::Report)?;
+        if self.resource_stopped {
+            // Do not let malformed/partial report bytes replace the already genuine memory
+            // candidate. Actual finite reader EOF still requires all actual writers to close.
+            self.collector
+                .drain_owner_stop(deadline)
+                .map_err(SamplingError::Report)?;
+        } else {
+            self.collector
+                .drain_tick(deadline)
+                .map_err(SamplingError::Report)?;
+        }
         outer
             .require_creator_live()
             .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
@@ -1439,6 +1471,9 @@ impl OuterSampling {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<(SealedReport, TerminalSampling), SamplingError> {
+        if self.resource_stopped {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
         if !settlement.matches_report(self.collector.identity()) {
             return Err(SamplingError::SettlementReportMismatch);
         }
