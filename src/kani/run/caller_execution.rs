@@ -18,6 +18,7 @@ use super::{
     caller_driver::{CallerDriveError, CallerDriveProgress, CallerDriver},
     caller_prepare::{self, PreparationError},
     caller_result,
+    caller_streams::SettledCaptures,
     launch::{BoundedLaunch, BoundedLaunchError, CAPTURE_LIMIT},
     namespace::BackendCommand,
     protocol::BackendExit,
@@ -183,6 +184,53 @@ impl CallerExecution {
         self.bootstrap.publication.publish(Stage::LeaseClosing);
         self.lease_closed = true;
         Ok(())
+    }
+
+    /// C retains its original local candidate outside this finite progress operation. Publish
+    /// original cancellation authority completely before actually closing its I lease.
+    pub(super) fn cancel_step(&mut self) -> Result<bool, CallerExecutionError> {
+        if !self
+            .bootstrap
+            .cancel_close_step(&mut self.clock)
+            .map_err(CallerExecutionError::Bootstrap)?
+        {
+            return Ok(false);
+        }
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        self.bootstrap
+            .cancellation_reply_step(&mut self.clock)
+            .map_err(CallerExecutionError::Bootstrap)
+    }
+
+    /// A cancellation receipt is not cleanup. Retain the actual normal O/L/creator proof even
+    /// if the later stream/capture operation fails; return only real settled captures.
+    pub(super) fn finish_cancelled(&mut self) -> Result<SettledCaptures, CallerExecutionError> {
+        if self.roles.is_none() {
+            self.roles = Some(
+                self.bootstrap
+                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::ObserveOuterExit)
+                    .map_err(CallerExecutionError::Bootstrap)?,
+            );
+        }
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        loop {
+            if self
+                .bootstrap
+                .finish_cancellation_after_roles(roles)
+                .map_err(CallerExecutionError::Bootstrap)?
+            {
+                break;
+            }
+            self.pause_until(roles.cutoff())?;
+        }
+        self.bootstrap
+            .streams
+            .settle(roles)
+            .map_err(CallerExecutionError::Io)
     }
 
     /// Genuine I-completion report path only. A late authenticated stop remains a different
