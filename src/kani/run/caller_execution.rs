@@ -400,6 +400,43 @@ impl CallerExecution {
             .map_err(CallerExecutionError::Bootstrap)
     }
 
+    /// Drive the genuine completed transaction without releasing the original owner on error.
+    /// A report read is provisional: authentic owner-stop metadata supersedes it, and the final
+    /// commit still precedes actual normal role, stream and capture settlement. A local read or
+    /// transport error remains owned by the caller for its separate cancellation path.
+    pub(super) fn finish_completed_transaction(
+        &mut self,
+    ) -> Result<(BoundedLaunch, MeasuredPeaks), CallerExecutionError> {
+        if self.completed.is_none() {
+            return Err(CallerExecutionError::Bootstrap(
+                CallerBootstrapError::TerminalTransition,
+            ));
+        }
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        let read = self.receive_completed_report();
+        if self.bootstrap.owner_stop_pending() {
+            return self.finish_owner_stopped();
+        }
+        read?;
+        loop {
+            let committed = self.advance_commit()?;
+            if self.bootstrap.owner_stop_pending() {
+                return self.finish_owner_stopped();
+            }
+            if committed {
+                break;
+            }
+            let cutoff = self
+                .clock
+                .settlement_deadline()
+                .map_err(CallerExecutionError::Deadline)?;
+            self.pause_until(cutoff)?;
+        }
+        self.finish_completed()
+    }
+
     pub(super) fn finish_completed(
         &mut self,
     ) -> Result<(BoundedLaunch, MeasuredPeaks), CallerExecutionError> {
