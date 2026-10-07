@@ -119,3 +119,25 @@ What was checked and is sound:
 | --- | --- | --- | --- |
 | FND-004 | medium | The 13-shape state-frame refusal table sits near the rekey cap and is slow in the default lane. Its fixture repair takes 224 reader attempts (the author's measurement in the PR body), but the helper charges the full one-million read work per attempt against `MAX_READER_WORK = 256_000_000`, so the cap allows only 256 attempts: 87.5% of the headroom is used. The same test takes about 95 s in the default `make ci` lane; it is a plain `#[test]` with no `kani` ignore. Failure scenario: adding one or two rows, or an IR change that makes a few more keys stale, panics the test with "fixture key repair exceeded its byte/work cap". That fails closed but blocks unrelated work, and CI time grows with every row. Fix: split the table into several smaller worlds (one request per group of rows), or charge the measured work instead of the ceiling, and keep a recorded headroom margin | tests/it/kani_obligations_state_frame.rs:1649-1750, tests/checked_package_support/rekey.rs:17, tests/checked_package_support/rekey.rs:186-192 |
 | FND-005 | low | `tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses` now expects FRAME to carry the FRAMED_OBJECT model blocker, so no test still drives a frame-tagged scalar item to `NoFiniteEncoding`. The IR-81 test's rationale still says "`STATE` and `FRAME` above both land on `NoFiniteEncoding`", which is now false. Correct the comment, and if the frame arm matters, add a frame fixture whose framed object carries no model blocker | tests/it/kani_obligations.rs:1017-1035, tests/it/kani_obligations.rs:1080-1081 |
+
+Round 3, reviewed at the branch's fixture-group head (fix commit "IR-664: bound state-frame
+fixture groups and refresh review"; revision recorded in the IR-664 Linear marker). The delta is
+this file, one doc comment in kani_obligations.rs, and the refusal-table loop in
+kani_obligations_state_frame.rs. `src/`, `spec/`, Cargo.lock and rekey.rs are unchanged.
+
+- Rows: the 15-row table array is byte-unchanged and is iterated as `rows.chunks(4)`, giving
+  groups of 4, 4, 4 and 3.
+- Same package per group: each group builds one `world_for` package and sends one negotiate
+  request.
+- Assertions kept, per group: the per-row refusal check, the record count and the no-harness
+  assertion.
+- CREATES: the frame-node check is kept and guarded by `checked_creates`. Only one row uses
+  CREATES.
+- Margin: the author measured 76 attempts for the worst group, against the 256-attempt work cap
+  (about 30% used). That is consistent with four shapes being roughly a third of the earlier 224.
+- The FND-005 comment now matches the asserted behaviour.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | round-3 fix commit "IR-664: bound state-frame fixture groups and refresh review" |
+| FND-005 | fixed | round-3 fix commit "IR-664: bound state-frame fixture groups and refresh review" (comment corrected; the frame `NoFiniteEncoding` path is not restored, and the comment now states that FRAME reaches its model blocker) |
