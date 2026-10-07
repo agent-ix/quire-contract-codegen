@@ -307,7 +307,7 @@ impl CallerBootstrap {
     pub(super) fn driver_control_step(
         &mut self,
         clock: &mut ExecutionClock,
-        cutoff: Instant,
+        cutoff: Option<Instant>,
     ) -> Result<bool, CallerBootstrapError> {
         self.receive_startup_control(clock, cutoff, false)
     }
@@ -628,7 +628,7 @@ impl CallerBootstrap {
         if !self.launcher_ready || matches!(self.phase, CallerPhase::AwaitArm) {
             return Ok(None);
         }
-        if self.receive_startup_control(clock, cutoff, true)? {
+        if self.receive_startup_control(clock, Some(cutoff), true)? {
             return Err(CallerBootstrapError::OwnerStopObserved);
         }
         if self.outer_receive.has_partial_frame() {
@@ -681,7 +681,7 @@ impl CallerBootstrap {
     fn receive_startup_control(
         &mut self,
         clock: &mut ExecutionClock,
-        cutoff: Instant,
+        cutoff: Option<Instant>,
         allow_phase: bool,
     ) -> Result<bool, CallerBootstrapError> {
         if clock.original_deadline() != self.identity_deadline
@@ -702,7 +702,7 @@ impl CallerBootstrap {
         }
         let Some(received) = self
             .outer_receive
-            .advance_clock_only_decode(
+            .advance_clock_only_optional(
                 &self.outer_control.transport(),
                 OuterStartupControl::rights_count,
                 cutoff,
@@ -723,6 +723,7 @@ impl CallerBootstrap {
                 if !allow_phase || self.phase_send.is_some() {
                     return Err(CallerBootstrapError::UnexpectedPhase);
                 }
+                let cutoff = cutoff.ok_or(CallerBootstrapError::UnexpectedPhase)?;
                 self.require_startup_owners(cutoff)?;
                 self.accept_phase_reply(reply, Some(sender), pin, cutoff)?;
                 Ok(false)
@@ -816,7 +817,7 @@ impl CallerBootstrap {
         self.startup_failed = true;
         self.phase_failed = true;
         self.inner_auth_failed = true;
-        self.receive_startup_control(clock, cutoff, false)
+        self.receive_startup_control(clock, Some(cutoff), false)
     }
 
     /// Provisional candidate remains unavailable until real normal O custody and original role
@@ -1398,7 +1399,11 @@ impl CallerBootstrap {
     }
 
     fn require_startup_owners(&self, cutoff: Instant) -> Result<(), CallerBootstrapError> {
-        if Instant::now() >= cutoff {
+        self.require_live_roles(Some(cutoff))
+    }
+
+    fn require_live_roles(&self, cutoff: Option<Instant>) -> Result<(), CallerBootstrapError> {
+        if cutoff.is_some_and(|cutoff| Instant::now() >= cutoff) {
             return Err(CallerBootstrapError::Control(ControlError::Deadline));
         }
         let launcher = self.launcher_identity()?;
@@ -1687,12 +1692,12 @@ impl CallerBootstrap {
     pub(super) fn receive_inner_event_step(
         &mut self,
         client: &mut super::stages::CallerLeaseClient,
-        cutoff: Instant,
+        cutoff: Option<Instant>,
     ) -> Result<super::stages::CallerLeaseProgress, CallerBootstrapError> {
-        self.require_startup_owners(cutoff)?;
+        self.require_live_roles(cutoff)?;
         let Some(received) = self
             .inner_receive
-            .advance_decode(
+            .advance_decode_optional(
                 &client.transport(),
                 super::startup_envelope::InnerEventHeader::rights_count,
                 cutoff,

@@ -814,11 +814,22 @@ impl IncrementalSend {
         rights: &[BorrowedFd<'_>],
         deadline: Instant,
     ) -> Result<bool, ControlError> {
+        self.advance_optional(transport, rights, Some(deadline))
+    }
+
+    /// One nonblocking syscall against an actual optional work/settlement cutoff. None
+    /// is the original never-elapsing admission, not a restarted finite control allowance.
+    pub(super) fn advance_optional(
+        &mut self,
+        transport: &Transport<'_>,
+        rights: &[BorrowedFd<'_>],
+        deadline: Option<Instant>,
+    ) -> Result<bool, ControlError> {
         if self.poisoned {
             return Err(ControlError::ProgressPoisoned);
         }
         self.poisoned = true;
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             return Err(ControlError::Deadline);
         }
         transport.refuse_observable_eof()?;
@@ -881,7 +892,7 @@ impl TerminalReceive {
         let result = self.receive.advance_decode_mode(
             transport,
             |_| 0,
-            deadline,
+            Some(deadline),
             ReceiveEof::DrainTerminal,
             decode,
         )?;
@@ -1028,7 +1039,7 @@ impl IncrementalReceive {
         deadline: Instant,
         eof: ReceiveEof,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
-        self.advance_decode_mode(transport, expected_rights, deadline, eof, |payload| {
+        self.advance_decode_mode(transport, expected_rights, Some(deadline), eof, |payload| {
             serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)
         })
     }
@@ -1045,7 +1056,7 @@ impl IncrementalReceive {
         self.advance_decode_mode(
             transport,
             expected_rights,
-            deadline,
+            Some(deadline),
             ReceiveEof::Refuse,
             decode,
         )
@@ -1060,6 +1071,51 @@ impl IncrementalReceive {
         transport: &Transport<'_>,
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Instant,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+        clock_only: impl FnOnce(&T) -> bool,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        self.advance_decode_mode(
+            transport,
+            expected_rights,
+            Some(deadline),
+            ReceiveEof::DrainTerminal,
+            |payload| {
+                let control = decode(payload)?;
+                match transport.refuse_observable_eof() {
+                    Ok(()) => {}
+                    Err(ControlError::Eof) if clock_only(&control) => {}
+                    Err(error) => return Err(error),
+                }
+                Ok(control)
+            },
+        )
+    }
+
+    /// Original optional cutoff for one strict nonblocking actor receive. No waiting or
+    /// allocation is introduced; partial bytes remain in this same charged framer.
+    pub(super) fn advance_decode_optional<'buffer, T>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Option<Instant>,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        self.advance_decode_mode(
+            transport,
+            expected_rights,
+            deadline,
+            ReceiveEof::Refuse,
+            decode,
+        )
+    }
+
+    /// Same optional cutoff and clock-only EOF rule as the original bounded provisional
+    /// receiver. Only complete authenticated stop metadata may later shorten the owner's clock.
+    pub(super) fn advance_clock_only_optional<'buffer, T>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Option<Instant>,
         decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
         clock_only: impl FnOnce(&T) -> bool,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
@@ -1084,7 +1140,7 @@ impl IncrementalReceive {
         &'buffer mut self,
         transport: &Transport<'_>,
         expected_rights: impl FnOnce(&T) -> usize,
-        deadline: Instant,
+        deadline: Option<Instant>,
         eof: ReceiveEof,
         decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
@@ -1092,7 +1148,7 @@ impl IncrementalReceive {
             return Err(ControlError::ProgressPoisoned);
         }
         self.poisoned = true;
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             return Err(ControlError::Deadline);
         }
         if !self.active {
@@ -1237,6 +1293,58 @@ mod tests {
     #[serde(deny_unknown_fields)]
     struct Message {
         authorized: bool,
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-38
+    #[test]
+    fn never_elapsing_actor_progress_has_no_cutoff_but_preserves_strict_eof() {
+        let (caller, endpoint) = private_pair().unwrap();
+        let mut receive = IncrementalReceive::prepare().unwrap();
+        let decode = |bytes: &[u8]| {
+            serde_json::from_slice::<Message>(bytes).map_err(ControlError::InvalidEncoding)
+        };
+        for _ in 0..2 {
+            assert!(receive
+                .advance_decode_optional(&caller.transport(), |_| 0, None, decode)
+                .unwrap()
+                .is_none());
+        }
+        let frame = PreparedFrame::encode(&Message { authorized: true }).unwrap();
+        let mut send = IncrementalSend::new(frame);
+        assert!(send
+            .advance_optional(&guardian(&endpoint), &[], None)
+            .unwrap());
+        assert!(receive
+            .advance_decode_optional(&caller.transport(), |_| 0, None, decode)
+            .unwrap()
+            .is_none());
+        let received = receive
+            .advance_decode_optional(&caller.transport(), |_| 0, None, decode)
+            .unwrap()
+            .unwrap();
+        assert_eq!(received.control, Message { authorized: true });
+        assert_eq!(
+            received.credentials.unwrap().pid,
+            rustix::process::getpid().as_raw_pid()
+        );
+        assert!(received.rights.is_empty());
+        drop(endpoint);
+        assert!(matches!(
+            receive.advance_decode_optional(&caller.transport(), |_| 0, None, decode),
+            Err(ControlError::Eof)
+        ));
+        let (caller, _endpoint) = private_pair().unwrap();
+        let mut expired = IncrementalReceive::prepare().unwrap();
+        assert!(matches!(
+            expired.advance_decode_optional(
+                &caller.transport(),
+                |_| 0,
+                Some(Instant::now()),
+                decode
+            ),
+            Err(ControlError::Deadline)
+        ));
+        // Actual nonblocking transport coverage; no backend completion/role settlement is inferred.
     }
 
     /// Trace: FR-034-AC-11, FR-034-AC-15, FR-034-AC-33.

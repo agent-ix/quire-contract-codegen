@@ -105,7 +105,7 @@ impl CallerDriver {
         &mut self,
         owner: &mut CallerBootstrap,
         clock: &mut ExecutionClock,
-        cutoff: Instant,
+        cutoff: Option<Instant>,
     ) -> Result<CallerDriveProgress, CallerDriveError> {
         if self.poisoned {
             return Err(CallerDriveError::Stage(StageError::UnexpectedControl));
@@ -122,7 +122,7 @@ impl CallerDriver {
         &mut self,
         owner: &mut CallerBootstrap,
         clock: &mut ExecutionClock,
-        cutoff: Instant,
+        cutoff: Option<Instant>,
     ) -> Result<CallerDriveProgress, CallerDriveError> {
         if owner.streams.flags.failed.load(Ordering::Acquire) {
             owner.driver_capture_stop(clock)?;
@@ -142,7 +142,12 @@ impl CallerDriver {
             return Err(CallerDriveError::WorkExpired);
         }
         if matches!(self.state, CallerDriveState::Startup) {
-            if let Some(ready) = owner.startup_step(clock, cutoff.min(owner.startup_cutoff()))? {
+            if let Some(ready) = owner.startup_step(
+                clock,
+                cutoff.map_or(owner.startup_cutoff(), |cutoff| {
+                    cutoff.min(owner.startup_cutoff())
+                }),
+            )? {
                 self.state = CallerDriveState::PendingReady(ready);
             }
             return Ok(CallerDriveProgress::Pending);
