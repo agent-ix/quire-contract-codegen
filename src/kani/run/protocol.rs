@@ -25,13 +25,33 @@ pub(super) fn current_build_identity() -> BuildIdentity {
     }
 }
 
-/// One actual library-compilation artifact identity, supplied only by the compiled library.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct BuildIdentity {
-    pub(super) artifact: [u8; 32],
-    pub(super) protocol: GuardianProtocol,
-    pub(super) lifecycle: GuardianLifecycle,
+macro_rules! build_identity_fields {
+    ($($variant:ident => $field:ident: $value:ty),+ $(,)?) => {
+        /// One actual library-compilation artifact identity, supplied only by the compiled library.
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct BuildIdentity { $(pub(super) $field: $value),+ }
+
+        #[derive(Clone, Copy)]
+        pub(super) enum BuildIdentityField { $($variant),+ }
+
+        impl BuildIdentityField {
+            pub(super) const fn declared_order() -> &'static [Self] {
+                &[$(Self::$variant),+]
+            }
+
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($field)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+
+build_identity_fields! {
+    Artifact => artifact: [u8; 32],
+    Protocol => protocol: GuardianProtocol,
+    Lifecycle => lifecycle: GuardianLifecycle,
 }
 
 macro_rules! identity_variants {

@@ -10,8 +10,12 @@ use std::mem::{size_of, size_of_val};
 
 use super::{
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
-    guardian_decode::{DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text},
-    protocol::{BuildIdentity, GuardianLifecycle, GuardianProtocol, RunAuthority},
+    guardian_decode::{
+        ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text, ValueKind,
+    },
+    protocol::{
+        BuildIdentity, BuildIdentityField, GuardianLifecycle, GuardianProtocol, RunAuthority,
+    },
     role_deadline::{MonotonicInstant, RoleDeadline, StopOrigin, StopStamp},
 };
 
@@ -23,27 +27,6 @@ fn missing<T>(value: Option<T>) -> Result<T, DecodeError> {
     value.ok_or_else(|| field_error(DecodeCause::MissingField))
 }
 
-#[derive(Clone, Copy)]
-enum IdentityField {
-    Artifact,
-    Protocol,
-    Lifecycle,
-}
-
-impl IdentityField {
-    fn from_text(name: Text<'_>) -> Result<Self, DecodeError> {
-        if name.equals("artifact") {
-            Ok(Self::Artifact)
-        } else if name.equals("protocol") {
-            Ok(Self::Protocol)
-        } else if name.equals("lifecycle") {
-            Ok(Self::Lifecycle)
-        } else {
-            Err(field_error(DecodeCause::UnknownField))
-        }
-    }
-}
-
 #[derive(Default)]
 struct IdentityFields {
     artifact: Option<[u8; 32]>,
@@ -53,32 +36,33 @@ struct IdentityFields {
 
 /// Consume one exact BuildIdentity record without claiming current-build equality.
 pub(super) fn identity(decoder: &mut Decoder<'_, '_>) -> Result<BuildIdentity, DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = IdentityFields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        match IdentityField::from_text(name)? {
-            IdentityField::Artifact => {
-                if fields.artifact.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
-                }
-                fields.artifact = Some(bytes32(decoder)?);
+    match decoder.peek_kind()? {
+        ValueKind::Object => {
+            let mut object = decoder.begin_object()?;
+            while let Some(name) = decoder.next_field(&mut object)? {
+                let field = BuildIdentityField::metadata_text(name)
+                    .ok_or_else(|| field_error(DecodeCause::UnknownField))?;
+                identity_field(decoder, field, &mut fields)?;
             }
-            IdentityField::Protocol => {
-                if fields.protocol.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
+        }
+        ValueKind::Array => {
+            let mut array = decoder.begin_array()?;
+            for field in BuildIdentityField::declared_order() {
+                if !decoder.next_element(&mut array)? {
+                    return Err(field_error(DecodeCause::MissingField));
                 }
-                let value = GuardianProtocol::metadata_text(decoder.unit_variant()?)
-                    .ok_or_else(|| field_error(DecodeCause::InvalidValue))?;
-                fields.protocol = Some(value);
+                identity_field(decoder, *field, &mut fields)?;
             }
-            IdentityField::Lifecycle => {
-                if fields.lifecycle.is_some() {
-                    return Err(field_error(DecodeCause::DuplicateField));
-                }
-                let value = GuardianLifecycle::metadata_text(decoder.unit_variant()?)
-                    .ok_or_else(|| field_error(DecodeCause::InvalidValue))?;
-                fields.lifecycle = Some(value);
+            if decoder.next_element(&mut array)? {
+                return Err(field_error(DecodeCause::InvalidValue));
             }
+        }
+        ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
+            return Err(DecodeError::new(
+                DecodeSite::Value,
+                DecodeCause::UnexpectedToken,
+            ));
         }
     }
     Ok(BuildIdentity {
@@ -86,6 +70,38 @@ pub(super) fn identity(decoder: &mut Decoder<'_, '_>) -> Result<BuildIdentity, D
         protocol: missing(fields.protocol)?,
         lifecycle: missing(fields.lifecycle)?,
     })
+}
+
+fn identity_field(
+    decoder: &mut Decoder<'_, '_>,
+    field: BuildIdentityField,
+    fields: &mut IdentityFields,
+) -> Result<(), DecodeError> {
+    match field {
+        BuildIdentityField::Artifact => {
+            if fields.artifact.is_some() {
+                return Err(field_error(DecodeCause::DuplicateField));
+            }
+            fields.artifact = Some(bytes32(decoder)?);
+        }
+        BuildIdentityField::Protocol => {
+            if fields.protocol.is_some() {
+                return Err(field_error(DecodeCause::DuplicateField));
+            }
+            let value = GuardianProtocol::metadata_text(decoder.unit_variant()?)
+                .ok_or_else(|| field_error(DecodeCause::InvalidValue))?;
+            fields.protocol = Some(value);
+        }
+        BuildIdentityField::Lifecycle => {
+            if fields.lifecycle.is_some() {
+                return Err(field_error(DecodeCause::DuplicateField));
+            }
+            let value = GuardianLifecycle::metadata_text(decoder.unit_variant()?)
+                .ok_or_else(|| field_error(DecodeCause::InvalidValue))?;
+            fields.lifecycle = Some(value);
+        }
+    }
+    Ok(())
 }
 
 fn bytes32(decoder: &mut Decoder<'_, '_>) -> Result<[u8; 32], DecodeError> {
@@ -268,10 +284,13 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<ObjectState>(),
         size_of::<Text<'static>>(),
         size_of::<IdentityFields>(),
+        size_of::<ArrayState>(),
+        size_of::<&'static [BuildIdentityField]>(),
+        size_of::<ValueKind>(),
         size_of::<TimeFields>(),
         size_of::<TimeParts>(),
         size_of::<StopFields>(),
-        size_of::<IdentityField>(),
+        size_of::<BuildIdentityField>(),
         size_of::<TimeField>(),
         size_of::<StopField>(),
         size_of::<[u8; 32]>(),
@@ -303,6 +322,37 @@ mod tests {
     use super::super::{guardian_decode::Scratch, role_deadline::DeadlineError};
     use super::*;
     use serde::Serialize;
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn named_build_identity_sequence_matches_owning_deserializer_and_exact_field_order() {
+        let expected = super::super::protocol::current_build_identity();
+        let value = serde_json::to_value(expected).unwrap();
+        let fields = vec![
+            value["artifact"].clone(),
+            value["protocol"].clone(),
+            value["lifecycle"].clone(),
+        ];
+        let payload = serde_json::to_vec(&fields).unwrap();
+        let owning: BuildIdentity = serde_json::from_slice(&payload).unwrap();
+        assert_eq!(owning, expected);
+        assert_eq!(parse(&payload, identity).unwrap(), owning);
+        for count in 0..fields.len() {
+            let incomplete = serde_json::to_vec(&fields[..count]).unwrap();
+            assert!(serde_json::from_slice::<BuildIdentity>(&incomplete).is_err());
+            assert!(parse(&incomplete, identity).is_err());
+        }
+        let mut extra = fields.clone();
+        extra.push(serde_json::Value::Null);
+        let extra = serde_json::to_vec(&extra).unwrap();
+        assert!(serde_json::from_slice::<BuildIdentity>(&extra).is_err());
+        assert!(parse(&extra, identity).is_err());
+        let mut reordered = fields;
+        reordered.swap(0, 1);
+        let reordered = serde_json::to_vec(&reordered).unwrap();
+        assert!(serde_json::from_slice::<BuildIdentity>(&reordered).is_err());
+        assert!(parse(&reordered, identity).is_err());
+    }
 
     /// Trace: FR-034-AC-15
     #[test]
