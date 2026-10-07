@@ -19,7 +19,8 @@ use rustix::process::{getpid, getuid, waitpid, Pid, WaitOptions};
 
 use super::{
     control::{
-        ControlError, FrameStorage, IncrementalReceive, IncrementalSend, PreparedFrame, Transport,
+        ControlError, FrameStorage, IncrementalReceive, IncrementalSend, PreparedFrame,
+        PreparedReceive, Transport,
     },
     protocol::{
         BackendExit, BuildIdentity, CallerControl, GuardianControl, GuardianRefusal, StdinControl,
@@ -270,6 +271,7 @@ pub(super) enum InnerAdmissionProgress {
 /// I owns the actual trusted installer throughout admission, including every failed post-spawn
 /// operation. Positive policy receipt precedes I Ready, and C Dispatch precedes exact Exec.
 pub(super) struct PendingInnerBackend {
+    caller_reception: PreparedCallerReception,
     input: Option<super::role_bootstrap::InnerInput>,
     installer: super::backend_installer::InstallerOwner,
     hello: Option<AuthenticatedHello>,
@@ -301,10 +303,13 @@ impl PendingInnerBackend {
             .map_err(io::Error::other)
             .map_err(GuardianError::Io)
             .map_err(InnerAdmissionError::Guardian)?;
+        let mut caller_reception =
+            PreparedCallerReception::prepare().map_err(InnerAdmissionError::Guardian)?;
         let hello = authenticate_hello(
             &input.caller_lease.transport(),
             input.settings.identity,
             deadline,
+            &mut caller_reception,
         )
         .map_err(InnerAdmissionError::Guardian)?;
         if hello.authority != input.settings.authority {
@@ -327,6 +332,7 @@ impl PendingInnerBackend {
             .map_err(GuardianError::Io)
             .map_err(InnerAdmissionError::Guardian)?;
         Ok(Self {
+            caller_reception,
             input: Some(input),
             installer,
             hello: Some(hello),
@@ -509,6 +515,7 @@ impl PendingInnerBackend {
                         authority: ready.authority,
                     },
                     self.deadline,
+                    &mut self.caller_reception,
                 )
                 .map_err(InnerAdmissionError::Guardian)?;
                 self.installer
@@ -571,10 +578,29 @@ impl PendingInnerBackend {
     }
 }
 
+/// The original C/I frame, workspace and native label stay owned across Hello and Dispatch.
+/// The production I owner prepares them before its first installer Child is created.
+struct PreparedCallerReception {
+    frame: PreparedReceive,
+    scratch: super::guardian_decode::Scratch,
+    native_tag: super::native_os_decode::NativeOsTag,
+}
+
+impl PreparedCallerReception {
+    fn prepare() -> Result<Self, GuardianError> {
+        Ok(Self {
+            frame: PreparedReceive::prepare()?,
+            scratch: super::guardian_decode::Scratch::default(),
+            native_tag: super::native_os_decode::native_tag().map_err(io::Error::other)?,
+        })
+    }
+}
+
 fn authenticate_hello(
     transport: &Transport<'_>,
     identity: BuildIdentity,
     startup_deadline: Instant,
+    reception: &mut PreparedCallerReception,
 ) -> Result<AuthenticatedHello, GuardianError> {
     let init = getpid();
     if init.as_raw_nonzero().get() != 1 {
@@ -589,9 +615,17 @@ fn authenticate_hello(
     if creator.uid != getuid().as_raw() {
         return Err(GuardianError::Refusal(GuardianRefusal::CreatorUidMismatch));
     }
-    let hello =
-        transport.receive::<CallerControl>(CallerControl::rights_count, startup_deadline)?;
-    let CallerControl::Hello {
+    let tag = reception.native_tag;
+    let hello = transport.receive_prepared_decode(
+        &mut reception.frame,
+        super::caller_control_decode::CallerReply::rights_count,
+        startup_deadline,
+        |payload| {
+            super::caller_control_decode::decode(payload, &mut reception.scratch, tag)
+                .map_err(ControlError::InvalidGrammar)
+        },
+    )?;
+    let super::caller_control_decode::CallerReply::Hello {
         identity: expected,
         authority,
     } = hello.control
@@ -615,11 +649,20 @@ fn receive_dispatch(
     transport: &Transport<'_>,
     ready: ReadyAdmission,
     startup_deadline: Instant,
+    reception: &mut PreparedCallerReception,
 ) -> Result<DispatchRecipe, GuardianError> {
     let authority = ready.authority;
-    let dispatch =
-        transport.receive::<CallerControl>(CallerControl::rights_count, startup_deadline)?;
-    let CallerControl::Dispatch {
+    let tag = reception.native_tag;
+    let dispatch = transport.receive_prepared_decode(
+        &mut reception.frame,
+        super::caller_control_decode::CallerReply::rights_count,
+        startup_deadline,
+        |payload| {
+            super::caller_control_decode::decode(payload, &mut reception.scratch, tag)
+                .map_err(ControlError::InvalidGrammar)
+        },
+    )?;
+    let super::caller_control_decode::CallerReply::Dispatch {
         authority: received_authority,
         command,
         stdin,
@@ -631,15 +674,29 @@ fn receive_dispatch(
     if received_authority != authority {
         return Err(GuardianError::Refusal(GuardianRefusal::ReplayedAuthority));
     }
-    if cleanup_paths.len() > ARTIFACT_COUNT {
+    if cleanup_paths.count() > ARTIFACT_COUNT {
         return Err(GuardianError::Refusal(GuardianRefusal::InvalidControl));
+    }
+    // All frame, run/state and rights checks precede owned native materialization. The
+    // borrowed facts keep this SAME prepared payload and rights live until conversion ends.
+    transport.refuse_observable_eof()?;
+    if Instant::now() >= startup_deadline {
+        return Err(ControlError::Deadline.into());
+    }
+    let command = super::recipe_decode::materialize(command, tag, &mut reception.scratch)
+        .map_err(original_materialization_error)?;
+    let cleanup_paths =
+        super::recipe_decode::materialize_values(cleanup_paths, tag, &mut reception.scratch)
+            .map_err(original_materialization_error)?;
+    transport.refuse_observable_eof()?;
+    if Instant::now() >= startup_deadline {
+        return Err(ControlError::Deadline.into());
     }
     let stdin = match stdin {
         StdinControl::Open => {
             let descriptor = dispatch
                 .rights
-                .into_iter()
-                .next()
+                .pop()
                 .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?;
             super::stdin::OriginalStdin::Open(descriptor)
         }
@@ -651,6 +708,21 @@ fn receive_dispatch(
         authority,
         artifacts: GuardianArtifacts(cleanup_paths),
     })
+}
+
+fn original_materialization_error(
+    error: super::recipe_decode::MaterializationError,
+) -> GuardianError {
+    match error {
+        super::recipe_decode::MaterializationError::Grammar(error) => {
+            GuardianError::Control(ControlError::InvalidGrammar(error))
+        }
+        super::recipe_decode::MaterializationError::Allocation(error) => {
+            // Move the ACTUAL local allocator source. No cross-role reconstruction, kind
+            // normalization, policy-origin relabel or prose-derived classification occurs.
+            GuardianError::Io(io::Error::other(error))
+        }
+    }
 }
 
 /// Exact typed metadata and original stdin survive Dispatch without constructing a backend
@@ -687,9 +759,11 @@ fn admit_backend(
     identity: BuildIdentity,
     startup_deadline: Instant,
 ) -> Result<BackendAdmission, GuardianError> {
-    let hello = authenticate_hello(transport, identity, startup_deadline)?;
+    let mut reception = PreparedCallerReception::prepare()?;
+    let hello = authenticate_hello(transport, identity, startup_deadline, &mut reception)?;
     let ready = hello.publish_ready(transport, startup_deadline)?;
-    receive_dispatch(transport, ready, startup_deadline).map(DispatchRecipe::into_command)
+    receive_dispatch(transport, ready, startup_deadline, &mut reception)
+        .map(DispatchRecipe::into_command)
 }
 
 fn supervise(

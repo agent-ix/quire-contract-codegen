@@ -299,6 +299,18 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
         }
     }
 
+    /// Reborrow this SAME workspace for a sequential operation while preserving the original
+    /// cursor. Materialization of an already validated immutable span may use it after frame
+    /// authentication; no additional Scratch or competing control consumer is constructed.
+    /// Scanner calls own their scratch state only for the call, while Object/ArrayState is
+    /// explicitly held by the schema. Native-stack simultaneity remains the owner's charge.
+    pub(super) fn with_scratch<T, E>(
+        &mut self,
+        work: impl FnOnce(&mut Scratch) -> Result<T, E>,
+    ) -> Result<T, E> {
+        work(self.scratch)
+    }
+
     /// Record this current input position without consuming or prevalidating a subtree.
     pub(super) fn mark(&self) -> CursorMark<'input> {
         CursorMark {

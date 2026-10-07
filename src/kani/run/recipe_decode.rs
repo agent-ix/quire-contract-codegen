@@ -6,14 +6,21 @@
 //! retained descriptors before materializing these native bytes. Counts describe logical
 //! values, not allocation capacities or a native-stack bound.
 
-use std::mem::{size_of, size_of_val};
+use std::{
+    collections::TryReserveError,
+    error::Error,
+    ffi::OsString,
+    fmt,
+    mem::{size_of, size_of_val},
+    os::unix::ffi::OsStringExt,
+};
 
 use super::{
     guardian_decode::{
         ArrayState, CursorMark, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState,
-        ValueKind,
+        Scratch, ValueKind,
     },
-    namespace::BackendCommandField,
+    namespace::{BackendCommand, BackendCommandField},
     native_os_decode::{self, NativeOsBytes, NativeOsTag},
 };
 
@@ -151,6 +158,134 @@ fn sequence<'input>(
     })
 }
 
+/// Actual local allocation or immutable-span check failure; no cause is reconstructed.
+#[derive(Debug)]
+pub(super) enum MaterializationError {
+    Grammar(DecodeError),
+    Allocation(TryReserveError),
+}
+
+impl fmt::Display for MaterializationError {
+    fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Grammar(error) => error.fmt(output),
+            Self::Allocation(error) => error.fmt(output),
+        }
+    }
+}
+
+impl Error for MaterializationError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Grammar(error) => Some(error),
+            Self::Allocation(error) => Some(error),
+        }
+    }
+}
+
+impl From<DecodeError> for MaterializationError {
+    fn from(error: DecodeError) -> Self {
+        Self::Grammar(error)
+    }
+}
+
+/// Materialize ONLY after the actor has authenticated the full original frame and retained
+/// its descriptors. Each fallible reserve preserves its actual local TryReserveError. Logical
+/// counts do not establish allocation capacities; the owning actor accounts actual retained
+/// recipe capacities/role RSS separately, without a CONTROL_BYTES allocation-bound claim.
+pub(super) fn materialize(
+    recipe: RecipeBytes<'_>,
+    tag: NativeOsTag,
+    scratch: &mut Scratch,
+) -> Result<BackendCommand, MaterializationError> {
+    let program = native_value(recipe.program, scratch)?;
+    let arguments = materialize_values(recipe.arguments, tag, scratch)?;
+    let directory = recipe
+        .directory
+        .map(|value| native_value(value, scratch))
+        .transpose()?;
+    let mut environment = Vec::new();
+    environment
+        .try_reserve_exact(recipe.environment.count)
+        .map_err(MaterializationError::Allocation)?;
+    {
+        let mut decoder = Decoder::new(recipe.environment.encoded, scratch)?;
+        let mut array = decoder.begin_array()?;
+        while decoder.next_element(&mut array)? {
+            if environment.len() >= recipe.environment.count {
+                return Err(fault(DecodeCause::StorageBound).into());
+            }
+            let mut tuple = decoder.begin_array()?;
+            if !decoder.next_element(&mut tuple)? {
+                return Err(fault(DecodeCause::MissingField).into());
+            }
+            let name = native_os_decode::decode(&mut decoder, tag)?;
+            if !decoder.next_element(&mut tuple)? {
+                return Err(fault(DecodeCause::MissingField).into());
+            }
+            let value = native_os_decode::decode(&mut decoder, tag)?;
+            if decoder.next_element(&mut tuple)? {
+                return Err(fault(DecodeCause::InvalidValue).into());
+            }
+            let name = decoder.with_scratch(|scratch| native_value(name, scratch))?;
+            let value = decoder.with_scratch(|scratch| native_value(value, scratch))?;
+            environment.push((name, value));
+        }
+        decoder.finish()?;
+    }
+    if environment.len() != recipe.environment.count {
+        return Err(fault(DecodeCause::StorageBound).into());
+    }
+    Ok(BackendCommand::from_received_parts(
+        program,
+        arguments,
+        directory,
+        environment,
+    ))
+}
+
+/// Materialize the already validated ordinary native collection after actor authentication.
+/// Existing semantic collection limits (such as artifact count) stay with the actor.
+pub(super) fn materialize_values(
+    sequence: RecipeSequence<'_>,
+    tag: NativeOsTag,
+    scratch: &mut Scratch,
+) -> Result<Vec<OsString>, MaterializationError> {
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(sequence.count)
+        .map_err(MaterializationError::Allocation)?;
+    {
+        let mut decoder = Decoder::new(sequence.encoded, scratch)?;
+        let mut array = decoder.begin_array()?;
+        while decoder.next_element(&mut array)? {
+            if values.len() >= sequence.count {
+                return Err(fault(DecodeCause::StorageBound).into());
+            }
+            let value = native_os_decode::decode(&mut decoder, tag)?;
+            values.push(decoder.with_scratch(|scratch| native_value(value, scratch))?);
+        }
+        decoder.finish()?;
+    }
+    if values.len() != sequence.count {
+        return Err(fault(DecodeCause::StorageBound).into());
+    }
+    Ok(values)
+}
+
+fn native_value(
+    value: NativeOsBytes<'_>,
+    scratch: &mut Scratch,
+) -> Result<OsString, MaterializationError> {
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(value.byte_count())
+        .map_err(MaterializationError::Allocation)?;
+    bytes.resize(value.byte_count(), 0);
+    native_os_decode::write_bytes(value, &mut bytes, scratch)?;
+    Ok(OsString::from_vec(bytes))
+}
+
 fn refuse_duplicate(seen: bool) -> Result<(), DecodeError> {
     if seen {
         return Err(fault(DecodeCause::DuplicateField));
@@ -181,6 +316,23 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<NativeOsTag>(),
         size_of::<usize>(),
         size_of::<Result<(), DecodeError>>(),
+        // Sequential materialization owns these actual fixed headers/errors while its
+        // retained output capacities are measured separately by BackendCommand/role RSS.
+        size_of::<Vec<u8>>(),
+        size_of::<Vec<OsString>>(),
+        size_of::<Vec<(OsString, OsString)>>(),
+        size_of::<OsString>(),
+        size_of::<OsString>(),
+        size_of::<OsString>(),
+        size_of::<Option<OsString>>(),
+        size_of::<BackendCommand>(),
+        size_of::<MaterializationError>(),
+        size_of::<TryReserveError>(),
+        size_of::<Result<OsString, MaterializationError>>(),
+        size_of::<Result<BackendCommand, MaterializationError>>(),
+        // The outer sequence cursor remains live during native span materialization's
+        // inner cursor, using the SAME Scratch. Primitive reservation covers one cursor.
+        size_of::<Decoder<'static, 'static>>(),
     ];
     let storage = || DecodeError::new(DecodeSite::Storage, DecodeCause::StorageBound);
     let table = u64::try_from(size_of_val(&terms)).map_err(|_| storage())?;
@@ -242,6 +394,13 @@ mod tests {
         let mut bytes = vec![0; directory.byte_count()];
         native_os_decode::write_bytes(directory, &mut bytes, &mut scratch).unwrap();
         assert_eq!(bytes, b"directory-\xfd");
+        let materialized = materialize(
+            recipe,
+            native_os_decode::native_tag().unwrap(),
+            &mut scratch,
+        )
+        .unwrap();
+        assert_eq!(serde_json::to_vec(&materialized).unwrap(), payload);
     }
 
     /// Trace: FR-034-AC-15
