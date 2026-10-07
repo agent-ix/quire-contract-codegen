@@ -60,6 +60,8 @@ mod creator;
 // Linux role/setup/storage primitives are compiled with the actual helper library artifact.
 // Registration alone does not replace the existing production launch orchestration.
 #[cfg(target_os = "linux")]
+mod cause_metadata;
+#[cfg(target_os = "linux")]
 mod outer_caller;
 #[cfg(target_os = "linux")]
 mod outer_failure;

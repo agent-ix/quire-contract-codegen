@@ -194,6 +194,22 @@ fn startup_error(error: CallerExecutionError) -> BoundedLaunchError {
 }
 
 fn local_error(owner: &mut CallerExecution, error: CallerExecutionError) -> BoundedLaunchError {
+    if caller_error::metadata_predicate(&error).is_some() {
+        // This actual local checking fault supplies C provenance, not an authenticated
+        // original negative admission site. Use the retained real helper path at the C boundary
+        // after the caller's confirmed cancellation; no packet label invents Unavailable.
+        if let Some(path) = owner.bootstrap.take_helper_path() {
+            return BoundedLaunchError::BoundaryIo {
+                path,
+                cause: caller_error::into_original_io(error),
+            };
+        }
+        // Lost path custody cannot manufacture either an executable path or admission site.
+        return BoundedLaunchError::Guardian {
+            kind: GuardianFailureKind::ControlUnavailable,
+            detail: String::new(),
+        };
+    }
     let command_failed = matches!(
         &error,
         CallerExecutionError::Bootstrap(CallerBootstrapError::Spawn(

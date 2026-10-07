@@ -14,7 +14,7 @@ use serde::{de, Deserialize, Serialize};
 
 use super::{
     control::CONTROL_BYTES,
-    cross_role_cause::{KaniCrossRoleCauseLoss, RemoteCauseProvenance},
+    cross_role_cause::{CauseIntegrityPredicate, KaniCrossRoleCauseLoss, RemoteCauseProvenance},
 };
 
 macro_rules! io_kinds {
@@ -35,6 +35,16 @@ macro_rules! io_kinds {
         }
 
         impl StartupIoKind {
+            /// Recognize only an existing metadata name. Unknown metadata is a receiver fault,
+            /// never a substitute original kind or permission to enlarge the producer domain.
+            pub(super) fn metadata_name(name: &str) -> Option<Self> {
+                match name {
+                    $(stringify!($kind) => Some(Self::$kind),)+
+                    "OsDerived" => Some(Self::OsDerived),
+                    _ => None,
+                }
+            }
+
             fn named(self) -> Option<io::ErrorKind> {
                 match self {
                     $(Self::$kind => Some(io::ErrorKind::$kind),)+
@@ -87,15 +97,28 @@ io_kinds!(
     Other,
 );
 
-/// Positively observed custom-payload facts, separate from ErrorKind and diagnostics.
-/// A direct reservation payload is identified through its stable concrete type only; no
-/// allocator-versus-capacity category, allocation layout or equivalent payload is inferred.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub(super) enum StartupPayload {
-    NoCustomPayload,
-    DirectTryReserve,
-    UnrepresentedCustom,
+macro_rules! payload_kinds {
+    ($($payload:ident),+ $(,)?) => {
+        /// Positively observed custom-payload facts, separate from ErrorKind and diagnostics.
+        /// A direct reservation is identified through its stable concrete type only; no
+        /// allocator-versus-capacity category, layout or equivalent payload is inferred.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+        pub(super) enum StartupPayload { $($payload),+ }
+
+        impl StartupPayload {
+            /// Recognize the existing payload fact without copying an unknown token into a
+            /// dependency error message. This supplies no original payload/source authority.
+            pub(super) fn metadata_name(name: &str) -> Option<Self> {
+                match name {
+                    $(stringify!($payload) => Some(Self::$payload),)+
+                    _ => None,
+                }
+            }
+        }
+    };
 }
+
+payload_kinds!(NoCustomPayload, DirectTryReserve, UnrepresentedCustom);
 
 /// Original kind representation and optional original OS error; neither comes from Display.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -114,6 +137,20 @@ fn required_errno<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<Opti
 }
 
 impl StartupIoCause {
+    /// Construct only parsed typed metadata. This grants no producer/site authority and does
+    /// not verify errno/kind/payload consistency; the existing projector performs that check.
+    pub(super) fn from_metadata(
+        kind: StartupIoKind,
+        raw_os_error: Option<i32>,
+        payload: StartupPayload,
+    ) -> Self {
+        Self {
+            kind,
+            raw_os_error,
+            payload,
+        }
+    }
+
     fn capture(error: &io::Error) -> Result<Self, RepresentationError> {
         let raw_os_error = error.raw_os_error();
         let kind = match error.kind().try_into() {
@@ -311,6 +348,7 @@ pub(super) struct PreparedStartupContext {
     text: String,
     limit: usize,
     encoded_max: usize,
+    metadata_fault: Option<CauseIntegrityPredicate>,
 }
 
 impl PreparedStartupContext {
@@ -329,6 +367,7 @@ impl PreparedStartupContext {
             text,
             limit,
             encoded_max,
+            metadata_fault: None,
         })
     }
 
@@ -355,6 +394,31 @@ impl PreparedStartupContext {
 
     pub(super) fn clear(&mut self) {
         self.text.clear();
+        self.metadata_fault = None;
+    }
+
+    /// Borrow the first required-metadata checking fault slot. Optional diagnostic retention
+    /// never writes or clears this fact; only a new whole decode resets it through clear().
+    pub(super) fn metadata_fault_slot(&mut self) -> &mut Option<CauseIntegrityPredicate> {
+        &mut self.metadata_fault
+    }
+
+    /// Preserve the actual moved decoder error and observed predicate. No error text is parsed,
+    /// and an error outside the required-cause seed remains an ordinary encoding refusal.
+    pub(super) fn metadata_error(&self, source: serde_json::Error) -> super::control::ControlError {
+        match self.metadata_fault {
+            Some(predicate) => super::control::ControlError::CauseMetadata {
+                // Only a source EOF encountered inside the required-cause seed supplies this
+                // category. Ordinary framed transport/other envelope errors stay separate.
+                predicate: if source.is_eof() {
+                    CauseIntegrityPredicate::IncompleteCauseMetadata
+                } else {
+                    predicate
+                },
+                source,
+            },
+            None => super::control::ControlError::InvalidEncoding(source),
+        }
     }
 
     /// Capture the original error without allocating its Display into an intermediate String.
@@ -611,6 +675,72 @@ pub(super) fn check_scratch_free_json(bytes: &[u8]) -> Result<(), StartupJsonErr
 mod tests {
     use super::*;
     use crate::kani::run::cross_role_cause::{CauseOperation, RemoteCauseRole};
+
+    // The criterion's finite list is independent of the production macro: removing or
+    // coercing a production kind must fail this real std-I/O capture/project check. This does
+    // not prove the separate exhaustive source-flow gate for every actual sender operation.
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn all_declared_no_errno_kinds_capture_actual_std_values_without_payload_or_normalization() {
+        let kinds = [
+            io::ErrorKind::NotFound,
+            io::ErrorKind::PermissionDenied,
+            io::ErrorKind::ConnectionRefused,
+            io::ErrorKind::ConnectionReset,
+            io::ErrorKind::HostUnreachable,
+            io::ErrorKind::NetworkUnreachable,
+            io::ErrorKind::ConnectionAborted,
+            io::ErrorKind::NotConnected,
+            io::ErrorKind::AddrInUse,
+            io::ErrorKind::AddrNotAvailable,
+            io::ErrorKind::NetworkDown,
+            io::ErrorKind::BrokenPipe,
+            io::ErrorKind::AlreadyExists,
+            io::ErrorKind::WouldBlock,
+            io::ErrorKind::NotADirectory,
+            io::ErrorKind::IsADirectory,
+            io::ErrorKind::DirectoryNotEmpty,
+            io::ErrorKind::ReadOnlyFilesystem,
+            io::ErrorKind::StaleNetworkFileHandle,
+            io::ErrorKind::InvalidInput,
+            io::ErrorKind::InvalidData,
+            io::ErrorKind::TimedOut,
+            io::ErrorKind::WriteZero,
+            io::ErrorKind::StorageFull,
+            io::ErrorKind::NotSeekable,
+            io::ErrorKind::QuotaExceeded,
+            io::ErrorKind::FileTooLarge,
+            io::ErrorKind::ResourceBusy,
+            io::ErrorKind::ExecutableFileBusy,
+            io::ErrorKind::Deadlock,
+            io::ErrorKind::CrossesDevices,
+            io::ErrorKind::TooManyLinks,
+            io::ErrorKind::InvalidFilename,
+            io::ErrorKind::ArgumentListTooLong,
+            io::ErrorKind::Interrupted,
+            io::ErrorKind::Unsupported,
+            io::ErrorKind::UnexpectedEof,
+            io::ErrorKind::OutOfMemory,
+            io::ErrorKind::Other,
+        ];
+        for kind in kinds {
+            let original = io::Error::from(kind);
+            assert_eq!(original.raw_os_error(), None);
+            assert!(original.get_ref().is_none());
+            let captured = StartupCause::capture_io(&original).unwrap();
+            let encoded = serde_json::to_vec(&captured).unwrap();
+            let decoded: StartupCause = serde_json::from_slice(&encoded).unwrap();
+            let ProjectedStartupCause::Io { error, fidelity } =
+                decoded.project(projection_origin()).unwrap()
+            else {
+                panic!("actual IO changed producer domain")
+            };
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.raw_os_error(), None);
+            assert!(error.get_ref().is_none());
+            assert_eq!(fidelity, ProjectionFidelity::PayloadFree);
+        }
+    }
 
     fn projection_origin() -> RemoteCauseProvenance {
         RemoteCauseProvenance {

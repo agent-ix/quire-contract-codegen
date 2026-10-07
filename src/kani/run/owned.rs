@@ -659,6 +659,7 @@ fn stage_refusal(error: StageError) -> BoundedLaunchError {
             ControlError::Deadline => GuardianFailureKind::ControlDeadline,
             ControlError::EncodedBytesExceeded => GuardianFailureKind::ControlLimit,
             ControlError::InvalidEncoding(_)
+            | ControlError::CauseMetadata { .. }
             | ControlError::Truncated
             | ControlError::UnknownAncillary
             | ControlError::ProgressPoisoned => GuardianFailureKind::MalformedControl,

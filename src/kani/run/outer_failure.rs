@@ -9,6 +9,7 @@ use std::{fmt, mem::size_of};
 use serde::{de, de::DeserializeSeed, de::Error as _, Deserialize, Serialize};
 
 use super::{
+    cause_metadata::CauseSeed,
     control::ControlError,
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
     protocol::{BuildIdentity, RunAuthority},
@@ -135,6 +136,100 @@ struct DispositionMetadata {
 struct CommitSeed<'a>(&'a mut PreparedStartupContext);
 struct DispositionSeed<'a>(&'a mut PreparedStartupContext);
 
+struct RepresentationSeed<'a>(&'a mut PreparedStartupContext);
+
+#[derive(Deserialize)]
+enum RepresentationTag {
+    Original,
+    Integrity,
+}
+
+#[derive(Deserialize)]
+#[serde(field_identifier)]
+enum RepresentationField {
+    #[serde(rename = "cause")]
+    Cause,
+    #[serde(rename = "predicate")]
+    Predicate,
+}
+
+impl<'de> DeserializeSeed<'de> for RepresentationSeed<'_> {
+    type Value = FailureRepresentation;
+
+    fn deserialize<D: de::Deserializer<'de>>(self, decoder: D) -> Result<Self::Value, D::Error> {
+        decoder.deserialize_map(self)
+    }
+}
+
+impl<'de> de::Visitor<'de> for RepresentationSeed<'_> {
+    type Value = FailureRepresentation;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("one required operational cause representation")
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let tag = map
+            .next_key::<RepresentationTag>()?
+            .ok_or_else(|| A::Error::missing_field("representation"))?;
+        let representation = map.next_value_seed(RepresentationBodySeed(self.0, tag))?;
+        if map.next_key::<RepresentationTag>()?.is_some() {
+            return Err(A::Error::custom("conflicting cause representations"));
+        }
+        Ok(representation)
+    }
+}
+
+struct RepresentationBodySeed<'a>(&'a mut PreparedStartupContext, RepresentationTag);
+
+impl<'de> DeserializeSeed<'de> for RepresentationBodySeed<'_> {
+    type Value = FailureRepresentation;
+
+    fn deserialize<D: de::Deserializer<'de>>(self, decoder: D) -> Result<Self::Value, D::Error> {
+        decoder.deserialize_map(self)
+    }
+}
+
+impl<'de> de::Visitor<'de> for RepresentationBodySeed<'_> {
+    type Value = FailureRepresentation;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("one required cause or integrity predicate")
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let field = map.next_key::<RepresentationField>()?;
+        let representation = match (self.1, field) {
+            (RepresentationTag::Original, Some(RepresentationField::Cause)) => {
+                FailureRepresentation::Original {
+                    cause: map.next_value_seed(CauseSeed::new(self.0.metadata_fault_slot()))?,
+                }
+            }
+            (RepresentationTag::Integrity, Some(RepresentationField::Predicate)) => {
+                FailureRepresentation::Integrity {
+                    predicate: map.next_value()?,
+                }
+            }
+            (RepresentationTag::Original | RepresentationTag::Integrity, None) => {
+                *self.0.metadata_fault_slot() =
+                    Some(CauseIntegrityPredicate::IncompleteCauseMetadata);
+                return Err(A::Error::custom("required cause member missing"));
+            }
+            (RepresentationTag::Original, Some(RepresentationField::Predicate))
+            | (RepresentationTag::Integrity, Some(RepresentationField::Cause)) => {
+                *self.0.metadata_fault_slot() =
+                    Some(CauseIntegrityPredicate::MalformedCauseMetadata);
+                return Err(A::Error::custom("cause representation member mismatch"));
+            }
+        };
+        if map.next_key::<RepresentationField>()?.is_some() {
+            *self.0.metadata_fault_slot() = Some(CauseIntegrityPredicate::MalformedCauseMetadata);
+            return Err(A::Error::custom("extra cause representation member"));
+        }
+        Ok(representation)
+    }
+}
+
 impl<'de> DeserializeSeed<'de> for CommitSeed<'_> {
     type Value = FailureHeader;
 
@@ -239,7 +334,7 @@ impl<'de> de::Visitor<'de> for DispositionSeed<'_> {
                     if fields.representation.is_some() {
                         return Err(A::Error::duplicate_field("representation"));
                     }
-                    fields.representation = Some(map.next_value()?);
+                    fields.representation = Some(map.next_value_seed(RepresentationSeed(self.0))?);
                 }
                 DispositionField::Context => {
                     if fields.context {
@@ -291,7 +386,7 @@ pub(super) fn decode(
     let mut decoder = serde_json::Deserializer::from_slice(payload);
     let header = CommitSeed(context)
         .deserialize(&mut decoder)
-        .map_err(ControlError::InvalidEncoding)?;
+        .map_err(|source| context.metadata_error(source))?;
     decoder.end().map_err(ControlError::InvalidEncoding)?;
     Ok(header)
 }
@@ -303,6 +398,10 @@ pub(super) fn decode_bytes() -> Result<u64, ControlError> {
         .checked_add(size_of::<DispositionFields>())
         .and_then(|bytes| bytes.checked_add(size_of::<CommitSeed<'_>>()))
         .and_then(|bytes| bytes.checked_add(size_of::<DispositionSeed<'_>>()))
+        .and_then(|bytes| bytes.checked_add(size_of::<RepresentationSeed<'_>>()))
+        .and_then(|bytes| bytes.checked_add(size_of::<RepresentationBodySeed<'_>>()))
+        .and_then(|bytes| bytes.checked_add(size_of::<RepresentationTag>()))
+        .and_then(|bytes| bytes.checked_add(size_of::<Option<RepresentationField>>()))
         .and_then(|bytes| bytes.checked_add(size_of::<StartupBytesSeed<'_>>()))
         .and_then(|bytes| bytes.checked_add(size_of::<FailureHeader>()))
         .and_then(|bytes| bytes.checked_add(size_of::<DispositionMetadata>()))
@@ -402,6 +501,48 @@ mod tests {
         conflicting["disposition"]["representation"]["Integrity"]["cause"] =
             value(original)["disposition"]["representation"]["Original"]["cause"].clone();
         refuses(&conflicting);
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn actual_negative_decoder_distinguishes_required_kind_presence_and_type_faults() {
+        let header = original();
+        let mut unknown = value(header);
+        unknown["disposition"]["representation"]["Original"]["cause"]["Io"]["kind"] =
+            serde_json::json!("UnknownOriginalKind");
+        let mut missing = value(header);
+        missing["disposition"]["representation"]["Original"]["cause"]["Io"]
+            .as_object_mut()
+            .unwrap()
+            .remove("raw_os_error");
+        let mut malformed = value(header);
+        malformed["disposition"]["representation"]["Original"]["cause"]["Io"]["payload"] =
+            serde_json::Value::Null;
+        let mut context = PreparedStartupContext::new(0).unwrap();
+        let capacity = context.reserved_bytes();
+        for (input, expected) in [
+            (unknown, CauseIntegrityPredicate::UnknownKindMetadata),
+            (missing, CauseIntegrityPredicate::IncompleteCauseMetadata),
+            (malformed, CauseIntegrityPredicate::MalformedCauseMetadata),
+        ] {
+            let bytes = serde_json::to_vec(&input).unwrap();
+            let error = decode(&bytes, &mut context).unwrap_err();
+            let ControlError::CauseMetadata { predicate, source } = &error else {
+                panic!("required cause fault lost its typed predicate")
+            };
+            assert_eq!(*predicate, expected);
+            assert!(source.is_data());
+            let actual_source = std::error::Error::source(&error)
+                .unwrap()
+                .downcast_ref::<serde_json::Error>()
+                .unwrap();
+            assert!(std::ptr::eq(source, actual_source));
+            assert_eq!(context.reserved_bytes(), capacity);
+            // A following valid whole decode resets the fault; diagnostic omission alone
+            // never authorizes a prior failed required cause or replays its predicate.
+            let valid = serde_json::to_vec(&NegativeCommit::new(header, &[])).unwrap();
+            assert_eq!(decode(&valid, &mut context).unwrap(), header);
+        }
     }
 
     /// Trace: FR-034-AC-15
