@@ -16,7 +16,9 @@ use super::{
         PendingInnerBackend,
     },
     launcher_owner::{self, LauncherError, LauncherOwner},
-    outer_sampling::{OuterRunPreparation, OuterRunProgress, SamplingError},
+    outer_sampling::{
+        OuterRunPreparation, OuterRunProgress, PreparationFailureProgress, SamplingError,
+    },
     protocol::BuildIdentity,
     role_bootstrap::{self, BootstrapError, InnerInput, OuterInput, OuterParts},
     role_command::HelperRole,
@@ -97,9 +99,20 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
     launcher_owner::publish_outer_arm(&guard, &settings, &caller_control, setup.deadline())
         .map_err(HelperEntryError::Launcher)?;
     let mut preparation = OuterRunPreparation::new(launcher_memory, settings, inner_endpoint);
-    let mut owner = preparation
-        .prepare(&guard, &caller_control, &caller_pin)
-        .map_err(HelperEntryError::Sampling)?;
+    let mut owner = match preparation.prepare(&guard, &caller_control, &caller_pin) {
+        Ok(owner) => owner,
+        Err(original) => loop {
+            // SAME preparation custody and unchanged original error remain here through each
+            // finite cleanup/send attempt. A later transport/observation failure cannot turn
+            // the original candidate into normal O exit or an authenticated negative receipt.
+            match preparation.failure_step(&guard, &caller_control) {
+                Ok(PreparationFailureProgress::Committed) => return Ok(()),
+                Ok(PreparationFailureProgress::OwnerStopped(owner)) => break owner,
+                Ok(PreparationFailureProgress::Pending) => thread::park_timeout(ACTOR_TICK),
+                Err(_) => return Err(HelperEntryError::Sampling(original)),
+            }
+        },
+    };
     loop {
         match owner
             .tick(&guard, &caller_control)

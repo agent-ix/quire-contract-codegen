@@ -80,6 +80,12 @@ pub(super) fn run(
             return cancelled_result(&mut owner, detail, error, CancelCandidate::CaptureFailed);
         }
         Err(CallerExecutionError::Progress(CallerDriveError::Bootstrap(
+            CallerBootstrapError::OperationalFailureObserved,
+        ))) => match owner.finish_operational_failure() {
+            Ok(error) => return Err(error),
+            Err(error) => Err(error),
+        },
+        Err(CallerExecutionError::Progress(CallerDriveError::Bootstrap(
             CallerBootstrapError::PolicyRefusalObserved,
         ))) => match owner.finish_policy_refused() {
             Ok(PolicyTerminalOutcome::Refused(error)) => return Err(error),

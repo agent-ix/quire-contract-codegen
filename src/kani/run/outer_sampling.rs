@@ -16,14 +16,14 @@ use super::{
         role_pair, ControlError, FrameStorage, GuardianEndpoint, IncrementalReceive,
         IncrementalSend, PreparedFrame, RoleCaller, RoleEndpoint,
     },
-    cross_role_cause::CauseOperation,
+    cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
     memory::{LauncherMemory, MemoryObserver},
     namespace::{
         GatedClaim, GuardianIdentity, InnerSettlement, MonitorStopSettlement, OuterMonitorOwner,
         ReadyIdentityError,
     },
     outer_caller::{OuterCallerControl, OuterCallerReceive},
-    outer_failure::{FailureHeader, FailureRepresentation},
+    outer_failure::{FailureHeader, FailureRepresentation, NegativeCommit},
     outer_preparation::{SamplingParts, SamplingPreparation},
     outer_setup::PreparedOuter,
     protocol::BackendExit,
@@ -237,6 +237,25 @@ pub(super) struct OuterRunPreparation {
     // Required metadata is recorded before any optional Display formatting. A failed capture
     // retains its actual typed checking error; absence is never a measurement or timeout label.
     failure_cause: Option<Result<FailureHeader, RepresentationError>>,
+    failure_operation: Option<CauseOperation>,
+    failure_delivery: Option<PreparationFailureDelivery>,
+    failure_poisoned: bool,
+}
+
+/// Provisional helper progress only. The original error stays owned by the helper caller.
+/// A genuine resource observation transfers the SAME actual sampling/monitor resources.
+pub(super) enum PreparationFailureProgress {
+    Pending,
+    Committed,
+    OwnerStopped(OuterRunOwner),
+}
+
+struct PreparationFailureDelivery {
+    cutoff: Instant,
+    send: IncrementalSend,
+    monitor_settled: bool,
+    collector_stopped: bool,
+    committed: bool,
 }
 
 struct OuterPreparationResources {
@@ -273,6 +292,9 @@ impl OuterRunPreparation {
             attempted: false,
             failure_event: None,
             failure_cause: None,
+            failure_operation: None,
+            failure_delivery: None,
+            failure_poisoned: false,
         }
     }
 
@@ -305,6 +327,10 @@ impl OuterRunPreparation {
             self.capture_failure_cause(&error);
             return Err(error);
         }
+        self.activate_resources()
+    }
+
+    fn activate_resources(&mut self) -> Result<OuterRunOwner, SamplingError> {
         let resources = self
             .resources
             .take()
@@ -380,6 +406,7 @@ impl OuterRunPreparation {
         };
         // Metadata capture borrows the same original error before diagnostics or publication.
         // No text buffer is needed, and a representation error never replaces that original.
+        self.failure_operation = Some(operation);
         self.failure_cause = Some(StartupCause::capture_io(cause).map(|cause| FailureHeader {
             identity: settings.identity,
             authority: settings.authority,
@@ -387,6 +414,286 @@ impl OuterRunPreparation {
             operation,
             representation: FailureRepresentation::Original { cause },
         }));
+    }
+
+    /// Finite negative progress after this SAME preparation failed. The helper must retain
+    /// the unchanged original SamplingError throughout these borrowed steps. No normal return
+    /// occurs on a missing buffer, partial send, failed observation or unconfirmed M custody.
+    pub(super) fn failure_step(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<PreparationFailureProgress, SamplingError> {
+        if self.failure_poisoned || !self.attempted || self.failure_event.is_none() {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        self.failure_poisoned = true;
+        let result = self.advance_failure(outer, caller);
+        if result.is_ok() {
+            self.failure_poisoned = false;
+        }
+        result
+    }
+
+    fn advance_failure(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<PreparationFailureProgress, SamplingError> {
+        if self
+            .failure_delivery
+            .as_ref()
+            .is_some_and(|delivery| delivery.committed)
+        {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        if self.failure_delivery.is_none() {
+            self.prepare_failure_delivery()?;
+        }
+        let delivery = self
+            .failure_delivery
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let cutoff = delivery.cutoff;
+        if Instant::now() >= cutoff {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        caller
+            .transport()
+            .refuse_observable_eof()
+            .map_err(SamplingError::Control)?;
+        outer
+            .require_creator_live()
+            .map_err(|error| SamplingError::Io {
+                operation: CauseOperation::OwnerProtection,
+                cause: io::Error::other(error),
+            })?;
+        let resources = self
+            .resources
+            .as_mut()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        if let Some(sampling) = resources.sampling.as_mut() {
+            // A failed original observation is never recovered from historical .ok() peaks.
+            // This is a new complete observation under the same full conservative ledger;
+            // an independently established ceiling breach wins over the retained IO candidate.
+            sampling.ledger.begin_observation();
+            let tick = observe_live(
+                &mut sampling.launcher,
+                &mut sampling.tree,
+                &mut sampling.ledger,
+                &sampling.settings,
+                &sampling.stops,
+                outer,
+                caller,
+            )?;
+            if matches!(tick, MemoryTick::Exhausted(_)) {
+                sampling.owner_stop = Some(OwnerStopCause::ResourceExhausted);
+                sampling
+                    .stops
+                    .capture_once(StopOrigin::Outer)
+                    .map_err(SamplingError::Deadline)?;
+                sampling
+                    .collector
+                    .begin_owner_stop(Some(cutoff))
+                    .map_err(|cause| SamplingError::Report {
+                        operation: CauseOperation::ReportCollection,
+                        cause,
+                    })?;
+                // Drop only the zero-progress negative frame. A partial negative cannot be
+                // replaced with a resource commit on the same stream.
+                if delivery.send.has_partial_frame() {
+                    return Err(SamplingError::UnexpectedPhase);
+                }
+                let retired = self
+                    .failure_delivery
+                    .take()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?;
+                let cutoff = retired.cutoff;
+                let monitor_settled = retired.monitor_settled;
+                let collector_stopped = retired.collector_stopped;
+                let committed = retired.committed;
+                let storage = match retired.send.retire_unsent() {
+                    Ok(storage) => storage,
+                    Err(send) => {
+                        self.failure_delivery = Some(PreparationFailureDelivery {
+                            cutoff,
+                            send,
+                            monitor_settled,
+                            collector_stopped,
+                            committed,
+                        });
+                        return Err(SamplingError::UnexpectedPhase);
+                    }
+                };
+                self.resources
+                    .as_mut()
+                    .and_then(|resources| resources.terminal.as_mut())
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+                    .commit = Some(storage);
+                return self
+                    .activate_resources()
+                    .map(PreparationFailureProgress::OwnerStopped);
+            }
+        }
+        // Preparation alone cannot spawn M: only the activated actor's authenticated
+        // BeginMonitor calls spawn. Still use the retained monitor's real stop/reap step if a
+        // returned monitor exists; an absent returned factory object is never a fake reap.
+        if !delivery.monitor_settled {
+            if let Some(monitor) = resources.monitor.as_mut() {
+                if !matches!(monitor.state, InnerMonitorState::Prepared) {
+                    return Err(SamplingError::InvalidMonitorTransition);
+                }
+                if monitor
+                    .monitor
+                    .stop_monitor_step(cutoff)
+                    .map_err(|cause| SamplingError::Io {
+                        operation: CauseOperation::MonitorStop,
+                        cause,
+                    })?
+                    .is_none()
+                {
+                    return Ok(PreparationFailureProgress::Pending);
+                }
+            }
+            delivery.monitor_settled = true;
+            // No I helper was spawned during construction. Retire only this owned unexposed
+            // endpoint after M's actual prepared command/writer or real Child custody settles.
+            drop(resources.inner_endpoint.take());
+        }
+        let collector = match (&mut resources.sampling, &mut resources.sampling_preparation) {
+            (Some(sampling), _) => Some(&mut sampling.collector),
+            (None, Some(preparation)) => preparation.collector.as_mut(),
+            (None, None) => return Err(SamplingError::InvalidMonitorTransition),
+        };
+        if let Some(collector) = collector {
+            if !delivery.collector_stopped {
+                collector.begin_owner_stop(Some(cutoff)).map_err(|cause| {
+                    SamplingError::Report {
+                        operation: CauseOperation::ReportCollection,
+                        cause,
+                    }
+                })?;
+                delivery.collector_stopped = true;
+            }
+            if !collector
+                .drain_owner_stop(Some(cutoff))
+                .map_err(|cause| SamplingError::Report {
+                    operation: CauseOperation::ReportCollection,
+                    cause,
+                })?
+            {
+                return Ok(PreparationFailureProgress::Pending);
+            }
+        }
+        // No collector was returned in the other branch; no pipe EOF/report or measurement
+        // claim is invented. The actual no-M preparation boundary exposed no external writer.
+        let sent = delivery
+            .send
+            .advance(&caller.transport(), &[], cutoff)
+            .map_err(SamplingError::Control)?;
+        if Instant::now() >= cutoff {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        if sent {
+            delivery.committed = true;
+            Ok(PreparationFailureProgress::Committed)
+        } else {
+            Ok(PreparationFailureProgress::Pending)
+        }
+    }
+
+    fn prepare_failure_delivery(&mut self) -> Result<(), SamplingError> {
+        let header = match self.failure_cause.as_ref() {
+            Some(Ok(header)) => *header,
+            Some(Err(error)) => {
+                // These are actual metadata-capture predicates, before optional formatting.
+                // The unchanged original error and checking source stay owned in O; this
+                // branch reports integrity and MUST NOT replay a guessed original cause.
+                let predicate = match error {
+                    RepresentationError::UnnamedIoKind => {
+                        CauseIntegrityPredicate::UnnameableOriginalKind
+                    }
+                    RepresentationError::OsKindMismatch => {
+                        CauseIntegrityPredicate::OriginalOsKindMismatch
+                    }
+                    RepresentationError::MissingOsCode | RepresentationError::OsPayloadMismatch => {
+                        CauseIntegrityPredicate::MalformedCauseMetadata
+                    }
+                    RepresentationError::InvalidContextBound
+                    | RepresentationError::Reservation(_)
+                    | RepresentationError::ContextExceeded
+                    | RepresentationError::Formatting
+                    | RepresentationError::NonInstallationBackendCause
+                    | RepresentationError::PolicyCauseMismatch => {
+                        return Err(SamplingError::InvalidTerminalTransition);
+                    }
+                };
+                let resources = self
+                    .resources
+                    .as_ref()
+                    .ok_or(SamplingError::InvalidMonitorTransition)?;
+                let settings = match (&resources.sampling, &resources.sampling_preparation) {
+                    (Some(sampling), _) => &sampling.settings,
+                    (None, Some(preparation)) => preparation.settings(),
+                    (None, None) => return Err(SamplingError::InvalidMonitorTransition),
+                };
+                FailureHeader {
+                    identity: settings.identity,
+                    authority: settings.authority,
+                    stop: self
+                        .failure_stop()
+                        .map_err(SamplingError::Deadline)?
+                        .ok_or(SamplingError::InvalidTerminalTransition)?,
+                    operation: self
+                        .failure_operation
+                        .ok_or(SamplingError::InvalidTerminalTransition)?,
+                    representation: FailureRepresentation::Integrity { predicate },
+                }
+            }
+            None => return Err(SamplingError::InvalidTerminalTransition),
+        };
+        let resources = self
+            .resources
+            .as_mut()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        let cutoff = match (&mut resources.sampling, &mut resources.sampling_preparation) {
+            (Some(sampling), _) => {
+                sampling
+                    .stops
+                    .observe(header.stop)
+                    .map_err(SamplingError::Deadline)?;
+                observation_deadline(&sampling.settings, &sampling.stops)?
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+            }
+            (None, Some(preparation)) => {
+                let mut stop = StopTimeline::prepare(preparation.settings.started)
+                    .map_err(SamplingError::Deadline)?;
+                stop.observe(header.stop).map_err(SamplingError::Deadline)?;
+                observation_deadline(&preparation.settings, &stop)?
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+            }
+            (None, None) => return Err(SamplingError::InvalidMonitorTransition),
+        };
+        let terminal = resources
+            .terminal
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        // Only an actual returned preallocated frame is consumed. Missing/failed storage
+        // never creates a replacement buffer, an allowance, or a successful negative receipt.
+        let frame = terminal
+            .commit
+            .take()
+            .ok_or(SamplingError::InvalidTerminalTransition)?
+            .encode(&NegativeCommit::new(header, &[]))
+            .map_err(SamplingError::Control)?;
+        self.failure_delivery = Some(PreparationFailureDelivery {
+            cutoff,
+            send: IncrementalSend::new(frame),
+            monitor_settled: false,
+            collector_stopped: false,
+            committed: false,
+        });
+        Ok(())
     }
 
     fn prepare_resources(
@@ -994,7 +1301,7 @@ impl TerminalSampling {
 /// Its actual allocations remain in O's observed RSS; report backing retains its full reservation.
 pub(super) struct TerminalPreparation {
     descriptor: FrameStorage,
-    commit: FrameStorage,
+    commit: Option<FrameStorage>,
     close_deadline: Option<Instant>,
     poisoned: bool,
 }
@@ -1003,7 +1310,7 @@ impl TerminalPreparation {
     pub(super) fn prepare() -> Result<Self, SamplingError> {
         Ok(Self {
             descriptor: FrameStorage::prepare().map_err(SamplingError::Control)?,
-            commit: FrameStorage::prepare().map_err(SamplingError::Control)?,
+            commit: Some(FrameStorage::prepare().map_err(SamplingError::Control)?),
             close_deadline: None,
             poisoned: false,
         })
@@ -1090,7 +1397,10 @@ impl TerminalPreparation {
                 report,
                 send: IncrementalSend::new(descriptor),
             },
-            commit: Some(self.commit),
+            commit: Some(
+                self.commit
+                    .ok_or(SamplingError::InvalidTerminalTransition)?,
+            ),
             bytes: Some(bytes),
             deadline,
             disposition: TerminalDisposition::Report,
@@ -1134,7 +1444,10 @@ impl TerminalPreparation {
                 stops: sampling.stops,
             },
             state: TerminalState::Commit,
-            commit: Some(self.commit),
+            commit: Some(
+                self.commit
+                    .ok_or(SamplingError::InvalidTerminalTransition)?,
+            ),
             bytes: None,
             deadline,
             disposition,
