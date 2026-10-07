@@ -54,10 +54,17 @@ pub(super) enum ControlError {
     Deadline,
     EncodedBytesExceeded,
     InvalidEncoding(serde_json::Error),
+    /// Actual fixed grammar error from the selected allocation-free decoder.
+    InvalidGrammar(super::guardian_decode::DecodeError),
     /// An actual required-cause decoder/checking fault, not original producer metadata.
     CauseMetadata {
         predicate: CauseIntegrityPredicate,
         source: serde_json::Error,
+    },
+    /// The first required-metadata fact with its actual fixed decoder source.
+    CauseMetadataGrammar {
+        predicate: CauseIntegrityPredicate,
+        source: super::guardian_decode::DecodeError,
     },
     Truncated,
     MissingCredentials,
@@ -97,7 +104,11 @@ impl std::fmt::Display for ControlError {
         match self {
             Self::Io(error) => write!(formatter, "guardian control I/O: {error}"),
             Self::InvalidEncoding(error) => write!(formatter, "guardian control encoding: {error}"),
+            Self::InvalidGrammar(error) => write!(formatter, "guardian control grammar: {error}"),
             Self::CauseMetadata { predicate, source } => {
+                write!(formatter, "guardian cause metadata {predicate:?}: {source}")
+            }
+            Self::CauseMetadataGrammar { predicate, source } => {
                 write!(formatter, "guardian cause metadata {predicate:?}: {source}")
             }
             Self::RightsCount { expected, received } => write!(
@@ -114,7 +125,9 @@ impl std::error::Error for ControlError {
         match self {
             Self::Io(error) => Some(error),
             Self::InvalidEncoding(error) => Some(error),
+            Self::InvalidGrammar(error) => Some(error),
             Self::CauseMetadata { source, .. } => Some(source),
+            Self::CauseMetadataGrammar { source, .. } => Some(source),
             _ => None,
         }
     }

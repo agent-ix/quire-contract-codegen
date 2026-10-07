@@ -34,23 +34,42 @@ pub(super) fn metadata_predicate(error: &CallerExecutionError) -> Option<CauseIn
 
     match error {
         Execution::Preparation(Preparation::Stage(Stage::Control(
-            ControlError::CauseMetadata { predicate, .. },
+            ControlError::CauseMetadata { predicate, .. }
+            | ControlError::CauseMetadataGrammar { predicate, .. },
         )))
-        | Execution::Progress(Progress::Stage(Stage::Control(ControlError::CauseMetadata {
-            predicate,
-            ..
-        })))
+        | Execution::Progress(Progress::Stage(Stage::Control(
+            ControlError::CauseMetadata { predicate, .. }
+            | ControlError::CauseMetadataGrammar { predicate, .. },
+        )))
         | Execution::Bootstrap(
-            Bootstrap::Control(ControlError::CauseMetadata { predicate, .. })
-            | Bootstrap::Stage(Stage::Control(ControlError::CauseMetadata { predicate, .. })),
+            Bootstrap::Control(
+                ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. },
+            )
+            | Bootstrap::Stage(Stage::Control(
+                ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. },
+            )),
         )
         | Execution::Preparation(Preparation::CallerBootstrap(
-            Bootstrap::Control(ControlError::CauseMetadata { predicate, .. })
-            | Bootstrap::Stage(Stage::Control(ControlError::CauseMetadata { predicate, .. })),
+            Bootstrap::Control(
+                ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. },
+            )
+            | Bootstrap::Stage(Stage::Control(
+                ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. },
+            )),
         ))
         | Execution::Progress(Progress::Bootstrap(
-            Bootstrap::Control(ControlError::CauseMetadata { predicate, .. })
-            | Bootstrap::Stage(Stage::Control(ControlError::CauseMetadata { predicate, .. })),
+            Bootstrap::Control(
+                ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. },
+            )
+            | Bootstrap::Stage(Stage::Control(
+                ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. },
+            )),
         )) => Some(*predicate),
         _ => None,
     }
@@ -70,27 +89,41 @@ pub(super) fn into_original_io(error: CallerExecutionError) -> io::Error {
 
     match error {
         Execution::Preparation(Preparation::Stage(Stage::Control(
-            control @ ControlError::CauseMetadata { predicate, .. },
+            control @ (ControlError::CauseMetadata { predicate, .. }
+            | ControlError::CauseMetadataGrammar { predicate, .. }),
         )))
         | Execution::Progress(Progress::Stage(Stage::Control(
-            control @ ControlError::CauseMetadata { predicate, .. },
+            control @ (ControlError::CauseMetadata { predicate, .. }
+            | ControlError::CauseMetadataGrammar { predicate, .. }),
         )))
         | Execution::Bootstrap(
-            Bootstrap::Control(control @ ControlError::CauseMetadata { predicate, .. })
+            Bootstrap::Control(
+                control @ (ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. }),
+            )
             | Bootstrap::Stage(Stage::Control(
-                control @ ControlError::CauseMetadata { predicate, .. },
+                control @ (ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. }),
             )),
         )
         | Execution::Preparation(Preparation::CallerBootstrap(
-            Bootstrap::Control(control @ ControlError::CauseMetadata { predicate, .. })
+            Bootstrap::Control(
+                control @ (ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. }),
+            )
             | Bootstrap::Stage(Stage::Control(
-                control @ ControlError::CauseMetadata { predicate, .. },
+                control @ (ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. }),
             )),
         ))
         | Execution::Progress(Progress::Bootstrap(
-            Bootstrap::Control(control @ ControlError::CauseMetadata { predicate, .. })
+            Bootstrap::Control(
+                control @ (ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. }),
+            )
             | Bootstrap::Stage(Stage::Control(
-                control @ ControlError::CauseMetadata { predicate, .. },
+                control @ (ControlError::CauseMetadata { predicate, .. }
+                | ControlError::CauseMetadataGrammar { predicate, .. }),
             )),
         )) => io::Error::new(
             io::ErrorKind::InvalidData,
@@ -306,6 +339,61 @@ mod tests {
             std::error::Error::source(control)
                 .unwrap()
                 .downcast_ref::<serde_json::Error>()
+                .unwrap()
+        ));
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn fixed_kind_decoder_fault_retains_its_actual_source_without_serde_translation() {
+        use super::super::{
+            cause_decode,
+            guardian_decode::{DecodeCause, DecodeError, Decoder, Scratch},
+            startup_cause::PreparedStartupContext,
+        };
+
+        let mut context = PreparedStartupContext::new(0).unwrap();
+        let mut scratch = Scratch::default();
+        let mut decoder = Decoder::new(
+            br#"{"Io":{"kind":"UnknownKind","raw_os_error":null,"payload":"NoCustomPayload"}}"#,
+            &mut scratch,
+        )
+        .unwrap();
+        let source = cause_decode::decode(&mut decoder, context.metadata_fault_slot()).unwrap_err();
+        assert_eq!(source.cause(), DecodeCause::InvalidValue);
+        let original = CallerExecutionError::Progress(CallerDriveError::Bootstrap(
+            CallerBootstrapError::Control(context.grammar_error(source)),
+        ));
+        assert_eq!(
+            metadata_predicate(&original),
+            Some(CauseIntegrityPredicate::UnknownKindMetadata)
+        );
+        let returned = into_original_io(original);
+        assert_eq!(returned.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(returned.raw_os_error(), None);
+        let marker = returned
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<KaniCauseMetadataIntegrityError>()
+            .unwrap();
+        let control = std::error::Error::source(marker)
+            .unwrap()
+            .downcast_ref::<ControlError>()
+            .unwrap();
+        let ControlError::CauseMetadataGrammar {
+            predicate,
+            source: retained,
+        } = control
+        else {
+            panic!("fixed decoder source was replaced")
+        };
+        assert_eq!(*predicate, CauseIntegrityPredicate::UnknownKindMetadata);
+        assert_eq!(*retained, source);
+        assert!(std::ptr::eq(
+            retained,
+            std::error::Error::source(control)
+                .unwrap()
+                .downcast_ref::<DecodeError>()
                 .unwrap()
         ));
     }
