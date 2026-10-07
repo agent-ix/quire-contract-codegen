@@ -1100,6 +1100,72 @@ The documentation shall promise no unavailable public role/stage query. The repr
 public consumer flow remain CODE-gated. These obligations allocate no NotObserved reason and weaken
 no report, capability, ownership, refusal precedence or cleanup requirement.
 
+### Stage-2 live-birth and producer-operation observations
+
+This PLANNED/UNRUN fixture allocation explicitly supersedes only TC-049's former literal child
+birth AFTER the FINAL whole-run sample oracle. The ordinary final report sample follows actual
+claimed I termination, retained M Child reap, writer EOF and sealing; a descendant of that I cannot
+remain alive to fork afterward. This order closes the sampled-membership cancellation hole by
+construction; it does not assert universal kernel success. Failed or unconfirmed settlement retains
+its existing refusal and never yields a conclusion. AC-8's absent-from-previous-samples descendant
+guarantee, AC-10's confirmed teardown and every ordinary accounting tick remain unchanged.
+
+Where guardian-test-support is enabled, the single live-caller fixture operation shall select a
+bounded live-birth scenario as typed data through the same production transitions. The scenario
+shall positively acknowledge an actual adopted orphan while its owned I remains live. After a
+positively completed ordinary O observation bound to that same run and actual complete accounting
+formula, the fixture controller shall release that same worker
+to fork exactly one child. The child's own positive birth acknowledgement shall establish the
+release-dependent birth; absence from an observation's membership is insufficient. The fixture
+shall validate and retain BOTH actual descendant identities and live pins before cleanup. The
+operation shall retain actual authenticated I Completed before entering unchanged cleanup; M exit
+or a reported stage shall not substitute for Completed. Later ordinary observations shall continue
+through real I/M settlement, report EOF, sealing and final delivery. The fixture shall not label the
+release sample final, pause accounting or create work after I teardown.
+
+The operation shall return immutable raw positive-operation observations and separate cleanup
+results without judging an oracle. A record shall originate ONLY at the actual successful operation:
+readiness IN from the retained I pidfd, Some(status) from the retained M Child wait/reap, actual
+matching report seal, or actual retained gate close. A settled token, boolean, monitor pidfd readiness,
+backend exit or eventual dead descendant shall not create a missing operation record. Source
+Analysis shall demonstrate each record's binding to the same authenticated original run, actual
+retained ownership and report capability; no new public role field, external authority or right is
+allocated. Bounded producer order shall establish which operations preceded that seal or close.
+C receipt time and later fill shall not establish O's order. Unavailable, duplicated, overflowed,
+wrong-run or unbound observations shall yield typed fixture failure, never passing evidence.
+
+The live-birth oracle shall require BOTH formerly live descendant pins dead and actual positive I
+termination and M reap before any outer escalation. The pre-seal oracle shall independently require
+the real I-positive-operation record strictly before actual matching seal. The separate M-reap
+oracle shall require its real Child-reap record strictly before that seal. Independently omitting
+either actual operation shall remove its producer record and fail its named oracle, even if I exits
+automatically, M is already dead but unreaped, or later O teardown kills descendants. A mutant shall
+not manufacture the omitted operation's observation. Restored controls shall execute both actual
+operations and pass. The retained-gate oracle shall separately require real I-positive termination
+while the original gate remains retained, followed by actual gate close; closing that gate first or
+omitting I confirmation shall fail independently of the no-backend marker. No-marker alone shall
+not establish gate/termination order.
+
+All original test assertions and adverse patches shall remain until measured genuine replacement
+controls pass and their independently targeted mutants fail before emergency cleanup. This retires
+only the obsolete literal LAST temporal obligation, not those assertions before parity. The ignored
+inner-lease-EOF mutant remains separate; outer cancellation shall never rescue it. The fixture
+shall immediately invoke unchanged owned cleanup after observation success, refusal or error, and
+shall return no cleanup-deferring callback or process handle. Positive-operation recording shall use the same unconditional production operations and bounded
+read-only publication; selecting a fixture shall not change their authorization or cancellation.
+A new observation adds no production callback, blocking handoff, stage replacement or
+feature-selected cancellation behavior.
+
+Before this changed fixture CODE, the author shall ground its actual coordination/storage bounds,
+operation-source binding and full integrated schedule. A dedicated off-default, noncaller-tunable
+coordination bound shall be justified by actual one-child birth/identity/live-pin measurement and
+observable load margin, then clamped to the original remaining monotonic deadline. No numeric cap
+is selected here; existing settlement or post-close allowances shall not fund extra coordination.
+Missing measured bounds or insufficient remaining budget shall block this fixture implementation
+or produce typed fixture failure, never skip/pass or raised headroom. Named storage and every
+simultaneous record remain charged under the existing accounting contract. No fixture DTO, hook,
+wire replacement or runtime implementation is delivered by this SPEC allocation.
+
 ### Run artifact and report lifetime
 
 FR-017's internal named report allocation is replaced explicitly by a child-only anonymous pipe
@@ -1514,6 +1580,10 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-48 | PLANNED/UNRUN (IR-682). The named heap inventory covers actual returned Rust capacities times element size, metadata and simultaneous lifetimes, excluding incidental allocator chunk overhead. A larger actual capacity or overlapping temporary omitted from the checked caller-buffer sum fails the conformance claim. | Analysis |
 | FR-034-AC-49 | PLANNED/UNRUN (IR-682). A change to the source head, resolved consumer configuration/compiler, resulting executable or loaded runtime/bound premises invalidates the former proof and requires analysis again. A stale proof or merely matching caller/helper artifact does not satisfy native-accounting conformance. | Analysis |
 | FR-034-AC-50 | PLANNED/UNRUN (IR-682). Missing or incomplete proof, or a proven bound exceeding the independently declared runtime charge, leaves the configuration UNPROVEN and fails the conformance gate; a missing actual named charge retains the existing runtime refusal. This build gate introduces no runtime refusal/public capability or evidence of completed Analysis; the initial release configuration and other eligible configurations remain UNPROVEN until their own proofs exist. | Analysis |
+| FR-034-AC-51 | PLANNED/UNRUN. A real live-I orphan creates one positively acknowledged child only after release following an actual completed ordinary O sample; both identities/pins are positively live, genuine I Completed is retained, and both pins are dead before outer escalation after actual I/M settlement. Later mandatory O accounting remains active. Earlier membership absence, M exit or a final-sample claim fails this replacement temporal oracle. | Test, Analysis |
+| FR-034-AC-52 | PLANNED/UNRUN. The same-run matching report seal is preceded by a producer-bound record of actual IN readiness from the retained I pidfd. Independently replacing that actual operation with fabricated success yields no positive record and fails before outer escalation despite automatic I exit; restored actual-operation control passes. Token-minted observations cannot satisfy the oracle. | Test, Analysis |
+| FR-034-AC-53 | PLANNED/UNRUN. The same-run matching report seal is preceded by a producer-bound record of actual Some(status) from the retained M Child wait/reap. Independently omitting that operation yields no reap record and fails before outer escalation despite dead-but-unreaped M; restored actual-operation control passes. M pidfd readiness cannot satisfy real reap. | Test, Analysis |
+| FR-034-AC-54 | PLANNED/UNRUN. Actual retained-gate cancellation records positive owned I termination before the actual gate-close record. Early gate-close and omitted-I-confirmation mutants independently fail the producer-bound ordering oracle before outer escalation; restored control passes. No backend marker alone supplies no ordering evidence. | Test, Analysis |
 
 ## Dependencies
 
@@ -1554,7 +1624,7 @@ remain CODE-gated and UNRUN.
 
 Evidence is staged explicitly in [TC-049](../matrix/TC-049-caller-death-ownership.md)'s evidence
 delivery allocation: ordinary production seams without fixture extension first, IR-655's owed exact
-O-origin/internal-bwrap/final-whole-run-sample and independent role witnesses second. This is an
+O-origin/internal-bwrap/live-I birth and positive-operation ordering, and independent role witnesses second. This is an
 internal evidence/commit-order delta in ONE lifecycle CODE PR, not separate CODE merges or a
 guarantee reduction. IR-655 fixture SPEC may use real integrated O source on the unmerged first
 stage, but shall merge before fixture CODE and before that single CODE PR merges. All internal
