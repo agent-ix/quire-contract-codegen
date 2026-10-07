@@ -93,6 +93,7 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
             // No authenticated L/C negative publication route exists yet, so this remains
             // a helper failure rather than fake Armed/normal-settlement permission.
             let _retained_input = failure.input;
+            let _original_stop = failure.stop;
             return Err(HelperEntryError::Bootstrap(failure.error));
         }
     };

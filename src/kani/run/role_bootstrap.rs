@@ -15,7 +15,7 @@ use super::{
     memory::LauncherMemory,
     outer_setup::{self, LauncherNamespace, NamespaceIdentity, PreparedOuter, SetupError},
     protocol::{BuildIdentity, GuardianRefusal},
-    role_deadline::DeadlineError,
+    role_deadline::{DeadlineError, StopOrigin, StopStamp},
     role_protocol::{LauncherReply, RunSettings},
     spawner::SPAWNER_STACK_BYTES,
 };
@@ -271,6 +271,9 @@ pub(super) struct OuterInput {
 pub(super) struct OuterInputFailure {
     pub(super) input: OuterInput,
     pub(super) error: BootstrapError,
+    /// Actual O split-failure event, captured before this failure is published to its owner.
+    /// A failed clock capture remains an error; receiving the failure cannot sample again.
+    pub(super) stop: Result<StopStamp, DeadlineError>,
 }
 
 impl OuterInput {
@@ -451,7 +454,17 @@ impl OuterInput {
     pub(super) fn into_parts(mut self) -> Result<OuterParts, OuterInputFailure> {
         let (deadline, launcher_memory) = match self.prepare_parts() {
             Ok(parts) => parts,
-            Err(error) => return Err(OuterInputFailure { input: self, error }),
+            Err(error) => {
+                // This O producer elects its first failure before returning custody. Keep clock
+                // failure independently of the original cause; neither may be replaced by a
+                // helper-entry receipt stamp, expired setup bound or fabricated work timeout.
+                let stop = StopStamp::capture(StopOrigin::Outer);
+                return Err(OuterInputFailure {
+                    input: self,
+                    error,
+                    stop,
+                });
+            }
         };
         Ok(OuterParts {
             settings: self.settings,
