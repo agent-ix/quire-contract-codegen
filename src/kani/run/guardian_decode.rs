@@ -212,15 +212,20 @@ impl<'input> Text<'input> {
         }
     }
 
+    /// Logical UTF-8 length of this validated text; no allocation capacity is inferred.
+    pub(super) fn decoded_bytes(self) -> Result<usize, DecodeError> {
+        self.chars().try_fold(0_usize, |length, character| {
+            length.checked_add(character.len_utf8()).ok_or_else(storage)
+        })
+    }
+
     /// Refuse before mutation if either the owner's limit or its real capacity is insufficient.
     pub(super) fn append_to(
         self,
         output: &mut String,
         existing_limit: usize,
     ) -> Result<(), DecodeError> {
-        let decoded = self.chars().try_fold(0_usize, |length, character| {
-            length.checked_add(character.len_utf8()).ok_or_else(storage)
-        })?;
+        let decoded = self.decoded_bytes()?;
         let final_length = output.len().checked_add(decoded).ok_or_else(storage)?;
         if final_length > existing_limit || final_length > output.capacity() {
             return Err(storage());

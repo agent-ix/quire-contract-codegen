@@ -491,6 +491,15 @@ impl CallerBootstrap {
             super::recipe_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
+            super::settings_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
+            super::settings_materialize::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
+            super::installer_control_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
             super::caller_control_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
