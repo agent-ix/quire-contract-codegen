@@ -20,6 +20,9 @@ relationships:
 ---
 # FR-029: Map every Kani run outcome, paired with its replay settlement, to QSL's terminal value in one total match
 
+Imported contexts remain PLANNED: the Eq constructor returns typed `ImportedContextUnsupported`
+until CG retains admitted dependency packages from the original compile.
+
 ## Description
 
 The Kani adapter shall map every `KaniRunOutcome`, with its inconclusive reason, paired with the
@@ -147,7 +150,7 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - The Kani adapter shall map a falsified outcome to `Refuted` only with a reproduced replay. A
   falsified outcome whose replay did not reproduce it is never `Refuted`.
 
-### Composite shadow publication (IR-666 direct converter delivered; IR-635 invocation planned)
+### Composite shadow publication (IR-666 converter delivered; IR-635 Eq-only verified constructor partial)
 
 The production and source-predicate rows above retain their meaning. For a bound, node-selected
 composite parity claim, the adapter shall consume QSL's same-claim settlement/record from
@@ -303,6 +306,11 @@ AC-15 cannot reject that input as an ordinary unexpected replay settlement.
 - The generator shall use QSL's terminal-value type, defining none of its own and importing none
   from Contract IR.
 
+IR-635's first Eq-only verified constructor slice preserves supplied verified evidence, original
+limits and content binding through a genuine QSL report and the IR-666 converter. It does not
+produce FR-028 proof strength/refinement or extend `run_terminal_value`. AC-17 and AC-19 to AC-27
+retain the partial/planned statuses below; falsified native/generated-family work remains planned.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -322,7 +330,7 @@ AC-15 cannot reject that input as an ordinary unexpected replay settlement.
 | FR-029-AC-14 | `falsified` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-040) |
 | FR-029-AC-15 | For the ordinary source-predicate `ReplaySettlement` input, a falsified outcome given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other outcome (`verified`, `cover-unsatisfied` and every inconclusive reason) given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. The distinct typed composite-parity settlement input is governed by AC-17 and AC-19 to AC-28, not this criterion. | Test |
 | FR-029-AC-16 | The state-clause replay path (FR-024) settles as the other replay paths do: a `StateClauseReplayResult` that settles `ReproducedWithEvaluatedWitness` in category `violation` is a reproduction and an `inconclusive` one is a disagreement carrying its `DisagreementCause`, so `falsified` maps to `Refuted` and `Inconclusive(ReplayParity)`; `StateClauseReplayError::Refused` and `CallSite` read as `ReplayRefusal` and `CallSiteRefusal` do for a non-fault refusal (`Inconclusive(ReplayRefused)` with its catalog code; their fault reading is FR-029-AC-10's), and `Dependencies` as `DependencyLockError` does; `Name`, `Transcript`, `Envelope`, `Document`, `MissingField`, `UndeclaredField`, `DuplicateField`, `OutOfDomain` and `UnsupportedOperationShape` carry no QSL code and each maps to `Failed`. A missing state field in CG's own harness playback and a value outside the proof bound are CG defects, and an operation shape CG does not support is a CG limit, not a QSL data refusal; none maps to `Incomplete` or to `Inconclusive(ReplayRefused)`. | Test (TC-040) |
-| FR-029-AC-17 | PLANNED (IR-635), GATED until CG consumes the delivered QSL parity facade. The strength projection enumerates every FR-028-AC-17 strength: production retains its ordinary map; exhaustive projects to Exhausted, sampled/not_run to NotExhausted, ceiling-inconclusive to CeilingReached, and refinement_failed to Disagreed. Backend-inconclusive outcomes acquire no invented verified proof strength. | Test |
+| FR-029-AC-17 | PLANNED (IR-635). The Eq-only verified constructor invokes QSL with supplied evidence; the closed FR-028 strength producer/projection remains gated. The strength projection enumerates every FR-028-AC-17 strength: production retains its ordinary map; exhaustive projects to Exhausted, sampled/not_run to NotExhausted, ceiling-inconclusive to CeilingReached, and refinement_failed to Disagreed. Backend-inconclusive outcomes acquire no invented verified proof strength. | Test |
 | FR-029-AC-18 | For the `falsified` state-clause run of the wrapping debit subject `deposit_debiting`, whose post-state value (-1) lies outside `balance`'s declared range, this repository builds the post snapshot with that exact unclamped value and does not refuse it itself (not as `StateClauseReplayError::OutOfDomain` or any other CG defect), and the run maps to `Refuted`, the ordinary violated terminal, and not to `Inconclusive(ReplayRefused)` or `Failed`. How QSL settles the replay of such a snapshot is QSL-634's to decide; this criterion states CG's own obligation and the target terminal. PLANNED, pending QSL-634 (IR-460), and nothing is built against it: QSL admission refuses such a post snapshot today, so the run reads `Inconclusive(ReplayRefused(InvalidRuntimeInput))` until QSL-634 lands. | Test (TC-040) |
 | FR-029-AC-19 | PLANNED/GATED (IR-635/QSL-640). After the cross-outcome disagreement rule, verified shadow CeilingReached yields Incomplete(ResourceExhausted); nonzero Exhausted with QSL-derived complete coverage yields Proved n; remaining completed nonzero verification yields Tested. Tested is excluded for disagreement, ceilings and zero checks; tightening or missing coverage cannot promote it to Proved. | Test |
 | FR-029-AC-20 | PARTIAL (IR-666 direct F-1 to F-7 report consumption covered; IR-635 must reach these rows from a CG-built request over the original proving context). An identity-valid falsified composite shadow consumes the shared Refinement and ordered F-1 to F-7 result: Disagreed/Failed/CgDefect; native Incomplete or ExecutionFault as GeneratedFault/Failed with NativeCause, winning over an invalid operand and every later limit; RefusedInput/ReplayRefused with QSL code and operand index, winning over CeilingReached; admission accounting exhaustion as Incomplete(ResourceExhausted)/Admission with counter; exact-evaluation exhaustion as Incomplete(ResourceExhausted)/ExactEvaluation before CeilingReached; CeilingReached as Incomplete(ResourceExhausted)/RefinementCeiling; finally exact-versus-shadow divergence Failed/CgDefect or Inconclusive(ScalarAgrees) with CompositeEquality claim/outcome. CG asserts typed report/terminal evidence; QSL FR-358 owns skipped internal work on F-2 and F-4. No row returns Refuted; Completed/Refused native is evidence only. | Test |

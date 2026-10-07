@@ -156,6 +156,18 @@ operations:
     inputs: [retained CompositeIdentity of the falsified claim actually sent, optional genuine QSL CompositeParityReport]
     output: CompositeParitySettlement | CompositeReportError (MissingReport | ClaimMismatch)
     semantics: compare the full report.claim() with the retained sent identity before reading its typed result; a missing or different report has no terminal value; the private settlement stores QSL's CompositeParityResult and derives terminal_value() from that result, preserving QSL's F-row order, cause and code (FR-033 AC-9, FR-029 AC-28)
+  - name: OriginalCompositeEqContext::new
+    inputs: [original admitted CheckedPackageV2, retained ReplayInputs, selected function identifier, retained canonical proof-content DigestRecord, CheckedPackageReadLimits]
+    output: OriginalCompositeEqContext | CompositeBuildError
+    semantics: retain immutable original inputs and require the exact source owner and source-byte binding in the package lock; content identity remains a caller-retained binding input and does not authenticate a generated artifact
+  - name: OriginalCompositeEqContext::request
+    inputs: [original CheckedNodeId, original CheckedOccurrence, harness ProofBound list, IR operand-projection work ceiling]
+    output: immutable OriginalCompositeEqRequest | CompositeBuildError
+    semantics: Eq-only graph-child route through IR composite_application_operands; require original function/node/occurrence membership, preserve positional parameter bounds and empty literal Bounds, compute O-09 through owning parity_obligation, decode the real wire to obtain QSL stage limits, and require exact recompiled package/context equality before invocation; imported contexts return ImportedContextUnsupported until original admitted dependency packages are retained by CG; Ne and inline operands refuse
+  - name: OriginalCompositeEqRequest::settle_verified
+    inputs: [retained VerifiedShadow evidence]
+    output: OriginalCompositeEqReport | CompositeBuildError
+    semantics: retain actual sent CompositeIdentity before calling the public QSL settle_verified_shadow facade, then feed its genuine report to verified_shadow_terminal_value; the owned result exposes the report, sent identity and binding-checked settlement; no Kani, proof-strength or native observation is produced
   - name: verified_shadow_terminal_value
     inputs: [retained CompositeIdentity of the verified claim actually sent, optional genuine QSL VerifiedShadowReport]
     output: VerifiedShadowSettlement | CompositeReportError (MissingReport | ClaimMismatch)
