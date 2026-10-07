@@ -63,6 +63,7 @@ impl std::error::Error for CallerExecutionError {
             Self::Io(error) => Some(error),
             Self::PolicyProjection(error) => Some(error),
             Self::Assembly(BoundedLaunchError::Io(error)) => Some(error),
+            Self::Assembly(BoundedLaunchError::BoundaryIo { cause, .. }) => Some(cause),
             Self::Assembly(BoundedLaunchError::Unavailable { cause, .. }) => Some(cause),
             Self::Assembly(BoundedLaunchError::Guardian { .. }) => None,
         }
@@ -86,10 +87,13 @@ pub(super) struct CallerExecution {
     pub(super) driver: CallerDriver,
     pub(super) clock: ExecutionClock,
     completed: Option<BackendExit>,
+    dispatched: bool,
     report: Option<Vec<u8>>,
     roles: Option<CallerRoleSettlement>,
     lease_closed: bool,
     work_expired: bool,
+    capture_failed: bool,
+    settled: bool,
     limit: usize,
     harnesses: NonZeroUsize,
 }
@@ -103,6 +107,9 @@ impl CallerExecution {
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<CallerDriver>()))
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<ExecutionClock>()))
             .and_then(|bytes| bytes.checked_add(std::mem::size_of::<PolicyTerminalOutcome>()))
+            .and_then(|bytes| {
+                bytes.checked_add(std::mem::size_of::<super::launch::BoundedProductionLaunch>())
+            })
             .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         u64::try_from(bytes).map_err(|_| CallerBootstrapError::ReservationUnrepresentable)
     }
@@ -139,10 +146,13 @@ impl CallerExecution {
             driver: CallerDriver::new(),
             clock,
             completed: None,
+            dispatched: false,
             report: None,
             roles: None,
             lease_closed: false,
             work_expired: false,
+            capture_failed: false,
+            settled: false,
             limit,
             harnesses,
         })
@@ -173,17 +183,92 @@ impl CallerExecution {
                     // Generic local failure/cancellation cannot select a timeout outcome.
                     self.work_expired = true;
                 }
+                if matches!(error, CallerDriveError::CaptureFailedFlag) {
+                    self.capture_failed = true;
+                }
                 return Err(CallerExecutionError::Progress(error));
             }
         };
         match progress {
             CallerDriveProgress::Dispatched => {
+                self.dispatched = true;
                 self.bootstrap.publication.publish(Stage::Dispatched)
             }
             CallerDriveProgress::Completed { outcome, .. } => self.completed = Some(outcome),
             CallerDriveProgress::Pending | CallerDriveProgress::OwnerStopped => {}
         }
         Ok(progress)
+    }
+
+    /// Drive the one actual caller actor until genuine completion or an authenticated owner
+    /// stop. Every error keeps this owner borrowed for explicit cancellation/settlement. Startup
+    /// retains its original finite setup bound; post-Dispatch None mints no phase/work expiry.
+    pub(super) fn drive_to_terminal(
+        &mut self,
+    ) -> Result<CallerDriveProgress, CallerExecutionError> {
+        loop {
+            match self.advance()? {
+                progress @ (CallerDriveProgress::Completed { .. }
+                | CallerDriveProgress::OwnerStopped) => return Ok(progress),
+                CallerDriveProgress::Pending | CallerDriveProgress::Dispatched => {}
+            }
+            let cutoff = self.clock.progress_cutoff();
+            let cutoff = if self.dispatched {
+                cutoff
+            } else {
+                Some(cutoff.map_or(self.bootstrap.startup_cutoff(), |cutoff| {
+                    cutoff.min(self.bootstrap.startup_cutoff())
+                }))
+            };
+            let wait = cutoff.map_or(CALLER_TICK, |cutoff| {
+                cutoff
+                    .saturating_duration_since(Instant::now())
+                    .min(CALLER_TICK)
+            });
+            if !wait.is_zero() {
+                thread::park_timeout(wait);
+            }
+            // An elapsed wait is not a synthetic error/trigger. The next actual actor step
+            // records C's real first stop and preserves capture/resource failure precedence.
+        }
+    }
+
+    pub(super) fn was_dispatched(&self) -> bool {
+        self.dispatched
+    }
+
+    pub(super) fn is_settled(&self) -> bool {
+        self.settled
+    }
+
+    /// After protocol/transport failure, attempt containment using only this owner's actual
+    /// original lease and retained L/O child custody. This does not fabricate a separate M reap,
+    /// normal terminal receipt or successful cleanup. Its caller must still return the truthful
+    /// CleanupUnconfirmed override if the ordinary authenticated transaction could not settle.
+    pub(super) fn attempt_unconfirmed_containment(&mut self) -> Result<(), CallerExecutionError> {
+        self.bootstrap
+            .driver_capture_stop(&mut self.clock)
+            .map_err(CallerExecutionError::Bootstrap)?;
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        if self.roles.is_none() {
+            self.roles = Some(
+                self.bootstrap
+                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::CancelOuter)
+                    .map_err(CallerExecutionError::Bootstrap)?,
+            );
+        }
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        let captures = self
+            .bootstrap
+            .streams
+            .settle(roles)
+            .map_err(CallerExecutionError::Io)?;
+        drop(captures);
+        Ok(())
     }
 
     /// Close actual transferred lease custody before publishing close completion. The same
@@ -253,10 +338,13 @@ impl CallerExecution {
             }
             self.pause_until(roles.cutoff())?;
         }
-        self.bootstrap
+        let captures = self
+            .bootstrap
             .streams
             .settle(roles)
-            .map_err(CallerExecutionError::Io)
+            .map_err(CallerExecutionError::Io)?;
+        self.settled = true;
+        Ok(captures)
     }
 
     /// Classify only C's retained genuine work-expiry candidate after authenticated cancellation,
@@ -287,6 +375,66 @@ impl CallerExecution {
             BoundedLaunch {
                 report: Ok(None),
                 outcome: LaunchOutcome::TimedOut,
+                memory: MemoryObservation {
+                    mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                    peak_resident_bytes: Some(peaks.tree_rss_bytes),
+                },
+            },
+            peaks,
+        ))
+    }
+
+    /// Preserve the existing stdout-first capture refusal from the actual joined readers. The
+    /// shared failed flag triggers cancellation but is not itself an unread/overflow result.
+    /// Both successful captures beside that flag refuse the inconsistent transition instead.
+    pub(super) fn finish_cancelled_capture(
+        &mut self,
+    ) -> Result<(BoundedLaunch, MeasuredPeaks), CallerExecutionError> {
+        if !self.capture_failed {
+            return Err(CallerExecutionError::Bootstrap(
+                CallerBootstrapError::TerminalTransition,
+            ));
+        }
+        if self.bootstrap.owner_stop_pending() {
+            return self.finish_owner_stopped();
+        }
+        let captures = self.finish_cancelled()?;
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        let peaks = self
+            .bootstrap
+            .settled_cancellation_peaks(roles)
+            .map_err(CallerExecutionError::Bootstrap)?;
+        let outcome = match super::launch::stream_bytes(
+            super::launch::CaptureStream::Stdout,
+            captures.stdout,
+            self.limit,
+            self.harnesses,
+        ) {
+            Err(outcome) => outcome,
+            Ok(stdout) => {
+                drop(stdout);
+                match super::launch::stream_bytes(
+                    super::launch::CaptureStream::Stderr,
+                    captures.stderr,
+                    self.limit,
+                    self.harnesses,
+                ) {
+                    Err(outcome) => outcome,
+                    Ok(_) => {
+                        return Err(CallerExecutionError::Bootstrap(
+                            CallerBootstrapError::TerminalTransition,
+                        ));
+                    }
+                }
+            }
+        };
+        drop(self.report.take());
+        Ok((
+            BoundedLaunch {
+                report: Ok(None),
+                outcome,
                 memory: MemoryObservation {
                     mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
                     peak_resident_bytes: Some(peaks.tree_rss_bytes),
@@ -336,6 +484,7 @@ impl CallerExecution {
             .streams
             .settle(roles)
             .map_err(CallerExecutionError::Io)?;
+        self.settled = true;
         drop(captures);
         drop(self.report.take());
         let outcome = match cause {
@@ -407,6 +556,7 @@ impl CallerExecution {
             .streams
             .settle(roles)
             .map_err(CallerExecutionError::Io)?;
+        self.settled = true;
         drop(captures);
         let (failure, _original_context) = self
             .bootstrap
@@ -522,6 +672,7 @@ impl CallerExecution {
             .streams
             .settle(roles)
             .map_err(CallerExecutionError::Io)?;
+        self.settled = true;
         let text =
             self.bootstrap
                 .streams

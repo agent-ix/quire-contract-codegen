@@ -35,7 +35,8 @@ use crate::kani::{
     run::{
         harness::{HarnessView, KaniExecutableHarness},
         launch::{
-            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream, LaunchOutcome,
+            run_bounded_launcher, BoundedLaunchError, BoundedProductionLaunch, CaptureStream,
+            LaunchOutcome,
         },
         memory::MemoryObservation,
         tool::{KaniInstallation, KaniTool, KaniToolError},
@@ -286,6 +287,33 @@ impl From<KaniToolError> for KaniExecutionRefusal {
     }
 }
 
+/// Actual complete conservative O charge, distinct from observed tree RSS. Absence has only
+/// the two allocated timeout-stage reasons; neither a ceiling nor a partial sample is observed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ChargedPeakObservation {
+    /// Maximum of actual complete O ledger observations during this owned run.
+    Observed {
+        /// Conservative whole-run charged peak, in bytes.
+        bytes: u64,
+    },
+    /// A genuine timeout at an allocated stage before any complete O observation.
+    NotObserved {
+        /// Positive timeout-stage fact; never inferred from an absent optional measurement.
+        reason: ChargedPeakNotObservedReason,
+    },
+}
+
+/// Allocated timeout stages at which evidence may truthfully lack a complete O observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChargedPeakNotObservedReason {
+    /// The applicable cutoff elapsed before L or O was created.
+    PreRoleTimeout,
+    /// Roles were created, but startup timed out before Dispatch and any complete O observation.
+    StartupTimeoutBeforeObservation,
+}
+
 /// What ran and the backend-reported outcome of one harness run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -294,6 +322,9 @@ pub struct KaniExecutionEvidence {
     pub ceilings: crate::kani::identity::ProofCeilings,
     /// Actual backend-tree memory mechanism and observed peak.
     pub memory: MemoryObservation,
+    /// Actual maximum complete whole-run charge, or the positively established pre-observation
+    /// timeout stage. Tree RSS alone is not this conservative total.
+    pub charged_peak: ChargedPeakObservation,
     /// Hard report-content cap, separately enforced from the identity's whole-run memory ceiling.
     pub report_cap_bytes: u64,
     /// Every symbolic argument and its identity bounds.
@@ -351,9 +382,14 @@ struct ReportedExecution {
 }
 
 impl ReportedExecution {
-    fn with_memory(self, memory: MemoryObservation) -> KaniExecutionEvidence {
+    fn with_memory(
+        self,
+        memory: MemoryObservation,
+        charged_peak: ChargedPeakObservation,
+    ) -> KaniExecutionEvidence {
         KaniExecutionEvidence {
             memory,
+            charged_peak,
             report_cap_bytes: super::REPORT_CONTENT_BYTES,
             ceilings: self.ceilings,
             symbolic_arguments: self.symbolic_arguments,
@@ -437,7 +473,7 @@ fn start(
     harnesses: NonZeroUsize,
     report_path: &Path,
     deadline: Option<Instant>,
-) -> Result<BoundedLaunch, KaniExecutionRefusal> {
+) -> Result<BoundedProductionLaunch, KaniExecutionRefusal> {
     if !deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         // The namespace helper's successful spawn cannot establish backend executability.
         request.installation.require_executable()?;
@@ -462,6 +498,13 @@ fn start(
             path: request.installation.launcher.clone(),
             error,
         }),
+        BoundedLaunchError::BoundaryIo { path, cause } => {
+            KaniExecutionRefusal::Tool(KaniToolError::Io {
+                tool: KaniTool::Launcher,
+                path,
+                error: cause,
+            })
+        }
         BoundedLaunchError::Guardian { kind, detail } => {
             KaniExecutionRefusal::Guardian { kind, detail }
         }
@@ -530,8 +573,10 @@ fn run_single(
         &report_path,
         deadline,
     )?;
+    let charged_peak = launch.charged_peak;
+    let launch = launch.launch;
     finish_single(request, arguments, launch.outcome, launch.report?)
-        .map(|reported| reported.with_memory(launch.memory))
+        .map(|reported| reported.with_memory(launch.memory, charged_peak))
 }
 
 /// Classify one captured launch and its own report, without asserting memory enforcement.
@@ -757,6 +802,8 @@ fn run_group(
         &report_path,
         deadline,
     )?;
+    let charged_peak = launch.charged_peak;
+    let launch = launch.launch;
     let report = launch.report;
     let (exited_successfully, exit_code, text) = match settle(launch.outcome)? {
         Concluded::Completed {
@@ -789,7 +836,7 @@ fn run_group(
     .map(|reported| {
         reported
             .into_iter()
-            .map(|run| run.with_memory(launch.memory.clone()))
+            .map(|run| run.with_memory(launch.memory.clone(), charged_peak))
             .collect()
     })
 }

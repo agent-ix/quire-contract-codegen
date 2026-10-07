@@ -772,6 +772,7 @@ fn io_error(error: rustix::io::Errno) -> GuardianFixtureError {
 fn production_error(error: BoundedLaunchError) -> GuardianFixtureError {
     match error {
         BoundedLaunchError::Io(error) => GuardianFixtureError::Io(error),
+        BoundedLaunchError::BoundaryIo { cause, .. } => GuardianFixtureError::Io(cause),
         BoundedLaunchError::Guardian { kind, detail } => {
             GuardianFixtureError::Guardian { kind, detail }
         }
