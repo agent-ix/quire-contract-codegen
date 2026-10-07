@@ -64,3 +64,13 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 The index is consistent and every old AC row is unchanged. Two medium gaps: the narrowing of 'original cause' is stated only in the new section and never reconciled with the unchanged clauses that still promise the original io::Error, and the new public-documentation obligation has no acceptance criterion or procedure. One low layout/terminology nit in TC-049.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The unchanged original-cause clauses now carry explicit, linked qualifications limited to listed cross-role cases: line 664-666 (native-policy scope), lines 794-796 (admission retention) and mapping row 1130; the section itself (lines 843-850) names both qualified clauses and keeps local sources and AC-39 duties unchanged. Anchors #report-threat-boundary-and-backend-ipc-confinement (line 553) and #settlement-confirmation-and-kernel-fault-boundary (line 1043) resolve. |
+| FND-002 | fixed | 16572f2: The public-documentation duty is now in FR-034-AC-40, in TC-049 step 27 as an independent rustdoc Analysis that fails on missing/misleading docs (lines 685-689), and in the AC-40 Expected Results row. |
+| FND-003 | fixed | 16572f2: Step 27 now uses the defined 'Slice 1'/'Slice 2' terms, the doubled blank after step 27 is removed and the unrelated blank before '## Expected Results' is removed. The remaining doubled blank at TC-049 lines 804-805 is pre-existing on main (base line 757) and outside this finding. |

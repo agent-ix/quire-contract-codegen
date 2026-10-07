@@ -63,3 +63,18 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 Errno mismatch refuses with no fabricated errno; malformed or unauthenticated custody refuses through existing typed paths without Dispatch or evidence, retaining owners and original deadlines; diagnostic absence cannot select a mapping; opaque payload loss is explicit. Two gaps: what happens when capturing the diagnostic for an otherwise representable cause fails, and what happens for a no-errno ErrorKind the finite encoding cannot name.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The section now orders typed-cause retention before optional diagnostic capture, requires omitting detail on over-bound/formatting failure without substituting a context/formatting error, and separates required-representation failures from optional diagnostic failure; TC-049 step 27 lines 678-680 and the AC-40 row check it. |
+| FND-002 | fixed | 16572f2: An unnameable no-errno kind now has a defined outcome: the sender stops the cause transaction without Other normalization and C refuses the actual transport/representation failure without fake replay, evidence or Dispatch. The rule introduced a new contradiction, recorded as FND-003 below. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | The round-1 unnamed-kind rule makes the public classification of a listed cross-role admission failure depend on its ErrorKind: when the sender cannot name a no-errno kind it stops the cause transaction, and C must report the transport/representation failure through Tool(KaniToolError::Io) or another control mapping and may not publish it as a MemoryMechanismUnavailable cause; this contradicts line 793 ('classify the admission failure as BoundedLaunchError::Unavailable at its site regardless of original errno/io::ErrorKind') and line 849 ('No public refusal variant/code, errno-independent admission ... is changed'). Scenario: An I-role PrivateProc admission check fails with a no-errno io::Error whose ErrorKind the finite encoding cannot name (for example a kind stabilized by a later toolchain, such as InProgress). Under lines 873-881 the caller receives Tool(KaniToolError::Io) or a control-failure mapping. Under lines 791-793 and 849-850 the same admission failure must be MemoryMechanismUnavailable with admission CapabilityUnavailable { PrivateProc }, regardless of kind. An implementer cannot satisfy both, and the AC-40 mutant oracle cannot say which classification is correct. Neither section says whether C, which already holds the authenticated role/operation, may still publish Unavailable with an explicitly unrepresented cause. | spec/kani/functional/FR-034-caller-death-ownership.md:873-882; spec/kani/functional/FR-034-caller-death-ownership.md:791-793; spec/kani/functional/FR-034-caller-death-ownership.md:849-850 |

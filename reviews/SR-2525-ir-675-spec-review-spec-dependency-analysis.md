@@ -62,3 +62,11 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 The IR-655 SPEC-before-fixture-CODE routing and the IR-639 CODE gate are stated, and the tests.md index records IR-675 AC-40 as UNRUN under IR-639. The seccompiler variant list matches seccompiler 0.5.0 with default features. One medium dependency defect: the normative finite set is keyed to crate-private identifiers of unmerged, still-moving WIP code.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The finite set is now a SPEC-declared closed set of semantic categories, independent of unmerged type/variant names; a CODE add/rename does not enlarge it, and an unlisted case takes the trusted-opaque row or fails closed. Remaining names (EmptyFilter, Prctl, Seccomp, ThreadSync) are the public seccompiler 0.5.0 enum, not WIP identifiers. |

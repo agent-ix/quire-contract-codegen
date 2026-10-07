@@ -63,3 +63,12 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 Most statements name the system and use 'shall'. The representation table and the 'source-grounded' constraint are not in requirement grammar, and 'the owner' is an undefined actor where the surrounding text distinguishes the sending owner from C. Neither changes behaviour as written; both leave room for two implementers to place the obligation on different roles.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The representation table now has separate 'Sending-owner obligation' and 'C receiving/projection obligation' columns, each stated as 'The sending owner shall ...' / 'C shall ...'; the source-grounding constraint is replaced by a declared closed set with actor-specific shall statements (lines 860-871). |
+| FND-002 | fixed | 16572f2: 'The owner' is replaced by 'The sending helper shall charge ...' and 'C shall charge ... to named caller_run_buffers'; caller_run_buffers is an existing named term (FR-034 lines 941-969), and neither side's charge replaces the other's. |

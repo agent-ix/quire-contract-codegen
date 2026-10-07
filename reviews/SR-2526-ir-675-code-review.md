@@ -62,3 +62,11 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 Verified: creator.rs:146-157 (WIP) maps both try_reserve_exact failures through io::Error::other, giving Other, raw_os_error None and a boxed TryReserveError payload; startup_cause.rs:97-128 (WIP) keeps kind/errno, validates OS-derived kinds and projects raw-None to io::Error::from(kind) with KindOnly (the CODE gap the SPEC names); startup_cause.rs:174-186 lists exactly the seven no-payload variants plus Reservation(TryReserveError); outer_sampling.rs:1090-1091 wraps RepresentationError in SamplingError::Observation(io::Error::other(..)); seccompiler 0.5.0 src/lib.rs:228-243 has Backend, EmptyFilter, Prctl, Seccomp, ThreadSync and feature-gated JsonFrontend, and the WIP Cargo.toml uses default-features = false; alloc/src/io/error.rs:236-246 implements From<TryReserveError> as ErrorKind::OutOfMemory.into(); alloc/src/collections/mod.rs:71-110 keeps TryReserveError::kind and TryReserveErrorKind #[unstable(try_reserve_kind)]. The SPEC's typed-discriminant, no-message-parsing and explicit-loss stance matches the rust-review error idioms. One medium finding on a std behaviour the SPEC treats as fixed.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The SPEC no longer treats source absence as a timeless property of From<TryReserveError>: C preserves the actual resulting kind and observed source presence/absence and must not infer absence from the conversion's name; TC-049 step 27 reads the selected toolchain's source-presence contract without assuming every version drops the source. |

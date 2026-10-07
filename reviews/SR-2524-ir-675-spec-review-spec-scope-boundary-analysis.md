@@ -62,3 +62,11 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 The local-role/cross-role split, the AC-39 carve-out and the 'no public role/stage query' boundary are explicit, and the generic boxed branch stays CODE-gated. One medium boundary gap: 'startup/observation' is not bounded by a site or role list, while cross-role-capable opaque producers also exist on control and report paths.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The amendment's scope is now a finite role/operation/phase table (L, O, I plus installer) that explicitly covers O's private control preparation/encoding/reception and owned report pipe/memfd paths, keeps C's own report-read/capture/control preparation errors local, excludes arbitrary backend payloads, and requires an explicit SPEC allocation for a new role/operation/phase. |

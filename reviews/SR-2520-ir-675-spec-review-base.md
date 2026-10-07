@@ -62,3 +62,11 @@ Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, str
 ## Verdict
 
 The amendment makes an honest, source-grounded narrowing: it states that an arbitrary boxed error cannot cross a process boundary, keeps exact errno/kind for OS errors, separates the Other-wrapped TryReserveError producer from the standard OutOfMemory conversion, forbids message-derived classification, and leaves local-role sources and AC-39 unchanged. All 39 prior AC rows and the TC-049 old text are unchanged in the diff; AC-40 is standalone, PLANNED/UNRUN and untagged. One medium soundness gap: AC-40 states a present-tense producer fact that the FR text makes conditional and that has no referent at the reviewed head. Criterion-strength (Jev) was not run: no Jev client is installed (`jev` not on PATH; the installed quoin 0.28.2 criterion-strength skill states no client exists), so AC failability is judged here by reviewer reading only, without calibrated semantic judgment.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: AC-40 no longer asserts a timeless 'Current' producer fact: it conditions on the actual producer (Other wrapper stays Other; a standard conversion keeps its actual observed kind/source presence), matching FR lines 884-890. |
