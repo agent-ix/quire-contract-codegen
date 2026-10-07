@@ -687,14 +687,24 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     kind-driven Tool normalization or Dispatch/evidence. Exercise an available real cause-metadata
     corruption/omission control while independently retaining the actual negative admission site's
     authenticated run/build/role/identity and unchanged startup state. Unknown kind, malformed cause
-    and missing cause metadata must each select their actual private CauseMetadataIntegrityError
-    predicate, retain any actual local decoder source and return MemoryMechanismUnavailable with
+    and missing cause metadata must each retain their actual private predicate within public KaniCauseMetadataIntegrityError, retain any actual local decoder source and return MemoryMechanismUnavailable with
     that site's exact admission context, cause.kind()==InvalidData, cause.raw_os_error()==None,
     code()==None and no evidence/outcome after confirmed settlement. The cause is the actual local
     integrity failure; no assertion shall claim an original producer kind/source or successful replay.
-    Assert absence of KaniCrossRoleCauseLoss on that cause. In a distinct control, fail independent
+    Require cause.get_ref().and_then(|error| error.downcast_ref::<KaniCauseMetadataIntegrityError>())
+    to be Some; verify the actual predicate/provenance and retained decoder source through internal
+    source Analysis or an available ordinary test seam. Require a valid original payload-free
+    InvalidData/no-errno control and genuine local custom InvalidData/no-errno control to produce
+    None for that same integrity downcast, preserving their actual local source identity. Merely
+    get_ref()==Some, InvalidData or diagnostic text is not an integrity oracle. Source Analysis shall
+    verify public accessibility/private constructors and lack of diagnostic-derived classification.
+    Assert absence of KaniCrossRoleCauseLoss on the integrity cause. In a distinct control, fail independent
     site authentication: no fabricated admission context; require the explicit startup/protocol
-    path (unavailable when ownership/protection cannot be established, otherwise ordinary I/O Tool).
+    path. When a distinct actual C-side ownership/protection check fails, require that check's real
+    Unavailable cause and known C-side context, without substituting a metadata error. Otherwise
+    require ordinary Tool(KaniToolError::Io) with actual InvalidData/no-errno error and public
+    KaniCauseMetadataIntegrityError downcast Some; the same metadata-integrity error remains typed
+    regardless of the selected existing path.
     Preserve original settlement deadline and CleanupUnconfirmed override. A genuine valid original
     producer cause is a positive control retaining its own actual kind/errno and site-first mapping.
     Mutants routing authenticated cause-metadata faults to Tool, inventing an original kind/errno,
@@ -715,11 +725,13 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     retention and absence of a public role/stage query promise. Missing/misleading docs fail this
     independent Analysis even when runtime transport assertions pass; no rendered docs are claimed
     before CODE supplies them. Also require the public docs to identify the authenticated-site
-    integrity exception: public InvalidData/no-errno cause denotes the actual local integrity fault,
-    original producer kind/source is unknown, and the loss marker is absent. Missing or misleading
+    integrity exception: get_ref/downcast to KaniCauseMetadataIntegrityError distinguishes actual
+    local InvalidData/no-errno integrity from genuine original payload-free or local custom causes;
+    original producer kind/source is unknown for integrity, and the loss marker is absent. Missing or misleading
     integrity semantics fail the independent docs Analysis.
     Mutants normalizing an actual Other kind to OutOfMemory, erasing OS errno, substituting a typed
-    category/site, promoting a new unlisted variant, dropping/misapplying the public marker,
+    category/site, promoting a new unlisted variant, dropping/misapplying the public marker or
+    integrity type, classifying genuine original InvalidData as integrity from source presence,
     erasing site-first admission mapping because of kind, omitting loss metadata or replacing an original
     cause after diagnostic failure must fail the corresponding kind/provenance/custody oracle.
     Changed/absent bounded diagnostic text leaves the typed mapping unchanged. Wrong run/build/role/
@@ -728,6 +740,23 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     seam or artificial allocation failure. Ordinary production transport cases belong to Slice 1;
     exact-boundary controls unavailable there remain owed under Slice 2/IR-655 SPEC-before-fixture-CODE.
     No old fixture/source-Analysis row backs AC-40 or supplies whole-criterion completion credit.
+
+The following AC-40 public-consumer matrix is PLANNED/UNRUN. It allocates the named controls within
+procedure 27, not tests for artificial errors or implementation credit. For each available genuine
+case, the ordinary public consumer shall use typed get_ref/downcast detection; changing diagnostic
+text or testing source presence alone cannot supply the result. Unavailable real cases retain zero
+Test credit and their existing Slice 2 obligation.
+
+| Actual cause/control | Public cause facts | KaniCrossRoleCauseLoss downcast | KaniCauseMetadataIntegrityError downcast | Classification/source obligation |
+|---|---|---|---|---|
+| Valid original raw OS error | Exact original raw errno and verified kind | None | None | Original site-first admission or other actual existing mapping; direct errno reconstruction, no wrapper. |
+| Valid original payload-free InvalidData | InvalidData, raw errno None, no custom payload | None | None | Original site-first admission; no fabricated custom source. |
+| Genuine local custom InvalidData | Original InvalidData/raw errno and original custom object | None | None | Original local mapping/source retained; get_ref Some alone is not integrity. |
+| Genuine generic no-errno custom source lost across roles | Exact original named kind, raw errno None, authenticated finite private provenance | Some | None | Original site-first admission or actual existing mapping; loss type denotes no original source identity. |
+| Finite typed public source required and representable under AC-39 | Its required original kind/errno and finite typed source facts | None | None | Stronger AC-39 duties retained; generic loss/integrity types shall not replace that source. |
+| Unknown, malformed or incomplete cause metadata; negative admission site/state independently authenticated | InvalidData, raw errno None, actual local integrity error with actual private predicate/provenance and decoder source when present | None | Some | MemoryMechanismUnavailable with exact actual admission context, code None/no evidence after settlement; public cause is integrity, never original producer replay. |
+| Cause metadata fault without independently authenticated originating admission site/state; required ownership/protection remains established | InvalidData/no-errno, actual local metadata-integrity error | None | Some | Tool(KaniToolError::Io) with actual launcher path/error; typed cause remains detectable, no invented admission-site context or Dispatch/evidence. |
+| Independent actual C-side ownership/protection check fails while a cause packet is invalid | That check's actual original cause/context, not a substituted metadata error | No generic loss marker on the local cause | None unless that check's actual original cause itself is metadata integrity; its real source identity is preserved | Existing Unavailable from the actual C-side check; false remote admission context/integrity-source substitution is forbidden. |
 
 ### Charged-peak evidence constructors (FR-034-AC-32)
 
@@ -825,7 +854,7 @@ cleanup obligations.
 | FR-034-AC-37 | PLANNED/UNRUN: I non-dumpability/backend privilege exclusion block proc1fd/pidfd_getfd/ptrace; trusted channel lifetimes and unchanged EOF mutant retained; uniform authority fault domain | Ambient Yama masks absent protection; contained export excused as outside peer; final delivery closed early |
 | FR-034-AC-38 | PLANNED/UNRUN: actual normal role/capture/spawner settlement; original-window typed CleanupUnconfirmed error with bounded diagnostic-only residuals, no new post-return custody; public precondition docs | Error carries authority; hidden cleanup worker; false joined/retired or kernel-cause claim; valid bytes accepted after unconfirmed settlement; grace resets T |
 | FR-034-AC-39 | PLANNED/UNRUN: source/cfg Analysis of unsupported native support and unconditional native-x86_64 x32 rule; real available installation Tests, typed provenance/capability distinction, applicable process-kill/effect controls, omission mutant, original settlement/classification | Source Analysis called an executed Test; errno-only denial instead of process-kill; omitted x32 rule on a kernel without x32; unavailable fixture counted complete; emulator mistaken for guest syscall evidence; false pre-Dispatch label or unfiltered retry |
-| FR-034-AC-40 | PLANNED/UNRUN: exhaustive actual sender/build named-kind source Analysis before delivery; genuine cases preserve site-first admission, actual kind/errno, authenticated private provenance and typed public loss-marker detection; authenticated negative-site unknown/malformed/incomplete cause metadata returns MemoryMechanismUnavailable with exact site context and actual typed local InvalidData/no-errno integrity cause (no loss marker), never original replay; unauthenticated site uses its specified startup/protocol path; diagnostics cannot replace it; public rustdoc and settlement remain required | Unproved/unwired sender domain; kind-driven Tool normalization; new emitted kind without encoder support; marker missing on opaque no-errno loss or attached to loss-free OS/payload-free/local/stronger AC-39 source; erased errno; fake replay; authenticated integrity fault sent to Tool; invented integrity admission context; false loss marker or missing actual local source; diagnostic replacement; misleading docs or false prior-test credit |
+| FR-034-AC-40 | PLANNED/UNRUN: exhaustive actual sender/build named-kind source Analysis before delivery; genuine cases preserve site-first admission, actual kind/errno, authenticated private provenance and typed public loss-marker detection; authenticated negative-site unknown/malformed/incomplete cause metadata returns MemoryMechanismUnavailable with exact site context and actual local InvalidData/no-errno KaniCauseMetadataIntegrityError detectable by get_ref/downcast (no loss marker), never original replay; unauthenticated site uses its specified startup/protocol path; diagnostics cannot replace it; public rustdoc and settlement remain required | Unproved/unwired sender domain; kind-driven Tool normalization; new emitted kind without encoder support; marker missing on opaque no-errno loss or attached to loss-free OS/payload-free/local/stronger AC-39 source; erased errno; fake replay; authenticated integrity fault sent to Tool; invented integrity admission context; false loss/integrity type; genuine original InvalidData misclassified from kind/source presence; missing actual local source; diagnostic replacement; misleading docs or false prior-test credit |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
