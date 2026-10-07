@@ -157,6 +157,9 @@ pub(super) struct CallerBootstrap {
     policy_refusal_settled: bool,
     terminal_receive: TerminalReceive,
     read_ack_storage: Option<FrameStorage>,
+    cancel_storage: Option<FrameStorage>,
+    cancel_close: Option<IncrementalSend>,
+    cancel_close_sent: bool,
     terminal_phase: CallerTerminalPhase,
     identity_records: RefCell<creator::PreparedIdentity>,
     named_buffers: u64,
@@ -403,6 +406,7 @@ impl CallerBootstrap {
             IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let terminal_receive = TerminalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let read_ack_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
+        let cancel_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let identity_records =
             creator::PreparedIdentity::prepare().map_err(CallerBootstrapError::Io)?;
         let phase_frames = [
@@ -460,6 +464,9 @@ impl CallerBootstrap {
                 .reserved_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             terminal_receive
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
+            cancel_storage
                 .reserved_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             read_ack_storage
@@ -552,6 +559,9 @@ impl CallerBootstrap {
             policy_refusal_settled: false,
             terminal_receive,
             read_ack_storage: Some(read_ack_storage),
+            cancel_storage: Some(cancel_storage),
+            cancel_close: None,
+            cancel_close_sent: false,
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
             identity_records: RefCell::new(identity_records),
             named_buffers,
@@ -1735,6 +1745,64 @@ impl CallerBootstrap {
             .policy_refusal
             .ok_or(CallerBootstrapError::UnexpectedPhase)?;
         Ok((cause, self.startup_context.context()))
+    }
+
+    /// Publish the actual original C trigger to O BEFORE the caller closes its I lease.
+    /// The same pre-L close buffer is consumed once. A pending partial phase command cannot
+    /// be replaced/spliced; refusing it retains all send/lease/process owners for settlement.
+    pub(super) fn cancel_close_step(
+        &mut self,
+        clock: &mut ExecutionClock,
+    ) -> Result<bool, CallerBootstrapError> {
+        if self.cancel_close_sent {
+            return Ok(true);
+        }
+        if clock.original_deadline() != self.identity_deadline
+            || self
+                .phase_send
+                .as_ref()
+                .is_some_and(IncrementalSend::has_partial_frame)
+        {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        if self.cancel_close.is_none() {
+            clock
+                .capture_caller_stop(self.identity_clock)
+                .map_err(CallerBootstrapError::Deadline)?;
+            let (_, deadline) = self.settlement_clock(clock)?;
+            let frame = self
+                .cancel_storage
+                .take()
+                .ok_or(CallerBootstrapError::TerminalTransition)?
+                .encode(&CallerTerminalControl::CancelClose {
+                    authority: self.authority,
+                    deadline,
+                    stop: clock
+                        .caller_stop_stamp()
+                        .map_err(CallerBootstrapError::Deadline)?,
+                })
+                .map_err(CallerBootstrapError::Control)?;
+            self.cancel_close = Some(IncrementalSend::new(frame));
+            // Only a zero-progress phase frame can be retired. No complete phase reply is
+            // promoted after cancellation and the same receive framer retains its actual bytes.
+            self.phase_send.take();
+            self.phase_failed = true;
+            self.inner_auth_failed = true;
+        }
+        let cutoff = clock
+            .settlement_deadline()
+            .map_err(CallerBootstrapError::Deadline)?;
+        let sent = self
+            .cancel_close
+            .as_mut()
+            .ok_or(CallerBootstrapError::TerminalTransition)?
+            .advance(&self.outer_control.transport(), &[], cutoff)
+            .map_err(CallerBootstrapError::Control)?;
+        if sent {
+            self.cancel_close.take();
+            self.cancel_close_sent = true;
+        }
+        Ok(sent)
     }
 
     /// Close only C's still-owned pre-Dispatch lease while retaining every process, capture and

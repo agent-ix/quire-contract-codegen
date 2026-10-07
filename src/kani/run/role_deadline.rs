@@ -386,6 +386,22 @@ impl ExecutionClock {
         self.stops.deadline(self.reserve, original)
     }
 
+    /// C's own genuine first trigger, distinct from an earlier authenticated producer that
+    /// already shortened the shared settlement cutoff. Cancellation preserves both facts.
+    pub(super) fn caller_stop_stamp(&self) -> Result<StopStamp, DeadlineError> {
+        let instant = self
+            .stops
+            .last
+            .first()
+            .copied()
+            .flatten()
+            .ok_or(DeadlineError::StopNotStarted)?;
+        Ok(StopStamp {
+            origin: StopOrigin::Caller,
+            instant,
+        })
+    }
+
     pub(super) fn stop_stamp(&self) -> Result<StopStamp, DeadlineError> {
         self.stops.earliest()
     }
