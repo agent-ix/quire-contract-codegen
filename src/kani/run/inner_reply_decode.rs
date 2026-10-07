@@ -740,7 +740,7 @@ mod tests {
             DecodeCause::UnexpectedEnd
         );
     }
-    /// Trace: FR-034-AC15
+    /// Trace: FR-034-AC-15
     #[test]
     fn owner_observation_preserves_owning_records_and_refuses_incomplete_authority() {
         use crate::kani::run::role_protocol::InnerOwnerControl;
