@@ -134,9 +134,10 @@ fn inputs<'a>(
 /// What `qsl_replay::replay_state_clause` returns for the request and envelope `replay` holds,
 /// called directly.
 fn direct(replay: StateClauseReplay) -> StateClauseReplayResult {
-    let StateClauseReplay { wire, packet } = replay;
-    let envelope = WitnessEnvelope::reconstruct(packet).expect("a complete packet reconstructs");
-    replay_state_clause(wire, &envelope).expect("QSL settles the replay")
+    let replay_limits = replay.replay_limits();
+    let envelope = WitnessEnvelope::reconstruct(replay.packet, replay_limits)
+        .expect("a complete packet reconstructs");
+    replay_state_clause(replay.wire, &envelope, replay_limits).expect("QSL settles the replay")
 }
 
 /// The violating run: the debiting subject takes `balance` from 5 to 4.

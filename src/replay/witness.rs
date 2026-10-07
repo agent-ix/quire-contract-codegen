@@ -220,7 +220,7 @@ fn decode_values(
                     buffer.copy_from_slice(bytes);
                     let value = i64::from_le_bytes(buffer);
                     (
-                        WitnessValue::Integer(value),
+                        WitnessValue::Integer(i128::from(value)),
                         comment.parse::<i64>().is_ok_and(|parsed| parsed == value),
                     )
                 }
@@ -257,7 +257,7 @@ pub(crate) fn first_out_of_domain<'a>(
             .as_ref()?;
         match value {
             WitnessValue::Integer(integer)
-                if !(bounds.minimum..=bounds.maximum).contains(integer) =>
+                if !(i128::from(bounds.minimum)..=i128::from(bounds.maximum)).contains(integer) =>
             {
                 Some(name.as_str())
             }

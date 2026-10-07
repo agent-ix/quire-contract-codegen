@@ -16,15 +16,15 @@
 //! The default lane covers the replay adapter against QSL. The `kani` lane (`make kani`,
 //! `#[ignore]` here, not part of `make ci`) runs the real prover.
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DependencyInput,
     DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
-    DisagreementCause, Identifier, ObligationIdentity, QualifiedName, ReplayRefusal, ReplaySource,
-    ScalarLimits, SourceIdentity, StageLimits, Verdict, WireNodeId, WitnessSettlement,
-    MAX_ENCODED_BYTES,
+    DisagreementCause, Identifier, ObligationIdentity, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReplaySource, ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
+    DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
@@ -94,20 +94,13 @@ fn locked(identity: &str, bytes: &[u8]) -> LockedSource {
 /// The proving run's lock for the native twin `source`: unlimited stand-in limits, because no
 /// proving run carries limits.
 fn inputs(source: &str, dependencies: Vec<DependencyLock>) -> ReplayInputs {
-    let s1 = ScalarLimits {
-        text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).unwrap(),
-        ..UNLIMITED
-    };
     ReplayInputs {
         source: locked(IDENTITY, source.as_bytes()),
         dependencies,
         accounting_limits: UNLIMITED,
-        stage_limits: StageLimits {
-            s1,
-            s2: UNLIMITED,
-            s3: UNLIMITED,
-            s4: UNLIMITED,
-        },
+        stage_limits: BTreeMap::from([("s1.input_bytes".to_owned(), DEFAULT_REPLAY_INPUT_BYTES)]),
+        declared_domains: Vec::new(),
+        replay_limits: ReplayLimits::default(),
     }
 }
 
@@ -148,13 +141,20 @@ fn replay_against(
         values,
         &package.parameters(),
         |source| request_of(&package, source),
+        ReplayLimits::default(),
     )
 }
 
 fn values(amount: i64, balance: i64) -> Vec<(String, WitnessValue)> {
     vec![
-        ("amount_current".to_owned(), WitnessValue::Integer(amount)),
-        ("balance_pre".to_owned(), WitnessValue::Integer(balance)),
+        (
+            "amount_current".to_owned(),
+            WitnessValue::Integer(i128::from(amount)),
+        ),
+        (
+            "balance_pre".to_owned(),
+            WitnessValue::Integer(i128::from(balance)),
+        ),
     ]
 }
 
@@ -252,6 +252,7 @@ fn tc_026_a_boolean_value_replays_as_zero_or_one() {
             &[("b".to_owned(), WitnessValue::Boolean(value))],
             &package.parameters(),
             |witness| request_of(&package, witness),
+            ReplayLimits::default(),
         )
         .expect("the replay settles")
     };
@@ -274,7 +275,14 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     let parameters = package.parameters();
     let build = |witness| request_of(&package, witness);
 
-    let delimiter = replay_falsification("a|b", "c", &values(1, 5), &parameters, build);
+    let delimiter = replay_falsification(
+        "a|b",
+        "c",
+        &values(1, 5),
+        &parameters,
+        build,
+        ReplayLimits::default(),
+    );
     assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
 
     let bad_node = [ReplayParameter {
@@ -287,29 +295,44 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
         &[("amount_current".to_owned(), WitnessValue::Integer(1))],
         &bad_node,
         build,
+        ReplayLimits::default(),
     );
     assert!(matches!(transcript, Err(SpineReplayError::Transcript(_))));
 
     let stale = compile_native_twin(&native_source(HEALTHY_TWIN), FUNCTION);
-    let refused = replay_falsification("h", "c", &values(1, 5), &parameters, |witness| {
-        let mut wire = request_of(&package, witness);
-        wire.package_id = request_of(&stale, ReplaySource::Input(Vec::new())).package_id;
-        wire
-    });
+    let refused = replay_falsification(
+        "h",
+        "c",
+        &values(1, 5),
+        &parameters,
+        |witness| {
+            let mut wire = request_of(&package, witness);
+            wire.package_id = request_of(&stale, ReplaySource::Input(Vec::new())).package_id;
+            wire
+        },
+        ReplayLimits::default(),
+    );
     assert!(matches!(refused, Err(SpineReplayError::Refused(_))));
 
-    let wrong_arm = replay_falsification("h", "c", &values(1, 5), &parameters, |_| {
-        let input = package
-            .parameters()
-            .iter()
-            .zip([1_i64, 5])
-            .map(|(parameter, value)| CanonicalAssignment {
-                parameter: WireNodeId::from_hex(parameter.node_id).expect("a node id"),
-                value: WitnessValue::Integer(value),
-            })
-            .collect();
-        request_of(&package, ReplaySource::Input(input))
-    });
+    let wrong_arm = replay_falsification(
+        "h",
+        "c",
+        &values(1, 5),
+        &parameters,
+        |_| {
+            let input = package
+                .parameters()
+                .iter()
+                .zip([1_i64, 5])
+                .map(|(parameter, value)| CanonicalAssignment {
+                    parameter: WireNodeId::from_hex(parameter.node_id).expect("a node id"),
+                    value: WitnessValue::Integer(i128::from(value)),
+                })
+                .collect();
+            request_of(&package, ReplaySource::Input(input))
+        },
+        ReplayLimits::default(),
+    );
     assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
 }
 
@@ -479,9 +502,10 @@ fn replay_q(
     replay_falsification(
         "module::proof",
         "q",
-        &[("x".to_owned(), WitnessValue::Integer(x))],
+        &[("x".to_owned(), WitnessValue::Integer(i128::from(x)))],
         &package.parameters(),
         |source| request_of(package, source),
+        ReplayLimits::default(),
     )
 }
 
@@ -568,6 +592,7 @@ fn tc_026_qsl_refuses_a_dependency_the_unit_does_not_select() {
         &values(1, 5),
         &package.parameters(),
         |source| request_of(&package, source),
+        ReplayLimits::default(),
     )
     .expect_err("QSL refuses the unselected dependency");
     assert!(
@@ -774,7 +799,7 @@ fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest(
         &package,
         |wire| {
             sent.push(wire.obligation_identity);
-            qsl_replay::replay(wire)
+            qsl_replay::replay(wire, ReplayLimits::default())
         },
     )
     .expect("QSL settles the replay");

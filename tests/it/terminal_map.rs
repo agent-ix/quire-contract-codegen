@@ -11,7 +11,7 @@ use qsl_replay::{
     DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
     FieldName, FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, InternalFault,
     MalformedTranscript, OperationName, PopulationName, ProofRefusalCause, QualifiedName,
-    ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StageLimits,
+    ReplayLimits, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity,
     StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
     Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
 };
@@ -334,21 +334,24 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
     }
 
     let empty_name = QualifiedName::new(Vec::new()).expect_err("an empty qualified name");
-    let envelope = WitnessEnvelope::reconstruct(WitnessPacket::<FrameCounterexample> {
-        obligation_identity: None,
-        occurrence_key: None,
-        clause_node: None,
-        selected_function: None,
-        package_id: None,
-        source_digests: None,
-        profile_selections: None,
-        run_limits: None,
-        declared_domains: None,
-        backend: None,
-        trace_position: None,
-        source: None,
-        family_payload: None,
-    })
+    let envelope = WitnessEnvelope::reconstruct(
+        WitnessPacket::<FrameCounterexample> {
+            obligation_identity: None,
+            occurrence_key: None,
+            clause_node: None,
+            selected_function: None,
+            package_id: None,
+            source_digests: None,
+            profile_selections: None,
+            run_limits: None,
+            declared_domains: None,
+            backend: None,
+            trace_position: None,
+            source: None,
+            family_payload: None,
+        },
+        ReplayLimits::default(),
+    )
     .map(|_| ())
     .expect_err("an envelope with no members is refused");
     let frame = [
@@ -654,12 +657,9 @@ fn repeated_identity_refusal() -> ReplayPackageError {
         source: locked("unit"),
         dependencies: vec![dependency("lib-one"), dependency("lib-two")],
         accounting_limits: unlimited,
-        stage_limits: StageLimits {
-            s1: unlimited,
-            s2: unlimited,
-            s3: unlimited,
-            s4: unlimited,
-        },
+        stage_limits: Default::default(),
+        declared_domains: Vec::new(),
+        replay_limits: ReplayLimits::default(),
     };
     let refusal = ReplayPackage::new(inputs, "f").expect_err("the repeated identity is refused");
     let ReplayPackageError::Dependencies(DependencyLockError::Input(input)) = &refusal else {
@@ -722,7 +722,7 @@ fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
         source: None,
         family_payload: None,
     };
-    let envelope = WitnessEnvelope::reconstruct(empty_packet())
+    let envelope = WitnessEnvelope::reconstruct(empty_packet(), ReplayLimits::default())
         .map(|_| ())
         .expect_err("an envelope with no members is refused");
     let defects = [

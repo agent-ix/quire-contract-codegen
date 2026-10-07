@@ -15,8 +15,8 @@ use super::model;
 use qsl_replay::{
     call_site, CallSiteRefusal, ClaimedChange, ClauseName, ClauseSite, DependencyInput,
     DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
-    OperationName, OperationSite, ReplayRefusal, ScalarLimits, SelectedObject, SourceIdentity,
-    StageLimits, WitnessEnvelope, MAX_ENCODED_BYTES,
+    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
+    SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
@@ -730,7 +730,6 @@ impl Twin {
 
     /// The proving run's lock: the unit, no dependency, and the limits the twin replays under.
     fn run(&self) -> ReplayInputs {
-        let unlimited = limits(u64::MAX);
         ReplayInputs {
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
@@ -741,15 +740,12 @@ impl Twin {
             },
             dependencies: Vec::<DependencyLock>::new(),
             accounting_limits: limits(1_000_000),
-            stage_limits: StageLimits {
-                s1: ScalarLimits {
-                    text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).expect("a small bound"),
-                    ..unlimited
-                },
-                s2: unlimited,
-                s3: unlimited,
-                s4: unlimited,
-            },
+            stage_limits: std::collections::BTreeMap::from([(
+                "s1.input_bytes".to_owned(),
+                DEFAULT_REPLAY_INPUT_BYTES,
+            )]),
+            declared_domains: Vec::new(),
+            replay_limits: ReplayLimits::default(),
         }
     }
 
@@ -867,9 +863,10 @@ impl Twin {
                 ));
             }
         }
-        let envelope =
-            WitnessEnvelope::reconstruct(packet).expect("a complete packet reconstructs");
-        qsl_replay::replay_frame(wire, &envelope)
+        let replay_limits = ReplayLimits::default();
+        let envelope = WitnessEnvelope::reconstruct(packet, replay_limits)
+            .expect("a complete packet reconstructs");
+        qsl_replay::replay_frame(wire, &envelope, replay_limits)
     }
 }
 

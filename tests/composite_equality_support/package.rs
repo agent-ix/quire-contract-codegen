@@ -1487,36 +1487,17 @@ pub fn recursive_items_package_from_wire(
 /// Compile independently authored recursive declarations through QSL's public
 /// replay facade and extend the admitted package with equality items.
 pub fn qsl_recursive_items_package() -> (PackageBuilder, CheckedNodeId, CheckedNodeId) {
-    use qsl_replay::{compile_package, DependencyInput, ScalarLimits, SourceIdentity, StageLimits};
+    use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 
     let source = include_bytes!("recursive.native");
-    let unbounded = ScalarLimits {
-        integer_bits: u64::MAX,
-        decimal_digits: u64::MAX,
-        scale_expansion: u64::MAX,
-        text_input_bytes: u64::MAX,
-        text_scalars: u64::MAX,
-        normalized_scalars: u64::MAX,
-        unit_edges: u64::MAX,
-        value_occurrences: u64::MAX,
-        work_units: u64::MAX,
-        result_units: u64::MAX,
-    };
     let compiled = compile_package(
         SourceIdentity::new("a", "u", "git", "1"),
         "recursive-items.native",
         source,
         [],
         &DependencyInput::default(),
-        StageLimits {
-            s1: ScalarLimits {
-                text_input_bytes: 1 << 20,
-                ..unbounded
-            },
-            s2: unbounded,
-            s3: unbounded,
-            s4: unbounded,
-        },
+        StageLimits::default(),
+        ReplayLimits::default(),
     )
     .expect("QSL compiles the recursive item types");
     let read = CheckedPackageV2::read(

@@ -11,12 +11,12 @@
 use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
-    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DependencyEntryWire,
-    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FunctionSite, Identifier, MalformedTranscript, ObligationIdentity, QualifiedName,
-    ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource, ScalarLimits, SourceIdentity,
-    StageLimits, StateEnvironment, SuppliedLibrary, Witness, WitnessArmResult, WitnessSettlement,
-    WitnessValue,
+    call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DeclaredDomain,
+    DependencyEntryWire, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
+    DisagreementCause, FunctionSite, Identifier, MalformedTranscript, ObligationIdentity,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, Witness, WitnessArmResult,
+    WitnessSettlement, WitnessValue,
 };
 
 use crate::{
@@ -109,6 +109,7 @@ pub fn replay_falsification(
     values: &[(String, WitnessValue)],
     parameters: &[ReplayParameter<'_>],
     request: impl FnOnce(ReplaySource) -> ReplayRequestWire,
+    replay_limits: ReplayLimits,
 ) -> Result<WitnessArmResult, SpineReplayError> {
     replay_falsification_through(
         harness,
@@ -116,7 +117,7 @@ pub fn replay_falsification(
         values,
         parameters,
         request,
-        &mut replay,
+        &mut |wire| replay(wire, replay_limits),
     )
 }
 
@@ -132,7 +133,7 @@ pub fn replay_falsification(
 pub(crate) fn render_witness(
     harness: &str,
     check_text: &str,
-    bindings: &[(&str, i64)],
+    bindings: &[(&str, i128)],
 ) -> Result<Witness, MalformedTranscript> {
     let bindings = bindings
         .iter()
@@ -172,7 +173,7 @@ fn replay_falsification_through(
                 })?;
             let integer = match value {
                 WitnessValue::Integer(integer) => *integer,
-                WitnessValue::Boolean(boolean) => i64::from(*boolean),
+                WitnessValue::Boolean(boolean) => i128::from(*boolean),
             };
             Ok((parameter.node_id, integer))
         })
@@ -261,8 +262,12 @@ pub struct ReplayInputs {
     pub dependencies: Vec<DependencyLock>,
     /// The limits the replay run itself is charged against.
     pub accounting_limits: ScalarLimits,
-    /// The S1 to S4 stage limits of the proving run.
-    pub stage_limits: StageLimits,
+    /// The proving run's named stage bounds. Omitted names use QSL's published defaults.
+    pub stage_limits: BTreeMap<String, u64>,
+    /// The proving run's declared finite domains, keyed by their original proof positions.
+    pub declared_domains: Vec<DeclaredDomain>,
+    /// The configured reader bound for the replay request and envelopes.
+    pub replay_limits: ReplayLimits,
 }
 
 /// Why a lock's dependency selections are not a dependency input QSL admits.
@@ -397,7 +402,8 @@ impl ReplayInputs {
             backend: BACKEND_IDENTITY.to_owned(),
             state_environment: StateEnvironment::new(Vec::new()),
             accounting_limits: self.accounting_limits,
-            stage_limits: self.stage_limits,
+            stage_limits: self.stage_limits.clone(),
+            declared_domains: self.declared_domains.clone(),
             byte_provision,
         }
     }
@@ -645,7 +651,9 @@ pub fn replay_counterexample(
     transcript: &str,
     package: &ReplayPackage,
 ) -> Result<ReplayVerdict, SpineReplayError> {
-    replay_counterexample_through(identity, transcript, package, replay)
+    replay_counterexample_through(identity, transcript, package, |wire| {
+        replay(wire, package.inputs.replay_limits)
+    })
 }
 
 /// [`replay_counterexample`] with the request handed to `execute` instead of straight to
@@ -760,15 +768,9 @@ mod tests {
             },
             dependencies: Vec::new(),
             accounting_limits: limits,
-            stage_limits: StageLimits {
-                s1: ScalarLimits {
-                    text_input_bytes: 1 << 20,
-                    ..limits
-                },
-                s2: limits,
-                s3: limits,
-                s4: limits,
-            },
+            stage_limits: BTreeMap::from([("s1.input_bytes".to_owned(), 1 << 20)]),
+            declared_domains: Vec::new(),
+            replay_limits: ReplayLimits::default(),
         };
         ReplayPackage::new(inputs, "f").expect("the unit compiles and declares `f`")
     }
