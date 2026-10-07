@@ -485,6 +485,12 @@ impl CallerBootstrap {
             super::installer_reply_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
+            super::native_os_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
+            super::recipe_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
             super::role_scalar_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
