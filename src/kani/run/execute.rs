@@ -38,10 +38,14 @@ use crate::kani::{
             run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream, LaunchOutcome,
         },
         memory::MemoryObservation,
-        report_file::{fresh_report_path, remove_stale_report},
         tool::{KaniInstallation, KaniTool, KaniToolError},
     },
 };
+
+#[cfg(test)]
+use super::report_file::fresh_report_path;
+#[cfg(all(test, not(target_os = "linux")))]
+use super::report_file::remove_stale_report;
 
 /// The stable code of a run refused because a stream carried more than its limit.
 pub const OUTPUT_OVER_LIMIT_CODE: &str = "kani_output_over_limit";
@@ -483,15 +487,6 @@ fn take_report(
     report
 }
 
-/// A surviving caller removes only its assigned report on every exit, including startup refusal.
-struct ReportCleanup<'a>(&'a Path);
-
-impl Drop for ReportCleanup<'_> {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(self.0);
-    }
-}
-
 /// The evidence of one harness from its `run` of a process that exited with `exit_code`.
 fn evidence_of(
     request: &KaniExecutionRequest<'_>,
@@ -524,9 +519,7 @@ fn run_single(
     stdin: &super::stdin::OriginalStdin,
     deadline: Option<Instant>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
-    let report_path = fresh_report_path(request.target_directory);
-    remove_stale_report(&report_path)?;
-    let _cleanup = ReportCleanup(&report_path);
+    let report_path = anonymous_report_operand();
     let (arguments, command) = launch_command(request, &report_path);
     let launch = start(
         request,
@@ -753,9 +746,7 @@ fn run_group(
         .map(|(_, request)| request.harness.view())
         .collect();
     let selections: Vec<String> = views.iter().map(|view| view.selection.clone()).collect();
-    let report_path = fresh_report_path(first.target_directory);
-    remove_stale_report(&report_path)?;
-    let _cleanup = ReportCleanup(&report_path);
+    let report_path = anonymous_report_operand();
     let (arguments, command) = batch_launch_command(first, &selections, &report_path);
     let launch = start(
         first,
@@ -976,6 +967,13 @@ fn launch_command(
         .current_dir(request.crate_directory);
     arguments.push(report_path.display().to_string());
     (arguments, command)
+}
+
+/// This path names only the backend's actual inherited write-only report pipe. It creates no
+/// target-directory file and confers no report-read authority. O's authenticated sealed delivery
+/// and real writer EOF remain the production report source; no surviving caller unlink is owed.
+fn anonymous_report_operand() -> std::path::PathBuf {
+    std::path::PathBuf::from(format!("/proc/self/fd/{}", super::REPORT_SLOT))
 }
 
 /// Maps a concluded [`LaunchOutcome`] and the report its run exported to the `(run, exit_code)`
@@ -1232,6 +1230,48 @@ mod classification_tests {
         // Two launches into one target directory never name the same report file.
         let (again, _) = kani_launch_command(&request);
         assert_ne!(again.last(), arguments.last());
+    }
+
+    /// Trace: FR-034-AC-31, FR-034-AC-32, FR-034-AC-33.
+    #[test]
+    fn bounded_recipes_export_to_the_reserved_anonymous_writer_slot() {
+        let harness = state_frame_harness(
+            StateFrameProperty::Frame {
+                granted: Vec::new(),
+                checked: Vec::new(),
+            },
+            vec![
+                "--harness".to_owned(),
+                "check".to_owned(),
+                "--exact".to_owned(),
+            ],
+        );
+        let installation = KaniInstallation {
+            launcher: PathBuf::from("cargo-kani"),
+        };
+        let request = KaniExecutionRequest {
+            installation: &installation,
+            guardian_path: Path::new("/unused-helper"),
+            harness: KaniExecutableHarness::from(&harness),
+            crate_directory: Path::new("/crate"),
+            target_directory: Path::new("/target"),
+        };
+        let operand = anonymous_report_operand();
+        assert_eq!(operand, Path::new("/proc/self/fd/5"));
+        let (single, _) = launch_command(&request, &operand);
+        assert_eq!(single.last().unwrap(), "/proc/self/fd/5");
+        assert_eq!(
+            single[1..=request.harness.view().options.len()],
+            request.harness.view().options[..]
+        );
+        let (batch, _) = batch_launch_command(&request, &["check".to_owned()], &operand);
+        assert_eq!(batch.last().unwrap(), "/proc/self/fd/5");
+        assert_eq!(
+            batch[batch.len() - 4..batch.len() - 1],
+            ["-Z", "unstable-options", "--export-json"]
+        );
+        // This checks recipe construction only. Real pipe inheritance, safe acquisition,
+        // writer EOF, sealing and Kani export semantics remain production runtime obligations.
     }
 
     /// A timed-out launch maps to no exit code and `Inconclusive { reason: TimedOut }`.
