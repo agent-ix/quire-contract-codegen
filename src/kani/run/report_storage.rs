@@ -3,6 +3,8 @@
 //! No report pathname exists. A nonblocking pipe is drained in finite event-loop work; quiet is
 //! never EOF. Only actual EOF permits immutable memfd handoff. The collector reserves its entire
 //! possible backing before exposure, including the detection byte, irrespective of sparse size.
+//! An independently selected owner stop irreversibly discards subsequent pipe content. Discard
+//! never supplies a report or proves descendant settlement; the whole-chain owner retains both.
 
 use std::{
     fs::{File, OpenOptions},
@@ -100,6 +102,8 @@ pub(super) enum ReportError {
     WriterSlot,
     WriterClose(nix::errno::Errno),
     MemoryCharge(ChargeError),
+    OwnerStopped,
+    OwnerStopNotStarted,
 }
 
 impl From<rustix::io::Errno> for ReportError {
@@ -187,6 +191,12 @@ pub(super) struct ReportCollector {
     limit: usize,
     detection: usize,
     eof: bool,
+    mode: CollectorMode,
+}
+
+enum CollectorMode {
+    Retaining,
+    OwnerStop { deadline: Option<Instant> },
 }
 
 impl ReportCollector {
@@ -248,6 +258,7 @@ impl ReportCollector {
             limit,
             detection,
             eof: false,
+            mode: CollectorMode::Retaining,
         })
     }
 
@@ -263,6 +274,7 @@ impl ReportCollector {
         &mut self,
         ledger: &ResourceLedger,
     ) -> Result<OwnedFd, ReportError> {
+        self.require_retaining()?;
         ledger
             .require_writer_exposure(self.identity, self.reserve)
             .map_err(ReportError::MemoryCharge)?;
@@ -271,6 +283,7 @@ impl ReportCollector {
 
     /// Finite concurrent event-loop work; the next control/deadline/accounting tick remains live.
     pub(super) fn drain_tick(&mut self, deadline: Option<Instant>) -> Result<(), ReportError> {
+        self.require_retaining()?;
         let mut bytes = [0; READ_BYTES];
         for _ in 0..READS_PER_TICK {
             check_deadline(deadline)?;
@@ -327,12 +340,81 @@ impl ReportCollector {
         Ok(())
     }
 
+    /// Called only after the owner independently selects a genuine stop. No report bytes or
+    /// collector error select that stop here. Only O's still-owned, unexposed writer is dropped;
+    /// already transferred writers and child cancellation remain the whole-chain owner's duty.
+    /// Re-entry preserves the irreversible mode and any previously established cutoff.
+    pub(super) fn begin_owner_stop(&mut self) -> Result<(), ReportError> {
+        if matches!(self.mode, CollectorMode::Retaining) {
+            self.mode = CollectorMode::OwnerStop { deadline: None };
+        }
+        drop(self.writer.take());
+        self.verify_pipe()
+    }
+
+    /// Discard finite nonblocking work under the owner's original settlement cutoff. Later
+    /// calls can only shorten a retained cutoff; None cannot erase an earlier Some. Quiet is
+    /// not EOF, and true confirms only a pipe read of zero, never child termination or cleanup.
+    /// Retained memfd content and the full backing reservation remain owned and charged.
+    pub(super) fn drain_owner_stop(
+        &mut self,
+        deadline: Option<Instant>,
+    ) -> Result<bool, ReportError> {
+        let cutoff = match &mut self.mode {
+            CollectorMode::Retaining => return Err(ReportError::OwnerStopNotStarted),
+            CollectorMode::OwnerStop { deadline: retained } => {
+                *retained = match (*retained, deadline) {
+                    (Some(previous), Some(next)) => Some(previous.min(next)),
+                    (Some(previous), None) => Some(previous),
+                    (None, next) => next,
+                };
+                *retained
+            }
+        };
+        let mut bytes = [0; READ_BYTES];
+        for _ in 0..READS_PER_TICK {
+            check_deadline(cutoff)?;
+            self.verify_pipe()?;
+            if self.eof {
+                return Ok(true);
+            }
+            match rustix::io::read(&self.reader, &mut bytes[..]) {
+                Ok(0) => {
+                    self.eof = true;
+                    check_deadline(cutoff)?;
+                    return Ok(true);
+                }
+                Ok(_) => {}
+                Err(rustix::io::Errno::AGAIN) => return Ok(false),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(false)
+    }
+
+    fn verify_pipe(&self) -> Result<(), ReportError> {
+        self.identity.verify(&self.reader)?;
+        if fcntl_getpipe_size(&self.reader)? != self.capacity {
+            return Err(ReportError::CapacityChanged);
+        }
+        Ok(())
+    }
+
+    fn require_retaining(&self) -> Result<(), ReportError> {
+        match self.mode {
+            CollectorMode::Retaining => Ok(()),
+            CollectorMode::OwnerStop { .. } => Err(ReportError::OwnerStopped),
+        }
+    }
+
     pub(super) fn eof(&self) -> bool {
         self.eof
     }
 
     /// Actual EOF is necessary; outer orchestration separately confirms I/M/all-writer settlement.
     pub(super) fn seal(mut self, deadline: Option<Instant>) -> Result<SealedReport, ReportError> {
+        self.require_retaining()?;
         check_deadline(deadline)?;
         if self.writer.is_some() {
             return Err(ReportError::WriterNotTransferred);
@@ -485,6 +567,8 @@ fn round_pages(bytes: u64, page: u64) -> io::Result<u64> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
 
     fn report_descriptor(bytes: &[u8], sealed: bool) -> OwnedFd {
