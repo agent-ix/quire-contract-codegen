@@ -35,6 +35,15 @@ impl std::fmt::Display for DeadlineError {
 impl std::error::Error for DeadlineError {}
 
 impl RoleDeadline {
+    /// Parsed absolute components only, with no new clock sample, window or authenticity.
+    /// Existing bound/clock checks still validate these values at their actual owning sites.
+    pub(super) const fn from_wire_parts(seconds: u64, nanoseconds: u32) -> Self {
+        Self {
+            seconds,
+            nanoseconds,
+        }
+    }
+
     /// Compare authenticated absolute bounds in their shared kernel monotonic domain. Two
     /// separate local() conversions conservatively round differently and cannot test equality.
     pub(super) fn no_later_than(self, bound: Self) -> Result<bool, DeadlineError> {
@@ -86,6 +95,14 @@ pub(super) struct MonotonicInstant {
 }
 
 impl MonotonicInstant {
+    /// Parsed original components; this does not establish liveness, freshness or origin.
+    pub(super) const fn from_wire_parts(seconds: u64, nanoseconds: u32) -> Self {
+        Self {
+            seconds,
+            nanoseconds,
+        }
+    }
+
     pub(super) fn now() -> Result<Self, DeadlineError> {
         let time = monotonic()?;
         Ok(Self {
@@ -124,15 +141,27 @@ impl MonotonicInstant {
 }
 
 /// The original event producer. A forwarded stamp retains its producer, not the receiver's role.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum StopOrigin {
+macro_rules! stop_origins {
+    ($( $(#[$attribute:meta])* $origin:ident ),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub(super) enum StopOrigin { $( $(#[$attribute])* $origin, )+ }
+        impl StopOrigin {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $( if text.equals(stringify!($origin)) { return Some(Self::$origin); } )+
+                None
+            }
+        }
+    };
+}
+
+stop_origins!(
     Caller,
     Launcher,
     Outer,
     Inner,
     /// Trusted same-PID installer can detect policy failure before I receives that event.
     Backend,
-}
+);
 
 impl StopOrigin {
     fn slot(self) -> usize {

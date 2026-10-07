@@ -60,6 +60,8 @@ mod creator;
 // Linux role/setup/storage primitives are compiled with the actual helper library artifact.
 // Registration alone does not replace the existing production launch orchestration.
 #[cfg(target_os = "linux")]
+mod cause_decode;
+#[cfg(target_os = "linux")]
 mod cause_metadata;
 // One borrowed fixed-workspace grammar decoder; schema migration remains source work.
 #[cfg(target_os = "linux")]

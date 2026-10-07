@@ -28,11 +28,28 @@ pub(super) enum CauseCheckerRole {
     BackendInstaller,
 }
 
+// The original finite enum declaration also supplies borrowed decoder labels. This does not
+// authorize any role/site cross product or alter portable marker/source behavior.
+macro_rules! wire_metadata_enum {
+    ($(#[$attribute:meta])* $name:ident { $($variant:ident),+ $(,)? }) => {
+        $(#[$attribute])*
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub(super) enum $name { $( $variant, )+ }
+
+        impl $name {
+            #[cfg(target_os = "linux")]
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $( if text.equals(stringify!($variant)) { return Some(Self::$variant); } )+
+                None
+            }
+        }
+    };
+}
+
 /// A finite operation name, not permission for every role/operation/phase combination.
 ///
 /// The owner must enforce FR-034's actual role/site/state scope before constructing provenance.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum CauseOperation {
+wire_metadata_enum!(CauseOperation {
     RoleBootstrap,
     Identity,
     OwnerProtection,
@@ -61,7 +78,7 @@ pub(super) enum CauseOperation {
     BackendSupervision,
     BackendCompletion,
     SettlementControl,
-}
+});
 
 /// Authenticated original producer facts retained independently of its lost source object.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -80,8 +97,7 @@ pub(super) struct CauseCheckerProvenance {
 }
 
 /// The single closed FR-034 cause-integrity predicate inventory.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum CauseIntegrityPredicate {
+wire_metadata_enum!(CauseIntegrityPredicate {
     RequiredRepresentationExceededBound,
     RequiredRepresentationFormattingFailed,
     UnnameableOriginalKind,
@@ -91,7 +107,7 @@ pub(super) enum CauseIntegrityPredicate {
     UnknownKindMetadata,
     MalformedCauseMetadata,
     IncompleteCauseMetadata,
-}
+});
 
 impl fmt::Display for CauseIntegrityPredicate {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
