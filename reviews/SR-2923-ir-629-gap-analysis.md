@@ -64,3 +64,4 @@ Round 1, against the fix-round head recorded in the IR-629 Linear dispositions m
 | FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-005 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-006 | fixed | round 2: fix commit 'spec(CG): close IR-629 review disposition findings' |
+| FND-007 | fixed | round 3: fix commit 'spec(CG): clarify routed-item constructor invariants' |
