@@ -186,8 +186,7 @@ macro_rules! backend_exits {
 
 backend_exits! { Code(i32), Signal(i32) }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum GuardianRefusal {
+identity_variants!(GuardianRefusal {
     NotNamespaceInit,
     SessionNotIsolated,
     CreatorUidMismatch,
@@ -197,7 +196,7 @@ pub(super) enum GuardianRefusal {
     InvalidControl,
     BackendSpawnFailed,
     BackendObservationFailed,
-}
+});
 
 #[cfg(test)]
 mod tests {

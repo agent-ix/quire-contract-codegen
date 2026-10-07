@@ -122,10 +122,11 @@ pub(super) fn startup_deadline_from_parts(
 
 // The owning declaration supplies both emitted fields and parsed variant field order.
 macro_rules! bootstrap_controls {
-    ($name:ident, $kind:ident { $($(#[$attribute:meta])* $variant:ident { $($field:ident: $value:ty),+ $(,)? }),+ $(,)? }) => {
+    ($(#[$enum_attribute:meta])* $name:ident, $kind:ident { $($(#[$attribute:meta])* $variant:ident $( { $($field:ident: $value:ty),+ $(,)? } )?),+ $(,)? }) => {
+        $(#[$enum_attribute])*
         #[derive(Deserialize, Serialize)]
         #[serde(tag = "kind", deny_unknown_fields)]
-        pub(super) enum $name { $($(#[$attribute])* $variant { $($field: $value),+ }),+ }
+        pub(super) enum $name { $($(#[$attribute])* $variant $( { $($field: $value),+ } )?),+ }
         #[derive(Clone, Copy)]
         pub(super) enum $kind { $($variant),+ }
         impl $kind {
@@ -134,7 +135,7 @@ macro_rules! bootstrap_controls {
                 None
             }
             pub(super) fn declared_fields(self) -> &'static [&'static str] {
-                match self { $(Self::$variant => &[$(stringify!($field)),+]),+ }
+                match self { $(Self::$variant => &[$($(stringify!($field)),+)?]),+ }
             }
         }
     };
@@ -177,18 +178,18 @@ macro_rules! settlement_modes {
 }
 settlement_modes!(ObserveOuterExit, CancelOuter);
 
-/// Trusted L reports only custody established from its retained actual Child wait result.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum OuterChildSettlement {
-    NotCreated,
-    Reaped { outcome: BackendExit },
+bootstrap_controls! {
+    /// Trusted L reports only custody established from its retained actual Child wait result.
+    #[derive(Clone, Copy, Debug)]
+    OuterChildSettlement, OuterChildSettlementKind {
+        NotCreated,
+        Reaped { outcome: BackendExit },
+    }
 }
 
-/// Authenticated L-origin bootstrap status. Neither status grants backend authorization.
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum LauncherReply {
+bootstrap_controls! {
+    /// Authenticated L-origin bootstrap status. Neither status grants backend authorization.
+    LauncherReply, LauncherReplyKind {
     Ready {
         identity: BuildIdentity,
         authority: RunAuthority,
@@ -203,7 +204,7 @@ pub(super) enum LauncherReply {
         authority: RunAuthority,
         reason: GuardianRefusal,
     },
-}
+}}
 
 impl LauncherReply {
     pub(super) fn rights_count(&self) -> usize {
@@ -232,10 +233,9 @@ impl OuterBootstrap {
     }
 }
 
-/// Actual O-origin arm publication, received separately by L and C with one actual O pidfd.
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum OuterArmReply {
+bootstrap_controls! {
+    /// Actual O-origin arm publication, received separately by L and C with one actual O pidfd.
+    OuterArmReply, OuterArmReplyKind {
     Armed {
         identity: BuildIdentity,
         authority: RunAuthority,
@@ -244,7 +244,7 @@ pub(super) enum OuterArmReply {
         mapped_uid: u32,
         mapped_gid: u32,
     },
-}
+}}
 
 impl OuterArmReply {
     pub(super) fn rights_count(&self) -> usize {
