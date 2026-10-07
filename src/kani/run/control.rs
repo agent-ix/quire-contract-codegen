@@ -848,11 +848,10 @@ impl TerminalReceive {
 
     pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
         let fixed = std::mem::size_of::<Self>()
-            .checked_sub(std::mem::size_of::<PreparedReceive>())
+            .checked_sub(std::mem::size_of::<IncrementalReceive>())
             .and_then(|bytes| u64::try_from(bytes).ok())
             .ok_or(ControlError::EncodedBytesExceeded)?;
         self.receive
-            .buffer
             .reserved_bytes()?
             .checked_add(fixed)
             .ok_or(ControlError::EncodedBytesExceeded)
@@ -914,6 +913,20 @@ impl IncrementalReceive {
             active: false,
             poisoned: false,
         })
+    }
+
+    /// Actual retained payload/right capacities plus fixed incremental state and the existing
+    /// receive ancillary work arrays. No frame limit or spare startup capacity substitutes for
+    /// this reservation; C charges it before creating L.
+    pub(super) fn reserved_bytes(&self) -> Result<u64, ControlError> {
+        let fixed = std::mem::size_of::<Self>()
+            .checked_sub(std::mem::size_of::<PreparedReceive>())
+            .and_then(|bytes| u64::try_from(bytes).ok())
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+        self.buffer
+            .reserved_bytes()?
+            .checked_add(fixed)
+            .ok_or(ControlError::EncodedBytesExceeded)
     }
 
     pub(super) fn has_partial_frame(&self) -> bool {
