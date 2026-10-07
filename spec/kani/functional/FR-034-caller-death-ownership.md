@@ -809,6 +809,64 @@ KaniRunOutcome. Existing run_terminal_value accepts KaniRunOutcome, not an execu
 fabricate no terminal value or Failed outcome. Original deadline expiry retains its classification
 precedence. All mechanisms, compatibility, capability and confinement Tests here remain PLANNED/UNRUN.
 
+### Cross-role refusal cause representation
+
+When a guardian startup or observation refusal carries an I/O cause across a process-role boundary,
+the sending owner shall capture its actual producer's ErrorKind and optional raw OS errno before
+transport projection. C shall retain the authenticated originating role, typed failing operation
+and finite cause representation before selecting the existing refusal mapping. Existing run/build,
+actual retained process identity, state, descriptor and applicable original-stop authentication
+remain required; cause metadata alone grants none of that authority.
+
+This amendment explicitly defines cross-role "original cause" retention for the following finite
+representations. It applies to generic guardian startup/observation causes, in addition to the native
+policy admission allocation. It promises faithful stated facts, not movement of an arbitrary boxed
+Rust error object between processes. Local-role errors do not undergo this projection: their existing
+original io::Error/source retention remains required. Native-policy typed-origin requirements above,
+public refusal variants/codes, errno-independent admission, failure precedence and actual settlement
+remain unchanged.
+
+| Actual originating cause | Required cross-role representation and public cause |
+| --- | --- |
+| I/O error with a raw OS errno | Retain that exact errno and actual ErrorKind; reconstruct the public I/O cause directly from the errno and verify its kind on the same running platform. A wrapper shall not erase the public raw_os_error. Mismatched metadata refuses; no fabricated errno repairs it. |
+| I/O error with no raw errno and no custom payload | Retain the actual ErrorKind and absence of errno/payload; reconstruct that kind without inventing a custom source. |
+| Finite reconstructible first-party/dependency variant | Retain the actual typed variant, its safely reconstructible fields and typed originating operation. Reconstruct only those declared fields and nested I/O facts; identify any unrepresented nested payload separately. Reconstruction is not original object/downcast identity. |
+| Actual reservation failure carried by a custom I/O payload or a first-party Reservation wrapper | Retain the actual outer I/O kind, absence/presence of raw errno and the positively observed typed reservation category plus its actual typed wrapper/site. Record that the opaque TryReserveError payload cannot be reconstructed. Stable APIs do not expose its allocation-versus-capacity kind or layout; never infer them from diagnostics or claim an identical reconstructed Reservation payload. |
+| Other custom/boxed payload outside the finite reconstructible set | Retain the actual outer kind/errno and typed producer/site, and explicitly mark the custom payload/chain unrepresented. No invented source, downcast identity or diagnostic-derived variant shall replace the missing payload. |
+
+The finite reconstructible set shall be source-grounded in the actual emitting paths. For the
+existing startup representation error domain, its no-payload variants are InvalidContextBound,
+ContextExceeded, Formatting, UnnamedIoKind, OsKindMismatch, NonInstallationBackendCause and
+PolicyCauseMismatch; Reservation has the opaque nested payload described above. The actual
+seccompiler installation variants are EmptyFilter, Prctl, Seccomp and ThreadSync with its original
+PID field; nested I/O uses this table. A producer outside these domains shall retain its actual
+I/O facts and typed site with explicit unrepresented payload, not silently enter a guessed variant.
+A first-party Reservation variant containing TryReserveError is only a truthful typed category,
+not a safely constructible copy of that original variant. A kind-only projection without the
+required typed producer/category and explicit payload-loss facts does not satisfy this allocation.
+For opaque payloads, the public I/O projection shall retain the actual kind/errno without
+inventing a source; authenticated private custody shall retain the explicit representation loss.
+Public bounded-execution documentation shall explain this cross-role projection limit and distinguish
+local original-source retention. It shall not promise an unavailable public role/stage query.
+The current representation and public consumer flow remain CODE-gated.
+
+When the actual producer uses io::Error::other with a TryReserveError payload, C shall preserve
+Other rather than silently changing it to OutOfMemory. When the actual producer instead uses the
+standard From<TryReserveError> conversion, C shall preserve its resulting OutOfMemory kind and
+its already absent source. That conversion deliberately drops the payload; its OutOfMemory name
+establishes neither allocator failure nor a reconstructed allocation layout. Choosing a different
+producer conversion is a CODE change requiring its own review, not transport normalization.
+
+The owner shall encode finite cause/provenance facts in the existing bounded authenticated controls
+and charge their actual metadata/storage under the existing named caller-buffer and whole-run
+limits. Optional original diagnostic detail shall remain separate, bounded UTF-8 diagnostic data;
+its absence, truncation or formatting failure shall not supply a cause, role, operation or public
+classification. No Display/string parsing, arbitrary source-chain serialization, unstable feature,
+new public error catalog, additional acknowledgment, phase cap or resource allowance is allocated.
+Unavailable/malformed cause custody shall refuse through existing typed error paths with retained
+owners and original deadlines, never Dispatch or emit evidence. These obligations do not allocate
+a new NotObserved reason or weaken report, capability, ownership or cleanup requirements.
+
 ### Run artifact and report lifetime
 
 FR-017's internal named report allocation is replaced explicitly by a child-only anonymous pipe
@@ -1104,6 +1162,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
 | FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
 | FR-034-AC-39 | PLANNED/UNRUN. Native guardian/backend-installer policy support is source/cfg Analysis; unreachable unsupported-native support is not a fabricated runtime Test. Actual installation failures are separate production Tests when available, otherwise unavailable/UNRUN with no Test completion credit. Planned mandatory admission context distinguishes BackendIpcExclusion capability support/filter installation from TrustedOwnerProtection privilege installation, retaining typed cause provenance without message parsing or fabricated errno. The policy terminates the calling process on an unsupported syscall audit architecture; every native x86_64 policy also terminates it for x32 syscall-number/aliases regardless of kernel x32 support. Native entry, exec and descendants retain these rules. Real applicable compat/x32 tests require an unconfined actual-syscall effect control and genuine omission mutant; unavailable workload/tooling/kernel controls yield zero whole-criterion completion credit, not assertion-skipping success. This establishes no immutable target-image identity or universal incompatible-image exec/entry rejection. Actual unsuccessful/no-report termination retains NoVerdict after whole-chain settlement and existing deadline/capture/resource precedence; CleanupUnconfirmed and all other report rules remain unchanged. Path/content/PATH/interpreter/loader/binfmt_misc residuals add no stability precondition, recipe change, descriptor leak or unfiltered retry. | Test, Analysis |
+| FR-034-AC-40 | PLANNED/UNRUN. Generic cross-role startup/observation causes preserve actual producer ErrorKind/raw errno, authenticated typed role/operation and finite reconstructible variant/fields, with explicit opaque reservation/custom-chain loss. Current Other-wrapped TryReserveError remains Other; an actual standard conversion remains OutOfMemory with its already absent source, without allocation-kind/layout inference or producer normalization. OS projection preserves public errno directly; kind-only/prose classification or invented source fails. Local-role original sources and AC-39 typed provenance remain required. Existing finite controls, charged buffers, original cutoffs, refusal precedence and whole-chain settlement remain; no new catalog, acknowledgment, budget, evidence or NotObserved reason. Standalone source Analysis and available genuine transport/consumer Tests receive no credit from existing rows or forced allocation failure. | Test, Analysis |
 
 ## Dependencies
 

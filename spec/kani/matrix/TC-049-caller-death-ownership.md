@@ -103,6 +103,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
 | FR-034-AC-38 | PLANNED/UNRUN: independent normal settlement/join, original-window unavailable confirmation, typed diagnostic-only refusal and no new post-return custody (step 25). Untagged until actual complete Tests. | Any unavailable ordinary-seam observation is explicitly owed; prior death tests or source-only fault discussion do not supply this new criterion. |
 | FR-034-AC-39 | PLANNED/UNRUN ordinary production Tests: actual native installation success/failure, syscall process-kill and real unconfined effect controls plus unchanged classification/settlement. Unsupported-native cfg/support and unconditional native-x86_64 x32 policy require source Analysis, not an invented Test. | No new IR-655 fixture facility is allocated. Any predicate unavailable through ordinary production seams remains explicitly owed through the SPEC-before-fixture-CODE process; missing tools/kernel/workload or source-only Analysis supplies no whole-criterion Test credit. |
+| FR-034-AC-40 | PLANNED/UNRUN: independent actual source-flow Analysis and available ordinary production refusal transport/public-consumer assertions for exact kind/errno, finite typed provenance and explicit payload loss. Analysis gives no Test credit. | Exact-boundary or unavailable producer/transport predicates requiring fixture extension are owed through IR-655 SPEC-before-fixture-CODE; no new hook or forced allocation failure. Whole criterion remains untagged while any Test obligation is unavailable. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -651,6 +652,35 @@ fixture DTO, rights, hook or coordination cap; where an ordinary production seam
 record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
 criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
 
+27. PLANNED/UNRUN (FR-034 AC-40). Perform independent source-flow Analysis of each actual
+    generic cross-role cause producer, finite encoder/decoder and public consumer. Record the
+    original typed operation, actual outer ErrorKind/raw errno, reconstructible variant/fields,
+    whether a custom payload exists and precisely which payload/chain facts do not cross roles.
+    Distinguish direct OS errors, no-payload kinds, finite first-party/dependency variants,
+    Other-wrapped TryReserveError and first-party Reservation wrappers, and other opaque payloads.
+    Read the actual stable standard-library From<TryReserveError> implementation: its OutOfMemory
+    conversion drops the source. Compare that conversion with actual Other producers without
+    changing producers or claiming executed allocator failure. Do not inspect unstable reservation
+    kind/layout APIs, fabricate a TryReserveError/errno or force capacity/allocation exhaustion.
+    This Analysis cannot replace a runtime transport/consumer Test.
+    For available genuine production refusal cases, exercise the existing authenticated bounded
+    transport and real public consumer before/after whole-chain settlement. Require the actual
+    existing public refusal mapping, exact original OS errno/kind or non-OS producer kind, typed
+    originating role/operation and declared representation fidelity. Check reconstructed supported
+    enum fields and explicit nested opaque loss; no claim of original object/downcast identity.
+    Admission failures emit no evidence/outcome/Failed and local-role sources remain unchanged.
+    If a genuine producer or control cannot be exercised through the allocated facility, record
+    that Test unavailable/UNRUN with zero completion credit; do not invent a runtime seam or use
+    artificial allocation failure. Fixture-dependent exact-boundary controls remain in the existing
+    IR-655 slice; an available ordinary production transport case belongs to the first slice.
+    Mutants replacing an actual Other kind with OutOfMemory, erasing an actual OS errno, substituting
+    typed operation/category, omitting opaque-loss metadata or deriving a variant from changed
+    diagnostic text must fail the matching semantic/provenance oracle. Diagnostic absence or
+    different bounded text shall leave the typed cause/mapping unchanged. Malformed/overlimit or
+    mismatched run/build/role/state controls must refuse without Dispatch, with actual owners and
+    the original cutoff retained. Restored controls pass; no old fixture/Analysis row backs AC-40.
+
+
 ### Charged-peak evidence constructors (FR-034-AC-32)
 
 This additional Test and source-flow Analysis procedure is PLANNED/UNRUN. It does not
@@ -724,6 +754,7 @@ Runtime evidence must cover later ticks and final settlement; bootstrap success/
 is insufficient. All failure checks preserve existing classification, original timer and owned
 cleanup obligations.
 
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -747,6 +778,7 @@ cleanup obligations.
 | FR-034-AC-37 | PLANNED/UNRUN: I non-dumpability/backend privilege exclusion block proc1fd/pidfd_getfd/ptrace; trusted channel lifetimes and unchanged EOF mutant retained; uniform authority fault domain | Ambient Yama masks absent protection; contained export excused as outside peer; final delivery closed early |
 | FR-034-AC-38 | PLANNED/UNRUN: actual normal role/capture/spawner settlement; original-window typed CleanupUnconfirmed error with bounded diagnostic-only residuals, no new post-return custody; public precondition docs | Error carries authority; hidden cleanup worker; false joined/retired or kernel-cause claim; valid bytes accepted after unconfirmed settlement; grace resets T |
 | FR-034-AC-39 | PLANNED/UNRUN: source/cfg Analysis of unsupported native support and unconditional native-x86_64 x32 rule; real available installation Tests, typed provenance/capability distinction, applicable process-kill/effect controls, omission mutant, original settlement/classification | Source Analysis called an executed Test; errno-only denial instead of process-kill; omitted x32 rule on a kernel without x32; unavailable fixture counted complete; emulator mistaken for guest syscall evidence; false pre-Dispatch label or unfiltered retry |
+| FR-034-AC-40 | PLANNED/UNRUN: actual producer kind/errno, authenticated finite typed provenance and declared opaque-loss representation reach the existing public refusal after settlement; local causes/AC-39 remain intact | Other normalized to OOM; erased errno; invented source/allocator kind; diagnostic-derived operation; stale unauthenticated payload; false existing-test credit |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
