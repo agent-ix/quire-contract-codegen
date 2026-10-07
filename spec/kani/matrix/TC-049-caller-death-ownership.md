@@ -991,6 +991,35 @@ bounded controls; no fabricated Armed, role identity, Child result or terminatio
    only wire change is this state-selected L→C ancillary-rights count: no new frame/ACK/window,
    public field/refusal or resource cap. Existing O→L zero-right negative handling remains intact.
 
+### Claimed-startup negative transaction checks
+
+These IR-687 Test and Analysis procedures are PLANNED/UNRUN; they add no prior-row execution credit.
+
+1. Use a genuine claimed I with its actual lease and a separately retained real M Child. Establish
+   an original typed producer failure and its actual stamp before a later successful complete
+   exhausting tick; repeat with exhaustion established first. Require the first independently
+   established stop to select the single existing terminal candidate. Inspect every named input,
+   checked sum and all due pre-send ticks; a pending or failed tick cannot stand in for exhaustion.
+   Keep the existing malformed-report precedence case separately, so the new pair ordering cannot
+   silently weaken resource/deadline precedence over malformed content.
+2. Exercise zero-progress, partial and complete sends on the actual existing control. Require
+   first-byte irreversibility, no replacement/splice/second terminal frame and full authentication
+   before C's provisional custody. C closes the real I lease after that receipt; actual I pin
+   termination, separate real M Child reap and the remaining O/L/capture/creator/EOF settlement
+   precede any normal final result under the original first-stop cutoff, including no work deadline.
+3. Establish a genuine complete observation before the negative, then obtain a later fresh
+   exhaustion or an actual observation/collector/transport error during settlement. Inspect the
+   retained original-owner accounting/history/OwnerStop or owned later-error custody without
+   interpreting the negative's absent peak field as zero, no history or current validity. Require
+   continued due sampling and refusal of an unconfirmed whole chain. Historical peaks cannot
+   repair a failed current tick; later facts cannot rewrite the committed bytes or reset the clock.
+4. Analysis shall inspect the actual producer error/state/stamp establishment, complete-tick
+   exhaustion selection, first-byte and full-publication boundaries, and retained later-error
+   lifetime. The currently missing later-error retention and published-versus-settled distinction
+   are CODE gates. A review shall explicitly attempt resource-precedence contradictions, silently
+   lost later exhaustion/error facts and false zero/no-observation claims; source Analysis alone
+   cannot count as production Test completion.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -1033,6 +1062,7 @@ bounded controls; no fabricated Armed, role identity, Child result or terminatio
 | FR-034-AC-62 | PLANNED/UNRUN: original producer stamp adopted before L wait; earliest original cutoff retained | Receipt-time trigger or reset FIRST-stop allowance |
 | FR-034-AC-63 | PLANNED/UNRUN: final original cause follows actual whole-chain settlement | Ready pidfd/negative bytes substitute for wait, EOF or capture/creator settlement |
 | FR-034-AC-64 | PLANNED/UNRUN: existing control/ceiling allocation and public API preserved | New frame/ACK/window/cap or uncharged extra descriptor |
+| FR-034-AC-65 | PLANNED/UNRUN: first established claimed-startup stop retains one immutable candidate; due ticks and later genuine facts survive, with final whole-chain settlement | Lost later error/exhaustion; false zero peaks; partial-frame rewrite; premature normal return |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable

@@ -316,6 +316,51 @@ publication alone does not implement negative-state capability acquisition or pr
 evidence. Required producer/source authentication and original-cause representation remain governed
 by the existing cross-role refusal-cause contract.
 
+### Claimed-startup negative terminal transaction
+
+When a genuine startup failure occurs after an actual I claim, O shall preserve the FIRST
+independently established terminal stop as the candidate for the existing single negative
+transaction. A genuine failure is established by the actual producer error with retained typed
+cause, operation/state and original producer stop stamp; packet labels or receipt time do not
+establish it. Resource exhaustion is established only by a successful fresh complete observation
+of every named input and checked charge sum yielding exhaustion. Deadline exhaustion requires the
+actual original deadline/work cutoff observation. A pending, failed or incomplete observation
+shall not establish a resource candidate through historical peaks, omitted quantities or defaults.
+This ordering allocates the genuine-failure/later-stop pair; it does not weaken independently
+established resource/deadline precedence over malformed partial report content.
+
+When the original failure is the first established candidate, O may publish the existing
+`Committed` / `OperationalFailure` before I/M settlement to let C
+close the actual original I lease and break the claimed-startup settlement cycle. Before the first
+send, O shall include every due observation and required fresh complete pre-send tick. O shall
+preserve the first established candidate and original earliest producer stamp/cutoff independently
+of delivery progress. The first emitted frame byte makes that candidate's wire representation
+irreversible: an unsent frame may be retired under the existing zero-progress rule, but a partial
+or fully sent frame shall not be replaced, spliced or rewritten. Full frame delivery permits C's
+existing complete authentication and provisional custody only; it is not a settlement result.
+
+The negative's absent peak field shall mean no peak transport or execution evidence. It shall not
+mean an actual zero measurement, no prior complete observation or a valid current observation.
+O shall retain actual complete observation history and the current observation's separate validity.
+A failed current observation shall not be repaired by a historical peak. Every due observation
+shall continue through remaining settlement; earlier failure publication shall not suppress later
+successful exhaustion or a later observation, collector or transport error. These later genuine
+facts shall remain in original O/L accounting or diagnostic custody, and in O's existing OwnerStop
+state when that measured path exists, without changing the already committed negative or adding
+another terminal frame, ACK, window, peak field or allowance.
+
+For that failure candidate, C shall retain the authenticated first failure provisionally, close its actual original I lease,
+and apply the original earliest cutoff. O shall positively confirm the actual claimed I's
+termination and separately reap its real retained M Child before normal O return. C's final
+original-cause result additionally requires the existing real O/L, capture, creator and control-EOF
+settlement. Later facts shall not waive this whole chain or `CleanupUnconfirmed` precedence.
+
+This transaction is PLANNED/UNRUN and CODE-gated. Current successful later exhaustion has ledger,
+history and OwnerStop custody; current later-error propagation can return the original failure
+without retaining the new owned error. CODE shall retain those actual later errors in the original
+owner and distinguish negative publication from settlement. Neither this source gap nor an earlier
+negative authorizes a confirmed result, silently omitted accounting or fabricated zero peaks.
+
 ### Startup and termination observations
 
 The stage boundaries and cancellation observations are cumulative only where explicitly stated:
@@ -1564,11 +1609,12 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-57 | PLANNED/UNRUN (IR-687). An authenticated pre-Armed O OperationalFailure reaches L with zero rights; forwarding the SAME negative bytes to C in AwaitArm carries exactly one clone of L's actual retained O pidfd. The typed rights contract is state-specific, and no other negative context gains this right. | Test |
 | FR-034-AC-58 | PLANNED/UNRUN (IR-687). L authenticates the negative's actual O Child PID and kernel UID/GID 0 plus original build/run/state; C authenticates its actual L chain and binds the received capability to that same L-owned O. Wrong actor, credentials, build/run or state refuses without deriving authority from packet labels. | Test |
 | FR-034-AC-59 | PLANNED/UNRUN (IR-687). A missing, extra, wrong-type or substituted negative capability refuses while retaining actual received rights and owners for bounded cleanup; a zero-right fallback never admits this L→C AwaitArm negative. | Test |
-| FR-034-AC-60 | PLANNED/UNRUN (IR-687). The transferred O pidfd permits only that O's cleanup/source custody, termination observation and existing owned cancellation. It never supplies a C direct Child, M/I or foreign-process authority, or numeric-PID reopening. | Test, Inspection |
+| FR-034-AC-60 | PLANNED/UNRUN (IR-687). The transferred O pidfd permits only that O's cleanup/source custody, termination observation and existing owned cancellation. It never supplies a C direct Child, M/I authority or authority over another actor, or numeric-PID reopening. | Test, Inspection |
 | FR-034-AC-61 | PLANNED/UNRUN (IR-687). Negative capability custody grants no Armed, namespace/network admission, positive phase advancement, report or Dispatch authority; an actual pre-arm failure cannot create M or execute the production backend. | Test |
 | FR-034-AC-62 | PLANNED/UNRUN (IR-687). C adopts the authenticated original O producer stop provisionally before L's actual Child wait, preserving the earliest original cutoff including absent work deadline; delayed delivery never generates a receipt-time stop or resets settlement allowance. | Test |
 | FR-034-AC-63 | PLANNED/UNRUN (IR-687). C exposes the original-cause failure only after actual O Child wait at L and required L/capture/creator/control-EOF settlement under the original cutoff. A provisional negative or ready pidfd is insufficient; unavailable confirmation retains CleanupUnconfirmed precedence and no evidence. | Test |
 | FR-034-AC-64 | PLANNED/UNRUN (IR-687). The pre-arm negative route reuses the existing bounded controls and ceilings without a new frame, ACK, window, cap or public API/refusal category; retaining the extra cleanup descriptor does not relax existing descriptor/accounting obligations. | Inspection |
+| FR-034-AC-65 | PLANNED/UNRUN (IR-687). When a genuine failure and a later stop occur during claimed startup, O preserves the first independently established candidate in one irreversible negative transaction, with all due pre-send observations included and later actual accounting/error facts retained by their original owner; full publication stays provisional until actual I termination, separate M reap and whole-chain settlement. An absent peak field supplies no zero/no-observation claim. | Test, Analysis |
 
 ## Dependencies
 
