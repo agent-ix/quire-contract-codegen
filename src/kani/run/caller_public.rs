@@ -12,7 +12,10 @@ use super::{
     caller_error,
     caller_execution::{CallerExecution, CallerExecutionError, PolicyTerminalOutcome},
     caller_prepare::PreparationError,
-    execute::{ChargedPeakNotObservedReason, ChargedPeakObservation, KaniStartupAdmissionCause},
+    execute::{
+        ChargedPeakNotObservedReason, ChargedPeakObservation, KaniStartupAdmissionCause,
+        KaniStartupCapability,
+    },
     launch::{
         BoundedLaunch, BoundedLaunchError, BoundedProductionLaunch, GuardianFailureKind,
         LaunchOutcome,
@@ -106,7 +109,7 @@ fn cancelled_result(
     candidate: CancelCandidate,
 ) -> Result<BoundedProductionLaunch, BoundedLaunchError> {
     if owner.is_settled() {
-        return Err(local_error(owner.was_dispatched(), original));
+        return Err(local_error(owner, original));
     }
     let cancelled = (|| {
         loop {
@@ -134,10 +137,10 @@ fn cancelled_result(
     })();
     match cancelled {
         Ok(Some((launch, peaks))) => Ok(BoundedProductionLaunch::from_measured(launch, peaks)),
-        Ok(None) => Err(local_error(owner.was_dispatched(), original)),
+        Ok(None) => Err(local_error(owner, original)),
         Err(failure) => {
             if owner.is_settled() {
-                return Err(local_error(owner.was_dispatched(), original));
+                return Err(local_error(owner, original));
             }
             // Forced outer containment is an attempt, not a substitute for the separately
             // authenticated M/terminal proof. Keep the override even if those retained child
@@ -152,14 +155,57 @@ fn cancelled_result(
 }
 
 fn startup_error(error: CallerExecutionError) -> BoundedLaunchError {
-    BoundedLaunchError::Unavailable {
-        admission: KaniStartupAdmissionCause::MemoryEnforcement,
-        cause: caller_error::into_original_io(error),
+    // Named preparation reservations are the explicit memory-enforcement sites. Other C
+    // bootstrap errors refuse establishment of the retained trusted ownership/control chain;
+    // they are never recast as memory exhaustion from their errno or diagnostic prose.
+    let memory_reservation = matches!(
+        &error,
+        CallerExecutionError::Preparation(PreparationError::CaptureSizeOverflow)
+            | CallerExecutionError::Preparation(PreparationError::CallerBootstrap(
+                CallerBootstrapError::ReservationUnrepresentable
+            ))
+            | CallerExecutionError::Bootstrap(CallerBootstrapError::ReservationUnrepresentable)
+            | CallerExecutionError::Progress(CallerDriveError::Bootstrap(
+                CallerBootstrapError::ReservationUnrepresentable
+            ))
+    );
+    match error {
+        CallerExecutionError::Assembly(error) => error,
+        original => BoundedLaunchError::Unavailable {
+            admission: if memory_reservation {
+                KaniStartupAdmissionCause::MemoryEnforcement
+            } else {
+                KaniStartupAdmissionCause::CapabilityUnavailable {
+                    capability: KaniStartupCapability::TrustedOwnerProtection,
+                }
+            },
+            cause: caller_error::into_original_io(original),
+        },
     }
 }
 
-fn local_error(dispatched: bool, error: CallerExecutionError) -> BoundedLaunchError {
-    if dispatched {
+fn local_error(owner: &mut CallerExecution, error: CallerExecutionError) -> BoundedLaunchError {
+    let command_failed = matches!(
+        &error,
+        CallerExecutionError::Bootstrap(CallerBootstrapError::Spawn(
+            super::spawner::SpawnFailure::Command(_)
+        )) | CallerExecutionError::Progress(CallerDriveError::Bootstrap(
+            CallerBootstrapError::Spawn(super::spawner::SpawnFailure::Command(_))
+        ))
+    );
+    if command_failed {
+        // The original Command::spawn error is not a creator/pidfd/clock error. Path storage
+        // was reserved before L and refers to precisely the configured helper program.
+        if let Some(path) = owner.bootstrap.take_helper_path() {
+            return BoundedLaunchError::BoundaryIo {
+                path,
+                cause: caller_error::into_original_io(error),
+            };
+        }
+        // Missing path custody cannot invent a backend executable context.
+        return startup_error(error);
+    }
+    if owner.was_dispatched() {
         BoundedLaunchError::Io(caller_error::into_original_io(error))
     } else {
         startup_error(error)
