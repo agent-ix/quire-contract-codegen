@@ -36,3 +36,11 @@ Relationship edges and enablement versus feature separation for the changed unit
 ## Verdict
 
 Enablement is correctly separated: QSL delivery is a source fact, and CG retention, driver authority and family proofs remain CODE gates. Open QSL text-profile and nested set/bag performance work is kept explicit as open upstream work.
+
+## Dispositions
+
+Round 1, reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9 (original review at cc3a78b0df85c6d3fde86af0b5a13a6eccc02d08; custody commit 8a0c77e1077e9a5d2068b48fbd774215adaa3a01). Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 1d5892fd-67f7-47dc-ab34-806d87e1ee79.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: Added a references edge to ix://agent-ix/quire-spec-language/FR-357. |

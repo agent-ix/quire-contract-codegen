@@ -40,3 +40,13 @@ Read the full three-file diff and checked each changed statement against public 
 ## Verdict
 
 Request changes. FND-001 regresses merged IR-666 terminal semantics and must be restored. FND-002 needs a feasible formulation. The composite claim shape itself matches QSL: positional operands, self-comparison twice, composite-literal graph child with empty Bounds, inline integer singleton Range, other inline literals refused, encoded-key byte order, duplicate-key refusal within an argument, and the four-member preimage. The API signatures, the Result-returning mint with no sentinel, the separate final ReplayLimits, and PLANNED/UNRUN gate status are also accurate. F-1..F-7, AC-7, AC-12, AC-13 and step 10 are unchanged.
+
+## Dispositions
+
+Round 1, reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9 (original review at cc3a78b0df85c6d3fde86af0b5a13a6eccc02d08; custody commit 8a0c77e1077e9a5d2068b48fbd774215adaa3a01). Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 1d5892fd-67f7-47dc-ab34-806d87e1ee79.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: AC-1 again carries merged IR-666's exact sentence: a CG precheck mismatch gives no report or terminal value, and a QSL common-step mismatch gives a binding-checked Refused report with its terminal value. This is consistent with Outputs, Setup Refusal step 2 and AC-9. |
+| FND-002 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: AC-9 now mutates CG's own retained sent identity, which is constructible because CompositeIdentity has public fields, against a genuine public report, and cross-binds another run's report. TC-048 8a forbids mutating or fabricating QSL's private report and forbids adding a decode seam. |
+| FND-003 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: The procedure is now labelled 8a, with a clean wrap. Peer steps 9 and 10 are not renumbered. |

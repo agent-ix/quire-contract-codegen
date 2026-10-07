@@ -36,3 +36,11 @@ Base spec-review of the changed FR-033/TC-048/AD-003 statements for consistency,
 ## Verdict
 
 Approve after the code-review blockers (SR-2240) are fixed. Status language keeps the line between delivered QSL source facts and CG PLANNED/UNRUN code gates, and does not close proof or generated-family evidence because an API exists. Open Text-profile and nested set/bag performance limitations stay explicit, with no grammar fallback.
+
+## Dispositions
+
+Round 1, reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9 (original review at cc3a78b0df85c6d3fde86af0b5a13a6eccc02d08; custody commit 8a0c77e1077e9a5d2068b48fbd774215adaa3a01). Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 1d5892fd-67f7-47dc-ab34-806d87e1ee79.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: Observable response now stated: retain the identity actually sent, and bind when the genuine report equals it, regardless of an earlier unsent request. |

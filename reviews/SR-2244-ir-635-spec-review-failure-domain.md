@@ -36,3 +36,23 @@ Unstated failure modes and identity confusion in the new positional O-09, sent-c
 ## Verdict
 
 Self-comparison, literal and duplicate-key identity rules match QSL. Echo equality is correctly kept separate from artifact authentication. Refusals stay typed, with no sentinel identity.
+
+## New findings (disposition pass 1)
+
+Reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9. Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 1d5892fd-67f7-47dc-ab34-806d87e1ee79.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | Fix presents Population-keyed bounds as retained composite claim members, but QSL refuses any such key in prepare | spec/replay/functional/FR-033-composite-parity-replay-binding.md:81-84 |
+
+### New finding detail
+
+- FND-002 (severity low, confidence high, check soundness, unit FR-033 Inputs O-09 bullet): In QSL 30d7beb7, the composite position derivation (execute/composite_domain.rs) emits only `DomainKey::Node` positions; a population leaf is a Node-keyed `Whole` position. `Positions::harness` therefore refuses any `DomainKey::Population` harness bound with `ParityBoundRefusal::HarnessUnknownKey` (InvalidRuntimeInput) inside `prepare`, before `identity_tie`. The fixed text in Inputs, AC-11, AD-003 E-1 and TC-048 step 9 says Population-keyed bounds 'remain in the full claim and CG record' and are only excluded from O-09. It never says that a composite parity request carrying one is a typed QSL refusal: the bound Refused report maps to ReplayRefused. So TC-048 step 9's Population case reads as a valid claim when it is not, and an implementer could draw population bounds expecting settlement. This also corrects FND-001's original scenario: such a claim refuses at the harness-key check, not at an O-09 mismatch.
+
+## Dispositions
+
+Round 1, reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9 (original review at cc3a78b0df85c6d3fde86af0b5a13a6eccc02d08; custody commit 8a0c77e1077e9a5d2068b48fbd774215adaa3a01). Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 1d5892fd-67f7-47dc-ab34-806d87e1ee79.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: The Node-keyed/Population partition is now stated in Inputs, Behavior, AC-11, AD-003 E-1 and TC-048 step 9, and it matches QSL parity_preimage. See new FND-002: on re-measurement, this finding's original failure scenario overstated reachability. |

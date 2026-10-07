@@ -36,3 +36,11 @@ Allocation of new obligations against the brief's lane: CG composite claim shape
 ## Verdict
 
 Composite changes stay inside FR-033/TC-048. QSpec FR-322, QSL FR-070/FR-358 and QSL encoder ownership are referenced rather than copied. Nothing is vendored.
+
+## Dispositions
+
+Round 1, reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9 (original review at cc3a78b0df85c6d3fde86af0b5a13a6eccc02d08; custody commit 8a0c77e1077e9a5d2068b48fbd774215adaa3a01). Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 1d5892fd-67f7-47dc-ab34-806d87e1ee79.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: E-2 no longer carries scalar shall-duties. The new allocation section names FR-032 and FR-033 as owners and uses no normative 'shall'. |
