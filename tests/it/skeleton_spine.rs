@@ -1310,7 +1310,7 @@ fn tc_026_one_boolean_clause_goes_from_a_bound_package_through_kani_to_native_re
     };
     assert_eq!(
         (get("amount_current"), get("balance_pre")),
-        (amount, balance),
+        (i128::from(amount), i128::from(balance)),
         "the decoder disagrees with the values Kani printed"
     );
     assert!(

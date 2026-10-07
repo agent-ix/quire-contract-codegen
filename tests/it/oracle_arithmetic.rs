@@ -62,7 +62,13 @@ fn handler() -> ExecutionPoint {
 }
 
 fn integer_type(minimum: i64, maximum: i64, overflow: OverflowPolicy) -> IntegerType {
-    IntegerType::new(IntegerDomain::Signed, minimum, maximum, overflow).unwrap()
+    IntegerType::new(
+        IntegerDomain::Signed,
+        i128::from(minimum),
+        i128::from(maximum),
+        overflow,
+    )
+    .unwrap()
 }
 
 /// Builds the nodes of one clause over one integer type, giving every node its own span.
@@ -98,7 +104,7 @@ impl Clause {
     fn literal(&self, value: i64) -> Expression {
         Expression::new(
             ExpressionKind::IntegerLiteral {
-                value,
+                value: i128::from(value),
                 value_type: self.value_type.clone(),
             },
             self.at(),

@@ -93,8 +93,8 @@ fn environment() -> DeclarationEnvironment {
 fn integer_type(minimum: i64, maximum: i64) -> IntegerType {
     IntegerType::new(
         IntegerDomain::Signed,
-        minimum,
-        maximum,
+        i128::from(minimum),
+        i128::from(maximum),
         OverflowPolicy::Reject,
     )
     .expect("fixture integer bounds should be valid")
@@ -142,7 +142,7 @@ fn observed(name_value: &str, observation: StateObservation, at: u64) -> Express
 fn integer(value: i64, value_type: &IntegerType, at: u64) -> Expression {
     Expression::new(
         ExpressionKind::IntegerLiteral {
-            value,
+            value: i128::from(value),
             value_type: value_type.clone(),
         },
         span(at, at + 1),
