@@ -36,3 +36,20 @@ Recorded clean:
 ## Verdict
 
 **Changes requested (medium).** Specify O's side of a transport failure: latch it, keep control flow unchanged, ignore EPIPE without relying on an inherited disposition, and let C detect the missing or failed record. Bound the pipe to the stage-2 live scenarios, or state its behaviour under ExactDeath. Give records an Armed-relative field so the pre-Armed adverse case is decidable. State that the feature-on L/O emits nothing without an authenticated binding. Consider a mechanical feature-off check for the helper-side items.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The retained-gate scenario's binding timing is not allocated. The writer now reaches O only after Armed, through the C/O receive cursor. The receive-state feasibility gate covers only the birth case ("while I lives"). Nothing requires O to accept the binding before the retained-gate cancellation's actual I confirmation and gate close. Nothing establishes that O's gated-startup receive state can consume the new envelope at all. If the cancellation wins the race, InitConfirmed and GateClosed are missing and the fixture fails closed, so the result is not vacuous. AC-54's retained-gate witness, however, then has no specified construction. | spec/kani/functional/FR-034-caller-death-ownership.md:1467-1472; spec/kani/functional/FR-034-caller-death-ownership.md:1499-1503; spec/kani/functional/FR-034-caller-death-ownership.md:1330-1332 |
+
+## Dispositions
+
+Round 1 was re-checked at the branch's round-1 fix head (subject 'Resolve IR689 observation selection and independent evidence obligations'; head named in the Linear marker only). It was checked against the newer published guardian review-source backup ref: C already has a separate pre-encoded C/O phase-send path. The check was static and read-only, and make spec passes.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': O latches full, EPIPE or other write failure, stops further writes and continues the same production path. Observation failure never causes cancellation, I signalling, early exit or escalation. Proven-safe feature-only SIGPIPE suppression is a CODE gate that no inherited disposition can satisfy (FR-034:1556-1564; AC-90). ExactDeath and ignored-inner-EOF scenarios use no writer (FR-034:1485). |
+| FND-002 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': O has no writer before Armed because C keeps both ends until authenticated Armed and transfer. The harness rejects pre-transfer bytes and checks endpoint transfer history without inferring a write epoch (FR-034:1488-1492; AC-78, AC-83). This is decidable: C holds the read end and can check that the pipe is empty at transfer. |
+| FND-003 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': ordinary feature-on execution without an authenticated binding creates no endpoint and emits nothing, and a missing binding is not a startup failure (FR-034:1483-1485; AC-91). IR-649 stays named as required (FR-034:1590). |
+| FND-004 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': the CODE author shall extend the mechanical feature-off consumer/helper checks to the binding decoder, frame/right mapping and all observer items, beyond public-operation absence (FR-034:1585-1589; AC-82; TC step 29e). |

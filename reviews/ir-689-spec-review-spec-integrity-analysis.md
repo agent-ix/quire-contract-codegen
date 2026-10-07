@@ -35,3 +35,20 @@ Recorded clean:
 ## Verdict
 
 **Changes requested (high).** Explicitly amend FR-034:517-519, 536-537 and 539-540 for the feature-on O emission sites. Either define emission so that production stages hand an unconditional typed boundary fact to a cfg-gated sink outside the stage, or state the exception and its bounds. Give AC-81's native-workspace term a real feature-on evidence route, or drop it from AC-81 with an explicit UNPROVEN allocation. Name the formula term that charges the observation pipe.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | Merged AC-24 says "fixture-written frames are forbidden". The slice now has C, in fixture mode, write a new Stage2ObservationBinding frame, carrying a right, on the EXISTING trusted C/O control transport. The slice qualifies the DTO/right exclusion and the no-branch/no-I/O rules, but not AC-24. Read literally, the two conflict. A CODE reviewer enforcing AC-24 would reject the binding frame, and one enforcing the new section would accept it. | spec/kani/functional/FR-034-caller-death-ownership.md:1472-1475; spec/kani/functional/FR-034-caller-death-ownership.md:1892 |
+| FND-005 | medium | The new exception is too narrow for what the slice requires of O. It allows "a cfg-gated nonblocking observation sink" at "these named event boundaries only" and calls itself "the sole exception" to the no-production-stage-feature-branch rule. The slice also requires other feature-on branches inside O's production stages: (1) decoding and authenticating the binding envelope in O's existing C/O receive cursor while I lives; (2) installing the feature-only SIGPIPE suppression before the first write; and (3) the parent-side M-reap probes (SR-3100 FND-004). None of these is a sink at an event boundary. FR-034:517-519 therefore still contradicts the required O receive and setup branches. | spec/kani/functional/FR-034-caller-death-ownership.md:1460-1465; spec/kani/functional/FR-034-caller-death-ownership.md:1480-1481; spec/kani/functional/FR-034-caller-death-ownership.md:1499-1503; spec/kani/functional/FR-034-caller-death-ownership.md:1558-1562; spec/kani/functional/FR-034-caller-death-ownership.md:517-519 |
+
+## Dispositions
+
+Round 1 was re-checked at the branch's round-1 fix head (subject 'Resolve IR689 observation selection and independent evidence obligations'; head named in the Linear marker only). The check was static and read-only. make spec passes, and the computed matrix grows from 615 to 631 records, additions only.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': FR-034:1460-1465 explicitly excepts cfg-gated nonblocking sinks at the named event boundaries from the earlier no-production-stage-feature-branch and no-I/O rules. Stage publication stays unconditional and without I/O, feature-off stages and frames are unchanged, and no sink may change control, cancellation, sampling or cutoffs. The residual scope gap is raised as FND-005. |
+| FND-002 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': FR-034:1577-1583 and the new AC-93 (TC step 29p) require a separate feature-on paired-artifact native-workspace Analysis with an independently declared charge, without expanding IR-682's supported configuration. Missing capacity or highwater leaves it UNPROVEN. |
+| FND-003 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': in feature-on bound scenarios, pipe_reserve is the sum of the report-pipe reserve and the observation pipe's page-rounded F_GETPIPE_SZ, under the same no-growth obligation. C storage goes in caller_run_buffers, O storage in owned_RSS, and there is no separate term. A feature-on-only MemoryExhausted shift is stated and may not be hidden (FR-034:1569-1575). |

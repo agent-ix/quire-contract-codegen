@@ -35,3 +35,19 @@ Recorded clean:
 ## Verdict
 
 **Changes requested (high).** Define how the OrdinarySampleCompleted tick is selected, using a rule O can evaluate from its own state with no C-to-O input. Alternatively, restate the AC-51 construction so that a self-selected once-only tick provably follows the orphan acknowledgement, or allocate a bounded per-tick record explicitly. State the M-reap provenance premises normatively. Quote and qualify the actual earlier exclusion sentence, including the DTO extension.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The new M-reap provenance predicate gives the verifier operations it cannot perform. Only M's parent, O, can call waitid on M. A nonreaping waitid(WNOWAIT) "before that consuming Child wait" and the "same-child independent query ... ECHILD after the actual Some" must therefore run inside O's reap stage. From any non-parent, ECHILD is always returned, so a verifier-side query is vacuous. The text assigns these to "the verifier" and never allocates O-side probe calls. Those calls are not covered by the only allowed feature-on change, the "nonblocking observation sink" at named boundaries (FR-034:1460-1465). An implementer must either add unallocated O-stage operations or run a vacuous non-parent check, and AC-86 accepts both. | spec/kani/functional/FR-034-caller-death-ownership.md:1536-1546; spec/kani/functional/FR-034-caller-death-ownership.md:1460-1465; spec/kani/matrix/TC-049-caller-death-ownership.md:966 |
+
+## Dispositions
+
+Round 1 was re-checked at the branch's round-1 fix head: four commits ahead of main, after the review-export commit, with subject 'Resolve IR689 observation selection and independent evidence obligations'. The head is named in the Linear marker only. It was checked against the newer published guardian review-source backup ref, whose head commit is 'Retain producer clock failure with borrowed outer setup custody'. The check was static and read-only. make spec passes, and no build, test, Kani or replay was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': C keeps the writer until authenticated Armed and, for birth, until the genuine adopted-orphan ACK. It then sends one write right directly to O in the binding envelope. O selects the NEXT completed ordinary tick after accepting the binding, never a startup or pre-binding tick, and preserves every due tick (FR-034:1467-1475, 1496-1505; AC-83, AC-92). No C-to-O ACK, pause or synthetic sample is allowed. |
+| FND-002 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': exact parent, sole waiter, SIGCHLD neither ignored nor SA_NOCLDWAIT, no prior consuming wait, a FIRST uncached Some, and the distinctions between cache, competing waiter and zombie are now normative (FR-034:1536-1546) and owned by AC-86. The actor feasibility of the waitid probes is raised separately as FND-004. |
+| FND-003 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': FR-034:1456-1459 quotes the actual earlier exclusion verbatim and names the DTO/result extension and the single write right it qualifies. |

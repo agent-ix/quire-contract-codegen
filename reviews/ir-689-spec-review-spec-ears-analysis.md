@@ -31,3 +31,19 @@ The defects are compound criteria and a few sentences with no actor or with "mus
 **Changes requested (medium).** Split AC-79 so that each obligation has its own falsifiable row: event set and once-only, boundary payload, producer order, and ordinary-sample preservation. Split AC-78 and AC-81 likewise. Give the three actorless sentences a named actor (the CG verification harness or the CODE author) and use shall.
 
 Examined with no EARS finding: FR-034:1455-1467 (pipe custody), 1469-1477 (reader binding), 1490-1491 and 1501-1504 (record emission), 1525-1531 (completion carrier), 1541-1545 (feature-off absence), and the AC-82 row.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The sixteen rewritten or new rows AC-78..AC-93 are obligation-shaped "shall" statements. make spec now emits sixteen new `ac:non-canonical-shape` warnings ("an acceptance criterion is a verification statement"). The surrounding FR-034 rows, including AC-51..AC-77, use the declarative verification form. The exception sentence also uses the permissive "may add" in requirement position. The gate still passes, but the slice adds avoidable validator noise and departs from the file's convention. | spec/kani/functional/FR-034-caller-death-ownership.md:1946-1961; spec/kani/functional/FR-034-caller-death-ownership.md:1460 |
+
+## Dispositions
+
+Round 1 was re-checked at the branch's round-1 fix head (subject 'Resolve IR689 observation selection and independent evidence obligations'; head named in the Linear marker only). The check was static and read-only, and make spec passes.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': the former AC-79 is split. AC-79 is fixed-frame grammar, AC-85 is exactly-once presence, AC-86 is boundary provenance, AC-87 is producer order and AC-88 is schedule preservation. Each has its own TC step (29b, 29h-29k) and its own Expected row. |
+| FND-002 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': AC-78 is split into AC-78, AC-83 and AC-84, and AC-80 into AC-80 and AC-89. AC-81 keeps only the pre-exposure charge, with failure noninterference in AC-90 and no-ACK/pause in AC-88. |
+| FND-003 | fixed | fix commit 'Resolve IR689 observation selection and independent evidence obligations': "The verifier shall require the events applicable to its selected scenario" (FR-034:1524-1525). Frame fit is now "The CODE author shall prove ...; the CODE reviewer shall reject ..." (FR-034:1533-1534). The actorless "must be established" sentence is removed. |
