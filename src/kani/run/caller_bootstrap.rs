@@ -491,6 +491,9 @@ impl CallerBootstrap {
             super::recipe_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
+            super::caller_control_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
             super::role_scalar_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,

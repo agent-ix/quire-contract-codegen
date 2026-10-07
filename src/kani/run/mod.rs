@@ -35,6 +35,8 @@ mod backend_policy;
 #[cfg(target_os = "linux")]
 mod caller_bootstrap;
 #[cfg(target_os = "linux")]
+mod caller_control_decode;
+#[cfg(target_os = "linux")]
 mod caller_driver;
 #[cfg(target_os = "linux")]
 mod caller_error;
