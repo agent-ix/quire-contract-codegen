@@ -44,6 +44,7 @@ pub(super) enum CallerExecutionError {
     Deadline(DeadlineError),
     Io(io::Error),
     Assembly(BoundedLaunchError),
+    PolicyProjection(super::startup_cause::RepresentationError),
 }
 
 impl std::fmt::Display for CallerExecutionError {
@@ -60,11 +61,22 @@ impl std::error::Error for CallerExecutionError {
             Self::Bootstrap(error) => Some(error),
             Self::Deadline(error) => Some(error),
             Self::Io(error) => Some(error),
+            Self::PolicyProjection(error) => Some(error),
             Self::Assembly(BoundedLaunchError::Io(error)) => Some(error),
             Self::Assembly(BoundedLaunchError::Unavailable { cause, .. }) => Some(cause),
             Self::Assembly(BoundedLaunchError::Guardian { .. }) => None,
         }
     }
+}
+
+/// Actual settled policy refusal versus a genuine independent resource/deadline candidate.
+/// No report/proof is manufactured by this private selection.
+pub(super) enum PolicyTerminalOutcome {
+    Refused(BoundedLaunchError),
+    OwnerStopped {
+        launch: BoundedLaunch,
+        peaks: MeasuredPeaks,
+    },
 }
 
 /// The actual caller ownership composition. Its fields and retained buffers are charged before
@@ -89,6 +101,7 @@ impl CallerExecution {
             .checked_sub(std::mem::size_of::<CallerBootstrap>())
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<CallerDriver>()))
             .and_then(|bytes| bytes.checked_sub(std::mem::size_of::<ExecutionClock>()))
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<PolicyTerminalOutcome>()))
             .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         u64::try_from(bytes).map_err(|_| CallerBootstrapError::ReservationUnrepresentable)
     }
@@ -290,6 +303,77 @@ impl CallerExecution {
                 },
             },
             peaks,
+        ))
+    }
+
+    /// Policy failure was authenticated from the actual positively retained pre-recipe I.
+    /// Preserve its original B stamp/cause through actual lease EOF, I termination/M reap,
+    /// normal O/L/creator proof and captures; independent genuine owner stops still win.
+    pub(super) fn finish_policy_refused(
+        &mut self,
+    ) -> Result<PolicyTerminalOutcome, CallerExecutionError> {
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        loop {
+            let cutoff = self
+                .clock
+                .settlement_deadline()
+                .map_err(CallerExecutionError::Deadline)?;
+            if self
+                .bootstrap
+                .driver_control_step(&mut self.clock, Some(cutoff))
+                .map_err(CallerExecutionError::Bootstrap)?
+            {
+                break;
+            }
+            self.pause_until(cutoff)?;
+        }
+        if self.bootstrap.owner_stop_pending() {
+            let (launch, peaks) = self.finish_owner_stopped()?;
+            return Ok(PolicyTerminalOutcome::OwnerStopped { launch, peaks });
+        }
+        if self.roles.is_none() {
+            self.roles = Some(
+                self.bootstrap
+                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::ObserveOuterExit)
+                    .map_err(CallerExecutionError::Bootstrap)?,
+            );
+        }
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        loop {
+            if self
+                .bootstrap
+                .finish_setup_refusal_after_roles(roles)
+                .map_err(CallerExecutionError::Bootstrap)?
+            {
+                break;
+            }
+            self.pause_until(roles.cutoff())?;
+        }
+        let captures = self
+            .bootstrap
+            .streams
+            .settle(roles)
+            .map_err(CallerExecutionError::Io)?;
+        drop(captures);
+        let (failure, _original_context) = self
+            .bootstrap
+            .settled_policy_refusal(roles)
+            .map_err(CallerExecutionError::Bootstrap)?;
+        let projected = super::startup_projection::project_policy(failure)
+            .map_err(CallerExecutionError::PolicyProjection)?;
+        // Public OS error is returned directly: wrapping it to attach private provenance would
+        // erase raw_os_error. The authenticated original site remains retained in bootstrap.
+        Ok(PolicyTerminalOutcome::Refused(
+            BoundedLaunchError::Unavailable {
+                admission: super::execute::KaniStartupAdmissionCause::CapabilityUnavailable {
+                    capability: projected.capability,
+                },
+                cause: projected.cause,
+            },
         ))
     }
 
