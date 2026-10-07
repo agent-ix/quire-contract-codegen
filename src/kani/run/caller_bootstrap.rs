@@ -1657,6 +1657,25 @@ impl CallerBootstrap {
         Ok((cause, self.startup_context.context()))
     }
 
+    /// Close only C's still-owned pre-Dispatch lease while retaining every process, capture and
+    /// creator authority in this owner. This performs cancellation, not termination proof. Once
+    /// Ready transfers the lease to CallerLeaseClient, its actual owner must close it instead.
+    pub(super) fn close_bootstrap_lease(&mut self) -> Result<(), CallerBootstrapError> {
+        let bootstrap = self
+            .inner_bootstrap
+            .take()
+            .ok_or(CallerBootstrapError::InnerBootstrapConsumed)?;
+        self.inner_auth_failed = true;
+        self.phase_failed = true;
+        self.inner_hello = None;
+        drop(bootstrap.into_lease());
+        // These read-only ordinals describe the actual close above. No observer callback, I/O,
+        // feature branch or controller pause can run between close and publication.
+        self.publication.lease_closed();
+        self.publication.publish(Stage::LeaseClosing);
+        Ok(())
+    }
+
     /// Consume only the already verified stage. Failed/pending receive attempts never take
     /// the actual lease out of this retained whole-chain owner.
     pub(super) fn take_authenticated_inner(&mut self) -> Result<InitReady, CallerBootstrapError> {
