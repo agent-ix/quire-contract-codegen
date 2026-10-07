@@ -16,8 +16,8 @@ use rustix::process::{pidfd_open, Pid, PidfdFlags};
 
 use super::{
     control::{
-        role_pair, ControlError, IncrementalReceive, IncrementalSend, PreparedFrame, RoleCaller,
-        RoleEndpoint, RoleEntry,
+        role_pair, ControlError, IncrementalReceive, IncrementalSend, PreparedFrame,
+        PreparedReceive, RoleCaller, RoleEndpoint, RoleEntry,
     },
     creator::{self, PreparedIdentity},
     protocol::{BuildIdentity, RunAuthority, StdinControl},
@@ -168,6 +168,8 @@ pub(super) struct InstallerEntry {
     startup_deadline: Instant,
     ready: Option<IncrementalSend>,
     exec_receive: IncrementalReceive,
+    exec_scratch: super::guardian_decode::Scratch,
+    native_tag: super::native_os_decode::NativeOsTag,
     failure_context: PreparedStartupContext,
     refusal_deadline: Option<Instant>,
     state: EntryState,
@@ -188,24 +190,34 @@ impl InstallerEntry {
             return Err(InstallerEntryError::InvalidRole);
         }
         let entry = RoleEntry::from_entry_stdin().map_err(InstallerEntryError::Control)?;
+        let mut frame = PreparedReceive::prepare().map_err(InstallerEntryError::Control)?;
+        let mut scratch = super::guardian_decode::Scratch::default();
+        let native_tag = super::native_os_decode::native_tag()
+            .map_err(|error| InstallerEntryError::Io(io::Error::other(error)))?;
         let received = entry
-            .receive::<BackendInstallerControl>(
-                BackendInstallerControl::rights_count,
+            .receive_prepared_decode(
+                &mut frame,
+                super::installer_control_decode::InstallerControl::rights_count,
                 initial_deadline,
+                |payload| {
+                    super::installer_control_decode::decode(payload, &mut scratch, native_tag)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(InstallerEntryError::Control)?;
-        let BackendInstallerControl::Start { settings, report } = received.control else {
+        let super::installer_control_decode::InstallerControl::Start { settings, report } =
+            received.control
+        else {
             return Err(InstallerEntryError::UnexpectedControl);
         };
-        let [inner_pin, caller_pin, writer]: [OwnedFd; 3] =
-            received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
-                InstallerEntryError::Control(ControlError::RightsCount {
-                    expected: 3,
-                    received: rights.len(),
-                })
-            })?;
+        // The actual rights remain in their original reserved buffer through authentication
+        // and both sides of fallible owned helper-path construction.
+        let inner_pin = received
+            .rights
+            .first()
+            .ok_or(InstallerEntryError::UnexpectedControl)?;
         let control = entry
-            .authenticate(&inner_pin)
+            .authenticate(inner_pin)
             .map_err(InstallerEntryError::Control)?;
         let peer = control
             .transport()
@@ -214,16 +226,49 @@ impl InstallerEntry {
         if peer.pid != 1 || peer.uid != 0 || peer.gid != 0 || settings.identity != identity {
             return Err(InstallerEntryError::IdentityMismatch);
         }
-        let startup_deadline = settings
-            .startup_deadline()
-            .map_err(InstallerEntryError::Deadline)?
-            .min(initial_deadline);
-        creator::require_live(&inner_pin).map_err(InstallerEntryError::Io)?;
-        creator::require_live(&caller_pin).map_err(InstallerEntryError::Io)?;
+        let startup_deadline = super::role_protocol::startup_deadline_from_parts(
+            settings.deadline,
+            settings.started,
+            settings.settlement_reserve,
+            settings.work_deadline,
+            settings.setup_deadline,
+        )
+        .map_err(InstallerEntryError::Deadline)?
+        .min(initial_deadline);
+        creator::require_live(inner_pin).map_err(InstallerEntryError::Io)?;
+        let caller_pin = received
+            .rights
+            .get(1)
+            .ok_or(InstallerEntryError::UnexpectedControl)?;
+        creator::require_live(caller_pin).map_err(InstallerEntryError::Io)?;
         control
             .transport()
             .refuse_observable_eof()
             .map_err(InstallerEntryError::Control)?;
+        let settings = super::settings_materialize::materialize(settings)
+            .map_err(entry_materialization_error)?;
+        if Instant::now() >= startup_deadline {
+            return Err(InstallerEntryError::Deadline(DeadlineError::Expired));
+        }
+        creator::require_live(inner_pin).map_err(InstallerEntryError::Io)?;
+        creator::require_live(caller_pin).map_err(InstallerEntryError::Io)?;
+        control
+            .transport()
+            .refuse_observable_eof()
+            .map_err(InstallerEntryError::Control)?;
+        // Pop in reverse wire order without taking away the retained buffer's capacity.
+        let writer = received
+            .rights
+            .pop()
+            .ok_or(InstallerEntryError::UnexpectedControl)?;
+        let caller_pin = received
+            .rights
+            .pop()
+            .ok_or(InstallerEntryError::UnexpectedControl)?;
+        let inner_pin = received
+            .rights
+            .pop()
+            .ok_or(InstallerEntryError::UnexpectedControl)?;
         let writer = File::from(writer);
         super::report_storage::verify_owned_writer(&report, &writer)
             .map_err(InstallerEntryError::Report)?;
@@ -235,7 +280,9 @@ impl InstallerEntry {
             writer: Some(writer),
             startup_deadline,
             ready: None,
-            exec_receive: IncrementalReceive::prepare().map_err(InstallerEntryError::Control)?,
+            exec_receive: IncrementalReceive::from_prepared(frame),
+            exec_scratch: scratch,
+            native_tag,
             failure_context: PreparedStartupContext::new(startup_envelope::CONTEXT_BYTES)
                 .map_err(InstallerEntryError::Representation)?,
             refusal_deadline: None,
@@ -459,16 +506,24 @@ impl InstallerEntry {
         self.require_live()?;
         let Some(received) = self
             .exec_receive
-            .advance::<BackendInstallerControl>(
+            .advance_decode(
                 &self.control.transport(),
-                BackendInstallerControl::rights_count,
+                super::installer_control_decode::InstallerControl::rights_count,
                 deadline,
+                |payload| {
+                    super::installer_control_decode::decode(
+                        payload,
+                        &mut self.exec_scratch,
+                        self.native_tag,
+                    )
+                    .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(InstallerEntryError::Control)?
         else {
             return Ok(None);
         };
-        let BackendInstallerControl::Exec {
+        let super::installer_control_decode::InstallerControl::Exec {
             authority,
             command,
             stdin,
@@ -479,6 +534,9 @@ impl InstallerEntry {
         if authority != self.settings.authority {
             return Err(InstallerEntryError::IdentityMismatch);
         }
+        let command =
+            super::recipe_decode::materialize(command, self.native_tag, &mut self.exec_scratch)
+                .map_err(entry_materialization_error)?;
         let stdin = match stdin {
             StdinControl::Open => OriginalStdin::Open(
                 received
@@ -488,6 +546,7 @@ impl InstallerEntry {
             ),
             StdinControl::Closed => OriginalStdin::Closed,
         };
+        self.require_live()?;
         self.state = EntryState::ExecReceived;
         Ok(Some(InstallerExecRecipe {
             authority,
@@ -515,6 +574,19 @@ impl InstallerEntry {
             .ok_or(InstallerEntryError::MissingWriter)?;
         super::backend_exec::prepare(recipe.command, recipe.stdin, writer)
             .map_err(InstallerEntryError::Io)
+    }
+}
+
+fn entry_materialization_error(
+    error: super::recipe_decode::MaterializationError,
+) -> InstallerEntryError {
+    match error {
+        super::recipe_decode::MaterializationError::Grammar(error) => {
+            InstallerEntryError::Control(ControlError::InvalidGrammar(error))
+        }
+        super::recipe_decode::MaterializationError::Allocation(error) => {
+            InstallerEntryError::Io(io::Error::other(error))
+        }
     }
 }
 

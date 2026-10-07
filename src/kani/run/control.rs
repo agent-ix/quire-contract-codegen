@@ -1034,8 +1034,14 @@ impl TerminalReceive {
 
 impl IncrementalReceive {
     pub(super) fn prepare() -> Result<Self, ControlError> {
-        Ok(Self {
-            buffer: PreparedReceive::prepare()?,
+        Ok(Self::from_prepared(PreparedReceive::prepare()?))
+    }
+
+    /// Continue on the same consumed original frame after its owner authenticated/took rights.
+    /// Capacities remain retained; this constructs no second receive payload or rights buffer.
+    pub(super) fn from_prepared(buffer: PreparedReceive) -> Self {
+        Self {
+            buffer,
             header: [0; 4],
             header_read: 0,
             length: None,
@@ -1043,7 +1049,7 @@ impl IncrementalReceive {
             credentials: None,
             active: false,
             poisoned: false,
-        })
+        }
     }
 
     /// Actual retained payload/right capacities plus fixed incremental state and the existing

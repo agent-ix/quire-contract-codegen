@@ -84,17 +84,13 @@ impl RunSettings {
     pub(super) fn startup_deadline(
         &self,
     ) -> Result<std::time::Instant, super::role_deadline::DeadlineError> {
-        if self.settlement_reserve > super::role_deadline::SETTLE_RESERVE
-            || (matches!(self.deadline, IdentityDeadline::NeverElapses)
-                && self.settlement_reserve != super::role_deadline::SETTLE_RESERVE)
-        {
-            return Err(super::role_deadline::DeadlineError::InvalidClock);
-        }
-        self.started.require_started()?;
-        let cap = self.setup_deadline.local()?;
-        Ok(self
-            .work_deadline()?
-            .map_or(cap, |deadline| deadline.min(cap)))
+        startup_deadline_from_parts(
+            self.deadline,
+            self.started,
+            self.settlement_reserve,
+            self.work_deadline,
+            self.setup_deadline,
+        )
     }
 
     pub(super) fn work_deadline(
@@ -102,6 +98,26 @@ impl RunSettings {
     ) -> Result<Option<std::time::Instant>, super::role_deadline::DeadlineError> {
         self.work_deadline.local()
     }
+}
+
+/// The same original transferred clock check for owned settings and authenticated borrowed
+/// settings before pathname allocation. It creates no new time window or admission milestone.
+pub(super) fn startup_deadline_from_parts(
+    deadline: IdentityDeadline,
+    started: MonotonicInstant,
+    reserve: std::time::Duration,
+    work: IdentityDeadline,
+    setup: RoleDeadline,
+) -> Result<std::time::Instant, super::role_deadline::DeadlineError> {
+    if reserve > super::role_deadline::SETTLE_RESERVE
+        || (matches!(deadline, IdentityDeadline::NeverElapses)
+            && reserve != super::role_deadline::SETTLE_RESERVE)
+    {
+        return Err(super::role_deadline::DeadlineError::InvalidClock);
+    }
+    started.require_started()?;
+    let cap = setup.local()?;
+    Ok(work.local()?.map_or(cap, |deadline| deadline.min(cap)))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -244,20 +260,29 @@ impl InnerBootstrap {
 
 /// I's temporary authenticated channel to the same-PID trusted backend installer. The original
 /// environment stays metadata until policy admission and C's genuine positive Dispatch.
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum BackendInstallerControl {
+macro_rules! backend_installer_controls {
+    ($($(#[$attribute:meta])* $variant:ident { $($field:ident: $value:ty),+ $(,)? }),+ $(,)?) => {
+        #[derive(Deserialize, Serialize)]
+        #[serde(tag = "kind", deny_unknown_fields)]
+        pub(super) enum BackendInstallerControl { $($(#[$attribute])* $variant { $($field: $value),+ }),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum InstallerControlKind { $($variant),+ }
+        impl InstallerControlKind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+            pub(super) fn declared_fields(self) -> &'static [&'static str] {
+                match self { $(Self::$variant => &[$(stringify!($field)),+]),+ }
+            }
+        }
+    };
+}
+backend_installer_controls! {
     /// Rights: actual I process pin, original C process pin, owned original O report writer.
-    Start {
-        settings: RunSettings,
-        report: PipeIdentity,
-    },
+    Start { settings: RunSettings, report: PipeIdentity },
     /// Sent only after genuine C/I Dispatch. It starts no second backend process or budget.
-    Exec {
-        authority: RunAuthority,
-        command: super::namespace::BackendCommand,
-        stdin: super::protocol::StdinControl,
-    },
+    Exec { authority: RunAuthority, command: super::namespace::BackendCommand, stdin: super::protocol::StdinControl },
 }
 
 impl BackendInstallerControl {
