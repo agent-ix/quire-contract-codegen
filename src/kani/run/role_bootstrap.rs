@@ -521,6 +521,8 @@ impl OuterSetup {
 /// I's authenticated O-origin bootstrap, separate from its original exclusive C lease.
 /// This state grants no backend Dispatch; that remains the unchanged typed C/I protocol.
 pub(super) struct InnerInput {
+    /// Reuse the original bootstrap parser workspace through actual O acknowledgement.
+    pub(super) decode_scratch: super::guardian_decode::Scratch,
     pub(super) settings: RunSettings,
     pub(super) outer_pin: OwnedFd,
     pub(super) caller_pin: OwnedFd,
@@ -685,6 +687,7 @@ impl InnerInput {
             .refuse_observable_eof()
             .map_err(BootstrapError::Control)?;
         Ok(Self {
+            decode_scratch: scratch,
             settings,
             outer_pin,
             caller_pin,

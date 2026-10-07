@@ -366,15 +366,12 @@ impl OuterPhaseReply {
     }
 }
 
-/// O has actually authenticated I's complete backend event. Queueing the I-origin event alone
-/// grants no permission to publish C Completed and let original lease close destroy its sender.
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum InnerOwnerControl {
-    CompletionObserved {
-        authority: RunAuthority,
-        stop: StopStamp,
-    },
+bootstrap_controls! {
+    /// O has actually authenticated I's complete backend event. Queueing the I-origin event alone
+    /// grants no permission to publish C Completed and let original lease close destroy its sender.
+    InnerOwnerControl, InnerOwnerControlKind {
+        CompletionObserved { authority: RunAuthority, stop: StopStamp },
+    }
 }
 
 impl InnerOwnerControl {
