@@ -479,6 +479,21 @@ impl<'fd> Transport<'fd> {
         expected_rights: impl FnOnce(&T) -> usize,
         deadline: Instant,
     ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
+        self.receive_prepared_decode(buffer, expected_rights, deadline, |payload| {
+            serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)
+        })
+    }
+
+    /// Decode from the original prepared frame while retaining its actual descriptors. A
+    /// borrowed recipe remains tied to this buffer through the owner's authentication and
+    /// fallible materialization; this method grants no role or recipe authority itself.
+    pub(super) fn receive_prepared_decode<'buffer, T>(
+        &self,
+        buffer: &'buffer mut PreparedReceive,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+        decode: impl FnOnce(&'buffer [u8]) -> Result<T, ControlError>,
+    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
         buffer.rights.clear();
         let mut credentials = None;
         let mut header = [0; 4];
@@ -495,16 +510,13 @@ impl<'fd> Transport<'fd> {
             &mut buffer.rights,
             deadline,
         )?;
-        self.finish_receive(buffer, credentials, expected_rights)
-    }
-
-    fn finish_receive<'buffer, T: DeserializeOwned>(
-        &self,
-        buffer: &'buffer mut PreparedReceive,
-        credentials: Option<PeerCredentials>,
-        expected_rights: impl FnOnce(&T) -> usize,
-    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
-        self.finish_receive_mode(buffer, credentials, expected_rights, ReceiveEof::Refuse)
+        self.finish_receive_decode(
+            buffer,
+            credentials,
+            expected_rights,
+            ReceiveEof::Refuse,
+            decode,
+        )
     }
 
     fn finish_receive_mode<'buffer, T: DeserializeOwned>(
@@ -1425,6 +1437,65 @@ mod tests {
             Err(ControlError::Deadline)
         ));
         // Actual nonblocking transport coverage; no backend completion/role settlement is inferred.
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn blocking_selected_decode_keeps_borrowed_bytes_and_refused_rights_in_original_storage() {
+        use super::super::guardian_decode::{Decoder, Scratch};
+
+        let (caller, endpoint) = private_pair().unwrap();
+        let source = std::fs::File::open("/dev/null").unwrap();
+        let mut receive = PreparedReceive::prepare().unwrap();
+        let original = receive.payload.as_ptr();
+        let reservation = receive.reserved_bytes().unwrap();
+        send_raw(&endpoint, br#""bytes""#, &[source.as_fd()]);
+        let mut scratch = Scratch::default();
+        {
+            let received = caller
+                .transport()
+                .receive_prepared_decode(
+                    &mut receive,
+                    |_| 1,
+                    deadline(),
+                    |payload| {
+                        let mut decoder = Decoder::new(payload, &mut scratch)
+                            .map_err(ControlError::InvalidGrammar)?;
+                        let text = decoder.string().map_err(ControlError::InvalidGrammar)?;
+                        decoder.finish().map_err(ControlError::InvalidGrammar)?;
+                        Ok(text)
+                    },
+                )
+                .unwrap();
+            let text = received.control.as_unescaped_str().unwrap();
+            assert_eq!(text, "bytes");
+            assert!(std::ptr::eq(text.as_ptr(), original.wrapping_add(1)));
+            assert_eq!(received.rights.len(), 1);
+            let delivered = rustix::fs::fstat(&received.rights[0]).unwrap();
+            let expected = rustix::fs::fstat(&source).unwrap();
+            assert_eq!(
+                (delivered.st_dev, delivered.st_ino),
+                (expected.st_dev, expected.st_ino)
+            );
+        }
+        assert_eq!(receive.reserved_bytes().unwrap(), reservation);
+
+        send_raw(&endpoint, br#""bytes""#, &[source.as_fd()]);
+        let refusal = caller.transport().receive_prepared_decode(
+            &mut receive,
+            |_| 0,
+            deadline(),
+            |payload| Ok(payload),
+        );
+        assert!(matches!(
+            refusal,
+            Err(ControlError::RightsCount {
+                expected: 0,
+                received: 1
+            })
+        ));
+        assert_eq!(receive.rights.len(), 1);
+        assert_eq!(receive.reserved_bytes().unwrap(), reservation);
     }
 
     /// Trace: FR-034-AC-11, FR-034-AC-15, FR-034-AC-33.
