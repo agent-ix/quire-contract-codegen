@@ -13,7 +13,10 @@ use std::{collections::TryReserveError, fmt, io};
 use serde::de::Error as _;
 use serde::{de, Deserialize, Serialize};
 
-use super::control::CONTROL_BYTES;
+use super::{
+    control::CONTROL_BYTES,
+    cross_role_cause::{KaniCrossRoleCauseLoss, RemoteCauseProvenance},
+};
 
 macro_rules! io_kinds {
     ($($kind:ident),+ $(,)?) => {
@@ -141,20 +144,34 @@ impl StartupIoCause {
         self.payload
     }
 
-    fn project(self) -> Result<(io::Error, ProjectionFidelity), RepresentationError> {
+    fn project(
+        self,
+        provenance: RemoteCauseProvenance,
+    ) -> Result<(io::Error, ProjectionFidelity), RepresentationError> {
         let kind = self.kind.named();
         match self.raw_os_error {
             Some(errno) => {
+                if self.payload != StartupPayload::NoCustomPayload {
+                    return Err(RepresentationError::OsPayloadMismatch);
+                }
                 let error = io::Error::from_raw_os_error(errno);
                 if kind.is_some_and(|kind| error.kind() != kind) {
                     return Err(RepresentationError::OsKindMismatch);
                 }
                 Ok((error, ProjectionFidelity::OsCodeAndKind))
             }
-            None => Ok((
-                io::Error::from(kind.ok_or(RepresentationError::UnnamedIoKind)?),
-                ProjectionFidelity::KindOnly,
-            )),
+            None => {
+                let kind = kind.ok_or(RepresentationError::MissingOsCode)?;
+                match self.payload {
+                    StartupPayload::NoCustomPayload => {
+                        Ok((io::Error::from(kind), ProjectionFidelity::PayloadFree))
+                    }
+                    StartupPayload::DirectTryReserve | StartupPayload::UnrepresentedCustom => Ok((
+                        io::Error::new(kind, KaniCrossRoleCauseLoss::new(provenance)),
+                        ProjectionFidelity::OpaqueCustomLoss,
+                    )),
+                }
+            }
         }
     }
 }
@@ -182,8 +199,10 @@ pub(super) enum StartupCause {
 pub(super) enum ProjectionFidelity {
     /// Original errno reconstructs the original kind on this same host/toolchain.
     OsCodeAndKind,
-    /// Original kind survives; its custom payload and concrete source chain do not.
-    KindOnly,
+    /// Original kind and positively observed absence of custom payload survive.
+    PayloadFree,
+    /// Original kind survives with an explicit typed marker for lost custom payload/chain.
+    OpaqueCustomLoss,
     /// The dependency's public non-I/O variant and typed payload are reconstructed.
     DependencyVariant,
 }
@@ -210,6 +229,10 @@ pub(super) enum RepresentationError {
     Formatting,
     UnnamedIoKind,
     OsKindMismatch,
+    /// Required OS-derived metadata lacks the actual code it claims to preserve.
+    MissingOsCode,
+    /// Raw-OS and custom-payload metadata contradict the actual std I/O representation.
+    OsPayloadMismatch,
     /// Backend compilation errors are not emitted by the actual apply_filter producer.
     NonInstallationBackendCause,
     /// Authenticated metadata does not describe the original error domain at its typed site.
@@ -236,20 +259,23 @@ impl std::error::Error for RepresentationError {
 
 impl StartupCause {
     /// Reconstruct only public, typed error shapes, without inventing an errno or source chain.
-    pub(super) fn project(self) -> Result<ProjectedStartupCause, RepresentationError> {
+    pub(super) fn project(
+        self,
+        provenance: RemoteCauseProvenance,
+    ) -> Result<ProjectedStartupCause, RepresentationError> {
         match self {
             Self::Io(cause) => {
-                let (error, fidelity) = cause.project()?;
+                let (error, fidelity) = cause.project(provenance)?;
                 Ok(ProjectedStartupCause::Io { error, fidelity })
             }
             Self::Seccompiler(cause) => {
                 let (error, fidelity) = match cause {
                     StartupSeccompilerCause::Prctl(cause) => {
-                        let (error, fidelity) = cause.project()?;
+                        let (error, fidelity) = cause.project(provenance)?;
                         (seccompiler::Error::Prctl(error), fidelity)
                     }
                     StartupSeccompilerCause::Seccomp(cause) => {
-                        let (error, fidelity) = cause.project()?;
+                        let (error, fidelity) = cause.project(provenance)?;
                         (seccompiler::Error::Seccomp(error), fidelity)
                     }
                     StartupSeccompilerCause::EmptyFilter => (
@@ -572,6 +598,14 @@ pub(super) fn check_scratch_free_json(bytes: &[u8]) -> Result<(), StartupJsonErr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani::run::cross_role_cause::{CauseOperation, RemoteCauseRole};
+
+    fn projection_origin() -> RemoteCauseProvenance {
+        RemoteCauseProvenance {
+            role: RemoteCauseRole::BackendInstaller,
+            operation: CauseOperation::NativePolicyPreparation,
+        }
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-39
     #[test]
@@ -624,7 +658,9 @@ mod tests {
         let reserved = context.reserved_bytes();
         let cause = context.capture_io(&original).unwrap();
         assert!(context.context().is_empty());
-        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, fidelity } =
+            cause.project(projection_origin()).unwrap()
+        else {
             panic!("diagnostic retention changed the original domain");
         };
         assert_eq!(error.raw_os_error(), original.raw_os_error());
@@ -648,19 +684,22 @@ mod tests {
         context.capture_context(&FormattingFailure);
         assert!(context.context().is_empty());
         assert_eq!(context.reserved_bytes(), reserved);
-        let ProjectedStartupCause::Io { error, .. } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, .. } = cause.project(projection_origin()).unwrap()
+        else {
             panic!("diagnostic formatting changed retained cause metadata");
         };
         assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
         let original = io::Error::new(io::ErrorKind::PermissionDenied, FormattingFailure);
         let cause = context.capture_io(&original).unwrap();
         assert!(context.context().is_empty());
-        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, fidelity } =
+            cause.project(projection_origin()).unwrap()
+        else {
             panic!("optional formatter failure changed required metadata");
         };
         assert_eq!(error.kind(), original.kind());
         assert_eq!(error.raw_os_error(), None);
-        assert_eq!(fidelity, ProjectionFidelity::KindOnly);
+        assert_eq!(fidelity, ProjectionFidelity::OpaqueCustomLoss);
         let StartupCause::Io(metadata) = cause else {
             panic!("formatter failure changed captured IO metadata");
         };

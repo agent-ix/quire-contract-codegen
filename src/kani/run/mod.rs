@@ -1,6 +1,9 @@
 // One execution: the request, refusal and evidence types and `execute_kani_obligation`.
 pub(crate) mod execute;
 
+// Portable public identities for listed cross-role source loss and local cause integrity.
+mod cross_role_cause;
+
 // One content cap shared by collection, consumers and serialized production evidence.
 pub(super) const REPORT_CONTENT_BYTES: u64 = 16 * 1_048_576;
 // One reserved writer slot across recipe construction, I acquisition and same-PID exec mapping.

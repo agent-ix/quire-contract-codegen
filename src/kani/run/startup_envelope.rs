@@ -498,6 +498,17 @@ pub(super) fn inner_startup_decode_bytes() -> Result<u64, ControlError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::kani::run::cross_role_cause::{
+        CauseOperation, RemoteCauseProvenance, RemoteCauseRole,
+    };
+
+    fn projection_origin() -> RemoteCauseProvenance {
+        RemoteCauseProvenance {
+            role: RemoteCauseRole::BackendInstaller,
+            operation: CauseOperation::NativePolicyPreparation,
+        }
+    }
+
     use super::*;
     use crate::kani::run::{
         protocol::current_build_identity,
@@ -639,7 +650,9 @@ mod tests {
         assert_eq!(actual_stop, stop);
         assert_eq!(receiver.context(), original.to_string());
         assert_eq!(receiver.reserved_bytes(), capacity);
-        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, fidelity } =
+            cause.project(projection_origin()).unwrap()
+        else {
             panic!("relayed OS error changed domains");
         };
         assert_eq!(error.raw_os_error(), original.raw_os_error());
@@ -731,12 +744,14 @@ mod tests {
             panic!("actual privilege failure was not preserved");
         };
         assert_eq!(observed, stop);
-        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, fidelity } =
+            cause.project(projection_origin()).unwrap()
+        else {
             panic!("original IO cause changed its typed domain");
         };
         assert_eq!(error.kind(), original.kind());
         assert_eq!(error.raw_os_error(), original.raw_os_error());
-        assert_eq!(fidelity, ProjectionFidelity::KindOnly);
+        assert_eq!(fidelity, ProjectionFidelity::OpaqueCustomLoss);
         let ready = serde_json::to_vec(&InstallerReply::PolicyReady {
             identity,
             authority,
@@ -792,7 +807,9 @@ mod tests {
         else {
             panic!("original OS privilege cause changed its typed site");
         };
-        let ProjectedStartupCause::Io { error, fidelity } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, fidelity } =
+            cause.project(projection_origin()).unwrap()
+        else {
             panic!("original OS cause changed its typed domain");
         };
         assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
@@ -834,7 +851,9 @@ mod tests {
                 panic!("optional diagnostics changed the original refusal");
             };
             assert!(receiver.context().is_empty());
-            let ProjectedStartupCause::Io { error, .. } = cause.project().unwrap() else {
+            let ProjectedStartupCause::Io { error, .. } =
+                cause.project(projection_origin()).unwrap()
+            else {
                 panic!("optional diagnostics changed the original cause domain");
             };
             assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
@@ -882,7 +901,8 @@ mod tests {
             panic!("diagnostic retention excess changed the refusal");
         };
         assert!(tiny.context().is_empty());
-        let ProjectedStartupCause::Io { error, .. } = cause.project().unwrap() else {
+        let ProjectedStartupCause::Io { error, .. } = cause.project(projection_origin()).unwrap()
+        else {
             panic!("diagnostic retention excess changed the cause domain");
         };
         assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
