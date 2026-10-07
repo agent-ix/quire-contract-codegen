@@ -607,6 +607,7 @@ pub(super) struct InstallerOwner {
     authority: RunAuthority,
     state: InstallerState,
     failure_context: PreparedStartupContext,
+    decode_scratch: super::guardian_decode::Scratch,
     stops: StopTimeline,
 }
 
@@ -644,6 +645,7 @@ impl InstallerOwner {
             state: InstallerState::Prepared,
             failure_context: PreparedStartupContext::new(startup_envelope::CONTEXT_BYTES)
                 .map_err(InstallerError::Representation)?,
+            decode_scratch: super::guardian_decode::Scratch::default(),
             stops: StopTimeline::prepare(input.settings.started)
                 .map_err(InstallerError::Deadline)?,
         })
@@ -723,7 +725,7 @@ impl InstallerOwner {
             &self.control.transport(),
             InstallerReplyHeader::rights_count,
             deadline,
-            |payload| startup_envelope::decode(payload, context),
+            |payload| startup_envelope::decode(payload, context, &mut self.decode_scratch),
         )?
         else {
             return Ok(None);

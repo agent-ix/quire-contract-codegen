@@ -478,6 +478,14 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
             token.bytes
         };
         let value = magnitude(digits, DecodeSite::Signed)?;
+        // The owning serde_json integer grammar routes -0 through its float visitor, which
+        // signed integer fields refuse. Preserve that schema behavior without a float parser.
+        if negative && value == 0 {
+            return Err(DecodeError::new(
+                DecodeSite::Signed,
+                DecodeCause::InvalidNumber,
+            ));
+        }
         if negative && value == i64::MIN.unsigned_abs() {
             return Ok(i64::MIN);
         }
@@ -928,12 +936,18 @@ mod tests {
         for (input, expected) in [
             (b"-9223372036854775808".as_slice(), i64::MIN),
             (b"9223372036854775807".as_slice(), i64::MAX),
-            (b"-0".as_slice(), 0),
         ] {
             let mut decoder = Decoder::new(input, &mut scratch).unwrap();
             assert_eq!(decoder.signed().unwrap(), expected);
             decoder.finish().unwrap();
         }
+        // Keep this actual edge case rather than treating mathematical zero as its wire type.
+        assert!(serde_json::from_slice::<i64>(b"-0").is_err());
+        let mut decoder = Decoder::new(b"-0", &mut scratch).unwrap();
+        assert_eq!(
+            decoder.signed().unwrap_err().cause(),
+            DecodeCause::InvalidNumber
+        );
         for input in [b"9223372036854775808".as_slice(), b"-9223372036854775809"] {
             let mut decoder = Decoder::new(input, &mut scratch).unwrap();
             assert_eq!(

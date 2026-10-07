@@ -4,9 +4,6 @@
 //! preflight excludes serde_json scratch paths before the seeded schema decoder touches data.
 //! The actual owner still authenticates sender/run/build/phase/stamp and confirms cleanup.
 
-use std::fmt;
-
-use serde::de::{DeserializeSeed, Error as _};
 use serde::{de, Deserialize, Serialize};
 
 use super::{
@@ -116,157 +113,14 @@ macro_rules! installer_reply_kinds {
 
 installer_reply_kinds! { PolicyReady, Refused }
 
-#[derive(Deserialize)]
-#[serde(field_identifier, rename_all = "snake_case")]
-enum Field {
-    Kind,
-    Identity,
-    Authority,
-    Stop,
-    Failure,
-    Context,
-}
-
-struct ReplySeed<'a>(&'a mut PreparedStartupContext);
-
-impl<'de> DeserializeSeed<'de> for ReplySeed<'_> {
-    type Value = InstallerReplyHeader;
-
-    fn deserialize<D: de::Deserializer<'de>>(
-        self,
-        deserializer: D,
-    ) -> Result<Self::Value, D::Error> {
-        deserializer.deserialize_map(self)
-    }
-}
-
-impl<'de> de::Visitor<'de> for ReplySeed<'_> {
-    type Value = InstallerReplyHeader;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("one exact trusted installer reply")
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, mut fields: A) -> Result<Self::Value, A::Error> {
-        let mut kind = None;
-        let mut identity = None;
-        let mut authority = None;
-        let mut stop = None;
-        let mut failure = None;
-        let mut context = false;
-        while let Some(field) = fields.next_key::<Field>()? {
-            match field {
-                Field::Kind => {
-                    if kind.is_some() {
-                        return Err(A::Error::duplicate_field("kind"));
-                    }
-                    kind = Some(fields.next_value::<ReplyKind>()?);
-                }
-                Field::Identity => {
-                    if identity.is_some() {
-                        return Err(A::Error::duplicate_field("identity"));
-                    }
-                    identity = Some(fields.next_value()?);
-                }
-                Field::Authority => {
-                    if authority.is_some() {
-                        return Err(A::Error::duplicate_field("authority"));
-                    }
-                    authority = Some(fields.next_value()?);
-                }
-                Field::Stop => {
-                    if stop.is_some() {
-                        return Err(A::Error::duplicate_field("stop"));
-                    }
-                    stop = Some(fields.next_value()?);
-                }
-                Field::Failure => {
-                    if failure.is_some() {
-                        return Err(A::Error::duplicate_field("failure"));
-                    }
-                    failure = Some(fields.next_value()?);
-                }
-                Field::Context => {
-                    if context {
-                        return Err(A::Error::duplicate_field("context"));
-                    }
-                    fields.next_value_seed(self.0.bytes_seed())?;
-                    context = true;
-                }
-            }
-        }
-        let identity = identity.ok_or_else(|| A::Error::missing_field("identity"))?;
-        let authority = authority.ok_or_else(|| A::Error::missing_field("authority"))?;
-        match kind.ok_or_else(|| A::Error::missing_field("kind"))? {
-            ReplyKind::PolicyReady => {
-                if stop.is_some() || failure.is_some() || context {
-                    return Err(A::Error::custom("PolicyReady carries refusal fields"));
-                }
-                Ok(InstallerReplyHeader::PolicyReady {
-                    identity,
-                    authority,
-                })
-            }
-            ReplyKind::Refused => {
-                if !context {
-                    return Err(A::Error::missing_field("context"));
-                }
-                let failure = failure.ok_or_else(|| A::Error::missing_field("failure"))?;
-                match failure {
-                    PolicyFailureCause::Preparation {
-                        cause: StartupCause::Io(_),
-                    }
-                    | PolicyFailureCause::Privilege {
-                        cause: StartupCause::Io(_),
-                    }
-                    | PolicyFailureCause::Filter {
-                        cause: StartupCause::Seccompiler(_),
-                    }
-                    | PolicyFailureCause::UnsupportedArchitecture
-                    | PolicyFailureCause::InvalidProgram
-                    | PolicyFailureCause::NotBackend
-                    | PolicyFailureCause::ProtectionUnverified => {}
-                    PolicyFailureCause::Preparation {
-                        cause: StartupCause::Seccompiler(_),
-                    }
-                    | PolicyFailureCause::Privilege {
-                        cause: StartupCause::Seccompiler(_),
-                    }
-                    | PolicyFailureCause::Filter {
-                        cause: StartupCause::Io(_),
-                    } => {
-                        return Err(A::Error::custom(
-                            "startup cause does not match actual failure site",
-                        ));
-                    }
-                }
-                Ok(InstallerReplyHeader::Refused {
-                    identity,
-                    authority,
-                    stop: stop.ok_or_else(|| A::Error::missing_field("stop"))?,
-                    failure,
-                })
-            }
-        }
-    }
-}
-
-/// Uses only the shared bounded frame's borrowed payload and pre-reserved context. Exact schema
-/// and JSON EOF are checked; no ambient syscall/error message selects the failure discriminant.
+/// Same exact installer schema on supplied resident scratch/context; no serde error is created.
 pub(super) fn decode(
     payload: &[u8],
     context: &mut PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<InstallerReplyHeader, ControlError> {
-    context.clear();
-    check_scratch_free_json(payload).map_err(|error| {
-        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
-    })?;
-    let mut decoder = serde_json::Deserializer::from_slice(payload);
-    let header = ReplySeed(context)
-        .deserialize(&mut decoder)
-        .map_err(ControlError::InvalidEncoding)?;
-    decoder.end().map_err(ControlError::InvalidEncoding)?;
-    Ok(header)
+    super::installer_reply_decode::decode(payload, scratch, context)
+        .map_err(|source| context.grammar_error(source))
 }
 
 /// I forwards only an authenticated pre-recipe installer refusal. The same bounded Refused
@@ -313,6 +167,7 @@ struct InnerReadyReply {
 pub(super) fn decode_inner_startup(
     payload: &[u8],
     context: &mut PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<InnerStartupHeader, ControlError> {
     context.clear();
     check_scratch_free_json(payload).map_err(|error| {
@@ -338,7 +193,7 @@ pub(super) fn decode_inner_startup(
                 },
             ))
         }
-        InnerReplyKind::Refused => match decode(payload, context)? {
+        InnerReplyKind::Refused => match decode(payload, context, scratch)? {
             InstallerReplyHeader::Refused {
                 identity,
                 authority,
@@ -482,6 +337,7 @@ struct InnerOwnerSelector {
 pub(super) fn decode_inner_owner(
     payload: &[u8],
     context: &mut PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<InnerOwnerHeader, ControlError> {
     check_scratch_free_json(payload).map_err(|error| {
         ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
@@ -492,7 +348,7 @@ pub(super) fn decode_inner_owner(
         InnerOwnerKind::Dispatched | InnerOwnerKind::Completed => {
             decode_inner_event(payload).map(InnerOwnerHeader::Event)
         }
-        InnerOwnerKind::Refused => match decode(payload, context)? {
+        InnerOwnerKind::Refused => match decode(payload, context, scratch)? {
             InstallerReplyHeader::Refused {
                 identity,
                 authority,
@@ -525,6 +381,23 @@ pub(super) fn inner_startup_decode_bytes() -> Result<u64, ControlError> {
 
 #[cfg(test)]
 mod tests {
+    macro_rules! context_parsed {
+        ($name:ident, $result:ty) => {
+            fn $name(
+                payload: &[u8],
+                context: &mut super::PreparedStartupContext,
+            ) -> Result<$result, super::ControlError> {
+                super::$name(
+                    payload,
+                    context,
+                    &mut super::super::guardian_decode::Scratch::default(),
+                )
+            }
+        };
+    }
+    context_parsed!(decode, super::InstallerReplyHeader);
+    context_parsed!(decode_inner_startup, super::InnerStartupHeader);
+    context_parsed!(decode_inner_owner, super::InnerOwnerHeader);
     use crate::kani::run::cross_role_cause::{
         CauseOperation, RemoteCauseProvenance, RemoteCauseRole,
     };

@@ -458,8 +458,15 @@ impl PreparedStartupContext {
         self.metadata_fault = None;
     }
 
+    /// Start a new required-metadata check without discarding a retained original diagnostic.
+    /// A terminal/phase receipt has no context field and must not erase the pending I refusal.
+    /// An actual context field clears/reuses the text through decode_context instead.
+    pub(super) fn begin_metadata_frame(&mut self) {
+        self.metadata_fault = None;
+    }
+
     /// Borrow the first required-metadata checking fault slot. Optional diagnostic retention
-    /// never writes or clears this fact; only a new whole decode resets it through clear().
+    /// never writes or clears this fact; a new whole decode resets it explicitly.
     pub(super) fn metadata_fault_slot(&mut self) -> &mut Option<CauseIntegrityPredicate> {
         &mut self.metadata_fault
     }

@@ -234,6 +234,20 @@ impl ControlFields {
     }
 }
 
+/// Exact close-only schema view for callers that cannot authorize phases or read acknowledgments.
+/// The actual O receive actor uses decode_control on its sole existing cursor.
+pub(super) fn decode_close(
+    payload: &[u8],
+    scratch: &mut Scratch,
+) -> Result<CallerTerminalControl, ControlError> {
+    match decode_control(payload, scratch)? {
+        OuterCallerControl::Close(close) => Ok(close),
+        OuterCallerControl::Phase(_) | OuterCallerControl::ReadCompleted { .. } => Err(
+            ControlError::InvalidGrammar(field_error(DecodeCause::InvalidValue)),
+        ),
+    }
+}
+
 /// Strict single schema walk; no selector pass or ignored-value prevalidation precedes it.
 fn decode_control(
     payload: &[u8],

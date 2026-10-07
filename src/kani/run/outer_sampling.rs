@@ -2334,6 +2334,7 @@ pub(super) struct InnerCompletion {
     state: InnerCompletionState,
     frame_deadline: Option<Instant>,
     refusal_context: PreparedStartupContext,
+    decode_scratch: super::guardian_decode::Scratch,
 }
 
 enum InnerCompletionState {
@@ -2363,6 +2364,7 @@ impl InnerCompletion {
             receive: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
             state: InnerCompletionState::AwaitDispatch,
             frame_deadline: None,
+            decode_scratch: super::guardian_decode::Scratch::default(),
             refusal_context: PreparedStartupContext::new(CONTEXT_BYTES).map_err(|error| {
                 SamplingError::Io {
                     operation: CauseOperation::ControlPreparation,
@@ -2431,7 +2433,11 @@ impl InnerCompletion {
                 InnerOwnerHeader::rights_count,
                 deadline,
                 |payload| {
-                    super::startup_envelope::decode_inner_owner(payload, &mut self.refusal_context)
+                    super::startup_envelope::decode_inner_owner(
+                        payload,
+                        &mut self.refusal_context,
+                        &mut self.decode_scratch,
+                    )
                 },
             )
             .map_err(SamplingError::Control)?

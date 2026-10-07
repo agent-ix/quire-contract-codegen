@@ -1612,13 +1612,22 @@ mod tests {
     /// Trace: FR-034-AC-15, FR-034-AC-38.
     #[test]
     fn clock_only_framer_preserves_strict_phase_eof_and_decodes_only_complete_stop() {
+        fn decode_outer_startup(
+            payload: &[u8],
+        ) -> Result<super::super::role_protocol::OuterStartupControl, ControlError> {
+            super::super::role_protocol::decode_outer_startup(
+                payload,
+                &mut super::super::startup_cause::PreparedStartupContext::new(0).unwrap(),
+                &mut super::super::guardian_decode::Scratch::default(),
+            )
+        }
         use super::super::{
             protocol::RunAuthority,
             resource_ledger::MeasuredPeaks,
             role_deadline::{StopOrigin, StopStamp},
             role_protocol::{
-                decode_outer_startup, OuterPhaseReply, OuterStartupControl, OuterTerminalReply,
-                OwnerStopCause, TerminalDisposition,
+                OuterPhaseReply, OuterStartupControl, OuterTerminalReply, OwnerStopCause,
+                TerminalDisposition,
             },
         };
         let authority = RunAuthority::fresh().unwrap();
