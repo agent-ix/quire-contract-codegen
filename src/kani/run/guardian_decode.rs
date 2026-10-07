@@ -225,6 +225,18 @@ struct NumberToken<'input> {
     integral: bool,
 }
 
+/// The next scalar/container category only, without validating or consuming its value.
+/// It grants no schema, semantic field, framing or authentication authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ValueKind {
+    Object,
+    Array,
+    String,
+    Number,
+    Boolean,
+    Null,
+}
+
 /// One payload cursor borrowing the owner's sole workspace.
 pub(super) struct Decoder<'input, 'scratch> {
     input: &'input [u8],
@@ -250,6 +262,33 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
             position: 0,
             scratch,
         })
+    }
+
+    /// Look only at the next non-whitespace byte, preserving all value bytes and the cursor.
+    /// Schema alternatives can therefore observe their first actual fault before later syntax.
+    pub(super) fn peek_kind(&self) -> Result<ValueKind, DecodeError> {
+        let byte = self
+            .input
+            .get(self.position..)
+            .and_then(|remaining| {
+                remaining
+                    .iter()
+                    .find(|byte| !matches!(**byte, b' ' | b'\n' | b'\r' | b'\t'))
+            })
+            .copied()
+            .ok_or_else(|| DecodeError::new(DecodeSite::Value, DecodeCause::UnexpectedEnd))?;
+        match byte {
+            b'{' => Ok(ValueKind::Object),
+            b'[' => Ok(ValueKind::Array),
+            b'"' => Ok(ValueKind::String),
+            b'-' | b'0'..=b'9' => Ok(ValueKind::Number),
+            b't' | b'f' => Ok(ValueKind::Boolean),
+            b'n' => Ok(ValueKind::Null),
+            _ => Err(DecodeError::new(
+                DecodeSite::Value,
+                DecodeCause::UnexpectedToken,
+            )),
+        }
     }
 
     pub(super) fn begin_object(&mut self) -> Result<ObjectState, DecodeError> {
@@ -791,6 +830,7 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<NumberToken<'static>>(),
         size_of::<ScanState>(),
         size_of::<DecodeError>(),
+        size_of::<ValueKind>(),
         size_of::<u64>(),
         size_of::<i64>(),
         size_of::<u32>(),
@@ -823,6 +863,32 @@ mod tests {
     }
 
     // Grammar units only: no whole schema, authentication, ledger or AC40 claim.
+    /// Trace: FR-034-AC-15.
+    #[test]
+    fn lookahead_preserves_cursor_without_prevalidating_later_structure() {
+        let mut scratch = Scratch::default();
+        let mut decoder = Decoder::new(br#"  {"bad":"unknown", "later": "#, &mut scratch).unwrap();
+        assert_eq!(decoder.peek_kind().unwrap(), ValueKind::Object);
+        assert_eq!(decoder.position, 0);
+        let mut object = decoder.begin_object().unwrap();
+        assert!(decoder
+            .next_field(&mut object)
+            .unwrap()
+            .unwrap()
+            .equals("bad"));
+        assert_eq!(decoder.peek_kind().unwrap(), ValueKind::String);
+        assert!(decoder.string().unwrap().equals("unknown"));
+        assert!(decoder
+            .next_field(&mut object)
+            .unwrap()
+            .unwrap()
+            .equals("later"));
+        assert_eq!(
+            decoder.peek_kind().unwrap_err().cause(),
+            DecodeCause::UnexpectedEnd
+        );
+    }
+
     /// Trace: FR-034-AC-15
     #[test]
     fn integral_extrema_and_overflow_are_exact() {
