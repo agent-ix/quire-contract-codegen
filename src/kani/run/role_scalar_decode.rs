@@ -67,7 +67,7 @@ pub(super) fn identity(decoder: &mut Decoder<'_, '_>) -> Result<BuildIdentity, D
                 if fields.protocol.is_some() {
                     return Err(field_error(DecodeCause::DuplicateField));
                 }
-                let value = GuardianProtocol::metadata_text(decoder.string()?)
+                let value = GuardianProtocol::metadata_text(decoder.unit_variant()?)
                     .ok_or_else(|| field_error(DecodeCause::InvalidValue))?;
                 fields.protocol = Some(value);
             }
@@ -75,7 +75,7 @@ pub(super) fn identity(decoder: &mut Decoder<'_, '_>) -> Result<BuildIdentity, D
                 if fields.lifecycle.is_some() {
                     return Err(field_error(DecodeCause::DuplicateField));
                 }
-                let value = GuardianLifecycle::metadata_text(decoder.string()?)
+                let value = GuardianLifecycle::metadata_text(decoder.unit_variant()?)
                     .ok_or_else(|| field_error(DecodeCause::InvalidValue))?;
                 fields.lifecycle = Some(value);
             }
@@ -224,7 +224,7 @@ pub(super) fn stop(decoder: &mut Decoder<'_, '_>) -> Result<StopStamp, DecodeErr
                     return Err(field_error(DecodeCause::DuplicateField));
                 }
                 fields.origin = Some(
-                    StopOrigin::metadata_text(decoder.string()?)
+                    StopOrigin::metadata_text(decoder.unit_variant()?)
                         .ok_or_else(|| field_error(DecodeCause::InvalidValue))?,
                 );
             }
@@ -244,7 +244,7 @@ pub(super) fn stop(decoder: &mut Decoder<'_, '_>) -> Result<StopStamp, DecodeErr
 
 /// Consume one existing operation label; no role/site cross-product permission is inferred.
 pub(super) fn operation(decoder: &mut Decoder<'_, '_>) -> Result<CauseOperation, DecodeError> {
-    CauseOperation::metadata_text(decoder.string()?)
+    CauseOperation::metadata_text(decoder.unit_variant()?)
         .ok_or_else(|| field_error(DecodeCause::InvalidValue))
 }
 
@@ -252,7 +252,7 @@ pub(super) fn operation(decoder: &mut Decoder<'_, '_>) -> Result<CauseOperation,
 pub(super) fn predicate(
     decoder: &mut Decoder<'_, '_>,
 ) -> Result<CauseIntegrityPredicate, DecodeError> {
-    CauseIntegrityPredicate::metadata_text(decoder.string()?)
+    CauseIntegrityPredicate::metadata_text(decoder.unit_variant()?)
         .ok_or_else(|| field_error(DecodeCause::InvalidValue))
 }
 
@@ -303,6 +303,60 @@ mod tests {
     use super::super::{guardian_decode::Scratch, role_deadline::DeadlineError};
     use super::*;
     use serde::Serialize;
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn ordinary_unit_enum_maps_preserve_owning_serde_grammar_and_refuse_nonunit_bodies() {
+        let mut value =
+            serde_json::to_value(super::super::protocol::current_build_identity()).unwrap();
+        for field in ["protocol", "lifecycle"] {
+            let name = value[field].as_str().unwrap().to_owned();
+            value[field] = serde_json::json!({name: null});
+        }
+        let expected: BuildIdentity = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(
+            parse(&serde_json::to_vec(&value).unwrap(), identity).unwrap(),
+            expected
+        );
+
+        let operation_value = serde_json::json!({"ControlReception": null});
+        let expected: CauseOperation = serde_json::from_value(operation_value.clone()).unwrap();
+        assert_eq!(
+            parse(&serde_json::to_vec(&operation_value).unwrap(), operation).unwrap(),
+            expected
+        );
+        let predicate_value = serde_json::json!({"MalformedCauseMetadata": null});
+        let expected: CauseIntegrityPredicate =
+            serde_json::from_value(predicate_value.clone()).unwrap();
+        assert_eq!(
+            parse(&serde_json::to_vec(&predicate_value).unwrap(), predicate).unwrap(),
+            expected
+        );
+
+        let stamp = serde_json::json!({
+            "origin": {"Caller": null},
+            "instant": {"seconds": 1, "nanoseconds": 0}
+        });
+        let expected: StopStamp = serde_json::from_value(stamp.clone()).unwrap();
+        assert_eq!(
+            parse(&serde_json::to_vec(&stamp).unwrap(), stop).unwrap(),
+            expected
+        );
+
+        for invalid in [
+            br#"{}"#.as_slice(),
+            br#"{"ControlReception":false}"#,
+            br#"{"ControlReception":[]}"#,
+            br#"{"ControlReception":{}}"#,
+            br#"{"ControlReception":null,"Other":null}"#,
+            br#"{"ControlReception":null,"ControlReception":null}"#,
+            br#"{"Unknown":null}"#,
+            br#"{"ControlReception":null"#,
+        ] {
+            assert!(serde_json::from_slice::<CauseOperation>(invalid).is_err());
+            assert!(parse(invalid, operation).is_err());
+        }
+    }
 
     fn parse<T>(
         bytes: &[u8],
