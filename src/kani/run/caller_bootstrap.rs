@@ -19,13 +19,16 @@ use rustix::process::{pidfd_open, PidfdFlags};
 use super::{
     caller_streams::CallerStreams,
     control::{
-        role_pair, ControlError, FrameStorage, GuardianEndpoint, PreparedFrame, PreparedReceive,
-        RoleCaller, TerminalReceive,
+        role_pair, ControlError, FrameStorage, GuardianEndpoint, IncrementalReceive,
+        IncrementalSend, PreparedFrame, PreparedReceive, RoleCaller, TerminalReceive,
     },
     creator,
     namespace::{GuardianIdentity, ReadyIdentityError},
     outer_setup::NamespaceIdentity,
-    protocol::{current_build_identity, BackendExit, BuildIdentity, GuardianRefusal, RunAuthority},
+    protocol::{
+        current_build_identity, BackendExit, BuildIdentity, GuardianControl, GuardianRefusal,
+        RunAuthority,
+    },
     publication::{Publication, Stage},
     report_storage::{PreparedReportRead, ReportError},
     resource_ledger::MeasuredPeaks,
@@ -37,7 +40,7 @@ use super::{
         OuterTerminalReply, RunSettings,
     },
     spawner::{RetainedSpawner, SpawnIdentity},
-    stages::{Bootstrap, PreparedDispatch},
+    stages::{Bootstrap, InitReady, PreparedDispatch, StageError, VerifiedInitReady},
     stdin::OriginalStdin,
 };
 
@@ -47,6 +50,7 @@ pub(super) enum CallerBootstrapError {
     Control(ControlError),
     Deadline(DeadlineError),
     Report(ReportError),
+    Stage(StageError),
     SettingsMismatch,
     ReservationUnrepresentable,
     LaunchAlreadyAttempted,
@@ -86,6 +90,7 @@ impl std::error::Error for CallerBootstrapError {
             Self::Control(error) => Some(error),
             Self::Deadline(error) => Some(error),
             Self::Report(error) => Some(error),
+            Self::Stage(error) => Some(error),
             Self::SettingsMismatch
             | Self::ReservationUnrepresentable
             | Self::LaunchAlreadyAttempted
@@ -129,6 +134,11 @@ pub(super) struct CallerBootstrap {
     pub(super) streams: CallerStreams,
     pub(super) publication: Arc<Publication>,
     receive: PreparedReceive,
+    inner_receive: IncrementalReceive,
+    inner_hello: Option<IncrementalSend>,
+    inner_hello_sent: bool,
+    inner_auth_failed: bool,
+    inner_ready: Option<VerifiedInitReady>,
     terminal_receive: TerminalReceive,
     read_ack_storage: Option<FrameStorage>,
     terminal_phase: CallerTerminalPhase,
@@ -291,6 +301,7 @@ impl CallerBootstrap {
         let report_read = PreparedReportRead::prepare()
             .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
         let receive = PreparedReceive::prepare().map_err(CallerBootstrapError::Control)?;
+        let inner_receive = IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let terminal_receive = TerminalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let read_ack_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let identity_records =
@@ -324,6 +335,9 @@ impl CallerBootstrap {
         let reservations = [
             u64::try_from(std::mem::size_of::<ExecutionClock>())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
+            inner_receive
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
             terminal_receive
                 .reserved_bytes()
                 .map_err(CallerBootstrapError::Control)?,
@@ -395,6 +409,11 @@ impl CallerBootstrap {
             streams,
             publication,
             receive,
+            inner_receive,
+            inner_hello: None,
+            inner_hello_sent: false,
+            inner_auth_failed: false,
+            inner_ready: None,
             terminal_receive,
             read_ack_storage: Some(read_ack_storage),
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
@@ -763,10 +782,117 @@ impl CallerBootstrap {
         Ok(())
     }
 
+    /// At most one nonblocking C/I control step, using only pre-L reserved storage. The outer
+    /// caller loop multiplexes its retained L/O channels between these attempts and supplies
+    /// the earliest original work/stop cutoff; this method creates no three-second wait.
+    pub(super) fn authenticate_inner_step(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        if self.inner_auth_failed {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.inner_auth_failed = true;
+        let result = self.advance_inner_authentication(cutoff);
+        if result.is_ok() {
+            self.inner_auth_failed = false;
+        }
+        result
+    }
+
+    fn advance_inner_authentication(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        if !matches!(self.phase, CallerPhase::ClaimedBootstrap) || self.inner_ready.is_some() {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        let cutoff = cutoff.min(self.deadline);
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Control(ControlError::Deadline));
+        }
+        creator::require_live(&self.launcher_identity()?.launcher_pin)
+            .map_err(CallerBootstrapError::Io)?;
+        creator::require_live(
+            self.outer_pin
+                .as_ref()
+                .ok_or(CallerBootstrapError::MissingOuterPin)?,
+        )
+        .map_err(CallerBootstrapError::Io)?;
+        let bootstrap = self
+            .inner_bootstrap
+            .as_mut()
+            .ok_or(CallerBootstrapError::InnerBootstrapConsumed)?;
+        if !self.inner_hello_sent {
+            if self.inner_hello.is_none() {
+                self.inner_hello = Some(IncrementalSend::new(
+                    bootstrap
+                        .take_hello()
+                        .map_err(CallerBootstrapError::Stage)?,
+                ));
+            }
+            let sent = self
+                .inner_hello
+                .as_mut()
+                .ok_or(CallerBootstrapError::UnexpectedPhase)?
+                .advance(&bootstrap.transport(), &[], cutoff)
+                .map_err(CallerBootstrapError::Control)?;
+            if sent {
+                self.inner_hello = None;
+                self.inner_hello_sent = true;
+            }
+            return Ok(false);
+        }
+        let Some(received) = self
+            .inner_receive
+            .advance::<GuardianControl>(&bootstrap.transport(), |_| 0, cutoff)
+            .map_err(CallerBootstrapError::Control)?
+        else {
+            return Ok(false);
+        };
+        let sender = received
+            .credentials
+            .ok_or(CallerBootstrapError::MissingSender)?;
+        let control = received.control;
+        let ready = super::stages::verify_init_ready(self, control, sender, self.authority)
+            .map_err(CallerBootstrapError::Stage)?;
+        self.inner_ready = Some(ready);
+        self.publication.publish(Stage::InitReady);
+        Ok(true)
+    }
+
+    /// Consume only the already verified stage. Failed/pending receive attempts never take
+    /// the actual lease out of this retained whole-chain owner.
+    pub(super) fn take_authenticated_inner(&mut self) -> Result<InitReady, CallerBootstrapError> {
+        if self.inner_ready.is_none() || self.inner_bootstrap.is_none() {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        let ready = self
+            .inner_ready
+            .take()
+            .ok_or(CallerBootstrapError::UnexpectedPhase)?;
+        let bootstrap = self
+            .inner_bootstrap
+            .take()
+            .ok_or(CallerBootstrapError::InnerBootstrapConsumed)?;
+        match bootstrap.into_authenticated(ready) {
+            Ok(ready) => Ok(ready),
+            Err((bootstrap, error)) => {
+                self.inner_bootstrap = Some(bootstrap);
+                self.inner_auth_failed = true;
+                Err(CallerBootstrapError::Stage(error))
+            }
+        }
+    }
+
     /// Take only the real original C/I lease state after authenticated actual gate release.
     /// The same existing typed Hello/Ready/Dispatch stages run against this retained chain owner.
     pub(super) fn take_inner_bootstrap(&mut self) -> Result<Bootstrap, CallerBootstrapError> {
-        if !matches!(self.phase, CallerPhase::ClaimedBootstrap) {
+        if !matches!(self.phase, CallerPhase::ClaimedBootstrap)
+            || self.inner_hello.is_some()
+            || self.inner_hello_sent
+            || self.inner_auth_failed
+        {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         self.inner_bootstrap

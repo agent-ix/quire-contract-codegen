@@ -26,7 +26,7 @@ pub(super) struct Bootstrap {
     lease: CallerLease,
     authority: RunAuthority,
     setup_deadline: Instant,
-    hello: PreparedFrame,
+    hello: Option<PreparedFrame>,
 }
 
 /// The independently retained RunOwner has claimed INIT and opened only trusted bootstrap.
@@ -127,17 +127,21 @@ impl Bootstrap {
                 lease,
                 authority,
                 setup_deadline,
-                hello: PreparedFrame::encode(&CallerControl::Hello {
+                hello: Some(PreparedFrame::encode(&CallerControl::Hello {
                     identity: current_build_identity(),
                     authority,
-                })?,
+                })?),
             },
             endpoint,
         ))
     }
 
     pub(super) fn reserved_bytes(&self) -> Result<u64, StageError> {
-        self.hello.reserved_bytes().map_err(StageError::Control)
+        self.hello
+            .as_ref()
+            .ok_or(StageError::UnexpectedControl)?
+            .reserved_bytes()
+            .map_err(StageError::Control)
     }
 
     pub(super) fn setup_deadline(&self) -> Instant {
@@ -198,10 +202,37 @@ impl Bootstrap {
 
     /// Called only after the separate owner validates INIT and binds its memory observer.
     pub(super) fn claimed(self) -> Result<ClaimedBootstrap, StageError> {
-        self.lease
-            .transport()
-            .send_prepared(&self.hello, &[], self.setup_deadline)?;
+        self.lease.transport().send_prepared(
+            self.hello.as_ref().ok_or(StageError::UnexpectedControl)?,
+            &[],
+            self.setup_deadline,
+        )?;
         Ok(ClaimedBootstrap(self))
+    }
+
+    /// The retained C owner moves these pre-L bytes once into its incremental send state.
+    /// Taking the frame never sends Hello, opens a gate or authenticates INIT.
+    pub(super) fn take_hello(&mut self) -> Result<PreparedFrame, StageError> {
+        self.hello.take().ok_or(StageError::UnexpectedControl)
+    }
+
+    pub(super) fn transport(&self) -> super::control::Transport<'_> {
+        self.lease.transport()
+    }
+
+    /// The token is minted only after the same actual INIT sender/run/build checks. C takes
+    /// this stage after a completed incremental receive; pending/error paths retain the lease.
+    pub(super) fn into_authenticated(
+        self,
+        ready: VerifiedInitReady,
+    ) -> Result<InitReady, (Self, StageError)> {
+        if ready.authority != self.authority {
+            return Err((self, StageError::AuthorityMismatch));
+        }
+        Ok(InitReady {
+            bootstrap: self,
+            mapped_uid: ready.mapped_uid,
+        })
     }
 
     pub(super) fn into_lease(self) -> CallerLease {
@@ -219,30 +250,56 @@ impl ClaimedBootstrap {
             .lease
             .transport()
             .receive::<GuardianControl>(|_| 0, self.0.setup_deadline)?;
-        let (identity, authority, mapped_uid) = match &received.control {
-            GuardianControl::Ready {
-                identity,
-                authority,
-                mapped_uid,
-                ..
-            } => (*identity, *authority, *mapped_uid),
-            GuardianControl::Refused { reason } => {
-                return Err(StageError::GuardianRefused(*reason))
-            }
-            _ => return Err(StageError::UnexpectedControl),
-        };
-        if identity != current_build_identity() {
-            return Err(StageError::BuildIdentityMismatch);
+        if let GuardianControl::Refused { reason } = &received.control {
+            return Err(StageError::GuardianRefused(*reason));
         }
-        if authority != self.0.authority {
-            return Err(StageError::AuthorityMismatch);
-        }
-        verify_sender(owner, &received, mapped_uid)?;
+        let ready = verify_init_ready(
+            owner,
+            received.control,
+            received.credentials.ok_or(StageError::MissingSender)?,
+            self.0.authority,
+        )?;
         Ok(InitReady {
             bootstrap: self.0,
-            mapped_uid,
+            mapped_uid: ready.mapped_uid,
         })
     }
+}
+
+/// Private positive receipt; no refusal, peer EOF or PID snapshot can construct it.
+pub(super) struct VerifiedInitReady {
+    mapped_uid: u32,
+    authority: RunAuthority,
+}
+
+pub(super) fn verify_init_ready(
+    owner: &impl GuardianIdentity,
+    control: GuardianControl,
+    sender: super::control::PeerCredentials,
+    authority: RunAuthority,
+) -> Result<VerifiedInitReady, StageError> {
+    let GuardianControl::Ready {
+        identity,
+        authority: actual,
+        mapped_uid,
+        ..
+    } = control
+    else {
+        // Typed startup failures use their separate authenticated cause path. An untyped
+        // Refused cannot skip actual owner binding by being accepted as positive Ready.
+        return Err(StageError::UnexpectedControl);
+    };
+    if identity != current_build_identity() {
+        return Err(StageError::BuildIdentityMismatch);
+    }
+    if actual != authority {
+        return Err(StageError::AuthorityMismatch);
+    }
+    owner.verify_ready(sender, mapped_uid)?;
+    Ok(VerifiedInitReady {
+        mapped_uid,
+        authority,
+    })
 }
 
 impl InitReady {
