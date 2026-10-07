@@ -109,3 +109,13 @@ Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa
 | FND-006 | medium | The fix requires the private refusal transport to bind provenance to the 'original stop stamp' (FR-034:659), and TC-049 step 26 inspects 'original stamp custody' (L612), but neither term is defined anywhere in the spec (the only other 'stamp' text is 'without timestamps' at FR-034:492), and 'stop' has no meaning for a pre-Dispatch admission refusal in this file, whose only stop concepts are the AC-38 workdeadline/FIRST stop trigger. | spec/kani/functional/FR-034-caller-death-ownership.md:659; spec/kani/matrix/TC-049-caller-death-ownership.md:612 |
 
 Failure scenario (FND-006, confidence medium): One coder binds the refusal to a monotonic timestamp taken at refusal, another to the AC-38 FIRST stop-trigger deadline, a third to nothing because no stop occurred before Dispatch; the step 26 Analysis has no fixed thing to check, so any of the three can be called conformant.
+
+## Dispositions (round 2)
+
+Round 2, reviewed at agent-ix/quire-contract-codegen@5ed72d58f1a5f5e425fc732a0ea8a8372b7be982 (fix diff aef3d57..5ed72d5; 78791f5 only commits the round-1 SR files). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fd6d3373-9bfa-4316-a623-c83befad3ab3. Scope: the round-1 new finding in this file plus regressions from the three source substitutions; the original findings' round-1 fixed outcomes stand. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | 5ed72d5: FR-034:658-659 now binds the private provenance to the authenticated run/build and actual owned pre-recipe PID/state only, and TC-049:612 inspects run/build and PID/state custody; neither 'original stop stamp' nor 'original stamp custody' remains (the only 'stamp' text left in spec/ is 'timestamps' at FR-034:492 and an unrelated TC-049:88 match). FR and TC now name the same two bindings. No cause, field or duty was added; deadline, cutoff and settlement obligations elsewhere in FR-034 are unchanged. |
+
+No regression and no new finding from the source substitutions.

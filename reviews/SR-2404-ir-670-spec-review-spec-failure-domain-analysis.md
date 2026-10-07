@@ -80,3 +80,13 @@ Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa
 | FND-003 | low | The binfmt_misc fix dropped the 'and' before 'loader selection' without adding a comma, so the residual list now reads 'ELF PT_INTERP resolution loader selection and kernel binfmt_misc interpreter/handler resolution', which runs two residuals together. | spec/kani/functional/FR-034-caller-death-ownership.md:682; spec/kani/functional/FR-034-caller-death-ownership.md:683 |
 
 Failure scenario (FND-003, confidence high): A reader parses 'ELF PT_INTERP resolution loader selection' as one item (the loader chosen by PT_INTERP) and omits loader selection by other means (for example LD_LIBRARY_PATH-driven library choice) from the residuals it reports in step 26.
+
+## Dispositions (round 2)
+
+Round 2, reviewed at agent-ix/quire-contract-codegen@5ed72d58f1a5f5e425fc732a0ea8a8372b7be982 (fix diff aef3d57..5ed72d5; 78791f5 only commits the round-1 SR files). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fd6d3373-9bfa-4316-a623-c83befad3ab3. Scope: the round-1 new finding in this file plus regressions from the three source substitutions; the original findings' round-1 fixed outcomes stand. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | 5ed72d5: FR-034:682 now ends 'ELF PT_INTERP resolution,' so the residual list reads '..., ELF PT_INTERP resolution, loader selection and kernel binfmt_misc interpreter/handler resolution', with loader selection a separate item. Only that comma changed on the line. |
+
+No regression and no new finding from the source substitutions.
