@@ -576,7 +576,7 @@ fn ids(shape: &Shape) -> Ids {
     }
 }
 
-fn fixture(shape: &Shape) -> Fixture {
+fn fixture_with_resolver(shape: &Shape) -> (Fixture, package::FixtureIds) {
     let (package, fixture_ids) = package_for(shape).admit_resolved();
     let Ids {
         clause,
@@ -584,13 +584,18 @@ fn fixture(shape: &Shape) -> Fixture {
         anchor,
         frame,
     } = ids(shape).resolved(&fixture_ids);
-    Fixture {
+    let fixture = Fixture {
         package,
         clause,
         object,
         anchor,
         frame,
-    }
+    };
+    (fixture, fixture_ids)
+}
+
+fn fixture(shape: &Shape) -> Fixture {
+    fixture_with_resolver(shape).0
 }
 
 /// The selected model fixture, with graph identities taken from QSL's emitted package.
@@ -1077,10 +1082,12 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
         condition_field: "not-an-identifier",
         ..Shape::HEALTHY
     };
+    let (read_fixture, read_ids) = fixture_with_resolver(&read);
     assert_eq!(
-        refusal(&read, &STATE_FIELDS),
+        generate_state_frame_obligations(&request(&read_fixture, &STATE_FIELDS))
+            .expect_err("the graph field name must be refused"),
         StateFrameRefusal::MalformedClause {
-            at: code_id(read.code(410))
+            at: read_ids.resolve(&code_id(read.code(410)))
         }
     );
     // A Rust keyword is not an identifier to `syn` yet is one to IR's own check of a frame's
@@ -1091,10 +1098,12 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
         condition_field: "type",
         ..Shape::HEALTHY
     };
+    let (keyword_fixture, keyword_ids) = fixture_with_resolver(&keyword_read);
     assert_eq!(
-        refusal(&keyword_read, &STATE_FIELDS),
+        generate_state_frame_obligations(&request(&keyword_fixture, &STATE_FIELDS))
+            .expect_err("the keyword field name must be refused"),
         StateFrameRefusal::MalformedClause {
-            at: code_id(keyword_read.code(410))
+            at: keyword_ids.resolve(&code_id(keyword_read.code(410)))
         }
     );
     let keyword_grant = Shape {
