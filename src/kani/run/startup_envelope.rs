@@ -101,11 +101,20 @@ impl InstallerReplyHeader {
     }
 }
 
-#[derive(Deserialize)]
-enum ReplyKind {
-    PolicyReady,
-    Refused,
+macro_rules! installer_reply_kinds {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Clone, Copy, Deserialize)]
+        pub(super) enum ReplyKind { $($variant),+ }
+        impl ReplyKind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+
+installer_reply_kinds! { PolicyReady, Refused }
 
 #[derive(Deserialize)]
 #[serde(field_identifier, rename_all = "snake_case")]
