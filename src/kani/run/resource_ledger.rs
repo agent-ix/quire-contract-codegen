@@ -70,6 +70,15 @@ impl std::fmt::Display for ChargeError {
 
 impl std::error::Error for ChargeError {}
 
+/// Producer-owned complete history is distinct from current exposure permission. The only
+/// transition out of Unobserved is after both RSS inputs and the full named charge succeed.
+/// This private state alone selects neither a timeout reason nor settled evidence.
+#[derive(Clone, Copy)]
+enum CompleteHistory {
+    Unobserved,
+    Recorded(MeasuredPeaks),
+}
+
 pub(super) struct ResourceLedger {
     ceiling: NonZeroU64,
     caller_buffers: u64,
@@ -77,8 +86,7 @@ pub(super) struct ResourceLedger {
     pipe: PipeIdentity,
     deadline: Option<Instant>,
     last_sample: Option<MemoryTick>,
-    peak_tree_rss: Option<u64>,
-    peak_conservative: Option<u64>,
+    history: CompleteHistory,
 }
 
 impl ResourceLedger {
@@ -110,8 +118,7 @@ impl ResourceLedger {
             pipe,
             deadline,
             last_sample: None,
-            peak_tree_rss: None,
-            peak_conservative: None,
+            history: CompleteHistory::Unobserved,
         })
     }
 
@@ -140,8 +147,20 @@ impl ResourceLedger {
             .backing
             .charge(tree_rss_bytes, self.caller_buffers)
             .map_err(|_| ChargeError::Unrepresentable)?;
-        self.peak_tree_rss = Some(self.peak_tree_rss.unwrap_or(0).max(tree_rss_bytes));
-        self.peak_conservative = Some(self.peak_conservative.unwrap_or(0).max(conservative_bytes));
+        let peaks = match self.history {
+            CompleteHistory::Unobserved => MeasuredPeaks {
+                tree_rss_bytes,
+                charged_bytes: conservative_bytes,
+            },
+            CompleteHistory::Recorded(previous) => MeasuredPeaks {
+                tree_rss_bytes: previous.tree_rss_bytes.max(tree_rss_bytes),
+                charged_bytes: previous.charged_bytes.max(conservative_bytes),
+            },
+        };
+        // A complete charge remains historical fact even if the original deadline check
+        // below refuses current exposure. Admission and positive absence must not be inferred
+        // from last_sample or from this call's Result alone.
+        self.history = CompleteHistory::Recorded(peaks);
         let sample = ChargedSample {
             tree_rss_bytes,
             conservative_bytes,
@@ -189,11 +208,126 @@ impl ResourceLedger {
     /// This is measurement data, not permission to return evidence. The run owner separately
     /// authenticates completion and confirms all owned settlement before using either value.
     pub(super) fn measured_peaks(&self) -> Result<MeasuredPeaks, ChargeError> {
-        Ok(MeasuredPeaks {
-            tree_rss_bytes: self.peak_tree_rss.ok_or(ChargeError::MissingMeasuredPeak)?,
-            charged_bytes: self
-                .peak_conservative
-                .ok_or(ChargeError::MissingMeasuredPeak)?,
-        })
+        match self.history {
+            CompleteHistory::Unobserved => Err(ChargeError::MissingMeasuredPeak),
+            CompleteHistory::Recorded(peaks) => Ok(peaks),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trace: FR-034-AC-32
+    #[test]
+    fn complete_history_survives_later_unavailable_samples_without_fabricated_initial_peak() {
+        // Pure named-charge arithmetic, not actual proc completeness, O sampling or settlement.
+        let caller = u64::try_from(SPAWNER_STACK_BYTES).unwrap();
+        let backing = BackingReserve {
+            pipe_bytes: 4096,
+            memfd_bytes: 8192,
+        };
+        let pipe = PipeIdentity::from_wire_parts(1, 2);
+        let mut ledger = ResourceLedger::prepare(
+            NonZeroU64::new(u64::MAX).unwrap(),
+            caller,
+            backing,
+            pipe,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.measured_peaks().unwrap_err(),
+            ChargeError::MissingMeasuredPeak
+        );
+        assert_eq!(
+            ledger.observe(None, Some(200)).unwrap_err(),
+            ChargeError::MissingLauncherRss
+        );
+        assert_eq!(
+            ledger.measured_peaks().unwrap_err(),
+            ChargeError::MissingMeasuredPeak
+        );
+        assert!(matches!(
+            ledger.observe(Some(100), Some(200)).unwrap(),
+            MemoryTick::WithinCeiling(_)
+        ));
+        let recorded = ledger.measured_peaks().unwrap();
+        assert_eq!(recorded.tree_rss_bytes, 300);
+        assert_eq!(recorded.charged_bytes, backing.charge(300, caller).unwrap());
+        assert_eq!(
+            ledger.observe(Some(1000), None).unwrap_err(),
+            ChargeError::MissingOuterTreeRss
+        );
+        assert_eq!(
+            ledger.require_writer_exposure(pipe, backing).unwrap_err(),
+            ChargeError::MissingSetupSample
+        );
+        assert_eq!(
+            ledger.measured_peaks().unwrap().tree_rss_bytes,
+            recorded.tree_rss_bytes
+        );
+        assert_eq!(
+            ledger.measured_peaks().unwrap().charged_bytes,
+            recorded.charged_bytes
+        );
+        assert!(matches!(
+            ledger.observe(Some(10), Some(20)).unwrap(),
+            MemoryTick::WithinCeiling(_)
+        ));
+        assert_eq!(
+            ledger.measured_peaks().unwrap().tree_rss_bytes,
+            recorded.tree_rss_bytes
+        );
+        assert_eq!(
+            ledger.measured_peaks().unwrap().charged_bytes,
+            recorded.charged_bytes
+        );
+    }
+    /// Trace: FR-034-AC-32
+    #[test]
+    fn complete_charge_precedes_deadline_refusal_and_actual_overage_keeps_priority() {
+        let caller = u64::try_from(SPAWNER_STACK_BYTES).unwrap();
+        let backing = BackingReserve {
+            pipe_bytes: 4096,
+            memfd_bytes: 8192,
+        };
+        let pipe = PipeIdentity::from_wire_parts(1, 2);
+        let mut ledger = ResourceLedger::prepare(
+            NonZeroU64::new(u64::MAX).unwrap(),
+            caller,
+            backing,
+            pipe,
+            None,
+        )
+        .unwrap();
+        // A deterministic already-expired pure-ledger state; no sleeps, role/proc witness,
+        // producer admission or emitted evidence is inferred from this fixture.
+        ledger.deadline = Some(Instant::now());
+        assert_eq!(
+            ledger.observe(Some(100), Some(200)).unwrap_err(),
+            ChargeError::Deadline
+        );
+        let complete = ledger.measured_peaks().unwrap();
+        assert_eq!(complete.tree_rss_bytes, 300);
+        assert_eq!(complete.charged_bytes, caller + 300 + 4096 + 8192);
+        assert_eq!(
+            ledger.require_writer_exposure(pipe, backing).unwrap_err(),
+            ChargeError::MissingSetupSample
+        );
+        ledger.ceiling = NonZeroU64::new(complete.charged_bytes - 1).unwrap();
+        assert!(matches!(
+            ledger.observe(Some(100), Some(200)).unwrap(),
+            MemoryTick::Exhausted(_)
+        ));
+        assert_eq!(
+            ledger.require_writer_exposure(pipe, backing).unwrap_err(),
+            ChargeError::ResourceExhausted
+        );
+        assert_eq!(
+            ledger.measured_peaks().unwrap().charged_bytes,
+            complete.charged_bytes
+        );
     }
 }
