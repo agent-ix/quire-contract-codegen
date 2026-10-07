@@ -434,6 +434,9 @@ impl CallerBootstrap {
         let reservations = [
             super::caller_driver::CallerDriver::metadata_reservation()
                 .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
+            super::caller_execution::CallerExecution::additional_metadata()?,
+            super::role_protocol::cancellation_decode_bytes()
+                .map_err(CallerBootstrapError::Control)?,
             u64::try_from(startup_context.reserved_bytes())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             super::startup_envelope::inner_startup_decode_bytes()
@@ -1971,6 +1974,7 @@ impl CallerBootstrap {
             || sender.uid != self.caller_uid
             || sender.gid != self.caller_gid
             || authority != self.authority
+            || peaks.charged_bytes < peaks.tree_rss_bytes
         {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         }
@@ -2068,6 +2072,11 @@ impl CallerBootstrap {
         }
         self.terminal_phase = CallerTerminalPhase::Finished;
         Ok(Some(peaks))
+    }
+
+    /// Private production selection only; no report or evidence is authorized by this fact.
+    pub(super) fn owner_stop_pending(&self) -> bool {
+        self.pending_owner_stop.is_some()
     }
 
     /// Actual O-child custody is established before L reap/creator join. This method is called

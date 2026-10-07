@@ -120,7 +120,7 @@ impl CallerStreams {
     /// The genuine C role token precedes the stop flag; all child/mapping writer descriptions
     /// are then gone. A requested stop is not a reader join. Retain both handles on expiry and
     /// consume them only after positive is_finished observations within the same cutoff.
-    pub(super) fn settle(&mut self, roles: CallerRoleSettlement) -> io::Result<SettledCaptures> {
+    pub(super) fn settle(&mut self, roles: &CallerRoleSettlement) -> io::Result<SettledCaptures> {
         self.flags.stop.store(true, Ordering::Release);
         let cutoff = roles.cutoff();
         while self

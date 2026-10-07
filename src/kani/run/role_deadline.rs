@@ -394,6 +394,16 @@ impl ExecutionClock {
         self.original
     }
 
+    /// Actual current progress cutoff, never a receipt-time or per-tick replacement. Before
+    /// any genuine stop, original None has no cutoff; afterward settlement may only shorten.
+    pub(super) fn progress_cutoff(&self) -> Option<Instant> {
+        if self.stops.earliest.is_some() {
+            self.settlement
+        } else {
+            self.work
+        }
+    }
+
     pub(super) fn work_deadline(&self) -> Option<Instant> {
         self.work
     }
@@ -410,6 +420,24 @@ impl ExecutionClock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-034-AC-38
+    #[test]
+    fn never_elapsing_progress_remains_uncut_until_the_actual_first_stop() {
+        let mut clock = ExecutionClock::prepare(None, Duration::MAX).unwrap();
+        assert_eq!(clock.progress_cutoff(), None);
+        assert_eq!(clock.work_deadline(), None);
+        let first = clock
+            .capture_caller_stop(IdentityDeadline::NeverElapses)
+            .unwrap();
+        assert_eq!(clock.progress_cutoff(), Some(first));
+        let repeated = clock
+            .capture_caller_stop(IdentityDeadline::NeverElapses)
+            .unwrap();
+        assert_eq!(repeated, first);
+        assert_eq!(clock.progress_cutoff(), Some(first));
+        assert_eq!(clock.work_deadline(), None);
+    }
 
     fn stamp(origin: StopOrigin, seconds: u64) -> StopStamp {
         StopStamp {

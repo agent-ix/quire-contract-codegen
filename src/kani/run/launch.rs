@@ -198,6 +198,7 @@ pub(super) struct BoundedLaunch {
 }
 
 /// Refuse unavailable memory enforcement before starting a backend.
+#[derive(Debug)]
 pub(super) enum BoundedLaunchError {
     Unavailable {
         admission: super::execute::KaniStartupAdmissionCause,

@@ -351,6 +351,13 @@ pub(super) enum OwnerStopCause {
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum OuterTerminalReply {
+    /// Provisional receipt of authenticated caller cancellation after actual M settlement.
+    /// No report, observation or classification authority is created; C still confirms actual
+    /// normal O/L/capture/creator settlement inside the original cutoff.
+    Cancelled {
+        authority: RunAuthority,
+        stop: StopStamp,
+    },
     ReportDescriptor {
         authority: RunAuthority,
         bytes: u64,
@@ -367,16 +374,24 @@ impl OuterTerminalReply {
     pub(super) fn rights_count(&self) -> usize {
         match self {
             Self::ReportDescriptor { .. } => 1,
-            Self::Committed { .. } => 0,
+            Self::Committed { .. } | Self::Cancelled { .. } => 0,
         }
     }
 }
 
-/// Sent only after C has validated seals/type/size and completed its original bounded report read.
-/// This precedes the final metrics commit and cannot create a recursive acknowledgment window.
+/// C's existing bounded close/read transaction on the independent original O channel.
+/// Cancellation is distinct from authenticated I completion and cannot admit a report. The
+/// existing read acknowledgment creates no recursive acknowledgment window.
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum CallerTerminalControl {
+    /// C irreversibly stopped the original run and closed its actual I lease. The original C
+    /// first-stop stamp/cutoff is carried without transporting or reclassifying its local error.
+    CancelClose {
+        authority: RunAuthority,
+        deadline: RoleDeadline,
+        stop: StopStamp,
+    },
     /// C authenticated I Completed and closed its original lease. This carries its already
     /// started settlement cutoff, including the original None admission's one first-stop R.
     CompletedClose {
@@ -388,6 +403,170 @@ pub(super) enum CallerTerminalControl {
         authority: RunAuthority,
         bytes: u64,
     },
+}
+
+/// Exact provisional alternatives for C's irreversible cancellation path only. Actor-owned
+/// authentication and whole-chain settlement remain mandatory; no report admission follows.
+pub(super) enum CancellationHeader {
+    Cancelled {
+        authority: RunAuthority,
+        stop: StopStamp,
+    },
+    OwnerStop {
+        authority: RunAuthority,
+        peaks: MeasuredPeaks,
+        stop: StopStamp,
+        cause: OwnerStopCause,
+    },
+}
+
+impl CancellationHeader {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::Cancelled { .. } | Self::OwnerStop { .. } => 0,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+enum CallerCloseKind {
+    CompletedClose,
+    CancelClose,
+}
+
+#[derive(Deserialize)]
+struct CallerCloseSelector {
+    kind: CallerCloseKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CallerCloseReply {
+    kind: CallerCloseKind,
+    authority: RunAuthority,
+    deadline: RoleDeadline,
+    stop: StopStamp,
+}
+
+/// Decode the exact scalar close alternatives on the existing C/O channel. ReadCompleted is
+/// admitted only by its separate existing ACK state. Sender/run/origin/cutoff checks are actor
+/// duties and are never implied by this parser accepting complete JSON.
+pub(super) fn decode_caller_close(
+    payload: &[u8],
+) -> Result<CallerTerminalControl, super::control::ControlError> {
+    use super::control::ControlError;
+    use serde::de::Error as _;
+    super::startup_cause::check_scratch_free_json(payload)
+        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
+    let selector: CallerCloseSelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    let reply: CallerCloseReply =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match (selector.kind, reply.kind) {
+        (CallerCloseKind::CompletedClose, CallerCloseKind::CompletedClose) => {
+            Ok(CallerTerminalControl::CompletedClose {
+                authority: reply.authority,
+                deadline: reply.deadline,
+                stop: reply.stop,
+            })
+        }
+        (CallerCloseKind::CancelClose, CallerCloseKind::CancelClose) => {
+            Ok(CallerTerminalControl::CancelClose {
+                authority: reply.authority,
+                deadline: reply.deadline,
+                stop: reply.stop,
+            })
+        }
+        (CallerCloseKind::CompletedClose, CallerCloseKind::CancelClose)
+        | (CallerCloseKind::CancelClose, CallerCloseKind::CompletedClose) => {
+            Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                "conflicting caller close kind",
+            )))
+        }
+    }
+}
+
+#[derive(Deserialize)]
+enum CancellationReplyKind {
+    Cancelled,
+    Committed,
+}
+
+#[derive(Deserialize)]
+struct CancellationReplySelector {
+    kind: CancellationReplyKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CancelledReply {
+    kind: CancellationReplyKind,
+    authority: RunAuthority,
+    stop: StopStamp,
+}
+
+/// Admit only an exact cancellation receipt or the existing exact resource/timeout commit.
+/// Ordinary startup/report decoders deliberately continue to reject Cancelled; no EOF waiver,
+/// second framer, I completion, observation substitute or report permission follows this result.
+pub(super) fn decode_cancellation_commit(
+    payload: &[u8],
+) -> Result<CancellationHeader, super::control::ControlError> {
+    use super::control::ControlError;
+    use serde::de::Error as _;
+    super::startup_cause::check_scratch_free_json(payload)
+        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
+    let selector: CancellationReplySelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selector.kind {
+        CancellationReplyKind::Cancelled => {
+            let reply: CancelledReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(reply.kind, CancellationReplyKind::Cancelled) {
+                return Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                    "conflicting cancellation kind",
+                )));
+            }
+            Ok(CancellationHeader::Cancelled {
+                authority: reply.authority,
+                stop: reply.stop,
+            })
+        }
+        CancellationReplyKind::Committed => match decode_outer_startup(payload)? {
+            OuterStartupControl::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            } => Ok(CancellationHeader::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            }),
+            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. } => {
+                Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                    "unexpected cancellation disposition",
+                )))
+            }
+        },
+    }
+}
+
+/// Fixed scalar close/cancellation decode storage, charged before L or writer exposure. Original
+/// frame/right storage is separate; no dynamic context or serde Content accumulator is reserved.
+pub(super) fn cancellation_decode_bytes() -> Result<u64, super::control::ControlError> {
+    use super::control::ControlError;
+    let total = std::mem::size_of::<CallerCloseSelector>()
+        .checked_add(std::mem::size_of::<CallerCloseReply>())
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CallerTerminalControl>()))
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CancellationReplySelector>()))
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CancelledReply>()))
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CancellationHeader>()))
+        .ok_or(ControlError::EncodedBytesExceeded)?;
+    u64::try_from(total)
+        .map_err(|_| ControlError::EncodedBytesExceeded)?
+        .checked_add(outer_startup_decode_bytes()?)
+        .ok_or(ControlError::EncodedBytesExceeded)
 }
 
 /// Exact alternatives on C's one original startup stream. OwnerStop can shorten the original
@@ -739,6 +918,176 @@ pub(super) fn report_decode_bytes() -> Result<u64, super::control::ControlError>
 mod tests {
     use super::*;
     use crate::kani::run::role_deadline::StopOrigin;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.
+    #[test]
+    fn close_decoder_keeps_cancellation_distinct_and_requires_exact_original_clock_fields() {
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Caller).unwrap();
+        let deadline = RoleDeadline::from_original(std::time::Instant::now()).unwrap();
+        for (control, cancelled) in [
+            (
+                CallerTerminalControl::CancelClose {
+                    authority,
+                    deadline,
+                    stop,
+                },
+                true,
+            ),
+            (
+                CallerTerminalControl::CompletedClose {
+                    authority,
+                    deadline,
+                    stop,
+                },
+                false,
+            ),
+        ] {
+            let original = serde_json::to_value(control).unwrap();
+            let decoded = decode_caller_close(&serde_json::to_vec(&original).unwrap()).unwrap();
+            let (actual_authority, actual_deadline, actual_stop, actual_cancelled) = match decoded {
+                CallerTerminalControl::CancelClose {
+                    authority,
+                    deadline,
+                    stop,
+                } => (authority, deadline, stop, true),
+                CallerTerminalControl::CompletedClose {
+                    authority,
+                    deadline,
+                    stop,
+                } => (authority, deadline, stop, false),
+                CallerTerminalControl::ReadCompleted { .. } => panic!("close became a read ACK"),
+            };
+            assert_eq!(actual_authority, authority);
+            assert_eq!(actual_deadline, deadline);
+            assert_eq!(actual_stop, stop);
+            assert_eq!(actual_cancelled, cancelled);
+            for field in ["kind", "authority", "deadline", "stop"] {
+                let mut missing = original.clone();
+                missing.as_object_mut().unwrap().remove(field);
+                assert!(decode_caller_close(&serde_json::to_vec(&missing).unwrap()).is_err());
+                let mut malformed = original.clone();
+                malformed[field] = serde_json::Value::Null;
+                assert!(decode_caller_close(&serde_json::to_vec(&malformed).unwrap()).is_err());
+            }
+            let mut extra = original.clone();
+            extra["bytes"] = 1.into();
+            assert!(decode_caller_close(&serde_json::to_vec(&extra).unwrap()).is_err());
+            let encoded = serde_json::to_string(&original).unwrap();
+            let duplicate = encoded.replacen("{", "{\"kind\":\"CancelClose\",", 1);
+            assert!(decode_caller_close(duplicate.as_bytes()).is_err());
+        }
+        let ack = serde_json::to_vec(&CallerTerminalControl::ReadCompleted {
+            authority,
+            bytes: 0,
+        })
+        .unwrap();
+        assert!(decode_caller_close(&ack).is_err());
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.
+    #[test]
+    fn cancellation_receipt_has_no_report_or_measurement_authority() {
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Caller).unwrap();
+        let receipt = OuterTerminalReply::Cancelled { authority, stop };
+        assert_eq!(receipt.rights_count(), 0);
+        let original = serde_json::to_value(receipt).unwrap();
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let header = decode_cancellation_commit(&bytes).unwrap();
+        assert_eq!(header.rights_count(), 0);
+        let CancellationHeader::Cancelled {
+            authority: actual,
+            stop: actual_stop,
+        } = header
+        else {
+            panic!("cancellation invented an owner stop");
+        };
+        assert_eq!(actual, authority);
+        assert_eq!(actual_stop, stop);
+        assert!(decode_outer_startup(&bytes).is_err());
+        assert!(decode_report_start(&bytes).is_err());
+        assert!(decode_terminal_commit(&bytes).is_err());
+        for field in ["kind", "authority", "stop"] {
+            let mut missing = original.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(decode_cancellation_commit(&serde_json::to_vec(&missing).unwrap()).is_err());
+            let mut malformed = original.clone();
+            malformed[field] = serde_json::Value::Null;
+            assert!(decode_cancellation_commit(&serde_json::to_vec(&malformed).unwrap()).is_err());
+        }
+        for field in ["peaks", "cause", "bytes", "disposition", "deadline"] {
+            let mut extra = original.clone();
+            extra[field] = serde_json::Value::Null;
+            assert!(decode_cancellation_commit(&serde_json::to_vec(&extra).unwrap()).is_err());
+        }
+        let encoded = serde_json::to_string(&original).unwrap();
+        let conflicting = encoded.replacen("{", "{\"kind\":\"Committed\",", 1);
+        assert!(decode_cancellation_commit(conflicting.as_bytes()).is_err());
+        let mut trailing = bytes;
+        trailing.extend_from_slice(b"{}");
+        assert!(decode_cancellation_commit(&trailing).is_err());
+        for cause in [OwnerStopCause::ResourceExhausted, OwnerStopCause::TimedOut] {
+            let peaks = MeasuredPeaks {
+                tree_rss_bytes: 7,
+                charged_bytes: 19,
+            };
+            let commit = serde_json::to_vec(&OuterTerminalReply::Committed {
+                authority,
+                peaks,
+                stop,
+                disposition: TerminalDisposition::OwnerStop { cause },
+            })
+            .unwrap();
+            let CancellationHeader::OwnerStop {
+                authority: actual,
+                peaks: actual_peaks,
+                stop: actual_stop,
+                cause: actual_cause,
+            } = decode_cancellation_commit(&commit).unwrap()
+            else {
+                panic!("genuine owner stop changed branch");
+            };
+            assert_eq!(actual, authority);
+            assert_eq!(actual_peaks.tree_rss_bytes, peaks.tree_rss_bytes);
+            assert_eq!(actual_peaks.charged_bytes, peaks.charged_bytes);
+            assert_eq!(actual_stop, stop);
+            assert_eq!(actual_cause, cause);
+        }
+        for refused in [
+            serde_json::to_vec(&OuterTerminalReply::Committed {
+                authority,
+                peaks: MeasuredPeaks {
+                    tree_rss_bytes: 7,
+                    charged_bytes: 19,
+                },
+                stop,
+                disposition: TerminalDisposition::SetupRefused {
+                    failure:
+                        super::super::startup_envelope::PolicyFailureCause::ProtectionUnverified,
+                },
+            })
+            .unwrap(),
+            serde_json::to_vec(&OuterPhaseReply::MonitorSpawned { authority }).unwrap(),
+            serde_json::to_vec(&OuterTerminalReply::ReportDescriptor {
+                authority,
+                bytes: 1,
+            })
+            .unwrap(),
+            serde_json::to_vec(&OuterTerminalReply::Committed {
+                authority,
+                peaks: MeasuredPeaks {
+                    tree_rss_bytes: 7,
+                    charged_bytes: 19,
+                },
+                stop,
+                disposition: TerminalDisposition::Report,
+            })
+            .unwrap(),
+        ] {
+            assert!(decode_cancellation_commit(&refused).is_err());
+        }
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-32, FR-034-AC-33, FR-034-AC-38
     #[test]
