@@ -85,12 +85,23 @@ io_kinds!(
     Other,
 );
 
+/// Positively observed custom-payload facts, separate from ErrorKind and diagnostics.
+/// A direct reservation payload is identified through its stable concrete type only; no
+/// allocator-versus-capacity category, allocation layout or equivalent payload is inferred.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub(super) enum StartupPayload {
+    NoCustomPayload,
+    DirectTryReserve,
+    UnrepresentedCustom,
+}
+
 /// Original kind representation and optional original OS error; neither comes from Display.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct StartupIoCause {
     kind: StartupIoKind,
     raw_os_error: Option<i32>,
+    payload: StartupPayload,
 }
 
 impl StartupIoCause {
@@ -107,7 +118,27 @@ impl StartupIoCause {
             }
             Err(error) => return Err(error),
         };
-        Ok(Self { kind, raw_os_error })
+        if let Some(errno) = raw_os_error {
+            if io::Error::from_raw_os_error(errno).kind() != error.kind() {
+                return Err(RepresentationError::OsKindMismatch);
+            }
+        }
+        let payload = match error.get_ref() {
+            None => StartupPayload::NoCustomPayload,
+            Some(source) if source.is::<TryReserveError>() => StartupPayload::DirectTryReserve,
+            Some(_) => StartupPayload::UnrepresentedCustom,
+        };
+        Ok(Self {
+            kind,
+            raw_os_error,
+            payload,
+        })
+    }
+
+    /// These actual capture facts survive private transport. They are not site authority or
+    /// permission to replace a local/AC39 representable source with a generic loss marker.
+    pub(super) fn payload(self) -> StartupPayload {
+        self.payload
     }
 
     fn project(self) -> Result<(io::Error, ProjectionFidelity), RepresentationError> {
@@ -544,6 +575,49 @@ mod tests {
 
     /// Trace: FR-034-AC-15, FR-034-AC-39
     #[test]
+    fn original_payload_presence_is_required_and_independent_from_kind_and_display() {
+        let mut context = PreparedStartupContext::new(0).unwrap();
+        let payload_free = io::Error::from(io::ErrorKind::InvalidData);
+        let custom = io::Error::new(io::ErrorKind::InvalidData, "actual custom payload");
+        let os = io::Error::from_raw_os_error(nix::libc::EPERM);
+        let free = context.capture_io(&payload_free).unwrap();
+        let lost = context.capture_io(&custom).unwrap();
+        let original_os = context.capture_io(&os).unwrap();
+        let StartupCause::Io(free_facts) = free else {
+            panic!("payload-free cause changed domain")
+        };
+        let StartupCause::Io(lost_facts) = lost else {
+            panic!("custom cause changed domain")
+        };
+        let StartupCause::Io(os_facts) = original_os else {
+            panic!("OS cause changed domain")
+        };
+        assert_eq!(free_facts.payload(), StartupPayload::NoCustomPayload);
+        assert_eq!(lost_facts.payload(), StartupPayload::UnrepresentedCustom);
+        assert_eq!(os_facts.payload(), StartupPayload::NoCustomPayload);
+        assert_eq!(free_facts.kind, lost_facts.kind);
+        assert!(context.context().is_empty());
+        let encoded = serde_json::to_value(lost).unwrap();
+        assert_eq!(
+            serde_json::from_value::<StartupCause>(encoded.clone()).unwrap(),
+            lost
+        );
+        for malformed in [
+            serde_json::Value::Null,
+            serde_json::json!("unknown"),
+            serde_json::json!(1),
+        ] {
+            let mut value = encoded.clone();
+            value["Io"]["payload"] = malformed;
+            assert!(serde_json::from_value::<StartupCause>(value).is_err());
+        }
+        let mut missing = encoded;
+        missing["Io"].as_object_mut().unwrap().remove("payload");
+        assert!(serde_json::from_value::<StartupCause>(missing).is_err());
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-39
+    #[test]
     fn retained_os_cause_survives_optional_display_bound_and_formatting_failure() {
         let original = io::Error::from_raw_os_error(nix::libc::EPERM);
         let mut context = PreparedStartupContext::new(0).unwrap();
@@ -587,6 +661,15 @@ mod tests {
         assert_eq!(error.kind(), original.kind());
         assert_eq!(error.raw_os_error(), None);
         assert_eq!(fidelity, ProjectionFidelity::KindOnly);
+        let StartupCause::Io(metadata) = cause else {
+            panic!("formatter failure changed captured IO metadata");
+        };
+        assert_eq!(metadata.payload(), StartupPayload::UnrepresentedCustom);
+        let payload_free = io::Error::from(io::ErrorKind::InvalidData);
+        let StartupCause::Io(metadata) = context.capture_io(&payload_free).unwrap() else {
+            panic!("payload-free capture changed IO metadata");
+        };
+        assert_eq!(metadata.payload(), StartupPayload::NoCustomPayload);
         assert_eq!(context.reserved_bytes(), reserved);
     }
 }
