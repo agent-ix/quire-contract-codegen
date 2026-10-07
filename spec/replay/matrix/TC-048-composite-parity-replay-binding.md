@@ -28,7 +28,9 @@ and never replace positive QSL evaluation with a verdict double.
 ## Test Procedure
 
 1. Obtain real QSL-emitted composite equality and inequality claim nodes with original source and
-   package identity. Exercise parameter/parameter, parameter/literal and literal/literal forms.
+   package identity and actual recompiled occurrence membership. Exercise parameter/parameter,
+   repeated/self parameter, parameter/literal and literal/literal forms, retaining positional
+   graph-child nodes and actual literal singleton values.
    Retain the actual generated harness, native refinement, original limits and canonical identity of
    the same proved artifact. Assert the original nodes, operand declarations and literal singleton
    values. Record public builder inputs and the QSL request; change source, package, selected node,
@@ -52,8 +54,8 @@ and never replace positive QSL evaluation with a verdict double.
    collection cardinality, duplicate set/ordered-set member and canonical sorted order. Check
    authoritative equality duplicate rules, not only byte-identical values. No copied upstream
    schema/fixture or executable is used. Exercise these operand refusals without retained
-   Disagreed; step 10 checks the separate disagreement-first case. Union text decode is present in
-   QSL's delivered value decoder, but union replay conversion remains unsupported until
+   Disagreed; step 10 checks the separate disagreement-first case. Union text decode is delivered,
+   but union replay conversion remains unsupported until
    checker union admission is delivered; do not count a decode as successful union replay.
 4. Submit arbitrary public input at the configured encoded-byte limit and one byte over. Observe the
    byte guard before parsing/unescaping. Exhaust checked occurrence and work counters separately.
@@ -104,19 +106,50 @@ and never replace positive QSL evaluation with a verdict double.
    the unavailable-capability refusal; malformed earlier setup reaches its own refusal. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.
 
-9. For planned O-09 composite identity, retain exact claimed node, recompiled occurrence, kind and
-   one argument per distinct parameter node ID with harness bounds ascending by DomainKey.
-   Compare a parameter with itself (`a == a`) and require one argument for `a`, without duplicate
-   DomainKeys from its two operand appearances. Compare two distinct parameters and require one
-   argument each; literal-only comparison contributes no arguments. Change each preimage member
-   independently and require identity mismatch. Change only CG abstractions, size budget, static
-   closure pair-node count or unexercised behaviours and require the same O-09 digest while the
-   full FR-015 AC-76 record retains those changes. Mutate the static pair-node count in that record,
-   not the runtime occurrence-pair count that step 5/F-7 compares. After QSL-640 delivers the owning
-   content-binding API, replace the proved artifact or original context while retaining O-09 and
-   require refusal through that delivered API. This artifact-replacement test remains mandatory;
-   before delivery it stays gated, with no invented API or extra CG tracking digest. Existing
-   function/frame preimage vectors remain equal.
+   **8a. Full sent-claim binding (PLANNED/UNRUN post-delivery consumer check).** Retain the
+   actual sent `CompositeIdentity::new` over request obligation, claim and complete evidence.
+   Before any outcome projection, including refusal/generated fault/incomplete, compare the genuine
+   public QSL report's `claim()` with it. With that genuine report held fixed, independently change
+   each CG-owned retained sent-identity member: node, occurrence, operation/kind, operand/domain,
+   harness bounds, ScalarLimits, content identity, native cause/result/count, shadow result/pair
+   count, refinement and verified SUCCESS count where present. Each mismatch returns no terminal
+   value. Separately cross-bind another run's genuine report and require the same refusal. Do not
+   mutate or fabricate QSL's private report representation or introduce a report decode seam.
+   As a separate positive control, change a valid request before send, retain that actual changed
+   sent identity and require its genuine report to pass claim binding; comparison with an earlier
+   unsent identity is not the oracle. Independent original source/artifact prechecks still apply.
+   Public ReplayLimits is the last entry argument and separate from ScalarLimits/full claim.
+   Independently replace the proved artifact or retained original source/package/context with
+   O-09 and the echoed claim held fixed; require the independent R-6/R-7 binding refusal.
+
+9. For O-09 composite identity, retain the exact claimed application node, original recompiled
+   occurrence and kind. Use the owning public typed parity_obligation with one argument per operand
+   position in operand order. Compare a parameter with itself (`a == a`) and require TWO positional
+   graph_child arguments for the same actual parameter node, each retaining the drawn bounds;
+   compare two distinct parameters and require their two positional arguments. Preserve repeated
+   positions rather than deduplicating nodes. Composite literal operands each contribute their own
+   graph_child node with empty Bounds; literal-only comparison therefore still has two arguments,
+   with no free parameter position. Exercise inline integer singleton Range identities at their
+   application/occurrence/position and require typed refusal for an unsupported inline literal.
+   Sort each argument's BoundEntries by canonical encoded key bytes: paths `[0,0]` before `[0]`
+   and `[10]` before `[2]`. Duplicate keys within one argument refuse, while repeated parameter
+   bounds across two positional arguments remain legal. Retain Population-keyed metadata only in
+   the full CG proving record, outside the admitted QSL composite claim and O-09 arguments. As a
+   separate adverse request, send a Population-keyed harness bound through the genuine public QSL
+   facade and require `HarnessUnknownKey` during `prepare` before identity tying, a binding-checked
+   `Refused` report and `Inconclusive(ReplayRefused)`. Do not count that request as admitted or as a
+   positive full-claim identity case. Separately assert that CG pre-invocation rejection returns no
+   report or terminal value. Retain actual drawn cardinality/depth
+   entries even for unbounded/recursive positions and declared-domain substitution. Independently
+   change node, occurrence, operand position, literal graph node/value or drawn bound; require changed
+   identity or original membership refusal. Invoke the typed encoder refusal without manufacturing
+   an identity. Change only CG abstractions, size budget, static closure pair-node count or
+   unexercised behaviours and require the same O-09 while full FR-015 AC-76 evidence retains them.
+   Keep the static record count distinct from the runtime count checked in step 5/F-7. Verify the
+   four-member preimage gains no operator/native/content/refinement/counter top-level member.
+   Replace the actual proved artifact or retained original context with O-09 and echoed claim held
+   equal; require the independent canonical content/R-6/R-7 binding refusal, not a new tracking
+   digest or echo-authentication claim. Existing function/frame vectors remain unchanged.
 10. Submit a changed source/package/node/occurrence/bound/O-09 request with Disagreed. A CG
     precheck rejection returns no report/terminal value. For a reachable QSL `prepare` refusal,
     send a valid wire request through the public facade with a replay input-byte limit below its
@@ -166,10 +199,16 @@ and never replace positive QSL evaluation with a verdict double.
 | FR-033-AC-6/7/10 | Actual same-artifact QSL parity: divergence Failed/CgDefect, assertion-only agreement Inconclusive; real generated verify/falsify controls | Supply a canned native verdict, regenerate away the mutation, ignore pair count or label parity Refuted |
 | FR-033-AC-8 | QSL derives complete declared-key coverage and literal singleton bounds | Treat empty/omitted/unbounded keys as covered, accept duplicate/unknown key or enum undeclared variant/DeclaredDomain |
 | FR-029-AC-17 and AC-19 to AC-27; FR-028-AC-17/24 | Closed strengths; cross-outcome disagreement wins, then verified refinement ceiling, ordinary vacuous record, exhausted+covered, completed Tested; all shadow-inconclusive rows and actual record category preserved | Delete a strength row, let zero defeat disagreement/ceiling, promote Proved0 or label a stopped refinement sampled/Tested |
-| FR-033-AC-11 | O-09 exact claim preimage excludes full CG record extras; separate same-artifact content tie preserved, existing function/frame vectors unchanged | Hash the CG size budget/static pair-node count into O-09, duplicate a self-comparison parameter, skip delivered artifact-replacement refusal or invent a second tracking digest |
+| FR-033-AC-11 | Positional O-09 includes repeated/self operands and literal graph nodes with empty Bounds; canonical encoded-key byte ordering and typed encoder refusal; full record extras and independent same-artifact content tie remain separate | Deduplicate self-comparison, omit literal arguments, sort DomainKey Ord, admit duplicate key within an argument, add a top-level operator/native/content member or substitute echo equality for artifact authentication |
 | FR-033-AC-12/13 | CG precheck yields no report value; QSL `prepare` Refused report precedes Disagreed, while later admission refusal follows it; shared Refinement and ordered F rows preserve actual native cause and separate resource stages | Settle another claim as Failed, hide disagreement behind admission/agreement, compare native instead of shadow, collapse limit stages or send backend ceilings through replay |
 | FR-033-AC-9; FR-029-AC-28 | Full `CompositeIdentity` binding and truthful typed capability/refusal/fault readings; QSL public terminal mapping and CG pass-through inspected for invariant faults | Accept one changed observation member; drop QSL Refused report's terminal value; label an actual bound Fault report ReplayRefused; invent a fault report, QSL code/cause or predicate replay route |
 
 Unimplemented canonical conversions, family harnesses or legal cause representations remain reported
 gaps. The future terminal payload names have the semantic meaning in FR-029, and the owning
 delivered API must establish their actual Rust representation before positive tests run.
+
+All claim-shape and complete-identity checks added here are PLANNED/UNRUN. Real Text-leaf profile
+selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
+remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
+as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact
+verify/falsify controls, never a verdict double or invented source predicate.
