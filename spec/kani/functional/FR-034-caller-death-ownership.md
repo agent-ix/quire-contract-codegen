@@ -1192,6 +1192,105 @@ The documentation shall promise no unavailable public role/stage query. The repr
 public consumer flow remain CODE-gated. These obligations allocate no NotObserved reason and weaken
 no report, capability, ownership, refusal precedence or cleanup requirement.
 
+### Stage-2 live-birth and producer-operation observations
+
+This PLANNED/UNRUN allocation conditionally retires only TC-049's former literal child birth
+AFTER the FINAL whole-run sample oracle. For successful report Commit, O shall complete the final
+accounting observation only after actual claimed I termination confirmation, retained M Child
+reap, writer EOF and immutable seal. O shall preserve every later due ordinary observation through
+final delivery; a final sample before inner settlement shall invalidate this retirement. The CG
+CODE author shall supply Analysis of the published integrated source and its actual transition
+order; the independent CODE reviewer shall check it before permitting the replacement. A claimed-I
+descendant cannot fork after confirmed I teardown. This stronger construction does not assert
+universal kernel success: failed/unconfirmed settlement remains refusal. AC-8, AC-10 and the
+separate confirmed whole-outer-tree guarantee remain required, including distinct O-origin
+inner-confirm/M-reap/outer-confirm observations. Inner confirmation never supplies outer confirmation.
+
+Where guardian-test-support is enabled, the single live-caller fixture operation shall select
+bounded typed scenarios through the unchanged production transitions. The live-birth scenario
+shall positively acknowledge a real adopted orphan while its owned I remains live. After an actual
+completed ordinary O observation of the complete accounting formula, the controller shall release
+that same worker to fork exactly one child. The child's own positive acknowledgement shall prove
+release-dependent birth. The operation shall validate BOTH actual identities and retain BOTH live
+pins and genuine authenticated I Completed before unchanged cleanup; M exit or a stage token
+shall not substitute. These are construction preconditions, separately checked and reported, not
+inferred from sample-membership absence. Missing any precondition shall yield typed fixture failure.
+
+The sampled-membership-only teardown regression class shall be verified by source Analysis,
+not an unproved runtime child-absence window. Closing C's original lease starts a request for I
+termination; it is not a last-sample boundary. O shall continue ordinary samples while I observes
+EOF and while inner settlement/report EOF/delivery progress. No existing bound or event record
+is claimed to make the child absent from every completed sample up to an actual control kill.
+The fixture shall still retain BOTH live then dead pins before outer escalation and actual I/M
+settlement, without claiming that the child stayed unsampled until death.
+
+The CG CODE author shall supply exhaustive Analysis of the actual contained teardown authority
+paths, including claimed-I lease EOF/INIT exit and retained-INIT signalling, unclaimed bootstrap
+recovery/cancellation and L/O outer cancellation/settlement. The independent CODE reviewer shall
+check that sample membership is used only for accounting/observation, never as a descendant kill
+list or cancellation authority. Any path using observed PID membership for teardown shall fail
+this Analysis; absence of such a path in an earlier snapshot shall not complete final-source
+Analysis. Claimed namespace descendants shall remain cancelled through actual INIT death.
+This allocation preserves AC-8's absent-from-previous-samples guarantee. The independent AC-24
+non-INIT-watcher runtime mutant and its restored control shall remain mandatory and unrescued by
+outer cleanup. That Test remains owed until genuinely executed; source Analysis shall provide
+neither its completion nor sampled-membership-mutant runtime credit. No sampling pause, new
+control-kill seam or impossible child-absence acceptance precondition is allocated.
+
+The operation shall return immutable raw observations and separate cleanup results without judging
+an oracle. O shall produce confirmation records ONLY from actual retained-I pidfd poll returning IN
+and actual retained M Child wait/reap returning Some(status), and actual matching seal/gate-close
+boundaries. I-IN is a confirmation witness; I termination authority remains the original C lease
+EOF under AC-24 and existing owned cancellation. I stays INIT after Completed until that EOF;
+Completed shall never be treated as I exit. A token, boolean, eventual dead pin or monitor pidfd
+readiness shall not supply the missing actual operation. Each record shall be bound to the same
+authenticated original run, retained role ownership/report capability and bounded producer order.
+C receipt timestamps or later fill shall not establish O's order. Unavailable, duplicated,
+overflowed, wrong-run or unbound observations shall yield typed fixture failure.
+
+The harness shall independently require actual I confirmation strictly before matching seal and
+actual M reap strictly before that seal. The I adverse case shall fabricate successful IN while
+retained I is positively live; fabricated early InnerSettlement/seal shall not be accepted while
+claimed descendants live. The M adverse case shall fabricate successful reap while the actual
+retained Child remains unreaped. Each mutation shall change ONLY the underlying call or result;
+record-emission and independent source-check code shall remain byte-unchanged. Source Analysis
+shall define and verify that mutation boundary. A record minted from fabricated success shall fail
+its genuine-operation predicate; deleting the record alongside the call shall not count as a
+passing mutation test. Independently moving real I poll or real M reap after matching seal shall
+fail strict order even when its positive record exists. Restored actual operations before seal
+shall pass. No generic combined settlement token shall satisfy either independent predicate.
+
+The retained-gate case shall separately require positive owned I termination while the original
+gate remains retained, followed by actual gate close. Early close and omitted I-confirmation
+mutants shall independently fail with record-emission unchanged. Absence of a backend marker
+shall not prove order. The independent ignored-inner-lease-EOF mutant shall remain required and
+shall never be paired with another mutant or rescued by outer cancellation.
+
+Every original assertion, adverse patch and FR-028-AC-21/FR-017-AC-24 trace obligation shall remain
+until measured replacement parity. Parity requires restored controls to pass and each named
+independent adverse case to fail its specific predicate before emergency cleanup: fabricated live-I IN, fabricated M reap, I poll after seal, M reap after seal, gate close
+before I confirmation, omitted gate-path I confirmation, and ignored inner EOF. The CG CODE author
+shall supply per-predicate runtime and source/bounds receipts; the independent CODE reviewer shall
+check each before accepting the single lifecycle CODE PR. The sampled-membership regression class
+requires independently accepted final-source AC-55 Analysis plus the genuine AC-24 non-INIT-watcher
+adverse/restored Test; neither is inferred from a matrix row, and no sampled-membership runtime
+control is claimed. Replacement trace bindings shall transfer
+only with full genuine original assertions; no partial test may bind an entire mixed criterion.
+
+The fixture shall immediately invoke unchanged owned cleanup after observation success, refusal
+or error, and return no cleanup-deferring callback/process handle. Bounded read-only publication
+shall observe the same unconditional operations; fixture selection shall not change authorization,
+cancellation, ordinary ticks or production stages. No controller pause or production callback is
+allocated. Before fixture CODE, actual event sources, mutation boundaries, integrated schedule,
+coordination/storage bounds and simultaneous charged lifetimes shall be grounded. No current
+operation token or stage ordinal is claimed to provide those capabilities. A dedicated off-default,
+noncaller-tunable coordination bound shall be justified by real one-child birth/identity/live-pin
+measurement and observable load margin, clamped to the original remaining monotonic deadline.
+No numeric cap is selected here; existing settlement or post-close allowances shall not fund extra
+coordination. Missing genuine authority/bounds or insufficient remaining budget shall block fixture
+implementation or yield typed failure, never skip/pass or raised headroom. No DTO, hook, new right,
+public role field or runtime implementation is delivered by this allocation.
+
 ### Run artifact and report lifetime
 
 FR-017's internal named report allocation is replaced explicitly by a child-only anonymous pipe
@@ -1606,6 +1705,12 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-48 | PLANNED/UNRUN (IR-682). The named heap inventory covers actual returned Rust capacities times element size, metadata and simultaneous lifetimes, excluding incidental allocator chunk overhead. A larger actual capacity or overlapping temporary omitted from the checked caller-buffer sum fails the conformance claim. | Analysis |
 | FR-034-AC-49 | PLANNED/UNRUN (IR-682). A change to the source head, resolved consumer configuration/compiler, resulting executable or loaded runtime/bound premises invalidates the former proof and requires analysis again. A stale proof or merely matching caller/helper artifact does not satisfy native-accounting conformance. | Analysis |
 | FR-034-AC-50 | PLANNED/UNRUN (IR-682). Missing or incomplete proof, or a proven bound exceeding the independently declared runtime charge, leaves the configuration UNPROVEN and fails the conformance gate; a missing actual named charge retains the existing runtime refusal. This build gate introduces no runtime refusal/public capability or evidence of completed Analysis; the initial release configuration and other eligible configurations remain UNPROVEN until their own proofs exist. | Analysis |
+| FR-034-AC-51 | PLANNED/UNRUN. Given genuine live-I construction preconditions, the child's own acknowledgement establishes release-dependent birth after the actual completed ordinary O sample. | Test, Analysis |
+| FR-034-AC-52 | PLANNED/UNRUN. O's independently validated actual retained-I pidfd-IN confirmation record strictly precedes the matching seal; the genuine-operation/order predicate rejects the named fabricated-live-I and late-poll controls. | Test, Analysis |
+| FR-034-AC-53 | PLANNED/UNRUN. O's independently validated actual retained M Child Some(status) reap record strictly precedes the matching seal; the genuine-operation/order predicate rejects the named fabricated-reap and late-reap controls. | Test, Analysis |
+| FR-034-AC-54 | PLANNED/UNRUN. During cancellation with the original gate retained, O's independently validated actual I confirmation precedes actual gate close; the producer-order predicate rejects early-close and omitted-confirmation controls. | Test, Analysis |
+| FR-034-AC-55 | PLANNED/UNRUN. Independently checked final-source Analysis establishes contained teardown authority through actual namespace INIT death and retained owner settlement, with no sampled-PID membership kill path; the separate AC-24 non-INIT-watcher runtime adverse/restored control remains owed. | Analysis |
+| FR-034-AC-56 | PLANNED/UNRUN. Published-source Analysis establishes O's final complete accounting after actual I confirmation, retained M reap, writer EOF and immutable seal for successful report Commit, with all later due ticks preserved; earlier final accounting invalidates literal-FINAL-oracle retirement. | Analysis |
 | FR-034-AC-57 | PLANNED/UNRUN (IR-687). An authenticated pre-Armed O OperationalFailure reaches L with zero rights; forwarding the SAME negative bytes to C in AwaitArm carries exactly one clone of L's actual retained O pidfd. The typed rights contract is state-specific, and no other negative context gains this right. | Test |
 | FR-034-AC-58 | PLANNED/UNRUN (IR-687). L authenticates the negative's actual O Child PID and kernel UID/GID 0 plus original build/run/state; C authenticates its actual L chain and binds the received capability to that same L-owned O. Wrong actor, credentials, build/run or state refuses without deriving authority from packet labels. | Test |
 | FR-034-AC-59 | PLANNED/UNRUN (IR-687). A missing, extra, wrong-type or substituted negative capability refuses while retaining actual received rights and owners for bounded cleanup; a zero-right fallback never admits this L→C AwaitArm negative. | Test |
@@ -1655,7 +1760,7 @@ remain CODE-gated and UNRUN.
 
 Evidence is staged explicitly in [TC-049](../matrix/TC-049-caller-death-ownership.md)'s evidence
 delivery allocation: ordinary production seams without fixture extension first, IR-655's owed exact
-O-origin/internal-bwrap/final-whole-run-sample and independent role witnesses second. This is an
+O-origin/internal-bwrap/live-I birth and positive-operation ordering, and independent role witnesses second. This is an
 internal evidence/commit-order delta in ONE lifecycle CODE PR, not separate CODE merges or a
 guarantee reduction. IR-655 fixture SPEC may use real integrated O source on the unmerged first
 stage, but shall merge before fixture CODE and before that single CODE PR merges. All internal
