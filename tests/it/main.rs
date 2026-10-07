@@ -46,6 +46,7 @@ mod bounded_kani_corpus;
 mod capability_settlement;
 mod composite_equality_agreement;
 mod composite_equality_generation;
+mod composite_parity_converter;
 mod cover_last;
 mod exact_function_agreement;
 mod exact_function_generation;
