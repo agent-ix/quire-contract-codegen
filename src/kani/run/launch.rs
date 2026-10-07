@@ -197,6 +197,29 @@ pub(super) struct BoundedLaunch {
     pub(super) memory: MemoryObservation,
 }
 
+/// Production resource attestation is separate from pure launch/capture test results. Only the
+/// actual caller path constructs this after whole-chain settlement, or an allocated pre-role
+/// timeout. An old memory-only launch is not upgraded by a default, ceiling or C-only RSS probe.
+pub(super) struct BoundedProductionLaunch {
+    pub(super) launch: BoundedLaunch,
+    pub(super) charged_peak: super::execute::ChargedPeakObservation,
+}
+
+#[cfg(target_os = "linux")]
+impl BoundedProductionLaunch {
+    pub(super) fn from_measured(
+        launch: BoundedLaunch,
+        peaks: super::resource_ledger::MeasuredPeaks,
+    ) -> Self {
+        Self {
+            launch,
+            charged_peak: super::execute::ChargedPeakObservation::Observed {
+                bytes: peaks.charged_bytes,
+            },
+        }
+    }
+}
+
 /// Refuse unavailable memory enforcement before starting a backend.
 #[derive(Debug)]
 pub(super) enum BoundedLaunchError {
@@ -205,6 +228,11 @@ pub(super) enum BoundedLaunchError {
         cause: io::Error,
     },
     Io(io::Error),
+    /// Actual C-side configured helper executable I/O, with its original path and error.
+    BoundaryIo {
+        path: std::path::PathBuf,
+        cause: io::Error,
+    },
     Guardian {
         kind: GuardianFailureKind,
         detail: String,
@@ -261,7 +289,7 @@ pub(super) fn run_bounded_launcher(
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     deadline: Option<Instant>,
-) -> Result<BoundedLaunch, BoundedLaunchError> {
+) -> Result<BoundedProductionLaunch, BoundedLaunchError> {
     run_bounded_launcher_at(
         command,
         helper,
@@ -283,17 +311,22 @@ fn run_bounded_launcher_at(
     harnesses: NonZeroUsize,
     procfs: &std::path::Path,
     deadline: Option<Instant>,
-) -> Result<BoundedLaunch, BoundedLaunchError> {
+) -> Result<BoundedProductionLaunch, BoundedLaunchError> {
     let observer =
         MemoryObserver::prepare(procfs).map_err(|cause| BoundedLaunchError::Unavailable {
             admission: super::execute::KaniStartupAdmissionCause::MemoryEnforcement,
             cause,
         })?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        return Ok(BoundedLaunch {
-            outcome: LaunchOutcome::TimedOut,
-            memory: observer.observation(),
-            report: Ok(None),
+        return Ok(BoundedProductionLaunch {
+            launch: BoundedLaunch {
+                outcome: LaunchOutcome::TimedOut,
+                memory: observer.observation(),
+                report: Ok(None),
+            },
+            charged_peak: super::execute::ChargedPeakObservation::NotObserved {
+                reason: super::execute::ChargedPeakNotObservedReason::PreRoleTimeout,
+            },
         });
     }
     // Preserve original zero/expiry capability ordering. An eligible launch inspects only its
@@ -330,16 +363,36 @@ fn run_bounded_launcher_at(
     })?;
     #[cfg(target_os = "linux")]
     {
-        let mut observer = observer;
-        super::owned::run(
+        // The original supplied helper is resolved against C's actual working directory;
+        // no PATH search or backend working-directory interpretation selects a different file.
+        let resolved = if helper.is_absolute() {
+            helper.to_owned()
+        } else {
+            std::env::current_dir()
+                .map_err(|cause| BoundedLaunchError::BoundaryIo {
+                    path: helper.to_owned(),
+                    cause,
+                })?
+                .join(helper)
+        };
+        let input = stdin
+            .clone_for_run()
+            .map_err(|cause| BoundedLaunchError::Unavailable {
+                admission:
+                    super::execute::KaniStartupAdmissionCause::BackendStdioInspectionFailed {
+                        descriptor: super::execute::BackendStdioDescriptor::Stdin,
+                    },
+                cause,
+            })?;
+        let _ = report_path; // The exact recipe already carries the anonymous report operand.
+        super::caller_public::run(
             command,
-            helper,
-            stdin,
-            report_path,
+            resolved,
+            input,
             ceilings,
             harnesses,
             deadline,
-            &mut observer,
+            observer.observation(),
         )
     }
     #[cfg(not(target_os = "linux"))]

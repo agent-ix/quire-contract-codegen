@@ -125,7 +125,8 @@ pub use kani::output::report::{
     OtherCheckClass,
 };
 pub use kani::run::execute::{
-    execute_kani_obligation, execute_kani_obligations, BackendStdioDescriptor, KaniBatchInvocation,
+    execute_kani_obligation, execute_kani_obligations, BackendStdioDescriptor,
+    ChargedPeakNotObservedReason, ChargedPeakObservation, KaniBatchInvocation,
     KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun,
     KaniStartupAdmissionCause, KaniStartupCapability, OUTPUT_OVER_LIMIT_CODE, OUTPUT_UNREAD_CODE,
 };
