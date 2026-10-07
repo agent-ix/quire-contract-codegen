@@ -400,18 +400,24 @@ pub(super) enum OuterStartupControl {
         stop: StopStamp,
         cause: OwnerStopCause,
     },
+    SetupRefused {
+        authority: RunAuthority,
+        peaks: MeasuredPeaks,
+        stop: StopStamp,
+        failure: super::startup_envelope::PolicyFailureCause,
+    },
 }
 
 impl OuterStartupControl {
     pub(super) fn rights_count(&self) -> usize {
         match self {
             Self::Phase(reply) => reply.rights_count(),
-            Self::OwnerStop { .. } => 0,
+            Self::OwnerStop { .. } | Self::SetupRefused { .. } => 0,
         }
     }
 
     pub(super) fn clock_only(&self) -> bool {
-        matches!(self, Self::OwnerStop { .. })
+        matches!(self, Self::OwnerStop { .. } | Self::SetupRefused { .. })
     }
 }
 
@@ -449,13 +455,15 @@ struct ClaimedPhaseReply {
 #[derive(Deserialize)]
 enum StopDispositionKind {
     OwnerStop,
+    SetupRefused,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StopDisposition {
     kind: StopDispositionKind,
-    cause: OwnerStopCause,
+    cause: Option<OwnerStopCause>,
+    failure: Option<super::startup_envelope::PolicyFailureCause>,
 }
 
 #[derive(Deserialize)]
@@ -515,17 +523,32 @@ pub(super) fn decode_outer_startup(
         StartupReplyKind::Committed => {
             let reply: StopCommittedReply =
                 serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, StartupReplyKind::Committed)
-                || !matches!(reply.disposition.kind, StopDispositionKind::OwnerStop)
-            {
+            if !matches!(reply.kind, StartupReplyKind::Committed) {
                 return Err(invalid());
             }
-            Ok(OuterStartupControl::OwnerStop {
-                authority: reply.authority,
-                peaks: reply.peaks,
-                stop: reply.stop,
-                cause: reply.disposition.cause,
-            })
+            match (
+                reply.disposition.kind,
+                reply.disposition.cause,
+                reply.disposition.failure,
+            ) {
+                (StopDispositionKind::OwnerStop, Some(cause), None) => {
+                    Ok(OuterStartupControl::OwnerStop {
+                        authority: reply.authority,
+                        peaks: reply.peaks,
+                        stop: reply.stop,
+                        cause,
+                    })
+                }
+                (StopDispositionKind::SetupRefused, None, Some(failure)) => {
+                    Ok(OuterStartupControl::SetupRefused {
+                        authority: reply.authority,
+                        peaks: reply.peaks,
+                        stop: reply.stop,
+                        failure,
+                    })
+                }
+                _ => Err(invalid()),
+            }
         }
     }
 }
@@ -552,6 +575,50 @@ pub(super) fn outer_startup_decode_bytes() -> Result<u64, super::control::Contro
 mod tests {
     use super::*;
     use crate::kani::run::role_deadline::StopOrigin;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38, FR-034-AC-39
+    #[test]
+    fn negative_commit_is_distinct_from_owner_stop_and_requires_original_cause() {
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Backend).unwrap();
+        let failure = super::super::startup_envelope::PolicyFailureCause::ProtectionUnverified;
+        let original = serde_json::to_value(OuterTerminalReply::Committed {
+            authority,
+            peaks: MeasuredPeaks {
+                tree_rss_bytes: 17,
+                charged_bytes: 31,
+            },
+            stop,
+            disposition: TerminalDisposition::SetupRefused { failure },
+        })
+        .unwrap();
+        let OuterStartupControl::SetupRefused {
+            authority: actual_authority,
+            peaks,
+            stop: actual_stop,
+            failure: actual_failure,
+        } = decode_outer_startup(&serde_json::to_vec(&original).unwrap()).unwrap()
+        else {
+            panic!("negative commit changed disposition");
+        };
+        assert_eq!(actual_authority, authority);
+        assert_eq!(actual_stop, stop);
+        assert_eq!(actual_failure, failure);
+        assert_eq!(peaks.charged_bytes, 31);
+        assert_eq!(peaks.tree_rss_bytes, 17);
+        let mut missing = original.clone();
+        missing["disposition"]
+            .as_object_mut()
+            .unwrap()
+            .remove("failure");
+        assert!(decode_outer_startup(&serde_json::to_vec(&missing).unwrap()).is_err());
+        let mut conflicting = original.clone();
+        conflicting["disposition"]["cause"] = "TimedOut".into();
+        assert!(decode_outer_startup(&serde_json::to_vec(&conflicting).unwrap()).is_err());
+        let mut renamed = original;
+        renamed["disposition"]["kind"] = "OwnerStop".into();
+        assert!(decode_outer_startup(&serde_json::to_vec(&renamed).unwrap()).is_err());
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-38.
     #[test]

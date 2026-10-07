@@ -152,6 +152,9 @@ pub(super) struct CallerBootstrap {
     inner_ready: Option<VerifiedInitReady>,
     startup_context: super::startup_cause::PreparedStartupContext,
     policy_refusal: Option<super::startup_envelope::PolicyFailureCause>,
+    policy_refusal_stop: Option<super::role_deadline::StopStamp>,
+    pending_setup_refusal: Option<super::startup_envelope::PolicyFailureCause>,
+    policy_refusal_settled: bool,
     terminal_receive: TerminalReceive,
     read_ack_storage: Option<FrameStorage>,
     terminal_phase: CallerTerminalPhase,
@@ -485,6 +488,9 @@ impl CallerBootstrap {
             inner_ready: None,
             startup_context,
             policy_refusal: None,
+            policy_refusal_stop: None,
+            pending_setup_refusal: None,
+            policy_refusal_settled: false,
             terminal_receive,
             read_ack_storage: Some(read_ack_storage),
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
@@ -622,7 +628,9 @@ impl CallerBootstrap {
         cutoff: Instant,
         allow_phase: bool,
     ) -> Result<bool, CallerBootstrapError> {
-        if clock.original_deadline() != self.identity_deadline || self.pending_owner_stop.is_some()
+        if clock.original_deadline() != self.identity_deadline
+            || self.pending_owner_stop.is_some()
+            || self.pending_setup_refusal.is_some()
         {
             return Err(CallerBootstrapError::TerminalTransition);
         }
@@ -701,6 +709,39 @@ impl CallerBootstrap {
                 // clock and then prove Code0 O wait plus L/captures/creator, including stream EOF.
                 Ok(true)
             }
+            OuterStartupControl::SetupRefused {
+                authority,
+                peaks,
+                stop,
+                failure,
+            } => {
+                // I's complete strict negative reply must already be retained, before C closes
+                // the lease that lets I terminate and O finish this nonreport transaction.
+                if sender.pid
+                    != self
+                        .outer_pid
+                        .ok_or(CallerBootstrapError::MissingOuterPin)?
+                    || sender.uid != self.caller_uid
+                    || sender.gid != self.caller_gid
+                    || authority != self.authority
+                    || pin.is_some()
+                    || self.policy_refusal != Some(failure)
+                    || self.policy_refusal_stop != Some(stop)
+                    || peaks.charged_bytes < peaks.tree_rss_bytes
+                {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                let cutoff = clock
+                    .adopt_stop(stop, self.identity_clock)
+                    .map_err(CallerBootstrapError::Deadline)?;
+                if Instant::now() >= cutoff {
+                    return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+                }
+                self.pending_setup_refusal = Some(failure);
+                self.phase_failed = true;
+                self.inner_auth_failed = true;
+                Ok(true)
+            }
         }
     }
 
@@ -746,6 +787,39 @@ impl CallerBootstrap {
             .take()
             .map(Some)
             .ok_or(CallerBootstrapError::TerminalTransition)
+    }
+
+    /// Finish only an authenticated original policy-negative transaction after the actual normal
+    /// O/L/creator role proof. Captures still belong to the caller and no evidence is minted.
+    pub(super) fn finish_setup_refusal_after_roles(
+        &mut self,
+        roles: &CallerRoleSettlement,
+    ) -> Result<bool, CallerBootstrapError> {
+        if roles.authority != self.authority
+            || Instant::now() >= roles.cutoff
+            || self.pending_setup_refusal.is_none()
+            || self.pending_setup_refusal != self.policy_refusal
+        {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        if !matches!(
+            self.outer_settled,
+            Some(OuterChildSettlement::Reaped {
+                outcome: BackendExit::Code(0),
+            })
+        ) {
+            return Err(CallerBootstrapError::OuterExitAbnormal);
+        }
+        if !self
+            .outer_receive
+            .confirm_end(&self.outer_control.transport(), roles.cutoff)
+            .map_err(CallerBootstrapError::Control)?
+        {
+            return Ok(false);
+        }
+        self.pending_setup_refusal = None;
+        self.policy_refusal_settled = true;
+        Ok(true)
     }
 
     /// Stores actual spawner custody BEFORE any wait/pin/control error. A failed handshake must
@@ -1524,6 +1598,7 @@ impl CallerBootstrap {
                     return Err(CallerBootstrapError::Control(ControlError::Deadline));
                 }
                 self.policy_refusal = Some(failure);
+                self.policy_refusal_stop = Some(stop);
                 return Err(CallerBootstrapError::PolicyRefusalObserved);
             }
         };
@@ -1570,7 +1645,10 @@ impl CallerBootstrap {
         &self,
         roles: &CallerRoleSettlement,
     ) -> Result<(super::startup_envelope::PolicyFailureCause, &str), CallerBootstrapError> {
-        if roles.authority != self.authority || Instant::now() >= roles.cutoff {
+        if roles.authority != self.authority
+            || Instant::now() >= roles.cutoff
+            || !self.policy_refusal_settled
+        {
             return Err(CallerBootstrapError::SettlementReplyMismatch);
         }
         let cause = self
