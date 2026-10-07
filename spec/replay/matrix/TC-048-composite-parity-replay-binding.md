@@ -106,17 +106,21 @@ and never replace positive QSL evaluation with a verdict double.
    the unavailable-capability refusal; malformed earlier setup reaches its own refusal. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.
 
-   Retain the actual
-   sent CompositeIdentity::new over request obligation, claim and complete evidence. Before ANY
-   outcome projection, including refusal/generated fault/incomplete, require decoded report.claim()
-   to equal it. Independently corrupt decoded node, occurrence, operation/kind, operand/domain,
+   **8a. Full sent-claim binding (PLANNED/UNRUN post-delivery consumer check).** Retain the
+   actual sent `CompositeIdentity::new` over request obligation, claim and complete evidence.
+   Before any outcome projection, including refusal/generated fault/incomplete, compare the genuine
+   public QSL report's `claim()` with it. With that genuine report held fixed, independently change
+   each CG-owned retained sent-identity member: node, occurrence, operation/kind, operand/domain,
    harness bounds, ScalarLimits, content identity, native cause/result/count, shadow result/pair
-   count, refinement and verified SUCCESS count with the sent identity held fixed; each returns
-   no settlement. As a separate control, change a request BEFORE send and require its legitimate
-   changed echo, without claiming consumer corruption or artifact authentication. Public ReplayLimits
-   is the last entry argument and separate from ScalarLimits/full claim. Independently replace
-   the proved artifact or retained original source/package/context with O-09 and the echoed claim
-   held fixed; require the independent R-6/R-7 binding refusal, not an echo-authentication claim.
+   count, refinement and verified SUCCESS count where present. Each mismatch returns no terminal
+   value. Separately cross-bind another run's genuine report and require the same refusal. Do not
+   mutate or fabricate QSL's private report representation or introduce a report decode seam.
+   As a separate positive control, change a valid request before send, retain that actual changed
+   sent identity and require its genuine report to pass claim binding; comparison with an earlier
+   unsent identity is not the oracle. Independent original source/artifact prechecks still apply.
+   Public ReplayLimits is the last entry argument and separate from ScalarLimits/full claim.
+   Independently replace the proved artifact or retained original source/package/context with
+   O-09 and the echoed claim held fixed; require the independent R-6/R-7 binding refusal.
 
 9. For O-09 composite identity, retain the exact claimed application node, original recompiled
    occurrence and kind. Use the owning public typed parity_obligation with one argument per operand
@@ -129,7 +133,10 @@ and never replace positive QSL evaluation with a verdict double.
    application/occurrence/position and require typed refusal for an unsupported inline literal.
    Sort each argument's BoundEntries by canonical encoded key bytes: paths `[0,0]` before `[0]`
    and `[10]` before `[2]`. Duplicate keys within one argument refuse, while repeated parameter
-   bounds across two positional arguments remain legal. Retain actual drawn cardinality/depth
+   bounds across two positional arguments remain legal. Add a Population-keyed harness bound and
+   require it to remain in the full claim/CG record while both O-09 parameter arguments contain only
+   Node-keyed bounds naming that parameter. Changing only the Population bound leaves O-09 unchanged
+   but changes the full claim identity. Retain actual drawn cardinality/depth
    entries even for unbounded/recursive positions and declared-domain substitution. Independently
    change node, occurrence, operand position, literal graph node/value or drawn bound; require changed
    identity or original membership refusal. Invoke the typed encoder refusal without manufacturing

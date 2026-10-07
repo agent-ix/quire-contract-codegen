@@ -137,6 +137,26 @@ both types. The statements below are ones a test can check, followed by the thre
 raised in IR-324 from parked CG PR 210 and their recommendations. PR 210 (draft, open, laid out
 before the subsystem restructure) is input here and is not at this base.
 
+### Claim binding allocation
+
+[FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) owns scalar producer,
+context-retention, driver and consumer duties;
+[FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md) owns those duties for
+composite parity. Their positional O-09 preimages and full report claims have separate roles.
+Repeated operand positions remain separate even when they name the same node; literal operands
+retain their route's authentic identity/domain. Function/frame preimages remain unchanged.
+
+Full sent-claim comparison on every outcome uses the actual retained claim sent by the driver.
+The owning requirements also retain the original replay wire/context and proving limits for
+independent source/package/proved-content checks and actual same-artifact native observation
+where required. An identity echo alone does not authenticate an artifact. Canonical proved-content,
+O-09 and refinement-certificate identities retain their distinct roles. Public transport
+`ReplayLimits` remains a separate final facade argument, rather than a claim-identity member.
+
+These CG producer, metadata, observation and consumer checks remain PLANNED/UNRUN and CODE-gated
+under their owning requirements; API availability and deterministic regeneration close none of
+them. E-2 below states only deterministic identity regeneration.
+
 ### Invariants a test can check
 
 Candidate statements (local labels; the repository assigns requirement ids when one is
@@ -271,9 +291,10 @@ authored).
   composite O-09 preimage contains only the exact claimed equality/inequality application
   node, its authentic occurrence key from the recompiled original package, the obligation
   kind and one argument per operand position in operand order. A self-comparison contributes
-  two graph-child argument entries for the same actual parameter, each with its actual
-  harness bounds; repeated positions are not a distinct-node set. A composite literal uses
-  its own actual graph-child node with empty Bounds. An inline integer literal uses the
+  two graph-child argument entries for the same actual parameter, each with only its actual
+  Node-keyed harness bounds naming that parameter. Population-keyed bounds remain in the full
+  claim and CG record, outside O-09 arguments. Repeated positions are not a distinct-node set.
+  A composite literal uses its own actual graph-child node with empty Bounds. An inline integer literal uses the
   actual application/occurrence/position identity with a singleton Range; unsupported
   inline literal forms refuse. Within each Bounds argument, keys sort by canonical encoded
   key bytes, not DomainKey ordering, and duplicate keys refuse within that argument.
@@ -293,29 +314,7 @@ authored).
   alone cannot establish that artifact tie; no operator/native/content/refinement/counter
   top-level O-09 member or tracking digest is added.
 - E-2. Two obligations with identical identity members have the same `ObligationIdentity`;
-  regeneration is byte-identical (NFR-001). For the planned scalar and composite routes,
-  [FR-032](../replay/functional/FR-032-routed-scalar-replay-binding.md) and
-  [FR-033](../replay/functional/FR-033-composite-parity-replay-binding.md) own the respective
-  positional O-09 preimages and full-claim consumer checks. Equality of the O-09 digest binds
-  those claim members; it does not authenticate generated content, a native observation or
-  every member of the retained proving/evidence record. Repeated operand positions remain
-  separate entries even when they name the same node; literal operands retain the owning
-  route's authentic graph-child or inline-literal identity and domain. Existing function/frame
-  preimages and ordering remain unchanged.
-  On every scalar or composite outcome, including refusal, fault and incomplete outcomes,
-  the CG converter shall compare the report's full corresponding typed claim with the actual
-  retained claim sent by the driver, before settlement. A changed or missing report claim
-  shall refuse binding with no settlement. The original sent replay wire/context and proving
-  limits shall remain retained for the independent original-package/source/proved-content
-  checks; comparing an echo with a later-mutated request does not establish those checks.
-  The driver shall authenticate the actual typed native observation of the same proved artifact
-  against that retained record where the route requires one. QSL carries the supplied content
-  identity and checks semantic claim membership; carried content equality is not artifact
-  authentication. Public transport `ReplayLimits` remains a separate final facade argument,
-  distinct from the claim's exact-evaluation limits, and is not invented as a claim-identity
-  member. These scalar/composite producer, metadata, observation and consumer obligations remain
-  PLANNED / UNRUN and CODE-gated under their owning requirements. API availability, identity
-  echo equality and deterministic regeneration alone close none of those gates.
+  regeneration is byte-identical (NFR-001).
 - E-3. Every run item that reaches the map has exactly one terminal value, and the map from
   `KaniRunOutcome` and from `KaniOutcomeKind` is one `match` with no wildcard arm, over the pair
   with the replay settlement (FR-030-AC-7; FR-029-AC-1 and FR-029-AC-12 state `Refuted` only with a
