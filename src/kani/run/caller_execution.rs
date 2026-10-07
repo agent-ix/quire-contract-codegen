@@ -111,6 +111,17 @@ impl CallerExecution {
             .and_then(|bytes| {
                 bytes.checked_add(std::mem::size_of::<super::launch::BoundedProductionLaunch>())
             })
+            // Fixed checking/candidate/marker payload objects are real named C storage.
+            // These sizes do not prove a capacity for serde's private dynamic error message.
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<CallerExecutionError>()))
+            .and_then(|bytes| {
+                bytes.checked_add(std::mem::size_of::<super::control::ControlError>())
+            })
+            .and_then(|bytes| {
+                bytes.checked_add(std::mem::size_of::<
+                    super::cross_role_cause::KaniCauseMetadataIntegrityError,
+                >())
+            })
             .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         u64::try_from(bytes).map_err(|_| CallerBootstrapError::ReservationUnrepresentable)
     }

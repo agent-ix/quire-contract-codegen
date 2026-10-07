@@ -25,6 +25,8 @@ use rustix::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 
+use super::cross_role_cause::CauseIntegrityPredicate;
+
 pub(super) const CONTROL_BYTES: usize = 65_536;
 const RECEIVED_RIGHTS: usize = 4;
 const ANCILLARY_BYTES: usize = rustix::cmsg_space!(ScmRights(RECEIVED_RIGHTS), ScmCredentials(1));
@@ -52,6 +54,11 @@ pub(super) enum ControlError {
     Deadline,
     EncodedBytesExceeded,
     InvalidEncoding(serde_json::Error),
+    /// An actual required-cause decoder/checking fault, not original producer metadata.
+    CauseMetadata {
+        predicate: CauseIntegrityPredicate,
+        source: serde_json::Error,
+    },
     Truncated,
     MissingCredentials,
     RepeatedCredentials,
@@ -62,9 +69,15 @@ pub(super) enum ControlError {
     UnexpectedCredentials,
     CreatorMismatch,
     ProgressPoisoned,
-    PartialTerminalSend { written: usize, expected: usize },
+    PartialTerminalSend {
+        written: usize,
+        expected: usize,
+    },
     TrailingTerminalBytes,
-    RightsCount { expected: usize, received: usize },
+    RightsCount {
+        expected: usize,
+        received: usize,
+    },
 }
 
 impl From<rustix::io::Errno> for ControlError {
@@ -84,6 +97,9 @@ impl std::fmt::Display for ControlError {
         match self {
             Self::Io(error) => write!(formatter, "guardian control I/O: {error}"),
             Self::InvalidEncoding(error) => write!(formatter, "guardian control encoding: {error}"),
+            Self::CauseMetadata { predicate, source } => {
+                write!(formatter, "guardian cause metadata {predicate:?}: {source}")
+            }
             Self::RightsCount { expected, received } => write!(
                 formatter,
                 "guardian control expected {expected} descriptor(s), received {received}"
@@ -98,6 +114,7 @@ impl std::error::Error for ControlError {
         match self {
             Self::Io(error) => Some(error),
             Self::InvalidEncoding(error) => Some(error),
+            Self::CauseMetadata { source, .. } => Some(source),
             _ => None,
         }
     }

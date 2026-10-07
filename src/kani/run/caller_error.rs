@@ -1,19 +1,63 @@
 //! Consuming projection of original local caller errors after caller-owned settlement.
 //!
 //! Known local I/O leaves move directly into the returned io::Error, preserving its kind, errno
-//! and concrete custom payload. Non-I/O failures retain the actual owned typed caller error as
-//! source. This is neither a remote cause reconstruction nor a public classification decision.
+//! and concrete custom payload. Required-cause checking faults expose the actual local integrity
+//! marker with the moved control/decoder source; other non-I/O failures retain the owned caller
+//! error as source. This performs no remote cause replay or public classification decision.
 
 use std::io;
 
 use super::{
-    caller_bootstrap::CallerBootstrapError, caller_driver::CallerDriveError,
-    caller_execution::CallerExecutionError, caller_prepare::PreparationError,
-    control::ControlError, launch::BoundedLaunchError, namespace::ReadyIdentityError,
-    report_storage::ReportError, stages::StageError,
+    caller_bootstrap::CallerBootstrapError,
+    caller_driver::CallerDriveError,
+    caller_execution::CallerExecutionError,
+    caller_prepare::PreparationError,
+    control::ControlError,
+    cross_role_cause::{
+        CauseCheckerProvenance, CauseCheckerRole, CauseIntegrityPredicate, CauseIntegritySource,
+        CauseOperation, KaniCauseMetadataIntegrityError,
+    },
+    launch::BoundedLaunchError,
+    namespace::ReadyIdentityError,
+    report_storage::ReportError,
+    stages::StageError,
 };
 
-/// Move the original reachable local I/O cause; otherwise retain the exact typed owned error.
+/// Recognize only an actual local required-cause checking error. Other failures retain their
+/// original path; neither an encoding message nor a packet label supplies this predicate.
+pub(super) fn metadata_predicate(error: &CallerExecutionError) -> Option<CauseIntegrityPredicate> {
+    use CallerBootstrapError as Bootstrap;
+    use CallerDriveError as Progress;
+    use CallerExecutionError as Execution;
+    use PreparationError as Preparation;
+    use StageError as Stage;
+
+    match error {
+        Execution::Preparation(Preparation::Stage(Stage::Control(
+            ControlError::CauseMetadata { predicate, .. },
+        )))
+        | Execution::Progress(Progress::Stage(Stage::Control(ControlError::CauseMetadata {
+            predicate,
+            ..
+        })))
+        | Execution::Bootstrap(
+            Bootstrap::Control(ControlError::CauseMetadata { predicate, .. })
+            | Bootstrap::Stage(Stage::Control(ControlError::CauseMetadata { predicate, .. })),
+        )
+        | Execution::Preparation(Preparation::CallerBootstrap(
+            Bootstrap::Control(ControlError::CauseMetadata { predicate, .. })
+            | Bootstrap::Stage(Stage::Control(ControlError::CauseMetadata { predicate, .. })),
+        ))
+        | Execution::Progress(Progress::Bootstrap(
+            Bootstrap::Control(ControlError::CauseMetadata { predicate, .. })
+            | Bootstrap::Stage(Stage::Control(ControlError::CauseMetadata { predicate, .. })),
+        )) => Some(*predicate),
+        _ => None,
+    }
+}
+
+/// Move the original reachable local I/O cause, or expose the actual local metadata checking
+/// source through its integrity marker; otherwise retain the exact typed owned error.
 /// Direct extraction does not preserve every intermediate wrapper in the returned I/O envelope:
 /// the caller separately retains meaningful stage/context and selects the public boundary only
 /// after cleanup. No error payload supplies role ownership or confirmed-cleanup authority.
@@ -25,6 +69,40 @@ pub(super) fn into_original_io(error: CallerExecutionError) -> io::Error {
     use StageError as Stage;
 
     match error {
+        Execution::Preparation(Preparation::Stage(Stage::Control(
+            control @ ControlError::CauseMetadata { predicate, .. },
+        )))
+        | Execution::Progress(Progress::Stage(Stage::Control(
+            control @ ControlError::CauseMetadata { predicate, .. },
+        )))
+        | Execution::Bootstrap(
+            Bootstrap::Control(control @ ControlError::CauseMetadata { predicate, .. })
+            | Bootstrap::Stage(Stage::Control(
+                control @ ControlError::CauseMetadata { predicate, .. },
+            )),
+        )
+        | Execution::Preparation(Preparation::CallerBootstrap(
+            Bootstrap::Control(control @ ControlError::CauseMetadata { predicate, .. })
+            | Bootstrap::Stage(Stage::Control(
+                control @ ControlError::CauseMetadata { predicate, .. },
+            )),
+        ))
+        | Execution::Progress(Progress::Bootstrap(
+            Bootstrap::Control(control @ ControlError::CauseMetadata { predicate, .. })
+            | Bootstrap::Stage(Stage::Control(
+                control @ ControlError::CauseMetadata { predicate, .. },
+            )),
+        )) => io::Error::new(
+            io::ErrorKind::InvalidData,
+            KaniCauseMetadataIntegrityError::new(
+                predicate,
+                CauseCheckerProvenance {
+                    role: Some(CauseCheckerRole::Caller),
+                    operation: Some(CauseOperation::ControlReception),
+                },
+                Some(CauseIntegritySource::Control(control)),
+            ),
+        ),
         Execution::Io(error)
         | Execution::Assembly(BoundedLaunchError::Io(error))
         | Execution::Assembly(BoundedLaunchError::BoundaryIo { cause: error, .. })
@@ -180,6 +258,52 @@ mod tests {
             Some(CallerExecutionError::Preparation(
                 PreparationError::CaptureSizeOverflow
             ))
+        ));
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn actual_kind_decoder_fault_projects_integrity_with_its_owned_control_source() {
+        use super::super::{cause_metadata::CauseSeed, startup_cause::PreparedStartupContext};
+        use serde::de::DeserializeSeed;
+
+        let mut context = PreparedStartupContext::new(0).unwrap();
+        let mut decoder = serde_json::Deserializer::from_slice(
+            br#"{"Io":{"kind":"UnknownKind","raw_os_error":null,"payload":"NoCustomPayload"}}"#,
+        );
+        let source = CauseSeed::new(context.metadata_fault_slot())
+            .deserialize(&mut decoder)
+            .unwrap_err();
+        let original = CallerExecutionError::Progress(CallerDriveError::Bootstrap(
+            CallerBootstrapError::Control(context.metadata_error(source)),
+        ));
+        assert_eq!(
+            metadata_predicate(&original),
+            Some(CauseIntegrityPredicate::UnknownKindMetadata)
+        );
+        let returned = into_original_io(original);
+        assert_eq!(returned.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(returned.raw_os_error(), None);
+        let marker = returned
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<KaniCauseMetadataIntegrityError>()
+            .unwrap();
+        let control = std::error::Error::source(marker)
+            .unwrap()
+            .downcast_ref::<ControlError>()
+            .unwrap();
+        let ControlError::CauseMetadata { predicate, source } = control else {
+            panic!("actual decoder source was replaced")
+        };
+        assert_eq!(*predicate, CauseIntegrityPredicate::UnknownKindMetadata);
+        assert!(source.is_data());
+        assert!(std::ptr::eq(
+            source,
+            std::error::Error::source(control)
+                .unwrap()
+                .downcast_ref::<serde_json::Error>()
+                .unwrap()
         ));
     }
 }
