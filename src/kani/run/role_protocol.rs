@@ -571,10 +571,250 @@ pub(super) fn outer_startup_decode_bytes() -> Result<u64, super::control::Contro
     u64::try_from(total).map_err(|_| super::control::ControlError::EncodedBytesExceeded)
 }
 
+/// Exact alternatives after actual I completion/lease close. A nonreport stop remains
+/// provisional and cannot stand for a delivered report descriptor or bounded read completion.
+pub(super) enum ReportStartHeader {
+    Descriptor {
+        authority: RunAuthority,
+        bytes: u64,
+    },
+    OwnerStop {
+        authority: RunAuthority,
+        peaks: MeasuredPeaks,
+        stop: StopStamp,
+        cause: OwnerStopCause,
+    },
+}
+
+impl ReportStartHeader {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::Descriptor { .. } => 1,
+            Self::OwnerStop { .. } => 0,
+        }
+    }
+    pub(super) fn clock_only(&self) -> bool {
+        matches!(self, Self::OwnerStop { .. })
+    }
+}
+
+#[derive(Deserialize)]
+enum ReportReplyKind {
+    ReportDescriptor,
+    Committed,
+}
+
+#[derive(Deserialize)]
+struct ReportReplySelector {
+    kind: ReportReplyKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DescriptorReply {
+    kind: ReportReplyKind,
+    authority: RunAuthority,
+    bytes: u64,
+}
+
+pub(super) fn decode_report_start(
+    payload: &[u8],
+) -> Result<ReportStartHeader, super::control::ControlError> {
+    use super::control::ControlError;
+    use serde::de::Error as _;
+    super::startup_cause::check_scratch_free_json(payload)
+        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
+    let selector: ReportReplySelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selector.kind {
+        ReportReplyKind::ReportDescriptor => {
+            let reply: DescriptorReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(reply.kind, ReportReplyKind::ReportDescriptor) {
+                return Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                    "expected report descriptor",
+                )));
+            }
+            Ok(ReportStartHeader::Descriptor {
+                authority: reply.authority,
+                bytes: reply.bytes,
+            })
+        }
+        ReportReplyKind::Committed => match decode_outer_startup(payload)? {
+            OuterStartupControl::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            } => Ok(ReportStartHeader::OwnerStop {
+                authority,
+                peaks,
+                stop,
+                cause,
+            }),
+            OuterStartupControl::Phase(_) | OuterStartupControl::SetupRefused { .. } => {
+                Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                    "expected resource or timeout stop after completion",
+                )))
+            }
+        },
+    }
+}
+
+#[derive(Deserialize)]
+enum ReportDispositionKind {
+    Report,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReportDisposition {
+    kind: ReportDispositionKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReportCommit {
+    kind: ReportReplyKind,
+    authority: RunAuthority,
+    peaks: MeasuredPeaks,
+    stop: StopStamp,
+    disposition: ReportDisposition,
+}
+
+pub(super) fn decode_terminal_commit(
+    payload: &[u8],
+) -> Result<OuterTerminalReply, super::control::ControlError> {
+    use super::control::ControlError;
+    use serde::de::Error as _;
+    super::startup_cause::check_scratch_free_json(payload)
+        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
+    // Both schemas own only fixed scalar values. Trying the exact Report schema first adds no
+    // internally-tagged Content accumulator or decoded String/context allocation.
+    if let Ok(reply) = serde_json::from_slice::<ReportCommit>(payload) {
+        if matches!(reply.kind, ReportReplyKind::Committed)
+            && matches!(reply.disposition.kind, ReportDispositionKind::Report)
+        {
+            return Ok(OuterTerminalReply::Committed {
+                authority: reply.authority,
+                peaks: reply.peaks,
+                stop: reply.stop,
+                disposition: TerminalDisposition::Report,
+            });
+        }
+    }
+    match decode_outer_startup(payload)? {
+        OuterStartupControl::OwnerStop {
+            authority,
+            peaks,
+            stop,
+            cause,
+        } => Ok(OuterTerminalReply::Committed {
+            authority,
+            peaks,
+            stop,
+            disposition: TerminalDisposition::OwnerStop { cause },
+        }),
+        OuterStartupControl::SetupRefused { .. } | OuterStartupControl::Phase(_) => {
+            Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                "unexpected terminal disposition",
+            )))
+        }
+    }
+}
+
+/// Retained scalar decoder/selector stack storage is reserved before L; JSON payload bytes
+/// are already charged by the original framer. These exact schemas allocate no context strings.
+pub(super) fn report_decode_bytes() -> Result<u64, super::control::ControlError> {
+    let total = std::mem::size_of::<ReportReplySelector>()
+        .checked_add(std::mem::size_of::<DescriptorReply>())
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<ReportCommit>()))
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<ReportStartHeader>()))
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<OuterTerminalReply>()))
+        .ok_or(super::control::ControlError::EncodedBytesExceeded)?;
+    u64::try_from(total).map_err(|_| super::control::ControlError::EncodedBytesExceeded)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::kani::run::role_deadline::StopOrigin;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-32, FR-034-AC-33, FR-034-AC-38
+    #[test]
+    fn report_receiver_distinguishes_descriptor_final_report_and_late_stop() {
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Outer).unwrap();
+        let descriptor = serde_json::to_vec(&OuterTerminalReply::ReportDescriptor {
+            authority,
+            bytes: 73,
+        })
+        .unwrap();
+        let ReportStartHeader::Descriptor {
+            authority: actual,
+            bytes,
+        } = decode_report_start(&descriptor).unwrap()
+        else {
+            panic!("descriptor changed branch");
+        };
+        assert_eq!(actual, authority);
+        assert_eq!(bytes, 73);
+        assert!(decode_terminal_commit(&descriptor).is_err());
+        let mut report = serde_json::to_value(OuterTerminalReply::Committed {
+            authority,
+            peaks: MeasuredPeaks {
+                tree_rss_bytes: 19,
+                charged_bytes: 41,
+            },
+            stop,
+            disposition: TerminalDisposition::Report,
+        })
+        .unwrap();
+        assert!(matches!(
+            decode_terminal_commit(&serde_json::to_vec(&report).unwrap()).unwrap(),
+            OuterTerminalReply::Committed {
+                disposition: TerminalDisposition::Report,
+                ..
+            }
+        ));
+        assert!(decode_report_start(&serde_json::to_vec(&report).unwrap()).is_err());
+        report["disposition"] =
+            serde_json::json!({ "kind": "OwnerStop", "cause": "ResourceExhausted" });
+        let encoded = serde_json::to_vec(&report).unwrap();
+        let ReportStartHeader::OwnerStop {
+            authority: actual,
+            peaks,
+            stop: actual_stop,
+            cause,
+        } = decode_report_start(&encoded).unwrap()
+        else {
+            panic!("late resource stop changed branch");
+        };
+        assert_eq!(actual, authority);
+        assert_eq!(actual_stop, stop);
+        assert_eq!(cause, OwnerStopCause::ResourceExhausted);
+        assert_eq!(peaks.charged_bytes, 41);
+        assert!(matches!(
+            decode_terminal_commit(&encoded).unwrap(),
+            OuterTerminalReply::Committed {
+                disposition: TerminalDisposition::OwnerStop {
+                    cause: OwnerStopCause::ResourceExhausted
+                },
+                ..
+            }
+        ));
+        for field in ["authority", "peaks", "stop", "disposition"] {
+            let mut missing = report.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            let bytes = serde_json::to_vec(&missing).unwrap();
+            assert!(decode_report_start(&bytes).is_err(), "{field}");
+            assert!(decode_terminal_commit(&bytes).is_err(), "{field}");
+        }
+        report["bytes"] = 73.into();
+        let conflict = serde_json::to_vec(&report).unwrap();
+        assert!(decode_report_start(&conflict).is_err());
+        assert!(decode_terminal_commit(&conflict).is_err());
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38, FR-034-AC-39
     #[test]

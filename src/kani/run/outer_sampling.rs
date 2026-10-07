@@ -54,6 +54,7 @@ pub(super) enum SamplingError {
     TerminalAuthority,
     TerminalSize,
     TerminalDeadlineMismatch,
+    PartialReportDescriptor,
 }
 
 impl std::fmt::Display for SamplingError {
@@ -81,7 +82,8 @@ impl std::error::Error for SamplingError {
             | Self::InvalidTerminalTransition
             | Self::TerminalAuthority
             | Self::TerminalSize
-            | Self::TerminalDeadlineMismatch => None,
+            | Self::TerminalDeadlineMismatch
+            | Self::PartialReportDescriptor => None,
         }
     }
 }
@@ -285,7 +287,6 @@ impl OuterRunOwner {
                 .tick(outer, caller)?
             {
                 TerminalProgress::Pending => Ok(OuterRunProgress::Pending),
-                TerminalProgress::Exhausted => Ok(OuterRunProgress::ResourceExhausted),
                 TerminalProgress::Committed => {
                     self.state = OuterRunState::Committed;
                     Ok(OuterRunProgress::TerminalCommitted)
@@ -390,13 +391,13 @@ impl OuterRunOwner {
                     .inner_settlement
                     .take()
                     .ok_or(SamplingError::InvalidTerminalTransition)?;
-                let (report, sampling) =
+                let (report, sampling, settlement) =
                     sampling.seal_after_inner_settlement(settlement, outer, caller)?;
                 self.terminal = Some(
                     self.terminal_prepared
                         .take()
                         .ok_or(SamplingError::InvalidTerminalTransition)?
-                        .begin(report, sampling)?,
+                        .begin(report, sampling, settlement)?,
                 );
                 self.state = OuterRunState::Terminal;
                 Ok(OuterRunProgress::Pending)
@@ -598,6 +599,7 @@ impl TerminalPreparation {
         self,
         report: SealedReport,
         sampling: TerminalSampling,
+        settlement: InnerSettlement,
     ) -> Result<TerminalDelivery, SamplingError> {
         let cutoff = self.settlement_deadline()?;
         if self.poisoned {
@@ -631,8 +633,10 @@ impl TerminalPreparation {
             bytes: Some(bytes),
             deadline,
             disposition: TerminalDisposition::Report,
-            discarded: None,
-            monitor_stop: None,
+            cleanup: TerminalCleanupWitness::Claimed {
+                _settlement: settlement,
+                discarded_report: None,
+            },
             poisoned: false,
         })
     }
@@ -673,8 +677,10 @@ impl TerminalPreparation {
             bytes: None,
             deadline,
             disposition,
-            discarded: Some(sampling.collector),
-            monitor_stop: Some(monitor_stop),
+            cleanup: TerminalCleanupWitness::MonitorStop {
+                _settlement: monitor_stop,
+                discarded: sampling.collector,
+            },
             poisoned: false,
         })
     }
@@ -692,10 +698,25 @@ enum TerminalState {
 
 pub(super) enum TerminalProgress {
     Pending,
-    Exhausted,
     /// Complete commit emission only. The executor may now exit normally; C must still prove
     /// actual normal O exit/reap through retained L, capture closure and creator settlement.
     Committed,
+}
+
+/// Actual settlement custody survives both accepted-report and abandoned-report transactions.
+/// A claimed witness binds the original writer pipe and actual I/M settlement; it cannot be
+/// replaced by the distinct monitor-stop witness or a resurrected collector after sealing.
+enum TerminalCleanupWitness {
+    Claimed {
+        _settlement: InnerSettlement,
+        // Zero-progress delivery abandonment retains O's actual sealed backing until O exits.
+        // After full delivery C owns its duplicate; O cannot revoke it or release C's backing.
+        discarded_report: Option<SealedReport>,
+    },
+    MonitorStop {
+        _settlement: MonitorStopSettlement,
+        discarded: ReportCollector,
+    },
 }
 
 /// O's single terminal transaction. Every unsuccessful finite attempt returns to actual fresh
@@ -708,8 +729,7 @@ pub(super) struct TerminalDelivery {
     bytes: Option<u64>,
     deadline: Instant,
     disposition: TerminalDisposition,
-    discarded: Option<ReportCollector>,
-    monitor_stop: Option<MonitorStopSettlement>,
+    cleanup: TerminalCleanupWitness,
     poisoned: bool,
 }
 
@@ -730,6 +750,56 @@ impl TerminalDelivery {
         result
     }
 
+    /// Abandon report acceptance only after a fresh complete genuine resource observation.
+    /// The actual I/M proof and conservative backing charge survive. C must discard any delivered
+    /// report bytes after its authenticated stop disposition, then confirm whole-chain settlement.
+    fn stop_sealed_report(&mut self) -> Result<(), SamplingError> {
+        let TerminalCleanupWitness::Claimed {
+            discarded_report, ..
+        } = &mut self.cleanup
+        else {
+            return Err(SamplingError::InvalidTerminalTransition);
+        };
+        if discarded_report.is_some() || self.bytes.is_none() {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        match &self.state {
+            TerminalState::DeliverDescriptor { send, .. } if send.has_partial_frame() => {
+                // Keep the actual report, send progress and proof on refusal; never splice a
+                // stop frame over a descriptor prefix (including already transferred rights).
+                return Err(SamplingError::PartialReportDescriptor);
+            }
+            TerminalState::DeliverDescriptor { .. }
+            | TerminalState::AwaitRead
+            | TerminalState::Commit => {}
+            TerminalState::Committed => return Err(SamplingError::InvalidTerminalTransition),
+        }
+        // TerminalSampling's actual observation already captured the Outer trigger once. An
+        // earlier authentic completion may remain the first stop; no later resource restarts R.
+        let cutoff = observation_deadline(&self.sampling.settings, &self.sampling.stops)?
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let deadline = self.deadline.min(cutoff);
+        if Instant::now() >= deadline {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        if matches!(self.state, TerminalState::DeliverDescriptor { .. }) {
+            let TerminalState::DeliverDescriptor { report, .. } =
+                std::mem::replace(&mut self.state, TerminalState::Commit)
+            else {
+                return Err(SamplingError::InvalidTerminalTransition);
+            };
+            // Only a zero-progress frame is retired. Preserve its real sealed backing; the
+            // ledger never subtracts the original reservation even when C received no fd.
+            *discarded_report = Some(report);
+        }
+        // AwaitRead remains AwaitRead: same bytes, authority, ACK and shortened original cutoff.
+        self.deadline = deadline;
+        self.disposition = TerminalDisposition::OwnerStop {
+            cause: OwnerStopCause::ResourceExhausted,
+        };
+        Ok(())
+    }
+
     fn advance(
         &mut self,
         outer: &PreparedOuter<'_>,
@@ -742,22 +812,45 @@ impl TerminalDelivery {
         let (tick, peaks) = self.sampling.observation_and_peaks(outer, caller)?;
         match self.disposition {
             TerminalDisposition::Report => {
-                if self.discarded.is_some() || self.monitor_stop.is_some() {
+                if !matches!(
+                    self.cleanup,
+                    TerminalCleanupWitness::Claimed {
+                        discarded_report: None,
+                        ..
+                    }
+                ) {
                     return Err(SamplingError::InvalidTerminalTransition);
                 }
                 if matches!(tick, MemoryTick::Exhausted(_)) {
-                    return Ok(TerminalProgress::Exhausted);
+                    self.stop_sealed_report()?;
                 }
             }
             TerminalDisposition::OwnerStop { .. } | TerminalDisposition::SetupRefused { .. } => {
-                if !matches!(self.state, TerminalState::Commit) || self.monitor_stop.is_none() {
-                    return Err(SamplingError::InvalidTerminalTransition);
+                match &mut self.cleanup {
+                    TerminalCleanupWitness::MonitorStop { discarded, .. } => {
+                        if !matches!(self.state, TerminalState::Commit) || self.bytes.is_some() {
+                            return Err(SamplingError::InvalidTerminalTransition);
+                        }
+                        discarded
+                            .drain_owner_stop(Some(self.deadline))
+                            .map_err(SamplingError::Report)?;
+                    }
+                    TerminalCleanupWitness::Claimed { .. } => {
+                        // A delivered descriptor still owes its original bounded read ACK. This
+                        // actual settled witness grants neither pipe resurrection nor another ACK.
+                        if !matches!(self.state, TerminalState::AwaitRead | TerminalState::Commit)
+                            || self.bytes.is_none()
+                            || !matches!(
+                                self.disposition,
+                                TerminalDisposition::OwnerStop {
+                                    cause: OwnerStopCause::ResourceExhausted
+                                }
+                            )
+                        {
+                            return Err(SamplingError::InvalidTerminalTransition);
+                        }
+                    }
                 }
-                self.discarded
-                    .as_mut()
-                    .ok_or(SamplingError::InvalidTerminalTransition)?
-                    .drain_owner_stop(Some(self.deadline))
-                    .map_err(SamplingError::Report)?;
                 if matches!(self.disposition, TerminalDisposition::SetupRefused { .. })
                     && matches!(tick, MemoryTick::Exhausted(_))
                 {
@@ -1691,13 +1784,14 @@ impl OuterSampling {
 
     /// Consume only the collector after genuine I/M settlement and actual writer EOF. Retained
     /// accounting remains active through sealed descriptor delivery and the bounded consumer read.
-    /// The pre-seal sample is not serialized as final metrics or accepted as cleanup evidence.
+    /// Return the original authenticated settlement token for terminal cleanup custody. The
+    /// pre-seal sample is not serialized as final metrics or accepted as cleanup evidence.
     pub(super) fn seal_after_inner_settlement(
         mut self,
         settlement: InnerSettlement,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
-    ) -> Result<(SealedReport, TerminalSampling), SamplingError> {
+    ) -> Result<(SealedReport, TerminalSampling, InnerSettlement), SamplingError> {
         if self.owner_stop.is_some() {
             return Err(SamplingError::InvalidTerminalTransition);
         }
@@ -1726,6 +1820,7 @@ impl OuterSampling {
                 settings: self.settings,
                 stops: self.stops,
             },
+            settlement,
         ))
     }
 

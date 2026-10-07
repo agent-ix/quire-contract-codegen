@@ -652,6 +652,27 @@ impl<'fd> Transport<'fd> {
         Ok(())
     }
 
+    /// Wait only for progress in the post-completion report transaction. EOF authorizes
+    /// nothing: the same original framer still rejects partial frames, and descriptors
+    /// retain strict EOF precedence. Only a complete authenticated stop may shorten a clock.
+    pub(super) fn wait_terminal_readable(&self, deadline: Instant) -> Result<(), ControlError> {
+        loop {
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .ok_or(ControlError::Deadline)?;
+            let mut events = [PollFd::from_borrowed_fd(
+                self.0,
+                PollFlags::IN | PollFlags::RDHUP,
+            )];
+            match poll(&mut events, Some(&timespec(remaining)?)) {
+                Ok(0) => return Err(ControlError::Deadline),
+                Ok(_) => return self.check_receive_state(ReceiveEof::DrainTerminal),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
     fn wait(&self, interest: PollFlags, deadline: Instant) -> Result<(), ControlError> {
         loop {
             let remaining = deadline
@@ -845,6 +866,29 @@ pub(super) struct TerminalReceive {
 }
 
 impl TerminalReceive {
+    /// State-specific final scalar decoding shares this retained framer and its actual rights
+    /// custody. Expected normal peer exit permits draining a complete terminal frame only;
+    /// the caller still authenticates it and proves normal whole-chain settlement separately.
+    pub(super) fn advance_decode<'buffer, T>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        deadline: Instant,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        if self.completed {
+            return Err(ControlError::ProgressPoisoned);
+        }
+        let result = self.receive.advance_decode_mode(
+            transport,
+            |_| 0,
+            deadline,
+            ReceiveEof::DrainTerminal,
+            decode,
+        )?;
+        self.completed = result.is_some();
+        Ok(result)
+    }
+
     pub(super) fn prepare() -> Result<Self, ControlError> {
         Ok(Self {
             receive: IncrementalReceive::prepare()?,
