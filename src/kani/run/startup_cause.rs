@@ -10,7 +10,6 @@
 
 use std::{collections::TryReserveError, fmt, io};
 
-use serde::de::Error as _;
 use serde::{de, Deserialize, Serialize};
 
 use super::{
