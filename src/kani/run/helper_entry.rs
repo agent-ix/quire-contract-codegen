@@ -16,7 +16,7 @@ use super::{
         PendingInnerBackend,
     },
     launcher_owner::{self, LauncherError, LauncherOwner},
-    outer_sampling::{OuterRunOwner, OuterRunProgress, SamplingError},
+    outer_sampling::{OuterRunPreparation, OuterRunProgress, SamplingError},
     protocol::BuildIdentity,
     role_bootstrap::{self, BootstrapError, InnerInput, OuterInput, OuterParts},
     role_command::HelperRole,
@@ -96,15 +96,10 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
     // endpoint receives its positively owned capability. No M exists at this boundary.
     launcher_owner::publish_outer_arm(&guard, &settings, &caller_control, setup.deadline())
         .map_err(HelperEntryError::Launcher)?;
-    let mut owner = OuterRunOwner::prepare(
-        &guard,
-        &caller_control,
-        &caller_pin,
-        inner_endpoint,
-        launcher_memory,
-        settings,
-    )
-    .map_err(HelperEntryError::Sampling)?;
+    let mut preparation = OuterRunPreparation::new(launcher_memory, settings, inner_endpoint);
+    let mut owner = preparation
+        .prepare(&guard, &caller_control, &caller_pin)
+        .map_err(HelperEntryError::Sampling)?;
     loop {
         match owner
             .tick(&guard, &caller_control)
