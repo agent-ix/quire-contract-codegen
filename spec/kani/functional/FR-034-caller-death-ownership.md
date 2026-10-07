@@ -817,7 +817,11 @@ precedence. All mechanisms, compatibility, capability and confinement Tests here
 ### Cross-role refusal cause representation
 
 This PLANNED/CODE-gated allocation covers only I/O causes emitted by matched trusted helper roles
-and carried to C through their existing authenticated negative controls. Its role/site/phase scope is:
+and carried to C through their existing authenticated negative controls. Private finite cause,
+provenance and loss custody applies to the listed roles/operations/phases below. Public io::Error
+projection and public loss/integrity get_ref/downcast duties apply ONLY where the existing public
+refusal actually carries an io::Error, such as MemoryMechanismUnavailable or Tool(KaniToolError::Io).
+They add no carrier to detail-only results. Its role/site/phase scope is:
 
 | Actual producer role | Allocated operations and phases |
 | --- | --- |
@@ -835,25 +839,29 @@ uses this permission; a renamed implementation function alone does not expand it
 
 When a listed operation emits a cross-role I/O cause, the sending owner shall capture its actual
 producer ErrorKind, optional raw OS errno and available typed payload facts before projection.
-C shall authenticate the originating role and failing operation before selecting the existing
-refusal mapping. C shall bind the cause to the existing run/build, actual retained process identity,
+For valid original-cause replay, C shall authenticate the originating role and failing operation
+before selecting that cause's existing mapping. Integrity/fault reports retain only independently
+authenticated optional facts and use the explicit mapping rules below; a packet label supplies no
+missing role/site authority. C shall bind admitted cause facts to the existing run/build, actual retained process identity,
 state, descriptor and applicable original-stop authority. Decoding cause metadata grants none of
 that authority.
 
 For these listed cross-role operations only, this section qualifies the original-cause wording in
 [admission refusal](#report-threat-boundary-and-backend-ipc-confinement) and the
 [failure mapping](#settlement-confirmation-and-kernel-fault-boundary) below: the public cause retains
-the original facts declared here, with explicit opaque loss, rather than an identical boxed object.
+the original facts declared here where that result has an I/O cause, with explicit opaque loss, rather
+than an identical boxed object. A detail-only result retains its existing public shape and no original
+public cause/downcast promise is allocated.
 Local-role original io::Error/source retention and the native-policy typed-origin duties remain
 unchanged. C shall retain the authenticated finite cause representation and its loss facts before
 publication. No public refusal variant/code, errno-independent admission, candidate precedence,
 actual settlement or original deadline is changed.
 
-| Actual originating cause | Sending-owner obligation | C receiving/projection obligation |
+| Actual originating cause | Sending-owner obligation | C receiving/projection obligation (public projection only for existing I/O-cause-bearing results) |
 | --- | --- | --- |
 | I/O error with a raw OS errno | The sending owner shall retain the exact errno and actual ErrorKind. | C shall reconstruct the public I/O cause directly from that errno and verify its kind on the same running platform; C shall reject a kind mismatch. No wrapper shall erase the public raw_os_error or invent an errno. |
 | I/O error with no raw errno and no custom payload | The sending owner shall retain the actual named ErrorKind and absence of errno/payload. | C shall reconstruct that kind without a custom source or loss marker. The supported producer/build domain below supplies complete kind coverage. |
-| Declared finite provenance category | The sending owner shall select the actual typed category/fields from the declared private set below and record any source loss. | C shall retain these facts as authenticated private provenance, not reconstruct an original generic public source/downcast chain from them. Stronger AC-39 representable public-source duties remain unchanged. |
+| Declared finite provenance category | The sending owner shall select the actual typed category/fields from the declared private set below and record any source loss. | C shall retain these facts as authenticated private provenance, not reconstruct an original generic public source/downcast chain from them. When this is an original no-errno boxed category whose payload is lost and the existing public result carries io::Error, C shall preserve its actual kind with KaniCrossRoleCauseLoss; a required-representation fault without a representable original cause uses the separate integrity-fault rule below. Stronger AC-39 representable public-source duties remain unchanged. |
 | Positively observed reservation payload or Reservation wrapper | The sending owner shall retain actual outer I/O facts and its observed reservation category, wrapper and operation. | C shall preserve the actual no-errno kind with the public KaniCrossRoleCauseLoss marker; C shall infer neither allocation-versus-capacity kind nor layout from diagnostics and shall not manufacture an identical Reservation payload. |
 | Other trusted custom payload not retained by a stronger existing public-source duty | The sending owner shall retain actual outer I/O facts and the typed listed operation with explicit unrepresented-payload/chain status. | C shall preserve the actual no-errno kind with KaniCrossRoleCauseLoss; C shall invent no original source, downcast identity or diagnostic-derived category. |
 
@@ -912,8 +920,13 @@ Unknown kind metadata, incomplete cause custody or malformed cause representatio
 cause-metadata integrity fault, not a valid original producer cause. Planned CODE shall expose
 `KaniCauseMetadataIntegrityError` alongside KaniExecutionRefusal at the public crate boundary.
 This opaque error implements Debug, Display and std::error::Error with Send + Sync. Its constructor,
-actual typed predicate and authenticated finite role/site provenance fields remain private. Its
-private predicates are UnknownKindMetadata, MalformedCauseMetadata and IncompleteCauseMetadata;
+actual typed predicate and finite provenance fields remain private. Each role/site provenance field
+shall be a typed Option containing only a fact independently authenticated by C; a role may be
+present while the site is absent, and both may be absent. C shall preserve every actually known
+field and shall never fill an absent field from an unverified packet label. A reported sender identity
+shall remain only a claim until independently authenticated. Absence shall not prevent
+construction or public integrity detection, nor supply admission-site authority. Its
+private metadata predicates are UnknownKindMetadata, MalformedCauseMetadata and IncompleteCauseMetadata;
 C shall select the predicate from the observed metadata failure, never prose. It shall retain any
 actual local decoder/control error, exposed by its source() when present, without an invented
 original producer payload. A caller shall identify integrity failure only by
@@ -949,8 +962,25 @@ that fault shall never become Tool solely because the producer kind metadata is 
 C shall retain already authenticated facts and actual owners through original bounded settlement.
 Neither invalid metadata nor a typed integrity error authorizes Dispatch or evidence.
 CleanupUnconfirmed retains its existing candidate override. This allocates no new public refusal
-variant, field, code or integrity catalog; the public opaque error is actual local integrity provenance,
-not a promise to transport an unnamed original ErrorKind.
+variant, field, code or integrity catalog. The public opaque error retains actual C-observed integrity
+provenance or an authenticated finite sender representation-fault report, not an original boxed
+producer error or a promise to transport an unnamed original ErrorKind.
+
+When an actual post-admission observation/accounting failure is reported, including a required cause
+representation or metadata integrity fault that prevents the actual observation, C shall retain the
+existing MemoryObservationFailed { detail } result with no evidence/outcome after required settlement.
+The actual finite producer cause/kind/errno facts, independently authenticated provenance, explicit
+source loss and any representation/integrity predicate remain private custody. Since this public
+variant has no io::Error field, C shall attach no public marker/error, promise no public get_ref/
+downcast or original source access, and add no error carrier. This states the existing public-shape
+limit, not removal of an existing observation cause API. detail remains diagnostic; its presence,
+absence, wording or truncation shall not select a cause or mapping. C shall not change observation
+failure to Tool or admission Unavailable just to expose a public cause. A malformed observation
+cause report supplies only its actually observed private integrity facts, not fake original cause
+replay. Genuine independent protocol/ownership/settlement failures retain their separately specified
+actual paths and candidate precedence; CleanupUnconfirmed still overrides when settlement fails.
+The same scope rule applies during settlement: this allocation changes no existing final failure
+variant to create an I/O carrier, and all finite facts/loss remain private when that variant is detail-only.
 
 When the actual producer uses io::Error::other with a reservation payload, C shall preserve its
 observed Other kind. When the producer uses the standard From<TryReserveError> conversion, C shall
@@ -960,14 +990,39 @@ layout. C shall not assume a source is absent merely from the conversion's name:
 and source-dropping implementations use their actual observed case. A changed producer conversion
 requires CODE review and never authorizes transport normalization.
 
+Required cause representation can itself fail at the sending owner before a representable original
+cause exists. The sender shall retain that actual typed representation failure and select only its
+observed finite predicate: RequiredRepresentationExceededBound, RequiredRepresentationFormattingFailed,
+UnnameableOriginalKind or OriginalOsKindMismatch. These are additional private predicates of
+KaniCauseMetadataIntegrityError, with actual sender-origin provenance; C shall not relabel them as
+original producer I/O kinds, optional diagnostic failure or generic custom-source loss. When the
+existing bounded authenticated negative control can carry that finite fault report, the sender shall
+send it using the same reserved control storage and limits, omitting original-cause replay. C shall
+construct io::Error::new(InvalidData, actual_integrity_error) for an existing I/O-cause-bearing public
+result, from the authenticated fault predicate and independently known provenance. For that public
+projection its kind/raw errno are InvalidData/None, the public
+integrity downcast is Some and the loss-marker downcast is None. C shall use the same explicit
+site-authenticated Unavailable versus non-site startup/protocol mapping specified above for cause-bearing
+results; a work/settlement observation failure instead retains the explicit detail-only private-custody
+rule. No public cause carrier is added, and evidence/Dispatch remain forbidden for these error paths,
+with unchanged settlement precedence. The cause denotes the actual required
+representation failure, not an alleged original remote I/O error or original boxed representation
+object. It retains actual finite predicate/origin facts, not an invented original payload.
+
+If no complete fault report is actually delivered, C shall not claim that a sender predicate was
+received or infer it from EOF/timeouts/diagnostics. An actual incomplete, malformed or unknown cause
+packet follows the C-observed metadata-integrity rule above; other actual transport/ownership errors
+retain their explicit existing paths. The sender retains its real failure/owners through the original
+bounded settlement; this rule creates no alternate control, acknowledgment, capacity or deadline.
+
 When a listed refusal's typed cause is representable, the sending owner shall retain that cause
 before attempting optional diagnostic capture. If diagnostic capture exceeds its existing bound or
 fails formatting, then the sending owner shall omit the diagnostic detail and send the unchanged
 retained typed cause; it shall not substitute a context/formatting error. C shall select its mapping
-from that original authenticated cause. Required representation failures without a previously
-representable original cause use the failure rule above; they are distinct from optional diagnostic
-capture failure. Optional detail shall remain bounded UTF-8 diagnostic data and shall supply no
-cause, role, operation or public classification.
+from that original authenticated cause. The required-representation-failure case above applies only
+without a previously representable original cause; it shall not override retained original cause
+custody because optional detail failed. Optional detail shall remain bounded UTF-8 diagnostic data
+and shall supply no cause, role, operation or public classification.
 
 The sending helper shall charge its actual encode/context storage to its measured owned-role
 accounting and existing backing terms. C shall charge actual receive/context/metadata storage to
@@ -979,7 +1034,11 @@ cap or resource allowance is allocated.
 C's bounded-execution API and MemoryMechanismUnavailable rustdoc shall explain this listed cross-role
 projection limit, typed public loss-marker detection, observed source presence/loss and unchanged
 local original-source retention.
-Public rustdoc shall distinguish an authenticated admission cause-metadata integrity fault through
+Public rustdoc shall state which existing refusals carry io::Error and permit these typed public
+projections, versus detail-only MemoryObservationFailed and other existing detail-only results, whose
+finite facts/loss are private and whose diagnostics promise no original-cause or downcast access.
+Public rustdoc shall distinguish an authenticated admission cause-metadata integrity fault or
+complete finite sender required-representation-fault report in a cause-bearing result through
 get_ref()/downcast_ref::<KaniCauseMetadataIntegrityError>(): its Unavailable cause is the actual
 local InvalidData/no-errno integrity error, not replay of the original
 producer cause, and it has no projection-loss marker. It shall state the independent site-authentication
@@ -1285,7 +1344,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
 | FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
 | FR-034-AC-39 | PLANNED/UNRUN. Native guardian/backend-installer policy support is source/cfg Analysis; unreachable unsupported-native support is not a fabricated runtime Test. Actual installation failures are separate production Tests when available, otherwise unavailable/UNRUN with no Test completion credit. Planned mandatory admission context distinguishes BackendIpcExclusion capability support/filter installation from TrustedOwnerProtection privilege installation, retaining typed cause provenance without message parsing or fabricated errno. The policy terminates the calling process on an unsupported syscall audit architecture; every native x86_64 policy also terminates it for x32 syscall-number/aliases regardless of kernel x32 support. Native entry, exec and descendants retain these rules. Real applicable compat/x32 tests require an unconfined actual-syscall effect control and genuine omission mutant; unavailable workload/tooling/kernel controls yield zero whole-criterion completion credit, not assertion-skipping success. This establishes no immutable target-image identity or universal incompatible-image exec/entry rejection. Actual unsuccessful/no-report termination retains NoVerdict after whole-chain settlement and existing deadline/capture/resource precedence; CleanupUnconfirmed and all other report rules remain unchanged. Path/content/PATH/interpreter/loader/binfmt_misc residuals add no stability precondition, recipe change, descriptor leak or unfiltered retry. | Test, Analysis |
-| FR-034-AC-40 | PLANNED/UNRUN. Only declared trusted role/operation/phase causes use the cross-role representation. Actual kind/errno and authenticated finite private provenance survive; generic original custom sources/chains are lost explicitly, with typed public KaniCrossRoleCauseLoss detectable by get_ref/downcast on no-errno opaque projections. Loss-free OS and payload-free causes remain unmarked; OS projection preserves public errno directly. The closed named-kind domain requires exhaustive actual sender/build source Analysis before CODE delivery; adding an emitted no-errno kind requires producer-side reviewed encoding support first. Genuine admission errors keep site-first Unavailable regardless of kind/errno; unknown/malformed/incomplete cause metadata at an independently authenticated negative admission site yields Unavailable with that site's admission context and actual local InvalidData/no-errno KaniCauseMetadataIntegrityError recognized by get_ref/downcast, not original producer replay or a loss marker. Genuine original payload-free/local custom InvalidData must not be misidentified as integrity by kind or source-presence heuristics. Unauthenticated site faults retain the specified startup/protocol path; no Dispatch or evidence. Optional diagnostic failure preserves the retained original cause. Actual producer conversions determine kind/source presence without normalization or allocation-kind/layout inference. Local original sources, stronger AC-39 public-source/provenance duties, existing charges, cutoffs and settlement precedence remain. Public API/refusal rustdoc states typed loss detection and no stage-query promise. Standalone Analysis and genuine available transport/consumer Tests remain PLANNED/UNRUN with no prior-row credit, forced allocation failure, new refusal catalog, acknowledgment, budget or NotObserved reason. | Test, Analysis |
+| FR-034-AC-40 | PLANNED/UNRUN. Only declared trusted role/operation/phase causes use the cross-role representation. Actual kind/errno, independently authenticated optional finite provenance and loss survive privately; public projection applies only to existing io::Error-cause-bearing refusals. Post-admission observation/settlement detail-only results keep their existing shape/mapping, private finite facts/loss and diagnostic-only text, with no public marker/carrier/downcast promise or Tool reclassification; generic original custom sources/chains are lost explicitly, including original boxed declared categories, with typed public KaniCrossRoleCauseLoss detectable by get_ref/downcast on no-errno opaque projections. Loss-free OS and payload-free causes remain unmarked; OS projection preserves public errno directly. The closed named-kind domain requires exhaustive actual sender/build source Analysis before CODE delivery; adding an emitted no-errno kind requires producer-side reviewed encoding support first. Genuine admission errors keep site-first Unavailable regardless of kind/errno; a complete bounded authenticated required-representation fault report with no prior representable original cause gives actual InvalidData/no-errno integrity in an existing I/O-cause-bearing result (no loss marker), retaining the actual sender predicate, not original replay; absent reports supply no invented received fault; unknown/malformed/incomplete cause metadata at an independently authenticated negative admission site yields Unavailable with that site's admission context and actual local InvalidData/no-errno KaniCauseMetadataIntegrityError recognized by get_ref/downcast, not original producer replay or a loss marker. Genuine original payload-free/local custom InvalidData must not be misidentified as integrity by kind or source-presence heuristics. Unauthenticated site faults retain the specified startup/protocol path; no Dispatch or evidence. Optional diagnostic failure preserves the retained original cause. Actual producer conversions determine kind/source presence without normalization or allocation-kind/layout inference. Local original sources, stronger AC-39 public-source/provenance duties, existing charges, cutoffs and settlement precedence remain. Public API/refusal rustdoc states typed loss detection and no stage-query promise. Standalone Analysis and genuine available transport/consumer Tests remain PLANNED/UNRUN with no prior-row credit, forced allocation failure, new refusal catalog, acknowledgment, budget or NotObserved reason. | Test, Analysis |
 
 ## Dependencies
 
