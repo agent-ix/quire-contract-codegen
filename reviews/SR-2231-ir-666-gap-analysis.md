@@ -61,3 +61,31 @@ a recorded IR-635 dependency (FND-001). Status prose across the matrix, TC and F
 contradicts the computed matrix (FND-002). The new public API is in no interface contract
 (FND-003). This is not merge-ready until FND-001 and FND-002 are resolved in this PR, and
 FND-003 is resolved or explicitly ticketed.
+
+## Dispositions
+
+Round 1. Reviewed at the branch's second frozen head: fix commit "Bind composite reports and
+cover public parity rows". The revision is recorded in the IR-666 Linear marker only. This is a
+static re-check. The committed `reviews/SR-2231-ir-666-gap-analysis.md` is byte-identical to
+this artifact's first-custody text.
+
+Computed matrix (`quire matrix --format tsv`), merge base against head, comparing criterion and
+status columns. The row count is unchanged. Eight criteria move from untagged to tagged:
+FR-029-AC-28, FR-030-AC-15, FR-030-AC-16, FR-030-AC-17, FR-033-AC-7, FR-033-AC-9, FR-033-AC-12
+and FR-033-AC-13. No other status changes. FR-029-AC-17 and FR-029-AC-19 to AC-27 stay untagged.
+Current `main` has 10 more rows (FR-034-AC-41 to AC-50 from IR-682); they do not overlap this
+branch.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | round-1 fix commit "Bind composite reports and cover public parity rows". `tc_041_f1_and_f2_preserve_precedence_and_native_causes` and `tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct` drive real QSL F-1 to F-6 reports. The QSL package comes from public `compile_package` and the O-09 identity from public `parity_obligation`. The F-2 case for each native kind competes with an out-of-domain operand, both limits and CeilingReached. The criteria are marked PARTIAL, with IR-635 named for the original-artifact path. Counter not asserted: see SR-2230 FND-005 |
+| FND-002 | fixed | round-1 fix commit: kani/matrix/tests.md:53/55/85-86, replay/matrix/tests.md:21-23/37, the TC-041 Status, FR-033 (Description, Falsified Settlement, Setup Refusal step 3) and spec/tests.md:20 now describe the delivered converter, and IR-635 is named for what remains. Two new status contradictions are recorded below as FND-005 and FND-006 |
+| FND-003 | fixed | round-1 fix commit: interface-001 declares `composite_parity_terminal_value` and `verified_shadow_terminal_value` (inputs, outputs, `CompositeReportError (MissingReport \| ClaimMismatch)`) in operations and Features. FR-033 Behavior names both operations and both variants. The declared surface matches the five exported items |
+| FND-004 | fixed | round-1 fix commit: `// Implements: FR-033-AC-9, FR-029-AC-28` in src/replay/mod.rs and in the module header |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | FR-033-AC-7 has contradictory status. Its own row now reads "PARTIAL (IR-666 direct public F-7 converter controls ...)", and the computed matrix tags it (`tc_041_f7_...`). The replay matrix row at line 21 still puts AC-7 under "Planned (IR-635) ... remain unbuilt". spec/tests.md:20 lists only "FR-033-AC-9/12/13" as Partial. Failure scenario: anyone reading the matrix files sees AC-7 as unbuilt while the computed matrix and the FR say otherwise. Fix: move FR-033-AC-7 into the line-22 Partial row and the spec/tests.md list | spec/replay/matrix/tests.md:21-22, spec/tests.md:20, spec/replay/functional/FR-033-composite-parity-replay-binding.md:350 |
+| FND-006 | medium | The kani/matrix/tests.md:52 row for FR-029-AC-17 and AC-19 to AC-27 changed from "Planned (IR-635)" to "Partial (IR-666 direct public converter controls ...); QSL #645 reports exercise F-1 to F-7, V-1 to V-5 ...". The computed matrix shows all ten of those criteria untagged, with no binder. The row claims partial coverage that no traced test backs. FR-029-AC-20, the F-1 to F-7 consumption criterion IR-666 owns, is the one the new tests actually exercise; see SR-2234 FND-001. Failure scenario: the row overstates coverage for nine IR-635 criteria. Fix: keep the row Planned (IR-635), and give FR-029-AC-20 its own row once a test traces it | spec/kani/matrix/tests.md:52 |

@@ -172,12 +172,17 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         arguments: parameters
             .iter()
             .map(|parameter| {
+                let parameter_bounds = bounds
+                    .iter()
+                    .filter(|bound| {
+                        matches!(bound.domain, DomainKey::Node { node, .. } if node == *parameter)
+                    })
+                    .cloned()
+                    .collect();
                 ParityArgument {
-            identity: OperandIdentity::GraphChild(*parameter),
-            domain: Domain::Bounds(BoundEntries::new(bounds.iter().filter(|bound| {
-                matches!(bound.domain, DomainKey::Node { node, .. } if node == *parameter)
-            }).cloned().collect()).unwrap()),
-        }
+                    identity: OperandIdentity::GraphChild(*parameter),
+                    domain: Domain::Bounds(BoundEntries::new(parameter_bounds).unwrap()),
+                }
             })
             .collect(),
     };
@@ -221,7 +226,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
 
 /// A valid public claim lets retained disagreement win over native faults and invalid operands;
 /// either native fault kind wins over admission and both limit stages without disagreement.
-/// Trace: FR-030-AC-15, FR-033-AC-12, FR-033-AC-13, TC-041, TC-048
+/// Trace: FR-029-AC-20, FR-030-AC-15, FR-033-AC-12, FR-033-AC-13, TC-041, TC-048
 #[test]
 fn tc_041_f1_and_f2_preserve_precedence_and_native_causes() {
     let fixture = public_composite_fixture();
@@ -267,7 +272,7 @@ fn tc_041_f1_and_f2_preserve_precedence_and_native_causes() {
 }
 
 /// F-3, F-4, F-5 and F-6 remain separate typed rows with the exact QSL terminal value.
-/// Trace: FR-030-AC-16, FR-033-AC-13, TC-041, TC-048
+/// Trace: FR-029-AC-20, FR-030-AC-16, FR-033-AC-13, TC-041, TC-048
 #[test]
 fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
     let fixture = public_composite_fixture();
@@ -309,6 +314,7 @@ fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
         panic!("expected F-4 admission, got {:?}", bound.result());
     };
     assert_eq!(incomplete.limit, 0);
+    assert_eq!(incomplete.limit_kind.as_str(), "value_occurrences");
     assert_eq!(incomplete.consumed, 0);
     assert_eq!(incomplete.next_charge, Integer::from(2_i64));
     assert_eq!(
@@ -332,6 +338,7 @@ fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
         panic!("expected F-5 exact evaluation, got {:?}", bound.result());
     };
     assert_eq!(incomplete.limit, 0);
+    assert_eq!(incomplete.limit_kind.as_str(), "value_occurrences");
     assert_eq!(incomplete.consumed, 0);
     assert_eq!(incomplete.next_charge, Integer::from(2_i64));
     assert_eq!(
@@ -360,7 +367,7 @@ fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
 
 /// Exact verdict and pair-count divergence are distinct F-7 inputs; agreement carries the full
 /// composite claim and equality outcome, and none of the three becomes Refuted.
-/// Trace: FR-030-AC-17, FR-033-AC-7, TC-041, TC-048
+/// Trace: FR-029-AC-20, FR-030-AC-17, FR-033-AC-7, TC-041, TC-048
 #[test]
 fn tc_041_f7_compares_verdict_and_pair_count_then_preserves_agreement() {
     let fixture = public_composite_fixture();
@@ -507,15 +514,16 @@ fn tc_048_verified_public_rows_keep_their_qsl_terminal_values() {
 }
 
 /// A real QSL prepare refusal remains a bound report and carries QSL's own code before F-1.
-/// Trace: FR-029-AC-28, FR-033-AC-9, TC-048
+/// Trace: FR-029-AC-28, FR-030-AC-17, FR-033-AC-9, TC-041, TC-048
 #[test]
-fn tc_048_bound_prepare_refusal_passes_through_qsl_terminal() {
+fn tc_041_bound_prepare_refusal_precedes_disagreed() {
     let fixture = public_composite_fixture();
     let wire = fixture.wire;
     ReplayRequest::decode(wire.clone(), ReplayLimits::default())
         .expect("the wire request itself is valid at the caller's ordinary limit");
     let claim = fixture.claim;
-    let evidence = falsified_evidence();
+    let mut evidence = falsified_evidence();
+    evidence.refinement = Refinement::Disagreed;
     let sent = CompositeIdentity::new(
         ObligationIdentity::from_digest(wire.obligation_identity),
         &claim,

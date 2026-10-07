@@ -62,3 +62,34 @@ public API, fabricate no report or F-row control, and cover the reachable `prepa
 (FR-029-AC-28) and the binding of a request changed before send. The one material defect is
 trace overclaim on FR-030-AC-17 (FND-001). FND-002 and FND-003 are idiom and test-strength
 nits.
+
+## Dispositions
+
+Round 1. Reviewed at the branch's second frozen head: fix commit "Bind composite reports and
+cover public parity rows", 2 commits and 16 files over the merge base. The revision is recorded
+in the IR-666 Linear marker only. This is a static re-check: the reviewer ran no cargo. The
+committed `reviews/SR-2230-ir-666-code-review.md` is byte-identical to this artifact's
+first-custody text.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | round-1 fix commit "Bind composite reports and cover public parity rows": FR-030-AC-17 is off both `tc_048_` tests and on `tc_041_f7_compares_verdict_and_pair_count_then_preserves_agreement`, which drives real F-7 Diverged (verdict, count) and Agrees reports. The `prepare`-before-Disagreed clause is now uncovered; see FND-004 |
+| FND-002 | fixed | round-1 fix commit: both settlements hold one private `result` borrow with `result()` and a `terminal_value()` derived from QSL's own `result.terminal_value()`. They have no `pub` field and no `Clone`, `Default` or `From`, so only the two binding functions can construct them |
+| FND-003 | fixed | round-1 fix commit: ExecutionFault and Refused native mutations, cause-only changes for both fault kinds, falsified/verified evidence swaps in both directions, pinned QSL rows on every positive bind, and a Display test |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The fix lost the `prepare`-before-Disagreed control. The previous `tc_048_bound_prepare_refusal_passes_through_qsl_terminal` fixture carried `Refinement::Disagreed`. The rewritten test uses `falsified_evidence()`, whose refinement is `NotExhausted`, so no falsified test pairs a real `prepare` refusal with Disagreed. The verified `prepare` test shows precedence over V-1 only. FR-029-AC-28 ("QSL `prepare` refusal precedes F-1"), FR-030-AC-17 and TC-041 step 16 ("a `prepare` non-fault `Refused` result with Disagreed ... require ... F-1 precedence") each require it. Yet kani/matrix/tests.md:53 and replay/matrix/tests.md:23 mark FR-029-AC-28 "Covered", and the TC-041 Status says step 16's `prepare` refusal is exercised. Failure scenario: a QSL change that let Disagreed win over a `prepare` refusal passes every test. Fix: set `refinement = Refinement::Disagreed` in that test, as before | tests/it/composite_parity_converter.rs:509-543, spec/kani/matrix/tests.md:53, spec/kani/matrix/TC-041-ir-outcome-terminal-map.md:100-105 |
+| FND-005 | low | F-4 and F-5 do not assert the counter. Both stage checks assert `limit == 0`, `consumed == 0` and `next_charge == 2`, but not `limit_kind`. FR-030-AC-16, FR-033-AC-13 and TC-041 step 15 each require the counter ("with the counter", "Inspect ... each incomplete report stage and counter"). Assert `incomplete.limit_kind` for both stages | tests/it/composite_parity_converter.rs:305-340 |
+| FND-006 | low | The `ParityArgument` construction inside `public_composite_fixture` is mis-indented: `identity:` sits left of its enclosing block. The filter-closure line is longer than the 100-column `max_width`, so rustfmt silently gives up on the whole statement. `make fmt-check` passes, but the block stays unformatted. Bind the filtered bounds to a local first so rustfmt can lay the statement out | tests/it/composite_parity_converter.rs:172-182 |
+
+Checked with no finding: every report in the file comes from QSL's public `replay_composite_parity`
+or `settle_verified_shadow`. The fixture is source text compiled by QSL's public `compile_package`,
+read back through CG's strict `CheckedPackageV2` reader, and given an O-09 identity by QSL's public
+`parity_obligation`. No test hand-builds a `CompositeParityReport` or a QSL result. No production
+builder, invocation or original-artifact binding was added; the only src change is the
+converter. Cargo.toml and Cargo.lock are untouched. The diff has no SHA, local path or conflict
+marker. The branch is one commit behind `main` (IR-682, FR-034/TC-049 only). `git merge-tree`
+reports a clean merge.
