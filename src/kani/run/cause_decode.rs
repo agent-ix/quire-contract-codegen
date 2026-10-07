@@ -14,11 +14,12 @@ use std::{
 use super::{
     cross_role_cause::CauseIntegrityPredicate,
     guardian_decode::{
-        DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Text, ValueKind,
+        record as named_record, ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder,
+        ObjectState, Text, ValueKind,
     },
     startup_cause::{
-        StartupCause, StartupCauseTag, StartupIoCause, StartupIoKind, StartupPayload,
-        StartupSeccompilerCause, StartupSeccompilerTag,
+        StartupCause, StartupCauseTag, StartupIoCause, StartupIoField, StartupIoKind,
+        StartupPayload, StartupSeccompilerCause, StartupSeccompilerTag,
     },
 };
 
@@ -93,40 +94,46 @@ pub(super) fn decode(
     checked(result, fault)
 }
 
+/// Only the policy's original ordinary Deserialize delegate admits derived record/enum forms.
+/// The generic metadata seed remains map-only with string-only kind/payload/unit tokens.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Grammar {
+    MetadataSeed,
+    PolicyDerived,
+}
+
+/// Parse the original policy delegate's ordinary-derived cause grammar on the same cursor.
+pub(super) fn decode_policy(
+    decoder: &mut Decoder<'_, '_>,
+    fault: &mut Option<CauseIntegrityPredicate>,
+) -> Result<StartupCause, DecodeError> {
+    let result = cause_value(decoder, fault, Grammar::PolicyDerived);
+    checked(result, fault)
+}
+
 fn decode_cause(
     decoder: &mut Decoder<'_, '_>,
     fault: &mut Option<CauseIntegrityPredicate>,
+) -> Result<StartupCause, DecodeError> {
+    cause_value(decoder, fault, Grammar::MetadataSeed)
+}
+
+fn cause_value(
+    decoder: &mut Decoder<'_, '_>,
+    fault: &mut Option<CauseIntegrityPredicate>,
+    grammar: Grammar,
 ) -> Result<StartupCause, DecodeError> {
     let mut object = decoder.begin_object()?;
     let tag = StartupCauseTag::metadata_text(required(decoder, &mut object)?)
         .ok_or_else(|| field_error(DecodeCause::UnknownField))?;
     let cause = match tag {
-        StartupCauseTag::Io => StartupCause::Io(decode_io(decoder, fault)?),
-        StartupCauseTag::Seccompiler => StartupCause::Seccompiler(installation(decoder, fault)?),
+        StartupCauseTag::Io => StartupCause::Io(io_value(decoder, fault, grammar)?),
+        StartupCauseTag::Seccompiler => {
+            StartupCause::Seccompiler(installation(decoder, fault, grammar)?)
+        }
     };
     close_single(decoder, &mut object)?;
     Ok(cause)
-}
-
-#[derive(Clone, Copy)]
-enum IoField {
-    Kind,
-    Errno,
-    Payload,
-}
-
-impl IoField {
-    fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
-        if text.equals("kind") {
-            Ok(Self::Kind)
-        } else if text.equals("raw_os_error") {
-            Ok(Self::Errno)
-        } else if text.equals("payload") {
-            Ok(Self::Payload)
-        } else {
-            Err(field_error(DecodeCause::UnknownField))
-        }
-    }
 }
 
 #[derive(Default)]
@@ -153,50 +160,98 @@ pub(super) fn decode_io(
     decoder: &mut Decoder<'_, '_>,
     fault: &mut Option<CauseIntegrityPredicate>,
 ) -> Result<StartupIoCause, DecodeError> {
-    let result = io_record(decoder, fault);
+    let result = io_value(decoder, fault, Grammar::MetadataSeed);
     checked(result, fault)
 }
 
-fn io_record(
+// Resolve the owning enum label before its unit body, preserving an earlier kind fault even
+// when later null/closing syntax is malformed. This is only the policy-derived unit grammar.
+fn derived_unit<T>(
+    decoder: &mut Decoder<'_, '_>,
+    lookup: impl FnOnce(Text<'_>) -> Result<T, DecodeError>,
+) -> Result<T, DecodeError> {
+    match decoder.peek_kind()? {
+        ValueKind::String => lookup(decoder.string()?),
+        ValueKind::Object => {
+            let mut object = decoder.begin_object()?;
+            let value = lookup(required(decoder, &mut object)?)?;
+            decoder.null()?;
+            close_single(decoder, &mut object)?;
+            Ok(value)
+        }
+        ValueKind::Array | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
+            Err(field_error(DecodeCause::UnexpectedToken))
+        }
+    }
+}
+
+fn io_value(
     decoder: &mut Decoder<'_, '_>,
     fault: &mut Option<CauseIntegrityPredicate>,
+    grammar: Grammar,
 ) -> Result<StartupIoCause, DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = IoFields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        match IoField::from_text(name)? {
-            IoField::Kind => {
+    let mut visit = |decoder: &mut Decoder<'_, '_>, field| {
+        match field {
+            StartupIoField::Kind => {
                 if fields.kind.is_some() {
                     return Err(field_error(DecodeCause::DuplicateField));
                 }
-                let name = decoder.string()?;
-                let kind = StartupIoKind::metadata_text(name).ok_or_else(|| {
-                    record(fault, CauseIntegrityPredicate::UnknownKindMetadata);
-                    field_error(DecodeCause::InvalidValue)
-                })?;
-                fields.kind = Some(kind);
+                let mut lookup = |name| {
+                    StartupIoKind::metadata_text(name).ok_or_else(|| {
+                        record(fault, CauseIntegrityPredicate::UnknownKindMetadata);
+                        field_error(DecodeCause::InvalidValue)
+                    })
+                };
+                fields.kind = Some(match grammar {
+                    Grammar::MetadataSeed => lookup(decoder.string()?)?,
+                    Grammar::PolicyDerived => derived_unit(decoder, lookup)?,
+                });
             }
-            IoField::Errno => {
+            StartupIoField::Errno => {
                 if fields.raw_os_error.is_some() {
                     return Err(field_error(DecodeCause::DuplicateField));
                 }
-                let value = if decoder.take_null()? {
+                fields.raw_os_error = Some(if decoder.peek_kind()? == ValueKind::Null {
+                    decoder.null()?;
                     None
                 } else {
                     Some(i32::try_from(decoder.signed()?).map_err(|_| {
                         DecodeError::new(DecodeSite::Signed, DecodeCause::IntegerOverflow)
                     })?)
-                };
-                fields.raw_os_error = Some(value);
+                });
             }
-            IoField::Payload => {
+            StartupIoField::Payload => {
                 if fields.payload.is_some() {
                     return Err(field_error(DecodeCause::DuplicateField));
                 }
-                fields.payload = Some(
-                    StartupPayload::metadata_text(decoder.string()?)
-                        .ok_or_else(|| field_error(DecodeCause::InvalidValue))?,
-                );
+                let lookup = |name| {
+                    StartupPayload::metadata_text(name)
+                        .ok_or_else(|| field_error(DecodeCause::InvalidValue))
+                };
+                fields.payload = Some(match grammar {
+                    Grammar::MetadataSeed => lookup(decoder.string()?)?,
+                    Grammar::PolicyDerived => derived_unit(decoder, lookup)?,
+                });
+            }
+        }
+        Ok(())
+    };
+    match grammar {
+        Grammar::PolicyDerived => named_record(
+            decoder,
+            StartupIoField::declared_order(),
+            StartupIoField::metadata_text,
+            visit,
+        )?,
+        Grammar::MetadataSeed => {
+            let mut object = decoder.begin_object()?;
+            while let Some(name) = decoder.next_field(&mut object)? {
+                visit(
+                    decoder,
+                    StartupIoField::metadata_text(name)
+                        .ok_or_else(|| field_error(DecodeCause::UnknownField))?,
+                )?;
             }
         }
     }
@@ -208,14 +263,16 @@ fn io_record(
 fn installation(
     decoder: &mut Decoder<'_, '_>,
     fault: &mut Option<CauseIntegrityPredicate>,
+    grammar: Grammar,
 ) -> Result<StartupSeccompilerCause, DecodeError> {
-    let result = installation_record(decoder, fault);
+    let result = installation_record(decoder, fault, grammar);
     checked(result, fault)
 }
 
 fn installation_record(
     decoder: &mut Decoder<'_, '_>,
     fault: &mut Option<CauseIntegrityPredicate>,
+    grammar: Grammar,
 ) -> Result<StartupSeccompilerCause, DecodeError> {
     if decoder.peek_kind()? == ValueKind::String {
         return match StartupSeccompilerTag::metadata_text(decoder.string()?) {
@@ -233,13 +290,21 @@ fn installation_record(
         .ok_or_else(|| field_error(DecodeCause::UnknownField))?;
     let cause = match tag {
         // The currently strict cause codec admits this unit variant ONLY as a string.
-        StartupSeccompilerTag::EmptyFilter => return Err(field_error(DecodeCause::InvalidValue)),
-        StartupSeccompilerTag::Prctl => StartupSeccompilerCause::Prctl(decode_io(decoder, fault)?),
+        StartupSeccompilerTag::EmptyFilter => {
+            if grammar == Grammar::MetadataSeed {
+                return Err(field_error(DecodeCause::InvalidValue));
+            }
+            decoder.null()?;
+            StartupSeccompilerCause::EmptyFilter
+        }
+        StartupSeccompilerTag::Prctl => {
+            StartupSeccompilerCause::Prctl(io_value(decoder, fault, grammar)?)
+        }
         StartupSeccompilerTag::Seccomp => {
-            StartupSeccompilerCause::Seccomp(decode_io(decoder, fault)?)
+            StartupSeccompilerCause::Seccomp(io_value(decoder, fault, grammar)?)
         }
         StartupSeccompilerTag::ThreadSync => StartupSeccompilerCause::ThreadSync {
-            pid: thread_sync(decoder)?,
+            pid: thread_sync(decoder, grammar)?,
         },
     };
     close_single(decoder, &mut object)?;
@@ -250,7 +315,19 @@ struct ThreadSyncFields {
     pid: Option<c_long>,
 }
 
-fn thread_sync(decoder: &mut Decoder<'_, '_>) -> Result<c_long, DecodeError> {
+fn thread_sync(decoder: &mut Decoder<'_, '_>, grammar: Grammar) -> Result<c_long, DecodeError> {
+    if grammar == Grammar::PolicyDerived && decoder.peek_kind()? == ValueKind::Array {
+        let mut array = decoder.begin_array()?;
+        if !decoder.next_element(&mut array)? {
+            return Err(field_error(DecodeCause::MissingField));
+        }
+        let pid = c_long::try_from(decoder.signed()?)
+            .map_err(|_| DecodeError::new(DecodeSite::Signed, DecodeCause::IntegerOverflow))?;
+        if decoder.next_element(&mut array)? {
+            return Err(field_error(DecodeCause::InvalidValue));
+        }
+        return Ok(pid);
+    }
     let mut object = decoder.begin_object()?;
     let mut fields = ThreadSyncFields { pid: None };
     while let Some(name) = decoder.next_field(&mut object)? {
@@ -287,8 +364,12 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<ObjectState>(),
         size_of::<Text<'static>>(),
         size_of::<IoFields>(),
+        size_of::<ArrayState>(),
+        size_of::<ObjectState>(), // policy unit-map body coexists with its I/O record.
+        size_of::<Grammar>(),
+        size_of::<&[StartupIoField]>(),
         size_of::<ThreadSyncFields>(),
-        size_of::<IoField>(),
+        size_of::<StartupIoField>(),
         size_of::<StartupCauseTag>(),
         size_of::<StartupSeccompilerTag>(),
         size_of::<StartupCause>(),

@@ -133,13 +133,26 @@ macro_rules! payload_kinds {
 payload_kinds!(NoCustomPayload, DirectTryReserve, UnrepresentedCustom);
 
 /// Original kind representation and optional original OS error; neither comes from Display.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct StartupIoCause {
-    kind: StartupIoKind,
-    #[serde(deserialize_with = "required_errno")]
-    raw_os_error: Option<i32>,
-    payload: StartupPayload,
+macro_rules! io_cause_record {
+    ($($variant:ident => $(#[$attribute:meta])* $member:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct StartupIoCause { $($(#[$attribute])* $member: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum StartupIoField { $($variant),+ }
+        impl StartupIoField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($member)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+io_cause_record! {
+    Kind => kind: StartupIoKind,
+    Errno => #[serde(deserialize_with = "required_errno")] raw_os_error: Option<i32>,
+    Payload => payload: StartupPayload,
 }
 
 // Explicit null records a positively captured absence. An omitted member is a required

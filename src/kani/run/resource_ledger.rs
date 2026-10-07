@@ -21,11 +21,25 @@ pub(super) struct ChargedSample {
 
 /// Actual recorded production peaks. Construction requires at least one complete observation;
 /// report reservation, the configured ceiling and an absent sample cannot supply either value.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct MeasuredPeaks {
-    pub(super) tree_rss_bytes: u64,
-    pub(super) charged_bytes: u64,
+macro_rules! measuredpeaks_record {
+    ($($variant:ident => $visibility:vis $member:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct MeasuredPeaks { $($visibility $member: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum PeakField { $($variant),+ }
+        impl PeakField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($member)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+measuredpeaks_record! {
+    TreeRssBytes => pub(super) tree_rss_bytes: u64,
+    ChargedBytes => pub(super) charged_bytes: u64,
 }
 
 /// Independent production memory stop; this is not a report-classification result.

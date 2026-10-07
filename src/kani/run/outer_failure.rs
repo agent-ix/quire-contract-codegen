@@ -46,11 +46,25 @@ failure_representations! {
 
 /// Genuine producer-owned observation capability and original work-clock election. Neither
 /// field supplies a current sample, a negative cause, positive Dispatch or settlement proof.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct FailureState {
-    pub(super) observation_admitted: bool,
-    pub(super) original_work_expired: bool,
+macro_rules! failurestate_record {
+    ($($variant:ident => $visibility:vis $member:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct FailureState { $($visibility $member: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum FailureStateField { $($variant),+ }
+        impl FailureStateField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($member)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+failurestate_record! {
+    ObservationAdmitted => pub(super) observation_admitted: bool,
+    OriginalWorkExpired => pub(super) original_work_expired: bool,
 }
 
 impl FailureState {

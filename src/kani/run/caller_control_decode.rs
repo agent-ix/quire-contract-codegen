@@ -9,7 +9,10 @@
 use std::mem::{size_of, size_of_val};
 
 use super::{
-    guardian_decode::{DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text},
+    guardian_decode::{
+        ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text,
+        ValueKind,
+    },
     native_os_decode::NativeOsTag,
     protocol::{BuildIdentity, CallerControlKind, RunAuthority, StdinControl},
     recipe_decode::{self, RecipeBytes, RecipeSequence},
@@ -47,34 +50,22 @@ fn required<T>(value: Option<T>) -> Result<T, DecodeError> {
     value.ok_or_else(|| error(DecodeCause::MissingField))
 }
 
-#[derive(Clone, Copy)]
-enum Field {
-    Kind,
-    Identity,
-    Authority,
-    Command,
-    Stdin,
-    CleanupPaths,
-}
-impl Field {
-    fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
-        if text.equals("kind") {
-            Ok(Self::Kind)
-        } else if text.equals("identity") {
-            Ok(Self::Identity)
-        } else if text.equals("authority") {
-            Ok(Self::Authority)
-        } else if text.equals("command") {
-            Ok(Self::Command)
-        } else if text.equals("stdin") {
-            Ok(Self::Stdin)
-        } else if text.equals("cleanup_paths") {
-            Ok(Self::CleanupPaths)
-        } else {
-            Err(error(DecodeCause::UnknownField))
+macro_rules! caller_fields {
+    ($($variant:ident => $name:literal),+ $(,)?) => {
+        #[derive(Clone, Copy)]
+        enum Field { $($variant),+ }
+        impl Field {
+            fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
+                $(if text.equals($name) { return Ok(Self::$variant); })+
+                Err(error(DecodeCause::UnknownField))
+            }
+            fn from_name(name: &str) -> Result<Self, DecodeError> {
+                match name { $($name => Ok(Self::$variant),)+ _ => Err(error(DecodeCause::UnknownField)) }
+            }
         }
-    }
+    };
 }
+caller_fields! { Kind => "kind", Identity => "identity", Authority => "authority", Command => "command", Stdin => "stdin", CleanupPaths => "cleanup_paths" }
 
 #[derive(Default)]
 struct Fields<'input> {
@@ -122,6 +113,32 @@ macro_rules! once {
     }};
 }
 
+fn read_field<'input>(
+    decoder: &mut Decoder<'input, '_>,
+    field: Field,
+    fields: &mut Fields<'input>,
+    tag: NativeOsTag,
+) -> Result<(), DecodeError> {
+    match field {
+        // Internally tagged CallerControl requires a string; no external-unit alternative.
+        Field::Kind => once!(
+            fields.kind,
+            CallerControlKind::metadata_text(decoder.string()?)
+                .ok_or_else(|| error(DecodeCause::InvalidValue))
+        ),
+        Field::Identity => once!(fields.identity, role_scalar_decode::identity(decoder)),
+        Field::Authority => once!(fields.authority, role_scalar_decode::authority(decoder)),
+        Field::Command => once!(fields.command, recipe_decode::decode(decoder, tag)),
+        Field::Stdin => once!(
+            fields.stdin,
+            StdinControl::metadata_text(decoder.unit_variant()?)
+                .ok_or_else(|| error(DecodeCause::InvalidValue))
+        ),
+        Field::CleanupPaths => once!(fields.cleanup_paths, recipe_decode::values(decoder, tag)),
+    }
+    Ok(())
+}
+
 /// Decode the whole original caller schema, with no context/fault-slot or owned allocations.
 pub(super) fn decode<'input>(
     payload: &'input [u8],
@@ -129,31 +146,34 @@ pub(super) fn decode<'input>(
     tag: NativeOsTag,
 ) -> Result<CallerReply<'input>, DecodeError> {
     let mut decoder = Decoder::new(payload, scratch)?;
-    let mut object = decoder.begin_object()?;
     let mut fields = Fields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        match Field::from_text(name)? {
-            // Internally tagged CallerControl requires a string; no external-unit alternative.
-            Field::Kind => once!(
-                fields.kind,
-                CallerControlKind::metadata_text(decoder.string()?)
-                    .ok_or_else(|| error(DecodeCause::InvalidValue))
-            ),
-            Field::Identity => once!(fields.identity, role_scalar_decode::identity(&mut decoder)),
-            Field::Authority => once!(
-                fields.authority,
-                role_scalar_decode::authority(&mut decoder)
-            ),
-            Field::Command => once!(fields.command, recipe_decode::decode(&mut decoder, tag)),
-            Field::Stdin => once!(
-                fields.stdin,
-                StdinControl::metadata_text(decoder.unit_variant()?)
-                    .ok_or_else(|| error(DecodeCause::InvalidValue))
-            ),
-            Field::CleanupPaths => once!(
-                fields.cleanup_paths,
-                recipe_decode::values(&mut decoder, tag)
-            ),
+    match decoder.peek_kind()? {
+        ValueKind::Object => {
+            let mut object = decoder.begin_object()?;
+            while let Some(name) = decoder.next_field(&mut object)? {
+                read_field(&mut decoder, Field::from_text(name)?, &mut fields, tag)?;
+            }
+        }
+        ValueKind::Array => {
+            let mut array = decoder.begin_array()?;
+            if !decoder.next_element(&mut array)? {
+                return Err(error(DecodeCause::MissingField));
+            }
+            let kind = CallerControlKind::metadata_text(decoder.string()?)
+                .ok_or_else(|| error(DecodeCause::InvalidValue))?;
+            fields.kind = Some(kind);
+            for name in kind.declared_fields() {
+                if !decoder.next_element(&mut array)? {
+                    return Err(error(DecodeCause::MissingField));
+                }
+                read_field(&mut decoder, Field::from_name(name)?, &mut fields, tag)?;
+            }
+            if decoder.next_element(&mut array)? {
+                return Err(error(DecodeCause::InvalidValue));
+            }
+        }
+        ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
+            return Err(error(DecodeCause::UnexpectedToken))
         }
     }
     let reply = fields.finish()?;
@@ -174,6 +194,9 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<StdinControl>(),
         size_of::<&mut Decoder<'static, 'static>>(),
         size_of::<ObjectState>(),
+        size_of::<ArrayState>(),
+        size_of::<ValueKind>(),
+        size_of::<&[&str]>(),
         size_of::<Text<'static>>(),
     ];
     let storage = || DecodeError::new(DecodeSite::Storage, DecodeCause::StorageBound);
@@ -458,5 +481,88 @@ mod tests {
             1,
         );
         refuses(bytes.as_bytes());
+    }
+    /// Trace: FR-034-AC-15, FR-034-AC-17
+    #[test]
+    fn owning_internal_tag_sequences_preserve_exact_variant_field_order() {
+        for control in [
+            hello(),
+            dispatch(StdinControl::Open),
+            dispatch(StdinControl::Closed),
+        ] {
+            let object = value(control);
+            let kind = object["kind"].as_str().unwrap();
+            let mut fields = vec![object["kind"].clone()];
+            let kind_value = if kind == "Hello" {
+                CallerControlKind::Hello
+            } else {
+                CallerControlKind::Dispatch
+            };
+            fields.extend(
+                kind_value
+                    .declared_fields()
+                    .iter()
+                    .map(|name| object[*name].clone()),
+            );
+            let bytes = serde_json::to_vec(&fields).unwrap();
+            let owning: CallerControl = serde_json::from_slice(&bytes).unwrap();
+            let mut scratch = Scratch::default();
+            let parsed = decode(
+                &bytes,
+                &mut scratch,
+                native_os_decode::native_tag().unwrap(),
+            )
+            .unwrap();
+            assert_eq!(parsed.rights_count(), owning.rights_count());
+            match (parsed, owning) {
+                (
+                    CallerReply::Hello {
+                        identity,
+                        authority,
+                    },
+                    CallerControl::Hello {
+                        identity: expected_identity,
+                        authority: expected_authority,
+                    },
+                ) => {
+                    assert_eq!(identity, expected_identity);
+                    assert_eq!(authority, expected_authority);
+                }
+                (
+                    CallerReply::Dispatch {
+                        authority,
+                        command,
+                        stdin,
+                        cleanup_paths,
+                    },
+                    CallerControl::Dispatch {
+                        authority: expected_authority,
+                        command: expected_command,
+                        stdin: expected_stdin,
+                        cleanup_paths: expected_paths,
+                    },
+                ) => {
+                    assert_eq!(authority, expected_authority);
+                    assert_eq!(stdin, expected_stdin);
+                    let tag = native_os_decode::native_tag().unwrap();
+                    let actual = recipe_decode::materialize(command, tag, &mut scratch).unwrap();
+                    assert_eq!(
+                        serde_json::to_value(actual).unwrap(),
+                        serde_json::to_value(expected_command).unwrap()
+                    );
+                    assert_eq!(
+                        recipe_decode::materialize_values(cleanup_paths, tag, &mut scratch)
+                            .unwrap(),
+                        expected_paths
+                    );
+                }
+                _ => panic!("owning sequence selected a different variant"),
+            }
+            for count in 0..fields.len() {
+                refuses(&serde_json::to_vec(&fields[..count]).unwrap());
+            }
+            fields.push(serde_json::Value::Null);
+            refuses(&serde_json::to_vec(&fields).unwrap());
+        }
     }
 }

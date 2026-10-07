@@ -12,9 +12,13 @@ use super::{
     cause_decode,
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
     guardian_decode::{
-        DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text, ValueKind,
+        record, ArrayState, DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch,
+        Text, ValueKind,
     },
-    outer_failure::{FailureHeader, FailureRepresentation, FailureRepresentationTag, FailureState},
+    outer_failure::{
+        FailureHeader, FailureRepresentation, FailureRepresentationTag, FailureState,
+        FailureStateField,
+    },
     protocol::{BuildIdentity, RunAuthority},
     role_control_scalar_decode,
     role_deadline::StopStamp,
@@ -57,7 +61,6 @@ macro_rules! read_once {
 
 fields!(CommitField { Kind => "kind", Identity => "identity", Authority => "authority", Stop => "stop", Disposition => "disposition" });
 fields!(DispositionField { Kind => "kind", Operation => "operation", State => "state", Representation => "representation", Context => "context", Cause => "cause", Failure => "failure" });
-fields!(StateField { ObservationAdmitted => "observation_admitted", OriginalWorkExpired => "original_work_expired" });
 
 #[derive(Default)]
 struct CommitFields {
@@ -333,18 +336,23 @@ fn optional<'input, 'scratch, T>(
 }
 
 fn state(decoder: &mut Decoder<'_, '_>) -> Result<FailureState, DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = StateFields::default();
-    while let Some(name) = decoder.next_field(&mut object)? {
-        match StateField::from_text(name)? {
-            StateField::ObservationAdmitted => {
-                read_once!(fields.observation_admitted, decoder.boolean())
+    record(
+        decoder,
+        FailureStateField::declared_order(),
+        FailureStateField::metadata_text,
+        |decoder, field| {
+            match field {
+                FailureStateField::ObservationAdmitted => {
+                    read_once!(fields.observation_admitted, decoder.boolean())
+                }
+                FailureStateField::OriginalWorkExpired => {
+                    read_once!(fields.original_work_expired, decoder.boolean())
+                }
             }
-            StateField::OriginalWorkExpired => {
-                read_once!(fields.original_work_expired, decoder.boolean())
-            }
-        }
-    }
+            Ok(())
+        },
+    )?;
     Ok(FailureState {
         observation_admitted: missing(fields.observation_admitted)?,
         original_work_expired: missing(fields.original_work_expired)?,
@@ -413,10 +421,12 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<CommitFields>(),
         size_of::<DispositionFields>(),
         size_of::<StateFields>(),
+        size_of::<ArrayState>(),
+        size_of::<&[FailureStateField]>(),
         size_of::<CommitField>(),
         size_of::<DispositionField>(),
         size_of::<DispositionKind>(),
-        size_of::<StateField>(),
+        size_of::<FailureStateField>(),
         size_of::<Disposition>(),
         size_of::<FailureHeader>(),
         size_of::<FailureState>(),
@@ -726,5 +736,25 @@ mod tests {
         let mut width = value();
         width["authority"][0] = serde_json::json!(256);
         refuses(&width, CauseIntegrityPredicate::MalformedCauseMetadata);
+    }
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn positional_failure_state_matches_the_owning_record_without_admission_inference() {
+        let mut scratch = Scratch::default();
+        let bytes = b"[true,false]";
+        let owning: FailureState = serde_json::from_slice(bytes).unwrap();
+        let mut decoder = Decoder::new(bytes, &mut scratch).unwrap();
+        assert_eq!(state(&mut decoder).unwrap(), owning);
+        decoder.finish().unwrap();
+        for bytes in [
+            b"[]".as_slice(),
+            b"[true]",
+            b"[true,false,null]",
+            b"[1,false]",
+        ] {
+            assert!(serde_json::from_slice::<FailureState>(bytes).is_err());
+            let mut decoder = Decoder::new(bytes, &mut scratch).unwrap();
+            assert!(state(&mut decoder).is_err());
+        }
     }
 }
