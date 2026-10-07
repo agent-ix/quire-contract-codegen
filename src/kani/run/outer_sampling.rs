@@ -27,7 +27,9 @@ use super::{
     protocol::BackendExit,
     report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
-    role_deadline::{DeadlineError, IdentityDeadline, StopOrigin, StopTimeline},
+    role_deadline::{
+        DeadlineError, IdentityDeadline, RoleDeadline, StopOrigin, StopStamp, StopTimeline,
+    },
     role_protocol::{
         CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
         OuterPhaseReply, OuterTerminalReply, OwnerStopCause, RunSettings, TerminalDisposition,
@@ -98,6 +100,7 @@ pub(super) struct OuterSampling {
     stops: StopTimeline,
     owner_stop: Option<OwnerStopCause>,
     setup_refusal: Option<PolicyFailureCause>,
+    caller_cancelled: bool,
 }
 
 /// One actual O actor composes the existing production phases, I completion and terminal
@@ -113,6 +116,9 @@ pub(super) struct OuterRunOwner {
     terminal: Option<TerminalDelivery>,
     inner_settlement: Option<InnerSettlement>,
     startup_deadline: Instant,
+    caller_frame_deadline: Option<Instant>,
+    caller_pending: Option<OuterCallerControl>,
+    cancellation: Option<CallerCancellation>,
     state: OuterRunState,
     poisoned: bool,
 }
@@ -126,6 +132,14 @@ enum OuterRunState {
     Terminal,
     Committed,
     OwnerStopped,
+    CallerCancelled,
+}
+
+struct CallerCancellation {
+    cutoff: Instant,
+    stop: StopStamp,
+    monitor: Option<MonitorStopSettlement>,
+    storage: Option<FrameStorage>,
 }
 
 /// Private production progress only; none of these variants grants C evidence or cleanup credit.
@@ -183,6 +197,9 @@ impl OuterRunOwner {
             terminal: None,
             inner_settlement: None,
             startup_deadline,
+            caller_frame_deadline: None,
+            caller_pending: None,
+            cancellation: None,
             state: if stopped {
                 OuterRunState::OwnerStopped
             } else {
@@ -215,6 +232,100 @@ impl OuterRunOwner {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<OuterRunProgress, SamplingError> {
+        // The original C stream is consumed before I events/EOF or startup side effects.
+        // A partial frame suspends those transitions, never accounting, liveness or the cutoff.
+        let mut caller_control = self.caller_pending.take();
+        if matches!(
+            self.state,
+            OuterRunState::Startup | OuterRunState::Backend | OuterRunState::AwaitCompletedClose
+        ) {
+            let sampling = self
+                .sampling
+                .as_mut()
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            sampling.tick(outer, caller)?;
+            if sampling.owner_stop.is_none()
+                && sampling.setup_refusal.is_none()
+                && caller_control.is_none()
+            {
+                let cutoff = observation_deadline(&sampling.settings, &sampling.stops)?;
+                let cutoff = if matches!(self.state, OuterRunState::Startup) {
+                    Some(cutoff.map_or(self.startup_deadline, |cutoff| {
+                        cutoff.min(self.startup_deadline)
+                    }))
+                } else {
+                    cutoff
+                };
+                let cutoff = match (cutoff, self.caller_frame_deadline) {
+                    (Some(original), Some(frame)) => Some(original.min(frame)),
+                    (original, None) => original,
+                    (None, Some(frame)) => Some(frame),
+                };
+                caller_control = self
+                    .caller_receive
+                    .step(caller, cutoff)
+                    .map_err(SamplingError::Control)?;
+                if self.caller_receive.has_partial_frame() {
+                    if self.caller_frame_deadline.is_none() {
+                        let cap = Instant::now()
+                            .checked_add(std::time::Duration::from_secs(3))
+                            .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
+                        self.caller_frame_deadline =
+                            Some(cutoff.map_or(cap, |cutoff| cutoff.min(cap)));
+                    }
+                    return Ok(OuterRunProgress::Pending);
+                }
+                if caller_control.is_some() {
+                    self.caller_frame_deadline = None;
+                }
+            }
+        }
+        if let Some(OuterCallerControl::Close(CallerTerminalControl::CancelClose {
+            authority,
+            deadline,
+            stop,
+        })) = caller_control.as_ref()
+        {
+            if stop.origin != StopOrigin::Caller {
+                return Err(SamplingError::TerminalAuthority);
+            }
+            if self
+                .phases
+                .pending_reply
+                .as_ref()
+                .is_some_and(|reply| reply.send.has_partial_frame())
+            {
+                return Err(SamplingError::UnexpectedPhase);
+            }
+            let sampling = self
+                .sampling
+                .as_mut()
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            let cutoff = adopt_caller_close(sampling, *authority, *deadline, *stop)?;
+            sampling
+                .collector
+                .begin_owner_stop()
+                .map_err(SamplingError::Report)?;
+            sampling.caller_cancelled = true;
+            // No bytes from a zero-progress pending reply entered the stream. Never splice
+            // a partial response, invent I Completed, or transfer original local C cause.
+            drop(self.phases.pending_reply.take());
+            let prepared = self
+                .terminal_prepared
+                .take()
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            self.cancellation = Some(CallerCancellation {
+                cutoff,
+                stop: *stop,
+                monitor: None,
+                storage: Some(prepared.commit),
+            });
+            self.state = OuterRunState::CallerCancelled;
+            caller_control = None;
+        }
+        if matches!(self.state, OuterRunState::CallerCancelled) {
+            return self.cancel_caller_step(outer, caller);
+        }
         if self.sampling.as_ref().is_some_and(|sampling| {
             sampling.owner_stop.is_some() || sampling.setup_refusal.is_some()
         }) {
@@ -316,7 +427,7 @@ impl OuterRunOwner {
                         .as_mut()
                         .ok_or(SamplingError::InvalidMonitorTransition)?,
                     self.startup_deadline,
-                    &mut self.caller_receive,
+                    caller_control.take(),
                 )?;
                 if sampling.owner_stop.is_some() {
                     self.state = OuterRunState::OwnerStopped;
@@ -328,6 +439,29 @@ impl OuterRunOwner {
                 Ok(OuterRunProgress::Startup(progress))
             }
             OuterRunState::Backend => {
+                match caller_control.take() {
+                    Some(
+                        control @ OuterCallerControl::Close(CallerTerminalControl::CompletedClose {
+                            ..
+                        }),
+                    ) => {
+                        // C may already hold genuine I Completed while O's separate I frame is
+                        // queued. Retain the complete close, but grant no completion authority
+                        // until this same actor authenticates its actual I completion stream.
+                        self.caller_pending = Some(control);
+                    }
+                    Some(OuterCallerControl::Phase(_))
+                    | Some(OuterCallerControl::ReadCompleted { .. })
+                    | Some(OuterCallerControl::Close(CallerTerminalControl::ReadCompleted {
+                        ..
+                    }))
+                    | Some(OuterCallerControl::Close(CallerTerminalControl::CancelClose {
+                        ..
+                    })) => {
+                        return Err(SamplingError::UnexpectedPhase);
+                    }
+                    None => {}
+                }
                 match self.completion.tick(
                     sampling,
                     outer,
@@ -362,7 +496,7 @@ impl OuterRunOwner {
                         &self.completion,
                         outer,
                         caller,
-                        &mut self.caller_receive,
+                        caller_control.take(),
                     )?;
                 if sampling.owner_stop.is_some() {
                     return sampling.stop_progress();
@@ -418,9 +552,93 @@ impl OuterRunOwner {
                 self.state = OuterRunState::Terminal;
                 Ok(OuterRunProgress::Pending)
             }
-            OuterRunState::Terminal | OuterRunState::Committed | OuterRunState::OwnerStopped => {
-                Err(SamplingError::InvalidTerminalTransition)
+            OuterRunState::Terminal
+            | OuterRunState::Committed
+            | OuterRunState::OwnerStopped
+            | OuterRunState::CallerCancelled => Err(SamplingError::InvalidTerminalTransition),
+        }
+    }
+    /// Original C cancellation has no report/measurement result. Its receipt is provisional:
+    /// actual O normal exit still confirms the unclaimed outer tree, while M reap is separate.
+    fn cancel_caller_step(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<OuterRunProgress, SamplingError> {
+        let sampling = self
+            .sampling
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let started = Instant::now();
+        sampling.tick(outer, caller)?;
+        if sampling.owner_stop.is_some() {
+            // A real fresh independent resource/timeout candidate is never replaced by C's
+            // local error. No cancellation bytes have entered the stream until the final send.
+            self.state = OuterRunState::OwnerStopped;
+            return sampling.stop_progress();
+        }
+        let cancellation = self
+            .cancellation
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let cutoff = observation_deadline(&sampling.settings, &sampling.stops)?
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        cancellation.cutoff = cancellation.cutoff.min(cutoff);
+        if Instant::now() >= cancellation.cutoff {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        if cancellation.monitor.is_none() {
+            cancellation.monitor = match self.monitor.as_mut() {
+                Some(monitor) => {
+                    if monitor
+                        .monitor
+                        .namespace()
+                        .claimed_init_terminated()
+                        .map_err(SamplingError::Observation)?
+                        == Some(false)
+                    {
+                        // Only original lease EOF is primary here. No M signal or outer exit
+                        // can masquerade as the claimed I's actual retained pidfd termination.
+                        return Ok(OuterRunProgress::Pending);
+                    }
+                    monitor
+                        .monitor
+                        .stop_monitor_step(cancellation.cutoff)
+                        .map_err(SamplingError::Observation)?
+                }
+                None => Some(MonitorStopSettlement::NotCreated),
+            };
+            if cancellation.monitor.is_none() {
+                return Ok(OuterRunProgress::Pending);
             }
+        }
+        let storage = cancellation
+            .storage
+            .take()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let frame = storage
+            .encode(&OuterTerminalReply::Cancelled {
+                authority: sampling.settings.authority,
+                stop: cancellation.stop,
+            })
+            .map_err(SamplingError::Control)?;
+        let due = started
+            .checked_add(super::owned::TICK)
+            .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
+        if Instant::now() >= due {
+            cancellation.storage = Some(frame.into_storage());
+            return Ok(OuterRunProgress::Pending);
+        }
+        if caller
+            .transport()
+            .send_terminal_once(&frame, cancellation.cutoff)
+            .map_err(SamplingError::Control)?
+        {
+            self.state = OuterRunState::Committed;
+            Ok(OuterRunProgress::TerminalCommitted)
+        } else {
+            cancellation.storage = Some(frame.into_storage());
+            Ok(OuterRunProgress::Pending)
         }
     }
 }
@@ -497,7 +715,6 @@ pub(super) struct TerminalPreparation {
     descriptor: FrameStorage,
     commit: FrameStorage,
     close_deadline: Option<Instant>,
-    frame_deadline: Option<Instant>,
     poisoned: bool,
 }
 
@@ -507,7 +724,6 @@ impl TerminalPreparation {
             descriptor: FrameStorage::prepare().map_err(SamplingError::Control)?,
             commit: FrameStorage::prepare().map_err(SamplingError::Control)?,
             close_deadline: None,
-            frame_deadline: None,
             poisoned: false,
         })
     }
@@ -521,7 +737,7 @@ impl TerminalPreparation {
         completion: &InnerCompletion,
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
-        receive: &mut OuterCallerReceive,
+        received: Option<OuterCallerControl>,
     ) -> Result<(MemoryTick, bool), SamplingError> {
         if self.poisoned
             || self.close_deadline.is_some()
@@ -535,19 +751,7 @@ impl TerminalPreparation {
             self.poisoned = false;
             return Ok((tick, false));
         }
-        let cap = Instant::now()
-            .checked_add(std::time::Duration::from_secs(3))
-            .ok_or(SamplingError::Deadline(DeadlineError::Unrepresentable))?;
-        let cap = self.frame_deadline.unwrap_or(cap);
-        let frame_deadline = observation_deadline(&sampling.settings, &sampling.stops)?
-            .map_or(cap, |original| cap.min(original));
-        let Some(received) = receive
-            .step(caller, Some(frame_deadline))
-            .map_err(SamplingError::Control)?
-        else {
-            if self.frame_deadline.is_none() && receive.has_partial_frame() {
-                self.frame_deadline = Some(frame_deadline);
-            }
+        let Some(received) = received else {
             self.poisoned = false;
             return Ok((tick, false));
         };
@@ -559,44 +763,7 @@ impl TerminalPreparation {
         else {
             return Err(SamplingError::InvalidTerminalTransition);
         };
-        if authority != sampling.settings.authority {
-            return Err(SamplingError::TerminalAuthority);
-        }
-        sampling
-            .stops
-            .observe(stop)
-            .map_err(SamplingError::Deadline)?;
-        let earliest = sampling
-            .stops
-            .deadline(
-                sampling.settings.settlement_reserve,
-                sampling.settings.deadline,
-            )
-            .map_err(SamplingError::Deadline)?;
-        let deadline = if earliest
-            .no_later_than(deadline)
-            .map_err(SamplingError::Deadline)?
-        {
-            earliest
-        } else {
-            deadline
-        };
-        let original = sampling.settings.deadline;
-        if let IdentityDeadline::Finite { deadline: bound } = original {
-            if !deadline
-                .no_later_than(bound)
-                .map_err(SamplingError::Deadline)?
-            {
-                return Err(SamplingError::TerminalDeadlineMismatch);
-            }
-        }
-        let deadline = deadline.local().map_err(SamplingError::Deadline)?;
-        if matches!(original, IdentityDeadline::NeverElapses)
-            && deadline.saturating_duration_since(Instant::now())
-                > super::role_deadline::SETTLE_RESERVE
-        {
-            return Err(SamplingError::TerminalDeadlineMismatch);
-        }
+        let deadline = adopt_caller_close(sampling, authority, deadline, stop)?;
         self.close_deadline = Some(deadline);
         self.poisoned = false;
         Ok((tick, true))
@@ -959,6 +1126,57 @@ impl TerminalDelivery {
             TerminalState::Committed => Err(SamplingError::InvalidTerminalTransition),
         }
     }
+}
+
+/// Both complete close alternatives preserve the existing producer clock and original cutoff.
+/// The actor independently requires genuine I completion or Caller-origin cancellation authority.
+fn adopt_caller_close(
+    sampling: &mut OuterSampling,
+    authority: super::protocol::RunAuthority,
+    deadline: RoleDeadline,
+    stop: StopStamp,
+) -> Result<Instant, SamplingError> {
+    if authority != sampling.settings.authority {
+        return Err(SamplingError::TerminalAuthority);
+    }
+    sampling
+        .stops
+        .observe(stop)
+        .map_err(SamplingError::Deadline)?;
+    let earliest = sampling
+        .stops
+        .deadline(
+            sampling.settings.settlement_reserve,
+            sampling.settings.deadline,
+        )
+        .map_err(SamplingError::Deadline)?;
+    let deadline = if earliest
+        .no_later_than(deadline)
+        .map_err(SamplingError::Deadline)?
+    {
+        earliest
+    } else {
+        deadline
+    };
+    let original = sampling.settings.deadline;
+    if let IdentityDeadline::Finite { deadline: bound } = original {
+        if !deadline
+            .no_later_than(bound)
+            .map_err(SamplingError::Deadline)?
+        {
+            return Err(SamplingError::TerminalDeadlineMismatch);
+        }
+    }
+    let deadline = deadline.local().map_err(SamplingError::Deadline)?;
+    if matches!(original, IdentityDeadline::NeverElapses)
+        && deadline.saturating_duration_since(Instant::now()) > super::role_deadline::SETTLE_RESERVE
+    {
+        return Err(SamplingError::TerminalDeadlineMismatch);
+    }
+    if Instant::now() >= deadline {
+        return Err(SamplingError::Deadline(DeadlineError::Expired));
+    }
+    Ok(deadline)
 }
 
 /// One actual-source accounting operation shared by collecting and terminal states. No caller
@@ -1415,7 +1633,7 @@ impl OuterPhases {
         caller: &RoleEndpoint,
         monitor: &mut InnerMonitor,
         startup_deadline: Instant,
-        receive: &mut OuterCallerReceive,
+        received: Option<OuterCallerControl>,
     ) -> Result<PhaseProgress, SamplingError> {
         let startup_deadline = startup_deadline.min(
             sampling
@@ -1424,6 +1642,12 @@ impl OuterPhases {
                 .local()
                 .map_err(SamplingError::Deadline)?,
         );
+        if received.is_some()
+            && (self.pending_reply.is_some()
+                || matches!(self.phase, OuterPhase::Bootstrapping | OuterPhase::Claiming))
+        {
+            return Err(SamplingError::UnexpectedPhase);
+        }
         if let Some(reply) = self.pending_reply.as_mut() {
             let tick = sampling.tick(outer, caller)?;
             if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
@@ -1503,10 +1727,7 @@ impl OuterPhases {
             .startup_deadline()
             .map_err(SamplingError::Deadline)?
             .min(startup_deadline);
-        let Some(received) = receive
-            .step(caller, Some(deadline))
-            .map_err(SamplingError::Control)?
-        else {
+        let Some(received) = received else {
             return Ok(PhaseProgress::Pending);
         };
         let OuterCallerControl::Phase(command) = received else {
@@ -1614,6 +1835,7 @@ impl OuterSampling {
             stops: StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?,
             owner_stop: None,
             setup_refusal: None,
+            caller_cancelled: false,
             settings,
         })
     }
@@ -1690,7 +1912,7 @@ impl OuterSampling {
             }
         }
         let deadline = observation_deadline(&self.settings, &self.stops)?;
-        if self.owner_stop.is_some() || self.setup_refusal.is_some() {
+        if self.owner_stop.is_some() || self.setup_refusal.is_some() || self.caller_cancelled {
             // Do not let malformed/partial report bytes replace the already genuine owner-stop
             // candidate. Actual finite reader EOF still requires all actual writers to close.
             self.collector

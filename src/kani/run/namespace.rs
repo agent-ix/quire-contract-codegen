@@ -789,6 +789,15 @@ impl NamespaceOwner {
         Ok(())
     }
 
+    /// Actual claim presence and its retained pin are distinct from unclaimed outer-tree custody.
+    /// None never supplies an inner termination/settlement witness.
+    pub(super) fn claimed_init_terminated(&self) -> io::Result<Option<bool>> {
+        if self.init.is_none() {
+            return Ok(None);
+        }
+        self.init_terminated().map(Some)
+    }
+
     /// Pidfd readiness alone, rather than control EOF, confirms namespace INIT termination.
     #[cfg(target_os = "linux")]
     pub(super) fn init_terminated(&self) -> io::Result<bool> {

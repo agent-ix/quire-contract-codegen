@@ -428,6 +428,80 @@ impl CancellationHeader {
     }
 }
 
+/// Cancellation-only progress on C's same original startup receive cursor. A queued phase
+/// carries only cleanup custody here: it grants no phase advancement, Dispatch or report read.
+/// The actor authenticates the original O/run and exact in-flight phase before taking any rights.
+pub(super) enum CancellationProgress {
+    Phase(OuterPhaseReply),
+    Terminal(CancellationHeader),
+}
+
+impl CancellationProgress {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::Phase(phase) => phase.rights_count(),
+            Self::Terminal(terminal) => terminal.rights_count(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+enum CancellationProgressKind {
+    MonitorSpawned,
+    InnerClaimed,
+    GateReleased,
+    Cancelled,
+    Committed,
+}
+
+#[derive(Deserialize)]
+struct CancellationProgressSelector {
+    kind: CancellationProgressKind,
+}
+
+/// Decode a complete original in-flight phase for cleanup custody, or an exact cancellation
+/// terminal alternative. Strict ordinary decoders are unchanged; no partial-frame resync or
+/// additional framer exists, and receipt decoding alone confirms no actor or role settlement.
+pub(super) fn decode_cancellation_progress(
+    payload: &[u8],
+) -> Result<CancellationProgress, super::control::ControlError> {
+    use super::control::ControlError;
+    use serde::de::Error as _;
+    super::startup_cause::check_scratch_free_json(payload)
+        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
+    let selector: CancellationProgressSelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selector.kind {
+        CancellationProgressKind::MonitorSpawned
+        | CancellationProgressKind::InnerClaimed
+        | CancellationProgressKind::GateReleased => match decode_outer_startup(payload)? {
+            OuterStartupControl::Phase(phase) => Ok(CancellationProgress::Phase(phase)),
+            OuterStartupControl::OwnerStop { .. } | OuterStartupControl::SetupRefused { .. } => {
+                Err(ControlError::InvalidEncoding(serde_json::Error::custom(
+                    "unexpected cancellation phase",
+                )))
+            }
+        },
+        CancellationProgressKind::Cancelled | CancellationProgressKind::Committed => {
+            decode_cancellation_commit(payload).map(CancellationProgress::Terminal)
+        }
+    }
+}
+
+/// Actual fixed selector/result plus the largest existing nested scalar decode reservation.
+/// Original payload, ancillary and retained rights storage remain charged by the same framer.
+pub(super) fn cancellation_progress_decode_bytes() -> Result<u64, super::control::ControlError> {
+    use super::control::ControlError;
+    let nested = outer_startup_decode_bytes()?.max(cancellation_decode_bytes()?);
+    let fixed = std::mem::size_of::<CancellationProgressSelector>()
+        .checked_add(std::mem::size_of::<CancellationProgress>())
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or(ControlError::EncodedBytesExceeded)?;
+    fixed
+        .checked_add(nested)
+        .ok_or(ControlError::EncodedBytesExceeded)
+}
+
 #[derive(Deserialize)]
 enum CallerCloseKind {
     CompletedClose,
@@ -918,6 +992,134 @@ pub(super) fn report_decode_bytes() -> Result<u64, super::control::ControlError>
 mod tests {
     use super::*;
     use crate::kani::run::role_deadline::StopOrigin;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.
+    #[test]
+    fn cancellation_progress_preserves_exact_queued_phase_cleanup_rights_only() {
+        let authority = RunAuthority::fresh().unwrap();
+        // Fixed schema values only; no namespace observation or role custody is claimed.
+        let namespace: NamespaceIdentity =
+            serde_json::from_value(serde_json::json!({ "device": 1, "inode": 2 })).unwrap();
+        for (reply, expected, expected_rights) in [
+            (OuterPhaseReply::MonitorSpawned { authority }, 0, 1),
+            (
+                OuterPhaseReply::InnerClaimed {
+                    authority,
+                    start: 23,
+                    namespace,
+                },
+                1,
+                1,
+            ),
+            (OuterPhaseReply::GateReleased { authority }, 2, 0),
+        ] {
+            let original = serde_json::to_value(reply).unwrap();
+            let bytes = serde_json::to_vec(&original).unwrap();
+            let progress = decode_cancellation_progress(&bytes).unwrap();
+            assert_eq!(progress.rights_count(), expected_rights);
+            let CancellationProgress::Phase(phase) = progress else {
+                panic!("queued phase became terminal receipt");
+            };
+            assert_eq!(phase.authority(), authority);
+            let actual = match phase {
+                OuterPhaseReply::MonitorSpawned { .. } => 0,
+                OuterPhaseReply::InnerClaimed {
+                    start,
+                    namespace: actual,
+                    ..
+                } => {
+                    assert_eq!(start, 23);
+                    assert_eq!(actual, namespace);
+                    1
+                }
+                OuterPhaseReply::GateReleased { .. } => 2,
+            };
+            assert_eq!(actual, expected);
+            assert!(decode_cancellation_commit(&bytes).is_err());
+            assert!(decode_report_start(&bytes).is_err());
+            assert!(decode_terminal_commit(&bytes).is_err());
+            for field in original.as_object().unwrap().keys() {
+                let mut missing = original.clone();
+                missing.as_object_mut().unwrap().remove(field);
+                assert!(
+                    decode_cancellation_progress(&serde_json::to_vec(&missing).unwrap()).is_err()
+                );
+                let mut malformed = original.clone();
+                malformed[field] = serde_json::Value::Null;
+                assert!(
+                    decode_cancellation_progress(&serde_json::to_vec(&malformed).unwrap()).is_err()
+                );
+            }
+            let mut extra = original.clone();
+            extra["bytes"] = 1.into();
+            assert!(decode_cancellation_progress(&serde_json::to_vec(&extra).unwrap()).is_err());
+            let encoded = serde_json::to_string(&original).unwrap();
+            let conflicting = encoded.replacen("{", "{\"kind\":\"Cancelled\",", 1);
+            assert!(decode_cancellation_progress(conflicting.as_bytes()).is_err());
+            let mut trailing = bytes;
+            trailing.extend_from_slice(b"{}");
+            assert!(decode_cancellation_progress(&trailing).is_err());
+            assert!(decode_cancellation_progress(&trailing[..trailing.len() / 2]).is_err());
+        }
+        let stop = StopStamp::capture(StopOrigin::Caller).unwrap();
+        let cancelled =
+            serde_json::to_vec(&OuterTerminalReply::Cancelled { authority, stop }).unwrap();
+        let receipt = decode_cancellation_progress(&cancelled).unwrap();
+        assert_eq!(receipt.rights_count(), 0);
+        assert!(
+            matches!(receipt, CancellationProgress::Terminal(CancellationHeader::Cancelled {
+            authority: actual, stop: actual_stop,
+        }) if actual == authority && actual_stop == stop)
+        );
+        for cause in [OwnerStopCause::ResourceExhausted, OwnerStopCause::TimedOut] {
+            let stop_commit = serde_json::to_vec(&OuterTerminalReply::Committed {
+                authority,
+                stop,
+                peaks: MeasuredPeaks {
+                    tree_rss_bytes: 7,
+                    charged_bytes: 11,
+                },
+                disposition: TerminalDisposition::OwnerStop { cause },
+            })
+            .unwrap();
+            let progress = decode_cancellation_progress(&stop_commit).unwrap();
+            assert_eq!(progress.rights_count(), 0);
+            assert!(
+                matches!(progress, CancellationProgress::Terminal(CancellationHeader::OwnerStop {
+                authority: actual, stop: actual_stop, cause: actual_cause, ..
+            }) if actual == authority && actual_stop == stop && actual_cause == cause)
+            );
+        }
+        for refused in [
+            OuterTerminalReply::ReportDescriptor {
+                authority,
+                bytes: 1,
+            },
+            OuterTerminalReply::Committed {
+                authority,
+                stop,
+                peaks: MeasuredPeaks {
+                    tree_rss_bytes: 7,
+                    charged_bytes: 11,
+                },
+                disposition: TerminalDisposition::Report,
+            },
+            OuterTerminalReply::Committed {
+                authority,
+                stop,
+                peaks: MeasuredPeaks {
+                    tree_rss_bytes: 7,
+                    charged_bytes: 11,
+                },
+                disposition: TerminalDisposition::SetupRefused {
+                    failure:
+                        super::super::startup_envelope::PolicyFailureCause::ProtectionUnverified,
+                },
+            },
+        ] {
+            assert!(decode_cancellation_progress(&serde_json::to_vec(&refused).unwrap()).is_err());
+        }
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.
     #[test]
