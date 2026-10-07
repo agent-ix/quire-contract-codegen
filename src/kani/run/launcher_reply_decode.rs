@@ -18,7 +18,7 @@ use super::{
     role_control_scalar_decode,
     role_protocol::{
         LauncherReply, LauncherReplyKind, OuterArmReply, OuterArmReplyKind, OuterChildSettlement,
-        OuterChildSettlementKind,
+        OuterChildSettlementKind, OuterPhaseReply, OuterPhaseReplyKind,
     },
     role_scalar_decode,
 };
@@ -69,6 +69,7 @@ macro_rules! reply_bindings {
 reply_bindings! { decoder;
     identity: BuildIdentity => role_scalar_decode::identity(decoder),
     authority: RunAuthority => role_scalar_decode::authority(decoder),
+    start: u64 => decoder.unsigned(),
     custody: OuterChildSettlement => custody(decoder),
     reason: GuardianRefusal => refusal(decoder),
     namespace: NamespaceIdentity => role_control_scalar_decode::namespace(decoder),
@@ -178,6 +179,31 @@ pub(super) fn arm(payload: &[u8], scratch: &mut Scratch) -> Result<OuterArmReply
             network: required(fields.network)?,
             mapped_uid: required(fields.mapped_uid)?,
             mapped_gid: required(fields.mapped_gid)?,
+        }),
+    }
+}
+
+/// Existing phase-only receive grammar. The current public actor uses the complete startup
+/// union; these retained low-level interfaces use the SAME fixed record visitor and owning
+/// declarations, with no fallback, phase authorization or pin manufactured by this parser.
+pub(super) fn phase(payload: &[u8], scratch: &mut Scratch) -> Result<OuterPhaseReply, DecodeError> {
+    let (kind, fields) = frame(
+        payload,
+        scratch,
+        OuterPhaseReplyKind::metadata_text,
+        OuterPhaseReplyKind::declared_fields,
+    )?;
+    match kind {
+        OuterPhaseReplyKind::MonitorSpawned => Ok(OuterPhaseReply::MonitorSpawned {
+            authority: required(fields.authority)?,
+        }),
+        OuterPhaseReplyKind::InnerClaimed => Ok(OuterPhaseReply::InnerClaimed {
+            authority: required(fields.authority)?,
+            start: required(fields.start)?,
+            namespace: required(fields.namespace)?,
+        }),
+        OuterPhaseReplyKind::GateReleased => Ok(OuterPhaseReply::GateReleased {
+            authority: required(fields.authority)?,
         }),
     }
 }
@@ -293,6 +319,12 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<CustodyFields<'static>>(),
         size_of::<LauncherReply>(),
         size_of::<OuterArmReply>(),
+        size_of::<OuterPhaseReply>(),
+        size_of::<OuterPhaseReplyKind>(),
+        size_of::<Option<OuterPhaseReplyKind>>(),
+        size_of::<Result<OuterPhaseReply, DecodeError>>(),
+        size_of::<(OuterPhaseReplyKind, ReplyFields)>(),
+        size_of::<Result<(OuterPhaseReplyKind, ReplyFields), DecodeError>>(),
         size_of::<OuterChildSettlement>(),
         size_of::<Result<LauncherReply, DecodeError>>(),
         size_of::<Result<OuterArmReply, DecodeError>>(),
@@ -339,11 +371,32 @@ mod tests {
     enum Scope {
         Launcher,
         Arm,
+        Phase,
     }
     fn fixtures() -> Vec<(Scope, Value, &'static [&'static str])> {
         let identity = current_build_identity();
         let authority = RunAuthority::from_wire_bytes([8; 32]);
         vec![
+            (
+                Scope::Phase,
+                serde_json::to_value(OuterPhaseReply::MonitorSpawned { authority }).unwrap(),
+                OuterPhaseReplyKind::MonitorSpawned.declared_fields(),
+            ),
+            (
+                Scope::Phase,
+                serde_json::to_value(OuterPhaseReply::InnerClaimed {
+                    authority,
+                    start: u64::MAX,
+                    namespace: NamespaceIdentity::from_wire_parts(3, 4),
+                })
+                .unwrap(),
+                OuterPhaseReplyKind::InnerClaimed.declared_fields(),
+            ),
+            (
+                Scope::Phase,
+                serde_json::to_value(OuterPhaseReply::GateReleased { authority }).unwrap(),
+                OuterPhaseReplyKind::GateReleased.declared_fields(),
+            ),
             (
                 Scope::Launcher,
                 serde_json::to_value(LauncherReply::Ready {
@@ -395,6 +448,9 @@ mod tests {
             Scope::Launcher => serde_json::from_slice::<LauncherReply>(bytes)
                 .ok()
                 .map(|value| (serde_json::to_value(&value).unwrap(), value.rights_count())),
+            Scope::Phase => serde_json::from_slice::<OuterPhaseReply>(bytes)
+                .ok()
+                .map(|value| (serde_json::to_value(&value).unwrap(), value.rights_count())),
             Scope::Arm => serde_json::from_slice::<OuterArmReply>(bytes)
                 .ok()
                 .map(|value| (serde_json::to_value(&value).unwrap(), value.rights_count())),
@@ -405,6 +461,10 @@ mod tests {
         match scope {
             Scope::Launcher => {
                 let value = launcher(bytes, &mut scratch)?;
+                Ok((serde_json::to_value(&value).unwrap(), value.rights_count()))
+            }
+            Scope::Phase => {
+                let value = phase(bytes, &mut scratch)?;
                 Ok((serde_json::to_value(&value).unwrap(), value.rights_count()))
             }
             Scope::Arm => {

@@ -332,21 +332,13 @@ impl OuterPhaseCommand {
     }
 }
 
-/// O-origin startup replies carry real process capabilities, never numbers standing in for pins.
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum OuterPhaseReply {
-    MonitorSpawned {
-        authority: RunAuthority,
-    },
-    InnerClaimed {
-        authority: RunAuthority,
-        start: u64,
-        namespace: NamespaceIdentity,
-    },
-    GateReleased {
-        authority: RunAuthority,
-    },
+bootstrap_controls! {
+    /// O-origin startup replies carry real process capabilities, never numbers standing in for pins.
+    OuterPhaseReply, OuterPhaseReplyKind {
+        MonitorSpawned { authority: RunAuthority },
+        InnerClaimed { authority: RunAuthority, start: u64, namespace: NamespaceIdentity },
+        GateReleased { authority: RunAuthority },
+    }
 }
 
 impl OuterPhaseReply {
