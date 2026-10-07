@@ -23,6 +23,7 @@ use super::{
         ReadyIdentityError,
     },
     outer_caller::{OuterCallerControl, OuterCallerReceive},
+    outer_failure::{FailureHeader, FailureRepresentation},
     outer_preparation::{SamplingParts, SamplingPreparation},
     outer_setup::PreparedOuter,
     protocol::BackendExit,
@@ -35,7 +36,7 @@ use super::{
         CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
         OuterPhaseReply, OuterTerminalReply, OwnerStopCause, RunSettings, TerminalDisposition,
     },
-    startup_cause::PreparedStartupContext,
+    startup_cause::{PreparedStartupContext, RepresentationError, StartupCause},
     startup_envelope::{InnerEventHeader, InnerOwnerHeader, PolicyFailureCause, CONTEXT_BYTES},
 };
 
@@ -70,6 +71,36 @@ pub(super) enum SamplingError {
 }
 
 impl SamplingError {
+    /// Borrow the actual producer without cloning or surrendering its original local cause.
+    /// This implemented capture covers these two I/O domains; other domains retain their
+    /// original typed errors and still require their genuine operational transport integration.
+    fn original_io(&self) -> Option<(CauseOperation, &io::Error)> {
+        match self {
+            Self::Io { operation, cause }
+            | Self::Report {
+                operation,
+                cause: ReportError::Io(cause),
+            } => Some((*operation, cause)),
+            Self::Report { .. }
+            | Self::Control(_)
+            | Self::Charge(_)
+            | Self::Deadline(_)
+            | Self::InvalidMonitorTransition
+            | Self::InnerLeaseConsumed
+            | Self::PhaseAuthorityMismatch
+            | Self::UnexpectedPhase
+            | Self::SettlementReportMismatch
+            | Self::InnerIdentity(_)
+            | Self::InnerCompletionAuthority
+            | Self::UnexpectedInnerEvent
+            | Self::InvalidTerminalTransition
+            | Self::TerminalAuthority
+            | Self::TerminalSize
+            | Self::TerminalDeadlineMismatch
+            | Self::PartialReportDescriptor => None,
+        }
+    }
+
     /// Move only actual I/O producer values into the negative representation path. Other
     /// domains remain owned and explicit; this does not invent a kind, site or wrapper cause.
     pub(super) fn into_original_io(self) -> Result<(CauseOperation, io::Error), Self> {
@@ -203,6 +234,9 @@ pub(super) struct OuterRunPreparation {
     resources: Option<OuterPreparationResources>,
     attempted: bool,
     failure_event: Option<Result<StopStamp, DeadlineError>>,
+    // Required metadata is recorded before any optional Display formatting. A failed capture
+    // retains its actual typed checking error; absence is never a measurement or timeout label.
+    failure_cause: Option<Result<FailureHeader, RepresentationError>>,
 }
 
 struct OuterPreparationResources {
@@ -238,6 +272,7 @@ impl OuterRunPreparation {
             }),
             attempted: false,
             failure_event: None,
+            failure_cause: None,
         }
     }
 
@@ -267,6 +302,7 @@ impl OuterRunPreparation {
                     None => StopStamp::capture(StopOrigin::Outer),
                 },
             );
+            self.capture_failure_cause(&error);
             return Err(error);
         }
         let resources = self
@@ -319,6 +355,38 @@ impl OuterRunPreparation {
     /// permission to start settlement at receipt time. This method creates no new event.
     pub(super) fn failure_stop(&self) -> Result<Option<StopStamp>, DeadlineError> {
         self.failure_event.transpose()
+    }
+
+    /// Fixed original-cause custody only. Reading it grants no sender/site, no-child,
+    /// measurement, terminal delivery or settlement authority.
+    pub(super) fn failure_cause(&self) -> Option<&Result<FailureHeader, RepresentationError>> {
+        self.failure_cause.as_ref()
+    }
+
+    fn capture_failure_cause(&mut self, error: &SamplingError) {
+        let Some(Ok(stop)) = self.failure_event else {
+            return;
+        };
+        let Some((operation, cause)) = error.original_io() else {
+            return;
+        };
+        let Some(resources) = self.resources.as_ref() else {
+            return;
+        };
+        let settings = match (&resources.sampling, &resources.sampling_preparation) {
+            (Some(sampling), _) => &sampling.settings,
+            (None, Some(preparation)) => preparation.settings(),
+            (None, None) => return,
+        };
+        // Metadata capture borrows the same original error before diagnostics or publication.
+        // No text buffer is needed, and a representation error never replaces that original.
+        self.failure_cause = Some(StartupCause::capture_io(cause).map(|cause| FailureHeader {
+            identity: settings.identity,
+            authority: settings.authority,
+            stop,
+            operation,
+            representation: FailureRepresentation::Original { cause },
+        }));
     }
 
     fn prepare_resources(
