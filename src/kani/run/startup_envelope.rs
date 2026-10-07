@@ -770,7 +770,7 @@ mod tests {
 
     /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38
     #[test]
-    fn malformed_failure_fields_context_and_scratch_paths_refuse() {
+    fn required_metadata_refuses_but_optional_diagnostics_preserve_original_cause() {
         let mut producer = PreparedStartupContext::new(CONTEXT_BYTES).unwrap();
         let cause = producer
             .capture_io(&io::Error::from_raw_os_error(nix::libc::EPERM))
@@ -826,6 +826,27 @@ mod tests {
         ] {
             let mut wrong = original.clone();
             wrong["context"] = context;
+            let InstallerReplyHeader::Refused {
+                failure: PolicyFailureCause::Privilege { cause },
+                ..
+            } = decode(&serde_json::to_vec(&wrong).unwrap(), &mut receiver).unwrap()
+            else {
+                panic!("optional diagnostics changed the original refusal");
+            };
+            assert!(receiver.context().is_empty());
+            let ProjectedStartupCause::Io { error, .. } = cause.project().unwrap() else {
+                panic!("optional diagnostics changed the original cause domain");
+            };
+            assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
+            assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        }
+        for context in [
+            serde_json::json!([255, "bad"]),
+            serde_json::json!([255, 256]),
+            serde_json::json!([null]),
+        ] {
+            let mut wrong = original.clone();
+            wrong["context"] = context;
             assert!(decode(&serde_json::to_vec(&wrong).unwrap(), &mut receiver).is_err());
         }
         let mut extra = original.clone();
@@ -853,6 +874,17 @@ mod tests {
         trailing.extend_from_slice(b"{}");
         assert!(decode(&trailing, &mut receiver).is_err());
         let mut tiny = PreparedStartupContext::new(1).unwrap();
-        assert!(decode(&bytes, &mut tiny).is_err());
+        let InstallerReplyHeader::Refused {
+            failure: PolicyFailureCause::Privilege { cause },
+            ..
+        } = decode(&bytes, &mut tiny).unwrap()
+        else {
+            panic!("diagnostic retention excess changed the refusal");
+        };
+        assert!(tiny.context().is_empty());
+        let ProjectedStartupCause::Io { error, .. } = cause.project().unwrap() else {
+            panic!("diagnostic retention excess changed the cause domain");
+        };
+        assert_eq!(error.raw_os_error(), Some(nix::libc::EPERM));
     }
 }
