@@ -106,7 +106,16 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
         negative_storage,
         setup,
     } = parts;
-    let guard = setup.prepare().map_err(HelperEntryError::Bootstrap)?;
+    let guard = match setup.prepare() {
+        Ok(guard) => guard,
+        Err(failure) => {
+            // The original setup and all split input resources remain here until this failed
+            // entry returns. Retain the producer event independently of the original cause;
+            // this prefix still has no authenticated negative publication/settlement route.
+            let _original_stop = failure.stop;
+            return Err(HelperEntryError::Bootstrap(failure.error));
+        }
+    };
     // Actual O has armed its original L parent and prepared private namespaces before either
     // endpoint receives its positively owned capability. No M exists at this boundary.
     launcher_owner::publish_outer_arm(&guard, &settings, &caller_control, setup.deadline())

@@ -531,8 +531,25 @@ pub(super) struct OuterSetup {
     deadline: Instant,
 }
 
+/// An actual pre-Arm setup failure; the caller still owns the borrowed original setup and
+/// every already split input. Factory-internal clone ownership is not restored by this record.
+pub(super) struct OuterSetupFailure {
+    pub(super) error: BootstrapError,
+    /// First failure at this O producer, including an explicit clock-capture failure.
+    pub(super) stop: Result<StopStamp, DeadlineError>,
+}
+
 impl OuterSetup {
-    pub(super) fn prepare(&self) -> Result<PreparedOuter<'_>, BootstrapError> {
+    pub(super) fn prepare(&self) -> Result<PreparedOuter<'_>, OuterSetupFailure> {
+        self.prepare_guard().map_err(|error| OuterSetupFailure {
+            // Capture before publishing the unchanged error to the helper. Neither a later
+            // receive nor an expired setup bound supplies a replacement producer event.
+            stop: StopStamp::capture(StopOrigin::Outer),
+            error,
+        })
+    }
+
+    fn prepare_guard(&self) -> Result<PreparedOuter<'_>, BootstrapError> {
         self.require_deadline()?;
         let pin = self
             .launcher_pin
