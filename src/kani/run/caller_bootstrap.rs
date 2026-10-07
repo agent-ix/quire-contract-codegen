@@ -76,6 +76,7 @@ pub(super) enum CallerBootstrapError {
     OuterExitAbnormal,
     OwnerStopObserved,
     PolicyRefusalObserved,
+    OperationalFailureObserved,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -118,7 +119,8 @@ impl std::error::Error for CallerBootstrapError {
             | Self::TerminalReplyMismatch
             | Self::OuterExitAbnormal
             | Self::OwnerStopObserved
-            | Self::PolicyRefusalObserved => None,
+            | Self::PolicyRefusalObserved
+            | Self::OperationalFailureObserved => None,
         }
     }
 }
@@ -158,6 +160,8 @@ pub(super) struct CallerBootstrap {
     policy_refusal_stop: Option<super::role_deadline::StopStamp>,
     pending_setup_refusal: Option<super::startup_envelope::PolicyFailureCause>,
     policy_refusal_settled: bool,
+    pending_operational_failure: Option<super::outer_failure::FailureHeader>,
+    operational_failure_settled: bool,
     terminal_receive: TerminalReceive,
     read_ack_storage: Option<FrameStorage>,
     cancel_storage: Option<FrameStorage>,
@@ -462,6 +466,7 @@ impl CallerBootstrap {
             super::startup_projection::metadata_reservation()
                 .map_err(CallerBootstrapError::Control)?,
             super::outer_failure::decode_bytes().map_err(CallerBootstrapError::Control)?,
+            super::outer_reply::decode_bytes().map_err(CallerBootstrapError::Control)?,
             super::role_protocol::cancellation_progress_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             u64::try_from(startup_context.reserved_bytes())
@@ -587,6 +592,8 @@ impl CallerBootstrap {
             policy_refusal_stop: None,
             pending_setup_refusal: None,
             policy_refusal_settled: false,
+            pending_operational_failure: None,
+            operational_failure_settled: false,
             terminal_receive,
             read_ack_storage: Some(read_ack_storage),
             cancel_storage: Some(cancel_storage),
@@ -737,6 +744,7 @@ impl CallerBootstrap {
         if clock.original_deadline() != self.identity_deadline
             || self.pending_owner_stop.is_some()
             || self.pending_setup_refusal.is_some()
+            || self.pending_operational_failure.is_some()
         {
             return Err(CallerBootstrapError::TerminalTransition);
         }
@@ -754,10 +762,10 @@ impl CallerBootstrap {
             .outer_receive
             .advance_clock_only_optional(
                 &self.outer_control.transport(),
-                OuterStartupControl::rights_count,
+                super::outer_reply::OuterReply::rights_count,
                 cutoff,
-                super::role_protocol::decode_outer_startup,
-                OuterStartupControl::clock_only,
+                |payload| super::outer_reply::decode(payload, &mut self.startup_context),
+                super::outer_reply::OuterReply::clock_only,
             )
             .map_err(CallerBootstrapError::Control)?
         else {
@@ -768,6 +776,39 @@ impl CallerBootstrap {
             .ok_or(CallerBootstrapError::MissingSender)?;
         let control = received.control;
         let pin = received.rights.pop();
+        let control = match control {
+            super::outer_reply::OuterReply::Startup(control) => control,
+            super::outer_reply::OuterReply::Failure(failure) => {
+                // Preparation has no I producer or positive Dispatch. O's actual retained
+                // capability was authenticated at Armed; this full negative shortens only the
+                // original clock and cannot authorize a phase or prove M/O/L settlement.
+                if self.startup_finished
+                    || failure.identity != self.build_identity
+                    || failure.authority != self.authority
+                    || failure.stop.origin != super::role_deadline::StopOrigin::Outer
+                    || sender.pid
+                        != self
+                            .outer_pid
+                            .ok_or(CallerBootstrapError::MissingOuterPin)?
+                    || sender.uid != self.caller_uid
+                    || sender.gid != self.caller_gid
+                    || pin.is_some()
+                    || self.policy_refusal.is_some()
+                {
+                    return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                let cutoff = clock
+                    .adopt_stop(failure.stop, self.identity_clock)
+                    .map_err(CallerBootstrapError::Deadline)?;
+                if Instant::now() >= cutoff {
+                    return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+                }
+                self.pending_operational_failure = Some(failure);
+                self.phase_failed = true;
+                self.inner_auth_failed = true;
+                return Err(CallerBootstrapError::OperationalFailureObserved);
+            }
+        };
         match control {
             OuterStartupControl::Phase(reply) => {
                 if !allow_phase || self.phase_send.is_some() {
@@ -943,6 +984,49 @@ impl CallerBootstrap {
         self.pending_setup_refusal = None;
         self.policy_refusal_settled = true;
         Ok(true)
+    }
+
+    /// A complete negative is provisional until real normal O/L/creator settlement and the
+    /// SAME original cursor's exact stream end. No missing measurement is classified here.
+    pub(super) fn finish_operational_failure_after_roles(
+        &mut self,
+        roles: &CallerRoleSettlement,
+    ) -> Result<bool, CallerBootstrapError> {
+        if roles.authority != self.authority
+            || Instant::now() >= roles.cutoff
+            || self.pending_operational_failure.is_none()
+        {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        if !matches!(
+            self.outer_settled,
+            Some(OuterChildSettlement::Reaped {
+                outcome: BackendExit::Code(0),
+            })
+        ) {
+            return Err(CallerBootstrapError::OuterExitAbnormal);
+        }
+        if !self
+            .outer_receive
+            .confirm_end(&self.outer_control.transport(), roles.cutoff)
+            .map_err(CallerBootstrapError::Control)?
+        {
+            return Ok(false);
+        }
+        self.operational_failure_settled = true;
+        Ok(true)
+    }
+
+    /// Borrow only after the genuine normal role/EOF proof; capture settlement still belongs
+    /// to C. The caller must finish those joins before projecting this authentic original cause.
+    pub(super) fn operational_failure_after_roles(
+        &self,
+    ) -> Result<super::outer_failure::FailureHeader, CallerBootstrapError> {
+        if !self.operational_failure_settled {
+            return Err(CallerBootstrapError::TerminalTransition);
+        }
+        self.pending_operational_failure
+            .ok_or(CallerBootstrapError::TerminalTransition)
     }
 
     /// Stores actual spawner custody BEFORE any wait/pin/control error. A failed handshake must

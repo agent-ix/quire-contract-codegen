@@ -539,6 +539,170 @@ impl CallerExecution {
         ))
     }
 
+    /// The preparation-negative carries no measurements or report. The original O cause is
+    /// projected only after actual normal O/L/creator/EOF and real capture joins by the retained
+    /// earliest cutoff. Missing/abnormal custody leaves this owner unsettled and refuses.
+    pub(super) fn finish_operational_failure(
+        &mut self,
+    ) -> Result<BoundedLaunchError, CallerExecutionError> {
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        if self.roles.is_none() {
+            self.roles = Some(
+                self.bootstrap
+                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::ObserveOuterExit)
+                    .map_err(CallerExecutionError::Bootstrap)?,
+            );
+        }
+        let roles = self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+            CallerBootstrapError::TerminalTransition,
+        ))?;
+        loop {
+            if self
+                .bootstrap
+                .finish_operational_failure_after_roles(roles)
+                .map_err(CallerExecutionError::Bootstrap)?
+            {
+                break;
+            }
+            self.pause_until(roles.cutoff())?;
+        }
+        let captures = self
+            .bootstrap
+            .streams
+            .settle(roles)
+            .map_err(CallerExecutionError::Io)?;
+        drop(captures);
+        drop(self.report.take());
+        if Instant::now() >= roles.cutoff() {
+            return Err(CallerExecutionError::Deadline(DeadlineError::Expired));
+        }
+        self.settled = true;
+        let failure = self
+            .bootstrap
+            .operational_failure_after_roles()
+            .map_err(CallerExecutionError::Bootstrap)?;
+        Self::project_preparation_failure(failure)
+    }
+
+    fn project_preparation_failure(
+        failure: super::outer_failure::FailureHeader,
+    ) -> Result<BoundedLaunchError, CallerExecutionError> {
+        use super::{
+            cross_role_cause::{
+                CauseCheckerProvenance, CauseCheckerRole, CauseIntegrityPredicate,
+                CauseIntegritySource, CauseOperation, KaniCauseMetadataIntegrityError,
+                RemoteCauseProvenance, RemoteCauseRole,
+            },
+            execute::{KaniStartupAdmissionCause, KaniStartupCapability},
+            outer_failure::FailureRepresentation,
+            startup_cause::{ProjectedStartupCause, RepresentationError},
+        };
+        // Exact preparation producers, not an errno/Display classification or a generic
+        // permission to reuse policy AC39. Post-activation observation errors are distinct.
+        let admission = match failure.operation {
+            CauseOperation::ProcSetup => KaniStartupAdmissionCause::CapabilityUnavailable {
+                capability: KaniStartupCapability::PrivateProc,
+            },
+            CauseOperation::ReportCreation
+            | CauseOperation::ReportCollection
+            | CauseOperation::LauncherObservation
+            | CauseOperation::TreeObservation => KaniStartupAdmissionCause::MemoryEnforcement,
+            CauseOperation::Identity
+            | CauseOperation::OwnerProtection
+            | CauseOperation::ControlPreparation
+            | CauseOperation::MonitorSpawn => KaniStartupAdmissionCause::CapabilityUnavailable {
+                capability: KaniStartupCapability::TrustedOwnerProtection,
+            },
+            CauseOperation::RoleBootstrap
+            | CauseOperation::NamespaceSetup
+            | CauseOperation::ControlEncoding
+            | CauseOperation::ControlReception
+            | CauseOperation::OuterSpawn
+            | CauseOperation::OuterControl
+            | CauseOperation::OuterWaitRetirement
+            | CauseOperation::ResourceAccounting
+            | CauseOperation::ReportSealing
+            | CauseOperation::ReportDelivery
+            | CauseOperation::MonitorClaim
+            | CauseOperation::MonitorStop
+            | CauseOperation::MonitorReap
+            | CauseOperation::ExclusiveLease
+            | CauseOperation::NativePolicyPreparation
+            | CauseOperation::NativePolicyInstallation
+            | CauseOperation::BackendSupervision
+            | CauseOperation::BackendCompletion
+            | CauseOperation::SettlementControl => {
+                return Err(CallerExecutionError::Bootstrap(
+                    CallerBootstrapError::TerminalReplyMismatch,
+                ));
+            }
+        };
+        let cause = match failure.representation {
+            FailureRepresentation::Original { cause } => {
+                match cause.project(RemoteCauseProvenance {
+                    role: RemoteCauseRole::Outer,
+                    operation: failure.operation,
+                }) {
+                    Ok(ProjectedStartupCause::Io { error, .. }) => error,
+                    Ok(ProjectedStartupCause::Seccompiler { .. }) => {
+                        return Err(CallerExecutionError::PolicyProjection(
+                            RepresentationError::NonInstallationBackendCause,
+                        ));
+                    }
+                    Err(error) => {
+                        let predicate = match &error {
+                            RepresentationError::OsKindMismatch => {
+                                CauseIntegrityPredicate::OriginalOsKindMismatch
+                            }
+                            RepresentationError::MissingOsCode
+                            | RepresentationError::OsPayloadMismatch => {
+                                CauseIntegrityPredicate::MalformedCauseMetadata
+                            }
+                            RepresentationError::InvalidContextBound
+                            | RepresentationError::Reservation(_)
+                            | RepresentationError::ContextExceeded
+                            | RepresentationError::Formatting
+                            | RepresentationError::UnnamedIoKind
+                            | RepresentationError::NonInstallationBackendCause
+                            | RepresentationError::PolicyCauseMismatch => {
+                                return Err(CallerExecutionError::PolicyProjection(error));
+                            }
+                        };
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            KaniCauseMetadataIntegrityError::new(
+                                predicate,
+                                CauseCheckerProvenance {
+                                    role: Some(CauseCheckerRole::Caller),
+                                    operation: Some(CauseOperation::ControlReception),
+                                },
+                                Some(CauseIntegritySource::Representation(error)),
+                            ),
+                        )
+                    }
+                }
+            }
+            FailureRepresentation::Integrity { predicate } => {
+                // Authenticated O supplies its actual checking predicate, without original
+                // replay. Its independently unknown check operation/source remain absent.
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    KaniCauseMetadataIntegrityError::new(
+                        predicate,
+                        CauseCheckerProvenance {
+                            role: Some(CauseCheckerRole::Outer),
+                            operation: None,
+                        },
+                        None,
+                    ),
+                )
+            }
+        };
+        Ok(BoundedLaunchError::Unavailable { admission, cause })
+    }
+
     /// Policy failure was authenticated from the actual positively retained pre-recipe I.
     /// Preserve its original B stamp/cause through actual lease EOF, I termination/M reap,
     /// normal O/L/creator proof and captures; independent genuine owner stops still win.
@@ -738,5 +902,81 @@ impl CallerExecution {
             .ok_or(CallerExecutionError::Deadline(DeadlineError::Expired))?;
         thread::park_timeout(remaining.min(CALLER_TICK));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kani::run::{
+        cross_role_cause::{CauseOperation, KaniCrossRoleCauseLoss},
+        execute::KaniStartupAdmissionCause,
+        outer_failure::{FailureHeader, FailureRepresentation},
+        protocol::current_build_identity,
+        role_deadline::{StopOrigin, StopStamp},
+        startup_cause::StartupCause,
+    };
+
+    fn failure(original: &io::Error) -> FailureHeader {
+        FailureHeader {
+            identity: current_build_identity(),
+            authority: serde_json::from_value(serde_json::to_value([0_u8; 32]).unwrap()).unwrap(),
+            stop: StopStamp::capture(StopOrigin::Outer).unwrap(),
+            operation: CauseOperation::ReportCreation,
+            representation: FailureRepresentation::Original {
+                cause: StartupCause::capture_io(original).unwrap(),
+            },
+        }
+    }
+
+    /// Trace: FR-034-AC-40
+    #[test]
+    fn operational_projection_preserves_errno_and_only_marks_actual_custom_loss() {
+        // Projection primitive only: actor authentication, original producer kind gate and
+        // whole-chain settlement are separate. No metadata token proves those obligations.
+        let os = io::Error::from_raw_os_error(nix::libc::EACCES);
+        let BoundedLaunchError::Unavailable { admission, cause } =
+            CallerExecution::project_preparation_failure(failure(&os)).unwrap()
+        else {
+            panic!("negative projection changed public branch");
+        };
+        assert_eq!(admission, KaniStartupAdmissionCause::MemoryEnforcement);
+        assert_eq!(cause.raw_os_error(), os.raw_os_error());
+        assert_eq!(cause.kind(), os.kind());
+        assert!(cause.get_ref().is_none());
+        let original = io::Error::new(io::ErrorKind::Other, "actual custom source");
+        let BoundedLaunchError::Unavailable { cause, .. } =
+            CallerExecution::project_preparation_failure(failure(&original)).unwrap()
+        else {
+            panic!("custom loss changed public branch");
+        };
+        assert_eq!(cause.kind(), original.kind());
+        assert_eq!(cause.raw_os_error(), None);
+        assert!(cause
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<KaniCrossRoleCauseLoss>()
+            .is_some());
+        let free = io::Error::from(io::ErrorKind::Other);
+        let BoundedLaunchError::Unavailable { cause, .. } =
+            CallerExecution::project_preparation_failure(failure(&free)).unwrap()
+        else {
+            panic!("payload-free error changed public branch");
+        };
+        assert_eq!(cause.kind(), free.kind());
+        assert!(cause.get_ref().is_none());
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-40
+    #[test]
+    fn operational_projection_rejects_a_non_preparation_producer_site() {
+        let mut header = failure(&io::Error::from(io::ErrorKind::InvalidData));
+        header.operation = CauseOperation::NativePolicyInstallation;
+        assert!(matches!(
+            CallerExecution::project_preparation_failure(header),
+            Err(CallerExecutionError::Bootstrap(
+                CallerBootstrapError::TerminalReplyMismatch
+            ))
+        ));
     }
 }

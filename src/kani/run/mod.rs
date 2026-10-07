@@ -66,6 +66,8 @@ mod outer_failure;
 #[cfg(target_os = "linux")]
 mod outer_preparation;
 #[cfg(target_os = "linux")]
+mod outer_reply;
+#[cfg(target_os = "linux")]
 mod outer_sampling;
 #[cfg(target_os = "linux")]
 mod outer_setup;

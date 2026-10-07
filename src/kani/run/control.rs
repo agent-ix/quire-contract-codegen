@@ -808,6 +808,15 @@ impl IncrementalSend {
         self.offset != 0 && self.offset < self.frame.bytes.len()
     }
 
+    /// Transfer only a genuinely unsent, unpoisoned frame back to its original reservation.
+    /// Failure returns the SAME send owner, retaining any partial protocol progress.
+    pub(super) fn retire_unsent(self) -> Result<FrameStorage, Self> {
+        if self.offset != 0 || self.poisoned {
+            return Err(self);
+        }
+        Ok(self.frame.into_storage())
+    }
+
     pub(super) fn advance(
         &mut self,
         transport: &Transport<'_>,
