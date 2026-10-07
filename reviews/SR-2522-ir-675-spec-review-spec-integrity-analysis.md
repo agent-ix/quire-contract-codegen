@@ -1,0 +1,119 @@
+---
+id: "SR-2522"
+title: "spec-integrity-analysis of IR-675 FR-034 cross-role cause representation"
+type: "SpecReview"
+analysis: "integrity"
+scope: "agent-ix/quire-contract-codegen@47dd57f79207eb4517e318752e316e696c9974bb; base 5ab6249658d9bd5f8977b95991b55cb9af1e7522; spec/kani/functional/FR-034-caller-death-ownership.md; spec/kani/matrix/TC-049-caller-death-ownership.md; spec/kani/matrix/tests.md"
+review_set: "subset"
+---
+
+## Summary
+
+Ticket: IR-675. Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run e86ea724-594f-49cb-ad01-8568cc4c64d8. Reviewed head 47dd57f79207eb4517e318752e316e696c9974bb against measured main 5ab6249658d9bd5f8977b95991b55cb9af1e7522; SPEC-only diff of three files. Method: spec-review/spec-integrity-analysis.
+
+Completeness, consistency and atomicity of the new section against the unchanged FR-034 original-cause promises (lines 659-664, 789-794, mapping row 1086), FR-034-AC-40, the TC-049 coverage row, step 27 and Expected Results row, and the tests.md index rows (FR-034 range AC-1..AC-40 and TC-049 criterion list). Index range and criterion lists are consistent: AC-40 is added to both and to no other row.
+
+Examined units (role examined):
+
+- `FR-034#cross-role-L814-819` (spec/kani/functional/FR-034-caller-death-ownership.md:814-819)
+- `FR-034#cross-role-L821-824` (spec/kani/functional/FR-034-caller-death-ownership.md:821-824)
+- `FR-034#cross-role-L825-827` (spec/kani/functional/FR-034-caller-death-ownership.md:825-827)
+- `FR-034#cross-role-table-row1-L829-831` (spec/kani/functional/FR-034-caller-death-ownership.md:829-831)
+- `FR-034#cross-role-table-row2-L832` (spec/kani/functional/FR-034-caller-death-ownership.md:832)
+- `FR-034#cross-role-table-row3-L833` (spec/kani/functional/FR-034-caller-death-ownership.md:833)
+- `FR-034#cross-role-table-row4-L834` (spec/kani/functional/FR-034-caller-death-ownership.md:834)
+- `FR-034#cross-role-table-row5-L835` (spec/kani/functional/FR-034-caller-death-ownership.md:835)
+- `FR-034#cross-role-L837-842` (spec/kani/functional/FR-034-caller-death-ownership.md:837-842)
+- `FR-034#cross-role-L843-846` (spec/kani/functional/FR-034-caller-death-ownership.md:843-846)
+- `FR-034#cross-role-L847-851` (spec/kani/functional/FR-034-caller-death-ownership.md:847-851)
+- `FR-034#cross-role-L853-858` (spec/kani/functional/FR-034-caller-death-ownership.md:853-858)
+- `FR-034#cross-role-L860-864` (spec/kani/functional/FR-034-caller-death-ownership.md:860-864)
+- `FR-034#cross-role-L865-868` (spec/kani/functional/FR-034-caller-death-ownership.md:865-868)
+- `FR-034-AC-40#s1` (spec/kani/functional/FR-034-caller-death-ownership.md:1165)
+- `FR-034-AC-40#s2` (spec/kani/functional/FR-034-caller-death-ownership.md:1165)
+- `FR-034-AC-40#s3` (spec/kani/functional/FR-034-caller-death-ownership.md:1165)
+- `TC-049#coverage-AC-40-L106` (spec/kani/matrix/TC-049-caller-death-ownership.md:106)
+- `TC-049#step27-L655-660` (spec/kani/matrix/TC-049-caller-death-ownership.md:655-660)
+- `TC-049#step27-L661-666` (spec/kani/matrix/TC-049-caller-death-ownership.md:661-666)
+- `TC-049#step27-L667-672` (spec/kani/matrix/TC-049-caller-death-ownership.md:667-672)
+- `TC-049#step27-L673-678` (spec/kani/matrix/TC-049-caller-death-ownership.md:673-678)
+- `TC-049#step27-L679-681` (spec/kani/matrix/TC-049-caller-death-ownership.md:679-681)
+- `TC-049#blank-L682-684` (spec/kani/matrix/TC-049-caller-death-ownership.md:682-684)
+- `TC-049#blank-L755-758` (spec/kani/matrix/TC-049-caller-death-ownership.md:755-758)
+- `TC-049#expected-AC-40-L781` (spec/kani/matrix/TC-049-caller-death-ownership.md:781)
+- `tests.md#FR-034-row-L54` (spec/kani/matrix/tests.md:54)
+- `tests.md#TC-049-row-L85` (spec/kani/matrix/tests.md:85)
+
+Context-only units:
+
+- `FR-034#abi-scope-L659-664` (spec/kani/functional/FR-034-caller-death-ownership.md:659-664)
+- `FR-034#admission-original-cause-L789-794` (spec/kani/functional/FR-034-caller-death-ownership.md:789-794)
+- `FR-034#mapping-row-L1086` (spec/kani/functional/FR-034-caller-death-ownership.md:1086)
+- `TC-049#slice-terms-L35-37` (spec/kani/matrix/TC-049-caller-death-ownership.md:35-37)
+
+Not run, by policy: Cargo, build, tests, full make ci, Kani, runtime probes, strict matrix re-run. All CODE/runtime criteria remain PLANNED/UNRUN; this review gives no CODE or proof credit.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | The new section redefines cross-role 'original cause' retention for generic startup/observation causes without amending or cross-referencing the unchanged clauses that still promise the original cause unqualified (line 791 'retain the original cause', mapping row 1086 'MemoryMechanismUnavailable with original io::Error', and line 664 'No other original-cause retention obligation is relaxed by this scoped allocation'), so for cross-role admission failures those clauses and the new table give different requirements. Scenario: An inner-role PrivateProc admission failure produced as io::Error::other(String) crosses to C. Read under line 791 and row 1086, MemoryMechanismUnavailable.cause must be the original io::Error with its custom payload; under the new table it is a reconstructed Other with the payload marked unrepresented. A reviewer applying line 791 rejects the conforming implementation, or an implementer applying it attempts the impossible object transport the new section rules out. | spec/kani/functional/FR-034-caller-death-ownership.md:821-827; spec/kani/functional/FR-034-caller-death-ownership.md:664; spec/kani/functional/FR-034-caller-death-ownership.md:791; spec/kani/functional/FR-034-caller-death-ownership.md:1086 |
+| FND-002 | medium | FR-034 lines 849-850 require public bounded-execution documentation to explain the cross-role projection limit, distinguish local original-source retention and not promise a public role/stage query, but FR-034-AC-40, TC-049 step 27 and the AC-40 Expected Results row carry no documentation obligation (unlike AC-38, which states 'Public bounded rustdoc explains ...'). Scenario: CODE delivers the transport and the representation; the public rustdoc for MemoryMechanismUnavailable still says it carries the original `cause: std::io::Error`. Every AC-40 Test and the step 27 Analysis pass, and the documentation requirement of lines 849-850 is never checked, so a public consumer is told the original error object survives a role boundary. | spec/kani/functional/FR-034-caller-death-ownership.md:849-850; spec/kani/functional/FR-034-caller-death-ownership.md:1165; spec/kani/matrix/TC-049-caller-death-ownership.md:655-681; spec/kani/matrix/TC-049-caller-death-ownership.md:781 |
+| FND-003 | low | TC-049 step 27 allocates its ordinary production case to 'the first slice' where TC-049 defines the term 'Slice 1', and the change adds two doubled blank lines, one of them (lines 756-757) in a region between the AC-32 section and '## Expected Results' that the change otherwise does not touch. Scenario: A reader or tool searching TC-049 for 'Slice 1'/'slice 1' allocations (lines 35-50, 81, 118) does not find step 27's ordinary-transport allocation; the extra blank line at 757 enlarges the diff in an unrelated section without content. | spec/kani/matrix/TC-049-caller-death-ownership.md:675; spec/kani/matrix/TC-049-caller-death-ownership.md:682-683; spec/kani/matrix/TC-049-caller-death-ownership.md:756-757; spec/kani/matrix/TC-049-caller-death-ownership.md:35-36 |
+
+## Verdict
+
+The index is consistent and every old AC row is unchanged. Two medium gaps: the narrowing of 'original cause' is stated only in the new section and never reconciled with the unchanged clauses that still promise the original io::Error, and the new public-documentation obligation has no acceptance criterion or procedure. One low layout/terminology nit in TC-049.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@16572f234284384a6117ea15b9ee0aed5aa204b5 (fix diff 47dd57f..16572f2; source fix commit 16572f234284384a6117ea15b9ee0aed5aa204b5). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run a5df61d0-d398-40ac-b2a5-5eacdbacb452. Changed lines re-checked for regressions of each finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 16572f2: The unchanged original-cause clauses now carry explicit, linked qualifications limited to listed cross-role cases: line 664-666 (native-policy scope), lines 794-796 (admission retention) and mapping row 1130; the section itself (lines 843-850) names both qualified clauses and keeps local sources and AC-39 duties unchanged. Anchors #report-threat-boundary-and-backend-ipc-confinement (line 553) and #settlement-confirmation-and-kernel-fault-boundary (line 1043) resolve. |
+| FND-002 | fixed | 16572f2: The public-documentation duty is now in FR-034-AC-40, in TC-049 step 27 as an independent rustdoc Analysis that fails on missing/misleading docs (lines 685-689), and in the AC-40 Expected Results row. |
+| FND-003 | fixed | 16572f2: Step 27 now uses the defined 'Slice 1'/'Slice 2' terms, the doubled blank after step 27 is removed and the unrelated blank before '## Expected Results' is removed. The remaining doubled blank at TC-049 lines 804-805 is pre-existing on main (base line 757) and outside this finding. |
+
+## New findings (disposition pass 4)
+
+Round 4 consolidated consistency pass, reviewed at agent-ix/quire-contract-codegen@45da0787da71abb24b8122f48ea7012d274a5d7a. Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run 9ee1b302-75e7-4222-be42-3d38cc35f1b2. FND-001..FND-003 latest outcomes remain fixed 16572f2; no regression of them was found.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The role/site/phase table allocates cross-role causes during work and settlement (O 'L/tree observation and checked resource accounting ... during setup, work and settlement', M stop/reap, I supervision/settlement controls), but every public-cause rule (direct errno reconstruction, the KaniCrossRoleCauseLoss marker, the integrity downcast) is stated for an io::Error cause, and the mapping for post-admission observation failure is MemoryObservationFailed { detail }, which has no io::Error carrier. The integrity rule covers only admission sites before Dispatch, and the consumer matrix has no post-admission row. So it is unspecified where a work/settlement-phase cause's projection, loss marker or integrity error appears, or whether those rules apply at all. Scenario: During work, O's tree observation fails with io::Error::other(TryReserveError) and sends it to C. Row 857 requires C to 'preserve the actual no-errno kind with the public KaniCrossRoleCauseLoss marker', but row 1211 publishes MemoryObservationFailed { detail }, a diagnostic string that must not carry a cause. One implementation silently drops the marker, another moves the projected io::Error into a Tool error to keep it, and a malformed observation packet has no stated mapping because lines 925-929 cover only negative admission sites. The AC-40 consumer matrix cannot catch any of these. | spec/kani/functional/FR-034-caller-death-ownership.md:1211; spec/kani/functional/FR-034-caller-death-ownership.md:825; spec/kani/functional/FR-034-caller-death-ownership.md:836-841; spec/kani/functional/FR-034-caller-death-ownership.md:925-929; spec/kani/matrix/TC-049-caller-death-ownership.md:744-759 |
+| FND-005 | low | The 'Declared finite provenance category' row states only private-provenance retention and does not say whether the public no-errno cause gets the KaniCrossRoleCauseLoss marker, and the AC-40 consumer matrix has no row for a declared-category cause outside AC-39. Only the general rule at lines 865-866 implies the marker. Scenario: During setup, O's prepared-context bound check fails and is wrapped as io::Error::other of the 'invalid context bound' category. Read alone, row 856 gives an unmarked Other with no payload. The general rule at lines 865-866 gives Other plus the marker. A consumer-matrix test written from the table rows has no row to follow, so either output passes it. | spec/kani/functional/FR-034-caller-death-ownership.md:856; spec/kani/functional/FR-034-caller-death-ownership.md:864-868; spec/kani/matrix/TC-049-caller-death-ownership.md:744-759 |
+
+## Dispositions (round 5)
+
+Round 5, reviewed at agent-ix/quire-contract-codegen@5c8448bfce9519e791398d1bdf26ce86b4301307 (fix diff 45da078..5c8448b). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run 060d2e9a-b5cd-4d07-a7fb-f13cbde64065. This was a single consolidated consistency pass over the whole amended cross-role text, carrier scope, failure mapping, AC-40, TC-049 step 27, the consumer matrix and the Expected Results row. Every remaining defect found is recorded now, in SR-2522 and SR-2523. FND-001..FND-003 latest outcomes remain fixed 16572f2; no regression of them was found.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | 5c8448b: Public projection, loss-marker and integrity downcast duties now apply only to existing io::Error-bearing refusals (lines 819-822). Post-admission observation/settlement failures keep the existing detail-only MemoryObservationFailed { detail } shape, with finite facts/loss/integrity held privately, no carrier, no Tool/Unavailable promotion and no detail-derived mapping (lines 969-983). On main, MemoryObservationFailed and the Report/OutputUnread refusals carry detail strings only (src/kani/run/execute.rs:75-78 and src/kani/output/report.rs:31-48 at 5ab6249), so no merged public cause is narrowed. TC-049 step 27 and the consumer matrix's post-admission row test this. |
+| FND-005 | fixed | 5c8448b: The declared-category row now states that an original no-errno boxed declared category whose payload is lost keeps its actual kind with KaniCrossRoleCauseLoss in an io::Error-bearing result. The consumer matrix adds the matching row (TC-049 line 781, loss marker Some, integrity None). |
+
+## New findings (disposition pass 5)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | FR-034-AC-40's documentation clause still reads only 'Public API/refusal rustdoc states typed loss detection and no stage-query promise', while the FR now also requires rustdoc to state which existing refusals carry io::Error versus detail-only results, and to distinguish integrity faults and complete sender required-representation reports through the KaniCauseMetadataIntegrityError downcast (lines 1037-1046). TC-049 step 27 checks these, but the acceptance criterion does not name them. Scenario: CODE ships rustdoc that documents the loss marker and the absent stage query but omits the detail-only carrier scope and the integrity downcast. Judged against AC-40's text it passes; judged against FR-034 lines 1037-1046 and the step 27 docs Analysis it fails. The criterion and its procedure disagree on what passes. | spec/kani/functional/FR-034-caller-death-ownership.md:1347; spec/kani/functional/FR-034-caller-death-ownership.md:1037-1046; spec/kani/matrix/TC-049-caller-death-ownership.md:746-760 |
+
+## Dispositions (round 6)
+
+Round 6, reviewed at agent-ix/quire-contract-codegen@c2280385c78b2fa1d8e551c5a3b9a44e88dd7e96 (fix diff 5c8448b..c228038). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run c579c32d-da50-40c3-ba1b-11db60b5e80e. This was a single consolidated consistency pass over the whole amended cross-role text, cause-domain model, provenance set, carrier scope, failure mapping, AC-40, TC-049 step 27, the consumer matrix and the Expected Results row. Every remaining defect found is recorded now. FND-001..FND-005 latest outcomes remain fixed; no regression of them was found. No new integrity finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | c228038: AC-40's documentation clause now names the I/O-carrier versus detail-only scope, get_ref/downcast detection of both KaniCrossRoleCauseLoss and KaniCauseMetadataIntegrityError, recognition of sender required-representation faults versus valid original causes, and the absent original-source/stage-query promise. This matches FR-034 lines 1052-1061 and the TC-049 step 27 docs Analysis. |
+
+## Dispositions (round 7)
+
+Round 7, reviewed at agent-ix/quire-contract-codegen@cc7f2417398812c45a152f0a0ef6f203d598de41 (fix diff c228038..cc7f241). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run 9189ce04-c107-4a9f-b930-8b0c5a83e0c9. This was a scoped pass over the simplified two-domain/9-predicate text only, plus a measurement of the author's mechanical exhaustiveness table against frozen 8fbf08f startup_cause.rs and startup_projection.rs (git show only). SR-2522 had no open finding; FND-001..FND-006 latest outcomes remain fixed. One new low finding from the simplification is recorded here.
+
+
+## New findings (disposition pass 7)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | Row 864 still tells the sender to 'select the actual typed category/fields from the declared private set below', and TC-049 consumer row 807 still names a 'valid original declared operational-category boxed no-errno cause'. The R7 simplification removed every declared operational scalar category. The only finite ValidOriginal facts left are the seccompiler dependency facts (governed by stronger AC-39 duties) and the Reservation observation, and a boxed first-party operational cause now gets 'the same original-payload loss treatment as other original custom causes' (lines 890-892). So the 'declared' row and consumer row point to a set with no members of their own and duplicate the generic custom-loss rows 866/808. Scenario: A test author implementing consumer row 807 looks for a member of the 'declared private set below' that is not a seccompiler AC-39 fact or a Reservation. There is none, so the row is either left unbacked with a permanent UNRUN, or backed by the same fixture as generic row 808 and counted twice. Both expect loss marker Some and integrity None, so behaviour does not diverge; the leftover wording only creates an untestable or duplicated obligation. | spec/kani/functional/FR-034-caller-death-ownership.md:864; spec/kani/functional/FR-034-caller-death-ownership.md:887-897; spec/kani/matrix/TC-049-caller-death-ownership.md:807-808 |
