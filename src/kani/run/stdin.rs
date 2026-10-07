@@ -54,6 +54,18 @@ impl std::error::Error for StdinInventoryError {
 }
 
 impl OriginalStdin {
+    /// Give one run an owned reference to the originally captured open description. Reuse of
+    /// ambient fd0 after initial capture cannot change this source; Closed performs no syscall.
+    #[cfg(target_os = "linux")]
+    pub(super) fn clone_for_run(&self) -> io::Result<Self> {
+        match self {
+            Self::Open(descriptor) => rustix::io::fcntl_dupfd_cloexec(descriptor, 3)
+                .map(Self::Open)
+                .map_err(Into::into),
+            Self::Closed => Ok(Self::Closed),
+        }
+    }
+
     /// Inspect the actual retained Open pin at eligible launch, never the now-reusable fd0.
     /// Closed retains its ordinary-exec meaning without issuing fstat on an absent descriptor.
     pub(super) fn inspect_backend(&self) -> Result<(), StdinInventoryError> {
