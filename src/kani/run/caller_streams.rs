@@ -120,7 +120,10 @@ impl CallerStreams {
     /// The genuine C role token precedes the stop flag; all child/mapping writer descriptions
     /// are then gone. A requested stop is not a reader join. Retain both handles on expiry and
     /// consume them only after positive is_finished observations within the same cutoff.
-    pub(super) fn settle(&mut self, roles: &CallerRoleSettlement) -> io::Result<SettledCaptures> {
+    fn join_after_roles(
+        &mut self,
+        roles: &CallerRoleSettlement,
+    ) -> io::Result<(Option<Captured>, Option<Captured>)> {
         self.flags.stop.store(true, Ordering::Release);
         let cutoff = roles.cutoff();
         while self
@@ -146,28 +149,36 @@ impl CallerStreams {
                 "owned capture settlement cutoff elapsed",
             ));
         }
-        let absent = || {
-            Err(CaptureFailure::Unread {
-                detail: "the capture reader was not created".to_owned(),
-            })
-        };
-        let stdout = self
-            .stdout
-            .take()
-            .map(finish_capture)
-            .unwrap_or_else(absent);
-        let stderr = self
-            .stderr
-            .take()
-            .map(finish_capture)
-            .unwrap_or_else(absent);
+        let stdout = self.stdout.take().map(finish_capture);
+        let stderr = self.stderr.take().map(finish_capture);
         if Instant::now() >= cutoff {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 "owned capture joins exceeded settlement cutoff",
             ));
         }
-        Ok(SettledCaptures { stdout, stderr })
+        Ok((stdout, stderr))
+    }
+
+    pub(super) fn settle(&mut self, roles: &CallerRoleSettlement) -> io::Result<SettledCaptures> {
+        let (stdout, stderr) = self.join_after_roles(roles)?;
+        let absent = || {
+            Err(CaptureFailure::Unread {
+                detail: "the capture reader was not created".to_owned(),
+            })
+        };
+        Ok(SettledCaptures {
+            stdout: stdout.unwrap_or_else(absent),
+            stderr: stderr.unwrap_or_else(absent),
+        })
+    }
+
+    /// Original-error return needs actual reader joins, but no invented output for readers
+    /// never created. Reuse the same role-before-stop/join operation without allocating two
+    /// synthetic Unread diagnostics for a positively uncreated launcher.
+    pub(super) fn discard_after_roles(&mut self, roles: &CallerRoleSettlement) -> io::Result<()> {
+        drop(self.join_after_roles(roles)?);
+        Ok(())
     }
 }
 

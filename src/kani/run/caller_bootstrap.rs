@@ -246,7 +246,8 @@ impl fmt::Write for PreparedCleanupDetail {
     }
 }
 
-/// Minted only after actual O custody, L reap and the retained creator's join. It grants no
+/// Minted after actual O custody/L reap/creator join, or positively completed creation with
+/// no L ever created and its actual creator joined. It grants no
 /// report/evidence acceptance; output readers still require their own bounded settlement.
 pub(super) struct CallerRoleSettlement {
     cutoff: Instant,
@@ -2393,6 +2394,63 @@ impl CallerBootstrap {
     /// Private production selection only; no report or evidence is authorized by this fact.
     pub(super) fn owner_stop_pending(&self) -> bool {
         self.pending_owner_stop.is_some()
+    }
+
+    /// Actual local creator failure can establish absence without an O receipt only when the
+    /// spawner proves L was NEVER created and its actual creating thread has joined. Mere absent
+    /// arm/identity/Child fields cannot enter this branch. Preserve the producer's first stamp.
+    pub(super) fn settle_never_created(
+        &mut self,
+        clock: &mut ExecutionClock,
+    ) -> Result<Option<CallerRoleSettlement>, CallerBootstrapError> {
+        if clock.original_deadline() != self.identity_deadline {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        }
+        let Some(spawner) = self.spawner.as_mut() else {
+            return Ok(None);
+        };
+        let Some(stop) = spawner
+            .failure_stop()
+            .map_err(CallerBootstrapError::Deadline)?
+        else {
+            return Ok(None);
+        };
+        if stop.origin != super::role_deadline::StopOrigin::Caller {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        }
+        clock
+            .adopt_stop(stop, self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)?;
+        let cutoff = clock
+            .settlement_deadline()
+            .map_err(CallerBootstrapError::Deadline)?;
+        let Some(witness) = spawner
+            .settle_not_created(cutoff)
+            .map_err(CallerBootstrapError::Io)?
+        else {
+            return Ok(None);
+        };
+        // No Child was ever created, so no L could receive Start/create O/M/I. Retain this
+        // source-specific distinction instead of forging outer normal-exit or M/INIT tokens.
+        if self.launcher_start_sent
+            || self.outer_pin.is_some()
+            || self.monitor_pin.is_some()
+            || self.inner_pin.is_some()
+            || self.identity.is_some()
+        {
+            return Err(CallerBootstrapError::SettlementReplyMismatch);
+        }
+        let _ = witness;
+        self.command.take();
+        self.inner_endpoint.take();
+        self.outer_endpoint.take();
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
+        }
+        Ok(Some(CallerRoleSettlement {
+            cutoff,
+            authority: self.authority,
+        }))
     }
 
     /// Actual O-child custody is established before L reap/creator join. This method is called

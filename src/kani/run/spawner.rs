@@ -16,7 +16,10 @@ use std::{
 
 use rustix::process::{pidfd_open, Pid, PidfdFlags};
 
-use super::creator::CreatorThread;
+use super::{
+    creator::CreatorThread,
+    role_deadline::{DeadlineError, StopOrigin, StopStamp},
+};
 
 /// Explicit per-run stack reservation; accounting must include this before thread creation.
 pub(super) const SPAWNER_STACK_BYTES: usize = 2 * 1_048_576;
@@ -86,6 +89,8 @@ struct Custody {
     cancel_requested: bool,
     signal_sent: bool,
     creation_finished: bool,
+    ever_created: bool,
+    failure_event: Option<Result<StopStamp, DeadlineError>>,
     reaped: bool,
 }
 
@@ -102,9 +107,16 @@ pub(super) struct SpawnIdentity {
     pub(super) launcher_pin: OwnedFd,
 }
 
+/// Positive local absence only after completed creation and actual successful creator join.
+/// It attests no O/M/I identity, reap or report authority and cannot be constructed by callers.
+pub(super) struct LauncherNotCreated {
+    _private: (),
+}
+
 pub(super) struct RetainedSpawner {
     shared: Arc<Shared>,
     thread: Option<JoinHandle<()>>,
+    creator_joined: bool,
 }
 
 impl RetainedSpawner {
@@ -130,6 +142,8 @@ impl RetainedSpawner {
                 cancel_requested: false,
                 signal_sent: false,
                 creation_finished: false,
+                ever_created: false,
+                failure_event: None,
                 reaped: false,
             }),
             changed: Condvar::new(),
@@ -139,19 +153,26 @@ impl RetainedSpawner {
             .name("kani-creator".to_owned())
             .stack_size(SPAWNER_STACK_BYTES)
             .spawn(move || {
-                let creator = CreatorThread::capture().map_err(SpawnFailure::Creator);
+                let mut failure_event = None;
+                let creator = CreatorThread::capture().map_err(|error| {
+                    record_failure(&mut failure_event, SpawnFailure::Creator(error))
+                });
                 command.process_group(0);
                 // Do not hold the custody mutex during Command's exec-error handshake. The
                 // original owner can record deadline cancellation without waiting on that IO.
                 // Until this returns, Preparing is not evidence of absence or settlement.
                 let spawned = match &creator {
-                    Ok(_) => Some(command.spawn().map_err(SpawnFailure::Command)),
+                    Ok(_) => Some(command.spawn().map_err(|error| {
+                        // Capture the actual producer stop before waiting for the custody mutex.
+                        record_failure(&mut failure_event, SpawnFailure::Command(error))
+                    })),
                     Err(_) => None,
                 };
                 let mut custody = lock_custody(&retained);
                 let spawned = match spawned {
                     Some(Ok(child)) => {
                         custody.launcher = Some(child);
+                        custody.ever_created = true;
                         Ok(())
                     }
                     Some(Err(error)) => Err(error),
@@ -165,26 +186,42 @@ impl RetainedSpawner {
                     // death. O itself must not request process_group(0), because it calls setsid.
                     spawned?;
                     let child = custody.launcher.as_ref().ok_or_else(|| {
-                        SpawnFailure::Startup(io::Error::other(
-                            "launcher custody missing after spawn",
-                        ))
+                        record_failure(
+                            &mut failure_event,
+                            SpawnFailure::Startup(io::Error::other(
+                                "launcher custody missing after spawn",
+                            )),
+                        )
                     })?;
-                    let pid = child_pid(child).map_err(SpawnFailure::LauncherIdentity)?;
-                    custody.launcher_pin = Some(
-                        pidfd_open(pid, PidfdFlags::NONBLOCK)
-                            .map_err(|error| SpawnFailure::LauncherPin(error.into()))?,
-                    );
+                    let pid = child_pid(child).map_err(|error| {
+                        record_failure(&mut failure_event, SpawnFailure::LauncherIdentity(error))
+                    })?;
+                    custody.launcher_pin =
+                        Some(pidfd_open(pid, PidfdFlags::NONBLOCK).map_err(|error| {
+                            record_failure(
+                                &mut failure_event,
+                                SpawnFailure::LauncherPin(error.into()),
+                            )
+                        })?);
                     if custody.cancel_requested {
-                        return Err(SpawnFailure::Startup(io::Error::new(
-                            io::ErrorKind::Interrupted,
-                            "launcher startup already cancelled",
-                        )));
+                        return Err(record_failure(
+                            &mut failure_event,
+                            SpawnFailure::Startup(io::Error::new(
+                                io::ErrorKind::Interrupted,
+                                "launcher startup already cancelled",
+                            )),
+                        ));
                     }
                     Ok::<_, SpawnFailure>(())
                 })();
                 match result {
                     Ok(()) => custody.startup = Startup::Ready,
                     Err(error) => {
+                        // The producer event is already captured; publication never creates a
+                        // later replacement clock, including when capture itself was unavailable.
+                        if custody.failure_event.is_none() {
+                            custody.failure_event = failure_event;
+                        }
                         custody.startup = Startup::Failed;
                         custody.failure = Some(error);
                     }
@@ -196,10 +233,14 @@ impl RetainedSpawner {
                         Ok(custody) => custody,
                         Err(poisoned) => {
                             let mut custody = poisoned.into_inner();
+                            let failure = record_failure(
+                                &mut custody.failure_event,
+                                SpawnFailure::Startup(io::Error::other(
+                                    "launcher custody poisoned",
+                                )),
+                            );
                             custody.startup = Startup::Failed;
-                            custody.failure = Some(SpawnFailure::Startup(io::Error::other(
-                                "launcher custody poisoned",
-                            )));
+                            custody.failure = Some(failure);
                             custody
                         }
                     };
@@ -209,7 +250,51 @@ impl RetainedSpawner {
         Ok(Self {
             shared,
             thread: Some(thread),
+            creator_joined: false,
         })
+    }
+
+    /// The original creating-thread failure event, captured before its publication. Pending absence is
+    /// not a stop and capture failure remains unavailable; this method never mints receipt time.
+    pub(super) fn failure_stop(&self) -> Result<Option<StopStamp>, DeadlineError> {
+        lock_custody(&self.shared).failure_event.transpose()
+    }
+
+    /// Positively confirm that creation finished without ever creating L, then join that actual
+    /// creator by the supplied original cutoff. A retained or historically created Child returns
+    /// None without a kill/reap or forged absence witness; no stage/flag alone proves absence.
+    pub(super) fn settle_not_created(
+        &mut self,
+        cutoff: Instant,
+    ) -> io::Result<Option<LauncherNotCreated>> {
+        {
+            let custody = lock_custody(&self.shared);
+            if !custody.creation_finished || custody.ever_created || custody.launcher.is_some() {
+                return Ok(None);
+            }
+        }
+        if Instant::now() >= cutoff {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "creator absence cutoff",
+            ));
+        }
+        self.settle_launcher(cutoff)?;
+        self.join(cutoff)?;
+        let custody = lock_custody(&self.shared);
+        if Instant::now() >= cutoff {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "creator absence cutoff",
+            ));
+        }
+        if !custody.creation_finished || custody.ever_created || custody.launcher.is_some() {
+            return Ok(None);
+        }
+        if !self.creator_joined {
+            return Err(io::Error::other("actual creator join not confirmed"));
+        }
+        Ok(Some(LauncherNotCreated { _private: () }))
     }
 
     /// Errors preserve this owner, including an actual Child created before a pin/open failure.
@@ -352,9 +437,22 @@ impl RetainedSpawner {
             thread
                 .join()
                 .map_err(|_| io::Error::other("creating thread panicked"))?;
+            self.creator_joined = true;
         }
         Ok(())
     }
+}
+
+// Producer-local first failure only. Preserve an unavailable clock result rather than retrying
+// at publication/receipt; the parent combines this actual stamp with its existing earliest stop.
+fn record_failure(
+    event: &mut Option<Result<StopStamp, DeadlineError>>,
+    error: SpawnFailure,
+) -> SpawnFailure {
+    if event.is_none() {
+        *event = Some(StopStamp::capture(StopOrigin::Caller));
+    }
+    error
 }
 
 fn lock_custody(shared: &Shared) -> MutexGuard<'_, Custody> {
