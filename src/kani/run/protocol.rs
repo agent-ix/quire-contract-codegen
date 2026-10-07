@@ -131,11 +131,24 @@ pub(super) enum GuardianControl {
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum BackendExit {
-    Code(i32),
-    Signal(i32),
+macro_rules! backend_exits {
+    ($($variant:ident($value:ty)),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub(super) enum BackendExit { $($variant($value)),+ }
+
+        #[derive(Clone, Copy)]
+        pub(super) enum BackendExitTag { $($variant),+ }
+
+        impl BackendExitTag {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+
+backend_exits! { Code(i32), Signal(i32) }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(super) enum GuardianRefusal {

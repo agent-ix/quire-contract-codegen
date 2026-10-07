@@ -84,33 +84,7 @@ impl Fields {
             ReplyKind::Refused => {
                 required(self.context)?;
                 let failure = required(self.failure)?;
-                // Preserve the existing ReplySeed domain checks, without public cause replay.
-                match failure {
-                    PolicyFailureCause::Preparation {
-                        cause: StartupCause::Io(_),
-                    }
-                    | PolicyFailureCause::Privilege {
-                        cause: StartupCause::Io(_),
-                    }
-                    | PolicyFailureCause::Filter {
-                        cause: StartupCause::Seccompiler(_),
-                    }
-                    | PolicyFailureCause::UnsupportedArchitecture
-                    | PolicyFailureCause::InvalidProgram
-                    | PolicyFailureCause::NotBackend
-                    | PolicyFailureCause::ProtectionUnverified => {}
-                    PolicyFailureCause::Preparation {
-                        cause: StartupCause::Seccompiler(_),
-                    }
-                    | PolicyFailureCause::Privilege {
-                        cause: StartupCause::Seccompiler(_),
-                    }
-                    | PolicyFailureCause::Filter {
-                        cause: StartupCause::Io(_),
-                    } => {
-                        return Err(field_error(DecodeCause::InvalidValue));
-                    }
-                }
+                let failure = admitted_failure(failure)?;
                 Ok(InstallerReplyHeader::Refused {
                     identity,
                     authority,
@@ -120,6 +94,40 @@ impl Fields {
             }
         }
     }
+}
+
+/// The existing installer cause/site domain, shared by I's forwarded negative schema.
+/// This validates parsed metadata only; it selects no public capability or authenticated site.
+pub(super) fn admitted_failure(
+    failure: PolicyFailureCause,
+) -> Result<PolicyFailureCause, DecodeError> {
+    match failure {
+        PolicyFailureCause::Preparation {
+            cause: StartupCause::Io(_),
+        }
+        | PolicyFailureCause::Privilege {
+            cause: StartupCause::Io(_),
+        }
+        | PolicyFailureCause::Filter {
+            cause: StartupCause::Seccompiler(_),
+        }
+        | PolicyFailureCause::UnsupportedArchitecture
+        | PolicyFailureCause::InvalidProgram
+        | PolicyFailureCause::NotBackend
+        | PolicyFailureCause::ProtectionUnverified => {}
+        PolicyFailureCause::Preparation {
+            cause: StartupCause::Seccompiler(_),
+        }
+        | PolicyFailureCause::Privilege {
+            cause: StartupCause::Seccompiler(_),
+        }
+        | PolicyFailureCause::Filter {
+            cause: StartupCause::Io(_),
+        } => {
+            return Err(field_error(DecodeCause::InvalidValue));
+        }
+    }
+    Ok(failure)
 }
 
 macro_rules! once {
