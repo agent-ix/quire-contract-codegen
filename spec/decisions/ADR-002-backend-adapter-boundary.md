@@ -88,7 +88,7 @@ Another linked backend registers in these steps:
 ### Amendment (IR-629): the process-provider variant
 
 QSL ADR-029 PV-4 gives `BackendKind` one `Process(BackendId)` variant for process providers.
-Its `negotiate_*` arm settles from the provider's manifest and the item's extent classification;
+Its `negotiate_*` arm settles from the provider's manifest and the item's capability kind and full extent;
 it never calls the plugin ([FR-019](../routed/functional/FR-019-capability-settlement.md)).
 The process generation arm returns `KindOutput::Process` with no CG artifact. CG has no adapter,
 execution or terminal-record arm for a process provider: the driver runs the plugin host's process

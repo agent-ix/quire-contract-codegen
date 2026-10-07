@@ -45,8 +45,8 @@ constructs no FR-019 `Disposition` here.
 
 Two checks remain, and neither is a settlement. First, the routed backend
 kind must agree with the routed identity: a built-in kind uses
-`BackendKind::from_identity`, while `Process(id)` carries the same `BackendId`
-as the routed backend (FR-019, QSL ADR-029 PV-4). An item is never sent to
+`BackendKind::from_identity`, while `Process(id)` carries the same identity
+string as the routed backend (FR-019, QSL ADR-029 PV-4). An item is never sent to
 another kind's arm.
 Second, the kind's generation arm still accounts every item it is given with
 its own typed per-item record. For Kani that record is FR-015's
@@ -105,7 +105,9 @@ output belong to IR-629; they do not change this crate boundary.
   - `node_id`: the IR `CheckedNodeId` of the item's checked node. The driver
     reads it from its own request item at that index;
   - `backend`: the routed `Candidate`;
-  - `kind`: the routed `BackendKind`.
+  - `kind`: the routed `BackendKind` from CG's descriptor-to-kind conversion
+    (FR-019). The driver calls that conversion on the same CG descriptor it
+    projected for negotiation; it does not construct `Process(id)` itself.
 - `GenerationContexts`: the optional Kani generation context and exhaustive
   kind handling required by this entry point. The `kani` field holds a
   `KaniGenerationContext`:
@@ -167,10 +169,8 @@ output belong to IR-629; they do not change this crate boundary.
   `BackendKind`, with no catch-all arm, so that a backend kind with no
   generation arm fails to compile.
 - The generator shall group routed items without relying on `BackendKind::ALL`
-  to enumerate dynamic `Process(id)` values. It shall traverse Kani first, then
-  process groups in bytewise order of the `BackendId` canonical bytes. This is
-  a CG-local deterministic traversal choice; QSL ADR-029 PV-4 does not mandate
-  a cross-kind order. The order is not a new FR-331 wire member.
+  to enumerate dynamic `Process(id)` values. It shall produce the specified
+  request-index-ordered output for every permutation of the routed-item slice.
 - The generator shall take each item's backend and backend kind from its
   routed input.
 - The generator shall compute no candidate set, read no backend registry, settle no
@@ -252,8 +252,8 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-1 | Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with no catch-all, and `GenerationContexts::has` handles each variant; adding a variant without either arm does not compile. `Process` requires no context. | Analysis |
 | FR-022-AC-2 | For a set of routed Kani items, each record and harness in the output equals what `negotiate_kani_obligations` returns for the same items in ascending request-index order with the same context. The one difference is that every index inside a record is the driver's request index, and each harness is paired with the record whose `harness_symbol` names it. | Test (TC-033) |
 | FR-022-AC-3 | The entry point accepts no backend registry, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. | Test (TC-033) |
-| FR-022-AC-4 | A routed item whose built-in kind disagrees with `from_identity`, or whose `Process(id)` identity differs from its routed backend, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, and no artifact is returned. | Test (TC-033) |
-| FR-022-AC-5 | Two routed items with one request index refuse as `DuplicateRequestIndex` naming it. A routed Kani item without Kani context refuses as `MissingKindContext` naming Kani. Each returns no artifact; `Process` needs no generation context. | Test (TC-033) |
+| FR-022-AC-4 | A routed Kani item whose backend identity has no CG built-in kind, or converts to a kind other than Kani, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, and no artifact is returned. | Test (TC-033) |
+| FR-022-AC-5 | Two routed items with one request index refuse as `DuplicateRequestIndex` naming it. A routed Kani item without Kani context refuses as `MissingKindContext` naming Kani. Each returns no artifact. | Test (TC-033) |
 | FR-022-AC-6 | A Kani group-level refusal (for example an unwind outside `1..=1024`, or an unparsable subject path) is returned as `Kani` carrying the unchanged `KaniObligationError`, with no artifact. | Test (TC-033) |
 | FR-022-AC-7 | A Kani group containing an `invalid_request` item is listed in `rejected`, and every Kani item's record is returned with no harness. A `DuplicateItem`'s `first_index` names the driver's request index of the first occurrence. | Test (TC-033) |
 | FR-022-AC-8 | Every routed item appears exactly once in `items`, in ascending request index, under its routed backend and the `KindOutput` variant of its routed kind. An item the arm refuses at lowering keeps its typed FR-015 refusal and no harness. An empty routed set returns an empty result. | Test (TC-033) |
@@ -265,7 +265,9 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-14 | `RoutedGeneration.oracle_artifacts` is `Some` after a Kani group and `None` when nothing is routed. It equals, byte for byte, the artifacts `generate_exact_scalar_oracles` returns over the derived items, so a group with no derivable node returns that call's artifacts for an empty item set. For `x + 1` over a parameter `Int[0, 9]`, each `Generated` claim's oracle symbol is defined in the returned `src/lib.rs` and appears in the supported harness's Rust source. | Test (TC-033) |
 | FR-022-AC-15 | The Kani arm routes the packages QSL emits for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]`, `x + y` over `Int[0, 9]` and `Int[10, 20]` into `Int[10, 29]`, and `-z` over `Int[0, 9]` into `Int[-9, 0]` (a literal as a reference to its own `value` node, the declared bound on a narrowing `conversion` consuming the plain-typed arithmetic node) to supported harnesses with arguments `[0, 9]` and `[1, 1]`; `[0, 9]` and `[10, 20]`; and `[0, 9]`, each asserting the result against the conversion's bound (`[0, 10]`, `[10, 29]`, `[-9, 0]`). In that shape a plain-Integer parameter beside a bounded one, and a reference to a `value` node whose body is not a literal, settle `requires_bound`, and a node narrowed to two distinct bounds is `oracle_refused` `AmbiguousBound`, none with a harness. | Test (TC-033) |
 | FR-022-AC-16 | Two Kani harnesses with one `harness_symbol` refuse the call as `DuplicateHarness` naming the second harness's `module::harness` path, and no harness is overwritten or dropped. | Test (TC-033) |
-| FR-022-AC-17 | A routed `Process(id)` item appears exactly once with its own identity and empty `KindOutput::Process`, produces no CG artifact, and reaches no CG adapter, execution or terminal-record path. A process item is retained without a generation context or membership in `BackendKind::ALL`; Kani then bytewise process-identity group traversal gives identical output for permutations of the routed-item slice. | Test (TC-046) |
+| FR-022-AC-17 | PLANNED (IR-629). A routed `Process(id)` item appears exactly once with its own identity and empty `KindOutput::Process`, without a generation context or membership in `BackendKind::ALL`. | Test (TC-046) |
+| FR-022-AC-18 | PLANNED (IR-629). A routed `Process(id)` item whose embedded identity differs from its routed backend refuses the whole call as `BackendKindDisagrees`, with no generated output. | Test (TC-046) |
+| FR-022-AC-19 | PLANNED (IR-629). Permuting a routed-item slice containing Kani and multiple process identities leaves its request-index-ordered output unchanged. | Test (TC-046) |
 
 ## Dependencies
 

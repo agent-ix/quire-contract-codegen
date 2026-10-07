@@ -59,7 +59,7 @@ driver's plugin host owns its process adapter (QSL ADR-029 PV-4).
 |----|----------|--------------|
 | FR-026-AC-1 | The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani adapter's generation arm, execution, transcript parser and witness renderer through it. | Test (TC-037) |
 | FR-026-AC-4 | The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`. | Test (TC-037) |
-| FR-026-AC-5 | `Process(id)` has no CG adapter trait implementation or CG execution path; a routed process item returns the empty FR-022 output and the driver plugin host owns execution. | Test (TC-046) |
+| FR-026-AC-5 | PLANNED (IR-629). `Process(id)` has no CG adapter trait implementation or CG execution path; an inspection of all adapter implementations and execution dispatch arms finds no process arm. | Analysis |
 
 ## Dependencies
 
