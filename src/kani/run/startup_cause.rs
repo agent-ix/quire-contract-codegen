@@ -482,6 +482,66 @@ impl PreparedStartupContext {
         }
     }
 
+    /// Required byte-array grammar is independent of optional UTF-8 diagnostic rendering.
+    /// Consume every typed byte after diagnostic omission, using only the original reservation.
+    pub(super) fn decode_context(
+        &mut self,
+        decoder: &mut super::guardian_decode::Decoder<'_, '_>,
+    ) -> Result<(), super::guardian_decode::DecodeError> {
+        self.text.clear();
+        let mut array = decoder.begin_array()?;
+        let mut staged = [0_u8; 4];
+        let mut length = 0_usize;
+        let mut omitted = false;
+        while decoder.next_element(&mut array)? {
+            // Width/type/array structure remains required even after text is discarded.
+            let byte = decoder.byte()?;
+            if omitted {
+                continue;
+            }
+            let Some(slot) = staged.get_mut(length) else {
+                self.text.clear();
+                omitted = true;
+                continue;
+            };
+            *slot = byte;
+            length = length.checked_add(1).ok_or_else(|| {
+                super::guardian_decode::DecodeError::new(
+                    super::guardian_decode::DecodeSite::Storage,
+                    super::guardian_decode::DecodeCause::StorageBound,
+                )
+            })?;
+            let Some(current) = staged.get(..length) else {
+                self.text.clear();
+                omitted = true;
+                continue;
+            };
+            match std::str::from_utf8(current) {
+                Ok(text)
+                    if self
+                        .text
+                        .len()
+                        .checked_add(text.len())
+                        .is_some_and(|final_length| {
+                            final_length <= self.limit && final_length <= self.text.capacity()
+                        }) =>
+                {
+                    self.text.push_str(text);
+                    length = 0;
+                }
+                Err(error) if error.error_len().is_none() && length < staged.len() => {}
+                Ok(_) | Err(_) => {
+                    self.text.clear();
+                    omitted = true;
+                }
+            }
+        }
+        if length != 0 || omitted {
+            self.text.clear();
+        }
+        Ok(())
+    }
+
     /// Capture the original error without allocating its Display into an intermediate String.
     pub(super) fn capture_io(
         &mut self,
@@ -692,7 +752,8 @@ impl fmt::Display for StartupJsonError {
 /// Prevent serde_json's private scratch Vec from allocating for escaped strings or malformed
 /// numeric overflow/float paths, including dependency feature unification with float_roundtrip.
 /// Ordinary unescaped slice strings and checked integral tokens use its borrowed/stack paths.
-/// Error-formatting/runtime internals remain opaque incidental allocations, not caller buffers.
+/// This preflight does not bound serde's private error-message allocation. Retained decoder
+/// errors are named control storage; their replacement/bound remains an integration obligation.
 pub(super) fn check_scratch_free_json(bytes: &[u8]) -> Result<(), StartupJsonError> {
     if bytes.is_empty() || bytes.len() > CONTROL_BYTES {
         return Err(StartupJsonError::EncodedBound);
@@ -740,6 +801,42 @@ mod tests {
     // The criterion's finite list is independent of the production macro: removing or
     // coercing a production kind must fail this real std-I/O capture/project check. This does
     // not prove the separate exhaustive source-flow gate for every actual sender operation.
+    /// Trace: FR-034-AC-15, FR-034-AC-40.
+    #[test]
+    fn fixed_context_omission_preserves_required_byte_grammar_and_actual_capacity() {
+        use super::super::guardian_decode::{DecodeCause, Decoder, Scratch};
+        let mut scratch = Scratch::default();
+        let mut context = PreparedStartupContext::new(2).unwrap();
+        let capacity = context.reserved_bytes();
+        let mut decoder = Decoder::new(b"[195,169]", &mut scratch).unwrap();
+        context.decode_context(&mut decoder).unwrap();
+        decoder.finish().unwrap();
+        assert_eq!(context.context(), "é");
+        assert_eq!(context.reserved_bytes(), capacity);
+        for input in [b"[226,130,172]".as_slice(), b"[226,130]", b"[255,97]"] {
+            let mut decoder = Decoder::new(input, &mut scratch).unwrap();
+            context.decode_context(&mut decoder).unwrap();
+            decoder.finish().unwrap();
+            assert_eq!(context.context(), "");
+            assert!(context.metadata_fault_slot().is_none());
+            assert_eq!(context.reserved_bytes(), capacity);
+        }
+        for (input, cause) in [
+            (b"[255,300]".as_slice(), DecodeCause::IntegerOverflow),
+            (b"[255,".as_slice(), DecodeCause::UnexpectedEnd),
+            (b"[255,null]".as_slice(), DecodeCause::InvalidNumber),
+        ] {
+            let mut decoder = Decoder::new(input, &mut scratch).unwrap();
+            assert_eq!(
+                context.decode_context(&mut decoder).unwrap_err().cause(),
+                cause
+            );
+            assert_eq!(context.reserved_bytes(), capacity);
+        }
+        // This is the required-array/optional-rendering primitive only, not an authenticated
+        // original cause, actual producer-kind gate or whole error/settlement acceptance.
+    }
+
     /// Trace: FR-034-AC-15
     #[test]
     fn all_declared_no_errno_kinds_capture_actual_std_values_without_payload_or_normalization() {
