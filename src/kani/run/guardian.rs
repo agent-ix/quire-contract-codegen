@@ -164,11 +164,53 @@ pub(super) fn prepare_inner_backend(
     admitted.into_pipe_command(&input.writer)
 }
 
-fn admit_backend(
+/// Actual first-party I authentication before policy installation. This value grants no Ready
+/// or Dispatch; it retains only the already checked original C/build/mapping/run identity.
+pub(super) struct AuthenticatedHello {
+    identity: BuildIdentity,
+    authority: super::protocol::RunAuthority,
+    mapped_uid: u32,
+    creator_pid: i32,
+}
+
+impl AuthenticatedHello {
+    pub(super) fn authority(&self) -> super::protocol::RunAuthority {
+        self.authority
+    }
+
+    /// The new I entry must authenticate policy-ready before this transition. This shared
+    /// operation checks lease/identity readiness only; it does not establish policy success.
+    fn publish_ready(
+        self,
+        transport: &Transport<'_>,
+        deadline: Instant,
+    ) -> Result<ReadyAdmission, GuardianError> {
+        transport.refuse_observable_eof()?;
+        transport.send(
+            &GuardianControl::Ready {
+                identity: self.identity,
+                authority: self.authority,
+                mapped_uid: self.mapped_uid,
+                creator_pid: self.creator_pid,
+            },
+            &[],
+            deadline,
+        )?;
+        Ok(ReadyAdmission {
+            authority: self.authority,
+        })
+    }
+}
+
+struct ReadyAdmission {
+    authority: super::protocol::RunAuthority,
+}
+
+fn authenticate_hello(
     transport: &Transport<'_>,
     identity: BuildIdentity,
     startup_deadline: Instant,
-) -> Result<BackendAdmission, GuardianError> {
+) -> Result<AuthenticatedHello, GuardianError> {
     let init = getpid();
     if init.as_raw_nonzero().get() != 1 {
         return Err(GuardianError::Refusal(GuardianRefusal::NotNamespaceInit));
@@ -196,16 +238,20 @@ fn admit_backend(
             GuardianRefusal::BuildIdentityMismatch,
         ));
     }
-    transport.send(
-        &GuardianControl::Ready {
-            identity,
-            authority,
-            mapped_uid: getuid().as_raw(),
-            creator_pid: creator.pid,
-        },
-        &[],
-        startup_deadline,
-    )?;
+    Ok(AuthenticatedHello {
+        identity,
+        authority,
+        mapped_uid: getuid().as_raw(),
+        creator_pid: creator.pid,
+    })
+}
+
+fn receive_dispatch(
+    transport: &Transport<'_>,
+    ready: ReadyAdmission,
+    startup_deadline: Instant,
+) -> Result<DispatchRecipe, GuardianError> {
+    let authority = ready.authority;
     let dispatch =
         transport.receive::<CallerControl>(CallerControl::rights_count, startup_deadline)?;
     let CallerControl::Dispatch {
@@ -223,29 +269,62 @@ fn admit_backend(
     if cleanup_paths.len() > ARTIFACT_COUNT {
         return Err(GuardianError::Refusal(GuardianRefusal::InvalidControl));
     }
-    let artifacts = GuardianArtifacts(cleanup_paths);
-    let mut backend = command.into_command();
-    match stdin {
+    let stdin = match stdin {
         StdinControl::Open => {
             let descriptor = dispatch
                 .rights
                 .into_iter()
                 .next()
                 .ok_or(GuardianError::Refusal(GuardianRefusal::InvalidControl))?;
-            backend.stdin(Stdio::from(descriptor));
+            super::stdin::OriginalStdin::Open(descriptor)
         }
-        StdinControl::Closed => {
-            // Control fd0 is CLOEXEC. Inherit leaves fd0 closed at backend exec entry.
-            backend.stdin(Stdio::inherit());
+        StdinControl::Closed => super::stdin::OriginalStdin::Closed,
+    };
+    Ok(DispatchRecipe {
+        command,
+        stdin,
+        authority,
+        artifacts: GuardianArtifacts(cleanup_paths),
+    })
+}
+
+/// Exact typed metadata and original stdin survive Dispatch without constructing a backend
+/// Command in I. The new installer owner forwards these same values to its retained actual PID.
+struct DispatchRecipe {
+    command: super::namespace::BackendCommand,
+    stdin: super::stdin::OriginalStdin,
+    authority: super::protocol::RunAuthority,
+    artifacts: GuardianArtifacts,
+}
+
+impl DispatchRecipe {
+    fn into_command(self) -> BackendAdmission {
+        let mut backend = self.command.into_command();
+        match self.stdin {
+            super::stdin::OriginalStdin::Open(descriptor) => {
+                backend.stdin(Stdio::from(descriptor));
+            }
+            super::stdin::OriginalStdin::Closed => {
+                backend.stdin(Stdio::inherit());
+            }
+        }
+        backend.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        BackendAdmission {
+            command: backend,
+            authority: self.authority,
+            artifacts: self.artifacts,
         }
     }
-    backend.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+}
 
-    Ok(BackendAdmission {
-        command: backend,
-        authority,
-        artifacts,
-    })
+fn admit_backend(
+    transport: &Transport<'_>,
+    identity: BuildIdentity,
+    startup_deadline: Instant,
+) -> Result<BackendAdmission, GuardianError> {
+    let hello = authenticate_hello(transport, identity, startup_deadline)?;
+    let ready = hello.publish_ready(transport, startup_deadline)?;
+    receive_dispatch(transport, ready, startup_deadline).map(DispatchRecipe::into_command)
 }
 
 fn supervise(
