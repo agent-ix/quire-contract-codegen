@@ -616,10 +616,28 @@ impl OuterRunOwner {
             .storage
             .take()
             .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let stop = sampling.stops.earliest().map_err(SamplingError::Deadline)?;
+        match stop.origin {
+            StopOrigin::Caller if stop == cancellation.stop => {}
+            StopOrigin::Inner => {
+                // This producer exists only after actual claimed-I completion authentication.
+                // The retained original M/claimed pin already supplied positive termination
+                // above; forwarding the earlier clock does not mint report completion custody.
+                if !matches!(
+                    self.completion.state,
+                    InnerCompletionState::Acknowledging { .. } | InnerCompletionState::Completed(_)
+                ) {
+                    return Err(SamplingError::TerminalAuthority);
+                }
+            }
+            StopOrigin::Caller | StopOrigin::Launcher | StopOrigin::Outer | StopOrigin::Backend => {
+                return Err(SamplingError::TerminalAuthority);
+            }
+        }
         let frame = storage
             .encode(&OuterTerminalReply::Cancelled {
                 authority: sampling.settings.authority,
-                stop: cancellation.stop,
+                stop,
             })
             .map_err(SamplingError::Control)?;
         let due = started

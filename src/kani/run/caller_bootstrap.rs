@@ -1891,13 +1891,29 @@ impl CallerBootstrap {
                 Ok(false)
             }
             CancellationProgress::Terminal(CancellationHeader::Cancelled { authority, stop }) => {
-                if authority != self.authority
-                    || stop
-                        != clock
-                            .caller_stop_stamp()
-                            .map_err(CallerBootstrapError::Deadline)?
-                {
+                if authority != self.authority {
                     return Err(CallerBootstrapError::TerminalReplyMismatch);
+                }
+                match stop.origin {
+                    super::role_deadline::StopOrigin::Caller => {
+                        if stop
+                            != clock
+                                .caller_stop_stamp()
+                                .map_err(CallerBootstrapError::Deadline)?
+                        {
+                            return Err(CallerBootstrapError::TerminalReplyMismatch);
+                        }
+                    }
+                    super::role_deadline::StopOrigin::Inner => {
+                        if self.inner_pin.is_none() || self.inner_identity.is_none() {
+                            return Err(CallerBootstrapError::MissingInnerPin);
+                        }
+                    }
+                    super::role_deadline::StopOrigin::Launcher
+                    | super::role_deadline::StopOrigin::Outer
+                    | super::role_deadline::StopOrigin::Backend => {
+                        return Err(CallerBootstrapError::TerminalReplyMismatch);
+                    }
                 }
                 clock
                     .adopt_stop(stop, self.identity_clock)
