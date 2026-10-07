@@ -69,6 +69,9 @@ pub(super) fn into_original_io(error: CallerExecutionError) -> io::Error {
                 | Stage::Identity(ReadyIdentityError::Observation(error)),
             ),
         )) => error,
+        Execution::Bootstrap(Bootstrap::Spawn(error))
+        | Execution::Preparation(Preparation::CallerBootstrap(Bootstrap::Spawn(error)))
+        | Execution::Progress(Progress::Bootstrap(Bootstrap::Spawn(error))) => error.into_io(),
         original @ (Execution::Preparation(_)
         | Execution::Progress(_)
         | Execution::Bootstrap(_)

@@ -37,7 +37,7 @@ use super::{
         OuterPhaseCommand, OuterPhaseReply, OuterStartupControl, OuterTerminalReply,
         OwnerStopCause, RunSettings,
     },
-    spawner::{RetainedSpawner, SpawnIdentity},
+    spawner::{RetainedSpawner, SpawnFailure, SpawnIdentity},
     stages::{Bootstrap, InitReady, PreparedDispatch, StageError, VerifiedInitReady},
     stdin::OriginalStdin,
 };
@@ -45,6 +45,7 @@ use super::{
 #[derive(Debug)]
 pub(super) enum CallerBootstrapError {
     Io(io::Error),
+    Spawn(SpawnFailure),
     Control(ControlError),
     Deadline(DeadlineError),
     Report(ReportError),
@@ -87,6 +88,7 @@ impl std::error::Error for CallerBootstrapError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
+            Self::Spawn(error) => Some(error),
             Self::Control(error) => Some(error),
             Self::Deadline(error) => Some(error),
             Self::Report(error) => Some(error),
@@ -172,6 +174,7 @@ pub(super) struct CallerBootstrap {
     named_buffers: u64,
     memory_bytes: std::num::NonZeroU64,
     pending_owner_stop: Option<PendingOwnerStop>,
+    helper_path: Option<std::path::PathBuf>,
     command: Option<Command>,
     spawner: Option<RetainedSpawner>,
     identity: Option<SpawnIdentity>,
@@ -310,6 +313,12 @@ enum CallerTerminalPhase {
 }
 
 impl CallerBootstrap {
+    /// Transfer the actual configured path only after the caller selected a genuine local
+    /// executable failure. This contains no process or settlement authority.
+    pub(super) fn take_helper_path(&mut self) -> Option<std::path::PathBuf> {
+        self.helper_path.take()
+    }
+
     /// The actual prepared finite startup cutoff, never a fresh cap at the caller driver.
     pub(super) fn startup_cutoff(&self) -> Instant {
         self.deadline
@@ -530,9 +539,16 @@ impl CallerBootstrap {
                 .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         }
         settings.caller_run_buffers = named_buffers;
+        let start = LauncherControl::Start { settings };
         let start_frame = frame_storage
-            .encode(&LauncherControl::Start { settings })
+            .encode(&start)
             .map_err(CallerBootstrapError::Control)?;
+        // Keep the same already-charged helper path allocation; failure projection must name
+        // the actual configured L executable without cloning a new path after launch.
+        let LauncherControl::Start { settings } = start else {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        };
+        let helper_path = settings.helper;
         Ok(Self {
             inner_bootstrap: Some(bootstrap),
             outer_control,
@@ -583,6 +599,7 @@ impl CallerBootstrap {
             named_buffers,
             memory_bytes,
             pending_owner_stop: None,
+            helper_path: Some(helper_path),
             command: Some(command),
             spawner: None,
             identity: None,
@@ -939,14 +956,14 @@ impl CallerBootstrap {
             .command
             .take()
             .ok_or(CallerBootstrapError::LaunchAlreadyAttempted)?;
-        self.spawner = Some(RetainedSpawner::spawn(command).map_err(CallerBootstrapError::Io)?);
+        self.spawner = Some(RetainedSpawner::spawn(command).map_err(CallerBootstrapError::Spawn)?);
         self.streams.start().map_err(CallerBootstrapError::Io)?;
         let identity = self
             .spawner
             .as_ref()
             .ok_or(CallerBootstrapError::MissingLauncher)?
             .wait_started(cutoff)
-            .map_err(CallerBootstrapError::Io)?;
+            .map_err(CallerBootstrapError::Spawn)?;
         self.identity = Some(identity);
         Ok(())
     }
