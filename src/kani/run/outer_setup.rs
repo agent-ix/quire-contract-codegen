@@ -33,6 +33,11 @@ pub(super) struct NamespaceIdentity {
 }
 
 impl NamespaceIdentity {
+    /// Parsed unverified namespace facts; this establishes no live descriptor identity.
+    pub(super) const fn from_wire_parts(device: u64, inode: u64) -> Self {
+        Self { device, inode }
+    }
+
     pub(super) fn read(path: &str) -> io::Result<Self> {
         let descriptor = File::open(path)?;
         let metadata = descriptor.metadata()?;

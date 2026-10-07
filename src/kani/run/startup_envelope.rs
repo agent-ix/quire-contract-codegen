@@ -21,9 +21,27 @@ use super::{
 pub(super) const CONTEXT_BYTES: usize = CONTROL_BYTES / 6 - 1;
 
 /// Actual policy failure discriminant, never selected by parsing its Display/context.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) enum PolicyFailureCause {
+macro_rules! policy_causes {
+    ($($variant:ident $({ $field:ident: $value:ty })?),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) enum PolicyFailureCause {
+            $($variant $({ $field: $value })?),+
+        }
+
+        #[derive(Clone, Copy)]
+        pub(super) enum PolicyFailureTag { $($variant),+ }
+
+        impl PolicyFailureTag {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+
+policy_causes! {
     UnsupportedArchitecture,
     InvalidProgram,
     NotBackend,
