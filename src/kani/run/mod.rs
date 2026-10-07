@@ -68,6 +68,8 @@ mod spawner;
 mod startup_cause;
 #[cfg(target_os = "linux")]
 mod startup_envelope;
+#[cfg(target_os = "linux")]
+mod startup_projection;
 
 #[cfg(target_os = "linux")]
 mod protocol;

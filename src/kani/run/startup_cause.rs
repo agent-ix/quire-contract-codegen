@@ -181,6 +181,8 @@ pub(super) enum RepresentationError {
     OsKindMismatch,
     /// Backend compilation errors are not emitted by the actual apply_filter producer.
     NonInstallationBackendCause,
+    /// Authenticated metadata does not describe the original error domain at its typed site.
+    PolicyCauseMismatch,
 }
 
 impl fmt::Display for RepresentationError {
