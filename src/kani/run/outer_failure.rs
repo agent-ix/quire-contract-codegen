@@ -22,9 +22,29 @@ use super::{
 
 /// Original replay and a required-representation fault are disjoint typed data.
 /// The sender must supply an actual I/O cause; this decoder rejects the dependency domain.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) enum FailureRepresentation {
+macro_rules! failure_representations {
+    ($($variant:ident { $field:ident: $value:ty }),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) enum FailureRepresentation {
+            $($variant { $field: $value }),+
+        }
+
+        #[derive(Clone, Copy)]
+        pub(super) enum FailureRepresentationTag {
+            $($variant),+
+        }
+
+        impl FailureRepresentationTag {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+
+failure_representations! {
     Original { cause: StartupCause },
     Integrity { predicate: CauseIntegrityPredicate },
 }
