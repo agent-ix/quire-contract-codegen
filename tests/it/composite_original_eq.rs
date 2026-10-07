@@ -7,8 +7,9 @@ use std::collections::BTreeMap;
 
 use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, FiniteBound, Integer, OperandIdentity, ProofBound, Refinement, ReplayLimits,
-    ScalarLimits, SourceIdentity, StageLimits, SuppliedLibrary, TerminalValue, VerifiedShadow,
+    DomainKey, FiniteBound, InconclusiveCause, Integer, OperandIdentity, ParityBoundRefusal,
+    ProofBound, Refinement, ReplayLimits, ReplayRefusal, ScalarIdentityMismatch, ScalarLimits,
+    SourceIdentity, StageLimits, SuppliedLibrary, TerminalValue, VerifiedShadow,
     VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
@@ -75,7 +76,11 @@ fn checked_with_dependencies(
     dependencies: &DependencyInput,
     evidence: &CheckedPackageEvidence,
 ) -> CheckedPackageV2 {
-    let compiled = compile_package(
+    read_checked(compiled(source, dependencies).bytes(), evidence)
+}
+
+fn compiled(source: &str, dependencies: &DependencyInput) -> qsl_replay::CompiledPackage {
+    compile_package(
         SourceIdentity::new("test", "original-eq.native", "git", "fixture"),
         "original-eq.native",
         source.as_bytes(),
@@ -84,15 +89,29 @@ fn checked_with_dependencies(
         StageLimits::default(),
         ReplayLimits::default(),
     )
-    .expect("fixture compiles through public QSL facade");
-    match CheckedPackageV2::read(
-        compiled.bytes(),
-        CheckedPackageReadLimits::bounded(),
-        evidence,
-    ) {
+    .expect("fixture compiles through public QSL facade")
+}
+
+fn read_checked(bytes: &[u8], evidence: &CheckedPackageEvidence) -> CheckedPackageV2 {
+    match CheckedPackageV2::read(bytes, CheckedPackageReadLimits::bounded(), evidence) {
         CheckedPackageV2ReadResult::Admitted(package) => *package,
         other => panic!("QSL fixture must admit in IR: {other:?}"),
     }
+}
+
+// Adversarial emitted-package metadata is admitted through IR's owning reader; no report is built.
+fn checked_with_extra_source(
+    source: &str,
+    extra: &quire_contract_model::CheckedSourceRef,
+) -> CheckedPackageV2 {
+    let compiled = compiled(source, &DependencyInput::default());
+    let mut wire: serde_json::Value = serde_json::from_slice(compiled.bytes()).unwrap();
+    wire["lock"]["sources"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::to_value(extra).unwrap());
+    let bytes = quire_canonical::to_vec(&wire, quire_canonical::Limits::new(1 << 20)).unwrap();
+    read_checked(&bytes, &evidence())
 }
 
 fn content_identity() -> DigestRecord {
@@ -211,11 +230,19 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "f");
     let bounds = parameter_bounds(&package, &node, &occurrence);
+    let mut supplied_bounds = bounds.clone();
+    supplied_bounds.push(ProofBound {
+        domain: DomainKey::Population {
+            member_type: WireNodeId::from_hex(&node.digest).unwrap(),
+            ordinal: 0,
+        },
+        bound: FiniteBound::cardinality(7),
+    });
     let original = package
         .composite_application_operands(&node, &occurrence, 100_000)
         .unwrap();
     let request = context(package, "f")
-        .request(&node, &occurrence, &bounds, 100_000)
+        .request(&node, &occurrence, &supplied_bounds, 100_000)
         .unwrap();
     assert_eq!(request.operands(), &original);
     assert_eq!(request.preimage().arguments.len(), 2);
@@ -240,6 +267,7 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
     };
     let report = request.settle_verified(verified).unwrap();
     assert_eq!(report.sent().obligation, obligation);
+    assert_eq!(report.sent().harness_bounds, bounds);
     assert_eq!(report.sent().limits, limits());
     assert_eq!(report.sent().content_identity, content_identity());
     assert_eq!(report.report().claim(), report.sent());
@@ -255,8 +283,28 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
     for (function, literals) in [("g", 1), ("h", 2)] {
         let package = checked(SOURCE);
         let (node, occurrence) = application(&package, function);
-        let request = context(package, function)
-            .request(&node, &occurrence, &[], 100_000)
+        let original = context(package, function);
+        let baseline = original.request(&node, &occurrence, &[], 100_000).unwrap();
+        let bounds = baseline
+            .operands()
+            .operands
+            .iter()
+            .map(|operand| {
+                let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
+                    panic!("graph child")
+                };
+                ProofBound {
+                    domain: DomainKey::Node {
+                        node: WireNodeId::from_hex(&child.digest).unwrap(),
+                        path: vec![0],
+                    },
+                    bound: FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
+                        .unwrap(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let request = original
+            .request(&node, &occurrence, &bounds, 100_000)
             .unwrap();
         let mut measured_literals = 0;
         for (operand, argument) in request
@@ -278,10 +326,21 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                     panic!("literal bounds")
                 };
                 assert!(entries.entries().is_empty());
+            } else {
+                let OperandIdentity::GraphChild(child) = argument.identity else {
+                    panic!("parameter graph child")
+                };
+                let Domain::Bounds(entries) = &argument.domain else {
+                    panic!("parameter bounds")
+                };
+                assert_eq!(entries.entries().len(), 1);
+                assert!(entries.entries().iter().all(
+                    |entry| matches!(entry.domain, DomainKey::Node { node, .. } if node == child)
+                ));
             }
         }
         assert_eq!(measured_literals, literals);
-        let report = request
+        let report = baseline
             .settle_verified(VerifiedShadow {
                 success_checks: 1,
                 refinement: Refinement::NotExhausted,
@@ -320,10 +379,10 @@ fn self_comparison_keeps_two_positional_arguments() {
     ));
 }
 
-/// Wrong retained source and another package refuse before any report can be created.
+/// Changed bytes and another source lock refuse before any report can be created.
 /// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
 #[test]
-fn wrong_source_and_package_refuse_before_invocation() {
+fn wrong_source_refuses_before_invocation() {
     let mut wrong_source = inputs(SOURCE);
     wrong_source.source.bytes.push(b'\n');
     assert!(matches!(
@@ -349,13 +408,59 @@ fn wrong_source_and_package_refuse_before_invocation() {
     ));
 }
 
-/// Absent nodes/occurrences and another function's node refuse with no report or terminal value.
-/// Trace: FR-033-AC-1, FR-033-AC-9, FR-033-AC-12, TC-048
+/// A genuinely different admitted graph retains the supplied source in its lock but refuses recompilation.
+/// Malformed package IDs cannot be constructed through IR admission and are not coverage claims.
+/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
 #[test]
-fn wrong_node_occurrence_and_function_refuse_before_invocation() {
+fn different_semantic_package_refuses_before_invocation() {
+    let original = checked(SOURCE);
+    let changed_source = SOURCE.replace("Int[0, 9]", "Int[0, 8]");
+    let changed = checked_with_extra_source(&changed_source, &original.lock().sources[0]);
+    assert_ne!(changed.package_id(), original.package_id());
+    let (node, occurrence) = application(&changed, "f");
+    assert!(matches!(
+        context(changed, "f").request(&node, &occurrence, &[], 100_000),
+        Err(CompositeBuildError::PackageMismatch)
+    ));
+}
+
+/// Extra retained dependency selection and altered admitted source-lock context refuse distinctly.
+/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[test]
+fn retained_selection_and_recompiled_context_mismatch_refuse() {
+    let package = checked(SOURCE);
+    let mut retained = inputs(SOURCE);
+    retained.dependencies.push(DependencyLock {
+        identity: "test/extra".to_owned(),
+        package_id: compiled(SOURCE, &DependencyInput::default()).package_id(),
+        source: retained.source.clone(),
+    });
+    assert!(matches!(
+        OriginalCompositeEqContext::new(
+            package,
+            retained,
+            "f",
+            content_identity(),
+            CheckedPackageReadLimits::bounded()
+        ),
+        Err(CompositeBuildError::ContextMismatch)
+    ));
+    let extra = checked(&format!("{SOURCE}\n"));
+    let changed = checked_with_extra_source(SOURCE, &extra.lock().sources[0]);
+    assert_eq!(changed.package_id(), checked(SOURCE).package_id());
+    let (node, occurrence) = application(&changed, "f");
+    assert!(matches!(
+        context(changed, "f").request(&node, &occurrence, &[], 100_000),
+        Err(CompositeBuildError::ContextMismatch)
+    ));
+}
+
+/// Absent nodes/occurrences refuse structurally before evidence is accepted; no disagreement is supplied.
+/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[test]
+fn wrong_node_and_occurrence_refuse_before_invocation() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "f");
-    let (other, other_occurrence) = application(&package, "g");
     let context = context(package, "f");
     let mut absent = node.clone();
     absent.digest = "ff".repeat(32).into_boxed_str();
@@ -367,10 +472,89 @@ fn wrong_node_occurrence_and_function_refuse_before_invocation() {
     assert!(
         matches!(context.request(&node, &wrong_occurrence, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::MissingOccurrence { .. }))
     );
-    assert!(matches!(
-        context.request(&other, &other_occurrence, &[], 100_000),
-        Err(CompositeBuildError::NodeOutsideFunction)
-    ));
+}
+
+/// QSL owns body membership and refuses an admitted node from another function before Disagreed.
+/// Trace: FR-033-AC-1, FR-033-AC-9, FR-033-AC-12, TC-048
+#[test]
+fn another_functions_node_reaches_binding_checked_qsl_refusal() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "g");
+    let request = context(package, "f")
+        .request(&node, &occurrence, &[], 100_000)
+        .unwrap();
+    let obligation = parity_obligation(request.preimage()).unwrap();
+    let report = request
+        .settle_verified(VerifiedShadow {
+            success_checks: 1,
+            refinement: Refinement::Disagreed,
+        })
+        .unwrap();
+    assert_eq!(report.sent().obligation, obligation);
+    assert_eq!(report.report().claim(), report.sent());
+    let settlement = report.settlement().unwrap();
+    let VerifiedShadowResult::Refused(refusal) = settlement.result() else {
+        panic!("QSL membership refusal: {:?}", settlement.result())
+    };
+    assert!(
+        matches!(&**refusal, ReplayRefusal::ScalarIdentity(cause) if matches!(&**cause, ScalarIdentityMismatch::Function { node: refused, .. } if *refused == WireNodeId::from_hex(&node.digest).unwrap()))
+    );
+    assert_eq!(
+        settlement.terminal_value(),
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(refusal.code()))
+    );
+}
+
+/// An actual nonoperand Node bound survives CG's filter and QSL refuses it before Disagreed.
+/// Trace: FR-033-AC-9, FR-033-AC-11, FR-033-AC-12, TC-048
+#[test]
+fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "f");
+    let key = DomainKey::Node {
+        node: WireNodeId::from_hex(&node.digest).unwrap(),
+        path: vec![],
+    };
+    let mut bounds = parameter_bounds(&package, &node, &occurrence);
+    bounds.push(ProofBound {
+        domain: key.clone(),
+        bound: FiniteBound::cardinality(3),
+    });
+    let request = context(package, "f")
+        .request(&node, &occurrence, &bounds, 100_000)
+        .unwrap();
+    let obligation = parity_obligation(request.preimage()).unwrap();
+    let report = request
+        .settle_verified(VerifiedShadow {
+            success_checks: 1,
+            refinement: Refinement::Disagreed,
+        })
+        .unwrap();
+    assert_eq!(report.sent().obligation, obligation);
+    assert_eq!(report.sent().harness_bounds, bounds);
+    assert_eq!(report.report().claim(), report.sent());
+    let settlement = report.settlement().unwrap();
+    let VerifiedShadowResult::Refused(refusal) = settlement.result() else {
+        panic!("QSL bound refusal: {:?}", settlement.result())
+    };
+    assert!(
+        matches!(&**refusal, ReplayRefusal::ParityBound(cause) if matches!(&**cause, ParityBoundRefusal::HarnessUnknownKey { key: refused } if *refused == key))
+    );
+    assert_eq!(
+        settlement.terminal_value(),
+        TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(refusal.code()))
+    );
+}
+
+/// The projection's zero work budget stops in IR without traversing a CG-owned membership rule.
+/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[test]
+fn original_operand_projection_obeys_work_ceiling() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application(&package, "f");
+    assert!(
+        matches!(context(package, "f").request(&node, &occurrence, &[], 0), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::WorkLimit { limit: 0, consumed } if consumed > 0))
+    );
 }
 
 /// Original non-default stage limits reach QSL recompilation without substituting defaults.

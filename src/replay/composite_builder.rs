@@ -7,7 +7,7 @@
 //! O-09 arguments. It binds the caller's retained proof-content identity; it does not authenticate
 //! a generated artifact, run a native observation, or establish a backend proof strength.
 
-use std::{collections::BTreeSet, fmt};
+use std::fmt;
 
 use qsl_replay::{
     compile_package, parity_obligation, settle_verified_shadow, BoundEntries, ByteDigest,
@@ -36,6 +36,8 @@ pub enum CompositeBuildError {
     SourceMismatch,
     /// The supplied bytes recompile to a different semantic package.
     PackageMismatch,
+    /// An admitted package identity cannot be represented in the replay identity type.
+    PackageIdentity,
     /// Retained or recompiled context differs from the original lock, graph or source map.
     ContextMismatch,
     /// Original dependency packages are not retained by this constructor.
@@ -44,10 +46,6 @@ pub enum CompositeBuildError {
     InvalidFunction,
     /// The selected function is absent from the original package.
     UnknownFunction,
-    /// The application is outside the selected function's original dependency closure.
-    NodeOutsideFunction,
-    /// The application occurrence is outside the selected function's original source regions.
-    OccurrenceOutsideFunction,
     /// An admitted node identity cannot be represented in the replay identity type.
     NodeIdentity,
     /// The lock's dependency inputs are not admitted.
@@ -77,6 +75,7 @@ impl fmt::Display for CompositeBuildError {
             Self::PackageMismatch => {
                 f.write_str("recompiled package differs from original package")
             }
+            Self::PackageIdentity => f.write_str("package identity is not representable"),
             Self::ContextMismatch => {
                 f.write_str("recompiled context differs from original context")
             }
@@ -85,16 +84,22 @@ impl fmt::Display for CompositeBuildError {
             }
             Self::InvalidFunction => f.write_str("invalid function identifier"),
             Self::UnknownFunction => f.write_str("function is absent from original package"),
-            Self::NodeOutsideFunction => f.write_str("node is outside original function"),
-            Self::OccurrenceOutsideFunction => {
-                f.write_str("occurrence is outside original function")
-            }
             Self::NodeIdentity => f.write_str("node identity is not representable"),
             Self::Dependencies(cause) => cause.fmt(f),
             Self::Recompile(cause) => cause.fmt(f),
             Self::RequestDecode(cause) => cause.fmt(f),
-            Self::PackageRead(cause) => write!(f, "checked-package read refused: {cause:?}"),
-            Self::PackageReadLimit(cause) => write!(f, "checked-package read stopped: {cause:?}"),
+            Self::PackageRead(cause) => {
+                f.write_str("checked-package read refused")?;
+                if let Some(path) = &cause.path {
+                    write!(f, " at {path}")?;
+                }
+                Ok(())
+            }
+            Self::PackageReadLimit(cause) => write!(
+                f,
+                "checked-package read reached ceiling {} after consuming {} units",
+                cause.limit, cause.consumed
+            ),
             Self::Operands(cause) => cause.fmt(f),
             Self::OperandShape => f.write_str("unsupported Eq operand projection"),
             Self::Identity(cause) => cause.fmt(f),
@@ -116,7 +121,6 @@ pub struct OriginalCompositeEqContext {
     inputs: ReplayInputs,
     dependencies: DependencyInput,
     selection: QualifiedName,
-    function: CheckedNodeId,
     package_id: DigestRecord,
     content_identity: DigestRecord,
     read_limits: CheckedPackageReadLimits,
@@ -174,15 +178,15 @@ impl OriginalCompositeEqContext {
             return Err(CompositeBuildError::ImportedContextUnsupported);
         }
         if original.package_id().domain.as_ref() != DigestDomain::PackageSemanticV2.as_str() {
-            return Err(CompositeBuildError::PackageMismatch);
+            return Err(CompositeBuildError::PackageIdentity);
         }
         let package_id = DigestRecord::mint(
             DigestDomain::PackageSemanticV2,
             ByteDigest::from_hex(&original.package_id().digest)
-                .map_err(|_| CompositeBuildError::PackageMismatch)?
+                .map_err(|_| CompositeBuildError::PackageIdentity)?
                 .as_bytes(),
         );
-        let function = original
+        original
             .graph()
             .nodes
             .iter()
@@ -193,15 +197,12 @@ impl OriginalCompositeEqContext {
                             && declaration.qualified_name[0].as_ref() == function
                     })
             })
-            .ok_or(CompositeBuildError::UnknownFunction)?
-            .node_id
-            .clone();
+            .ok_or(CompositeBuildError::UnknownFunction)?;
         Ok(Self {
             original,
             inputs,
             dependencies,
             selection,
-            function,
             package_id,
             content_identity,
             read_limits,
@@ -212,7 +213,11 @@ impl OriginalCompositeEqContext {
     ///
     /// Parameter positions retain only their Node bounds. Population metadata is excluded from
     /// this request. Literal graph children retain empty Bounds and hence singleton source values;
-    /// QSL derives their values and domains from the original source. The supplied work ceiling
+    /// QSL derives their values and domains from the original source and owns selected-function
+    /// body and occurrence membership at invocation, returning a binding-checked refusal report.
+    /// Projection/encoder refusals precede recompilation: public QSL stage-limit decoding requires
+    /// the genuine O-09 wire, so this boundary does not authenticate context before projection.
+    /// The supplied work ceiling
     /// bounds the IR operand projection. Unsupported operations and inline operands refuse.
     ///
     /// # Errors
@@ -229,7 +234,6 @@ impl OriginalCompositeEqContext {
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
-        self.check_function_membership(node, occurrence)?;
         let arguments = operands.operands.iter().map(|operand| {
             let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                 return Err(CompositeBuildError::OperandShape);
@@ -326,65 +330,6 @@ impl OriginalCompositeEqContext {
         }
         Ok(())
     }
-
-    fn check_function_membership(
-        &self,
-        node: &CheckedNodeId,
-        occurrence: &CheckedOccurrence,
-    ) -> Result<(), CompositeBuildError> {
-        let mut pending = vec![&self.function];
-        let mut seen = BTreeSet::new();
-        let mut found = false;
-        while let Some(id) = pending.pop() {
-            if !seen.insert(id) {
-                continue;
-            }
-            if id == node {
-                found = true;
-                break;
-            }
-            let Some(member) = self
-                .original
-                .graph()
-                .nodes
-                .iter()
-                .find(|member| &member.node_id == id)
-            else {
-                continue;
-            };
-            if id != &self.function && member.node_tag.as_ref() == "function" {
-                continue;
-            }
-            pending.extend(member.dependencies.iter());
-        }
-        if !found {
-            return Err(CompositeBuildError::NodeOutsideFunction);
-        }
-        let map = self.original.source_map();
-        let inside = map
-            .iter()
-            .filter(|entry| {
-                &entry.node_id == node
-                    && entry.role == occurrence.role
-                    && entry.ordinal == occurrence.ordinal
-            })
-            .any(|entry| {
-                entry.regions.iter().all(|region| {
-                    map.iter()
-                        .filter(|function| function.node_id == self.function)
-                        .flat_map(|function| &function.regions)
-                        .any(|outer| {
-                            outer.source == region.source
-                                && outer.start <= region.start
-                                && region.end <= outer.end
-                        })
-                })
-            });
-        if !inside {
-            return Err(CompositeBuildError::OccurrenceOutsideFunction);
-        }
-        Ok(())
-    }
 }
 
 fn wire_node(node: &CheckedNodeId) -> Result<WireNodeId, CompositeBuildError> {
@@ -410,6 +355,17 @@ pub struct OriginalCompositeEqRequest {
     operands: CheckedCompositeOperands,
     preimage: ParityPreimage,
     replay_limits: qsl_replay::ReplayLimits,
+}
+
+impl fmt::Debug for OriginalCompositeEqRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OriginalCompositeEqRequest")
+            .field("claim", &self.claim)
+            .field("operands", &self.operands)
+            .field("preimage", &self.preimage)
+            .field("replay_limits", &self.replay_limits)
+            .finish_non_exhaustive()
+    }
 }
 
 impl OriginalCompositeEqRequest {

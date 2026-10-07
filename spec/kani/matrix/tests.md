@@ -6,9 +6,6 @@ type: TestMatrix
 
 # Contract codegen Kani test matrix
 
-Imported contexts remain PLANNED: the Eq constructor returns typed `ImportedContextUnsupported`
-until CG retains admitted dependency packages from the original compile.
-
 ## Functional Requirement Coverage
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |

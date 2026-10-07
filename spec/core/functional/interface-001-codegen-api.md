@@ -163,7 +163,7 @@ operations:
   - name: OriginalCompositeEqContext::request
     inputs: [original CheckedNodeId, original CheckedOccurrence, harness ProofBound list, IR operand-projection work ceiling]
     output: immutable OriginalCompositeEqRequest | CompositeBuildError
-    semantics: Eq-only graph-child route through IR composite_application_operands; require original function/node/occurrence membership, preserve positional parameter bounds and empty literal Bounds, compute O-09 through owning parity_obligation, decode the real wire to obtain QSL stage limits, and require exact recompiled package/context equality before invocation; imported contexts return ImportedContextUnsupported until original admitted dependency packages are retained by CG; Ne and inline operands refuse
+    semantics: Eq-only graph-child route through IR composite_application_operands; require admitted original node/occurrence presence, preserve positional parameter bounds and empty literal Bounds, compute O-09 through owning parity_obligation, decode the real wire to obtain QSL stage limits, and require exact recompiled package/context equality before invocation; projection/encoder refusal can precede context authentication because public stage-limit decoding needs the genuine O-09 wire; QSL owns selected-function body and occurrence-origin membership at invocation through its composite-site locator, with binding-checked Refused reports; imported contexts return ImportedContextUnsupported until original admitted dependency packages are retained by CG; Ne and inline operands refuse
   - name: OriginalCompositeEqRequest::settle_verified
     inputs: [retained VerifiedShadow evidence]
     output: OriginalCompositeEqReport | CompositeBuildError

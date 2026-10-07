@@ -6,9 +6,6 @@ type: TestMatrix
 
 # Contract codegen replay test matrix
 
-Imported contexts remain PLANNED: the Eq constructor returns typed `ImportedContextUnsupported`
-until CG retains admitted dependency packages from the original compile.
-
 ## Functional Requirement Coverage
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
@@ -21,9 +18,9 @@ until CG retains admitted dependency packages from the original compile.
 | FR-024 | FR-024-AC-20 through FR-024-AC-29 | TC-035 | ✅ Covered (IR-459); the frame path's one obligation identity (`replay/obligation.rs`), `state_fields` record, decoded witness, domain, pre-state and scope ties, asserted over QSL's own `call_site` and `replay_frame` for the QSL twin of the state-frame fixture; the former AC-30 real-Kani test is being migrated under IR-624 |
 | FR-024 | FR-024-AC-30 through FR-024-AC-35 | TC-035 | 🚧 Planned (IR-624): emitted-package state field ranges come from `model_object_fields`, including unread declared fields, while input `state_fields` supplies draw order; replay validates names against the accessor and carries `TypeNotRange` for present fields without an `i64` range. IR-628 has merged; end-to-end replay, real-Kani cases and CG dependency update remain pending. Non-model and admitted unselected model/object_type bodies are refused without a range or replay; no body-member positive route remains. A selected/read nonempty-body tamper is rejected by IR admission as `StaleNodeKey` before CG. FR-024-AC-30 is restated over a QSL-emitted harness; AC-32 retires `Twin::aligned`. |
 | FR-032 | FR-032-AC-1 through FR-032-AC-14 | TC-047 | 🚧 Planned (IR-631); admitted scalar route CODE-gated on owning vector merge/execution, typed scalar-family retention, IR-648 authentic occurrence/operand/domain provenance, CG retention, actual R-7 context and driver observation/consumer conformance. No executable scalar replay coverage is claimed. |
-| FR-033 | FR-033-AC-1, FR-033-AC-11 | TC-048 | 🚧 Partial (IR-635 Eq-only verified constructor); original source/package/function/node/occurrence, positional O-09, repeated parameters and admitted Integer-record literals reach genuine QSL reports. Ne awaits IR-690; bounded-field narrowing literals (IR-691), collection-constructor literals, inline operands and full proving-record/native integration remain gated. |
+| FR-033 | FR-033-AC-1, FR-033-AC-11 | TC-048 | 🚧 Partial (IR-635 Eq-only verified constructor); original source, semantic package and exact context controls, admitted node/occurrence presence, projection work ceiling, positional O-09, repeated parameters, Node-only filtering and admitted Integer-record literal singleton controls; QSL owns function membership and returns genuine bound refusal reports. Ne awaits IR-690; bounded-field narrowing literals (IR-691), collection-constructor literals, inline operands and full proving-record/native integration remain gated. |
 | FR-033 | FR-033-AC-2 through FR-033-AC-6, FR-033-AC-8, FR-033-AC-10 | TC-048 | 🚧 Planned (IR-635); canonical decode/lifecycle, playback, falsified same-artifact native execution, complete coverage/refusal matrix, generated-family and independent artifact authentication remain unbuilt |
-| FR-033 | FR-033-AC-7, FR-033-AC-9, FR-033-AC-12, FR-033-AC-13 | TC-048 | 🚧 Partial (IR-666 converter); real QSL public reports cover F-7 divergence/agreement, full sent-identity binding, F-1 precedence, F-2 native causes, F-3 admission, F-4/F-5/F-6 stages and V rows; IR-635 adds Eq-only verified constructor prechecks and genuine public invocation for AC-9/AC-12; falsified invocation and independent artifact authentication remain planned |
+| FR-033 | FR-033-AC-7, FR-033-AC-9, FR-033-AC-12, FR-033-AC-13 | TC-048 | 🚧 Partial (IR-666 converter); real QSL public reports cover F-7 divergence/agreement, full sent-identity binding, F-1 precedence, F-2 native causes, F-3 admission, F-4/F-5/F-6 stages and V rows; IR-635 adds Eq-only verified constructor prechecks and genuine QSL membership/unknown-bound refusal reports before supplied Disagreed for AC-9/AC-12; falsified invocation and independent artifact authentication remain planned |
 | FR-029 | FR-029-AC-28 | TC-048 | ✅ Covered (IR-666 converter); a genuine QSL public `prepare` refusal binds and preserves its exact code/terminal; QSL fault mapping is inspected without fabricating a report |
 
 ## Test Case Summary

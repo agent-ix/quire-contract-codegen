@@ -23,7 +23,11 @@ Public-converter controls and remaining production scenarios for
 completed-route checks remain GATED. IR-635's first slice exercises only the public verified Eq
 constructor with supplied verified evidence: parameter/parameter, parameter/literal, literal/literal
 and repeated/self graph children, retained source and exact recompiled context, positional O-09,
-wrong source/package/node/occurrence/function refusals, and a genuine QSL report through IR-666.
+changed source, semantic package and retained/recompiled context refusals, absent-node/occurrence
+and work-ceiling refusals, literal empty-Bounds and Population filtering controls, and genuine
+QSL function-membership/unknown-Node-bound Refused reports through IR-666. QSL owns membership;
+CG checks admitted node/occurrence presence. The QSL controls supply Disagreed and measure its
+common-step precedence; CG structural refusals occur before evidence is accepted.
 Imported contexts refuse with typed `ImportedContextUnsupported`; admitting them remains PLANNED
 until CG retains the original compile's admitted dependency packages. These are partial AC-1/AC-11 Eq-only and AC-9/AC-12 constructor controls, not generated backend
 verification or same-artifact native authentication. Ne awaits IR-690's typed accessor; AC-8's

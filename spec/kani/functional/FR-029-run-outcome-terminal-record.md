@@ -20,9 +20,6 @@ relationships:
 ---
 # FR-029: Map every Kani run outcome, paired with its replay settlement, to QSL's terminal value in one total match
 
-Imported contexts remain PLANNED: the Eq constructor returns typed `ImportedContextUnsupported`
-until CG retains admitted dependency packages from the original compile.
-
 ## Description
 
 The Kani adapter shall map every `KaniRunOutcome`, with its inconclusive reason, paired with the
