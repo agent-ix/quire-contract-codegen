@@ -155,7 +155,7 @@ mod tests {
             },
         ];
         for wrap in wrappers {
-            let original = io::Error::from_raw_os_error(rustix::io::Errno::ACCES.raw_os_error());
+            let original = io::Error::from_raw_os_error(rustix::io::Errno::ACCESS.raw_os_error());
             let kind = original.kind();
             let errno = original.raw_os_error();
             let returned = into_original_io(wrap(original));

@@ -2579,7 +2579,8 @@ impl GuardianIdentity for CallerBootstrap {
 
 #[cfg(test)]
 mod tests {
-    use super::{PreparedCleanupDetail, CLEANUP_DETAIL_BYTES};
+    use super::*;
+    use crate::kani::run::namespace::BackendCommand;
 
     /// Trace: FR-034-AC-38
     #[test]
