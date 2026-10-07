@@ -104,6 +104,16 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-38 | PLANNED/UNRUN: independent normal settlement/join, original-window unavailable confirmation, typed diagnostic-only refusal and no new post-return custody (step 25). Untagged until actual complete Tests. | Any unavailable ordinary-seam observation is explicitly owed; prior death tests or source-only fault discussion do not supply this new criterion. |
 | FR-034-AC-39 | PLANNED/UNRUN ordinary production Tests: actual native installation success/failure, syscall process-kill and real unconfined effect controls plus unchanged classification/settlement. Unsupported-native cfg/support and unconditional native-x86_64 x32 policy require source Analysis, not an invented Test. | No new IR-655 fixture facility is allocated. Any predicate unavailable through ordinary production seams remains explicitly owed through the SPEC-before-fixture-CODE process; missing tools/kernel/workload or source-only Analysis supplies no whole-criterion Test credit. |
 | FR-034-AC-40 | PLANNED/UNRUN: declared helper role/site/phase source-flow and public rustdoc Analysis, plus available genuine ordinary transport/consumer Tests for actual kind/errno, finite typed provenance, diagnostic independence and explicit loss; Analysis gives no Test credit. | Exact-boundary or unavailable genuine producer/transport predicates remain owed through IR-655 SPEC-before-fixture-CODE; no new hook or forced allocation failure. Whole criterion stays untagged while any required Test obligation is unavailable. |
+| FR-034-AC-41 | PLANNED/UNRUN Analysis: Exact consumer manifest/package/bin and resolved workspace configuration. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-42 | PLANNED/UNRUN Analysis: Final linked executable and loaded-library GNU/LLVM disassembly with stable inputs. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-43 | PLANNED/UNRUN Analysis: Final address mappings for operation and thread roots, all indirect targets. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-44 | PLANNED/UNRUN Analysis: No reachable recursive call cycle. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-45 | PLANNED/UNRUN Analysis: Per-thread live-frame maxima summed for all concurrent instances. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-46 | PLANNED/UNRUN Analysis: Actual panic unwind/cleanup edges or demonstrated abort absence. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-47 | PLANNED/UNRUN Analysis: Finite external bounds matching loaded runtime ABI/configuration. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-48 | PLANNED/UNRUN Analysis: Returned heap capacities, metadata and overlap inside declared charge. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-49 | PLANNED/UNRUN Analysis: Reanalysis after source/build/compiler/runtime/artifact/premise change. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
+| FR-034-AC-50 | PLANNED/UNRUN Analysis: Bound fits independent declaration; missing proof is UNPROVEN, missing charge uses existing refusal. CG CODE author supplies the operational receipt; independent CODE reviewer checks it before IR-639 CODE merge. Completion is zero until actual evidence, never inferred from a matrix method row. | No fixture extension; unresolved Analysis remains UNPROVEN and supplies no Test credit. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -899,6 +909,60 @@ Runtime evidence must cover later ticks and final settlement; bootstrap success/
 is insufficient. All failure checks preserve existing classification, original timer and owned
 cleanup obligations.
 
+### Supported-build named native workspace (FR-034-AC-41 through FR-034-AC-50)
+
+These Analysis procedures are PLANNED/UNRUN. Completed Analysis count is zero until
+CG's CODE author supplies an operational receipt and the independent CODE reviewer
+checks it. A computed method-without-symbol matrix row is not executed evidence.
+The receipt shall give a completed or UNPROVEN disposition for each of AC-41..50;
+IR-639's single CODE PR must satisfy this gate for its claimed initial configuration
+before merge. Runtime observation/settlement Tests remain independently required.
+
+1. Identify the actual final consumer executable input: consumer workspace manifest,
+   package and binary target, matched helper, resolved workspace profile/features,
+   target/ABI, selected compiler, flags/linker/panic strategy, allocator and actually
+   loaded runtime configuration. The initial planned luna Linux x86_64 GNU input
+   requires explicitly resolved release thin LTO/one codegen unit and feature-off
+   production. Base `make build` builds a library, not this executable; dependency
+   profiles/toolchain files cannot select the consumer workspace's settings.
+2. Use GNU objdump or llvm-objdump on the delivered final linked executable and
+   relevant loaded libraries after LTO/linking. Record actual tool/version in the
+   operational receipt; reject nightly -Z/RUSTC_BOOTSTRAP and pre-link substitutes.
+   Map named source operations to final address ranges using symbols/debug/inlining
+   information; conservatively include a whole containing host frame when inlined.
+   Unresolved final root attribution fails the claim.
+3. Identify every thread entry root carrying named state, including indirect starts.
+   Enumerate all reachable call targets through success/refusal/cancellation/error/
+   cleanup paths. Unknown indirect targets and reachable recursive cycles leave the
+   claim UNPROVEN. Derive per-thread live-frame maxima with actual tail replacements
+   and stack adjustments, then sum all concurrently live instances. Unknown instance
+   count/lifetime cannot be filled by one global maximum or a requested stack size.
+4. Cover actual panic unwind/landing-pad/cleanup paths or prove absence under abort.
+   Bound external frames using actual loaded machine code or authoritative finite
+   bounds with matching ABI/runtime/configuration premises. Unknown dynamic stack,
+   external bounds or loaded runtime selection leaves the claim UNPROVEN. Preserve
+   unrelated incidental runtime/TLS/guard exclusions; named state cannot be excluded.
+5. Inventory actual returned Rust Vec/String capacities times element size, named
+   metadata and overlapping retained/temporary lifetimes. Larger returned capacity
+   defeats requested-capacity accounting; allocator chunk overhead is excluded by
+   the explicit FR-034 allocator-overhead boundary. Inspect the independently declared
+   finite private native-workspace charge in actual caller_run_buffers before L/exposure,
+   and prove the checked required bound <= declaration. Carrier implementation is an
+   IR-639 CODE gate. Computed proof must not be written back into the analyzed binary;
+   changing a declaration requires rebuilding and reanalyzing. Missing named charge
+   uses the existing runtime refusal; missing proof only fails conformance, not runtime
+   admission. No numeric reserve or new public carrier is allocated.
+6. Invalidate the receipt after source, consumer configuration/compiler, executable,
+   loaded runtime/allocator or external-bound premise changes. Require a new Analysis
+   before claiming conformance; record unresolved facts and no completion credit.
+   Keep exact build attribution private/operational, with no committed pin catalog.
+
+Expected pass: complete current evidence accounts for roots, threads, every required
+path and named quantity and proves the bound fits the independently declared charge.
+Expected failure: a missing/stale premise, unresolved path or exceeded declaration
+leaves the configuration UNPROVEN. Missing proof is not a new runtime refusal.
+Other candidate native policies/configurations remain UNPROVEN until their own proofs.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -923,6 +987,16 @@ cleanup obligations.
 | FR-034-AC-38 | PLANNED/UNRUN: actual normal role/capture/spawner settlement; original-window typed CleanupUnconfirmed error with bounded diagnostic-only residuals, no new post-return custody; public precondition docs | Error carries authority; hidden cleanup worker; false joined/retired or kernel-cause claim; valid bytes accepted after unconfirmed settlement; grace resets T |
 | FR-034-AC-39 | PLANNED/UNRUN: source/cfg Analysis of unsupported native support and unconditional native-x86_64 x32 rule; real available installation Tests, typed provenance/capability distinction, applicable process-kill/effect controls, omission mutant, original settlement/classification | Source Analysis called an executed Test; errno-only denial instead of process-kill; omitted x32 rule on a kernel without x32; unavailable fixture counted complete; emulator mistaken for guest syscall evidence; false pre-Dispatch label or unfiltered retry |
 | FR-034-AC-40 | PLANNED/UNRUN: exhaustive actual sender/build named-kind source Analysis before delivery; genuine cases preserve site-first admission, actual private kind/errno, independently authenticated optional provenance and loss; typed public projection applies only to existing I/O-cause carriers, including valid original boxed declared operational categories exclusively outside required encoding/checking faults; fail-closed unexpected encoding faults never satisfy the supported producer gate or normalize an original kind; complete required-representation fault reports identify actual sender predicates with integrity type and no loss marker only in existing I/O-cause-bearing results, never invented undelivered reports; post-admission observation/settlement detail-only variants remain unchanged with private facts/loss and diagnostic-only text; authenticated negative-site unknown/malformed/incomplete cause metadata returns MemoryMechanismUnavailable with exact site context and actual local InvalidData/no-errno KaniCauseMetadataIntegrityError detectable by get_ref/downcast (no loss marker), never original replay; unauthenticated site uses its specified startup/protocol path; diagnostics cannot replace it; public rustdoc states carrier/detail-only scope, both typed detectors, sender encoding fault versus valid original cause and no original-source/stage-query promise for the projections; settlement remains required | Unproved/unwired sender domain; kind-driven Tool normalization; new emitted kind without encoder support; marker missing on opaque no-errno loss or attached to loss-free OS/payload-free/local/stronger AC-39 source; erased errno; fake replay; authenticated integrity fault sent to Tool; invented integrity admission context; false loss/integrity type; genuine original InvalidData misclassified from kind/source presence; missing actual local source; diagnostic replacement; misleading docs or false prior-test credit |
+| FR-034-AC-41 | PLANNED/UNRUN Analysis: Exact consumer manifest/package/bin and resolved workspace configuration; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-42 | PLANNED/UNRUN Analysis: Final linked executable and loaded-library GNU/LLVM disassembly with stable inputs; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-43 | PLANNED/UNRUN Analysis: Final address mappings for operation and thread roots, all indirect targets; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-44 | PLANNED/UNRUN Analysis: No reachable recursive call cycle; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-45 | PLANNED/UNRUN Analysis: Per-thread live-frame maxima summed for all concurrent instances; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-46 | PLANNED/UNRUN Analysis: Actual panic unwind/cleanup edges or demonstrated abort absence; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-47 | PLANNED/UNRUN Analysis: Finite external bounds matching loaded runtime ABI/configuration; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-48 | PLANNED/UNRUN Analysis: Returned heap capacities, metadata and overlap inside declared charge; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-49 | PLANNED/UNRUN Analysis: Reanalysis after source/build/compiler/runtime/artifact/premise change; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-50 | PLANNED/UNRUN Analysis: Bound fits independent declaration; missing proof is UNPROVEN, missing charge uses existing refusal; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
