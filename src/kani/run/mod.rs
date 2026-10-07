@@ -3,6 +3,8 @@ pub(crate) mod execute;
 
 // One content cap shared by collection, consumers and serialized production evidence.
 pub(super) const REPORT_CONTENT_BYTES: u64 = 16 * 1_048_576;
+// One reserved writer slot across recipe construction, I acquisition and same-PID exec mapping.
+pub(super) const REPORT_SLOT: i32 = 5;
 // The harness of any kind this crate can run.
 pub(crate) mod harness;
 // Spawn, bounded capture, timeout and process-group kill.

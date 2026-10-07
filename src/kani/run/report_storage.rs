@@ -28,7 +28,7 @@ use super::{
     resource_ledger::{ChargeError, ResourceLedger},
 };
 
-pub(super) const REPORT_SLOT: i32 = 5;
+pub(super) use super::REPORT_SLOT;
 const READ_BYTES: usize = 65_536;
 const READS_PER_TICK: usize = 4;
 
