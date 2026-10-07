@@ -276,6 +276,21 @@ pub(super) enum IdentityDeadline {
 }
 
 impl IdentityDeadline {
+    /// Compare the original absolute work bound with the actual producer event. No local
+    /// deadline conversion, minimum setup cap or later receiving clock elects this fact.
+    pub(super) fn expired_at(self, event: StopStamp) -> Result<bool, DeadlineError> {
+        let event = event.instant.duration()?;
+        match self {
+            Self::Finite { deadline } => {
+                if deadline.nanoseconds >= 1_000_000_000 {
+                    return Err(DeadlineError::InvalidClock);
+                }
+                Ok(event >= Duration::new(deadline.seconds, deadline.nanoseconds))
+            }
+            Self::NeverElapses => Ok(false),
+        }
+    }
+
     pub(super) fn from_original(original: Option<Instant>) -> Result<Self, DeadlineError> {
         match original {
             Some(original) => {
@@ -453,6 +468,34 @@ mod tests {
         assert_eq!(repeated, first);
         assert_eq!(clock.progress_cutoff(), Some(first));
         assert_eq!(clock.work_deadline(), None);
+    }
+
+    /// Trace: FR-034-AC-38
+    #[test]
+    fn work_expiry_is_elected_at_the_original_absolute_producer_event() {
+        let work = IdentityDeadline::Finite {
+            deadline: RoleDeadline {
+                seconds: 20,
+                nanoseconds: 0,
+            },
+        };
+        // An earlier setup cap can have elapsed without this original work bound expiring.
+        assert!(!work.expired_at(stamp(StopOrigin::Outer, 10)).unwrap());
+        assert!(work.expired_at(stamp(StopOrigin::Outer, 20)).unwrap());
+        assert!(work.expired_at(stamp(StopOrigin::Outer, 21)).unwrap());
+        assert!(!IdentityDeadline::NeverElapses
+            .expired_at(stamp(StopOrigin::Outer, 21))
+            .unwrap());
+        let invalid = IdentityDeadline::Finite {
+            deadline: RoleDeadline {
+                seconds: 20,
+                nanoseconds: 1_000_000_000,
+            },
+        };
+        assert_eq!(
+            invalid.expired_at(stamp(StopOrigin::Outer, 21)),
+            Err(DeadlineError::InvalidClock)
+        );
     }
 
     fn stamp(origin: StopOrigin, seconds: u64) -> StopStamp {

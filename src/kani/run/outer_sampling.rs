@@ -23,7 +23,7 @@ use super::{
         ReadyIdentityError,
     },
     outer_caller::{OuterCallerControl, OuterCallerReceive},
-    outer_failure::{FailureHeader, FailureRepresentation, NegativeCommit},
+    outer_failure::{FailureHeader, FailureRepresentation, FailureState, NegativeCommit},
     outer_preparation::{SamplingParts, SamplingPreparation},
     outer_setup::PreparedOuter,
     protocol::BackendExit,
@@ -172,6 +172,9 @@ pub(super) struct OuterSampling {
     owner_stop: Option<OwnerStopCause>,
     setup_refusal: Option<PolicyFailureCause>,
     caller_cancelled: bool,
+    // Historical capability milestone, established only by observe_live's complete checked
+    // within-ceiling setup observation. It is not current tick validity or Dispatch authority.
+    observation_admitted: bool,
 }
 
 /// One actual O actor composes the existing production phases, I completion and terminal
@@ -195,6 +198,9 @@ pub(super) struct OuterRunOwner {
     // The failed actor step's actual producer instant, retained before helper publication.
     // It is distinct from an earlier completion/stop already retained in the same timeline.
     failure_event: Option<Result<StopStamp, DeadlineError>>,
+    // Producer-owned state is retained separately so a failed clock comparison neither
+    // erases the original event/error nor becomes an inferred admission/timeout fact.
+    failure_state: Option<Result<FailureState, DeadlineError>>,
     failure_cause: Option<(CauseOperation, Result<FailureHeader, RepresentationError>)>,
     // An owner stop before monitor preparation retains the original unexposed I endpoint.
     _unexposed_inner_endpoint: Option<GuardianEndpoint>,
@@ -238,6 +244,9 @@ pub(super) struct OuterRunPreparation {
     resources: Option<OuterPreparationResources>,
     attempted: bool,
     failure_event: Option<Result<StopStamp, DeadlineError>>,
+    // Producer-owned state is retained separately so a failed clock comparison neither
+    // erases the original event/error nor becomes an inferred admission/timeout fact.
+    failure_state: Option<Result<FailureState, DeadlineError>>,
     // Required metadata is recorded before any optional Display formatting. A failed capture
     // retains its actual typed checking error; absence is never a measurement or timeout label.
     failure_cause: Option<Result<FailureHeader, RepresentationError>>,
@@ -295,6 +304,7 @@ impl OuterRunPreparation {
             }),
             attempted: false,
             failure_event: None,
+            failure_state: None,
             failure_cause: None,
             failure_operation: None,
             failure_delivery: None,
@@ -372,6 +382,7 @@ impl OuterRunPreparation {
                     },
                     poisoned: false,
                     failure_event: None,
+                    failure_state: None,
                     failure_cause: None,
                     _unexposed_inner_endpoint: inner_endpoint,
                 })
@@ -407,9 +418,17 @@ impl OuterRunPreparation {
             (None, Some(preparation)) => preparation.settings(),
             (None, None) => return,
         };
+        let admitted = resources
+            .sampling
+            .as_ref()
+            .is_some_and(|sampling| sampling.observation_admitted);
+        self.failure_state = Some(FailureState::capture(settings, stop, admitted));
+        let Some(Ok(state)) = self.failure_state else {
+            return;
+        };
         // Metadata capture borrows the same original error before diagnostics or publication.
         // No text buffer is needed, and a representation error never replaces that original.
-        if let Some((operation, cause)) = retain_io_failure(error, settings, stop) {
+        if let Some((operation, cause)) = retain_io_failure(error, settings, stop, state) {
             self.failure_operation = Some(operation);
             self.failure_cause = Some(cause);
         }
@@ -648,6 +667,11 @@ impl OuterRunPreparation {
                     operation: self
                         .failure_operation
                         .ok_or(SamplingError::InvalidTerminalTransition)?,
+                    state: self
+                        .failure_state
+                        .transpose()
+                        .map_err(SamplingError::Deadline)?
+                        .ok_or(SamplingError::InvalidTerminalTransition)?,
                     representation: FailureRepresentation::Integrity { predicate },
                 }
             }
@@ -800,7 +824,15 @@ impl OuterRunOwner {
                 if let Some(settings) = settings {
                     // Required producer metadata precedes optional diagnostics. No new buffer
                     // or reconstructed error is created; the same original stays in result.
-                    self.failure_cause = retain_io_failure(original, settings, stop);
+                    let admitted = match (&self.sampling, &self.terminal) {
+                        (Some(sampling), _) => sampling.observation_admitted,
+                        (None, Some(terminal)) => terminal.sampling.observation_admitted,
+                        (None, None) => false,
+                    };
+                    self.failure_state = Some(FailureState::capture(settings, stop, admitted));
+                    if let Some(Ok(state)) = self.failure_state {
+                        self.failure_cause = retain_io_failure(original, settings, stop, state);
+                    }
                 }
             }
         }
@@ -811,6 +843,12 @@ impl OuterRunOwner {
     /// for absent/failed capture, or interpret this stamp as measurement or role settlement.
     pub(super) fn failure_stop(&self) -> Result<Option<StopStamp>, DeadlineError> {
         self.failure_event.transpose()
+    }
+
+    /// Actual producer milestone/election only; caller authentication and settlement remain
+    /// required before either fact selects any result. Failed comparison is retained explicitly.
+    pub(super) fn failure_state(&self) -> Result<Option<FailureState>, DeadlineError> {
+        self.failure_state.transpose()
     }
 
     /// Producer metadata alone supplies no independently authenticated admission state, public
@@ -1279,6 +1317,7 @@ fn retain_io_failure(
     error: &SamplingError,
     settings: &RunSettings,
     stop: StopStamp,
+    state: FailureState,
 ) -> Option<(CauseOperation, Result<FailureHeader, RepresentationError>)> {
     let (operation, cause) = error.original_io()?;
     Some((
@@ -1288,6 +1327,7 @@ fn retain_io_failure(
             authority: settings.authority,
             stop,
             operation,
+            state,
             representation: FailureRepresentation::Original { cause },
         }),
     ))
@@ -1296,6 +1336,7 @@ fn retain_io_failure(
 /// O's actual accounting survives collector sealing and descriptor delivery. This owner grants
 /// no writer exposure or child creation, and its latest complete sample is not cleanup evidence.
 pub(super) struct TerminalSampling {
+    observation_admitted: bool,
     launcher: LauncherMemory,
     tree: MemoryObserver,
     ledger: ResourceLedger,
@@ -1502,6 +1543,7 @@ impl TerminalPreparation {
         }
         Ok(TerminalDelivery {
             sampling: TerminalSampling {
+                observation_admitted: sampling.observation_admitted,
                 launcher: sampling.launcher,
                 tree: sampling.tree,
                 ledger: sampling.ledger,
@@ -2563,6 +2605,7 @@ impl OuterSampling {
             owner_stop: None,
             setup_refusal: None,
             caller_cancelled: false,
+            observation_admitted: false,
         }
     }
 
@@ -2604,6 +2647,9 @@ impl OuterSampling {
             outer,
             caller,
         )?;
+        if matches!(tick, MemoryTick::WithinCeiling(_)) {
+            self.observation_admitted = true;
+        }
         if self.owner_stop.is_none() {
             // Only a fresh complete observation may select a resource stop. It precedes the
             // clock check, so genuine memory excess wins simultaneous observed work expiry.
@@ -2801,6 +2847,7 @@ impl OuterSampling {
         Ok((
             report,
             TerminalSampling {
+                observation_admitted: self.observation_admitted,
                 launcher: self.launcher,
                 tree: self.tree,
                 ledger: self.ledger,
