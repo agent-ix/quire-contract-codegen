@@ -1179,8 +1179,11 @@ successful bootstrap nor one setup sample establishes later coverage or an evide
 The resource accounting fault domain excludes incidental caller-process allocations outside the
 named terms. Opaque Command implementation storage, caller thread/native runtime, TLS,
 guard/alternate-stack and allocator transient allocations beyond the named per-run controls/captures
-are not charged, bounded or claimed by this requirement. This exclusion shall not omit positively
-observed launcher L RSS, any other owned role/descendant, named `caller_run_buffers` or actual
+are not charged, bounded or claimed by this requirement. Allocator bookkeeping, chunk overhead
+and rounding of a named allocation are also excluded from its named bound. Its actual returned
+Rust capacity multiplied by element size, and its named metadata, shall still be charged; this
+explicit allocator-overhead exclusion shall not omit either quantity. This exclusion shall not omit
+positively observed launcher L RSS, any other owned role/descendant, named `caller_run_buffers` or actual
 pipe/memfd reservations. Named controls/captures shall retain real finite allocation caps and their
 charge; an already allocated named quantity shall not be reclassified as incidental to omit it.
 A complete conservative-charge observation shall cover every named formula term and the actual
@@ -1266,8 +1269,8 @@ For each named retained or temporary heap allocation, the inventory shall use it
 actual returned Rust capacity multiplied by element size, plus named metadata and
 checked simultaneous-lifetime overlap. For `Vec` and `String`, requested constructor
 capacity alone is insufficient if the returned capacity is larger. Allocator usable
-chunk size, rounding and overhead are not this capacity term and remain within the
-existing incidental allocator exclusions. Temporary decoding, formatting and
+chunk size, rounding and overhead are not this capacity term and are excluded by the
+explicit allocator-overhead boundary above. Temporary decoding, formatting and
 collection overlap shall be included; conservative duplicate counting is allowed.
 Subtracting a named live term requires a justified lifetime proof.
 

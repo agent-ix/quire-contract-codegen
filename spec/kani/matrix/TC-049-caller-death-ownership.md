@@ -945,8 +945,8 @@ before merge. Runtime observation/settlement Tests remain independently required
 5. Inventory actual returned Rust Vec/String capacities times element size, named
    metadata and overlapping retained/temporary lifetimes. Larger returned capacity
    defeats requested-capacity accounting; allocator chunk overhead is excluded by
-   the existing incidental boundary. Inspect the independently declared finite
-   private native-workspace charge in actual caller_run_buffers before L/exposure,
+   the explicit FR-034 allocator-overhead boundary. Inspect the independently declared
+   finite private native-workspace charge in actual caller_run_buffers before L/exposure,
    and prove the checked required bound <= declaration. Carrier implementation is an
    IR-639 CODE gate. Computed proof must not be written back into the analyzed binary;
    changing a declaration requires rebuilding and reanalyzing. Missing named charge

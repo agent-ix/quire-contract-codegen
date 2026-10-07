@@ -39,3 +39,9 @@ coverage-inflation risk is recorded.
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | low | The 10 new PLANNED/UNRUN Analysis criteria compute `method-without-symbol`, which `quire matrix --strict` counts as passing. Strict coverage therefore rises by 10 criteria with zero executed evidence: only the statement text says UNRUN. The PR body reports this correctly, but a strict-matrix consumer cannot tell these rows from completed Analysis. | spec/kani/functional/FR-034-caller-death-ownership.md:1476-1485 | correct-requirement-no-evidence |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed in commit "Clarify supported-build native accounting proof and charge ownership" | FR-034:1227-1230 and TC-049:915-916 say that a computed method-without-symbol row is not executed evidence and that completion is zero until a receipt exists. The tool status itself is unchanged. The matrix goes from 578 to 588 rows with the same strict failure set. |

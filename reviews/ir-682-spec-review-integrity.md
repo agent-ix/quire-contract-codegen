@@ -51,3 +51,11 @@ extended, and one reference has no owner in the specification.
 | FND-001 | medium | TC-049 adds a procedure section for FR-034-AC-41 to FR-034-AC-50 but no rows in its two per-criterion tables, although every criterion from FR-034-AC-31 to FR-034-AC-40 has a row in both. The tables are the slice-1/slice-2 evidence allocation (the IR-655 staging, lines 74-106) and Expected Results (lines 947-970: authority, required observation, regression caught). As a result, the new criteria have no slice assignment within the single lifecycle CODE PR and no stated regression-caught column. | spec/kani/matrix/TC-049-caller-death-ownership.md:74-106,947-970,902-945 | missing-requirement |
 | FND-002 | low | "The Linux little-endian aarch64/riscv64 native-policy implementations" is a definite reference to implementations that the base specification never defines; they exist only in pending IR-639 code (backend_policy.rs cfg arms). FR-034 elsewhere names only native x86_64 policy and "other audited native policies". | spec/kani/functional/FR-034-caller-death-ownership.md:1220-1222 | wrong-requirement |
 | FND-003 | low | Line 1198 says "The guardian cannot determine this proof's availability". However, `caller_run_buffers` is derived and charged by trusted caller C (lines 1158-1160), not by the guardian. Naming the wrong role blurs which process the gate concerns. | spec/kani/functional/FR-034-caller-death-ownership.md:1198 | wrong-requirement |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed in commit "Clarify supported-build native accounting proof and charge ownership" | TC-049 now has AC-41..50 rows in both the slice-1/slice-2 table (lines 107-116) and Expected Results (lines 990-999). |
+| FND-002 | fixed in commit "Clarify supported-build native accounting proof and charge ownership" | FR-034:1218-1221 now say "Other audited native policies permitted by the existing contract remain candidates" and add no implementation claim. |
+| FND-003 | fixed in commit "Clarify supported-build native accounting proof and charge ownership" | FR-034:1196-1197 now say "Neither C nor O determines proof availability at runtime". |

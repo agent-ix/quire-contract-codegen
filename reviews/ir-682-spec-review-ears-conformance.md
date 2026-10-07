@@ -39,3 +39,10 @@ wording defects remain.
 | --- | --- | --- | --- | --- |
 | FND-001 | low | The section mixes uppercase "SHALL" (9 uses) and lowercase "shall" in the same sentences (for example lines 1196-1200). The base FR-034 and the rest of the file use only "shall". Readers may infer two strengths of obligation where none is intended. | spec/kani/functional/FR-034-caller-death-ownership.md:1192-1264 | wrong-requirement |
 | FND-002 | low | "Stable objdump disassembly" is undefined. objdump has no stable or unstable mode, and it is unclear whether GNU binutils or llvm-objdump is meant. The intended constraint, stable compiler flags only (no `-Z` options such as `-Z emit-stack-sizes`), is not stated anywhere, so FR-034-AC-42 does not forbid nightly-only build flags. | spec/kani/functional/FR-034-caller-death-ownership.md:1225; FR-034-AC-42 | wrong-requirement |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed in commit "Clarify supported-build native accounting proof and charge ownership" | The section now uses only lowercase "shall" (0 uppercase SHALL in FR-034 and TC-049). |
+| FND-002 | fixed in commit "Clarify supported-build native accounting proof and charge ownership" | FR-034:1232-1236 and AC-42 name GNU objdump or llvm-objdump, record the tool version, and exclude nightly -Z and RUSTC_BOOTSTRAP. |
