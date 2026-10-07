@@ -111,7 +111,13 @@ impl SamplingPreparation {
             .identity_deadline()
             .map_err(SamplingError::Deadline)?;
 
-        self.collector = Some(ReportCollector::prepare(outer).map_err(SamplingError::Report)?);
+        self.collector =
+            Some(
+                ReportCollector::prepare(outer).map_err(|cause| SamplingError::Report {
+                    operation: CauseOperation::ReportCreation,
+                    cause,
+                })?,
+            );
         self.tree = Some(
             MemoryObserver::prepare(Path::new("/proc")).map_err(|cause| SamplingError::Io {
                 operation: CauseOperation::ProcSetup,
