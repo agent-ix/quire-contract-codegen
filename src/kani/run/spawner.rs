@@ -406,7 +406,7 @@ mod tests {
             SpawnFailure::Startup,
         ];
         for (expected, construct) in constructors.into_iter().enumerate() {
-            let original = io::Error::from_raw_os_error(rustix::io::Errno::ACCES.raw_os_error());
+            let original = io::Error::from_raw_os_error(rustix::io::Errno::ACCESS.raw_os_error());
             let kind = original.kind();
             let errno = original.raw_os_error();
             let failure = construct(original);
