@@ -249,6 +249,7 @@ enum InnerAdmissionState {
     Prepared,
     SendingStart,
     AwaitPolicy,
+    SendingOuterRefusal,
     SendingRefusal,
     Refused,
     AwaitDispatch(ReadyAdmission),
@@ -277,6 +278,8 @@ pub(super) struct PendingInnerBackend {
     handoff_child: Option<std::process::Child>,
     refusal_storage: Option<FrameStorage>,
     refusal_send: Option<IncrementalSend>,
+    outer_refusal_storage: Option<FrameStorage>,
+    outer_refusal_send: Option<IncrementalSend>,
     policy_refusal: Option<(super::startup_envelope::PolicyFailureCause, StopStamp)>,
     stops: StopTimeline,
     deadline: Instant,
@@ -316,6 +319,9 @@ impl PendingInnerBackend {
         let refusal_storage = FrameStorage::prepare()
             .map_err(GuardianError::Control)
             .map_err(InnerAdmissionError::Guardian)?;
+        let outer_refusal_storage = FrameStorage::prepare()
+            .map_err(GuardianError::Control)
+            .map_err(InnerAdmissionError::Guardian)?;
         let stops = StopTimeline::prepare(input.settings.started)
             .map_err(io::Error::other)
             .map_err(GuardianError::Io)
@@ -329,6 +335,8 @@ impl PendingInnerBackend {
             handoff_child: None,
             refusal_storage: Some(refusal_storage),
             refusal_send: None,
+            outer_refusal_storage: Some(outer_refusal_storage),
+            outer_refusal_send: None,
             policy_refusal: None,
             stops,
             deadline,
@@ -362,7 +370,9 @@ impl PendingInnerBackend {
             .map_err(GuardianError::Io)
             .map_err(InnerAdmissionError::Guardian)?;
         let cutoff = match self.state {
-            InnerAdmissionState::SendingRefusal | InnerAdmissionState::Refused => self
+            InnerAdmissionState::SendingOuterRefusal
+            | InnerAdmissionState::SendingRefusal
+            | InnerAdmissionState::Refused => self
                 .stops
                 .deadline(input.settings.settlement_reserve, input.settings.deadline)
                 .and_then(super::role_deadline::RoleDeadline::local)
@@ -408,7 +418,7 @@ impl PendingInnerBackend {
                         // The actual installer remains in this owner. Capture original metadata
                         // before any fallible forwarding work, with no I receipt-time trigger.
                         self.policy_refusal = Some((failure, stop));
-                        self.state = InnerAdmissionState::SendingRefusal;
+                        self.state = InnerAdmissionState::SendingOuterRefusal;
                         self.stops
                             .observe(stop)
                             .map_err(io::Error::other)
@@ -418,17 +428,26 @@ impl PendingInnerBackend {
                             .refusal_storage
                             .take()
                             .ok_or(InnerAdmissionError::MissingOwnedState)?;
+                        let refusal = super::startup_envelope::InstallerReply::Refused {
+                            identity: input.settings.identity,
+                            authority: input.settings.authority,
+                            stop,
+                            failure,
+                            context: self.installer.failure_context().as_bytes(),
+                        };
                         let frame = storage
-                            .encode(&super::startup_envelope::InstallerReply::Refused {
-                                identity: input.settings.identity,
-                                authority: input.settings.authority,
-                                stop,
-                                failure,
-                                context: self.installer.failure_context().as_bytes(),
-                            })
+                            .encode(&refusal)
                             .map_err(GuardianError::Control)
                             .map_err(InnerAdmissionError::Guardian)?;
                         self.refusal_send = Some(IncrementalSend::new(frame));
+                        let outer_frame = self
+                            .outer_refusal_storage
+                            .take()
+                            .ok_or(InnerAdmissionError::MissingOwnedState)?
+                            .encode(&refusal)
+                            .map_err(GuardianError::Control)
+                            .map_err(InnerAdmissionError::Guardian)?;
+                        self.outer_refusal_send = Some(IncrementalSend::new(outer_frame));
                         return Ok(InnerAdmissionProgress::Pending);
                     }
                     Err(error) => return Err(InnerAdmissionError::Installer(error)),
@@ -447,6 +466,21 @@ impl PendingInnerBackend {
                         .map_err(InnerAdmissionError::Guardian)?;
                     self.state = InnerAdmissionState::AwaitDispatch(ready);
                     return Ok(InnerAdmissionProgress::Ready);
+                }
+            }
+            InnerAdmissionState::SendingOuterRefusal => {
+                // Preserve the genuine negative producer event at O before C can close its
+                // exclusive lease. This is the same bounded Refused record, not completion.
+                if self
+                    .outer_refusal_send
+                    .as_mut()
+                    .ok_or(InnerAdmissionError::MissingOwnedState)?
+                    .advance(&input.outer_bootstrap.transport(), &[], cutoff)
+                    .map_err(GuardianError::Control)
+                    .map_err(InnerAdmissionError::Guardian)?
+                {
+                    self.outer_refusal_send = None;
+                    self.state = InnerAdmissionState::SendingRefusal;
                 }
             }
             InnerAdmissionState::SendingRefusal => {
