@@ -102,7 +102,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-36 | PLANNED/UNRUN: independent real socket-stdin admission, actual production capture-pipe inventory and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
 | FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
 | FR-034-AC-38 | PLANNED/UNRUN: independent normal settlement/join, original-window unavailable confirmation, typed diagnostic-only refusal and no new post-return custody (step 25). Untagged until actual complete Tests. | Any unavailable ordinary-seam observation is explicitly owed; prior death tests or source-only fault discussion do not supply this new criterion. |
-| FR-034-AC-39 | PLANNED/UNRUN: native trusted-process policy/install admission separated from actual post-Dispatch audit-architecture/x32 syscall enforcement; real applicable unconfined positive control, omission mutant and confirmed owned settlement; exact recipe and explicit check-to-exec residuals | Header/open success mislabelled target admission; kernel-rejected fixture counted as filter success; missing compat/x32 control counted complete; pre-Dispatch label for actual post-Dispatch kill; unfiltered retry or stale image authority |
+| FR-034-AC-39 | PLANNED/UNRUN ordinary production Tests: actual native installation success/failure, syscall process-kill and real unconfined effect controls plus unchanged classification/settlement. Unsupported-native cfg/support and unconditional native-x86_64 x32 policy require source Analysis, not an invented Test. | No new IR-655 fixture facility is allocated. Any predicate unavailable through ordinary production seams remains explicitly owed through the SPEC-before-fixture-CODE process; missing tools/kernel/workload or source-only Analysis supplies no whole-criterion Test credit. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -596,23 +596,37 @@ oracle and one-CODE-PR gate.
     guarantee outside the kernel precondition. Keep ordinary caller/group death and contained
     writer/death/EOF/seal adverse gates mandatory; this fault boundary cannot repair their failure.
 
-Steps 22–25 allocate independent new confinement/admission/settlement Tests, all PLANNED/UNRUN. They add no
-fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
-record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
-criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
-
-26. PLANNED/UNRUN (FR-034 AC-39). Source-audit the actual trusted guardian/backend-installer
-    native ABI against the matching policy and the safe installation boundary. Establish native
-    installation success with the actual matched owned roles, then exercise unavailable native
-    policy support and actual installation failure separately: require pre-Dispatch
-    BackendIpcExclusion capability refusal with the retained actual cause, no backend dispatch and
-    confirmed owned settlement. File/header inspection, helper spawn and startup EOF are not
-    target-image ABI or installation-success oracles.
-    On an applicable platform, use a repository-owned real compat/x32 syscall workload built by
-    ordinary test tooling without copied executables or an invented ABI-admission success seam.
-    Require its unconfined owned positive control to execute the actual attempted syscall; kernel
-    rejection before that syscall does not prove the filter. Record unsupported platform or
-    unavailable workload as unavailable/UNRUN evidence, without counting the criterion complete.
+26. PLANNED/UNRUN (FR-034 AC-39). Perform source/cfg Analysis of actual native policy support
+    and the safe trusted guardian/backend-installer boundary. For an unsupported-native branch
+    unavailable on the current compiled target, inspect the actual typed branch and public refusal
+    route; label it Analysis, not an executed Test. If source is not yet implemented, that Analysis
+    remains UNRUN. Establish native installation success and real installation-failure Test cases
+    through ordinary production paths when available; absent capability failure controls remain
+    unavailable/UNRUN, with no assertion-skipping Test credit or invented admission seam. Require
+    planned mandatory admission context naming BackendIpcExclusion for unsupported ABI/filter
+    installation and TrustedOwnerProtection for privilege/protection failure, with typed cause
+    provenance, no backend Dispatch and confirmed owned settlement. Header/open/helper spawn/EOF
+    observations do not prove target-image ABI or installation success.
+    Analysis must distinguish actual unsupported support provenance (semantic Unsupported with no
+    raw errno) from original OS install errno/kind and finite reconstructible non-OS variant/sites.
+    Inspect authenticated run/build, owned pre-recipe PID/state and original stamp custody before
+    classification. A kind-only projection or Display/message discriminator fails the allocation;
+    do not demand an unavailable public stage query or universal original boxed-chain fidelity.
+    Positively distinguish NNP Prctl/privilege/protection failures (TrustedOwnerProtection) from
+    actual Seccomp filter installation failure (BackendIpcExclusion), even under a Filter wrapper.
+    Source-audit process-kill architecture rejection and x32-number/alias rejection for EVERY native
+    x86_64 policy independent of host kernel x32 support. For runtime Tests on applicable x86_64
+    hosts, author tiny repository-owned standalone assembly fixtures with explicit entry and no
+    libc/interpreter, using existing host GNU as/ld: --64/elf_x86_64 for native entry issuing compat
+    int 0x80 and x32-number syscalls, --32/elf_i386 and --x32/elf32_x86_64 for actual compat/x32 exec.
+    Do not add unsafe Rust, inline/global Rust assembly, copied binaries, dependencies, multilib
+    runtimes, Rust targets or tooling fallback. Assembly/linking/runtime success is UNRUN until
+    actually measured at the CODE gate. Require the same unconfined owned workload to produce the
+    attempted syscall's actual observable effect; a merely attempted instruction, emulator or
+    kernel-rejected image is insufficient. Missing tools/emulation/workload/kernel support is
+    unavailable/UNRUN Test evidence with zero whole-criterion completion credit. Other native
+    architectures require their own applicable source/workload evidence; these fixtures cover only
+    x86_64. Native-emulator translated syscalls are actual native enforcement, not compat evidence.
     Execute the same workload through the real filtered backend boundary after authenticated
     Dispatch, including native entry followed by a compat syscall and an exec/descendant case.
     Positively observe actual policy termination before the denied syscall's observable effect,
@@ -627,9 +641,15 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     the actual post-Dispatch event, synthetic Failed, fabricated evidence or unfiltered retry.
     Inspect the production exact-recipe construction and positively exercise admitted script/path
     and loader/environment behavior under the filter. Report pathname/content/PATH/execvp,
-    shebang/PT_INTERP and loader check-to-exec uncertainty explicitly: an earlier header/open
+    shebang/PT_INTERP, loader and kernel binfmt_misc handler check-to-exec uncertainty explicitly: an earlier header/open
     observation is not actual image authority. No installation stability precondition, recipe
     substitution, inherited execution-FD shortcut or changed writable-path semantics is allowed.
+
+Steps 22–26 allocate independent new confinement/admission/settlement/ABI Tests and named source
+Analysis, all PLANNED/UNRUN. Analysis is never runtime Test credit. They add no
+fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
+record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
+criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
 
 ### Charged-peak evidence constructors (FR-034-AC-32)
 
@@ -726,6 +746,7 @@ cleanup obligations.
 | FR-034-AC-36 | PLANNED/UNRUN: real socket stdin refuses, production fd1/fd2 capture inventory verified; explicit Closed and Open inspection error distinguished; mandatory typed cause and no fabricated result | Unreachable stdout socket test claimed; Open EBADF admitted as Closed; caller-fixable socket misreported as memory-only failure |
 | FR-034-AC-37 | PLANNED/UNRUN: I non-dumpability/backend privilege exclusion block proc1fd/pidfd_getfd/ptrace; trusted channel lifetimes and unchanged EOF mutant retained; uniform authority fault domain | Ambient Yama masks absent protection; contained export excused as outside peer; final delivery closed early |
 | FR-034-AC-38 | PLANNED/UNRUN: actual normal role/capture/spawner settlement; original-window typed CleanupUnconfirmed error with bounded diagnostic-only residuals, no new post-return custody; public precondition docs | Error carries authority; hidden cleanup worker; false joined/retired or kernel-cause claim; valid bytes accepted after unconfirmed settlement; grace resets T |
+| FR-034-AC-39 | PLANNED/UNRUN: source/cfg Analysis of unsupported native support and unconditional native-x86_64 x32 rule; real available installation Tests, typed provenance/capability distinction, applicable process-kill/effect controls, omission mutant, original settlement/classification | Source Analysis called an executed Test; errno-only denial instead of process-kill; omitted x32 rule on a kernel without x32; unavailable fixture counted complete; emulator mistaken for guest syscall evidence; false pre-Dispatch label or unfiltered retry |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
