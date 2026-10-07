@@ -103,8 +103,15 @@ pub(super) enum StartupPayload {
 #[serde(deny_unknown_fields)]
 pub(super) struct StartupIoCause {
     kind: StartupIoKind,
+    #[serde(deserialize_with = "required_errno")]
     raw_os_error: Option<i32>,
     payload: StartupPayload,
+}
+
+// Explicit null records a positively captured absence. An omitted member is a required
+// metadata fault; deserialize_with makes serde reject omission rather than default Option.
+fn required_errno<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<Option<i32>, D::Error> {
+    Option::<i32>::deserialize(deserializer)
 }
 
 impl StartupIoCause {
@@ -258,6 +265,12 @@ impl std::error::Error for RepresentationError {
 }
 
 impl StartupCause {
+    /// Capture required original I/O metadata even when optional context storage is absent.
+    /// This operation allocates no diagnostic or source clone and grants no producer authority.
+    pub(super) fn capture_io(error: &io::Error) -> Result<Self, RepresentationError> {
+        StartupIoCause::capture(error).map(Self::Io)
+    }
+
     /// Reconstruct only public, typed error shapes, without inventing an errno or source chain.
     pub(super) fn project(
         self,
@@ -351,9 +364,9 @@ impl PreparedStartupContext {
         error: &io::Error,
     ) -> Result<StartupCause, RepresentationError> {
         self.text.clear();
-        let cause = StartupIoCause::capture(error)?;
+        let cause = StartupCause::capture_io(error)?;
         self.capture_optional_display(error);
-        Ok(StartupCause::Io(cause))
+        Ok(cause)
     }
 
     /// Capture optional diagnostics only after the owner has retained its typed cause.
@@ -645,6 +658,23 @@ mod tests {
             value["Io"]["payload"] = malformed;
             assert!(serde_json::from_value::<StartupCause>(value).is_err());
         }
+        assert!(encoded["Io"]["raw_os_error"].is_null());
+        for malformed in [
+            serde_json::json!("1"),
+            serde_json::json!(true),
+            serde_json::json!([]),
+            serde_json::json!(i64::from(i32::MAX) + 1),
+        ] {
+            let mut value = encoded.clone();
+            value["Io"]["raw_os_error"] = malformed;
+            assert!(serde_json::from_value::<StartupCause>(value).is_err());
+        }
+        let mut missing_errno = encoded.clone();
+        missing_errno["Io"]
+            .as_object_mut()
+            .unwrap()
+            .remove("raw_os_error");
+        assert!(serde_json::from_value::<StartupCause>(missing_errno).is_err());
         let mut missing = encoded;
         missing["Io"].as_object_mut().unwrap().remove("payload");
         assert!(serde_json::from_value::<StartupCause>(missing).is_err());

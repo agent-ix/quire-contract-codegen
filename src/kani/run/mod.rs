@@ -62,6 +62,8 @@ mod creator;
 #[cfg(target_os = "linux")]
 mod outer_caller;
 #[cfg(target_os = "linux")]
+mod outer_failure;
+#[cfg(target_os = "linux")]
 mod outer_preparation;
 #[cfg(target_os = "linux")]
 mod outer_sampling;

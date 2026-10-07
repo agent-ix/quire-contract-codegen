@@ -69,6 +69,37 @@ pub(super) enum SamplingError {
     PartialReportDescriptor,
 }
 
+impl SamplingError {
+    /// Move only actual I/O producer values into the negative representation path. Other
+    /// domains remain owned and explicit; this does not invent a kind, site or wrapper cause.
+    pub(super) fn into_original_io(self) -> Result<(CauseOperation, io::Error), Self> {
+        match self {
+            Self::Io { operation, cause } => Ok((operation, cause)),
+            Self::Report {
+                operation,
+                cause: ReportError::Io(cause),
+            } => Ok((operation, cause)),
+            original @ (Self::Report { .. }
+            | Self::Control(_)
+            | Self::Charge(_)
+            | Self::Deadline(_)
+            | Self::InvalidMonitorTransition
+            | Self::InnerLeaseConsumed
+            | Self::PhaseAuthorityMismatch
+            | Self::UnexpectedPhase
+            | Self::SettlementReportMismatch
+            | Self::InnerIdentity(_)
+            | Self::InnerCompletionAuthority
+            | Self::UnexpectedInnerEvent
+            | Self::InvalidTerminalTransition
+            | Self::TerminalAuthority
+            | Self::TerminalSize
+            | Self::TerminalDeadlineMismatch
+            | Self::PartialReportDescriptor) => Err(original),
+        }
+    }
+}
+
 impl std::fmt::Display for SamplingError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(formatter, "outer sampling refused: {self:?}")
