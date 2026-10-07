@@ -140,33 +140,46 @@ nothing says so.
 - The generator shall settle such an item in no other place.
 - The process-provider arm shall settle an item from the candidate's descriptor
   in the envelope manifest and the requested item's capability kind and full `extent`.
-- The process-provider arm shall compare the item's capability kind and extent classification
-  with the descriptor's advertised (kind, mode) pairs. For a bounded extent it shall
-  settle `supported` only when the descriptor advertises `bounded` for that kind
-  and every `extent.bounds[].kind` belongs to its advertised `domains`; an
-  empty `bounds` list passes the domain check. Otherwise it shall settle
-  `unsupported`, warned, with
+- The process-provider arm shall compare the item's capability kind and extent
+  classification with the descriptor's advertised (kind, mode) pairs.
+- For a bounded extent, the process-provider arm shall compare every explicit
+  `extent.bounds[].kind` with manifest `domains`, including when the descriptor
+  advertises `unbounded` only for the item's kind. An empty `bounds` passes
+  this check (QSpec FR-290-AC-13).
+- When a bounded extent has an unadvertised `bounds[].kind`, the process arm
+  shall settle it `unsupported`, warned, with
+  `unsupported_projection`/`unsupported-requested-capability`, naming the
+  offending domain kind and candidate (QSpec FR-290-AC-13).
+- When a bounded extent passes that check, the process arm shall settle it
+  `supported` if the descriptor advertises `bounded` for its kind; otherwise
+  it shall settle it `unsupported`, warned, with
   `unsupported_projection`/`unsupported-requested-capability`.
-- For an unbounded extent, the process-provider arm shall settle `supported`
-  when the descriptor advertises `unbounded` for the item's kind, regardless of
-  the advertised domain set. On a `bounded`-only descriptor it shall compare
-  only the boundable `extent.domains[].kind` values (`collection`,
-  `population`, `integer`, `recursive`) with manifest `domains`, before the
-  advertised-mode decision. If any compared kind is unadvertised, the arm
-  shall settle `unsupported`, warned, with
-  `unsupported_projection`/`unsupported-requested-capability`, regardless of
-  `finite_bound_available`. The non-boundable kinds `quantity`, `loop`, and
-  `infinite-trace` are not compared and continue to the FR-290 advertised-mode
-  table. When every boundable kind is advertised, the arm shall settle
-  `requires-bound` if `finite_bound_available` is true; otherwise it shall
-  settle `unsupported`, warned, with
-  `unsupported_projection`/`unbounded-extent` (QSpec FR-290-AC-13).
-- QSpec FR-290-AC-13 owns admission of manifest `domains`: a registration
-  advertising a `bounded` pair with absent `domains`, or any registration with
-  empty, non-boundable, or repeated `domains`, is refused per registration as
-  `invalid_capability`/`invalid-domains`, keyed by backend identity. The
-  process arm receives no such bounded-capable descriptor and shall not supply
-  a missing `domains` fallback.
+- When an unbounded extent's descriptor advertises `unbounded` for its kind,
+  the process arm shall settle it `supported` without a domain-kind check.
+- When an unbounded extent's descriptor advertises only `bounded` for its
+  kind, the process arm shall compare only the boundable
+  `extent.domains[].kind` values (`collection`, `population`, `integer`,
+  `recursive`) with manifest `domains`, before the advertised-mode decision.
+  It shall skip the non-boundable kinds (`quantity`, `loop`, `infinite-trace`)
+  and leave them to the advertised-mode table (QSL ADR-014 §4; QSpec
+  FR-290-AC-13).
+- When that comparison finds an unadvertised boundable kind, the process arm
+  shall settle the unbounded item `unsupported`, warned, with
+  `unsupported_projection`/`unsupported-requested-capability`, naming the
+  offending domain kind and candidate, regardless of
+  `finite_bound_available`.
+- When every compared kind is advertised and the item's
+  `finite_bound_available` is true, the process arm shall settle an unbounded
+  item on a `bounded`-only descriptor `requires-bound`.
+- When every compared kind is advertised and the item's
+  `finite_bound_available` is false, the process arm shall settle an unbounded
+  item on a `bounded`-only descriptor `unsupported`, warned, with
+  `unsupported_projection`/`unbounded-extent`.
+- QSL supplies admitted descriptors (QSpec FR-290 "Advertised mode";
+  FR-331-AC-22). When the process arm receives an admitted bounded-capable
+  descriptor, it shall use its manifest `domains` and supply no
+  missing-`domains` fallback. QSL-654 owns the admit-side `invalid-domains`
+  enforcement.
 - The process-provider arm shall compare domain-kind membership only. It shall
   neither derive a kind from `DomainKey` nor compare a proof-bound numeric value
   with a manifest run-limit default. It shall read the requested item's `extent`.
@@ -218,7 +231,7 @@ of their arms):
 
 1. QSL ADR-029 PV-4 requires the process arm to read advertised domains and
    (kind, mode) pairs from the manifest. QSpec FR-290-AC-13 owns the domain-kind
-   check and registration refusal; QSpec FR-331 defines manifest `bounds` as
+   check; QSL-654 owns admit-side enforcement. QSpec FR-331 defines manifest `bounds` as
    run-limit defaults, so they are not admission inputs. QSpec's required
    `ProofBound.kind` is merged; QSL-654 owns its producer and the PV-4 wording.
    The arm reads that kind instead of deriving one from a `DomainKey` (AC-12,
@@ -254,14 +267,14 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-8 | An item with an absent extent classification settles `invalid-request` with `invalid_capability`/`absent-extent`, and an absent or unknown kind settles before the candidate table is consulted. | Test (TC-030) |
 | FR-019-AC-9 | A backend kind added without a negotiation arm does not compile: the dispatch is an exhaustive `match` over the closed kind with no catch-all arm. | Analysis |
 | FR-019-AC-11 | PLANNED (IR-629). `BackendKind` has `Process(id)` beside `Kani`; `ALL` lists finite built-in kinds only, while CG enumerates process candidates from descriptors. CG's descriptor-to-kind conversion returns `Process(id)` exactly when a descriptor has process origin, including identity text `kani`. A named, registered process backend reaches that arm and receives one disposition; no process item disappears for being absent from `ALL`. | Test (TC-046) |
-| FR-019-AC-12 | PLANNED (IR-629; non-empty bounded rows depend on QSL-654's producer). A bounded process item settles `supported` exactly when its descriptor advertises `bounded` for its kind and every explicit `extent.bounds[].kind` belongs to manifest `domains`; empty `bounds` passes the domain check. Otherwise it settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability` (QSpec FR-290-AC-13). | Test (TC-046) |
+| FR-019-AC-12 | PLANNED (IR-629; non-empty bounded rows depend on QSL-654's producer and admit-side enforcement). A bounded process item with an uncovered `extent.bounds[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate (QSpec FR-290-AC-13). An item that passes the domain check, including one with empty `bounds`, settles `supported` exactly when its descriptor advertises `bounded` for its kind; otherwise it settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`. | Test (TC-046) |
 | FR-019-AC-16 | PLANNED (IR-629). An unbounded process item settles `supported` when its descriptor advertises `unbounded` for its kind, regardless of whether any `extent.domains[].kind` belongs to manifest `domains`. | Test (TC-046) |
 | FR-019-AC-17 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item settles `requires-bound` exactly when `finite_bound_available` is true and every boundable `extent.domains[].kind` is in manifest `domains` (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-18 | PLANNED (IR-629). Given the same process advertisements and item extent, changing only backend identity, manifest position, manifest run-limit defaults or ambient state leaves the disposition and cause unchanged apart from the backend named in the output. | Test (TC-046) |
-| FR-019-AC-19 | PLANNED (IR-629; bounded row depends on QSL-654). The process arm reads each explicit `extent.bounds[].kind` and never derives a domain kind from `DomainKey`; two otherwise equal bounded items with the same `DomainKey` and different explicit kinds can settle differently under one manifest `domains` set. | Test (TC-046) |
+| FR-019-AC-19 | PLANNED (IR-629; bounded row depends on QSL-654's producer). The process arm reads each explicit `extent.bounds[].kind` and never derives a domain kind from `DomainKey`; two otherwise equal bounded items with the same `DomainKey` and different explicit kinds can settle differently under one manifest `domains` set. | Test (TC-046) |
 | FR-019-AC-20 | PLANNED (IR-629). CG's process descriptor retains the FR-331 manifest's advertised (kind, mode) pairs, `domains` and `bounds` beside the IR-633 `id` and `origin` projection. | Test (TC-046) |
-| FR-019-AC-21 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with any unadvertised boundable `extent.domains[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`, regardless of `finite_bound_available`; non-boundable kinds are not compared (QSpec FR-290-AC-13). | Test (TC-046) |
-| FR-019-AC-22 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with every boundable `extent.domains[].kind` advertised and `finite_bound_available=false` settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`, including when a `quantity`, `loop`, or `infinite-trace` kind makes a finite bound unavailable (QSpec FR-290-AC-13). | Test (TC-046) |
+| FR-019-AC-21 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with any unadvertised boundable `extent.domains[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate, regardless of `finite_bound_available`; non-boundable kinds are not compared (QSpec FR-290-AC-13). | Test (TC-046) |
+| FR-019-AC-22 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with every boundable `extent.domains[].kind` advertised and the item's `finite_bound_available=false` settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`. CG reads that flag from the item and does not derive it from the domain kinds (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-23 | PLANNED (IR-629; bounded row depends on QSL-654). Changing only a bounded item's proof-bound numeric maximum leaves its process-provider `supported` or `unsupported` disposition and cause unchanged. | Test (TC-046) |
 | FR-019-AC-13 | Settling a process-provider item reaches no plugin: a descriptor whose identity names a non-existent executable settles identically to one with an ordinary identity, apart from the backend each names, and starts nothing, and a descriptor whose identity names an executable that records its own start leaves no record. A mutant arm that starts or resolves the identity as a process either changes the first disposition or leaves the record, and fails this. | Test (TC-046) |
 | FR-019-AC-14 | The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result or artifact member, so settling returns none of them. A change that returns one does not compile against that type. | Analysis |
@@ -272,8 +285,9 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 - **Upstream**: [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), the
   `quire-spec-language` registry that computes `candidates`, and QSL-654's
   QSpec FR-290-AC-13 domain-kind rule and FR-331/schema addition of required
-  `ProofBound.kind` (merged); QSL-654 owns the producer and ADR-029 PV-4 reword
-  of the domain-check scope and bounded admission rule.
+  `ProofBound.kind` (merged); QSL-654 owns the producer, admit-side
+  `invalid-domains` enforcement, and ADR-029 PV-4 reword of the domain-check
+  scope and bounded admission rule.
 - **Downstream**: [TC-030](../matrix/TC-030-capability-settlement.md),
   [TC-046](../matrix/TC-046-process-provider-settlement.md); quire-driver
   IR-609's pre-negotiation conversion and adaptation to the new variant;

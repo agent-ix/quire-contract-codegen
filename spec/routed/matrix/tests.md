@@ -17,7 +17,7 @@ type: TestMatrix
 | FR-022 | FR-022-AC-16 | TC-033 | ⚠️ Partially covered; asserted on the harness-pairing function (`index_harnesses`), not through `generate_routed`, because unique name assignment makes the duplicate unreachable from the public entry |
 | FR-022 | FR-022-AC-6 | TC-033 | ⚠️ Partially covered; the out-of-range unwind and unparsable subject path refusals are asserted; the criterion's first example has no test |
 | FR-022 | FR-022-AC-1 | Analysis | 🚧 Planned |
-| FR-019 | FR-019-AC-1 (process arm), FR-019-AC-11 through FR-019-AC-13, FR-019-AC-16 through FR-019-AC-23 | TC-046 | 🚧 Planned; QSpec requires `ProofBound.kind`, non-empty bounded-domain rows await QSL-654's producer |
+| FR-019 | FR-019-AC-1 (process arm), FR-019-AC-11 through FR-019-AC-13, FR-019-AC-16 through FR-019-AC-23 | TC-046 | 🚧 Planned; QSpec requires `ProofBound.kind`, while admitted-descriptor rows await QSL-654's producer and admit-side `invalid-domains` enforcement |
 | FR-022 | FR-022-AC-17 through FR-022-AC-19 | TC-046 | 🚧 Planned |
 | FR-022 | FR-022-AC-20 | Analysis | 🚧 Planned |
 | FR-022 | FR-022-AC-21, FR-022-AC-22 | TC-046 | 🚧 Planned |
