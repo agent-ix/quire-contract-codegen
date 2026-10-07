@@ -60,3 +60,11 @@ Failure scenario: A coder reads 'through the existing CapabilityUnavailable cont
 ## Verdict
 
 The behavioural claims are source-grounded: src/kani/classify.rs:128-137 maps unsuccessful exit with no report to Inconclusive NoVerdict and successful exit with no report to KaniReportRefusal::Missing; src/kani/run/tool.rs:63-65 disclaims file pinning and replacement races; src/kani/run/namespace.rs:146-148 hands bwrap the original program pathname, which bwrap resolves at exec, matching the stated PATH/execvp residual. The narrowing is explicit and adds no hash, pin, unsafe, fallback, compatibility layer, catalog, budget or new public cause. One wording defect: the admission context is called 'existing' though it is not in the source. rust-review was not run as a method (no .rs or Cargo file in the diff); its checklist was applied only while reading source for context. No build, test, Kani or gate was run, by assignment.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: FR-034:636-638 now says 'planned mandatory CapabilityUnavailable context', 'a merged SPEC API allocation that remains CODE-gated, not an already implemented capability API'; AC-39 (FR-034:1106) and TC-049 step 26 (L606-607) say 'planned'. src/ at the fix head still has no such type, which now matches the text. |

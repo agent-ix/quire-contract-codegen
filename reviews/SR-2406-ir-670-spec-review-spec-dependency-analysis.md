@@ -49,3 +49,11 @@ Failure scenario: The coder reaches step 26, finds that no safe Rust API issues 
 ## Verdict
 
 No new spec-artifact dependency or cycle; reuse of FR-017 classification and the planned KaniStartupAdmissionCause allocation is consistent with FR-034's existing depends_on FR-017 edge. The compat/x32 workload's build dependency is the gap.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: FR-034 Dependencies (L1110-1122) now allocates repository-authored standalone assembly built by existing GNU as/ld modes (--64/elf_x86_64, --32/elf_i386, --x32/elf32_x86_64), with safe Rust only invoking tools, no unsafe Rust, Rust assembly, Cargo dependency, multilib runtime, Rust target, copied binary or fallback, and missing tools as unavailable/UNRUN; TC-049 step 26 (L617-629) matches. Assembly and runtime remain UNRUN and are not credited here. |

@@ -63,3 +63,20 @@ Failure scenario: On a host with a registered qemu-user binfmt handler, a foreig
 ## Verdict
 
 Post-Dispatch handling is sound: exec failure and ABI kill go to the existing bounded result path, never retroactive admission, and NoVerdict is limited to an actual unsuccessful exit with no report after settlement, matching classify.rs:128-137. Kernel rejection before the syscall is correctly excluded as filter evidence. Two gaps: the unsupported-support refusal has no defined cause or discriminator, and the residual inventory omits one exec-time resolution path.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: FR-034:649-657 gives unsupported native support io::ErrorKind::Unsupported with no raw OS errno plus typed private provenance, keeps an OS installation error's errno and kind, and bans message parsing; raw_os_error None versus Some now separates unsupported support from an OS EOPNOTSUPP installation error at the public boundary. TC-049 step 26 (L610-614) requires the same distinction. |
+| FND-002 | fixed | aef3d57: FR-034:683-687 adds kernel binfmt_misc interpreter/handler resolution, says the filter enforces the emulator's actual native syscalls rather than an inferred guest ABI, and grants no confinement exception; TC-049 step 26 and the Expected Results row add the emulator-mistaken-for-guest-evidence regression. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The binfmt_misc fix dropped the 'and' before 'loader selection' without adding a comma, so the residual list now reads 'ELF PT_INTERP resolution loader selection and kernel binfmt_misc interpreter/handler resolution', which runs two residuals together. | spec/kani/functional/FR-034-caller-death-ownership.md:682; spec/kani/functional/FR-034-caller-death-ownership.md:683 |
+
+Failure scenario (FND-003, confidence high): A reader parses 'ELF PT_INTERP resolution loader selection' as one item (the loader chosen by PT_INTERP) and omits loader selection by other means (for example LD_LIBRARY_PATH-driven library choice) from the residuals it reports in step 26.

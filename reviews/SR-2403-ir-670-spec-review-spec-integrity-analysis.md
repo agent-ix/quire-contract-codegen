@@ -89,3 +89,23 @@ Failure scenario: A coder implementing step 26 who finds no ordinary production 
 ## Verdict
 
 The new FR text is internally consistent with the FR-034 Dispatch transition table (L589-593) and the FR-017 NoVerdict mapping, and it does not weaken the IPC, descriptor, owner-protection, capture, deadline or settlement obligations. The defects are placement and mapping gaps in how AC-39 is wired into TC-049 and into the existing capability allocation.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: The slice row (TC-049:105) now holds ordinary-seam evidence in column 2 and states 'No new IR-655 fixture facility is allocated' with owed-evidence routing in column 3; a new Expected Results row FR-034-AC-39 (TC-049:749) carries required observation and regressions caught. |
+| FND-002 | fixed | aef3d57: FR-034:639-645 separates IPC/seccomp filter installation failure (BackendIpcExclusion) from privilege installation or owner-protection verification failure, including NNP/CAP_SYS_PTRACE reported via a filter library (TrustedOwnerProtection), decided by the typed operation; AC-39 and TC-049 step 26 match. |
+| FND-003 | fixed | aef3d57: FR-034:668-671 now fixes the action as the seccomp process-kill before the syscall executes, matching TC-049 step 26's termination oracle and the Expected Results regression 'errno-only denial instead of process-kill'. |
+| FND-004 | fixed | aef3d57: spec/kani/matrix/tests.md:54 now reads FR-034-AC-1 through FR-034-AC-39 and the TC-049 summary row (L85) lists AC-31 through AC-39; quire matrix at the fix head computes FR-034-AC-39 untagged with no binder, as a PLANNED criterion should. |
+| FND-005 | fixed | aef3d57: The closing paragraph now follows step 26 (TC-049:648-652) and reads 'Steps 22-26', carrying the no-fixture-DTO/hook and IR-655 owed-evidence rules to step 26, and adds 'Analysis is never runtime Test credit'. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | The fix requires the private refusal transport to bind provenance to the 'original stop stamp' (FR-034:659), and TC-049 step 26 inspects 'original stamp custody' (L612), but neither term is defined anywhere in the spec (the only other 'stamp' text is 'without timestamps' at FR-034:492), and 'stop' has no meaning for a pre-Dispatch admission refusal in this file, whose only stop concepts are the AC-38 workdeadline/FIRST stop trigger. | spec/kani/functional/FR-034-caller-death-ownership.md:659; spec/kani/matrix/TC-049-caller-death-ownership.md:612 |
+
+Failure scenario (FND-006, confidence medium): One coder binds the refusal to a monotonic timestamp taken at refusal, another to the AC-38 FIRST stop-trigger deadline, a third to nothing because no stop occurred before Dispatch; the step 26 Analysis has no fixed thing to check, so any of the three can be called conformant.

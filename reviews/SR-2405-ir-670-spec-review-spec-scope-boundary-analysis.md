@@ -51,3 +51,11 @@ Failure scenario: A coder reads 'where applicable' as 'when the build host's ker
 ## Verdict
 
 The narrowing replaces 'incompatible or unsupported execution ABIs shall refuse admission' with a truthful split and explicitly keeps IPC, privilege, descriptor, ownership, capture, deadline, resource and settlement obligations; it introduces no stability precondition, recipe rewrite, inherited execution descriptor, fallback or new cause. The undefined 'where applicable' for the x32 rule is the one boundary defect.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: FR-034:670-671 makes the x32 process-kill rule unconditional for every native x86_64 policy 'regardless of host kernel x32 support'; AC-39, TC-049 step 26 and the Expected Results regression 'omitted x32 rule on a kernel without x32' match, and source Analysis of the rule is required independently of runtime availability. |

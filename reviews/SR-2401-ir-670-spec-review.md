@@ -53,3 +53,11 @@ Failure scenario: On an x86_64 CI host the unsupported-ABI refusal is compiled o
 ## Verdict
 
 Structurally valid and free of the hash/pin antipattern; the narrowing is stated rather than hidden. The defect is that one AC-39 branch has no feasible evidence path. Review set: subset (base plus ears-conformance, integrity, failure-domain, scope-boundary, dependency). Criterion-strength was not run because no Jev client is installed; no calibrated strength judgement is claimed.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: TC-049 step 26 (L599-605) now routes the unreachable unsupported-native branch to source/cfg Analysis labelled not an executed Test, UNRUN until source exists, and makes absent installation-failure controls unavailable/UNRUN with no Test credit; AC-39 (FR-034:1106), the slice row (TC-049:105) and the Expected Results row (TC-049:749) state the same. |

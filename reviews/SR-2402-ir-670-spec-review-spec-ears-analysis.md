@@ -48,3 +48,11 @@ Failure scenario: A requirement extractor that keys on '<system> shall' skips th
 ## Verdict
 
 Mostly conformant; the descriptive disclaimers ('imposes no ... precondition', 'claims no binding') are scope statements, not requirements, and are acceptable as prose. AC-39 bundles many obligations in one row, matching the existing AC-35..AC-38 convention in this file, so it is not raised as an EARS defect here.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-contract-codegen@aef3d5715543db202d37d28c5fa4f422b99dc369 (fix diff 24b4135..aef3d57; 79a1a9a only adds the seven original SR files under reviews/, byte-identical to this file's original prefix). Reviewer session 931a2951-8e8f-4dc1-b745-5c804f4eb6a6, model claude-opus-5-5, run fea14e45-7035-49c6-9f42-ef4ddc5a1514. Every outcome was re-measured against the fix head; the author's fix map was read as data only. No build, test, Kani or full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | aef3d57: Both clauses now have the installed policy as subject with 'shall' (FR-034:668-674): event-driven 'When a syscall has an unsupported audit architecture, the installed policy shall terminate ...' and 'When native entry issues a compat syscall, the installed policy shall apply ...'; no 'must' remains in the new FR section (L633-700). |
