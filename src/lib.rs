@@ -161,6 +161,10 @@ pub use kani::identity::{
 };
 pub use kani::output::playback::DecodeFailure;
 pub use publication::publish::{write_bundle_atomic, PublishedBundleIdentity};
+pub use replay::composite::{
+    composite_parity_terminal_value, verified_shadow_terminal_value, CompositeParitySettlement,
+    CompositeReportError, VerifiedShadowSettlement,
+};
 pub use replay::frame::{
     FrameReplay, FrameReplayError, FrameReplayInputs, PreStateFault, ScopeMember,
 };

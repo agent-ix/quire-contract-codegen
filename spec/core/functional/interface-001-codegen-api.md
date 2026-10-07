@@ -152,6 +152,14 @@ operations:
     inputs: [Contract IR KaniOutcome, the SUCCESS-check count, an optional ReplaySettlement as run_terminal_value takes it]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
     semantics: the one match over the pair (outcome kind, replay settlement) with no wildcard arm; a Counterexample is Refuted only with a reproduced replay, and the settlement accompanies a Counterexample only; Refused, InvalidInput and IncompleteInput are Declined carrying the outcome's Std001Code as DeclineCode::Std001, unchanged and unchecked for registration; Unavailable and Inconclusive read the code (FR-030)
+  - name: composite_parity_terminal_value
+    inputs: [retained CompositeIdentity of the falsified claim actually sent, optional genuine QSL CompositeParityReport]
+    output: CompositeParitySettlement | CompositeReportError (MissingReport | ClaimMismatch)
+    semantics: compare the full report.claim() with the retained sent identity before reading its typed result; a missing or different report has no terminal value; the private settlement stores QSL's CompositeParityResult and derives terminal_value() from that result, preserving QSL's F-row order, cause and code (FR-033 AC-9, FR-029 AC-28)
+  - name: verified_shadow_terminal_value
+    inputs: [retained CompositeIdentity of the verified claim actually sent, optional genuine QSL VerifiedShadowReport]
+    output: VerifiedShadowSettlement | CompositeReportError (MissingReport | ClaimMismatch)
+    semantics: compare the full report.claim() with the retained sent identity before reading its typed result; a missing or different report has no terminal value; the private settlement stores QSL's VerifiedShadowResult and derives terminal_value() from that result (FR-033 AC-9)
   - name: generate_composite_equality_oracles
     inputs: [admitted CheckedPackageV2, CompositeEqualityItem list]
     output: CompositeEqualityOracles | OracleGenerationError
@@ -392,6 +400,8 @@ The interface's features in declaration order: every operation the contract abov
 | classify_kani_run | operation |
 | run_terminal_value | operation |
 | ir_outcome_terminal_value | operation |
+| composite_parity_terminal_value | operation |
+| verified_shadow_terminal_value | operation |
 | generate_composite_equality_oracles | operation |
 | negotiate_backend_provider | operation |
 | generate_routed | operation |

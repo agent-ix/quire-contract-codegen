@@ -16,12 +16,13 @@ relationships:
 
 ## Description
 
-Planned public-consumer scenarios for
+Public-converter controls and remaining production scenarios for
 [FR-033](../functional/FR-033-composite-parity-replay-binding.md),
 [FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
 [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-28. All
-completed-route checks are GATED until CG consumes the QSL-640 node-parity/value/settlement API
-delivered in QSL #645; a spec-only merge does not satisfy that gate. This scenario artifact claims no executable coverage. FR-028 AC-17/24 retain the
+completed-route checks are GATED on IR-635's original-artifact builder and invocation. IR-666
+tests the delivered QSL #645 facade through CG's report converter, including F-1 to F-7,
+verified V rows, the full sent identity and `prepare` refusal. FR-028 AC-17/24 retain the
 strength/ceiling evidence checked here; native execution and backend controls use their named lanes
 and never replace positive QSL evaluation with a verdict double.
 
@@ -97,16 +98,17 @@ and never replace positive QSL evaluation with a verdict double.
    category/cause for Proved0. Cross-bind another run/result and alter node, operation, operand,
    domain, limits or proof-content identity; each CG precheck or failed report binding returns no
    report terminal value. Keep QSL refusal codes, executor faults and CG defect causes typed. Until
-   CG consumes the delivered QSL parity facade, also exercise inconclusive
+   production CG invokes the delivered QSL parity facade, also exercise inconclusive
    and cover-unsatisfied shadows with retained refinement_failed: each takes typed interim
    NonProductionProof carrying that strength and returns no terminal value. IR-241 owns the refusal
    variant and verified-strength input; IR-635 owns the widened interim case. Cases without
-   disagreement take ordinary inconclusive rows. After CG consumer delivery, the disagreement-first
-   Failed/CgDefect rule applies. While the CG consumer gate holds, an otherwise valid request reaches
-   the unavailable-capability refusal; malformed earlier setup reaches its own refusal. Executable
+   disagreement take ordinary inconclusive rows. The IR-666 direct report converter already preserves
+   the disagreement-first Failed/CgDefect rule. IR-635 owns original-artifact setup, prechecks and
+   production invocation. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.
 
-   **8a. Full sent-claim binding (PLANNED/UNRUN post-delivery consumer check).** Retain the
+   **8a. Full sent-claim binding (IR-666 direct public-converter control; IR-635 production
+   invocation planned).** Retain the
    actual sent `CompositeIdentity::new` over request obligation, claim and complete evidence.
    Before any outcome projection, including refusal/generated fault/incomplete, compare the genuine
    public QSL report's `claim()` with it. With that genuine report held fixed, independently change
@@ -207,7 +209,9 @@ Unimplemented canonical conversions, family harnesses or legal cause representat
 gaps. The future terminal payload names have the semantic meaning in FR-029, and the owning
 delivered API must establish their actual Rust representation before positive tests run.
 
-All claim-shape and complete-identity checks added here are PLANNED/UNRUN. Real Text-leaf profile
+IR-666 directly tests the public facade's claim shape, complete report identity, F rows and V
+rows through the CG converter. The original-artifact builder, same-artifact native observation and
+generated-family controls remain planned under IR-635. Real Text-leaf profile
 selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
 remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
 as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact
