@@ -23,7 +23,7 @@ use super::{
         ReadyIdentityError,
     },
     outer_setup::PreparedOuter,
-    protocol::{BackendExit, GuardianControl},
+    protocol::BackendExit,
     report_storage::{ReportCollector, ReportError, SealedReport},
     resource_ledger::{ChargeError, MeasuredPeaks, MemoryTick, ResourceLedger},
     role_deadline::{DeadlineError, IdentityDeadline, StopOrigin, StopTimeline},
@@ -31,6 +31,8 @@ use super::{
         CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
         OuterPhaseReply, OuterTerminalReply, OwnerStopCause, RunSettings, TerminalDisposition,
     },
+    startup_cause::PreparedStartupContext,
+    startup_envelope::{InnerEventHeader, InnerOwnerHeader, PolicyFailureCause, CONTEXT_BYTES},
 };
 
 #[derive(Debug)]
@@ -92,6 +94,7 @@ pub(super) struct OuterSampling {
     settings: RunSettings,
     stops: StopTimeline,
     owner_stop: Option<OwnerStopCause>,
+    setup_refusal: Option<PolicyFailureCause>,
 }
 
 /// One actual O actor composes the existing production phases, I completion and terminal
@@ -129,6 +132,7 @@ pub(super) enum OuterRunProgress {
     BackendCompleted,
     ResourceExhausted,
     OwnerStopped { cause: OwnerStopCause },
+    SetupRefused,
     TerminalCommitted,
 }
 
@@ -200,11 +204,9 @@ impl OuterRunOwner {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<OuterRunProgress, SamplingError> {
-        if self
-            .sampling
-            .as_ref()
-            .is_some_and(|sampling| sampling.owner_stop.is_some())
-        {
+        if self.sampling.as_ref().is_some_and(|sampling| {
+            sampling.owner_stop.is_some() || sampling.setup_refusal.is_some()
+        }) {
             // A later lower RSS sample cannot undo the genuine earlier owner stop or
             // reopen startup/Dispatch/report progress while the same owner settles children.
             self.state = OuterRunState::OwnerStopped;
@@ -232,6 +234,23 @@ impl OuterRunOwner {
             sampling.tick(outer, caller)?;
             let cutoff = observation_deadline(&sampling.settings, &sampling.stops)?
                 .ok_or(SamplingError::InvalidTerminalTransition)?;
+            if sampling.owner_stop.is_none() && sampling.setup_refusal.is_some() {
+                // I already owns its real claim and the negative installer child. Preserve
+                // its original C refusal/context channel until C closes the exclusive lease.
+                // I's actual pidfd termination, not an EOF/frame/boolean, ends this wait.
+                let monitor = self
+                    .monitor
+                    .as_mut()
+                    .ok_or(SamplingError::InvalidMonitorTransition)?;
+                if !monitor
+                    .monitor
+                    .namespace()
+                    .init_terminated()
+                    .map_err(SamplingError::Observation)?
+                {
+                    return Ok(OuterRunProgress::SetupRefused);
+                }
+            }
             let settlement = match self.monitor.as_mut() {
                 Some(monitor) => monitor
                     .monitor
@@ -311,6 +330,10 @@ impl OuterRunOwner {
                     CompletionProgress::Exhausted => {
                         self.state = OuterRunState::OwnerStopped;
                         sampling.stop_progress()
+                    }
+                    CompletionProgress::SetupRefused => {
+                        self.state = OuterRunState::OwnerStopped;
+                        Ok(OuterRunProgress::SetupRefused)
                     }
                     CompletionProgress::Completed(_) => {
                         self.state = OuterRunState::AwaitCompletedClose;
@@ -626,9 +649,11 @@ impl TerminalPreparation {
         if self.poisoned || Instant::now() >= deadline {
             return Err(SamplingError::InvalidTerminalTransition);
         }
-        let cause = sampling
-            .owner_stop
-            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        let disposition = match (sampling.owner_stop, sampling.setup_refusal) {
+            (Some(cause), _) => TerminalDisposition::OwnerStop { cause },
+            (None, Some(failure)) => TerminalDisposition::SetupRefused { failure },
+            (None, None) => return Err(SamplingError::InvalidTerminalTransition),
+        };
         let original = observation_deadline(&sampling.settings, &sampling.stops)?
             .ok_or(SamplingError::InvalidTerminalTransition)?;
         if deadline > original {
@@ -647,7 +672,7 @@ impl TerminalPreparation {
             read_ack: self.read_ack,
             bytes: None,
             deadline,
-            disposition: TerminalDisposition::OwnerStop { cause },
+            disposition,
             discarded: Some(sampling.collector),
             monitor_stop: Some(monitor_stop),
             poisoned: false,
@@ -724,7 +749,7 @@ impl TerminalDelivery {
                     return Ok(TerminalProgress::Exhausted);
                 }
             }
-            TerminalDisposition::OwnerStop { .. } => {
+            TerminalDisposition::OwnerStop { .. } | TerminalDisposition::SetupRefused { .. } => {
                 if !matches!(self.state, TerminalState::Commit) || self.monitor_stop.is_none() {
                     return Err(SamplingError::InvalidTerminalTransition);
                 }
@@ -733,6 +758,17 @@ impl TerminalDelivery {
                     .ok_or(SamplingError::InvalidTerminalTransition)?
                     .drain_owner_stop(Some(self.deadline))
                     .map_err(SamplingError::Report)?;
+                if matches!(self.disposition, TerminalDisposition::SetupRefused { .. })
+                    && matches!(tick, MemoryTick::Exhausted(_))
+                {
+                    self.sampling
+                        .stops
+                        .capture_once(StopOrigin::Outer)
+                        .map_err(SamplingError::Deadline)?;
+                    self.disposition = TerminalDisposition::OwnerStop {
+                        cause: OwnerStopCause::ResourceExhausted,
+                    };
+                }
                 // Persistent above-ceiling RSS preserves the genuine stop candidate; it cannot
                 // suppress due observations or prevent the bounded provisional stop commit.
             }
@@ -1021,6 +1057,7 @@ pub(super) struct InnerCompletion {
     receive: IncrementalReceive,
     state: InnerCompletionState,
     frame_deadline: Option<Instant>,
+    refusal_context: PreparedStartupContext,
 }
 
 enum InnerCompletionState {
@@ -1032,6 +1069,7 @@ enum InnerCompletionState {
         deadline: Instant,
     },
     Completed(BackendExit),
+    Refused,
 }
 
 pub(super) enum CompletionProgress {
@@ -1039,6 +1077,7 @@ pub(super) enum CompletionProgress {
     Dispatched,
     Completed(BackendExit),
     Exhausted,
+    SetupRefused,
 }
 
 impl InnerCompletion {
@@ -1048,6 +1087,8 @@ impl InnerCompletion {
             receive: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
             state: InnerCompletionState::AwaitDispatch,
             frame_deadline: None,
+            refusal_context: PreparedStartupContext::new(CONTEXT_BYTES)
+                .map_err(|error| SamplingError::Observation(io::Error::other(error)))?,
         })
     }
 
@@ -1069,6 +1110,9 @@ impl InnerCompletion {
         }
         if let InnerCompletionState::Completed(outcome) = self.state {
             return Ok(CompletionProgress::Completed(outcome));
+        }
+        if matches!(self.state, InnerCompletionState::Refused) {
+            return Ok(CompletionProgress::SetupRefused);
         }
         if let InnerCompletionState::Acknowledging {
             outcome,
@@ -1102,7 +1146,14 @@ impl InnerCompletion {
             .map_or(cap, |deadline| deadline.min(cap));
         let Some(received) = self
             .receive
-            .advance::<GuardianControl>(&monitor.control.transport(), |_| 0, deadline)
+            .advance_decode(
+                &monitor.control.transport(),
+                InnerOwnerHeader::rights_count,
+                deadline,
+                |payload| {
+                    super::startup_envelope::decode_inner_owner(payload, &mut self.refusal_context)
+                },
+            )
             .map_err(SamplingError::Control)?
         else {
             if self.frame_deadline.is_none() && self.receive.has_partial_frame() {
@@ -1119,19 +1170,20 @@ impl InnerCompletion {
             .verify_ready(sender, 0)
             .map_err(SamplingError::InnerIdentity)?;
         match (&self.state, received.control) {
-            (InnerCompletionState::AwaitDispatch, GuardianControl::Dispatched { authority })
-                if authority == sampling.settings.authority =>
-            {
+            (
+                InnerCompletionState::AwaitDispatch,
+                InnerOwnerHeader::Event(InnerEventHeader::Dispatched { authority }),
+            ) if authority == sampling.settings.authority => {
                 self.state = InnerCompletionState::Dispatched;
                 Ok(CompletionProgress::Dispatched)
             }
             (
                 InnerCompletionState::Dispatched,
-                GuardianControl::Completed {
+                InnerOwnerHeader::Event(InnerEventHeader::Completed {
                     authority,
                     outcome,
                     stop,
-                },
+                }),
             ) if authority == sampling.settings.authority => {
                 if stop.origin != StopOrigin::Inner {
                     return Err(SamplingError::UnexpectedInnerEvent);
@@ -1163,10 +1215,41 @@ impl InnerCompletion {
                 };
                 Ok(CompletionProgress::Pending)
             }
-            (InnerCompletionState::AwaitDispatch, GuardianControl::Dispatched { .. })
-            | (InnerCompletionState::Dispatched, GuardianControl::Completed { .. }) => {
-                Err(SamplingError::InnerCompletionAuthority)
+            (
+                InnerCompletionState::AwaitDispatch,
+                InnerOwnerHeader::Refused {
+                    identity,
+                    authority,
+                    stop,
+                    failure,
+                },
+            ) => {
+                if identity != sampling.settings.identity
+                    || authority != sampling.settings.authority
+                    || stop.origin != StopOrigin::Backend
+                {
+                    return Err(SamplingError::InnerCompletionAuthority);
+                }
+                sampling
+                    .stops
+                    .observe(stop)
+                    .map_err(SamplingError::Deadline)?;
+                sampling.setup_refusal = Some(failure);
+                self.state = InnerCompletionState::Refused;
+                sampling
+                    .collector
+                    .begin_owner_stop()
+                    .map_err(SamplingError::Report)?;
+                Ok(CompletionProgress::SetupRefused)
             }
+            (
+                InnerCompletionState::AwaitDispatch,
+                InnerOwnerHeader::Event(InnerEventHeader::Dispatched { .. }),
+            )
+            | (
+                InnerCompletionState::Dispatched,
+                InnerOwnerHeader::Event(InnerEventHeader::Completed { .. }),
+            ) => Err(SamplingError::InnerCompletionAuthority),
             (
                 InnerCompletionState::AwaitDispatch
                 | InnerCompletionState::Dispatched
@@ -1174,6 +1257,7 @@ impl InnerCompletion {
                 | InnerCompletionState::Completed(_),
                 _,
             ) => Err(SamplingError::UnexpectedInnerEvent),
+            (InnerCompletionState::Refused, _) => Err(SamplingError::UnexpectedInnerEvent),
         }
     }
 }
@@ -1428,15 +1512,17 @@ impl OuterSampling {
             collector,
             stops: StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?,
             owner_stop: None,
+            setup_refusal: None,
             settings,
         })
     }
 
     fn stop_progress(&self) -> Result<OuterRunProgress, SamplingError> {
-        let cause = self
-            .owner_stop
-            .ok_or(SamplingError::InvalidMonitorTransition)?;
-        Ok(OuterRunProgress::OwnerStopped { cause })
+        match (self.owner_stop, self.setup_refusal) {
+            (Some(cause), _) => Ok(OuterRunProgress::OwnerStopped { cause }),
+            (None, Some(_)) => Ok(OuterRunProgress::SetupRefused),
+            (None, None) => Err(SamplingError::InvalidMonitorTransition),
+        }
     }
 
     /// One real observation followed by finite collector work. Independently observed resource
@@ -1503,7 +1589,7 @@ impl OuterSampling {
             }
         }
         let deadline = observation_deadline(&self.settings, &self.stops)?;
-        if self.owner_stop.is_some() {
+        if self.owner_stop.is_some() || self.setup_refusal.is_some() {
             // Do not let malformed/partial report bytes replace the already genuine owner-stop
             // candidate. Actual finite reader EOF still requires all actual writers to close.
             self.collector

@@ -331,7 +331,13 @@ impl InnerOwnerControl {
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(super) enum TerminalDisposition {
     Report,
-    OwnerStop { cause: OwnerStopCause },
+    OwnerStop {
+        cause: OwnerStopCause,
+    },
+    /// Genuine pre-Dispatch policy refusal; measurements never become public evidence.
+    SetupRefused {
+        failure: super::startup_envelope::PolicyFailureCause,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
