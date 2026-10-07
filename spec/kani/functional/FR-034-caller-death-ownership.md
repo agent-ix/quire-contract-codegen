@@ -615,7 +615,9 @@ property, not a selected helper entry or implemented environment transport.
 The policy shall prevent `socket(AF_UNIX, ...)` creation and
 AF_UNIX datagram socketpairs. It shall allow anonymous connected SOCK_STREAM socketpairs for
 contained-local IPC and shall not blanket-deny sendmsg. It shall cover legacy socketcall and every
-supported syscall/ABI alias; incompatible or unsupported execution ABIs shall refuse admission.
+supported syscall/ABI alias. Pre-Dispatch ABI admission establishes support for the actual native
+ABI of the trusted guardian/backend-installer process and successful installation of the matching
+policy; it does not establish the ABI or immutable identity of the eventual backend image.
 No inherited socket/listener or io_uring descriptor shall reach arbitrary backend code. The policy
 shall close io_uring socket/operation bypasses by excluding backend io_uring creation/control and
 shall persist across fork, exec, reparenting and nested namespaces without a privilege-based escape.
@@ -627,6 +629,75 @@ network isolation excludes the host abstract address scope. I shall admit no arb
 host-peer endpoint; private proc/PID view shall exclude host descriptor/root aliases. Host ownership
 pidfds and all other trusted descriptors shall remain CLOEXEC outside intended role mappings and
 unavailable to arbitrary backend, sibling exec and backend descendants.
+
+### Native policy admission and actual backend execution ABI
+
+When the actual trusted guardian/backend-installer process ABI lacks an audited matching policy,
+C shall refuse before Dispatch through the planned mandatory `CapabilityUnavailable` context
+naming `BackendIpcExclusion`. This admission context is a merged SPEC API allocation that remains
+CODE-gated, not an already implemented capability API.
+When IPC policy preparation or seccomp filter installation fails, C shall retain its actual cause
+through that BackendIpcExclusion admission context and confirm owned settlement.
+When privilege installation or trusted-owner protection verification fails, C shall retain its
+actual cause through the planned `TrustedOwnerProtection` capability context and confirm owned
+settlement. NNP/CAP_SYS_PTRACE restriction failures remain owner-protection failures even when a
+filter library reports them during installation; the actual typed operation decides the context,
+not the outer wrapper, errno or diagnostic message.
+Header inspection, a successful file open, initial helper spawn or startup EOF shall not establish
+target-image ABI admission.
+
+For semantic unsupported native policy support, C shall construct the mandatory admission
+`io::Error` with `ErrorKind::Unsupported`, no raw OS errno and typed private support provenance
+from the actual audited-support predicate. This is an admission error, not an invented OS failure.
+For an actual OS installation error, C shall preserve the original public cause's errno and kind;
+private wrapping shall not erase its raw OS errno. C shall retain the actual typed installation
+site/origin in the authenticated private refusal custody independently of that public errno.
+For a non-OS installation error, C shall retain only its finite actually reconstructible CG or
+dependency variant/fields as typed private provenance and, where representable, typed public
+io-error source. No Display/message parsing shall distinguish support, privilege or filter sites.
+The private transport shall bind that provenance to the authenticated run/build, actual owned
+pre-recipe PID/state before C classifies the refusal. A kind-only transport
+projection does not satisfy typed-origin retention and remains a CODE gap. For these new ABI-admission errors, this allocation promises
+neither arbitrary boxed-error/downcast-chain or object reconstruction nor an external post-return
+stage query; any such original-chain fidelity loss remains explicit rather than forged. It adds no
+public cause, stage field, catalog or budget to the planned capability plus mandatory io-error shape.
+No other original-cause retention obligation is relaxed by this scoped allocation.
+
+The installed backend-only policy shall enforce its actual syscall audit-architecture rule on
+every backend and descendant syscall.
+When a syscall has an unsupported audit architecture, the installed policy shall terminate the
+calling process using the seccomp process-kill action before that syscall executes.
+For every native x86_64 policy, the installed policy shall terminate the calling process on an x32
+syscall-number/alias using the same process-kill action, regardless of host kernel x32 support.
+The policy shall remain installed across exec and descendants.
+When native entry issues a compat syscall, the installed policy shall apply the same architecture
+and x32 process-kill rules. This is syscall-boundary enforcement, not a promise that
+exec rejects every incompatible binary or that no incompatible image/instruction executes before
+its first filtered syscall. Required IPC, privilege, descriptor and ownership protections remain
+mandatory; an ABI mismatch permits no unfiltered retry or weaker policy.
+
+The exact original recipe continues to use its admitted pathname, argv0, arguments, environment,
+cwd and stdio. This contract imposes no executable/interpreter/loader stability precondition and
+claims no binding of a prior file/header inspection to the eventual executed bytes. Path replacement,
+content mutation, PATH/execvp resolution, script interpreter resolution, ELF PT_INTERP resolution,
+loader selection and kernel binfmt_misc interpreter/handler resolution can differ between
+observation and actual exec. A registered native emulator can translate a foreign image into native
+syscalls; the filter enforces those actual native syscalls, not an inferred guest-image ABI.
+Handler/emulator resolution grants no exception to private-root, descriptor, IPC, privilege or
+contained-descendant requirements. Those check-to-exec residuals
+apply before the first filtered syscall; they do not authorize recipe rewriting, a new inherited
+execution descriptor, changed shared-writable-path semantics or relaxation of installed policy.
+The trusted installer still uses sanitized loader inputs, and only filtered post-Dispatch recipe
+exec restores the original backend environment.
+
+An actual post-Dispatch exec failure or syscall-policy ABI termination shall follow the existing
+bounded backend-result path, rather than retroactive pre-Dispatch unavailable admission. When the
+actual exit is unsuccessful with no report, C shall classify existing Inconclusive
+NoVerdict only after positive whole-chain settlement and original capture/deadline handling. Existing
+memory/deadline candidate precedence and CleanupUnconfirmed override remain unchanged. Present,
+malformed or missing-success reports retain their existing report/classification rules; an ABI
+assumption never fabricates a status, report, evidence, new cause or Failed verdict. No rule here
+promotes an observed-only file check into proof of the actual backend image.
 
 Before backend creation, I shall set and positively confirm PR_SET_DUMPABLE 0 after final
 credential/mapping transitions. I shall remove backend CAP_SYS_PTRACE authority in I's owning user
@@ -1032,8 +1103,23 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Caller fd0..2 stability throughout setup is a trusted precondition; observed capture inconsistency refuses, with no claim to detect every ambient mutation. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned public rustdoc documents the caller stability precondition/setup window and observed-only capture refusal; target type/device/inode, original O_ACCMODE and FD_CLOEXEC are compared separately from proc-link presence; mutable shared-OFD status flags neither trigger instability refusal nor get rewritten. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
 | FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
+| FR-034-AC-39 | PLANNED/UNRUN. Native guardian/backend-installer policy support is source/cfg Analysis; unreachable unsupported-native support is not a fabricated runtime Test. Actual installation failures are separate production Tests when available, otherwise unavailable/UNRUN with no Test completion credit. Planned mandatory admission context distinguishes BackendIpcExclusion capability support/filter installation from TrustedOwnerProtection privilege installation, retaining typed cause provenance without message parsing or fabricated errno. The policy terminates the calling process on an unsupported syscall audit architecture; every native x86_64 policy also terminates it for x32 syscall-number/aliases regardless of kernel x32 support. Native entry, exec and descendants retain these rules. Real applicable compat/x32 tests require an unconfined actual-syscall effect control and genuine omission mutant; unavailable workload/tooling/kernel controls yield zero whole-criterion completion credit, not assertion-skipping success. This establishes no immutable target-image identity or universal incompatible-image exec/entry rejection. Actual unsuccessful/no-report termination retains NoVerdict after whole-chain settlement and existing deadline/capture/resource precedence; CleanupUnconfirmed and all other report rules remain unchanged. Path/content/PATH/interpreter/loader/binfmt_misc residuals add no stability precondition, recipe change, descriptor leak or unfiltered retry. | Test, Analysis |
 
 ## Dependencies
+
+The AC-39 x86_64 Test facility uses repository-authored standalone assembly source, built by the
+host's existing GNU `as` and `ld` ELF modes: `as --64` / `ld -m elf_x86_64` for native entry with
+compat `int 0x80` and x32-number syscall instructions; `as --32` / `ld -m elf_i386` and `as --x32` /
+`ld -m elf32_x86_64` for actual compat/x32 exec workloads where the kernel admits them. These tiny
+fixtures use an explicit entry, direct syscalls and no libc or interpreter. Safe Rust test code
+only invokes the tools and owned workloads; it adds no unsafe Rust, inline/global assembly, Cargo
+dependency, multilib runtime, Rust target, copied executable or toolchain fallback. Missing tools,
+ELF emulations or successful actual-syscall controls are unavailable/UNRUN Test evidence, never a
+reason to relax production policy. Source Analysis of every native x86_64 x32 rule remains required
+independently. Other audited native policies retain architecture-specific source Analysis and real
+Tests only where an applicable genuine workload exists; the x86_64 fixture does not cover them.
+This fixture plan establishes source feasibility only; assembly/linking and actual runtime controls
+remain CODE-gated and UNRUN.
 
 - [FR-028](./FR-028-bounded-proof-ceilings.md) AC-21 owns the every-run tree memory mechanism;
   AC-2/3 own resource outcomes, and AC-24 owns bounded native refinement. This requirement adds
