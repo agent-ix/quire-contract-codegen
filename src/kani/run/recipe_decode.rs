@@ -64,33 +64,33 @@ pub(super) fn decode<'input>(
     decoder: &mut Decoder<'input, '_>,
     tag: NativeOsTag,
 ) -> Result<RecipeBytes<'input>, DecodeError> {
-    let mut object = decoder.begin_object()?;
     let mut fields = RecipeFields::default();
-    while let Some(field) = decoder.next_field(&mut object)? {
-        match BackendCommandField::metadata_text(field)
-            .ok_or_else(|| fault(DecodeCause::UnknownField))?
-        {
-            BackendCommandField::Program => {
-                refuse_duplicate(fields.program.is_some())?;
-                fields.program = Some(native_os_decode::decode(decoder, tag)?);
+    match decoder.peek_kind()? {
+        ValueKind::Object => {
+            let mut object = decoder.begin_object()?;
+            while let Some(field) = decoder.next_field(&mut object)? {
+                let field = BackendCommandField::metadata_text(field)
+                    .ok_or_else(|| fault(DecodeCause::UnknownField))?;
+                read_field(decoder, tag, field, &mut fields)?;
             }
-            BackendCommandField::Arguments => {
-                refuse_duplicate(fields.arguments.is_some())?;
-                fields.arguments = Some(sequence(decoder, tag, SequenceKind::Arguments)?);
+        }
+        ValueKind::Array => {
+            let mut array = decoder.begin_array()?;
+            for field in BackendCommandField::declared_order() {
+                if !decoder.next_element(&mut array)? {
+                    return Err(fault(DecodeCause::MissingField));
+                }
+                read_field(decoder, tag, *field, &mut fields)?;
             }
-            BackendCommandField::Directory => {
-                refuse_duplicate(fields.directory.is_some())?;
-                fields.directory = Some(if matches!(decoder.peek_kind()?, ValueKind::Null) {
-                    decoder.null()?;
-                    None
-                } else {
-                    Some(native_os_decode::decode(decoder, tag)?)
-                });
+            if decoder.next_element(&mut array)? {
+                return Err(fault(DecodeCause::InvalidValue));
             }
-            BackendCommandField::Environment => {
-                refuse_duplicate(fields.environment.is_some())?;
-                fields.environment = Some(sequence(decoder, tag, SequenceKind::Environment)?);
-            }
+        }
+        ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
+            return Err(DecodeError::new(
+                DecodeSite::Value,
+                DecodeCause::UnexpectedToken,
+            ));
         }
     }
     Ok(RecipeBytes {
@@ -105,6 +105,38 @@ pub(super) fn decode<'input>(
             .environment
             .ok_or_else(|| fault(DecodeCause::MissingField))?,
     })
+}
+
+fn read_field<'input>(
+    decoder: &mut Decoder<'input, '_>,
+    tag: NativeOsTag,
+    field: BackendCommandField,
+    fields: &mut RecipeFields<'input>,
+) -> Result<(), DecodeError> {
+    match field {
+        BackendCommandField::Program => {
+            refuse_duplicate(fields.program.is_some())?;
+            fields.program = Some(native_os_decode::decode(decoder, tag)?);
+        }
+        BackendCommandField::Arguments => {
+            refuse_duplicate(fields.arguments.is_some())?;
+            fields.arguments = Some(sequence(decoder, tag, SequenceKind::Arguments)?);
+        }
+        BackendCommandField::Directory => {
+            refuse_duplicate(fields.directory.is_some())?;
+            fields.directory = Some(if matches!(decoder.peek_kind()?, ValueKind::Null) {
+                decoder.null()?;
+                None
+            } else {
+                Some(native_os_decode::decode(decoder, tag)?)
+            });
+        }
+        BackendCommandField::Environment => {
+            refuse_duplicate(fields.environment.is_some())?;
+            fields.environment = Some(sequence(decoder, tag, SequenceKind::Environment)?);
+        }
+    }
+    Ok(())
 }
 
 /// Visit an ordinary native-value array, including the existing cleanup-path collection.
@@ -309,6 +341,9 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<ObjectState>(),
         size_of::<ArrayState>(),
         size_of::<ArrayState>(),
+        // Named-struct array representation retains its outer sequence through tuple parsing.
+        size_of::<ArrayState>(),
+        size_of::<&'static [BackendCommandField]>(),
         size_of::<CursorMark<'static>>(),
         size_of::<BackendCommandField>(),
         size_of::<SequenceKind>(),
@@ -401,6 +436,47 @@ mod tests {
         )
         .unwrap();
         assert_eq!(serde_json::to_vec(&materialized).unwrap(), payload);
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-17
+    #[test]
+    fn named_recipe_sequence_preserves_owning_field_order_and_requires_exact_arity() {
+        let value = serde_json::to_value(fixture()).unwrap();
+        let fields = vec![
+            value["program"].clone(),
+            value["arguments"].clone(),
+            value["directory"].clone(),
+            value["environment"].clone(),
+        ];
+        let payload = serde_json::to_vec(&fields).unwrap();
+        let expected: BackendCommand = serde_json::from_slice(&payload).unwrap();
+        let mut scratch = Scratch::default();
+        let parsed = parse(&payload, &mut scratch).unwrap();
+        let actual = materialize(
+            parsed,
+            native_os_decode::native_tag().unwrap(),
+            &mut scratch,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_vec(&actual).unwrap(),
+            serde_json::to_vec(&expected).unwrap()
+        );
+        for count in 0..fields.len() {
+            let incomplete = serde_json::to_vec(&fields[..count]).unwrap();
+            assert!(serde_json::from_slice::<BackendCommand>(&incomplete).is_err());
+            assert!(parse(&incomplete, &mut scratch).is_err());
+        }
+        let mut extra = fields.clone();
+        extra.push(serde_json::Value::Null);
+        let extra = serde_json::to_vec(&extra).unwrap();
+        assert!(serde_json::from_slice::<BackendCommand>(&extra).is_err());
+        assert!(parse(&extra, &mut scratch).is_err());
+        let mut reordered = fields;
+        reordered.swap(0, 1);
+        let reordered = serde_json::to_vec(&reordered).unwrap();
+        assert!(serde_json::from_slice::<BackendCommand>(&reordered).is_err());
+        assert!(parse(&reordered, &mut scratch).is_err());
     }
 
     /// Trace: FR-034-AC-15

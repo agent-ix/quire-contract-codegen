@@ -51,6 +51,11 @@ macro_rules! backend_recipe_fields {
 
         #[cfg(target_os = "linux")]
         impl BackendCommandField {
+            /// SAME declared order used by derived serde's named-struct sequence visitor.
+            pub(super) const fn declared_order() -> &'static [Self] {
+                &[$(Self::$variant),+]
+            }
+
             pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
                 $(if text.equals(stringify!($field)) { return Some(Self::$variant); })+
                 None
