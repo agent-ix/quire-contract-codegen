@@ -65,6 +65,7 @@ pub(super) fn policy(
             | DecodeCause::InvalidUtf8
             | DecodeCause::InvalidNumber
             | DecodeCause::IntegerOverflow
+            | DecodeCause::RecursionLimit
             | DecodeCause::TrailingBytes
             | DecodeCause::UnknownField
             | DecodeCause::DuplicateField

@@ -51,6 +51,7 @@ pub(super) enum DecodeCause {
     MissingField,
     InvalidValue,
     StorageBound,
+    RecursionLimit,
 }
 
 /// An actual fixed decoder/check error with no dynamic payload or reconstructed source.
@@ -178,6 +179,8 @@ pub(super) struct CursorMark<'input> {
 #[derive(Clone, Copy)]
 pub(super) struct ValueSlice<'input> {
     bytes: &'input [u8],
+    parent_depth: usize,
+    profile: ScanProfile,
 }
 
 impl<'input> ValueSlice<'input> {
@@ -267,9 +270,18 @@ impl Iterator for TextChars<'_> {
     }
 }
 
+#[derive(Clone, Copy)]
+enum ScanProfile {
+    Syntax,
+    // Only the original Content container-entry semantics are established here.
+    // Numeric conversion parity remains unproven; numbers retain syntax validation.
+    ContentDepth,
+}
+
 struct ScanState {
     start: usize,
     depth: usize,
+    profile: ScanProfile,
 }
 
 struct NumberToken<'input> {
@@ -294,6 +306,8 @@ pub(super) struct Decoder<'input, 'scratch> {
     input: &'input [u8],
     position: usize,
     scratch: &'scratch mut Scratch,
+    typed_depth: usize,
+    profile: ScanProfile,
 }
 
 impl<'input, 'scratch> Decoder<'input, 'scratch> {
@@ -313,6 +327,8 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
             input,
             position: 0,
             scratch,
+            typed_depth: 0,
+            profile: ScanProfile::Syntax,
         })
     }
 
@@ -382,6 +398,7 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
 
     pub(super) fn begin_object(&mut self) -> Result<ObjectState, DecodeError> {
         self.expect(b'{', DecodeSite::Object)?;
+        self.typed_depth = self.typed_depth.checked_add(1).ok_or_else(storage)?;
         Ok(ObjectState {
             state: SequenceState::First,
         })
@@ -401,6 +418,7 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
 
     pub(super) fn begin_array(&mut self) -> Result<ArrayState, DecodeError> {
         self.expect(b'[', DecodeSite::Array)?;
+        self.typed_depth = self.typed_depth.checked_add(1).ok_or_else(storage)?;
         Ok(ArrayState {
             state: SequenceState::First,
         })
@@ -425,6 +443,7 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
                 if byte == closing {
                     self.advance(site)?;
                     *state = SequenceState::Closed;
+                    self.typed_depth = self.typed_depth.checked_sub(1).ok_or_else(storage)?;
                     return Ok(false);
                 }
             }
@@ -432,6 +451,7 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
                 if byte == closing {
                     self.advance(site)?;
                     *state = SequenceState::Closed;
+                    self.typed_depth = self.typed_depth.checked_sub(1).ok_or_else(storage)?;
                     return Ok(false);
                 }
                 if byte != b',' {
@@ -590,10 +610,23 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
 
     /// Validate an arbitrary nested value with an iterative, byte-bounded syntax stack.
     pub(super) fn value(&mut self) -> Result<ValueSlice<'input>, DecodeError> {
+        self.scan_value(ScanProfile::Syntax)
+    }
+
+    /// Preserve selected Content container depth, including original typed parents.
+    /// This is deliberately partial: numeric admission still validates syntax only, not
+    /// serde_json's feature-dependent finite conversion. It supplies no full Content parity.
+    pub(super) fn content_value(&mut self) -> Result<ValueSlice<'input>, DecodeError> {
+        self.profile = ScanProfile::ContentDepth;
+        self.scan_value(self.profile)
+    }
+
+    fn scan_value(&mut self, profile: ScanProfile) -> Result<ValueSlice<'input>, DecodeError> {
         self.whitespace()?;
         let mut scan = ScanState {
             start: self.position,
             depth: 0,
+            profile,
         };
         self.value_start(&mut scan)?;
         while let Some(index) = scan.depth.checked_sub(1) {
@@ -636,7 +669,11 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
             .input
             .get(scan.start..self.position)
             .ok_or_else(|| DecodeError::new(DecodeSite::Value, DecodeCause::InvalidValue))?;
-        Ok(ValueSlice { bytes })
+        Ok(ValueSlice {
+            bytes,
+            parent_depth: self.typed_depth,
+            profile,
+        })
     }
 
     fn value_start(&mut self, scan: &mut ScanState) -> Result<(), DecodeError> {
@@ -662,6 +699,21 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
         scan: &mut ScanState,
         state: ContainerState,
     ) -> Result<(), DecodeError> {
+        if matches!(scan.profile, ScanProfile::ContentDepth) {
+            // Owning serde_json starts remaining_depth at 128 and refuses entry when
+            // decrement reaches zero. Count the original schema ancestors, not a new root.
+            let entered = self
+                .typed_depth
+                .checked_add(scan.depth)
+                .and_then(|depth| depth.checked_add(1))
+                .ok_or_else(storage)?;
+            if entered >= 128 {
+                return Err(DecodeError::new(
+                    DecodeSite::Value,
+                    DecodeCause::RecursionLimit,
+                ));
+            }
+        }
         self.advance(DecodeSite::Value)?;
         self.set_state(scan.depth, state)?;
         scan.depth = scan.depth.checked_add(1).ok_or_else(storage)?;
@@ -702,7 +754,10 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
         &'borrow mut self,
         value: ValueSlice<'input>,
     ) -> Result<Decoder<'input, 'borrow>, DecodeError> {
-        Decoder::new(value.bytes, self.scratch)
+        let mut child = Decoder::new(value.bytes, self.scratch)?;
+        child.typed_depth = value.parent_depth;
+        child.profile = value.profile;
+        Ok(child)
     }
 
     pub(super) fn finish(&mut self) -> Result<(), DecodeError> {
@@ -870,7 +925,7 @@ fn hex4(input: &[u8], position: &mut usize) -> Result<u16, DecodeError> {
                 return Err(DecodeError::new(
                     DecodeSite::String,
                     DecodeCause::InvalidUnicode,
-                ))
+                ));
             }
         };
         value = value
@@ -897,7 +952,7 @@ fn escape(input: &[u8], position: &mut usize) -> Result<char, DecodeError> {
             return Err(DecodeError::new(
                 DecodeSite::String,
                 DecodeCause::InvalidEscape,
-            ))
+            ));
         }
     };
     if let Some(character) = simple {
@@ -957,6 +1012,8 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<TextChars<'static>>(),
         size_of::<NumberToken<'static>>(),
         size_of::<ScanState>(),
+        size_of::<ScanProfile>(),
+        size_of::<usize>(),
         size_of::<DecodeError>(),
         size_of::<ValueKind>(),
         size_of::<u64>(),
@@ -1344,5 +1401,44 @@ mod tests {
         let mut decoder = Decoder::new(br#"{"a":1,"a":2}"#, &mut scratch).unwrap();
         assert_eq!(decoder.value().unwrap().bytes(), br#"{"a":1,"a":2}"#);
         decoder.finish().unwrap();
+    }
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn content_span_retains_typed_ancestors_without_constraining_syntax_ignore() {
+        for depth in [125, 126, 128] {
+            let input = format!(
+                r#"{{"outer":{{"payload":{}0{}}}}}"#,
+                "[".repeat(depth),
+                "]".repeat(depth),
+            );
+            let original_content = serde_json::from_str::<serde_json::Value>(&input);
+            assert!(serde_json::from_str::<serde::de::IgnoredAny>(&input).is_ok());
+            let mut scratch = Scratch::default();
+            let mut decoder = Decoder::new(input.as_bytes(), &mut scratch).unwrap();
+            let mut outer = decoder.begin_object().unwrap();
+            assert!(decoder
+                .next_field(&mut outer)
+                .unwrap()
+                .unwrap()
+                .equals("outer"));
+            let mut inner = decoder.begin_object().unwrap();
+            assert!(decoder
+                .next_field(&mut inner)
+                .unwrap()
+                .unwrap()
+                .equals("payload"));
+            // Syntax staging deliberately admits direct IgnoredAny's deeper valid bodies.
+            let span = decoder.value().unwrap();
+            let mut child = decoder.nested(span).unwrap();
+            let fixed_content = child.content_value();
+            assert_eq!(
+                fixed_content.is_ok(),
+                original_content.is_ok(),
+                "depth {depth}"
+            );
+            if let Err(error) = fixed_content {
+                assert_eq!(error.cause(), DecodeCause::RecursionLimit);
+            }
+        }
     }
 }

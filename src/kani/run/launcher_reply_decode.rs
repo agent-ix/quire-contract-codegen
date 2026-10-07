@@ -125,7 +125,7 @@ fn frame<'input, K: Copy>(
             }
         }
         ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
-            return Err(error(DecodeCause::UnexpectedToken))
+            return Err(error(DecodeCause::UnexpectedToken));
         }
     }
     let selected = required(selected)?;
@@ -229,7 +229,8 @@ fn custody_map<'input>(
         } else {
             // Owning TaggedContentVisitor first validates generic content. NotCreated may
             // ignore any valid map member; Reaped subsequently checks its one exact schema.
-            let value = decoder.value()?;
+            // Selected Content depth is preserved; numeric conversion parity remains unproven.
+            let value = decoder.content_value()?;
             let known = OuterChildSettlementKind::Reaped
                 .declared_fields()
                 .iter()
@@ -261,7 +262,7 @@ fn custody_sequence<'input>(
     }
     fields.kind = Some(kind(decoder, OuterChildSettlementKind::metadata_text)?);
     while decoder.next_element(&mut array)? {
-        let value = decoder.value()?;
+        let value = decoder.content_value()?;
         if fields.outcome.is_none() {
             fields.outcome = Some(value);
         } else {
@@ -284,7 +285,7 @@ pub(super) fn custody(decoder: &mut Decoder<'_, '_>) -> Result<OuterChildSettlem
             true
         }
         ValueKind::String | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => {
-            return Err(error(DecodeCause::UnexpectedToken))
+            return Err(error(DecodeCause::UnexpectedToken));
         }
     };
     match required(fields.kind)? {
@@ -561,6 +562,27 @@ mod tests {
             let mut trailing = complete;
             trailing.extend_from_slice(b"{}");
             negative(scope, &trailing);
+        }
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn ignored_custody_content_depth_matches_original_parent_before_and_after_tag() {
+        for depth in [126, 127] {
+            let body = format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
+            for bytes in [
+                format!(r#"{{"extra":{body},"kind":"NotCreated"}}"#),
+                format!(r#"{{"kind":"NotCreated","extra":{body}}}"#),
+            ] {
+                let original = serde_json::from_slice::<OuterChildSettlement>(bytes.as_bytes());
+                let fixed = parsed_custody(bytes.as_bytes());
+                assert_eq!(fixed.is_ok(), original.is_ok(), "depth {depth}");
+                if let Ok(original) = original {
+                    assert_eq!(fixed.unwrap(), original);
+                } else {
+                    assert_eq!(fixed.unwrap_err().cause(), DecodeCause::RecursionLimit);
+                }
+            }
         }
     }
 

@@ -157,7 +157,8 @@ fn deadline_map<'input>(
         } else {
             // TaggedContentVisitor consumes arbitrary content before selecting the variant.
             // Only this no-cause schema permits staging; it grants no fault-slot precedence.
-            let value = decoder.value()?;
+            // Selected Content depth is preserved; numeric conversion parity remains unproven.
+            let value = decoder.content_value()?;
             let known = IdentityDeadlineKind::Finite
                 .declared_fields()
                 .iter()
@@ -190,7 +191,7 @@ fn deadline_sequence<'input>(
     }
     fields.kind = Some(deadline_kind(decoder)?);
     while decoder.next_element(&mut array)? {
-        let value = decoder.value()?;
+        let value = decoder.content_value()?;
         if fields.deadline.is_none() {
             fields.deadline = Some(value);
         } else {
@@ -501,6 +502,27 @@ mod tests {
         ] {
             assert!(serde_json::from_slice::<Duration>(bytes).is_err());
             assert!(parsed_duration(bytes).is_err());
+        }
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn ignored_deadline_content_depth_matches_original_parent_before_and_after_tag() {
+        for depth in [125, 126, 127, 128] {
+            let body = format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
+            for bytes in [
+                format!(r#"{{"extra":{body},"kind":"NeverElapses"}}"#),
+                format!(r#"{{"kind":"NeverElapses","extra":{body}}}"#),
+            ] {
+                let original = serde_json::from_slice::<IdentityDeadline>(bytes.as_bytes());
+                let fixed = parsed_deadline(bytes.as_bytes());
+                assert_eq!(fixed.is_ok(), original.is_ok(), "depth {depth}");
+                if let Ok(original) = original {
+                    assert_eq!(fixed.unwrap(), original);
+                } else {
+                    assert_eq!(fixed.unwrap_err().cause(), DecodeCause::RecursionLimit);
+                }
+            }
         }
     }
 
