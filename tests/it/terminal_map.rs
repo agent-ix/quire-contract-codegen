@@ -322,6 +322,9 @@ fn for_each_cg_failure(check: impl Fn(ReplaySettlement<'_>)) {
         SpineReplayError::UnboundArgument {
             argument: "x".to_owned(),
         },
+        SpineReplayError::UnsupportedWitnessValue {
+            argument: "x".to_owned(),
+        },
         SpineReplayError::FieldDelimiter,
         SpineReplayError::Transcript(malformed()),
         SpineReplayError::WrongArm,

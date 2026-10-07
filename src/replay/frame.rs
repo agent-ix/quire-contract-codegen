@@ -370,11 +370,18 @@ fn decoded_state(
                 WitnessValue::Integer(integer) => i64::try_from(integer).map_err(|_| {
                     FrameReplayError::Decode(DecodeFailure::new(
                         "kani_witness_i64_overflow",
-                        &harness.harness_symbol,
+                        harness.harness_symbol.as_str(),
                         &field,
                     ))
                 })?,
                 WitnessValue::Boolean(boolean) => i64::from(boolean),
+                _ => {
+                    return Err(FrameReplayError::Decode(DecodeFailure::new(
+                        "kani_witness_unsupported_value",
+                        harness.harness_symbol.as_str(),
+                        &field,
+                    )))
+                }
             };
             Ok((field, integer))
         })

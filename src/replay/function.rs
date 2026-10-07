@@ -51,6 +51,11 @@ pub enum SpineReplayError {
         /// The decoded value's name.
         argument: String,
     },
+    /// The selected scalar Kani harness cannot transcribe this QSL value into its witness text.
+    UnsupportedWitnessValue {
+        /// The decoded argument's name.
+        argument: String,
+    },
     /// The harness or check text would change the transcript's field boundaries.
     FieldDelimiter,
     /// The transcript this adapter built is not one `qsl-replay` admits.
@@ -70,6 +75,12 @@ impl fmt::Display for SpineReplayError {
                 write!(
                     f,
                     "no replay parameter is bound to the harness argument `{argument}`"
+                )
+            }
+            Self::UnsupportedWitnessValue { argument } => {
+                write!(
+                    f,
+                    "the harness argument `{argument}` is not an integer or Boolean"
                 )
             }
             Self::FieldDelimiter => {
@@ -174,6 +185,11 @@ fn replay_falsification_through(
             let integer = match value {
                 WitnessValue::Integer(integer) => *integer,
                 WitnessValue::Boolean(boolean) => i128::from(*boolean),
+                _ => {
+                    return Err(SpineReplayError::UnsupportedWitnessValue {
+                        argument: argument.clone(),
+                    })
+                }
             };
             Ok((parameter.node_id, integer))
         })
@@ -600,6 +616,7 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
     fn from(error: &'a SpineReplayError) -> Self {
         match error {
             SpineReplayError::UnboundArgument { .. }
+            | SpineReplayError::UnsupportedWitnessValue { .. }
             | SpineReplayError::FieldDelimiter
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm

@@ -255,14 +255,11 @@ pub(crate) fn first_out_of_domain<'a>(
             .find(|binding| binding.identifier == *name)?
             .integer_bounds
             .as_ref()?;
-        match value {
-            WitnessValue::Integer(integer)
-                if !(i128::from(bounds.minimum)..=i128::from(bounds.maximum)).contains(integer) =>
-            {
-                Some(name.as_str())
-            }
-            WitnessValue::Integer(_) | WitnessValue::Boolean(_) => None,
-        }
+        let WitnessValue::Integer(integer) = value else {
+            return None;
+        };
+        (!(i128::from(bounds.minimum)..=i128::from(bounds.maximum)).contains(integer))
+            .then_some(name.as_str())
     })
 }
 
@@ -508,7 +505,10 @@ fn kani_concrete_playback_synthetic() {{\n\
         let check = |value: i64| {
             first_out_of_domain(
                 &arguments,
-                &[("amount".to_owned(), WitnessValue::Integer(value))],
+                &[(
+                    "amount".to_owned(),
+                    WitnessValue::Integer(i128::from(value)),
+                )],
             )
             .map(str::to_owned)
         };
@@ -522,7 +522,10 @@ fn kani_concrete_playback_synthetic() {{\n\
             first_out_of_domain(
                 &arguments,
                 &[
-                    ("unbound".to_owned(), WitnessValue::Integer(i64::MAX)),
+                    (
+                        "unbound".to_owned(),
+                        WitnessValue::Integer(i128::from(i64::MAX))
+                    ),
                     ("amount".to_owned(), WitnessValue::Integer(5)),
                 ]
             ),
@@ -636,7 +639,7 @@ fn kani_concrete_playback_synthetic() {{\n\
                     &transcript
                 )
                 .expect("decodes"),
-                vec![("v".to_owned(), WitnessValue::Integer(value))]
+                vec![("v".to_owned(), WitnessValue::Integer(i128::from(value)))]
             );
         }
     }

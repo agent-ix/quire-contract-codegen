@@ -285,6 +285,23 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     );
     assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
 
+    let unsupported = replay_falsification(
+        "h",
+        "c",
+        &[(
+            "amount_current".to_owned(),
+            WitnessValue::Text("x".to_owned()),
+        )],
+        &parameters,
+        build,
+        ReplayLimits::default(),
+    );
+    assert!(matches!(
+        unsupported,
+        Err(SpineReplayError::UnsupportedWitnessValue { argument })
+            if argument == "amount_current"
+    ));
+
     let bad_node = [ReplayParameter {
         argument: "amount_current",
         node_id: "x>>>y",
