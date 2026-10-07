@@ -95,6 +95,8 @@ mod role_deadline;
 #[cfg(target_os = "linux")]
 mod role_protocol;
 #[cfg(target_os = "linux")]
+mod role_scalar_decode;
+#[cfg(target_os = "linux")]
 mod spawner;
 #[cfg(target_os = "linux")]
 mod startup_cause;

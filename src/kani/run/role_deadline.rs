@@ -185,6 +185,12 @@ pub(super) struct StopStamp {
 }
 
 impl StopStamp {
+    /// Unverified received event components, with no clock sample or origin authority.
+    /// Actual owner authentication and original timeline validation remain mandatory.
+    pub(super) const fn from_wire_parts(origin: StopOrigin, instant: MonotonicInstant) -> Self {
+        Self { origin, instant }
+    }
+
     /// Capture at the actual trigger, before later frame preparation or forwarding work.
     pub(super) fn capture(origin: StopOrigin) -> Result<Self, DeadlineError> {
         Ok(Self {
