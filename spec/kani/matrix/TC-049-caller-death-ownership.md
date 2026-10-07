@@ -87,7 +87,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-3 | Actual claimed-I pin and positive escaped-worker evidence at observable ClaimedBootstrap/InitReady/Dispatched caller-lease EOF; no fabricated dead-caller result. | Any initialized-boundary role/termination facts unavailable through ordinary seams remain explicitly owed; existing I pin never supplies independent O authority. Whole AC is tagged only after every required stage assertion. |
 | FR-034-AC-5 | Actual live C→L→O→M→I identity translations and ordinary setup refusal tests where observable; real normal-helper authentication, not helper identity override. | Needed role-labelled chain and independent termination witness beyond existing single M/I pin; unavailable inner/unclaimed/outer facts cannot be inferred. Whole AC stays untagged where these facts are owed. |
 | FR-034-AC-7 | Ordinary malformed/missing info, observable M failure and owned O cancellation/refusal; confirm positively pinned external O/tree termination where observable. | Exact internal-handoff failure/recovery and O-origin immutable gate/inner-confirm/M-reap order; no later C timestamp reconstructs it. Whole AC stays untagged. |
-| FR-034-AC-8/10/22 | Positive escaped-worker acknowledgement/live pins, observable C/O/I death, ordinary completion/refusal/deadline and independent-run protection; record dead pins before emergency cleanup. | The explicitly amended live-I birth-after-completed-ordinary-O-sample oracle below, genuine Completed and distinct O-origin inner-confirm/M-reap/outer-confirm observations, plus producer-bound I-confirm/M-reap/seal order. Outer confirmation and confirmed whole-outer-tree termination remain separately owed; inner settlement never supplies them. The former literal birth AFTER FINAL whole-run sample obligation is retired only as stated below; membership absence and later outer cleanup do not supply replacement parity. Sampled-membership teardown authority is separately allocated to AC-55 source Analysis plus the unchanged AC-24 non-INIT-watcher runtime mutant, not a claimed unsampled-through-kill runtime window. Whole mixed criteria stay untagged. |
+| FR-034-AC-8/10/22 | Positive escaped-worker acknowledgement/live pins, observable C/O/I death, ordinary completion/refusal/deadline and independent-run protection; record dead pins before emergency cleanup. | The explicitly amended live-I birth-after-completed-ordinary-O-sample oracle below, genuine Completed and distinct O-origin inner-confirm/M-reap/outer-confirm observations, plus producer-bound I-confirm/M-reap/seal order. Outer confirmation and confirmed whole-outer-tree termination remain separately owed; inner settlement never supplies them. The former literal birth AFTER FINAL whole-run sample obligation is retired only as stated below; membership absence and later outer cleanup do not supply replacement parity. Sampled-membership teardown authority is separately allocated to AC-55 source Analysis plus the unchanged AC-24 non-INIT-watcher runtime mutant, not a claimed unsampled-through-kill runtime window. The existing AC-8/10 Test obligations own the separate BOTH-formerly-live-pins-dead-before-outer-escalation check in step 28a; AC-55 Analysis never backs that runtime predicate. Whole mixed criteria stay untagged until every obligation is genuinely backed. |
 | FR-034-AC-11 | Positively pinned guardian death at observable startup/Ready/post-Dispatch boundaries; live-C typed guardian failure even beside success output, with dead acknowledged worker before emergency cleanup. | Exact pre-peer/Ready or bootstrap windows and independent role/tree witnesses not observable through stage-1 seams. No later outer cleanup masks missing boundary evidence; whole AC stays untagged while owed. |
 | FR-034-AC-12 | Real unnamed report final-close/no-named-artifact lifetime, ordinary opposite-owner failures, bounded role settlement and honest other-artifact limits. | Exact startup refusal/retained-gate cleanup order and all-owner independent role/tree witness unavailable through current operation. Whole AC stays untagged. |
 | FR-034-AC-14 | Actual ordinary-caller inherited profile/errno and mapping/private-proc/pidfd capability refusals before Dispatch, no policy mutation/weaker mode; setup docs and role/storage costs. | No exact-window fixture allocation required for these predicates; any measured unavailable Test predicate remains expressly owed. |
@@ -866,6 +866,11 @@ Test credit and their existing Slice 2 obligation.
        ordinary O sample; release that worker to fork ONE child and require its own birth ACK.
        Validate BOTH identities, pin BOTH live and retain genuine authenticated I Completed before
        cleanup. Check each construction predicate explicitly. Membership alone is not birth proof.
+       Separately, the existing AC-8/10 Test obligations own this runtime death predicate: after
+       unchanged cleanup, require BOTH formerly live pins dead and actual I/M settlement before
+       any outer escalation. Retain the raw pre-escalation observations; later emergency cleanup
+       cannot repair a failed death predicate. This Test remains PLANNED/UNRUN and independent of
+       AC-51's birth predicate and AC-55's source Analysis; no partial assertion binds a mixed AC.
     b. AC-52: require O's actual retained-I pidfd poll-IN record strictly before matching seal.
        Mutate ONLY its underlying call/result to fabricated IN while I is positively live;
        preserve emission and independent source-check code byte-unchanged. Require genuine-operation
@@ -884,9 +889,7 @@ Test credit and their existing Slice 2 obligation.
        Require that observation/sample membership never supplies descendant kill-list authority.
        A membership-dependent teardown path fails this Analysis regardless of current sample timing.
        C lease close is not the actual kill/exit boundary, and O samples continue afterward; do not
-       assert a child-absence-through-control-kill runtime precondition. Retain BOTH live then dead
-       pins and genuine I/M settlement before escalation in the normal live-birth case. Independently
-       retain the actual AC-24 non-INIT-watcher adverse/restored Test; no outer cleanup rescue and
+       assert a child-absence-through-control-kill runtime precondition. Independently retain the actual AC-24 non-INIT-watcher adverse/restored Test; no outer cleanup rescue and
        no source-only completion or sampled-membership-mutant execution credit. The CODE author
        supplies actual final-source Analysis and the CODE reviewer accepts it separately from Test.
     f. AC-56: inspect published integrated source for actual I confirmation/M Child reap, writer EOF,
@@ -1074,6 +1077,7 @@ not excluded double faults.
 
 | Criterion | Expected result | Independent adverse result |
 | --- | --- | --- |
+| FR-034-AC-8/10 (Test, step 28a) | BOTH positively live descendant pins become dead with actual I/M settlement before outer escalation. | Surviving pin, missing genuine settlement or observation only after escalation fails; source Analysis and later emergency cleanup supply no Test credit. |
 | FR-034-AC-51 | Child ACK proves release-dependent birth after actual ordinary sample, with explicit genuine construction preconditions. | Membership-only proxy or missing precondition fails. |
 | FR-034-AC-52 | O's genuine I-IN confirmation precedes matching seal. | Fabricated IN with real I live/emission unchanged fails provenance; actual late poll fails order. |
 | FR-034-AC-53 | O's genuine M Child reap precedes matching seal. | Fabricated reap with Child unreaped/emission unchanged fails provenance; actual late reap fails order. |
