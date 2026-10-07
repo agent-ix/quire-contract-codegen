@@ -171,6 +171,7 @@ pub(super) enum OuterRunProgress {
 pub(super) struct OuterRunPreparation {
     resources: Option<OuterPreparationResources>,
     attempted: bool,
+    failure_event: Option<Result<StopStamp, DeadlineError>>,
 }
 
 struct OuterPreparationResources {
@@ -205,6 +206,7 @@ impl OuterRunPreparation {
                 startup_deadline: None,
             }),
             attempted: false,
+            failure_event: None,
         }
     }
 
@@ -220,7 +222,22 @@ impl OuterRunPreparation {
             return Err(SamplingError::InvalidMonitorTransition);
         }
         self.attempted = true;
-        self.prepare_resources(outer, caller, caller_pin)?;
+        if let Err(error) = self.prepare_resources(outer, caller, caller_pin) {
+            // O observes the failed construction here, before returning/publishing its cause
+            // or doing diagnostic encoding. A clock error is retained without retry. If a real
+            // memory stop already exists, capture_once preserves its earlier actual event.
+            self.failure_event = Some(
+                match self
+                    .resources
+                    .as_mut()
+                    .and_then(|resources| resources.sampling.as_mut())
+                {
+                    Some(sampling) => sampling.stops.capture_once(StopOrigin::Outer),
+                    None => StopStamp::capture(StopOrigin::Outer),
+                },
+            );
+            return Err(error);
+        }
         let resources = self
             .resources
             .take()
@@ -265,6 +282,12 @@ impl OuterRunPreparation {
                 Err(SamplingError::InvalidMonitorTransition)
             }
         }
+    }
+
+    /// Original O construction-failure event. No failure, or unavailable capture, is not a
+    /// permission to start settlement at receipt time. This method creates no new event.
+    pub(super) fn failure_stop(&self) -> Result<Option<StopStamp>, DeadlineError> {
+        self.failure_event.transpose()
     }
 
     fn prepare_resources(
