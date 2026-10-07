@@ -106,3 +106,14 @@ Round 6, reviewed at agent-ix/quire-contract-codegen@c2280385c78b2fa1d8e551c5a3b
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-006 | fixed | c228038: AC-40's documentation clause now names the I/O-carrier versus detail-only scope, get_ref/downcast detection of both KaniCrossRoleCauseLoss and KaniCauseMetadataIntegrityError, recognition of sender required-representation faults versus valid original causes, and the absent original-source/stage-query promise. This matches FR-034 lines 1052-1061 and the TC-049 step 27 docs Analysis. |
+
+## Dispositions (round 7)
+
+Round 7, reviewed at agent-ix/quire-contract-codegen@cc7f2417398812c45a152f0a0ef6f203d598de41 (fix diff c228038..cc7f241). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run 9189ce04-c107-4a9f-b930-8b0c5a83e0c9. This was a scoped pass over the simplified two-domain/9-predicate text only, plus a measurement of the author's mechanical exhaustiveness table against frozen 8fbf08f startup_cause.rs and startup_projection.rs (git show only). SR-2522 had no open finding; FND-001..FND-006 latest outcomes remain fixed. One new low finding from the simplification is recorded here.
+
+
+## New findings (disposition pass 7)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | Row 864 still tells the sender to 'select the actual typed category/fields from the declared private set below', and TC-049 consumer row 807 still names a 'valid original declared operational-category boxed no-errno cause'. The R7 simplification removed every declared operational scalar category. The only finite ValidOriginal facts left are the seccompiler dependency facts (governed by stronger AC-39 duties) and the Reservation observation, and a boxed first-party operational cause now gets 'the same original-payload loss treatment as other original custom causes' (lines 890-892). So the 'declared' row and consumer row point to a set with no members of their own and duplicate the generic custom-loss rows 866/808. Scenario: A test author implementing consumer row 807 looks for a member of the 'declared private set below' that is not a seccompiler AC-39 fact or a Reservation. There is none, so the row is either left unbacked with a permanent UNRUN, or backed by the same fixture as generic row 808 and counted twice. Both expect loss marker Some and integrity None, so behaviour does not diverge; the leftover wording only creates an untestable or duplicated obligation. | spec/kani/functional/FR-034-caller-death-ownership.md:864; spec/kani/functional/FR-034-caller-death-ownership.md:887-897; spec/kani/matrix/TC-049-caller-death-ownership.md:807-808 |
