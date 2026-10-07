@@ -94,6 +94,7 @@ pub(super) struct CallerExecution {
     work_expired: bool,
     capture_failed: bool,
     settled: bool,
+    producer_clock_refusal: Option<DeadlineError>,
     limit: usize,
     harnesses: NonZeroUsize,
 }
@@ -153,6 +154,7 @@ impl CallerExecution {
             work_expired: false,
             capture_failed: false,
             settled: false,
+            producer_clock_refusal: None,
             limit,
             harnesses,
         })
@@ -246,6 +248,11 @@ impl CallerExecution {
     /// normal terminal receipt or successful cleanup. Its caller must still return the truthful
     /// CleanupUnconfirmed override if the ordinary authenticated transaction could not settle.
     pub(super) fn attempt_unconfirmed_containment(&mut self) -> Result<(), CallerExecutionError> {
+        // An explicit producer-clock refusal cannot authorize a later receipt-time trigger.
+        // Preserve unconfirmed custody instead of manufacturing a replacement allowance.
+        if let Some(error) = self.producer_clock_refusal {
+            return Err(CallerExecutionError::Deadline(error));
+        }
         self.bootstrap
             .driver_capture_stop(&mut self.clock)
             .map_err(CallerExecutionError::Bootstrap)?;
@@ -295,6 +302,34 @@ impl CallerExecution {
         self.bootstrap.publication.publish(Stage::LeaseClosing);
         self.lease_closed = true;
         Ok(())
+    }
+
+    /// Original local startup errors need no remote receipt when actual completed creation
+    /// proves L was never created. This never mints O/M/INIT or measurement evidence.
+    pub(super) fn finish_uncreated_error(&mut self) -> Result<bool, CallerExecutionError> {
+        let roles = match self.bootstrap.settle_never_created(&mut self.clock) {
+            Ok(Some(roles)) => roles,
+            Ok(None) => return Ok(false),
+            Err(CallerBootstrapError::Deadline(error)) => {
+                self.producer_clock_refusal = Some(error);
+                return Err(CallerExecutionError::Bootstrap(
+                    CallerBootstrapError::Deadline(error),
+                ));
+            }
+            Err(error) => return Err(CallerExecutionError::Bootstrap(error)),
+        };
+        if !self.lease_closed {
+            self.close_original_lease()?;
+        }
+        self.roles = Some(roles);
+        self.bootstrap
+            .streams
+            .discard_after_roles(self.roles.as_ref().ok_or(CallerExecutionError::Bootstrap(
+                CallerBootstrapError::SettlementReplyMismatch,
+            ))?)
+            .map_err(CallerExecutionError::Io)?;
+        self.settled = true;
+        Ok(true)
     }
 
     /// C retains its original local candidate outside this finite progress operation. Publish

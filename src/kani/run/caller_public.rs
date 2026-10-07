@@ -112,6 +112,9 @@ fn cancelled_result(
         return Err(local_error(owner, original));
     }
     let cancelled = (|| {
+        if matches!(candidate, CancelCandidate::LocalError) && owner.finish_uncreated_error()? {
+            return Ok(None);
+        }
         loop {
             if owner.cancel_step()? {
                 break;
