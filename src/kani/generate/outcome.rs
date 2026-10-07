@@ -952,13 +952,13 @@ mod tests {
     /// refusal arms of `NotLowered`, and the variants a request reaches only with a defective
     /// generator or a source over 1 MiB.
     fn table() -> Vec<(&'static str, StateFrameRefusal, ObligationDisposition)> {
-        let refusal_detail = CheckedPackageRefusal {
-            code: quire_contract_model::CheckedPackageRefusalCode::MalformedWire,
-            path: None,
-            cause: None,
-            locus: None,
-            contract_version: None,
-            document_pointer: None,
+        let refusal_detail = match quire_contract_model::CheckedPackageV2::read(
+            b"{}",
+            quire_contract_model::CheckedPackageReadLimits::bounded(),
+            &quire_contract_model::CheckedPackageEvidence::new(),
+        ) {
+            quire_contract_model::CheckedPackageV2ReadResult::Refused(refusal) => refusal,
+            other => panic!("an empty package is refused by the reader: {other:?}"),
         };
         let incomplete = CheckedPackageIncomplete {
             limit_kind: CheckedPackageLimit::Work,

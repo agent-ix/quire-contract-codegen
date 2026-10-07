@@ -167,6 +167,10 @@ fn observed_value(name_value: &str, observation: StateObservation, at: u64) -> E
 }
 
 fn integer_literal(value: i64, value_type: &IntegerType, at: u64) -> Expression {
+    integer_literal_wide(i128::from(value), value_type, at)
+}
+
+fn integer_literal_wide(value: i128, value_type: &IntegerType, at: u64) -> Expression {
     Expression::new(
         ExpressionKind::IntegerLiteral {
             value,
@@ -174,6 +178,76 @@ fn integer_literal(value: i64, value_type: &IntegerType, at: u64) -> Expression 
         },
         span(at, at + 1),
     )
+}
+
+/// Trace: TC-003, NFR-002-AC-3, TC-044, FR-031-AC-28.
+#[test]
+fn wide_ir_integer_bounds_refuse_an_i64_oracle_without_generated_source() {
+    for (minimum, maximum, literal) in [
+        (0, i128::from(i64::MAX) + 1, i128::from(i64::MAX) + 1),
+        (0, i128::from(u64::MAX), i128::from(u64::MAX)),
+        (0, i128::MAX, i128::MAX),
+        (i128::from(i64::MIN) - 1, 0, 0),
+        (i128::MIN, 0, 0),
+    ] {
+        let value_type = IntegerType::new(
+            IntegerDomain::Signed,
+            minimum,
+            maximum,
+            OverflowPolicy::Reject,
+        )
+        .unwrap();
+        let environment = integer_environment(&value_type);
+        let expression = comparison(
+            ComparisonOperator::LessEqual,
+            value("x", 20),
+            integer_literal_wide(literal, &value_type, 21),
+            19,
+        );
+        let typed = environment
+            .check_expression(&expression, &ValueType::Boolean, &pre(), true)
+            .unwrap();
+        let clause = ClauseId::new("wide-integer-bound").unwrap();
+        let diagnostics = generate_boolean_oracle(&OracleRequest {
+            requirement: environment.owner(),
+            clause: &clause,
+            expression: &typed,
+        })
+        .unwrap_err();
+        assert_eq!(
+            diagnostics[0].code,
+            GenerationErrorCode::UnsupportedExpression
+        );
+        assert_eq!(diagnostics[0].source_span, Some(span(20, 21)));
+        assert!(diagnostics[0].message.contains("not representable as i64"));
+    }
+
+    // A literal alone still carries a typed integer domain; no declaration read is needed to
+    // expose the V1 rendering boundary at that literal's own source span.
+    let value_type =
+        IntegerType::new(IntegerDomain::Signed, 0, i128::MAX, OverflowPolicy::Reject).unwrap();
+    let environment = boolean_environment(&[]);
+    let expression = comparison(
+        ComparisonOperator::LessEqual,
+        integer_literal_wide(i128::MAX, &value_type, 30),
+        integer_literal_wide(0, &value_type, 31),
+        29,
+    );
+    let typed = environment
+        .check_expression(&expression, &ValueType::Boolean, &pre(), true)
+        .unwrap();
+    let clause = ClauseId::new("wide-integer-literal").unwrap();
+    let diagnostics = generate_boolean_oracle(&OracleRequest {
+        requirement: environment.owner(),
+        clause: &clause,
+        expression: &typed,
+    })
+    .unwrap_err();
+    assert_eq!(
+        diagnostics[0].code,
+        GenerationErrorCode::UnsupportedExpression
+    );
+    assert_eq!(diagnostics[0].source_span, Some(span(30, 31)));
 }
 
 fn comparison(

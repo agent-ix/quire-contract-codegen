@@ -358,9 +358,16 @@ pub struct StateClauseReplay {
     pub wire: ReplayRequestWire,
     /// The envelope's members. `clause_node` and `occurrence_key` are the `ClauseSite`'s.
     pub packet: WitnessPacket<StateClauseCounterexample>,
+    /// The caller's configured replay reader bound.
+    replay_limits: qsl_replay::ReplayLimits,
 }
 
 impl StateClauseReplay {
+    /// The caller's reader bound used to admit this request and envelope.
+    pub fn replay_limits(&self) -> qsl_replay::ReplayLimits {
+        self.replay_limits
+    }
+
     /// Compiles the proved unit against its domain packages and dependencies, locates the clause
     /// in it, reads the operation's shape and the state object's fields from the admitted package,
     /// builds the invocation and snapshot documents, and builds the request and envelope members.
@@ -448,7 +455,7 @@ impl StateClauseReplay {
             .map_err(StateClauseReplayError::Name)?;
         let bindings = pre
             .iter()
-            .map(|(field, value)| (field.as_str(), *value))
+            .map(|(field, value)| (field.as_str(), i128::from(*value)))
             .collect::<Vec<_>>();
         let witness = render_witness(&operation.to_string(), clause.0.as_str(), &bindings)
             .map_err(StateClauseReplayError::Transcript)?;
@@ -494,7 +501,11 @@ impl StateClauseReplay {
             source: Some(ReplaySource::Witness(witness)),
             family_payload: Some(payload),
         };
-        Ok(Self { wire, packet })
+        Ok(Self {
+            wire,
+            packet,
+            replay_limits: run.replay_limits,
+        })
     }
 
     /// Replays the counterexample through [`qsl_replay::replay_state_clause`].
@@ -503,7 +514,8 @@ impl StateClauseReplay {
     ///
     /// As [`Self::replay_through`].
     pub fn replay(self) -> Result<StateClauseReplayResult, StateClauseReplayError> {
-        self.replay_through(replay_state_clause)
+        let replay_limits = self.replay_limits;
+        self.replay_through(|wire, envelope| replay_state_clause(wire, envelope, replay_limits))
     }
 
     /// Admits the envelope and hands the request and the envelope to `executor`, returning the
@@ -521,8 +533,8 @@ impl StateClauseReplay {
             &WitnessEnvelope<StateClauseCounterexample>,
         ) -> Result<StateClauseReplayResult, ReplayRefusal>,
     ) -> Result<StateClauseReplayResult, StateClauseReplayError> {
-        let envelope =
-            WitnessEnvelope::reconstruct(self.packet).map_err(StateClauseReplayError::Envelope)?;
+        let envelope = WitnessEnvelope::reconstruct(self.packet, self.replay_limits)
+            .map_err(StateClauseReplayError::Envelope)?;
         executor(self.wire, &envelope)
             .map_err(|refusal| StateClauseReplayError::Refused(Box::new(refusal)))
     }

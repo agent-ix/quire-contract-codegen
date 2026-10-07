@@ -3383,10 +3383,7 @@ fn derive_operation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quire_contract_model::{
-        CheckedPackageIncomplete, CheckedPackageLimit, CheckedPackageRefusal,
-        CheckedPackageRefusalCode,
-    };
+    use quire_contract_model::{CheckedPackageIncomplete, CheckedPackageLimit};
 
     fn node_id(digit: char) -> CheckedNodeId {
         serde_json::from_value(serde_json::json!({
@@ -3402,17 +3399,18 @@ mod tests {
     /// Trace: FR-014-AC-3, TC-024.
     #[test]
     fn tc_024_invalid_and_incomplete_bodies_are_typed_refusals() {
+        let refusal = match quire_contract_model::CheckedPackageV2::read(
+            b"{}",
+            quire_contract_model::CheckedPackageReadLimits::bounded(),
+            &quire_contract_model::CheckedPackageEvidence::new(),
+        ) {
+            quire_contract_model::CheckedPackageV2ReadResult::Refused(refusal) => refusal,
+            other => panic!("an empty package is refused by the reader: {other:?}"),
+        };
         let invalid = CompleteLoweringRecordV2::InvalidBody {
             node_id: node_id('a'),
             body_node_id: node_id('b'),
-            refusal: CheckedPackageRefusal {
-                code: CheckedPackageRefusalCode::InvalidSemanticGraph,
-                path: None,
-                cause: None,
-                locus: None,
-                contract_version: None,
-                document_pointer: None,
-            },
+            refusal,
         };
         assert_eq!(
             lowered(&invalid).err(),

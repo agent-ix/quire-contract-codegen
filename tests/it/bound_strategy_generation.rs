@@ -11,7 +11,7 @@ use std::{
 use crate::scratch_crate::{runtime_dependency, write_manifest};
 use quire_contract_codegen::{
     generate_bound_oracles, generate_bound_strategy, BoundGenerationError, BoundStrategyPopulation,
-    BoundStrategyRequest, GenerationTerminalState, StrategyErrorCode,
+    BoundStrategyRequest, GenerationErrorCode, GenerationTerminalState, StrategyErrorCode,
 };
 use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
@@ -167,6 +167,41 @@ fn generate(
         maximum_discarded_cases: 0,
     })
     .unwrap()
+}
+
+/// Trace: TC-017, FR-008-AC-3, FR-008-AC-6, TC-003, NFR-002-AC-3.
+#[test]
+fn wide_ir_domain_refuses_the_i64_strategy() {
+    for (minimum, maximum) in [
+        (0, i128::from(i64::MAX) + 1),
+        (0, i128::from(u64::MAX)),
+        (0, i128::MAX),
+        (i128::from(i64::MIN) - 1, 1000),
+        (i128::MIN, 1000),
+    ] {
+        let mut projection = version_projection();
+        projection["bindings"][0]["expression"]["values"][0]["value_type"]["minimum"] =
+            json!(minimum.to_string());
+        projection["bindings"][0]["expression"]["values"][0]["value_type"]["maximum"] =
+            json!(maximum.to_string());
+        let package = decode(&projection);
+        let refusal = generate_bound_strategy(&BoundStrategyRequest {
+            package: &package,
+            clause: &clause_ref(),
+            population: BoundStrategyPopulation::Broad,
+            minimum_accepted_cases: 1,
+            minimum_rejected_cases: 0,
+            maximum_discarded_cases: 0,
+        })
+        .unwrap_err();
+        assert_eq!(refusal.code, StrategyErrorCode::UnsupportedClause);
+        assert_eq!(
+            refusal.generation_code,
+            Some(GenerationErrorCode::UnsupportedExpression)
+        );
+        let expected_span = serde_json::from_value(span(4)).unwrap();
+        assert_eq!(refusal.source_span.as_deref(), Some(&expected_span));
+    }
 }
 
 fn generate_projection_population(

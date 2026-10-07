@@ -257,12 +257,11 @@ pub(super) fn abi(contexts: &[(&ClauseOracle, SlotContext)]) -> Result<Abi, Unsu
                 RustValueType::Boolean => (KaniPrimitiveType::Boolean, None),
                 RustValueType::Integer(value) => (
                     KaniPrimitiveType::I64,
-                    Some(KaniIntegerBounds {
-                        domain: value.domain(),
-                        minimum: value.minimum(),
-                        maximum: value.maximum(),
-                        overflow: value.overflow(),
-                    }),
+                    Some(KaniIntegerBounds::from_model(value).ok_or(
+                        UnsupportedObligation::ClauseLowering {
+                            generation_code: GenerationErrorCode::UnsupportedDependency,
+                        },
+                    )?),
                 ),
             };
             match bindings.get_mut(&identifier) {
@@ -339,6 +338,10 @@ pub(super) fn symbolic_arguments(arguments: &[ObligationBinding]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quire_contract_model::{
+        AnchorName, ClauseId, DependencyName, IntegerDomain, IntegerType, OverflowPolicy,
+        RequirementRef,
+    };
 
     /// Trace: FR-015-AC-1, TC-025.
     #[test]
@@ -361,6 +364,51 @@ mod tests {
             ClauseKind::Information,
         ] {
             assert_eq!(obligation_kind(kind), None);
+        }
+    }
+
+    /// Trace: FR-015-CON-1, TC-025.
+    #[test]
+    fn tc_025_clause_abi_refuses_both_outside_i64_endpoints() {
+        let requirement = RequirementRef::parse("test/kani-abi", "FR-015", 1).unwrap();
+        let dependency = DependencyIdentity::new(
+            requirement.clone(),
+            DependencyKind::Input,
+            vec![DependencyName::new("x").unwrap()],
+        )
+        .unwrap();
+        for (minimum, maximum) in [
+            (i128::from(i64::MIN) - 1, 0),
+            (i128::MIN, 0),
+            (0, i128::from(i64::MAX) + 1),
+            (0, i128::MAX),
+        ] {
+            let value = IntegerType::new(
+                IntegerDomain::Signed,
+                minimum,
+                maximum,
+                OverflowPolicy::Reject,
+            )
+            .unwrap();
+            let oracle = ClauseOracle {
+                clause: ClauseRef::new(requirement.clone(), ClauseId::new("wide").unwrap()),
+                kind: ObligationKind::Precondition,
+                anchor: ExecutionPoint::Pre {
+                    operation: AnchorName::new("run").unwrap(),
+                },
+                symbol: "oracle_wide".to_owned(),
+                source: String::new(),
+                parameters: vec![Parameter {
+                    dependency: dependency.clone(),
+                    value_type: RustValueType::Integer(value),
+                }],
+            };
+            assert!(matches!(
+                abi(&[(&oracle, SlotContext::Precondition)]),
+                Err(UnsupportedObligation::ClauseLowering {
+                    generation_code: GenerationErrorCode::UnsupportedDependency
+                })
+            ));
         }
     }
 }

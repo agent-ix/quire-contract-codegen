@@ -96,9 +96,12 @@ fn tc_031_generated_function_crate_agrees_with_direct_runtime() {
 /// function.
 #[test]
 fn tc_031_ac17_location_map_origin_confirmed_against_runtime_check_refusal() {
-    let package = ext_corpus_package().admit();
-    let functions = main_functions_for_ac17();
-    let items = vec![item(ITEM_CALL_ADD, "add_fn")];
+    let (package, ids) = ext_corpus_package().admit_resolved();
+    let functions = main_functions_for_ac17()
+        .into_iter()
+        .map(|function| ids.resolve_function(function))
+        .collect::<Vec<_>>();
+    let items = vec![ids.resolve_call(item(ITEM_CALL_ADD, "add_fn"))];
     let oracles =
         quire_contract_codegen::generate_exact_function_oracles(&package, &functions, &items)
             .expect("generation succeeds");

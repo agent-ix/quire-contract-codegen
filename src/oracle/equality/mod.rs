@@ -1853,40 +1853,21 @@ mod tests {
     /// Compile the recursive QSpec forms through QSL's public facade and read its package.
     fn qsl_recursive_package() -> CheckedPackageV2 {
         use qsl_replay::{
-            compile_package, DependencyInput, ScalarLimits, SourceIdentity, StageLimits,
+            compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
         };
         use quire_contract_model::{
             CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2ReadResult,
         };
 
         let source = include_bytes!("../../../tests/composite_equality_support/recursive.native");
-        let unbounded = ScalarLimits {
-            integer_bits: u64::MAX,
-            decimal_digits: u64::MAX,
-            scale_expansion: u64::MAX,
-            text_input_bytes: u64::MAX,
-            text_scalars: u64::MAX,
-            normalized_scalars: u64::MAX,
-            unit_edges: u64::MAX,
-            value_occurrences: u64::MAX,
-            work_units: u64::MAX,
-            result_units: u64::MAX,
-        };
         let compiled = compile_package(
             SourceIdentity::new("a", "u", "git", "1"),
             "recursive.native",
             source,
             [],
             &DependencyInput::default(),
-            StageLimits {
-                s1: ScalarLimits {
-                    text_input_bytes: 1 << 20,
-                    ..unbounded
-                },
-                s2: unbounded,
-                s3: unbounded,
-                s4: unbounded,
-            },
+            StageLimits::default(),
+            ReplayLimits::default(),
         )
         .expect("QSL compiles recursive records");
         let mut evidence = CheckedPackageEvidence::new();

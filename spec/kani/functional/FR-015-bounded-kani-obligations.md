@@ -538,6 +538,13 @@ families it names, each of which is owed a shadow or a production harness of its
 | a closure whose pair-node count exceeds the shadow size budget | `unsupported`, `ShadowShapeOverBudget` naming the count and the budget |
 | a descriptor `check_equality` refuses, or an item FR-018 refused | the refusal FR-018 recorded, unchanged, and no harness |
 
+## Constraints
+
+| ID | Constraint | Type | Validation |
+|----|------------|------|------------|
+| FR-015-CON-1 | Clause ABI construction SHALL check both endpoints of a bounded integer dependency before conversion to i64 and refuse one outside i64 as `UnsupportedDependency` in the clause-lowering detail, without producing a binding. | Integrity | Test (TC-025) |
+| FR-015-CON-2 | Subject binding SHALL check both endpoints of a bounded integer dependency before conversion to i64 and refuse one outside i64 as `UnsupportedBinding`, without producing a binding or harness. | Integrity | Test (TC-025) |
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |

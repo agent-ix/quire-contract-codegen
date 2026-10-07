@@ -431,8 +431,8 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
             (family, harness.rust.contents)
         })
         .collect::<Vec<_>>();
-    let (scalar, claim_map) = scalar_package();
-    let node = code_id(1001);
+    let (scalar, claim_map, ids) = scalar_package();
+    let node = ids.resolve(&code_id(1001));
     let items = [ObligationItem::ScalarClaim {
         package: &scalar,
         claim_map: &claim_map,
@@ -457,7 +457,11 @@ const FRAME: u32 = 3002;
 /// The object type `FRAME` frames.
 const FRAMED_OBJECT: u32 = 3004;
 
-pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>) {
+pub(crate) fn scalar_package() -> (
+    CheckedPackageV2,
+    ClaimMap<ExactScalarClaim>,
+    package::FixtureIds,
+) {
     let mut builder = corpus_package();
     // IR-280's FR-322 application-node dependency join means this bound must
     // anchor on a node no other expression's differing bound also reaches
@@ -508,24 +512,34 @@ pub(crate) fn scalar_package() -> (CheckedPackageV2, ClaimMap<ExactScalarClaim>)
             &key(FRAMED_OBJECT),
             json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
         );
-    let package = builder.admit();
-    let mut items = golden_items();
+    let (package, ids) = builder.admit_resolved();
+    let mut items = golden_items()
+        .into_iter()
+        .map(|mut item| {
+            item.node_id = ids.resolve(&item.node_id);
+            item
+        })
+        .collect::<Vec<_>>();
     for code in [UNSATISFIABLE, FRAME] {
         items.push(ExactScalarItem {
-            node_id: code_id(code),
+            node_id: ids.resolve(&code_id(code)),
             operation: integer_add(),
         });
     }
     let oracles = generate_exact_scalar_oracles(&package, &items).expect("claim map");
-    (package, oracles.claim_map)
+    (package, oracles.claim_map, ids)
 }
 
 fn scalar_records(
     package: &CheckedPackageV2,
     claim_map: &ClaimMap<ExactScalarClaim>,
+    fixture_ids: &package::FixtureIds,
     codes: &[u32],
 ) -> Vec<ObligationRecord> {
-    let ids = codes.iter().map(|code| code_id(*code)).collect::<Vec<_>>();
+    let ids = codes
+        .iter()
+        .map(|code| fixture_ids.resolve(&code_id(*code)))
+        .collect::<Vec<_>>();
     let items = ids
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
@@ -789,8 +803,8 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     // not a typed refusal. Both its operands are references to the corpus's `value` node whose
     // body is the literal `3`, so each is a constant and ranged at its own value (IR-302); the
     // per-operand bounded ranges are TC-033's.
-    let (scalar, claim_map) = scalar_package();
-    let node_1001 = code_id(1001);
+    let (scalar, claim_map, ids) = scalar_package();
+    let node_1001 = ids.resolve(&code_id(1001));
     let items = [ObligationItem::ScalarClaim {
         package: &scalar,
         claim_map: &claim_map,
@@ -826,8 +840,8 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
 /// Trace: FR-015-AC-37, FR-015-AC-7, TC-025
 #[test]
 fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
-    let (scalar, claim_map) = scalar_package();
-    let node_1001 = code_id(1001);
+    let (scalar, claim_map, ids) = scalar_package();
+    let node_1001 = ids.resolve(&code_id(1001));
     let items = [ObligationItem::ScalarClaim {
         package: &scalar,
         claim_map: &claim_map,
@@ -928,7 +942,7 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
             "let exact: i128 = -i128::from(operand_native);",
         ),
     ];
-    let (scalar, claim_map) = scalar_package();
+    let (scalar, claim_map, _) = scalar_package();
     let generated = claim_map
         .items
         .iter()
@@ -975,16 +989,17 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
 #[test]
 fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
-    let (scalar, claim_map) = scalar_package();
+    let (scalar, claim_map, ids) = scalar_package();
     let records = scalar_records(
         &scalar,
         &claim_map,
+        &ids,
         &[UNBOUNDED, MISSING_ROUNDING, MODEL, STATE, FRAME],
     );
     assert_eq!(
         records[0].disposition,
         ObligationDisposition::RequiresBound {
-            unbounded_type: code_id(T_INTEGER)
+            unbounded_type: ids.resolve(&code_id(T_INTEGER))
         }
     );
     assert!(matches!(
@@ -994,7 +1009,7 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
     assert_eq!(
         unsupported(&records[2]),
         &UnsupportedObligation::BlockedOnUpstream {
-            node_id: code_id(MODEL),
+            node_id: ids.resolve(&code_id(MODEL)),
             node_tag: "model",
             issue: UpstreamBlocker::QuireSpecLanguage120,
         }
@@ -1002,21 +1017,25 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
     assert_eq!(
         unsupported(&records[3]),
         &UnsupportedObligation::NoFiniteEncoding {
-            node_id: code_id(STATE),
+            node_id: ids.resolve(&code_id(STATE)),
             node_tag: "state",
         }
     );
     assert_eq!(records[4].kind, Some(ObligationKind::Frame));
+    assert!(ids.resolve(&code_id(FRAMED_OBJECT)) < ids.resolve(&code_id(FRAME)));
+    // The frame is typed by FRAMED_OBJECT. IR names that model first in admitted node-id
+    // order, before the rekeyed frame node, so this item carries the model blocker.
     assert_eq!(
         unsupported(&records[4]),
-        &UnsupportedObligation::NoFiniteEncoding {
-            node_id: code_id(FRAME),
-            node_tag: "state",
+        &UnsupportedObligation::BlockedOnUpstream {
+            node_id: ids.resolve(&code_id(FRAMED_OBJECT)),
+            node_tag: "model",
+            issue: UpstreamBlocker::QuireSpecLanguage120,
         }
     );
     assert!(matches!(
         &records[4].subject,
-        ObligationSubject::CheckedNode { node_id, source_map } if node_id == &code_id(FRAME) && !source_map.is_empty()
+        ObligationSubject::CheckedNode { node_id, source_map } if node_id == &ids.resolve(&code_id(FRAME)) && !source_map.is_empty()
     ));
 
     let package = bound_package(1000);
@@ -1058,8 +1077,9 @@ const RENDERED_OPERATIONS: [&str; 4] = [
 /// `state`/`frame` role pair nor `expression`-tagged (the only family
 /// `generate_exact_scalar_oracles` ever lowers to a `Generated` claim), must not be silently
 /// accounted with a null `kind` and a `Supported` disposition if it ever reaches one. The real
-/// generator already refuses every other `state`-tagged node before that point -- `STATE` and
-/// `FRAME` above both land on `NoFiniteEncoding` -- so this drives the gap directly: `transition`
+/// generator already refuses the other `state`-tagged nodes before that point -- `STATE` lands on
+/// `NoFiniteEncoding`, while `FRAME` reaches its framed model's upstream blocker -- so this
+/// drives the gap directly: `transition`
 /// is a real, admitted `state` form distinct from `frame` (`quire-contract-ir`'s own
 /// `CheckedNodeTag::State::forms()`), and its claim-map entry is hand-appended as `Generated`,
 /// the shape `generate_exact_scalar_oracles` would never itself produce for a non-`expression`
@@ -1078,8 +1098,8 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         &key(T_BOOLEAN),
         json!({"term": "aggregate", "members": []}),
     );
-    let package = builder.admit();
-    let node_id = code_id(UNRECOGNIZED_STATE_FORM);
+    let (package, ids) = builder.admit_resolved();
+    let node_id = ids.resolve(&code_id(UNRECOGNIZED_STATE_FORM));
 
     let oracles = generate_exact_scalar_oracles(&package, &golden_items()).expect("claim map");
     let (operation, generated) = oracles
@@ -1145,7 +1165,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
 /// Trace: FR-015-AC-50, TC-025
 #[test]
 fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused_unchanged() {
-    let (package, claim_map) = scalar_package();
+    let (package, claim_map, ids) = scalar_package();
     for refusal in [
         ExactScalarRefusal::LoweringByteLimitExceeded {
             limit: 1_000,
@@ -1161,12 +1181,12 @@ fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused
         let claim = hand_built
             .items
             .iter_mut()
-            .find(|claim| claim.node_id == code_id(UNBOUNDED))
+            .find(|claim| claim.node_id == ids.resolve(&code_id(UNBOUNDED)))
             .expect("the corpus claims the unbounded node");
         claim.result = ClaimDisposition::Refused {
             refusal: refusal.clone(),
         };
-        let records = scalar_records(&package, &hand_built, &[UNBOUNDED]);
+        let records = scalar_records(&package, &hand_built, &ids, &[UNBOUNDED]);
         assert_eq!(
             unsupported(&records[0]),
             &UnsupportedObligation::OracleRefused { refusal }
@@ -1451,8 +1471,8 @@ fn tc_025_contract_harnesses_on_one_operation_share_one_subject_signature() {
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
 #[test]
 fn tc_025_unsatisfiable_bounds_are_refused() {
-    let (scalar, claim_map) = scalar_package();
-    let records = scalar_records(&scalar, &claim_map, &[UNSATISFIABLE]);
+    let (scalar, claim_map, ids) = scalar_package();
+    let records = scalar_records(&scalar, &claim_map, &ids, &[UNSATISFIABLE]);
     assert_eq!(
         unsupported(&records[0]),
         &UnsupportedObligation::UnsatisfiableBound {
@@ -1483,7 +1503,7 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
         "quire.op.integer.mul",
         "quire.op.integer.negate",
     ];
-    let (scalar, claim_map) = scalar_package();
+    let (scalar, claim_map, _) = scalar_package();
     let generated = claim_map
         .items
         .iter()
@@ -1609,7 +1629,7 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
 fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let package = bound_package(1000);
     let other_package = bound_package(999);
-    let (scalar, claim_map) = scalar_package();
+    let (scalar, claim_map, ids) = scalar_package();
     let refs = [
         clause(PRECONDITION),
         clause(POSTCONDITION),
@@ -1617,7 +1637,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         clause(DEFINEDNESS),
     ];
     let missing = code_id(MISSING);
-    let unbounded = code_id(UNBOUNDED);
+    let unbounded = ids.resolve(&code_id(UNBOUNDED));
     let items = [
         ObligationItem::BoundClause {
             package: &package,

@@ -390,7 +390,7 @@ fn derive_subject_abi(
                 existing.source_spans.sort();
                 existing.source_spans.dedup();
             } else {
-                bindings.insert(dependency.clone(), subject_binding(parameter, role));
+                bindings.insert(dependency.clone(), subject_binding(parameter, role)?);
             }
         }
     }
@@ -400,37 +400,38 @@ fn derive_subject_abi(
     })
 }
 
-fn subject_binding(parameter: &DependencyParameter, role: KaniBindingRole) -> KaniSubjectBinding {
+fn subject_binding(
+    parameter: &DependencyParameter,
+    role: KaniBindingRole,
+) -> Result<KaniSubjectBinding, Vec<KaniDiagnostic>> {
     let (primitive_type, integer_bounds) = match &parameter.value_type {
         RustValueType::Boolean => (KaniPrimitiveType::Boolean, None),
         RustValueType::Integer(value) => (
             KaniPrimitiveType::I64,
-            Some(KaniIntegerBounds {
-                domain: value.domain(),
-                minimum: value.minimum(),
-                maximum: value.maximum(),
-                overflow: value.overflow(),
-            }),
+            Some(KaniIntegerBounds::from_model(value).ok_or_else(|| {
+                single_diagnostic(
+                    KaniErrorCode::UnsupportedBinding,
+                    "clauses.dependencies",
+                    "integer dependency bounds are not representable as i64",
+                )
+            })?),
         ),
     };
-    KaniSubjectBinding {
+    Ok(KaniSubjectBinding {
         dependency: parameter.dependency.clone(),
         identifier: parameter.identifier.clone(),
         role,
         primitive_type,
         integer_bounds,
         source_spans: vec![parameter.source.clone()],
-    }
+    })
 }
 
 fn binding_matches_value_type(binding: &KaniSubjectBinding, value_type: &RustValueType) -> bool {
     match (value_type, binding.primitive_type, &binding.integer_bounds) {
         (RustValueType::Boolean, KaniPrimitiveType::Boolean, None) => true,
         (RustValueType::Integer(value), KaniPrimitiveType::I64, Some(bounds)) => {
-            bounds.domain == value.domain()
-                && bounds.minimum == value.minimum()
-                && bounds.maximum == value.maximum()
-                && bounds.overflow == value.overflow()
+            KaniIntegerBounds::from_model(value).as_ref() == Some(bounds)
         }
         _ => false,
     }
@@ -678,4 +679,57 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
 
 fn artifact(path: String, contents: String) -> Artifact {
     Artifact::new(path, contents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quire_contract_model::{
+        DependencyName, IntegerDomain, IntegerType, OverflowPolicy, SourceDocumentId,
+        SourceIdentity, SourceLocation, SourceRevision,
+    };
+
+    /// Trace: FR-015-CON-2, TC-025.
+    #[test]
+    fn tc_025_subject_binding_refuses_both_outside_i64_endpoints() {
+        let requirement = RequirementRef::parse("test/kani-subject", "FR-015", 1).unwrap();
+        let dependency = DependencyIdentity::new(
+            requirement,
+            DependencyKind::Input,
+            vec![DependencyName::new("x").unwrap()],
+        )
+        .unwrap();
+        let source = SourceIdentity::new(
+            SourceDocumentId::new("kani-subject-test").unwrap(),
+            SourceRevision::new(1).unwrap(),
+        );
+        let source = SourceSpan::new(
+            SourceLocation::new(source.clone(), 1, 1, 0).unwrap(),
+            SourceLocation::new(source, 1, 2, 1).unwrap(),
+        )
+        .unwrap();
+        for (minimum, maximum) in [
+            (i128::from(i64::MIN) - 1, 0),
+            (i128::MIN, 0),
+            (0, i128::from(i64::MAX) + 1),
+            (0, i128::MAX),
+        ] {
+            let value = IntegerType::new(
+                IntegerDomain::Signed,
+                minimum,
+                maximum,
+                OverflowPolicy::Reject,
+            )
+            .unwrap();
+            let parameter = DependencyParameter {
+                dependency: dependency.clone(),
+                identifier: "x_current".to_owned(),
+                value_type: RustValueType::Integer(value),
+                source: source.clone(),
+            };
+            let diagnostics = subject_binding(&parameter, KaniBindingRole::Argument).unwrap_err();
+            assert_eq!(diagnostics.len(), 1);
+            assert_eq!(diagnostics[0].code, KaniErrorCode::UnsupportedBinding);
+        }
+    }
 }

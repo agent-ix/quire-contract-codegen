@@ -23,9 +23,9 @@ use std::{collections::BTreeMap, fmt};
 use qsl_replay::{
     call_site, replay_frame, CallSiteRefusal, ClaimedChange, DigestDomain, DigestRecord,
     DocumentRef, EmptyQualifiedName, FrameCounterexample, FrameOperation, FrameReplayResult,
-    MalformedTranscript, OperationName, OperationSite, QualifiedName, ReplayRefusal, ReplayRequest,
-    ReplayRequestWire, ReplaySource, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
-    WitnessValue,
+    MalformedTranscript, OperationName, OperationSite, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReplayRequest, ReplayRequestWire, ReplaySource, WireNodeId, WitnessEnvelope, WitnessPacket,
+    WitnessRefusal, WitnessValue,
 };
 use serde::Deserialize;
 
@@ -304,6 +304,8 @@ pub struct FrameReplay {
     /// The envelope's members. `clause_node` is the payload's frame node and `occurrence_key`
     /// its frame occurrence.
     pub packet: WitnessPacket<FrameCounterexample>,
+    /// The caller's configured replay reader bound.
+    replay_limits: ReplayLimits,
     /// Persisted context for QSL refusals; an unranged field is not necessarily their cause.
     unranged: Vec<StateUnrangedField>,
 }
@@ -362,15 +364,43 @@ fn decoded_state(
         .into_iter()
         .map(|(field, value)| {
             // Every binding above is an `i64`, so the decoder yields only integers; the Boolean
-            // arm is the encoding QSL admits for a Boolean (as the function path replays one)
-            // and keeps this match free of a wildcard.
+            // arm handles QSL's Boolean witness encoding explicitly.
             let integer = match value {
-                WitnessValue::Integer(integer) => integer,
+                WitnessValue::Integer(integer) => i64::try_from(integer).map_err(|_| {
+                    FrameReplayError::Decode(DecodeFailure::new(
+                        "kani_witness_i64_overflow",
+                        harness.harness_symbol.as_str(),
+                        &field,
+                    ))
+                })?,
                 WitnessValue::Boolean(boolean) => i64::from(boolean),
+                WitnessValue::ExactInteger(_)
+                | WitnessValue::Enum { .. }
+                | WitnessValue::Text(_)
+                | WitnessValue::Rational { .. }
+                | WitnessValue::Decimal { .. }
+                | WitnessValue::Float32(_)
+                | WitnessValue::Float64(_)
+                | WitnessValue::Quantity { .. }
+                | WitnessValue::Reference { .. }
+                | WitnessValue::Option(_)
+                | WitnessValue::Record { .. }
+                | WitnessValue::Tuple { .. }
+                | WitnessValue::Union { .. }
+                | WitnessValue::Sequence(_)
+                | WitnessValue::OrderedSet(_)
+                | WitnessValue::Set(_)
+                | WitnessValue::Bag(_) => {
+                    return Err(FrameReplayError::Decode(DecodeFailure::new(
+                        "kani_witness_unsupported_value",
+                        harness.harness_symbol.as_str(),
+                        &field,
+                    )))
+                }
             };
-            (field, integer)
+            Ok((field, integer))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, FrameReplayError>>()?;
     let out_of_range = values.iter().find(|(field, value)| {
         harness
             .domains
@@ -535,6 +565,7 @@ impl FrameReplay {
         }
         let (check_text, values) = decoded_state(&harness, &playback)?;
         let (run, dependencies) = run.admit().map_err(FrameReplayError::Dependencies)?;
+        let replay_limits = run.replay_limits;
         let located = call_site(
             run.source.source_identity(),
             &run.source.identity,
@@ -562,7 +593,7 @@ impl FrameReplay {
             .map_err(FrameReplayError::Name)?;
         let bindings = values
             .iter()
-            .map(|(field, value)| (field.as_str(), *value))
+            .map(|(field, value)| (field.as_str(), i128::from(*value)))
             .collect::<Vec<_>>();
         let witness = render_witness(&harness.harness_path().to_string(), &check_text, &bindings)
             .map_err(FrameReplayError::Transcript)?;
@@ -595,12 +626,14 @@ impl FrameReplay {
         // and refuses with its own code; the pre-state tie reads those documents only after it
         // has passed, so a document whose bytes do not match its digest is QSL's refusal.
         let unranged = harness.unranged.clone();
-        ReplayRequest::decode(request(ReplaySource::Witness(witness.clone()))).map_err(
-            |refusal| FrameReplayError::Refused {
-                refusal: Box::new(ReplayRefusal::Request(refusal)),
-                unranged: unranged.clone(),
-            },
-        )?;
+        ReplayRequest::decode(
+            request(ReplaySource::Witness(witness.clone())),
+            replay_limits,
+        )
+        .map_err(|refusal| FrameReplayError::Refused {
+            refusal: Box::new(ReplayRefusal::Request(refusal)),
+            unranged: unranged.clone(),
+        })?;
         tie_pre_state(&payload.invocation, &state_documents, &values)
             .map_err(FrameReplayError::PreState)?;
         let wire = request(ReplaySource::Witness(witness.clone()));
@@ -622,6 +655,7 @@ impl FrameReplay {
         Ok(Self {
             wire,
             packet,
+            replay_limits,
             unranged,
         })
     }
@@ -636,10 +670,12 @@ impl FrameReplay {
         let Self {
             wire,
             packet,
+            replay_limits,
             unranged,
         } = self;
-        let envelope = WitnessEnvelope::reconstruct(packet).map_err(FrameReplayError::Envelope)?;
-        replay_frame(wire, &envelope).map_err(|refusal| FrameReplayError::Refused {
+        let envelope = WitnessEnvelope::reconstruct(packet, replay_limits)
+            .map_err(FrameReplayError::Envelope)?;
+        replay_frame(wire, &envelope, replay_limits).map_err(|refusal| FrameReplayError::Refused {
             refusal: Box::new(refusal),
             unranged,
         })

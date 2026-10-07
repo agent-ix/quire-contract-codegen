@@ -37,7 +37,42 @@ use quire_contract_runtime::exact::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+#[path = "../checked_package_support/rekey.rs"]
+mod rekey;
+pub use rekey::FixtureIds;
+
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
+const FIXTURE_MODEL: &str = "test/cg-exact-scalar";
+const FIXTURE_OBJECT: &str = "ix://test/cg-exact-scalar/Account";
+const FIXTURE_RELATIONSHIP: &str = "ix://test/cg-exact-scalar/relationship/Account-link-Account";
+
+/// The selected declaration to which the corpus's relationship nodes refer.
+fn fixture_model_document() -> Value {
+    json!({
+        "contractVersion": "2.0.0",
+        "package": {"identity": FIXTURE_MODEL, "version": "1"},
+        "constructs": [{
+            "kind": {"module": FIXTURE_MODEL, "name": "entity"},
+            "construct": {"meaning": "quire.meaning.model.object-type/v1"},
+        }],
+        "types": [{
+            "identity": FIXTURE_OBJECT, "displayName": "Account",
+            "kind": {"module": FIXTURE_MODEL, "name": "entity"},
+            "roles": [], "constraints": [], "extensions": [], "unknownPolicy": "reject",
+            "supertypes": [], "fields": [], "operations": [],
+            "relationships": [{
+                "identity": FIXTURE_RELATIONSHIP,
+                "category": "structural", "composite": false, "direction": "bidirectional",
+                "sourceEnd": {"type": FIXTURE_OBJECT, "role": "link",
+                    "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true}},
+                "targetEnd": {"type": FIXTURE_OBJECT,
+                    "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true}},
+                "origin": {"source": {"sourceIdentity": FIXTURE_OBJECT,
+                    "path": "models/Account.md", "startLine": 1, "startColumn": 1}},
+            }],
+        }],
+    })
+}
 /// The base package's enum declaration node key.
 pub fn enum_type() -> String {
     base_node_ids().enum_type
@@ -66,14 +101,13 @@ pub fn id(digest: &str) -> CheckedNodeId {
     serde_json::from_value(node_ref(digest)).expect("node id")
 }
 
-/// Every code this module ever builds a node for, mapped to its real node
-/// id: the computed application digest for an application-bodied node (see
+/// Every code this module ever builds a node for, mapped to its builder-side
+/// id: the provisional application digest for an application-bodied node (see
 /// [`PackageBuilder::application_code`]/[`PackageBuilder::application_bounded`]),
 /// or the readable placeholder [`key`] for a plain node built by
-/// [`PackageBuilder::code`]/[`PackageBuilder::bounded`] (`validate_application_keys`
-/// never re-derives those, so `key(code)` really is their id). [`code_id`]
-/// reads it so a caller building `golden_items()`/`refused_items()` without
-/// a `&mut PackageBuilder` in hand still gets the same id IR would.
+/// [`PackageBuilder::code`]/[`PackageBuilder::bounded`]. [`code_id`] reads it
+/// so callers can build items without a `&mut PackageBuilder`; after admission
+/// [`FixtureIds::resolve`] maps it to the key the checked reader required.
 fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
     static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
@@ -101,7 +135,7 @@ fn register_code(code: u32, digest: String) {
     }
 }
 
-/// The node id IR actually assigns for `code`, read from [`application_registry`].
+/// The builder-side node id for `code`, read from [`application_registry`].
 /// Ensures the registry is populated by building the corpus once (discarding
 /// the builder) if this is the first call in the process -- `corpus_package`
 /// registers every code this module defines via `code`/`bounded`/
@@ -404,8 +438,17 @@ include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
     fn default() -> Self {
+        let mut value = base_package();
+        let document = fixture_model_document();
+        let selection = json!({
+            "identity": FIXTURE_MODEL,
+            "digest_domain": "sha256-jcs",
+            "digest": sha256_hex(&serde_json::to_vec(&document).expect("model document")),
+        });
+        value["lock"]["model_selections"] = json!([selection]);
+        value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
         Self {
-            value: base_package(),
+            value,
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
         }
@@ -467,6 +510,7 @@ impl PackageBuilder {
             ("state", "state_clause") => "claim",
             _ => "declaration",
         };
+        let source = self.value["lock"]["sources"][0].clone();
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
@@ -482,9 +526,22 @@ impl PackageBuilder {
         });
         if let Some(declaration) = declaration_for(tag, form, label) {
             node["declaration"] = declaration;
+            // These hand-built declarations belong to the selected `example` source.
+            // Application bodies derive their identity from their operation instead;
+            // the checked reader therefore requires no owner on those nodes.
+            if node["body"]["term"] != "application" {
+                node["owner"] = json!({
+                    "kind": "source",
+                    "authority": source["authority"],
+                    "identity": source["identity"],
+                });
+            }
+        } else if (tag, form) == ("relation", "relationship") {
+            node["owner"] = json!({
+                "kind": "model", "identity": FIXTURE_MODEL, "node": FIXTURE_RELATIONSHIP,
+            });
         }
         nodes.push(node);
-        let source = self.value["lock"]["sources"][0].clone();
         let map = self.value["source_map"].as_array_mut().expect("source map");
         let start = map.len();
         map.push(json!({
@@ -530,8 +587,8 @@ impl PackageBuilder {
         self.node_with(&key(code), tag, form, semantic_type, body, &keys)
     }
 
-    /// Registers one application-bodied node with the real `node_id`
-    /// IR-216's `validate_application_keys` re-derives: the SHA-256 digest
+    /// Registers one application-bodied node with a provisional `node_id`
+    /// from the SHA-256 digest
     /// of `{version, node_tag, semantic_form, semantic_type, declaration,
     /// recursion, body}` over sorted-key JSON bytes (Contract IR
     /// `crates/quire-contract-model/src/checked_package/v2/
@@ -541,8 +598,9 @@ impl PackageBuilder {
     /// the digest this call computes. No node this module builds via this
     /// method ever sets `recursion_group`, so `recursion` is always `null`
     /// in the preimage. Also records `code -> digest` in the module's
-    /// application registry so [`code_id`] can look the same digest up
-    /// without rebuilding the node.
+    /// application registry so [`code_id`] can look it up without rebuilding
+    /// the node. Admission uses IR's typed stale-key refusal to resolve this
+    /// builder-side identity to the reader's required key.
     pub fn application_code(
         &mut self,
         code: u32,
@@ -934,12 +992,9 @@ impl PackageBuilder {
     }
 
     /// Adds `dependency` to the already-registered node `target`'s own
-    /// `dependencies` edge list, without touching `target`'s identity: an
-    /// application-bodied node's digest is derived from a preimage that
-    /// excludes `dependencies` (see [`Self::application_code_with`]), and
-    /// every other node's digest is the caller-supplied `digest` parameter
-    /// to `node`/`node_with` -- in both cases identity is fixed before this
-    /// method ever runs. `wire()` rebuilds
+    /// `dependencies` edge list without changing its builder-side id. The
+    /// reader may require a different final id after this change; `wire()`
+    /// resolves it through the reader's typed stale-key refusal and rebuilds
     /// `identity_preimage.identity_projection` fresh from the current node
     /// objects on every call, so the appended edge is reflected consistently
     /// by the next `wire()`/`admit()`.
@@ -999,21 +1054,36 @@ impl PackageBuilder {
 
     /// The wire document with its identity projection and package id refreshed.
     pub fn wire(&self) -> Value {
-        let mut package = self.value.clone();
-        let projection = package["semantic_graph"]["nodes"]
-            .as_array()
-            .expect("nodes")
-            .iter()
-            .cloned()
-            .map(|mut node| {
-                node.as_object_mut().expect("node").remove("occurrences");
-                node
-            })
-            .collect::<Vec<_>>();
-        package["identity_preimage"]["identity_projection"] = Value::Array(projection);
-        let preimage = serde_json::to_vec(&package["identity_preimage"]).expect("preimage");
-        package["package_id"]["digest"] = json!(sha256_hex(&preimage));
-        package
+        self.resolved_wire(CheckedPackageReadLimits::bounded()).wire
+    }
+
+    /// This fixture's wire and the map from its readable IDs to admitted IDs.
+    fn resolved_wire(&self, limits: CheckedPackageReadLimits) -> rekey::ResolvedWire {
+        rekey::resolve_wire(&self.value, &evidence(), limits)
+    }
+
+    /// Admits the package and returns its per-artifact ID resolver.
+    pub fn admit_resolved(&self) -> (CheckedPackageV2, FixtureIds) {
+        self.admit_with_resolved(CheckedPackageReadLimits::bounded())
+    }
+
+    /// Admits under explicit reader limits and returns this artifact's ID resolver.
+    pub fn admit_with_resolved(
+        &self,
+        limits: CheckedPackageReadLimits,
+    ) -> (CheckedPackageV2, FixtureIds) {
+        let rekey::ResolvedWire { outcome, ids, .. } = self.resolved_wire(limits);
+        match outcome {
+            CheckedPackageV2ReadResult::Admitted(package) => (*package, ids),
+            other => panic!("expected V2 admission, got {other:?}"),
+        }
+    }
+
+    /// Returns the reader result and wire with the IDs used by that wire.
+    pub fn read_resolved(&self) -> (CheckedPackageV2ReadResult, Value, FixtureIds) {
+        let rekey::ResolvedWire { wire, outcome, ids } =
+            self.resolved_wire(CheckedPackageReadLimits::bounded());
+        (outcome, wire, ids)
     }
 
     pub fn admit(&self) -> CheckedPackageV2 {
@@ -1022,26 +1092,21 @@ impl PackageBuilder {
 
     /// The reader's verdict on this package, admitted or refused, with the wire it read.
     pub fn read(&self) -> (CheckedPackageV2ReadResult, Value) {
-        let wire = self.wire();
-        let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        let result =
-            CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence());
+        let (result, wire, _) = self.read_resolved();
         (result, wire)
     }
 
     pub fn admit_with(&self, limits: CheckedPackageReadLimits) -> CheckedPackageV2 {
-        let wire = self.wire();
-        let bytes = serde_json::to_vec(&wire).expect("canonical bytes");
-        match CheckedPackageV2::read(&bytes, limits, &evidence()) {
-            CheckedPackageV2ReadResult::Admitted(package) => *package,
-            other => panic!("expected V2 admission, got {other:?}"),
-        }
+        self.admit_with_resolved(limits).0
     }
 }
 
 fn evidence() -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    let document = fixture_model_document();
+    let bytes = serde_json::to_vec(&document).expect("model document");
+    evidence.insert_domain_package_document(sha256_hex(&bytes), bytes);
     evidence
 }
 
@@ -2753,8 +2818,8 @@ pub fn corpus_package() -> PackageBuilder {
         // IR admits a `temporal_clause` only as a `temporal`-operator application over a
         // declared `parameter` with one `temporal_profile` law and a `temporal` formula argument
         // (the QSpec temporal-clause rule), so this node is that minimal clause rather than a
-        // `boolean.not` stand-in. CG refuses it as an unsupported `temporal` family; the refusal
-        // names `TEMPORAL_FORMULA`, the first unsupported node IR reaches from the clause.
+        // `boolean.not` stand-in. CG refuses it as an unsupported `temporal` family; IR checks
+        // the admitted closure in node-id order, which puts this clause before its formula.
         .application_code_with(
             TEMPORAL,
             "temporal",
@@ -3140,8 +3205,9 @@ pub const V_PARAM_WRONG_FORM: u32 = 117;
 /// `a + 1` with the result typed `[0, 29]`: the literal operand has no bound of its own.
 pub const TWO_PARAMETER_LITERAL: u32 = 2056;
 
-/// `p`, a parameter typed by the plain Integer scalar type: it owns no bound.
-pub const V_PARAM_PLAIN: u32 = 118;
+/// `p`, the corpus's plain-Integer parameter: it owns no bound. Reuse its node because
+/// a second parameter with the same body and type has the same structural key.
+pub const V_PARAM_PLAIN: u32 = TEMPORAL_PARAMETER;
 /// `e: Int[1, 9]` and `f: Int[100, 200]`.
 pub const V_PARAM_E: u32 = 119;
 pub const V_PARAM_F: u32 = 120;
@@ -3172,13 +3238,6 @@ pub fn two_parameter_package() -> PackageBuilder {
     let f = builder.bound(&Bound::Integer(100, 200));
     let negated = builder.bound(&Bound::Integer(-9, -1));
     let product = builder.bound(&Bound::Integer(100, 1800));
-    builder.code(
-        V_PARAM_PLAIN,
-        "value",
-        "parameter",
-        &integer_type,
-        parameter_body("p", 0),
-    );
     for (code, bound) in [
         (V_PARAM_E, &e),
         (V_PARAM_F, &f),

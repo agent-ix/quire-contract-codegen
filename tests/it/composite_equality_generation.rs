@@ -10,6 +10,7 @@
 use std::{
     collections::BTreeSet,
     fs,
+    ops::Deref,
     path::PathBuf,
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -64,11 +65,74 @@ impl Drop for TemporaryDirectory {
     }
 }
 
-fn generate(
-    package: &CheckedPackageV2,
-    items: &[CompositeEqualityItem],
-) -> CompositeEqualityOracles {
-    generate_composite_equality_oracles(package, items).expect("generation succeeds")
+struct FixturePackage {
+    checked: CheckedPackageV2,
+    ids: FixtureIds,
+}
+
+impl FixturePackage {
+    fn key(&self, code: u32) -> quire_contract_model::CheckedNodeId {
+        self.ids.resolve(&code_id(code))
+    }
+}
+
+impl Deref for FixturePackage {
+    type Target = CheckedPackageV2;
+
+    fn deref(&self) -> &Self::Target {
+        &self.checked
+    }
+}
+
+fn admit(builder: PackageBuilder) -> FixturePackage {
+    let (checked, ids) = builder.admit_resolved();
+    FixturePackage { checked, ids }
+}
+
+fn admit_with(
+    builder: &PackageBuilder,
+    limits: quire_contract_model::CheckedPackageReadLimits,
+) -> FixturePackage {
+    let (checked, ids) = builder.admit_with_resolved(limits);
+    FixturePackage { checked, ids }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(super) struct FixtureOracles {
+    output: CompositeEqualityOracles,
+    ids: FixtureIds,
+}
+
+impl FixtureOracles {
+    fn key(&self, code: u32) -> quire_contract_model::CheckedNodeId {
+        self.ids.resolve(&code_id(code))
+    }
+
+    fn runtime_key(&self, code: u32) -> String {
+        self.key(code).digest.to_string()
+    }
+}
+
+impl Deref for FixtureOracles {
+    type Target = CompositeEqualityOracles;
+
+    fn deref(&self) -> &Self::Target {
+        &self.output
+    }
+}
+
+fn generate(package: &FixturePackage, items: &[CompositeEqualityItem]) -> FixtureOracles {
+    let items = items
+        .iter()
+        .cloned()
+        .map(|item| package.ids.resolve_item(item))
+        .collect::<Vec<_>>();
+    let output =
+        generate_composite_equality_oracles(&package.checked, &items).expect("generation succeeds");
+    FixtureOracles {
+        output,
+        ids: package.ids.clone(),
+    }
 }
 
 fn contents<'o>(oracles: &'o CompositeEqualityOracles, path: &str) -> &'o str {
@@ -81,16 +145,17 @@ fn contents<'o>(oracles: &'o CompositeEqualityOracles, path: &str) -> &'o str {
 }
 
 /// All claims for `node` code, in claim-map order.
-fn claims_for(oracles: &CompositeEqualityOracles, node: u32) -> Vec<&CompositeEqualityClaim> {
+fn claims_for(oracles: &FixtureOracles, node: u32) -> Vec<&CompositeEqualityClaim> {
+    let requested = oracles.key(node);
     oracles
         .claim_map
         .items
         .iter()
-        .filter(|claim| claim.node_id.digest.as_ref() == code_id(node).digest.as_ref())
+        .filter(|claim| claim.node_id == requested)
         .collect()
 }
 
-fn only_claim(oracles: &CompositeEqualityOracles, node: u32) -> &CompositeEqualityClaim {
+fn only_claim(oracles: &FixtureOracles, node: u32) -> &CompositeEqualityClaim {
     let claims = claims_for(oracles, node);
     assert_eq!(
         claims.len(),
@@ -115,7 +180,7 @@ fn generated(
 #[test]
 fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
     let list = generate(
-        &corpus_package().admit(),
+        &admit(corpus_package()),
         &[item(
             E_SELF,
             EqualityOperatorKind::Equal,
@@ -124,7 +189,7 @@ fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
         )],
     );
     let tree = generate(
-        &recursive_tree_package().admit(),
+        &admit(recursive_tree_package()),
         &[item(
             E_TREE_CYCLE,
             EqualityOperatorKind::Equal,
@@ -136,7 +201,7 @@ fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
         [(&list, E_SELF, R_SELF), (&tree, E_TREE_CYCLE, R_TREE_CYCLE)]
     {
         let claim = generated(only_claim(oracles, expression));
-        assert_eq!(claim.declaration_keys, vec![code_id(record)]);
+        assert_eq!(claim.declaration_keys, vec![oracles.key(record)]);
         let lib = contents(oracles, "src/lib.rs");
         assert_eq!(lib.matches("pub fn oracle_").count(), 1);
         assert_eq!(lib.matches("pub fn environment_").count(), 1);
@@ -178,7 +243,7 @@ fn assert_recursive_item_generation(
         block.split_once("\n}\n").expect("declaration block end").0
     }
 
-    let package = builder.admit();
+    let package = admit(builder);
     let items = [
         CompositeEqualityItem {
             node_id: code_id(E_QSPEC_LIST),
@@ -285,9 +350,6 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
 
     let mut builder = corpus_package();
     builder.boolean_equality_chain(CHAIN);
-    let requested = (0..CHAIN)
-        .map(|offset| code_id(BYTE_CHAIN_BASE + offset))
-        .collect::<Vec<_>>();
     let items = (0..CHAIN)
         .map(|offset| {
             item(
@@ -299,7 +361,7 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
         })
         .collect::<Vec<_>>();
     let generate_under =
-        |ceiling: u64| generate(&builder.admit_with(limits_under(ceiling)), &items);
+        |ceiling: u64| generate(&admit_with(&builder, limits_under(ceiling)), &items);
     let byte_refusal = |claim: &CompositeEqualityClaim| match &claim.result {
         ClaimDisposition::Refused {
             refusal: CompositeEqualityRefusal::LoweringByteLimitExceeded { limit, consumed },
@@ -308,11 +370,11 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     };
 
     let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
-    let lowered_length = lowered_package_length(
-        &builder.admit_with(limits_under(LARGEST_CEILING)),
-        &requested,
-        &measuring_profile(false),
-    );
+    let measured = admit_with(&builder, limits_under(LARGEST_CEILING));
+    let requested = (0..CHAIN)
+        .map(|offset| measured.key(BYTE_CHAIN_BASE + offset))
+        .collect::<Vec<_>>();
+    let lowered_length = lowered_package_length(&measured, &requested, &measuring_profile(false));
     let ceiling = lowered_length - 1;
     assert!(
         ceiling >= checked_length,
@@ -354,7 +416,7 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
 /// Trace: FR-018-AC-1, TC-029.
 #[test]
 fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let items = vec![
         item(
             E_RECORD,
@@ -402,7 +464,7 @@ fn tc_029_ac3_claim_descriptor_matches_the_request() {
     // usage elsewhere in this module and in the agreement test) -- since
     // codegen#82, an arbitrary node id can no longer stand in for one whose
     // body disagrees with the requested descriptor.
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let left = converted(T_INTEGER_BOUNDED, T_INTEGER);
     let right = typed(T_INTEGER);
     let requested = item(
@@ -414,22 +476,33 @@ fn tc_029_ac3_claim_descriptor_matches_the_request() {
     let oracles = generate(&package, std::slice::from_ref(&requested));
     let claim = generated(only_claim(&oracles, E_CONV));
     assert_eq!(claim.descriptor.operator, EqualityOperatorKind::Equal);
-    assert_eq!(claim.descriptor.left_source_type, left.source_type);
+    assert_eq!(
+        claim.descriptor.left_source_type,
+        package.ids.resolve(&left.source_type)
+    );
     assert_eq!(
         claim.descriptor.left_conversion_target,
         left.conversion_target
+            .as_ref()
+            .map(|id| package.ids.resolve(id))
     );
-    assert_eq!(claim.descriptor.right_source_type, right.source_type);
+    assert_eq!(
+        claim.descriptor.right_source_type,
+        package.ids.resolve(&right.source_type)
+    );
     assert_eq!(
         claim.descriptor.right_conversion_target,
-        right.conversion_target
+        right
+            .conversion_target
+            .as_ref()
+            .map(|id| package.ids.resolve(id))
     );
 }
 
 /// Trace: FR-018-AC-4, TC-029.
 #[test]
 fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let items = vec![
         item(
             E_RECORD,
@@ -501,7 +574,7 @@ fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
 /// Trace: FR-018-AC-5, TC-029.
 #[test]
 fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let requested = item(
         E_BAD_CONVERT,
         EqualityOperatorKind::Equal,
@@ -530,7 +603,7 @@ fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
 /// positions and each reports the position that actually disagreed.
 #[test]
 fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generation() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
 
     // Both positions disagree: the refusal names position 0 (left), checked
     // first.
@@ -548,8 +621,8 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
             found,
         } => {
             assert_eq!(*position, 0);
-            assert_eq!(*expected, code_id(T_TEXT));
-            assert_eq!(*found, Some(code_id(T_INTEGER)));
+            assert_eq!(*expected, oracles.key(T_TEXT));
+            assert_eq!(*found, Some(oracles.key(T_INTEGER)));
         }
         other => panic!("expected OperandTypeMismatch, got {other:?}"),
     }
@@ -577,8 +650,8 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
             found,
         } => {
             assert_eq!(*position, 1);
-            assert_eq!(*expected, code_id(T_TEXT));
-            assert_eq!(*found, Some(code_id(T_INTEGER)));
+            assert_eq!(*expected, oracles.key(T_TEXT));
+            assert_eq!(*found, Some(oracles.key(T_INTEGER)));
         }
         other => panic!("expected OperandTypeMismatch, got {other:?}"),
     }
@@ -599,7 +672,7 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
 /// Trace: FR-018-AC-6, TC-029.
 #[test]
 fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let requested = item(
         E_NESTED_IEEE,
         EqualityOperatorKind::Equal,
@@ -619,7 +692,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     // agrees with an independent, direct `contains_ieee` call over that
     // reconstructed type at both its depths (the record field, and the
     // sequence wrapping it) rather than merely riding on the same code path.
-    let float_record_key = NodeKey::from_hex(&key(R_FLOAT)).unwrap();
+    let float_record_key = NodeKey::from_hex(&oracles.runtime_key(R_FLOAT)).unwrap();
     let environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
             float_record_key,
@@ -682,7 +755,7 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
 /// converted operand's type as found.
 #[test]
 fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let wrong_source = item(
         E_CONV_CHARGE,
         EqualityOperatorKind::Equal,
@@ -697,8 +770,8 @@ fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
             found,
         } => {
             assert_eq!(*position, 0);
-            assert_eq!(*expected, code_id(T_INTEGER));
-            assert_eq!(*found, Some(code_id(T_INTEGER_BOUNDED)));
+            assert_eq!(*expected, oracles.key(T_INTEGER));
+            assert_eq!(*found, Some(oracles.key(T_INTEGER_BOUNDED)));
         }
         other => panic!("expected OperandTypeMismatch, got {other:?}"),
     }
@@ -720,7 +793,7 @@ fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
 /// conversion's result type.
 #[test]
 fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
-    let package = nested_conversion_package().admit();
+    let package = admit(nested_conversion_package());
     let innermost = item(
         E_NESTED_CONV,
         EqualityOperatorKind::Equal,
@@ -746,8 +819,8 @@ fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
             found,
         } => {
             assert_eq!(*position, 0);
-            assert_eq!(*expected, code_id(T_RATIONAL_WIDE));
-            assert_eq!(*found, Some(code_id(T_INTEGER_BOUNDED)));
+            assert_eq!(*expected, oracles.key(T_RATIONAL_WIDE));
+            assert_eq!(*found, Some(oracles.key(T_INTEGER_BOUNDED)));
         }
         other => panic!("expected OperandTypeMismatch, got {other:?}"),
     }
@@ -757,7 +830,7 @@ fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
 /// as that node's own `semantic_type`, never as its first argument's type.
 #[test]
 fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
-    let package = application_operand_package().admit();
+    let package = admit(application_operand_package());
     let own_type = item(
         E_APPLICATION_OPERAND,
         EqualityOperatorKind::Equal,
@@ -781,7 +854,7 @@ fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
             position, found, ..
         } => {
             assert_eq!(*position, 0);
-            assert_eq!(*found, Some(code_id(T_RATIONAL_WIDE)));
+            assert_eq!(*found, Some(oracles.key(T_RATIONAL_WIDE)));
         }
         other => panic!("expected OperandTypeMismatch, got {other:?}"),
     }
@@ -792,7 +865,7 @@ fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
 /// `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`.
 #[test]
 fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let items = vec![
         item(
             M_BARE,
@@ -861,8 +934,8 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
 /// with such a model declaration.
 #[test]
 fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
-    let (result, wire) = direct_reference_package().read();
-    let node_id = code_id(E_REFERENCE_DIRECT);
+    let (result, wire, ids) = direct_reference_package().read_resolved();
+    let node_id = ids.resolve(&code_id(E_REFERENCE_DIRECT));
     let position = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("nodes")
@@ -888,7 +961,7 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
 /// half is `tc_029_ac8_check_type_guards_the_oracle` in the agreement test).
 #[test]
 fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let requested = item(
         E_DUP,
         EqualityOperatorKind::Equal,
@@ -908,7 +981,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
 /// Trace: FR-018-AC-10, TC-029.
 #[test]
 fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let mut items = golden_items();
     let forward = generate(&package, &items);
     items.reverse();
@@ -935,7 +1008,7 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
 /// Trace: FR-018-AC-10, TC-029.
 #[test]
 fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let oracles = generate(&package, &golden_items());
     let keys: Vec<(String, u8)> = oracles
         .claim_map
@@ -961,7 +1034,7 @@ fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
 /// `composite_equality_agreement` builds and executes.
 /// The `names.rs` the composite agreement cases `include!`: each executed oracle and environment
 /// under `{oracle,environment}_{code}_{operator}`, and the base package's enum declaration key.
-pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
+pub(super) fn agreement_names(oracles: &FixtureOracles) -> String {
     let executed: &[(u32, &str, &str)] = &[
         (E_RECORD, "equal", "e_record_equal"),
         (E_TUPLE, "equal", "e_tuple_equal"),
@@ -987,7 +1060,9 @@ pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
             .claim_map
             .items
             .iter()
-            .find(|claim| claim.node_id == code_id(*code) && claim.operation.identity == identity)
+            .find(|claim| {
+                claim.node_id == oracles.key(*code) && claim.operation.identity == identity
+            })
             .and_then(|claim| match &claim.result {
                 ClaimDisposition::Generated(generated) => Some(generated),
                 ClaimDisposition::Refused { .. } => None,
@@ -1009,8 +1084,8 @@ pub(super) fn agreement_names(oracles: &CompositeEqualityOracles) -> String {
     )
 }
 
-pub(super) fn corpus_oracles() -> CompositeEqualityOracles {
-    generate(&corpus_package().admit(), &golden_items())
+pub(super) fn corpus_oracles() -> FixtureOracles {
+    generate(&admit(corpus_package()), &golden_items())
 }
 
 /// Trace: FR-018-AC-10, TC-029.
@@ -1031,7 +1106,7 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
 /// are `tc_029_ac11_complementary_outcomes` in the agreement test).
 #[test]
 fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_declared() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let oracles = generate(&package, &golden_items());
     let claims = claims_for(&oracles, E_RECORD);
     assert_eq!(claims.len(), 2);
@@ -1091,7 +1166,7 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
 /// (which does reach one, via TUP_PAIR) never observes it.
 #[test]
 fn tc_029_ac12_integer_helper_omitted_when_unreached() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let request = [item(
         E_TEXT,
         EqualityOperatorKind::Equal,
@@ -1109,7 +1184,7 @@ fn tc_029_ac12_integer_helper_omitted_when_unreached() {
 /// Trace: FR-018-AC-12, TC-029.
 #[test]
 fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
-    let oracles = generate(&corpus_package().admit(), &golden_items());
+    let oracles = generate(&admit(corpus_package()), &golden_items());
     let manifest = contents(&oracles, "Cargo.toml");
     assert!(manifest.contains(&format!("name = \"{COMPOSITE_EQUALITY_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
@@ -1182,7 +1257,7 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
 /// Trace: FR-018-AC-13, TC-029.
 #[test]
 fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
-    let package = corpus_package().admit();
+    let package = admit(corpus_package());
     let items = vec![
         item(
             E_RECORD,
@@ -1200,22 +1275,25 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     let oracles = generate(&package, &items);
 
     let single = generated(only_claim(&oracles, E_RECORD));
-    assert_eq!(single.declaration_keys, vec![code_id(R_POINT)]);
+    assert_eq!(single.declaration_keys, vec![oracles.key(R_POINT)]);
     assert_eq!(
         single.declaration_runtime_keys,
-        vec![key(R_POINT)],
+        vec![oracles.runtime_key(R_POINT)],
         "declaration_runtime_keys must equal NodeKey::from_hex of declaration_keys"
     );
 
     let nested = generated(only_claim(&oracles, E_PAIR_OF_POINTS));
     assert_eq!(
         nested.declaration_keys,
-        vec![code_id(R_POINT), code_id(R_PAIR_OF_POINTS)],
+        vec![oracles.key(R_POINT), oracles.key(R_PAIR_OF_POINTS)],
         "declaration keys ascend by digest domain then digest"
     );
     assert_eq!(
         nested.declaration_runtime_keys,
-        vec![key(R_POINT), key(R_PAIR_OF_POINTS)]
+        vec![
+            oracles.runtime_key(R_POINT),
+            oracles.runtime_key(R_PAIR_OF_POINTS)
+        ]
     );
 
     // FR-018-AC-13 also names node id, IR id, package id, source map, claims
@@ -1232,17 +1310,20 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         require_bounds: false,
         work_limit: 10_000,
     };
-    assert_eq!(only_claim(&oracles, E_RECORD).node_id, code_id(E_RECORD));
+    assert_eq!(
+        only_claim(&oracles, E_RECORD).node_id,
+        oracles.key(E_RECORD)
+    );
     assert_eq!(
         only_claim(&oracles, E_PAIR_OF_POINTS).node_id,
-        code_id(E_PAIR_OF_POINTS)
+        oracles.key(E_PAIR_OF_POINTS)
     );
     assert_eq!(single.schedule, RecordedSchedule::Plan);
     assert_eq!(nested.schedule, RecordedSchedule::Plan);
     assert_eq!(single.package_id, *package.package_id());
     assert_eq!(nested.package_id, *package.package_id());
 
-    let single_lowering = package.lower(&[code_id(E_RECORD)], &profile);
+    let single_lowering = package.lower(&[package.key(E_RECORD)], &profile);
     assert_eq!(
         *single_lowering.package.source_package_id(),
         *package.package_id(),
@@ -1267,7 +1348,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         other => panic!("expected exactly one Lowered record, found {other:?}"),
     }
 
-    let nested_lowering = package.lower(&[code_id(E_PAIR_OF_POINTS)], &profile);
+    let nested_lowering = package.lower(&[package.key(E_PAIR_OF_POINTS)], &profile);
     match &nested_lowering.records[..] {
         [CompleteLoweringRecordV2::Lowered { node }] => {
             assert_eq!(
@@ -1288,8 +1369,8 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
 }
 
 /// The generated source of `E_TUPLE` over `TUP_PAIR` built from `extras` and `members`.
-fn tuple_source(extras: &[u32], members: &[u32]) -> (CompositeEqualityOracles, String) {
-    let package = tuple_members_package(extras, members).admit();
+fn tuple_source(extras: &[u32], members: &[u32]) -> (FixtureOracles, String) {
+    let package = admit(tuple_members_package(extras, members));
     let items = vec![item(
         E_TUPLE,
         EqualityOperatorKind::Equal,
@@ -1302,8 +1383,8 @@ fn tuple_source(extras: &[u32], members: &[u32]) -> (CompositeEqualityOracles, S
 }
 
 /// The refusal `E_TUPLE` gets over `TUP_PAIR` built from `extras` and `members`.
-fn tuple_refusal(extras: &[u32], members: &[u32]) -> CompositeEqualityRefusal {
-    let package = tuple_members_package(extras, members).admit();
+fn tuple_refusal(extras: &[u32], members: &[u32]) -> (CompositeEqualityRefusal, FixtureIds) {
+    let package = admit(tuple_members_package(extras, members));
     let items = vec![item(
         E_TUPLE,
         EqualityOperatorKind::Equal,
@@ -1311,7 +1392,7 @@ fn tuple_refusal(extras: &[u32], members: &[u32]) -> CompositeEqualityRefusal {
         typed(TUP_PAIR),
     )];
     let oracles = generate(&package, &items);
-    refused(only_claim(&oracles, E_TUPLE)).clone()
+    (refused(only_claim(&oracles, E_TUPLE)).clone(), oracles.ids)
 }
 
 /// Trace: FR-018-AC-16, TC-029. The corpus tuple `(Int[-100, 100], Text[0, 16; nfc])` names the
@@ -1371,13 +1452,13 @@ fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
 /// refused as missing the form the base needs, not read as an unbounded type.
 #[test]
 fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
-    let refusal = tuple_refusal(&[BD_INTEGER_WRONG_FORM], &[BD_INTEGER_WRONG_FORM, BD_TEXT]);
+    let (refusal, ids) = tuple_refusal(&[BD_INTEGER_WRONG_FORM], &[BD_INTEGER_WRONG_FORM, BD_TEXT]);
     match refusal {
         CompositeEqualityRefusal::MissingBound {
             bounded_type,
             expected_form,
         } => {
-            assert_eq!(bounded_type, code_id(BD_INTEGER_WRONG_FORM));
+            assert_eq!(bounded_type, ids.resolve(&code_id(BD_INTEGER_WRONG_FORM)));
             assert_eq!(expected_form, "integer_range");
         }
         other => panic!("expected MissingBound, got {other:?}"),
@@ -1390,7 +1471,7 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
 #[test]
 fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
     assert!(matches!(
-        tuple_refusal(&[BD_FLOAT_ROUNDING], &[BD_FLOAT_ROUNDING, BD_TEXT]),
+        tuple_refusal(&[BD_FLOAT_ROUNDING], &[BD_FLOAT_ROUNDING, BD_TEXT]).0,
         CompositeEqualityRefusal::IllTyped {
             cause: IllTypedCauseKind::OperatorIneligible
         }
@@ -1407,12 +1488,13 @@ fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
         (vec![BD_ENUM], BD_ENUM),
         (vec![BD_OVER_COMPOSITE], BD_OVER_COMPOSITE),
     ] {
-        match tuple_refusal(&extra_nodes, &[bound, BD_TEXT]) {
+        let (refusal, ids) = tuple_refusal(&extra_nodes, &[bound, BD_TEXT]);
+        match refusal {
             CompositeEqualityRefusal::Unsupported {
                 unsupported_node_id,
                 node_tag,
             } => {
-                assert_eq!(unsupported_node_id, code_id(bound));
+                assert_eq!(unsupported_node_id, ids.resolve(&code_id(bound)));
                 assert_eq!(node_tag, "bounded_domain");
             }
             other => panic!("bound {bound}: expected Unsupported, got {other:?}"),

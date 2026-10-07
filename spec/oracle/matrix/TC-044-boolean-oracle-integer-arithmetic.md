@@ -252,6 +252,10 @@ decision OD-2. Steps 10's divide and remainder bundle shape, 15, and 11's `satur
     the tree before the change and record the failing run of each, before the passing run, as the
     FR-031 Test obligations state. Steps 15 and 10's divide and remainder generation need `make
     kani` and the installed backend; a run that cannot be made is reported as not run.
+18. For FR-031-AC-28, generate a V1 Boolean oracle over signed IR integer declarations whose
+    minimum is `i64::MIN - 1` and `i128::MIN` and whose maximum is `i64::MAX + 1` and `i128::MAX`;
+    also present an out-of-range literal. Assert `UnsupportedExpression` at the affected source
+    span and no generated source. Keep in-range edge controls.
 
 ## Expected Results
 

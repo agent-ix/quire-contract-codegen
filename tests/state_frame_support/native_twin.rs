@@ -15,8 +15,8 @@ use super::model;
 use qsl_replay::{
     call_site, CallSiteRefusal, ClaimedChange, ClauseName, ClauseSite, DependencyInput,
     DigestDomain, DigestRecord, DocumentRef, FrameReplayResult, Identifier, OccurrenceKey,
-    OperationName, OperationSite, ReplayRefusal, ScalarLimits, SelectedObject, SourceIdentity,
-    StageLimits, WitnessEnvelope, MAX_ENCODED_BYTES,
+    OperationName, OperationSite, ReplayLimits, ReplayRefusal, ScalarLimits, SelectedObject,
+    SourceIdentity, WitnessEnvelope, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     DependencyLock, DocumentLabel, FrameReplay, FrameReplayError, FrameReplayInputs, LockedSource,
@@ -386,6 +386,56 @@ impl Twin {
         Self::build(&model::GRANTED, &CLAUSES, 0)
     }
 
+    /// QSL-emitted postcondition package whose operation declares one `other` parameter.
+    pub fn with_deposit_parameter() -> Self {
+        Self::with_deposit_declaration(true, false)
+    }
+
+    /// QSL-emitted postcondition package whose operation declares a Boolean result.
+    pub fn with_deposit_result() -> Self {
+        Self::with_deposit_declaration(false, true)
+    }
+
+    fn with_deposit_declaration(parameter: bool, result: bool) -> Self {
+        let mut twin = Self::new();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        if parameter {
+            let identity = format!("{}/deposit/other", account_type());
+            deposit["params"] = json!([{
+                "identity": identity,
+                "name": "other",
+                "typeRef": "ix://quire/native/Boolean",
+                "presence": "required",
+                "nullable": false,
+                "defaultKind": "none",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "origin": generated(&identity),
+            }]);
+        }
+        if result {
+            deposit["returns"] = json!({
+                "typeRef": "ix://quire/native/Boolean",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "nullable": false,
+            });
+        }
+        twin.domain = domain.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin
+    }
+
     fn with_field_native_type(name: &str, type_ref: &str) -> Self {
         let mut twin = Self::new();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
@@ -730,7 +780,6 @@ impl Twin {
 
     /// The proving run's lock: the unit, no dependency, and the limits the twin replays under.
     fn run(&self) -> ReplayInputs {
-        let unlimited = limits(u64::MAX);
         ReplayInputs {
             source: LockedSource {
                 authority: AUTHORITY.to_owned(),
@@ -741,15 +790,12 @@ impl Twin {
             },
             dependencies: Vec::<DependencyLock>::new(),
             accounting_limits: limits(1_000_000),
-            stage_limits: StageLimits {
-                s1: ScalarLimits {
-                    text_input_bytes: u64::try_from(MAX_ENCODED_BYTES).expect("a small bound"),
-                    ..unlimited
-                },
-                s2: unlimited,
-                s3: unlimited,
-                s4: unlimited,
-            },
+            stage_limits: std::collections::BTreeMap::from([(
+                "s1.input_bytes".to_owned(),
+                DEFAULT_REPLAY_INPUT_BYTES,
+            )]),
+            declared_domains: Vec::new(),
+            replay_limits: ReplayLimits::default(),
         }
     }
 
@@ -867,9 +913,10 @@ impl Twin {
                 ));
             }
         }
-        let envelope =
-            WitnessEnvelope::reconstruct(packet).expect("a complete packet reconstructs");
-        qsl_replay::replay_frame(wire, &envelope)
+        let replay_limits = ReplayLimits::default();
+        let envelope = WitnessEnvelope::reconstruct(packet, replay_limits)
+            .expect("a complete packet reconstructs");
+        qsl_replay::replay_frame(wire, &envelope, replay_limits)
     }
 }
 

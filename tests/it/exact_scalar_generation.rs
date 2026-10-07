@@ -121,8 +121,8 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
     assert_eq!(refused.len(), TEXT_ADMISSIONS.len(), "the six admissions");
     for expression in refused {
         let code = expression.code;
-        let (result, wire) = refused_corpus_package(code).read();
-        let node_id = code_id(code);
+        let (result, wire, ids) = refused_corpus_package(code).read_resolved();
+        let node_id = ids.resolve(&code_id(code));
         let position = wire["semantic_graph"]["nodes"]
             .as_array()
             .expect("nodes")
@@ -421,16 +421,27 @@ fn function_body<'l>(lib: &'l str, symbol: &str) -> &'l str {
 /// Trace: FR-014-AC-1, FR-014-AC-3, FR-014-AC-7, FR-014-AC-10, TC-024.
 #[test]
 fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
-    let package = corpus_package().admit();
-    let oracles = generate(&package, &golden_items());
+    let (package, ids) = corpus_package().admit_resolved();
+    let resolve = |code| ids.resolve(&code_id(code));
+    let items = golden_items()
+        .into_iter()
+        .map(|mut item| {
+            item.node_id = ids.resolve(&item.node_id);
+            item
+        })
+        .collect::<Vec<_>>();
+    let oracles = generate(&package, &items);
     let lib = contents(&oracles, "src/lib.rs");
+    // IR's lowering checks reachable unsupported nodes in admitted node-id order. The
+    // rekeyed clause sorts before its formula, so it is the first unsupported temporal node.
+    assert!(resolve(TEMPORAL) < resolve(TEMPORAL_FORMULA));
     let blocked = |code, tag, issue| ExactScalarRefusal::BlockedOnUpstream {
-        unsupported_node_id: code_id(code),
+        unsupported_node_id: resolve(code),
         node_tag: tag,
         issue,
     };
     let unsupported = |code, tag| ExactScalarRefusal::Unsupported {
-        unsupported_node_id: code_id(code),
+        unsupported_node_id: resolve(code),
         node_tag: tag,
     };
     let expected = [
@@ -460,9 +471,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             blocked(RELATION, "relation", UpstreamBlocker::QuireSpecLanguage120),
         ),
         (STATE, unsupported(STATE, "state")),
-        // IR names the first unsupported node the lowering reaches, and the clause's formula
-        // dependency is reached before the clause itself.
-        (TEMPORAL, unsupported(TEMPORAL_FORMULA, "temporal")),
+        (TEMPORAL, unsupported(TEMPORAL, "temporal")),
         (PROTOCOL, unsupported(PROTOCOL, "protocol")),
         (MISSING, ExactScalarRefusal::InvalidInput),
         (
@@ -588,9 +597,15 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
         ),
     ];
     for (code, refusal) in &expected {
-        assert_eq!(refusal_of(&oracles, *code), *refusal, "node {code}");
+        let node_id = resolve(*code);
+        match dispositions(&oracles).get(node_id.digest.as_ref()) {
+            Some(ClaimDisposition::Refused { refusal: actual }) => {
+                assert_eq!(actual, refusal, "node {code}");
+            }
+            other => panic!("node {code} is not refused: {other:?}"),
+        }
         assert!(
-            !lib.contains(code_id(*code).digest.as_ref()),
+            !lib.contains(node_id.digest.as_ref()),
             "refused node {code} left code behind"
         );
     }
@@ -604,7 +619,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     let generated_only = corpus()
         .into_iter()
         .map(|expression| ExactScalarItem {
-            node_id: code_id(expression.code),
+            node_id: resolve(expression.code),
             operation: expression.operation,
         })
         .collect::<Vec<_>>();
@@ -626,7 +641,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     let single = generate(
         &package,
         &[ExactScalarItem {
-            node_id: code_id(DUPLICATED),
+            node_id: resolve(DUPLICATED),
             operation: golden_items()
                 .into_iter()
                 .find(|item| item.node_id == code_id(DUPLICATED))
@@ -1118,8 +1133,9 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
 
     let mut builder = corpus_package();
     integer_add_chain(&mut builder, CHAIN);
+    let (_, ids) = builder.admit_resolved();
     let requested = (0..CHAIN)
-        .map(|offset| code_id(CHAIN_BASE + offset))
+        .map(|offset| ids.resolve(&code_id(CHAIN_BASE + offset)))
         .collect::<Vec<_>>();
     let items = requested
         .iter()
@@ -1389,15 +1405,15 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
         bytes: 16 * 1024 * 1024,
         ..quire_contract_model::CheckedPackageReadLimits::bounded()
     };
+    let (package, ids) = builder.admit_with_resolved(limits);
     let items = codes
         .map(|code| ExactScalarItem {
-            node_id: code_id(code),
+            node_id: ids.resolve(&code_id(code)),
             operation: ExactScalarOperation::EnumComparison {
                 operator: ComparisonOperator::Equal,
             },
         })
         .collect::<Vec<_>>();
-    let package = builder.admit_with(limits);
     assert!(matches!(
         generate_exact_scalar_oracles(&package, &items),
         Err(OracleGenerationError::SourceTooLarge { bytes })
@@ -1574,16 +1590,17 @@ fn two_parameter_disposition(
     ExactScalarOracles,
     ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal>,
 ) {
-    let package = two_parameter_package().admit();
+    let (package, ids) = two_parameter_package().admit_resolved();
+    let node_id = ids.resolve(&code_id(code));
     let oracles = generate(
         &package,
         &[ExactScalarItem {
-            node_id: code_id(code),
+            node_id: node_id.clone(),
             operation,
         }],
     );
     let disposition = dispositions(&oracles)
-        .get(code_id(code).digest.as_ref())
+        .get(node_id.digest.as_ref())
         .map(|disposition| (*disposition).clone())
         .expect("one claim per item");
     (oracles, disposition)
@@ -1606,6 +1623,11 @@ fn two_parameter_checked_bounds(
     }
 }
 
+fn two_parameter_derive(code: u32) -> Result<ExactScalarItem, ExactScalarRefusal> {
+    let (package, ids) = two_parameter_package().admit_resolved();
+    derive_one_resolved(&package, &ids, code)
+}
+
 /// Two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, with a result typed `[0, 29]`
 /// generate: the descriptor is compared with the result bound only, and the claim's checked
 /// bounds are the result bound first, then each operand's own. Derivation returns the descriptor
@@ -1624,7 +1646,7 @@ fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound
         ]
     );
     assert_eq!(
-        derive_one(&two_parameter_package().admit(), TWO_PARAMETER_SUM)
+        two_parameter_derive(TWO_PARAMETER_SUM)
             .expect("derives")
             .operation,
         add_over(0, 29)
@@ -1693,7 +1715,6 @@ fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused(
 /// Trace: FR-014-AC-24, TC-024
 #[test]
 fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
-    let package = two_parameter_package().admit();
     let negate = ExactScalarOperation::IntegerArithmetic {
         operator: IntegerOperator::Negate,
         domain: bounded(-9, -1),
@@ -1728,7 +1749,7 @@ fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
         ),
     ] {
         assert_eq!(
-            derive_one(&package, code).expect("derives").operation,
+            two_parameter_derive(code).expect("derives").operation,
             operation,
             "node {code}: derivation and generation agree"
         );
@@ -1751,7 +1772,6 @@ fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
 /// Trace: FR-014-AC-25, TC-024
 #[test]
 fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_bound() {
-    let package = two_parameter_package().admit();
     // The scalar-typed result's one reachable bound is `[0, 9]`, so its descriptor is over that.
     for (code, operation) in [
         (TWO_PARAMETER_UNBOUNDED_OPERAND, add_over(0, 29)),
@@ -1767,7 +1787,7 @@ fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_
             "node {code}"
         );
         assert_eq!(
-            derive_one(&package, code),
+            two_parameter_derive(code),
             Err(expected),
             "node {code}: derivation refuses what generation refuses"
         );
@@ -1795,17 +1815,29 @@ fn qsl_disposition(
     code: u32,
     operation: ExactScalarOperation,
 ) -> ClaimDisposition<GeneratedScalarClaim, ExactScalarRefusal> {
+    let (package, ids) = qsl_shaped_package().admit_resolved();
+    let node_id = ids.resolve(&code_id(code));
     let oracles = generate(
-        &qsl_shaped_package().admit(),
+        &package,
         &[ExactScalarItem {
-            node_id: code_id(code),
+            node_id: node_id.clone(),
             operation,
         }],
     );
     dispositions(&oracles)
-        .get(code_id(code).digest.as_ref())
+        .get(node_id.digest.as_ref())
         .map(|disposition| (*disposition).clone())
         .expect("one claim per item")
+}
+
+fn derive_one_resolved(
+    package: &CheckedPackageV2,
+    ids: &FixtureIds,
+    code: u32,
+) -> Result<ExactScalarItem, ExactScalarRefusal> {
+    derive_exact_scalar_items(package, &[ids.resolve(&code_id(code))])
+        .pop()
+        .expect("one result per node id")
 }
 
 /// The checked bounds of a QSL-shaped node that generates.
@@ -1829,8 +1861,9 @@ fn assert_qsl_refused(code: u32, operation: ExactScalarOperation, expected: Exac
         ClaimDisposition::Refused { refusal } => assert_eq!(refusal, expected, "node {code}"),
         other => panic!("node {code} is not refused: {other:?}"),
     }
+    let (package, ids) = qsl_shaped_package().admit_resolved();
     assert_eq!(
-        derive_one(&qsl_shaped_package().admit(), code),
+        derive_one_resolved(&package, &ids, code),
         Err(expected),
         "node {code}: derivation refuses what generation refuses"
     );
@@ -1861,8 +1894,9 @@ fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
         qsl_checked_bounds(QSL_INC, add_over(0, 10)),
         bound_ids(&[Bound::Integer(0, 10), Bound::Integer(0, 9)])
     );
+    let (package, ids) = qsl_shaped_package().admit_resolved();
     assert_eq!(
-        derive_one(&qsl_shaped_package().admit(), QSL_INC)
+        derive_one_resolved(&package, &ids, QSL_INC)
             .expect("derives")
             .operation,
         add_over(0, 10)
@@ -1878,7 +1912,7 @@ fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
 /// Trace: FR-014-AC-27, TC-024
 #[test]
 fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion() {
-    let package = qsl_shaped_package().admit();
+    let (package, ids) = qsl_shaped_package().admit_resolved();
     let negate = ExactScalarOperation::IntegerArithmetic {
         operator: IntegerOperator::Negate,
         domain: bounded(-9, 0),
@@ -1900,7 +1934,9 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
         ),
     ] {
         assert_eq!(
-            derive_one(&package, code).expect("derives").operation,
+            derive_one_resolved(&package, &ids, code)
+                .expect("derives")
+                .operation,
             operation,
             "node {code}"
         );
