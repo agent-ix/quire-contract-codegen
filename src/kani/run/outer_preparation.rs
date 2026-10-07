@@ -14,7 +14,7 @@ use super::{
     outer_setup::PreparedOuter,
     report_storage::ReportCollector,
     resource_ledger::ResourceLedger,
-    role_deadline::StopTimeline,
+    role_deadline::{DeadlineError, StopOrigin, StopStamp, StopTimeline},
     role_protocol::RunSettings,
 };
 
@@ -26,6 +26,9 @@ pub(super) struct SamplingPreparation {
     pub(super) tree: Option<MemoryObserver>,
     pub(super) ledger: Option<ResourceLedger>,
     pub(super) stops: Option<StopTimeline>,
+    // Only the original work check records this producer event. A failed clock capture is
+    // retained explicitly and never replaced by a later outer-owner/receipt timestamp.
+    work_stop: Option<Result<StopStamp, DeadlineError>>,
 }
 
 /// The original fully prepared resources, ready for the owner's separate first observation.
@@ -56,6 +59,7 @@ impl SamplingPreparation {
             tree: None,
             ledger: None,
             stops: None,
+            work_stop: None,
         }
     }
 
@@ -86,6 +90,7 @@ impl SamplingPreparation {
                 tree: Some(tree),
                 ledger: Some(ledger),
                 stops: Some(stops),
+                work_stop: None,
             } => Ok(SamplingParts {
                 launcher,
                 tree,
@@ -170,12 +175,24 @@ impl SamplingPreparation {
         self.require_work_live()
     }
 
-    fn require_work_live(&self) -> Result<(), SamplingError> {
+    /// Original producing work-stop event only, including an unavailable clock. This carries
+    /// neither observation absence nor role settlement, and takes no new clock sample.
+    pub(super) fn work_stop(&self) -> Option<Result<StopStamp, DeadlineError>> {
+        self.work_stop
+    }
+
+    fn require_work_live(&mut self) -> Result<(), SamplingError> {
         // None is the original never-elapsing work admission, not an absent observation or
         // a new setup/settlement allowance. A finite expired bound remains typed Expired.
-        self.settings
-            .work_deadline()
-            .map(|_| ())
-            .map_err(SamplingError::Deadline)
+        let result = self.settings.work_deadline();
+        if matches!(result, Err(DeadlineError::Expired)) && self.work_stop.is_none() {
+            // Record at this actual work-expiry producer BEFORE returning the unchanged
+            // error to O. Capture failure is also final metadata, not permission to retry.
+            self.work_stop = Some(match self.stops.as_mut() {
+                Some(stops) => stops.capture_once(StopOrigin::Outer),
+                None => StopStamp::capture(StopOrigin::Outer),
+            });
+        }
+        result.map(|_| ()).map_err(SamplingError::Deadline)
     }
 }

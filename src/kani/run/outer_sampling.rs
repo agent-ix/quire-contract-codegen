@@ -337,8 +337,16 @@ impl OuterRunPreparation {
             // O observes the failed construction here, before returning/publishing its cause
             // or doing diagnostic encoding. A clock error is retained without retry. If a real
             // memory stop already exists, capture_once preserves its earlier actual event.
-            self.failure_event = Some(
-                match self
+            // A constructor work check is itself a stop producer. Retain its ORIGINAL
+            // event (including capture failure), rather than sampling again at this return.
+            let work_stop = self
+                .resources
+                .as_ref()
+                .and_then(|resources| resources.sampling_preparation.as_ref())
+                .and_then(SamplingPreparation::work_stop);
+            self.failure_event = Some(match work_stop {
+                Some(event) => event,
+                None => match self
                     .resources
                     .as_mut()
                     .and_then(|resources| resources.sampling.as_mut())
@@ -346,7 +354,7 @@ impl OuterRunPreparation {
                     Some(sampling) => sampling.stops.capture_once(StopOrigin::Outer),
                     None => StopStamp::capture(StopOrigin::Outer),
                 },
-            );
+            });
             self.capture_failure_cause(&error);
             return Err(error);
         }
