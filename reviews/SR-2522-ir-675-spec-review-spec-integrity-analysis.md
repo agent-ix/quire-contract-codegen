@@ -98,3 +98,11 @@ Round 5, reviewed at agent-ix/quire-contract-codegen@5c8448bfce9519e791398d1bdf2
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-006 | low | FR-034-AC-40's documentation clause still reads only 'Public API/refusal rustdoc states typed loss detection and no stage-query promise', while the FR now also requires rustdoc to state which existing refusals carry io::Error versus detail-only results, and to distinguish integrity faults and complete sender required-representation reports through the KaniCauseMetadataIntegrityError downcast (lines 1037-1046). TC-049 step 27 checks these, but the acceptance criterion does not name them. Scenario: CODE ships rustdoc that documents the loss marker and the absent stage query but omits the detail-only carrier scope and the integrity downcast. Judged against AC-40's text it passes; judged against FR-034 lines 1037-1046 and the step 27 docs Analysis it fails. The criterion and its procedure disagree on what passes. | spec/kani/functional/FR-034-caller-death-ownership.md:1347; spec/kani/functional/FR-034-caller-death-ownership.md:1037-1046; spec/kani/matrix/TC-049-caller-death-ownership.md:746-760 |
+
+## Dispositions (round 6)
+
+Round 6, reviewed at agent-ix/quire-contract-codegen@c2280385c78b2fa1d8e551c5a3b9a44e88dd7e96 (fix diff 5c8448b..c228038). Reviewer session dcb5e3e7-8fe4-422e-aef1-3ca57d78bee2, model claude-opus-5-5, run c579c32d-da50-40c3-ba1b-11db60b5e80e. This was a single consolidated consistency pass over the whole amended cross-role text, cause-domain model, provenance set, carrier scope, failure mapping, AC-40, TC-049 step 27, the consumer matrix and the Expected Results row. Every remaining defect found is recorded now. FND-001..FND-005 latest outcomes remain fixed; no regression of them was found. No new integrity finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-006 | fixed | c228038: AC-40's documentation clause now names the I/O-carrier versus detail-only scope, get_ref/downcast detection of both KaniCrossRoleCauseLoss and KaniCauseMetadataIntegrityError, recognition of sender required-representation faults versus valid original causes, and the absent original-source/stage-query promise. This matches FR-034 lines 1052-1061 and the TC-049 step 27 docs Analysis. |
