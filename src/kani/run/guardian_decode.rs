@@ -358,6 +358,32 @@ impl<'input, 'scratch> Decoder<'input, 'scratch> {
         Ok(true)
     }
 
+    /// Ordinary externally tagged unit-enum grammar: a name string or one name/null map.
+    /// This grants no schema label authority; the owning enum validates the returned name.
+    /// Custom string-only seeds must continue using string(), rather than this operation.
+    pub(super) fn unit_variant(&mut self) -> Result<Text<'input>, DecodeError> {
+        match self.peek_kind()? {
+            ValueKind::String => self.string(),
+            ValueKind::Object => {
+                let mut object = self.begin_object()?;
+                let name = self.next_field(&mut object)?.ok_or_else(|| {
+                    DecodeError::new(DecodeSite::Field, DecodeCause::MissingField)
+                })?;
+                self.null()?;
+                if self.next_field(&mut object)?.is_some() {
+                    return Err(DecodeError::new(
+                        DecodeSite::Field,
+                        DecodeCause::InvalidValue,
+                    ));
+                }
+                Ok(name)
+            }
+            ValueKind::Array | ValueKind::Number | ValueKind::Boolean | ValueKind::Null => Err(
+                DecodeError::new(DecodeSite::String, DecodeCause::UnexpectedToken),
+            ),
+        }
+    }
+
     pub(super) fn string(&mut self) -> Result<Text<'input>, DecodeError> {
         self.expect(b'"', DecodeSite::String)?;
         let start = self.position;
@@ -823,8 +849,11 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<Decoder<'static, 'static>>(),
         size_of::<Decoder<'static, 'static>>(),
         size_of::<ObjectState>(),
+        // unit_variant can retain its own map/name while an enclosing schema stays live.
+        size_of::<ObjectState>(),
         size_of::<ArrayState>(),
         size_of::<ValueSlice<'static>>(),
+        size_of::<Text<'static>>(),
         size_of::<Text<'static>>(),
         size_of::<TextChars<'static>>(),
         size_of::<NumberToken<'static>>(),
