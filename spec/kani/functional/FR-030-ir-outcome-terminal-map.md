@@ -51,7 +51,7 @@ terminal value, so neither map applies to them.
   takes it.
 - For a `Counterexample` outcome, the replay settlement of its counterexample, as
   [FR-029](./FR-029-run-outcome-terminal-record.md) states it. No other kind takes a settlement.
-- Planned CG consumer (IR-666): for an IR `Counterexample` that represents a falsified composite
+- IR-666 direct report converter; IR-635 original-artifact invocation planned: for an IR `Counterexample` that represents a falsified composite
   `bounded_shadow` parity claim, the distinct typed QSL `CompositeParityReport` and its full
   `CompositeIdentity` binding. It is not the ordinary source-predicate `ReplaySettlement` above;
   [FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md) owns its construction.
@@ -62,7 +62,7 @@ terminal value, so neither map applies to them.
 - A typed refusal, `TerminalPairError`, for a pair the map's input does not express: a
   `Counterexample` with no replay settlement (`MissingSettlement`), or any other kind with one
   (`UnexpectedSettlement`).
-- Planned CG consumer (IR-666): the terminal value and report result of the same-claim composite
+- IR-666 direct report converter; IR-635 original-artifact invocation planned: the terminal value and report result of the same-claim composite
   parity settlement, or its typed claim-binding refusal with no value.
 
 ## Behavior
@@ -119,7 +119,7 @@ refusals. After full identity binding, a non-fault
 The generator shall read that report's terminal value without inventing a CG code. No F row is `Refuted`; native
 `Completed` and `Refused` are evidence rather than a settlement oracle. Backend timeout or memory
 exhaustion remains the ordinary `TimedOut` or `ResourceExhausted` row above and never enters the
-composite facade. These rows are delivered in QSL #645 and planned for CG's IR-666 code consumer.
+composite facade. QSL #645 owns these rows. IR-666 tests their public reports through CG's binding converter; IR-635 still owns original-artifact construction and invocation.
 
 - The generator shall produce `Declined` only from `Refused`, `InvalidInput` and `IncompleteInput`,
   which refuse the obligation's own input before Kani runs, so nothing was proved.
@@ -174,9 +174,9 @@ composite facade. These rows are delivered in QSL #645 and planned for CG's IR-6
 | FR-030-AC-12 | `Counterexample` with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, each bare and wrapped, maps to `Inconclusive(ReplayRefused)` carrying that refusal's QSL catalog code, never to `Declined`. | Test (TC-041) |
 | FR-030-AC-13 | `Counterexample` with a `DependencyLockError::Input` that carries QSL's `DuplicateIdentity` refusal (code `invalid_package`), as a lock whose only defect is a repeated library identity produces it (FR-016-AC-24), maps to `Inconclusive(ReplayRefused)` carrying `invalid_package`. | Test (TC-041) |
 | FR-030-AC-14 | A `Counterexample` given no replay settlement is refused with `TerminalPairError::MissingSettlement`, and each other kind given a settlement is refused with `TerminalPairError::UnexpectedSettlement`; neither returns a terminal value. | Test (TC-041) |
-| FR-030-AC-15 | PLANNED CG CONSUMER (IR-666; QSL FR-358 delivered). For an identity-valid IR `Counterexample` composite claim, F-1 Disagreed yields Failed/CgDefect even with a native fault or invalid operand; without Disagreed, native Incomplete and ExecutionFault each yield a binding-checked GeneratedFault/Failed report with the actual NativeCause even when an operand would refuse, admission or exact limits would stop, or refinement is CeilingReached. CG asserts the typed result and terminal value; QSL FR-358 owns the internal F-2 no-admission/no-exact-evaluation rule. | Test |
-| FR-030-AC-16 | PLANNED CG CONSUMER (IR-666). With valid identity, no Disagreed and Completed native, an out-of-domain operand yields F-3 RefusedInput/ReplayRefused with its index and QSL code even with CeilingReached; a request accounting limit reached during admission yields F-4 Incomplete(ResourceExhausted)/Admission with the counter; an exact limit reached after admission yields F-5 Incomplete(ResourceExhausted)/ExactEvaluation even with CeilingReached; with sufficient limits, CeilingReached yields F-6 Incomplete(ResourceExhausted)/RefinementCeiling. CG asserts the distinct report stages and their terminal values; QSL FR-358 owns the internal F-4 no-exact-evaluation rule. No case becomes Tested or Refuted. | Test |
-| FR-030-AC-17 | PLANNED CG CONSUMER (IR-666). With valid identity and all earlier rows absent, changing only the retained shadow verdict or pair count yields F-7 Diverged/Failed/CgDefect; agreement yields Inconclusive(ScalarAgrees) with the CompositeEquality claim and Equality outcome. A binding-valid QSL `prepare` non-fault `Refused` report precedes Disagreed and yields Inconclusive(ReplayRefused) with QSL's code. `Refused` from later admission or exact comparison follows Disagreed; if QSL returns `Fault` or `Admission(Fault)`, its bound report yields Failed as FR-029-AC-28 states. CG prechecks, an absent report or a mismatched full `CompositeIdentity` yield no terminal value under FR-033-AC-9. The ordinary source-predicate MissingSettlement/UnexpectedSettlement rule does not reject a valid typed composite report. | Test |
+| FR-030-AC-15 | PARTIAL (IR-666 direct public report controls; IR-635 original-artifact path planned). For an identity-valid IR `Counterexample` composite claim, F-1 Disagreed yields Failed/CgDefect even with a native fault or invalid operand; without Disagreed, native Incomplete and ExecutionFault each yield a binding-checked GeneratedFault/Failed report with the actual NativeCause even when an operand would refuse, admission or exact limits would stop, or refinement is CeilingReached. CG asserts the typed result and terminal value; QSL FR-358 owns the internal F-2 no-admission/no-exact-evaluation rule. | Test |
+| FR-030-AC-16 | PARTIAL (IR-666 direct public report controls; IR-635 original-artifact path planned). With valid identity, no Disagreed and Completed native, an out-of-domain operand yields F-3 RefusedInput/ReplayRefused with its index and QSL code even with CeilingReached; a request accounting limit reached during admission yields F-4 Incomplete(ResourceExhausted)/Admission with the counter; an exact limit reached after admission yields F-5 Incomplete(ResourceExhausted)/ExactEvaluation even with CeilingReached; with sufficient limits, CeilingReached yields F-6 Incomplete(ResourceExhausted)/RefinementCeiling. CG asserts the distinct report stages and their terminal values; QSL FR-358 owns the internal F-4 no-exact-evaluation rule. No case becomes Tested or Refuted. | Test |
+| FR-030-AC-17 | PARTIAL (IR-666 F-7 and binding controls; IR-635 original-artifact path planned). With valid identity and all earlier rows absent, changing only the retained shadow verdict or pair count yields F-7 Diverged/Failed/CgDefect; agreement yields Inconclusive(ScalarAgrees) with the CompositeEquality claim and Equality outcome. A binding-valid QSL `prepare` non-fault `Refused` report precedes Disagreed and yields Inconclusive(ReplayRefused) with QSL's code. `Refused` from later admission or exact comparison follows Disagreed; if QSL returns `Fault` or `Admission(Fault)`, its bound report yields Failed as FR-029-AC-28 states. CG prechecks, an absent report or a mismatched full `CompositeIdentity` yield no terminal value under FR-033-AC-9. The ordinary source-predicate MissingSettlement/UnexpectedSettlement rule does not reject a valid typed composite report. | Test |
 
 ## Dependencies
 

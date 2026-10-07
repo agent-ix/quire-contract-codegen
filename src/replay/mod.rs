@@ -5,6 +5,7 @@
 //! function and frame replays build QSL's replay request from the decoded values.
 
 // Binding of QSL composite reports to their retained sent claim.
+// Implements: FR-033-AC-9, FR-029-AC-28
 pub(crate) mod composite;
 // Native replay of a frame counterexample.
 // Implements: FR-015-AC-33
