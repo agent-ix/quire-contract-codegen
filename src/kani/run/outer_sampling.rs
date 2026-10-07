@@ -195,6 +195,7 @@ pub(super) struct OuterRunOwner {
     // The failed actor step's actual producer instant, retained before helper publication.
     // It is distinct from an earlier completion/stop already retained in the same timeline.
     failure_event: Option<Result<StopStamp, DeadlineError>>,
+    failure_cause: Option<(CauseOperation, Result<FailureHeader, RepresentationError>)>,
     // An owner stop before monitor preparation retains the original unexposed I endpoint.
     _unexposed_inner_endpoint: Option<GuardianEndpoint>,
 }
@@ -371,6 +372,7 @@ impl OuterRunPreparation {
                     },
                     poisoned: false,
                     failure_event: None,
+                    failure_cause: None,
                     _unexposed_inner_endpoint: inner_endpoint,
                 })
             }
@@ -397,9 +399,6 @@ impl OuterRunPreparation {
         let Some(Ok(stop)) = self.failure_event else {
             return;
         };
-        let Some((operation, cause)) = error.original_io() else {
-            return;
-        };
         let Some(resources) = self.resources.as_ref() else {
             return;
         };
@@ -410,14 +409,10 @@ impl OuterRunPreparation {
         };
         // Metadata capture borrows the same original error before diagnostics or publication.
         // No text buffer is needed, and a representation error never replaces that original.
-        self.failure_operation = Some(operation);
-        self.failure_cause = Some(StartupCause::capture_io(cause).map(|cause| FailureHeader {
-            identity: settings.identity,
-            authority: settings.authority,
-            stop,
-            operation,
-            representation: FailureRepresentation::Original { cause },
-        }));
+        if let Some((operation, cause)) = retain_io_failure(error, settings, stop) {
+            self.failure_operation = Some(operation);
+            self.failure_cause = Some(cause);
+        }
     }
 
     /// Finite negative progress after this SAME preparation failed. The helper must retain
@@ -796,6 +791,18 @@ impl OuterRunOwner {
                 }
                 Err(error) => Err(error),
             });
+            if let (Err(original), Some(Ok(stop))) = (&result, self.failure_event) {
+                let settings = match (&self.sampling, &self.terminal) {
+                    (Some(sampling), _) => Some(&sampling.settings),
+                    (None, Some(terminal)) => Some(&terminal.sampling.settings),
+                    (None, None) => None,
+                };
+                if let Some(settings) = settings {
+                    // Required producer metadata precedes optional diagnostics. No new buffer
+                    // or reconstructed error is created; the same original stays in result.
+                    self.failure_cause = retain_io_failure(original, settings, stop);
+                }
+            }
         }
         result
     }
@@ -804,6 +811,14 @@ impl OuterRunOwner {
     /// for absent/failed capture, or interpret this stamp as measurement or role settlement.
     pub(super) fn failure_stop(&self) -> Result<Option<StopStamp>, DeadlineError> {
         self.failure_event.transpose()
+    }
+
+    /// Producer metadata alone supplies no independently authenticated admission state, public
+    /// classification or settlement. Unsupported non-I/O domains retain their original error.
+    pub(super) fn failure_cause(
+        &self,
+    ) -> Option<&(CauseOperation, Result<FailureHeader, RepresentationError>)> {
+        self.failure_cause.as_ref()
     }
 
     fn advance(
@@ -1256,6 +1271,26 @@ impl OuterRunOwner {
             Ok(OuterRunProgress::Pending)
         }
     }
+}
+
+/// One allocation-free capture shared by construction and activated failures. This captures
+/// only genuine producer I/O domains; caller state/authentication and projection stay separate.
+fn retain_io_failure(
+    error: &SamplingError,
+    settings: &RunSettings,
+    stop: StopStamp,
+) -> Option<(CauseOperation, Result<FailureHeader, RepresentationError>)> {
+    let (operation, cause) = error.original_io()?;
+    Some((
+        operation,
+        StartupCause::capture_io(cause).map(|cause| FailureHeader {
+            identity: settings.identity,
+            authority: settings.authority,
+            stop,
+            operation,
+            representation: FailureRepresentation::Original { cause },
+        }),
+    ))
 }
 
 /// O's actual accounting survives collector sealing and descriptor delivery. This owner grants
