@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
-//! Strict negative-envelope grammar over one caller-owned decoder and scratch (FR-034).
+//! Strict startup dispositions and negative envelopes on one owner-supplied decoder (FR-034).
 //!
 //! Headers are unverified parsed facts. This module owns no authentication, clock, phase,
 //! projection, frame or settlement. Required context bytes are distinct from optional UTF-8
@@ -11,12 +11,17 @@ use std::mem::{size_of, size_of_val};
 use super::{
     cause_decode,
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
-    guardian_decode::{DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text},
+    guardian_decode::{
+        DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text, ValueKind,
+    },
     outer_failure::{FailureHeader, FailureRepresentation, FailureRepresentationTag, FailureState},
     protocol::{BuildIdentity, RunAuthority},
+    role_control_scalar_decode,
     role_deadline::StopStamp,
+    role_protocol::OwnerStopCause,
     role_scalar_decode,
     startup_cause::{PreparedStartupContext, StartupCause},
+    startup_envelope::PolicyFailureCause,
 };
 
 fn field_error(cause: DecodeCause) -> DecodeError {
@@ -51,7 +56,7 @@ macro_rules! read_once {
 }
 
 fields!(CommitField { Kind => "kind", Identity => "identity", Authority => "authority", Stop => "stop", Disposition => "disposition" });
-fields!(DispositionField { Kind => "kind", Operation => "operation", State => "state", Representation => "representation", Context => "context" });
+fields!(DispositionField { Kind => "kind", Operation => "operation", State => "state", Representation => "representation", Context => "context", Cause => "cause", Failure => "failure" });
 fields!(StateField { ObservationAdmitted => "observation_admitted", OriginalWorkExpired => "original_work_expired" });
 
 #[derive(Default)]
@@ -65,11 +70,15 @@ struct CommitFields {
 
 #[derive(Default)]
 struct DispositionFields {
-    kind: Option<()>,
+    kind: Option<DispositionKind>,
     operation: Option<CauseOperation>,
     state: Option<FailureState>,
     representation: Option<FailureRepresentation>,
     context: Option<()>,
+    // Presence and explicit null are separate so duplicates remain refused. The owning
+    // StopDisposition accepts an absent or null opposite member for these two variants.
+    cause: Option<Option<OwnerStopCause>>,
+    failure: Option<Option<PolicyFailureCause>>,
 }
 
 #[derive(Default)]
@@ -78,14 +87,44 @@ struct StateFields {
     original_work_expired: Option<bool>,
 }
 
-struct Disposition {
-    operation: CauseOperation,
-    state: FailureState,
-    representation: FailureRepresentation,
+/// Raw exact startup dispositions; none supplies phase/measurement/settlement authority.
+pub(super) enum Disposition {
+    OperationalFailure {
+        operation: CauseOperation,
+        state: FailureState,
+        representation: FailureRepresentation,
+    },
+    OwnerStop {
+        cause: OwnerStopCause,
+    },
+    SetupRefused {
+        failure: PolicyFailureCause,
+    },
+}
+
+#[derive(Clone, Copy)]
+enum DispositionKind {
+    OperationalFailure,
+    OwnerStop,
+    SetupRefused,
+}
+
+impl DispositionKind {
+    fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
+        if text.equals("OperationalFailure") {
+            Ok(Self::OperationalFailure)
+        } else if text.equals("OwnerStop") {
+            Ok(Self::OwnerStop)
+        } else if text.equals("SetupRefused") {
+            Ok(Self::SetupRefused)
+        } else {
+            Err(field_error(DecodeCause::InvalidValue))
+        }
+    }
 }
 
 fn tag(decoder: &mut Decoder<'_, '_>, expected: &str) -> Result<(), DecodeError> {
-    if decoder.string()?.equals(expected) {
+    if decoder.unit_variant()?.equals(expected) {
         Ok(())
     } else {
         Err(field_error(DecodeCause::InvalidValue))
@@ -100,6 +139,14 @@ pub(super) fn decode(
 ) -> Result<FailureHeader, DecodeError> {
     context.clear();
     let result = decode_inner(payload, scratch, context);
+    checked(result, context)
+}
+
+/// Preserve the first actual required-schema checking fact and its fixed source.
+pub(super) fn checked<T>(
+    result: Result<T, DecodeError>,
+    context: &mut PreparedStartupContext,
+) -> Result<T, DecodeError> {
     if let Err(error) = result {
         let predicate = match error.cause() {
             DecodeCause::MissingField | DecodeCause::UnexpectedEnd => {
@@ -154,19 +201,27 @@ fn decode_inner(
     }
     missing(fields.kind)?;
     let disposition = missing(fields.disposition)?;
+    let Disposition::OperationalFailure {
+        operation,
+        state,
+        representation,
+    } = disposition
+    else {
+        return Err(field_error(DecodeCause::InvalidValue));
+    };
     let header = FailureHeader {
         identity: missing(fields.identity)?,
         authority: missing(fields.authority)?,
         stop: missing(fields.stop)?,
-        operation: disposition.operation,
-        state: disposition.state,
-        representation: disposition.representation,
+        operation,
+        state,
+        representation,
     };
     decoder.finish()?;
     Ok(header)
 }
 
-fn disposition(
+pub(super) fn disposition(
     decoder: &mut Decoder<'_, '_>,
     context: &mut PreparedStartupContext,
 ) -> Result<Disposition, DecodeError> {
@@ -174,7 +229,12 @@ fn disposition(
     let mut fields = DispositionFields::default();
     while let Some(name) = decoder.next_field(&mut object)? {
         match DispositionField::from_text(name)? {
-            DispositionField::Kind => read_once!(fields.kind, tag(decoder, "OperationalFailure")),
+            DispositionField::Kind => {
+                read_once!(
+                    fields.kind,
+                    DispositionKind::from_text(decoder.unit_variant()?)
+                )
+            }
             DispositionField::Operation => {
                 read_once!(fields.operation, role_scalar_decode::operation(decoder))
             }
@@ -185,15 +245,73 @@ fn disposition(
             DispositionField::Context => {
                 read_once!(fields.context, context.decode_context(decoder))
             }
+            DispositionField::Cause => read_once!(
+                fields.cause,
+                optional(decoder, role_control_scalar_decode::owner_stop)
+            ),
+            DispositionField::Failure => read_once!(
+                fields.failure,
+                optional(decoder, |decoder| {
+                    role_control_scalar_decode::policy(decoder, context.metadata_fault_slot())
+                })
+            ),
         }
     }
-    missing(fields.kind)?;
-    missing(fields.context)?;
-    Ok(Disposition {
-        operation: missing(fields.operation)?,
-        state: missing(fields.state)?,
-        representation: missing(fields.representation)?,
-    })
+    match missing(fields.kind)? {
+        DispositionKind::OperationalFailure => {
+            if fields.cause.is_some() || fields.failure.is_some() {
+                return Err(field_error(DecodeCause::UnknownField));
+            }
+            missing(fields.context)?;
+            Ok(Disposition::OperationalFailure {
+                operation: missing(fields.operation)?,
+                state: missing(fields.state)?,
+                representation: missing(fields.representation)?,
+            })
+        }
+        DispositionKind::OwnerStop | DispositionKind::SetupRefused => {
+            if fields.operation.is_some()
+                || fields.state.is_some()
+                || fields.representation.is_some()
+                || fields.context.is_some()
+            {
+                return Err(field_error(DecodeCause::UnknownField));
+            }
+            match missing(fields.kind)? {
+                DispositionKind::OwnerStop => {
+                    if fields.failure.flatten().is_some() {
+                        return Err(field_error(DecodeCause::UnknownField));
+                    }
+                    Ok(Disposition::OwnerStop {
+                        cause: missing(fields.cause.flatten())?,
+                    })
+                }
+                DispositionKind::SetupRefused => {
+                    if fields.cause.flatten().is_some() {
+                        return Err(field_error(DecodeCause::UnknownField));
+                    }
+                    Ok(Disposition::SetupRefused {
+                        failure: missing(fields.failure.flatten())?,
+                    })
+                }
+                DispositionKind::OperationalFailure => Err(field_error(DecodeCause::InvalidValue)),
+            }
+        }
+    }
+}
+
+// Look only at the next token: validating a whole non-null subtree here would mask an
+// earlier cause fault with later syntax. This preserves the owning Option field grammar.
+fn optional<'input, 'scratch, T>(
+    decoder: &mut Decoder<'input, 'scratch>,
+    parse: impl FnOnce(&mut Decoder<'input, 'scratch>) -> Result<T, DecodeError>,
+) -> Result<Option<T>, DecodeError> {
+    if matches!(decoder.peek_kind()?, ValueKind::Null) {
+        decoder.null()?;
+        Ok(None)
+    } else {
+        parse(decoder).map(Some)
+    }
 }
 
 fn state(decoder: &mut Decoder<'_, '_>) -> Result<FailureState, DecodeError> {
@@ -279,6 +397,7 @@ pub(super) fn decode_bytes() -> Result<u64, DecodeError> {
         size_of::<StateFields>(),
         size_of::<CommitField>(),
         size_of::<DispositionField>(),
+        size_of::<DispositionKind>(),
         size_of::<StateField>(),
         size_of::<Disposition>(),
         size_of::<FailureHeader>(),
