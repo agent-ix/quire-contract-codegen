@@ -835,6 +835,7 @@ impl TerminalPreparation {
                 _settlement: settlement,
                 discarded_report: None,
             },
+            caller_cancelled: false,
             poisoned: false,
         })
     }
@@ -878,6 +879,7 @@ impl TerminalPreparation {
                 _settlement: monitor_stop,
                 discarded: sampling.collector,
             },
+            caller_cancelled: false,
             poisoned: false,
         })
     }
@@ -926,6 +928,9 @@ pub(super) struct TerminalDelivery {
     deadline: Instant,
     disposition: TerminalDisposition,
     cleanup: TerminalCleanupWitness,
+    // Only a full authenticated CancelClose after descriptor delivery can abandon the original
+    // read acknowledgment. The actual claimed settlement/backing stay in this same transaction.
+    caller_cancelled: bool,
     poisoned: bool,
 }
 
@@ -1087,14 +1092,40 @@ impl TerminalDelivery {
                 else {
                     return Ok(TerminalProgress::Pending);
                 };
-                let OuterCallerControl::ReadCompleted { authority, bytes } = received else {
-                    return Err(SamplingError::InvalidTerminalTransition);
-                };
-                if authority != self.sampling.settings.authority {
-                    return Err(SamplingError::TerminalAuthority);
-                }
-                if Some(bytes) != self.bytes {
-                    return Err(SamplingError::TerminalSize);
+                match received {
+                    OuterCallerControl::ReadCompleted { authority, bytes } => {
+                        if authority != self.sampling.settings.authority {
+                            return Err(SamplingError::TerminalAuthority);
+                        }
+                        if Some(bytes) != self.bytes {
+                            return Err(SamplingError::TerminalSize);
+                        }
+                    }
+                    OuterCallerControl::Close(CallerTerminalControl::CancelClose {
+                        authority,
+                        deadline,
+                        stop,
+                    }) => {
+                        if stop.origin != StopOrigin::Caller
+                            || !matches!(self.cleanup, TerminalCleanupWitness::Claimed { .. })
+                        {
+                            return Err(SamplingError::TerminalAuthority);
+                        }
+                        let deadline = adopt_close_clock(
+                            &self.sampling.settings,
+                            &mut self.sampling.stops,
+                            authority,
+                            deadline,
+                            stop,
+                        )?;
+                        self.deadline = self.deadline.min(deadline);
+                        self.caller_cancelled = true;
+                    }
+                    OuterCallerControl::Phase(_)
+                    | OuterCallerControl::Close(CallerTerminalControl::CompletedClose { .. })
+                    | OuterCallerControl::Close(CallerTerminalControl::ReadCompleted { .. }) => {
+                        return Err(SamplingError::InvalidTerminalTransition);
+                    }
                 }
                 self.state = TerminalState::Commit;
                 Ok(TerminalProgress::Pending)
@@ -1106,18 +1137,29 @@ impl TerminalDelivery {
                     .commit
                     .take()
                     .ok_or(SamplingError::InvalidTerminalTransition)?;
-                let frame = storage
-                    .encode(&OuterTerminalReply::Committed {
+                let stop = self
+                    .sampling
+                    .stops
+                    .earliest()
+                    .map_err(SamplingError::Deadline)?;
+                let reply = if self.caller_cancelled
+                    && matches!(self.disposition, TerminalDisposition::Report)
+                {
+                    // No read ACK, report acceptance or metrics are manufactured by a local
+                    // read failure. Real I/M settlement was retained before the descriptor.
+                    OuterTerminalReply::Cancelled {
+                        authority: self.sampling.settings.authority,
+                        stop,
+                    }
+                } else {
+                    OuterTerminalReply::Committed {
                         authority: self.sampling.settings.authority,
                         peaks,
                         disposition: self.disposition,
-                        stop: self
-                            .sampling
-                            .stops
-                            .earliest()
-                            .map_err(SamplingError::Deadline)?,
-                    })
-                    .map_err(SamplingError::Control)?;
+                        stop,
+                    }
+                };
+                let frame = storage.encode(&reply).map_err(SamplingError::Control)?;
                 // Do not freeze the early peak while serialization/preemption consumes a due
                 // ordinary 20ms observer tick. Zero-progress returns to a fresh complete sample.
                 // This check is immediately before the nonblocking syscall, not a promise that
@@ -1154,19 +1196,28 @@ fn adopt_caller_close(
     deadline: RoleDeadline,
     stop: StopStamp,
 ) -> Result<Instant, SamplingError> {
-    if authority != sampling.settings.authority {
+    adopt_close_clock(
+        &sampling.settings,
+        &mut sampling.stops,
+        authority,
+        deadline,
+        stop,
+    )
+}
+
+fn adopt_close_clock(
+    settings: &RunSettings,
+    stops: &mut StopTimeline,
+    authority: super::protocol::RunAuthority,
+    deadline: RoleDeadline,
+    stop: StopStamp,
+) -> Result<Instant, SamplingError> {
+    if authority != settings.authority {
         return Err(SamplingError::TerminalAuthority);
     }
-    sampling
-        .stops
-        .observe(stop)
-        .map_err(SamplingError::Deadline)?;
-    let earliest = sampling
-        .stops
-        .deadline(
-            sampling.settings.settlement_reserve,
-            sampling.settings.deadline,
-        )
+    stops.observe(stop).map_err(SamplingError::Deadline)?;
+    let earliest = stops
+        .deadline(settings.settlement_reserve, settings.deadline)
         .map_err(SamplingError::Deadline)?;
     let deadline = if earliest
         .no_later_than(deadline)
@@ -1176,7 +1227,7 @@ fn adopt_caller_close(
     } else {
         deadline
     };
-    let original = sampling.settings.deadline;
+    let original = settings.deadline;
     if let IdentityDeadline::Finite { deadline: bound } = original {
         if !deadline
             .no_later_than(bound)
