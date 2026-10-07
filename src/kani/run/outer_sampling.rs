@@ -19,7 +19,8 @@ use super::{
     },
     memory::{LauncherMemory, MemoryObserver},
     namespace::{
-        GatedClaim, GuardianIdentity, InnerSettlement, OuterMonitorOwner, ReadyIdentityError,
+        GatedClaim, GuardianIdentity, InnerSettlement, MonitorStopSettlement, OuterMonitorOwner,
+        ReadyIdentityError,
     },
     outer_setup::PreparedOuter,
     protocol::{BackendExit, GuardianControl},
@@ -28,7 +29,7 @@ use super::{
     role_deadline::{DeadlineError, IdentityDeadline, StopOrigin, StopTimeline},
     role_protocol::{
         CallerTerminalControl, InnerBootstrap, InnerOwnerControl, OuterPhaseCommand,
-        OuterPhaseReply, OuterTerminalReply, RunSettings,
+        OuterPhaseReply, OuterTerminalReply, OwnerStopCause, RunSettings, TerminalDisposition,
     },
 };
 
@@ -207,15 +208,41 @@ impl OuterRunOwner {
             self.state = OuterRunState::ResourceStopped;
         }
         if matches!(self.state, OuterRunState::ResourceStopped) {
-            // M may be absent, prepared or already spawned. Keep its same actual owner; this
-            // mode alone signals/reaps no child. C/L liveness, fresh accounting and bounded
-            // discarded-reader EOF work continue under the earliest original stop cutoff.
-            self.sampling
+            // Keep complete actual observations and discarded-reader work during every real
+            // M stop/reap attempt. M reap is separate from actual outer INIT termination.
+            let sampling = self
+                .sampling
                 .as_mut()
-                .ok_or(SamplingError::InvalidMonitorTransition)?
-                .tick(outer, caller)?;
-            return Ok(OuterRunProgress::ResourceExhausted);
+                .ok_or(SamplingError::InvalidMonitorTransition)?;
+            sampling.tick(outer, caller)?;
+            let cutoff = observation_deadline(&sampling.settings, &sampling.stops)?
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            let settlement = match self.monitor.as_mut() {
+                Some(monitor) => monitor
+                    .monitor
+                    .stop_monitor_step(cutoff)
+                    .map_err(SamplingError::Observation)?,
+                None => Some(MonitorStopSettlement::NotCreated),
+            };
+            let Some(settlement) = settlement else {
+                return Ok(OuterRunProgress::ResourceExhausted);
+            };
+            // For the nonreport branch only, actual O termination later confirms its unclaimed
+            // tree (FR034-279/285..292). No InnerSettlement, report EOF or seal is manufactured.
+            let sampling = self
+                .sampling
+                .take()
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            self.terminal = Some(
+                self.terminal_prepared
+                    .take()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+                    .begin_owner_stop(sampling, settlement, cutoff)?,
+            );
+            self.state = OuterRunState::Terminal;
+            return Ok(OuterRunProgress::Pending);
         }
+
         if matches!(self.state, OuterRunState::Terminal) {
             return match self
                 .terminal
@@ -562,8 +589,50 @@ impl TerminalPreparation {
             },
             commit: Some(self.commit),
             read_ack: self.read_ack,
-            bytes,
+            bytes: Some(bytes),
             deadline,
+            disposition: TerminalDisposition::Report,
+            discarded: None,
+            monitor_stop: None,
+            poisoned: false,
+        })
+    }
+
+    /// M's genuine stop/reap witness authorizes only a provisional nonreport commit. The actual
+    /// discarded pipe and full backing remain owned until O exits; unclaimed I may still own a
+    /// writer. C must prove actual outer INIT termination and every remaining owned settlement.
+    fn begin_owner_stop(
+        self,
+        sampling: OuterSampling,
+        monitor_stop: MonitorStopSettlement,
+        deadline: Instant,
+    ) -> Result<TerminalDelivery, SamplingError> {
+        if self.poisoned || !sampling.resource_stopped || Instant::now() >= deadline {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        let original = observation_deadline(&sampling.settings, &sampling.stops)?
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        if deadline > original {
+            return Err(SamplingError::TerminalDeadlineMismatch);
+        }
+        Ok(TerminalDelivery {
+            sampling: TerminalSampling {
+                launcher: sampling.launcher,
+                tree: sampling.tree,
+                ledger: sampling.ledger,
+                settings: sampling.settings,
+                stops: sampling.stops,
+            },
+            state: TerminalState::Commit,
+            commit: Some(self.commit),
+            read_ack: self.read_ack,
+            bytes: None,
+            deadline,
+            disposition: TerminalDisposition::OwnerStop {
+                cause: OwnerStopCause::ResourceExhausted,
+            },
+            discarded: Some(sampling.collector),
+            monitor_stop: Some(monitor_stop),
             poisoned: false,
         })
     }
@@ -594,8 +663,11 @@ pub(super) struct TerminalDelivery {
     state: TerminalState,
     commit: Option<FrameStorage>,
     read_ack: IncrementalReceive,
-    bytes: u64,
+    bytes: Option<u64>,
     deadline: Instant,
+    disposition: TerminalDisposition,
+    discarded: Option<ReportCollector>,
+    monitor_stop: Option<MonitorStopSettlement>,
     poisoned: bool,
 }
 
@@ -626,8 +698,27 @@ impl TerminalDelivery {
         }
         let sample_started = Instant::now();
         let (tick, peaks) = self.sampling.observation_and_peaks(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
-            return Ok(TerminalProgress::Exhausted);
+        match self.disposition {
+            TerminalDisposition::Report => {
+                if self.discarded.is_some() || self.monitor_stop.is_some() {
+                    return Err(SamplingError::InvalidTerminalTransition);
+                }
+                if matches!(tick, MemoryTick::Exhausted(_)) {
+                    return Ok(TerminalProgress::Exhausted);
+                }
+            }
+            TerminalDisposition::OwnerStop { .. } => {
+                if !matches!(self.state, TerminalState::Commit) || self.monitor_stop.is_none() {
+                    return Err(SamplingError::InvalidTerminalTransition);
+                }
+                self.discarded
+                    .as_mut()
+                    .ok_or(SamplingError::InvalidTerminalTransition)?
+                    .drain_owner_stop(Some(self.deadline))
+                    .map_err(SamplingError::Report)?;
+                // Persistent above-ceiling RSS preserves the genuine stop candidate; it cannot
+                // suppress due observations or prevent the bounded provisional stop commit.
+            }
         }
         match &mut self.state {
             TerminalState::DeliverDescriptor { report, send } => {
@@ -660,7 +751,7 @@ impl TerminalDelivery {
                 if authority != self.sampling.settings.authority {
                     return Err(SamplingError::TerminalAuthority);
                 }
-                if bytes != self.bytes {
+                if Some(bytes) != self.bytes {
                     return Err(SamplingError::TerminalSize);
                 }
                 self.state = TerminalState::Commit;
@@ -677,6 +768,7 @@ impl TerminalDelivery {
                     .encode(&OuterTerminalReply::Committed {
                         authority: self.sampling.settings.authority,
                         peaks,
+                        disposition: self.disposition,
                         stop: self
                             .sampling
                             .stops

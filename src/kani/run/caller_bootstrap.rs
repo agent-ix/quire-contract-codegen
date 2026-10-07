@@ -1397,6 +1397,7 @@ impl CallerBootstrap {
             authority,
             peaks,
             stop,
+            disposition,
         } = received.control
         else {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
@@ -1409,6 +1410,9 @@ impl CallerBootstrap {
             || sender.gid != self.caller_gid
             || authority != self.authority
         {
+            return Err(CallerBootstrapError::TerminalReplyMismatch);
+        }
+        if disposition != super::role_protocol::TerminalDisposition::Report {
             return Err(CallerBootstrapError::TerminalReplyMismatch);
         }
         clock
