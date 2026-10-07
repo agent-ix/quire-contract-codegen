@@ -183,20 +183,32 @@ until genuine restored/mutant parity is measured. The gate-close ordering case r
 ### Additional feature-only stage-2 observation allocation (PLANNED/UNRUN)
 
 The [feature-only transport contract](../functional/FR-034-caller-death-ownership.md#feature-only-stage-2-observation-transport)
-adds the explicitly allocated private pipe/binding/event/completion carrier missing from the earlier
-IR-655 observation allocation. The earlier no-external-right statement describes that earlier slice;
-this slice adds only its named observation write right. Production frame declarations, authority,
-schedule and ceilings remain unchanged. Use the genuine C owner after authenticated O Armed;
-old direct-M orchestration and C-origin stage records do not expose these O events. These new rows
-are standalone planned verification, not coverage inherited from existing TC procedures.
+explicitly allocates its new private DTO/result carrier and single write right, qualifying the earlier
+IR-655 exclusion rather than asserting an earlier delivered API. It alone permits the named
+feature-on nonblocking O sinks; unconditional stage publication and feature-off production remain
+unchanged. Writer transfer follows actual Armed and, for birth, genuine adopted-orphan ACK on the
+existing C/O transport using a NEW feature-only binding schema. Source finite-cursor feasibility is
+not implemented schema/rights/actor proof. No pre-Armed writer/authority is allocated. All new rows
+are independently PLANNED/UNRUN, with no prior Test, method-row or controlled M-probe completion.
 
 | Criterion | Verification status and independent procedure | Evidence boundary |
 |-----------|-----------------------------------------------|-------------------|
-| FR-034-AC-78 | PLANNED/UNRUN Test and Analysis, step 29a. | Exclusive actual pipe/right/producer binding and child/public exclusion; no pre-Armed claim. |
-| FR-034-AC-79 | PLANNED/UNRUN Test and Analysis, step 29b. | Five fixed records with genuine-boundary adverses; records alone do not prove calls or reap. |
-| FR-034-AC-80 | PLANNED/UNRUN Test, step 29c. | Original I/C reception and independent false-completion controls. |
-| FR-034-AC-81 | PLANNED/UNRUN Test and Analysis, step 29d. | Actual simultaneous layouts/reservations/cutoffs, no guessed capacity or native-stack proof. |
-| FR-034-AC-82 | PLANNED/UNRUN Analysis, step 29e. | Exact supported feature-off consumer/helper source/build proof, no runtime Test credit. |
+| FR-034-AC-78 | PLANNED/UNRUN Test, Analysis, step 29a: post-Armed acceptance. | Bound producer acceptance; a reported write epoch never proves it. |
+| FR-034-AC-79 | PLANNED/UNRUN Test, step 29b: fixed grammar. | No secondary label inventory, EOF event or frame-fragment fallback. |
+| FR-034-AC-80 | PLANNED/UNRUN Test, step 29c: completion source. | Carrier remains provisional, not report/settlement authority. |
+| FR-034-AC-81 | PLANNED/UNRUN Test, Analysis, step 29d: pre-exposure charges. | Feature-on boundary exhaustion is truthful and not production acceptance; unavailable actual faults remain owed. |
+| FR-034-AC-82 | PLANNED/UNRUN Test, Analysis, step 29e: feature-off absence. | Matched normal artifacts required; Analysis alone is not Test credit. |
+| FR-034-AC-83 | PLANNED/UNRUN Test, step 29f: exclusive transfer. | Exactly one write right, no response/ACK/new transport channel. |
+| FR-034-AC-84 | PLANNED/UNRUN Test, Analysis, step 29g: endpoint exclusion. | C-only reporter exclusion and existing backend stdio admission remain unchanged. |
+| FR-034-AC-85 | PLANNED/UNRUN Test, step 29h: once-only events. | Inapplicable kinds absent, never fabricated to fill slots. |
+| FR-034-AC-86 | PLANNED/UNRUN Test, Analysis, step 29i: boundary provenance. | Controlled M probe is not production-profile/order proof; missing provenance blocks fixture completion. |
+| FR-034-AC-87 | PLANNED/UNRUN Test, step 29j: producer order. | Receipt time/late fill cannot repair order. |
+| FR-034-AC-88 | PLANNED/UNRUN Test, Analysis, step 29k: schedule preservation. | Actual new schema/rights/actor receive integration is UNRUN, not existing API support. |
+| FR-034-AC-89 | PLANNED/UNRUN Test, step 29l: completion-before-close. | No new I frame or synthetic stop; cleanup remains immediate. |
+| FR-034-AC-90 | PLANNED/UNRUN Test, Analysis, step 29m: write-fault noninterference. | Socket NOSIGNAL/inherited disposition gives no pipe proof; no ignored-EOF rescue or later-cleanup repair. |
+| FR-034-AC-91 | PLANNED/UNRUN Test, step 29n: ordinary unbound execution. | Explicit binding is fixture data, never mandatory ordinary startup. |
+| FR-034-AC-92 | PLANNED/UNRUN Test, step 29o: selected sample. | No startup tick substitution, C-to-O ACK response, sample pause or synthetic tick. |
+| FR-034-AC-93 | PLANNED/UNRUN Analysis, step 29p: feature-on native proof. | Feature-off proof supplies no feature-on credit; missing capacity/highwater leaves UNPROVEN. |
 
 ## Test Procedure
 
@@ -943,35 +955,26 @@ Test credit and their existing Slice 2 obligation.
     for every named predicate. Missing full obligations leave old mixed criteria untagged.
 
 29. Additional feature-only observation transport (all PLANNED/UNRUN):
-    a. Use the real C owner/matching feature-on helper. Inspect one actual read endpoint retained
-       by C and exactly one write right transferred C-to-L-to-O with completed-transfer copies
-       closed. Receive only after actual Armed O/L/run binding. Independently try foreign writer,
-       wrong run and unbound-before-Armed observations; each fails the fixture. Inspect every
-       child/exec mapping and public fixture result for exclusion of endpoints/authority.
-    b. Exercise the five selected actual O boundaries and compare immutable fixed frames to the
-       independently retained operation/identity/order facts. Require exactly once per applicable
-       kind; independently omit, duplicate, truncate, invert order or corrupt unused variant space.
-       Each fails its specific predicate. Run the existing unchanged-emission fabricated I-IN/M-reap
-       and late-operation controls; an emitted record must not turn fabricated success into proof.
-       Select a real ordinary completed sample without omitting later due ticks. Retain all AC-51
-       through AC-56, both live/dead pins and outer-confirm obligations; no new record backs them
-       alone. Independently establish the actual Guardian M wait/cache/SIGCHLD/no-other-waiter
-       provenance; the standalone controlled probe is feasibility evidence only.
-    c. Retain the genuine original I/C Completed outcome/stop and I/build/run/report binding in
-       the separate C-owned fixed carrier before lease close. Independently replace its source
-       with M exit, EOF, phase or constructed completion; all fail. Missing genuine Completed
-       fails the scenario and immediately cleans up; none of these controls changes the I protocol.
-    d. Enumerate simultaneous event slots, in-progress frame, binding/completion metadata,
-       native workspace and actual pipe reserve. Verify checked exact charges before L/exposure
-       and the actual atomic pipe-write bound with no new cap. Independently fail existing
-       preparation/transport at genuine available seams: fixture failure preserves original
-       custody/cutoff and immediate unchanged cleanup. Inspect no heap history/dynamic error
-       storage/ACK/pause and verify continued ordinary ticks under normal record progress.
-       Unavailable genuine failures/provenance/bounds stay owed, not assertion-skipping success.
-    e. CODE author supplies final supported-consumer feature-off source/build Analysis excluding
-       all new types/endpoints/rights/records/completion carrier/branches; independent CODE
-       reviewer checks it. Feature-on normal-library package/helper matching remains mandatory.
-       Completion stays zero until actual evidence; no method row supplies completion.
+    a. AC-78 (post-Armed acceptance): Authenticate actual original C/O binding before accepting the exclusively transferred writer. Attempt wrong-run, unbound and pre-transfer bytes; each fails the fixture. Inspect O has no writer before genuine Armed.
+    b. AC-79 (fixed grammar): Decode the owning five event kinds with actual fixed widths and unused-space rules. Independently supply unknown/partial/invalid-width/nonzero-unused frames; each fails actual grammar.
+    c. AC-80 (completion source): Retain original I/C authenticated Completed and independently substitute M exit, EOF, phase or constructed metadata. Only genuine reception populates the fixed carrier.
+    d. AC-81 (pre-exposure charges): Inventory actual simultaneous fixed/encoded/native terms and page-rounded F_GETPIPE_SZ for both pipes; check named caller_run_buffers/owned_RSS and additive pipe_reserve before exposure. Exercise genuine available preparation faults under original ceilings.
+    e. AC-82 (feature-off absence): Extend mechanical feature-off consumer/helper checks beyond public-operation absence; inspect final supported artifacts/source exclude binding decoder/frame/right mapping and all observer items.
+    f. AC-83 (exclusive transfer): Observe original C writer custody until authenticated Armed, then one actual C/O write-right transfer and completed-send close. Birth transfer additionally follows real adopted-orphan ACK. Reject extra/read/wrong rights and inspect L never owns this right.
+    g. AC-84 (endpoint exclusion): Inspect every M/I/backend/descendant/sibling mapping and public raw result for absence of observation endpoints/authority. Independently leak a right and require failure.
+    h. AC-85 (once-only events): Require applicable scenario events once each; independently omit or duplicate each applicable kind and require its specific failure.
+    i. AC-86 (boundary provenance): Correlate actual I/seal/gate operations and same M parent/Child/pidfd. Establish sole waiter, SIGCHLD neither ignored nor SA_NOCLDWAIT, no prior consuming wait, positive WNOWAIT before FIRST uncached Some and post-reap ECHILD. Retain live/zombie/cache/competing-wait controls and unchanged-emission fabricated I/M results.
+    j. AC-87 (producer order): Require actual checked producer ordinals and strict I/M-before-seal and I-before-gate-close order. Move real operations after seal, invert/overflow ordinal and require independent failures with emission unchanged.
+    k. AC-88 (schedule preservation): Inspect and execute ordinary ticks/control/cutoffs during absent, partial and full new binding and event progress; require no suppressed tick or ACK/pause permission.
+    l. AC-89 (completion-before-close): Compare genuine retained completion reception/carrier and original lease-close order; independently move carrier fill after close and require failure.
+    m. AC-90 (write-fault noninterference): Establish actual feature-on helper SIGPIPE safety/profile and pending-signal cleanup premises. Close reader or force genuine full/error write at an available seam; O latches/ends observation writes but preserves production controls/ticks and cannot cancel/exit from this fault. C seals missing/partial failure before ordinary cleanup.
+    n. AC-91 (ordinary unbound execution): Run ordinary matched feature-on execution with no binding and inspect no endpoint/emission or requirement for that envelope; compare unchanged production behavior.
+    o. AC-92 (selected sample): Positively acknowledge and pin genuine adopted orphan, retain writer until then, transfer after Armed/ACK, require O next completed ordinary tick after consuming binding, then release same worker and verify own child ACK.
+    p. AC-93 (feature-on native proof): Supply separate exact feature-on paired consumer/helper artifact Analysis using supported native-workspace method and independently declared charge, with simultaneous lifetimes and all actual external/runtime premises.
+    Retain every AC-51 through AC-56/AC-24 oracle, BOTH live/dead pins before escalation,
+    separate outer confirmation and original FR-028-AC-21/FR-017-AC-24 assertions/mutants.
+    Missing real capability/storage/provenance stays owed; no fake actor, copied orchestrator,
+    method-row credit or assertion-skipping pass. No new deadline, cap or resource allowance.
 
 ### Charged-peak evidence constructors (FR-034-AC-32)
 
@@ -1267,11 +1270,22 @@ independent CODE-review acceptance; all runtime Tests remain UNRUN.
 
 | Criterion | Required restored result | Independently failing adverse result |
 |-----------|--------------------------|--------------------------------------|
-| FR-034-AC-78 | Genuine post-Armed exclusive C/O pipe bound to original run, excluded from children/public handles. | Foreign/unbound/wrong-run event or leaked right fails fixture; no guessed producer identity. |
-| FR-034-AC-79 | Applicable five events are once-only, complete and bound to actual operations/order while ticks continue. | Missing/duplicate/partial/bad-order frame or fabricated call fails independent predicate; later cleanup cannot repair it. |
-| FR-034-AC-80 | Separate carrier contains genuine authenticated original I Completed before lease close. | M exit/EOF/phase/fabricated metadata cannot populate the carrier; absence fails scenario. |
-| FR-034-AC-81 | Actual fixed simultaneous storage/native/pipe terms fit existing charged ceilings before exposure. | Actual unavailable preparation/transport gives typed fixture failure and immediate cleanup; no guessed capacity, pause or extra budget. |
-| FR-034-AC-82 | Independently checked supported-production feature-off Analysis demonstrates complete absence. | Any remaining feature-off type/right/record/branch or missing proof blocks completion; source Analysis supplies no Test credit. |
+| FR-034-AC-78 | C accepts original bound producer only after genuine Armed and completed transfer. | Unbound/wrong-run/pre-transfer bytes fail fixture; packet PID/epoch never proves binding. |
+| FR-034-AC-79 | All five owning kinds decode with exact widths and zero unused space. | Unknown kind, partial frame, bad width or nonzero unused space fails grammar; EOF supplies no event. |
+| FR-034-AC-80 | Only genuine original I/C Completed populates the separate carrier. | M exit, EOF, phase or constructed completion does not populate it and fails required completion. |
+| FR-034-AC-81 | Actual simultaneous named storage and report+observation pipe_reserve are charged before exposure. | Missing/overflowed input or genuine unavailable preparation fails under original ceilings; no cap proxy or feature-off outcome credit. |
+| FR-034-AC-82 | Final feature-off source/artifact Analysis and mechanical consumer/helper checks exclude every observer item. | Remaining binding/type/right/emission or missing helper check blocks criterion; public operation absence alone is insufficient. |
+| FR-034-AC-83 | C retains sole writer until Armed/scenario preconditions and closes its copy after exact one-right transfer to O. | Early transfer, retained duplicate, read/extra/wrong right or L writer custody fails exclusive-transfer predicate. |
+| FR-034-AC-84 | No observer endpoint/control handle occurs in untrusted mappings or public results. | Actual leaked child/exec/public right fails exclusion; no future feature-exclusion gate substitutes. |
+| FR-034-AC-85 | Every required scenario event appears exactly once; inapplicable events remain absent. | Each independently omitted or duplicated required kind fails its own presence/uniqueness predicate. |
+| FR-034-AC-86 | Actual boundary facts include same-M waitable WNOWAIT→FIRST uncached consuming Some→ECHILD under verified sole-parent/waiter/disposition/history. | Fabricated IN/reap, cache hit, competing waiter/auto-reap or missing provenance fails independent predicate with emission unchanged; controlled probe gives no production credit. |
+| FR-034-AC-87 | Checked actual I/M ordinals precede seal and actual I confirmation precedes gate close. | Late real poll/reap, early gate close, inverted/overflowed ordinal fails order even with positive records; receipt time cannot repair it. |
+| FR-034-AC-88 | All due ordinary ticks/accounting/cutoffs continue during partial/full binding and events. | Omission/suppression, ACK/pause wait or changed cutoff fails schedule predicate; schema-only test supplies no runtime credit. |
+| FR-034-AC-89 | Genuine completion carrier is retained before actual original lease close. | Carrier filled only after close fails temporal predicate; no constructed stamp repairs it. |
+| FR-034-AC-90 | Actual full/EPIPE/error latches observation failure while O continues the same production path without SIGPIPE termination. | Observation-triggered cancellation/exit/escalation or unproved effective signal safety fails; C seals failure before cleanup and no ignored-EOF rescue counts. |
+| FR-034-AC-91 | Ordinary matched feature-on execution without binding has no observer endpoint/emission and remains available. | Requiring the absent fixture envelope or emitting without binding fails; matched features alone are not selection. |
+| FR-034-AC-92 | C transfers after actual adopted-orphan ACK; O next complete tick follows receipt; C releases same worker only after validated sample. | Startup/pre-binding tick, fabricated ACK or sample, and premature worker release fails birth-construction predicate; no pause/response allowed. |
+| FR-034-AC-93 | Separate exact feature-on paired artifacts prove finite native workspace no greater than independently declared charge. | Borrowed feature-off proof, unknown capacity/lifetime/highwater or missing actual comparison leaves UNPROVEN; no runtime completion credit. |
 
 ## Settlement reserve research receipt
 
