@@ -121,6 +121,25 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-54 | PLANNED/UNRUN: Retained-gate I confirmation before close (step28d). CG CODE author supplies per-predicate source/bounds and applicable runtime receipts; independent CODE reviewer checks before CODE acceptance. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
 | FR-034-AC-55 | PLANNED/UNRUN: Final-source contained teardown authority/no sampled-membership kill path Analysis (step28e), paired with the independently owed AC-24 non-INIT-watcher Test. CG CODE author supplies exhaustive authority-path Analysis; independent CODE reviewer checks before CODE acceptance. Completion is zero until actual evidence, never inferred from a matrix method row. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
 | FR-034-AC-56 | PLANNED/UNRUN: Published successful-Commit final-accounting schedule (step28f). CG CODE author supplies per-predicate source/bounds Analysis; independent CODE reviewer checks before retirement/CODE acceptance. Completion is zero until actual evidence, never inferred from a matrix method row. | No existing test supplies backing; Analysis is not Test credit. Genuine authority and bounded integrated schedule remain owed. |
+| FR-034-AC-57 | PLANNED/UNRUN: New O→L pre-local-Armed negative uses zero rights. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-58 | PLANNED/UNRUN: L authenticates actual O Child PID/UID/GID0/build/run/source/state/stamp. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-59 | PLANNED/UNRUN: Invalid negative rights refuse with actual owner/capability custody. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-60 | PLANNED/UNRUN: Exact O-only cleanup/source capability scope; real Child stays at L. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-61 | PLANNED/UNRUN: No positive Armed/namespace/phase/report/Dispatch admission. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-62 | PLANNED/UNRUN: Original authentic producer stamp adopted before wait, earliest cutoff preserved. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-63 | PLANNED/UNRUN: Final original cause only after actual O/L/capture/creator/EOF settlement. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-64 | PLANNED/UNRUN: No new envelope type/ACK/window/cap/public category. Actual source/ordinary seam evidence required; no existing test credit. | Inspection only: no fixture extension or Test completion credit. |
+| FR-034-AC-65 | PLANNED/UNRUN: Fresh exhausting pre-send tick retires zero-progress Failure into OwnerStop. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-66 | PLANNED/UNRUN: L-local preArm same-byte/one-clone route; admitted OFD Test oracle. Actual source/ordinary seam evidence required; no existing test credit. | Genuine admitted OFD oracle and independently opened same-O/foreign negative controls required. Unavailable oracle remains UNRUN; no inode proxy or new runtime KCMP mandate. |
+| FR-034-AC-67 | PLANNED/UNRUN: C authenticates full L negative only AwaitArm through actual chain. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-68 | PLANNED/UNRUN: No pidfd_getfd/pidfd setns/process_madvise/numeric reopening. Actual source/ordinary seam evidence required; no existing test credit. | Inspection only: no fixture extension or Test completion credit. |
+| FR-034-AC-69 | PLANNED/UNRUN: Unconfirmed or abnormal settlement keeps CleanupUnconfirmed/no evidence. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-70 | PLANNED/UNRUN: First emitted byte fixes immutable single candidate. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-71 | PLANNED/UNRUN: All due pre-send ticks and actual fresh complete named inputs. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-72 | PLANNED/UNRUN: Late complete exhaustion retained/enforced until actual settlement. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-73 | PLANNED/UNRUN: Claimed I termination plus separate real M reap/writerEOF/finaltick precede O normal return. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-74 | PLANNED/UNRUN: Absent peak field means no peak transport, no inferred zero/history/current validity. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
+| FR-034-AC-75 | PLANNED/UNRUN: Later owned observation/collector/transport error blocks normal O Code0. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -1032,60 +1051,56 @@ Other candidate native policies/configurations remain UNPROVEN until their own p
 
 ### Pre-Armed negative capability checks
 
-These IR-687 checks are PLANNED/UNRUN and CODE-gated. Use the real C/L/O roles and original
-bounded controls; no fabricated Armed, role identity, Child result or termination witness.
+All procedures are PLANNED/UNRUN; they supply no prior-row execution credit.
 
-1. At genuine O startup failure before Armed and before ANY M creation, retain L's actual O
-   Child/pidfd. Observe O→L Committed OperationalFailure with zero rights. Verify L receives the
-   actual Child PID/UID/GID 0, matching build/run/state and original producer stop, then forwards
-   unchanged bytes to C AwaitArm with exactly one real clone. Compare the clone with L's retained
-   capability using actual descriptor identity; C authenticates L independently. A different
-   sender, credential, build/run, state or foreign capability must refuse.
-2. Exercise missing/extra/wrong-type/substituted rights and that same negative outside AwaitArm.
-   Verify exact state-selected cardinality, owned received-descriptor cleanup and no zero-right
-   fallback. Observe no positive Armed, namespace admission, phase progression, M or backend marker.
-   Inspect that cancellation uses only the retained O capability and L still owns/reaps the real
-   O Child; C never fabricates a direct Child, M/I pin or reopened numeric-PID authority.
-3. Delay L's actual O Child wait after the genuine producer stop and full forwarded negative.
-   Verify C retains the cause and adopts the original O stamp provisionally BEFORE that wait;
-   delaying receipt/wait cannot move the cutoff later. Exercise finite and absent work deadlines
-   with the original FIRST-stop allowance. No interim execution evidence or final failure is
-   accepted, even if the O pidfd is ready.
-4. Observe real O Child wait, L/capture/creator settlement and required control EOF before the
-   existing original-cause failure becomes final. An unavailable confirmation within the same
-   original cutoff must produce CleanupUnconfirmed rather than a fake normal cleanup/cause result.
-   Inspect that all new live descriptor/control state is charged to existing ceilings and the
-   only wire change is this state-selected L→C ancillary-rights count: no new frame/ACK/window,
-   public field/refusal or resource cap. Existing O→L zero-right negative handling remains intact.
+1. Genuine pre-L-Armed O failure: inspect actual O→L zero-right frame and same L→C bytes with one
+   actual retained clone. Authenticate actual ChildPID UID/GID0, L chain, build/run/source state and
+   producer stamp independently. Substitutions, missing/extra rights and wrong state must refuse. 2.
+   Prove actual open-file-description identity with admitted KCMP_FILE/equivalent kernel oracle;
+   independently open a pidfd to the SAME O and to another positively owned actor, and require both
+   clone negatives to fail. Inode equality never substitutes. Unavailable oracle is UNRUN/zero
+   evidence credit, not passing skip or new runtime capability mandate. 3. Exercise L-local waiting
+   arm versus fully accepted arm. Fail zero/partial direct O→C Armed after L acceptance: retain
+   partial bytes/rights for cleanup, no positive admission. Require genuine partial-as-positive
+   mutant to fail. Do not fabricate L positive forwarding or post-L-Armed negative duty; original
+   cause may be unavailable on this startup-protocol path. 4. While C AwaitArm and L still preArm,
+   deliver actual directO EOF before full L-forwarded negative. C must preserve full authentic
+   original cause/clock/capability if route completes by existing cutoff; EOF alone,
+   malformed/partial/missing negative and deadline expiration never grant admission or extend
+   window. Independent existing stream cursors/ancillary custody remain intact; no splice/new
+   ACK/reset. 5. Inspect allowed cleanup capability operations versus prohibited
+   pidfd_getfd/setns/process_madvise/numeric reopening/foreign-actor authority. Preserve actual
+   Childwait at L. Delay wait under finite and absent work deadlines: original producer stamp
+   adopted before wait; earliest original allowance never restarts. Ready pidfd without actual whole
+   chain fails. Unconfirmed chain produces existing CleanupUnconfirmed/no evidence.
 
 ### Claimed-startup negative transaction checks
 
-These IR-687 Test and Analysis procedures are PLANNED/UNRUN; they add no prior-row execution credit.
+All procedures are PLANNED/UNRUN; they supply no prior-row execution credit.
 
-1. Use a genuine claimed I with its actual lease and a separately retained real M Child. Establish
-   an original typed producer failure and its actual stamp before a later successful complete
-   exhausting tick; repeat with exhaustion established first. Require the first independently
-   established stop to select the single existing terminal candidate. Inspect every named input,
-   checked sum and all due pre-send ticks; a pending or failed tick cannot stand in for exhaustion.
-   Keep the existing malformed-report precedence case separately, so the new pair ordering cannot
-   silently weaken resource/deadline precedence over malformed content.
-2. Exercise zero-progress, partial and complete sends on the actual existing control. Require
-   first-byte irreversibility, no replacement/splice/second terminal frame and full authentication
-   before C's provisional custody. C closes the real I lease after that receipt; actual I pin
-   termination, separate real M Child reap and the remaining O/L/capture/creator/EOF settlement
-   precede any normal final result under the original first-stop cutoff, including no work deadline.
-3. Establish a genuine complete observation before the negative, then obtain a later fresh
-   exhaustion or an actual observation/collector/transport error during settlement. Inspect the
-   retained original-owner accounting/history/OwnerStop or owned later-error custody without
-   interpreting the negative's absent peak field as zero, no history or current validity. Require
-   continued due sampling and refusal of an unconfirmed whole chain. Historical peaks cannot
-   repair a failed current tick; later facts cannot rewrite the committed bytes or reset the clock.
-4. Analysis shall inspect the actual producer error/state/stamp establishment, complete-tick
-   exhaustion selection, first-byte and full-publication boundaries, and retained later-error
-   lifetime. The currently missing later-error retention and published-versus-settled distinction
-   are CODE gates. A review shall explicitly attempt resource-precedence contradictions, silently
-   lost later exhaustion/error facts and false zero/no-observation claims; source Analysis alone
-   cannot count as production Test completion.
+1. Establish genuine typed producer failure first, then obtain Exhausted in the mandatory fresh
+   complete pre-send tick BEFORE ANY emitted byte. Require retirement of offset-zero unpoisoned
+   Failure into existing OwnerStop. Repeat exhaustion-before-failure, no resource-default/history
+   substitute, and unchanged resource/deadline-over-malformed-report precedence. Resource
+   establishment is complete named-input checked-sum evaluation, not sampling start/backdated
+   receipt. 2. Exercise real zero-progress, partial and fully emitted terminal sends. First byte
+   fixes candidate; partial/full frame cannot retire/splice/rewrite/append second terminal. Full
+   authenticated negative receipt only provisions original cause/clock and closes real I lease, not
+   evidence or settlement. Every due tick continues. 3. After first byte, produce genuine later
+   complete exhaustion. Hold actual claimed I or retained M settlement incomplete; require no normal
+   O Code0/C result. Require actual O accounting/history/stop retention through settlement, source-
+   state assertions and an allocated mutant clearing that actual state at COMMIT to fail. The actual
+   runtime witness is owed if unavailable through ordinary seams; no emitted late diagnostic is
+   invented. After true positive I termination, separate M reap, writer EOF, final due accounting
+   and whole chain, original negative may settle normally, never public Success. 4. Separately
+   produce actual later observation/collector/transport error. Require genuine owned later error
+   through bounded cleanup and abnormal/absent normal O Code0 acceptance, selecting existing
+   CleanupUnconfirmed rather than projecting original failure as final. No diagnostic parsing, fake
+   cause, extra frame/field/window. 5. Establish actual complete observation history before failure,
+   then fail a current tick. Absent FailureHeader peak field is neither measured zero nor no-
+   history/current-validity. History does not repair failed current input. Source Analysis
+   explicitly records missing claimed negative path, current guard, current partial exhaustion/error
+   loss, and required Published-versus-Settled owner state; no implementation/coverage claim.
 
 ## Expected Results
 
@@ -1121,15 +1136,6 @@ These IR-687 Test and Analysis procedures are PLANNED/UNRUN; they add no prior-r
 | FR-034-AC-48 | PLANNED/UNRUN Analysis: Returned heap capacities, metadata and overlap inside declared charge; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
 | FR-034-AC-49 | PLANNED/UNRUN Analysis: Reanalysis after source/build/compiler/runtime/artifact/premise change; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
 | FR-034-AC-50 | PLANNED/UNRUN Analysis: Bound fits independent declaration; missing proof is UNPROVEN, missing charge uses existing refusal; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
-| FR-034-AC-57 | PLANNED/UNRUN: O→L zero-right negative, unchanged L→C bytes with one actual O-pidfd clone in AwaitArm | Global rights change; reconstructed cause/clock; foreign descriptor |
-| FR-034-AC-58 | PLANNED/UNRUN: actual O Child PID/UID/GID 0 and authenticated L/build/run/state bind cleanup custody | Packet labels or socket creator substitute for actual sender chain |
-| FR-034-AC-59 | PLANNED/UNRUN: invalid rights/context refuses with actual owned cleanup | Zero-right fallback; missing/extra/substituted authority admitted |
-| FR-034-AC-60 | PLANNED/UNRUN: retained capability addresses only actual O; L retains real Child wait | Guessed/reopened PID; fictitious C Child or M/I authority |
-| FR-034-AC-61 | PLANNED/UNRUN: negative custody gives no positive namespace/phase/report/Dispatch admission | Armed fabricated; backend/M starts on negative |
-| FR-034-AC-62 | PLANNED/UNRUN: original producer stamp adopted before L wait; earliest original cutoff retained | Receipt-time trigger or reset FIRST-stop allowance |
-| FR-034-AC-63 | PLANNED/UNRUN: final original cause follows actual whole-chain settlement | Ready pidfd/negative bytes substitute for wait, EOF or capture/creator settlement |
-| FR-034-AC-64 | PLANNED/UNRUN: existing control/ceiling allocation and public API preserved | New frame/ACK/window/cap or uncharged extra descriptor |
-| FR-034-AC-65 | PLANNED/UNRUN: first established claimed-startup stop retains one immutable candidate; due ticks and later genuine facts survive, with final whole-chain settlement | Lost later error/exhaustion; false zero peaks; partial-frame rewrite; premature normal return |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
@@ -1138,6 +1144,30 @@ destruction and uninterruptible tasks cannot justify fabricated teardown; live-c
 confirmation refuses. Caller-group signals and direct guardian death are included lifecycle cases,
 not excluded double faults.
 
+
+### Negative startup transaction expectations (PLANNED/UNRUN)
+
+| Criterion | Expected result | Independent adverse result |
+| --- | --- | --- |
+| FR-034-AC-57 | PLANNED/UNRUN: New O→L pre-local-Armed negative uses zero rights | Misrepresented existing O→L route or extra right |
+| FR-034-AC-58 | PLANNED/UNRUN: L authenticates actual O Child PID/UID/GID0/build/run/source/state/stamp | Packet/socket-creator label substitutes for actual sender |
+| FR-034-AC-59 | PLANNED/UNRUN: Invalid negative rights refuse with actual owner/capability custody | Zero-right fallback or leaked received right |
+| FR-034-AC-60 | PLANNED/UNRUN: Exact O-only cleanup/source capability scope; real Child stays at L | Fictional C Child or authority beyond owned O |
+| FR-034-AC-61 | PLANNED/UNRUN: No positive Armed/namespace/phase/report/Dispatch admission | Partial Armed interpreted as positive; created M/backend |
+| FR-034-AC-62 | PLANNED/UNRUN: Original authentic producer stamp adopted before wait, earliest cutoff preserved | Receipt-time stamp or restarted None settlement allowance |
+| FR-034-AC-63 | PLANNED/UNRUN: Final original cause only after actual O/L/capture/creator/EOF settlement | Ready pin or receipt used as final result |
+| FR-034-AC-64 | PLANNED/UNRUN: No new envelope type/ACK/window/cap/public category | Uncharged extra control/capability state |
+| FR-034-AC-65 | PLANNED/UNRUN: Fresh exhausting pre-send tick retires zero-progress Failure into OwnerStop | Earlier genuine failure wrongly defeats prebyte precedence |
+| FR-034-AC-66 | PLANNED/UNRUN: L-local preArm same-byte/one-clone route; admitted OFD Test oracle | Same-O fresh-open or foreign pidfd passes clone oracle |
+| FR-034-AC-67 | PLANNED/UNRUN: C authenticates full L negative only AwaitArm through actual chain | Direct O EOF hides full authentic L negative or waives startup integrity |
+| FR-034-AC-68 | PLANNED/UNRUN: No pidfd_getfd/pidfd setns/process_madvise/numeric reopening | Capability operation exceeds negative cleanup scope |
+| FR-034-AC-69 | PLANNED/UNRUN: Unconfirmed or abnormal settlement keeps CleanupUnconfirmed/no evidence | Provisional original failure escapes settlement override |
+| FR-034-AC-70 | PLANNED/UNRUN: First emitted byte fixes immutable single candidate | Partial/full frame retired, rewritten or spliced |
+| FR-034-AC-71 | PLANNED/UNRUN: All due pre-send ticks and actual fresh complete named inputs | History/default repairs failed current observation |
+| FR-034-AC-72 | PLANNED/UNRUN: Late complete exhaustion retained/enforced until actual settlement | COMMIT clears fact or permits Code0 while real settlement pending |
+| FR-034-AC-73 | PLANNED/UNRUN: Claimed I termination plus separate real M reap/writerEOF/finaltick precede O normal return | Full published failure treated as settled |
+| FR-034-AC-74 | PLANNED/UNRUN: Absent peak field means no peak transport, no inferred zero/history/current validity | Fabricated zero or historical-current substitution |
+| FR-034-AC-75 | PLANNED/UNRUN: Later owned observation/collector/transport error blocks normal O Code0 | Original negative projected as final despite later genuine error |
 
 ### Stage-2 replacement expectations (PLANNED/UNRUN)
 
