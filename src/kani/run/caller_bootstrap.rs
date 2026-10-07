@@ -503,6 +503,9 @@ impl CallerBootstrap {
             super::bootstrap_control_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
+            super::launcher_reply_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
             super::caller_control_decode::decode_bytes().map_err(|error| {
                 CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
             })?,
@@ -1158,10 +1161,14 @@ impl CallerBootstrap {
         let received = self
             .launcher_control
             .transport()
-            .receive_prepared::<LauncherReply>(
+            .receive_prepared_decode(
                 &mut self.receive,
                 LauncherReply::rights_count,
                 self.deadline,
+                |payload| {
+                    super::launcher_reply_decode::launcher(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?;
         let control = received.control;
@@ -1273,10 +1280,14 @@ impl CallerBootstrap {
         }
         let Some(received) = self
             .launcher_receive
-            .advance::<LauncherReply>(
+            .advance_decode(
                 &self.launcher_control.transport(),
                 LauncherReply::rights_count,
                 cutoff,
+                |payload| {
+                    super::launcher_reply_decode::launcher(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?
         else {
@@ -2658,10 +2669,14 @@ impl CallerBootstrap {
         let received = self
             .launcher_control
             .transport()
-            .receive_prepared::<LauncherReply>(
+            .receive_prepared_decode(
                 &mut self.receive,
                 LauncherReply::rights_count,
                 cutoff,
+                |payload| {
+                    super::launcher_reply_decode::launcher(payload, &mut self.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
             )
             .map_err(CallerBootstrapError::Control)?;
         let launcher = self

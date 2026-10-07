@@ -18,7 +18,7 @@ use std::{
 use rustix::process::{pidfd_open, Pid, PidfdFlags, Signal};
 
 use super::{
-    control::{role_pair, ControlError, PreparedFrame, RoleCaller},
+    control::{role_pair, ControlError, PreparedFrame, PreparedReceive, RoleCaller},
     creator,
     outer_setup::{NamespaceIdentity, PreparedOuter, SetupError},
     protocol::BackendExit,
@@ -537,10 +537,19 @@ impl LauncherOwner {
                     .local()
                     .map_err(LauncherError::Deadline)?,
             );
+        let mut frame = PreparedReceive::prepare().map_err(LauncherError::Control)?;
         let received = self
             .bootstrap
             .transport()
-            .receive::<OuterArmReply>(OuterArmReply::rights_count, deadline)
+            .receive_prepared_decode(
+                &mut frame,
+                OuterArmReply::rights_count,
+                deadline,
+                |payload| {
+                    super::launcher_reply_decode::arm(payload, &mut self.input.decode_scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
+            )
             .map_err(LauncherError::Control)?;
         let sender = received.credentials.ok_or(LauncherError::MissingSender)?;
         if i32::try_from(child.id()).ok() != Some(sender.pid) || sender.uid != 0 || sender.gid != 0
@@ -564,13 +573,7 @@ impl LauncherOwner {
         {
             return Err(LauncherError::ArmMismatch);
         }
-        let [actual]: [OwnedFd; 1] =
-            received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
-                LauncherError::Control(ControlError::RightsCount {
-                    expected: 1,
-                    received: rights.len(),
-                })
-            })?;
+        let actual = received.rights.pop().ok_or(LauncherError::MissingPin)?;
         let actual_identity =
             rustix::fs::fstat(&actual).map_err(|error| LauncherError::Io(error.into()))?;
         let expected_identity =
