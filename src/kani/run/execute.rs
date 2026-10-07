@@ -48,6 +48,8 @@ use super::report_file::fresh_report_path;
 #[cfg(all(test, not(target_os = "linux")))]
 use super::report_file::remove_stale_report;
 
+pub use super::cross_role_cause::{KaniCauseMetadataIntegrityError, KaniCrossRoleCauseLoss};
+
 /// The stable code of a run refused because a stream carried more than its limit.
 pub const OUTPUT_OVER_LIMIT_CODE: &str = "kani_output_over_limit";
 
@@ -139,12 +141,22 @@ pub enum KaniExecutionRefusal {
     MemoryMechanismUnavailable {
         /// Typed context selected by the actual admission check.
         admission: KaniStartupAdmissionCause,
-        /// The original failed prerequisite check, including its original syscall error.
+        /// Original failed check, preserving local source identity and direct OS errno/kind.
+        /// Listed trusted-helper cross-role custom sources may instead retain their original
+        /// kind with [`KaniCrossRoleCauseLoss`], detected through `get_ref()`/downcast. That
+        /// marker denotes lost payload/chain, not a reconstructed original object or stage query.
+        /// Native-policy finite reconstructible sources retain their stronger typed identity.
+        /// An independently authenticated admission cause-metadata integrity fault carries
+        /// actual local InvalidData/no-errno [`KaniCauseMetadataIntegrityError`], detected by
+        /// the same typed downcast; its original producer cause is unknown, not replayed.
+        /// Optional diagnostics may be absent/lossy and never select this admission context.
         cause: std::io::Error,
     },
     /// Memory observation failed during a launch, so the backend tree was killed.
     MemoryObservationFailed {
-        /// The observation failure.
+        /// Diagnostic observation failure only; this variant has no public I/O cause carrier.
+        /// Finite cross-role facts and loss remain private, with no original-source/downcast
+        /// access or public stage query. Diagnostic text may be absent/lossy, never a selector.
         detail: String,
     },
     /// A batch exceeded its one aggregate memory ceiling. No member was classified.

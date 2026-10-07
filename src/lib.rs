@@ -127,8 +127,9 @@ pub use kani::output::report::{
 pub use kani::run::execute::{
     execute_kani_obligation, execute_kani_obligations, BackendStdioDescriptor,
     ChargedPeakNotObservedReason, ChargedPeakObservation, KaniBatchInvocation,
-    KaniExecutionEvidence, KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun,
-    KaniStartupAdmissionCause, KaniStartupCapability, OUTPUT_OVER_LIMIT_CODE, OUTPUT_UNREAD_CODE,
+    KaniCauseMetadataIntegrityError, KaniCrossRoleCauseLoss, KaniExecutionEvidence,
+    KaniExecutionRefusal, KaniExecutionRequest, KaniGroupRun, KaniStartupAdmissionCause,
+    KaniStartupCapability, OUTPUT_OVER_LIMIT_CODE, OUTPUT_UNREAD_CODE,
 };
 #[cfg(feature = "guardian-test-support")]
 pub use kani::run::fixture::{
