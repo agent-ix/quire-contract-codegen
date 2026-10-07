@@ -1,6 +1,6 @@
 ---
 id: FR-026
-title: "Reach each backend through one adapter trait and the closed backend enum"
+title: "Reach linked backends through one adapter trait and the closed backend enum"
 type: FR
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/StR-001
@@ -14,26 +14,27 @@ relationships:
   - target: ix://agent-ix/quire-spec-language/ADR-013
     type: references
 ---
-# FR-026: Reach each backend through one adapter trait and the closed backend enum
+# FR-026: Reach linked backends through one adapter trait and the closed backend enum
 
 ## Description
 
-The code generator shall hold everything specific to one proof backend in that backend's adapter,
+The code generator shall hold everything specific to one linked proof backend in that backend's adapter,
 one implementation of a single adapter trait, and shall reach an adapter only through an exhaustive
 match on the closed `BackendKind` enum
 ([ADR-002](../../decisions/ADR-002-backend-adapter-boundary.md) Q0, Q1 and Q4). ADR-002 Q4 states how a
-second backend registers.
+second linked backend registers. `Process(BackendId)` has no CG adapter; the
+driver's plugin host owns its process adapter (QSL ADR-029 PV-4).
 
 ## Inputs
 
 - The closed `BackendKind` enum ([FR-019](./FR-019-capability-settlement.md)).
-- One adapter per `BackendKind` variant. The Kani adapter is the one adapter today.
+- One adapter per linked `BackendKind` variant. Kani is the linked adapter here.
 
 ## Outputs
 
 - An adapter trait whose associated items are the four parts of an adapter: the generation arm,
   execution, the transcript parser and the witness renderer.
-- One implementation of that trait per `BackendKind` variant.
+- One implementation of that trait per linked `BackendKind` variant.
 
 ## Behavior
 
@@ -41,8 +42,10 @@ second backend registers.
   ([FR-022](./FR-022-routed-generation.md)), execution
   ([FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)), the transcript parser and
   the witness renderer ([FR-024](../../replay/functional/FR-024-counterexample-envelope-intake.md)).
-- The generator shall implement that trait once for each `BackendKind` variant.
-- The generator shall reach an adapter from settlement, routed generation, execution and the
+- The generator shall implement that trait once for each linked `BackendKind` variant.
+- The generator shall not implement a CG adapter for `Process(BackendId)`; its
+  generation arm returns empty `KindOutput::Process` as FR-022 states.
+- The generator shall reach a linked adapter from settlement, routed generation, execution and the
   terminal-record map ([FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md)) only through an
   exhaustive match on `BackendKind` with no catch-all arm.
 - The generator shall register no adapter at run time.
@@ -56,6 +59,7 @@ second backend registers.
 |----|----------|--------------|
 | FR-026-AC-1 | The Kani adapter implements the adapter trait, and a function generic over that trait reaches the Kani adapter's generation arm, execution, transcript parser and witness renderer through it. | Test (TC-037) |
 | FR-026-AC-4 | The execution evidence type is an associated type of the adapter trait, and the Kani adapter's is `KaniExecutionEvidence`. | Test (TC-037) |
+| FR-026-AC-5 | PLANNED (IR-629). `Process(id)` has no CG adapter trait implementation or CG execution path; an inspection of all adapter implementations and execution dispatch arms finds no process arm. | Analysis |
 
 ## Dependencies
 

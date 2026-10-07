@@ -40,10 +40,9 @@ parser stays in CG as part of its backend adapter.
 
 ## Decision
 
-### Q0 and Q1: one adapter trait per backend kind, reached through the closed enum
+### Q0 and Q1: the linked Kani adapter, reached through the closed enum
 
-A backend adapter owns everything specific to one `BackendKind`. It is one Rust trait, implemented
-once per kind, whose associated items are the adapter's four parts:
+The linked Kani backend has one CG adapter trait whose associated items are its four parts:
 
 1. **Generation arm.** The per-kind arm FR-022 dispatches to.
 2. **Execution.** Launch the installed backend and classify the run (FR-017).
@@ -52,8 +51,8 @@ once per kind, whose associated items are the adapter's four parts:
 4. **Witness renderer.** The one function that renders QSL's backend-witness transcript from the
    decoded values, admitted by `qsl_replay::Witness::parse` (FR-024).
 
-The closed `BackendKind` enum is the registry. An adapter is reached only through an exhaustive
-match on it, and no adapter is registered at run time.
+The closed `BackendKind` enum dispatches CG settlement and generation exhaustively. The Kani
+adapter is reached through its kind's arm; no CG adapter is registered at run time.
 [FR-026](../routed/functional/FR-026-backend-adapter-contract.md) states this.
 
 ### Q2: the adapter runs the installed Kani
@@ -73,9 +72,9 @@ item settled `unsupported` at negotiation has no run and no terminal value; its 
 capability kind from `quire.capability-kind/v1` (QSpec FR-290).
 [FR-029](../kani/functional/FR-029-run-outcome-terminal-record.md) states this.
 
-### Q4: a second backend registers through the closed enum
+### Q4: another linked backend registers through the closed enum
 
-A second backend registers in these steps:
+Another linked backend registers in these steps:
 
 1. Its descriptor appears in the FR-331 provider envelope, which QSpec authors and QSL converts
    (QSL ADR-013 T-7).
@@ -84,19 +83,19 @@ A second backend registers in these steps:
 3. The new adapter implements the adapter trait, with real transcript captures of its own under
    `tests/fixtures/`.
 4. The adapter owns its own execution evidence type.
-5. FR-019, FR-022 and the test matrix gain the kind's rows. For the process-provider variant FR-019
-   and the matrix have them (IR-629), and FR-022's wait on FR-019 open question 3.
+5. FR-019, FR-022 and the test matrix gain the kind's rows.
 
 ### Amendment (IR-629): the process-provider variant
 
-QSL ADR-029 PV-4 gives `BackendKind` one variant for process providers. Its `negotiate_*` arm settles
-from the provider's manifest alone and never calls the plugin
-([FR-019](../routed/functional/FR-019-capability-settlement.md)). Q4's step 2 applies to it as to any
-variant. PV-4 states only the negotiation arm, so the variant's generation, adapter, execution and
-terminal-record arms are open until the QSL owner states them (FR-019 open question 3).
+QSL ADR-029 PV-4 gives `BackendKind` one `Process(BackendId)` variant for process providers.
+Its `negotiate_*` arm settles from the provider's manifest and the item's capability kind and full extent;
+it never calls the plugin ([FR-019](../routed/functional/FR-019-capability-settlement.md)).
+The process generation arm returns `KindOutput::Process` with no CG artifact. CG has no adapter,
+execution or terminal-record arm for a process provider: the driver runs the plugin host's process
+adapter and reads its FR-331 result. Q4's linked-backend adapter steps therefore do not apply to
+`Process(BackendId)`.
 
 ## Consequences
 
-- FR-026 and FR-029 state the adapter trait and the terminal-record map.
-- FR-019 and FR-022 gain rows when a backend kind is added: FR-019 has the process-provider rows, and
-  FR-022 gains its rows once FR-019 open question 3 is answered.
+- FR-026 and FR-029 state the linked Kani adapter trait and terminal-record map.
+- FR-019 and FR-022 state the process-provider settlement and empty generation arms.
