@@ -105,6 +105,58 @@ enum EntryState {
     RefusalDelivered,
 }
 
+/// Execute the trusted same-PID role on its one authenticated bootstrap endpoint. This owns no
+/// second process or shutdown worker: I retains the actual Child and settles every failed entry.
+/// Installation failure can send only the original bounded typed refusal, never positive Ready.
+/// A successful exec consumes all trusted descriptors before arbitrary recipe code can run.
+pub(super) fn run_entry(
+    identity: BuildIdentity,
+    initial_deadline: Instant,
+) -> Result<(), InstallerEntryError> {
+    let mut entry = InstallerEntry::receive(identity, initial_deadline)?;
+    if let Err(cause) = entry.install() {
+        entry.queue_policy_refusal(&cause)?;
+        let deadline = entry
+            .refusal_deadline
+            .ok_or(InstallerEntryError::UnexpectedState)?;
+        let mut delivered = false;
+        loop {
+            if delivered {
+                // Stay positively owned/pinnable until I's unchanged cancellation or the actual
+                // original refusal cutoff. EOF is a failure, never successful installation.
+                entry.require_refusal_custody()?;
+            } else {
+                delivered = entry.send_policy_refusal()?;
+            }
+            park_entry_until(deadline)?;
+        }
+    }
+    let deadline = entry.startup_deadline;
+    while !entry.send_ready(deadline)? {
+        park_entry_until(deadline)?;
+    }
+    let recipe = loop {
+        if let Some(recipe) = entry.receive_exec(deadline)? {
+            break recipe;
+        }
+        park_entry_until(deadline)?;
+    };
+    // The existing authenticated fd0 bootstrap remains CLOEXEC and stable through prepare/exec.
+    // Consuming the entry closes every temporary trusted capability. Exact std exec retains PID;
+    // any returned OS error is post-Dispatch recipe failure, not a policy startup refusal.
+    let prepared = entry.prepare_exec(recipe)?;
+    Err(InstallerEntryError::Io(prepared.exec()))
+}
+
+fn park_entry_until(deadline: Instant) -> Result<(), InstallerEntryError> {
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or(InstallerEntryError::Deadline(DeadlineError::Expired))?;
+    std::thread::park_timeout(remaining.min(super::owned::TICK));
+    Ok(())
+}
+
 /// Actual single-thread sanitized helper, positively owned by I. Its startup descriptor remains
 /// fd0 CLOEXEC through exact same-PID exec; all other trusted capabilities are owned CLOEXEC.
 pub(super) struct InstallerEntry {
