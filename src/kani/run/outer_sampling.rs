@@ -494,7 +494,7 @@ impl OuterRunPreparation {
                     .map_err(SamplingError::Deadline)?;
                 sampling
                     .collector
-                    .begin_owner_stop(Some(cutoff))
+                    .begin_owner_stop()
                     .map_err(|cause| SamplingError::Report {
                         operation: CauseOperation::ReportCollection,
                         cause,
@@ -567,12 +567,14 @@ impl OuterRunPreparation {
         };
         if let Some(collector) = collector {
             if !delivery.collector_stopped {
-                collector.begin_owner_stop(Some(cutoff)).map_err(|cause| {
-                    SamplingError::Report {
+                // Entry only retires the owned writer. The actor checks its original cutoff
+                // above; bounded draining below retains that same cutoff inside the collector.
+                collector
+                    .begin_owner_stop()
+                    .map_err(|cause| SamplingError::Report {
                         operation: CauseOperation::ReportCollection,
                         cause,
-                    }
-                })?;
+                    })?;
                 delivery.collector_stopped = true;
             }
             if !collector
@@ -870,7 +872,7 @@ impl OuterRunOwner {
                 cutoff,
                 stop: *stop,
                 monitor: None,
-                storage: Some(prepared.commit),
+                storage: prepared.commit,
             });
             self.state = OuterRunState::CallerCancelled;
             caller_control = None;
