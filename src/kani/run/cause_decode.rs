@@ -166,9 +166,9 @@ pub(super) fn decode_io(
 
 // Resolve the owning enum label before its unit body, preserving an earlier kind fault even
 // when later null/closing syntax is malformed. This is only the policy-derived unit grammar.
-fn derived_unit<T>(
-    decoder: &mut Decoder<'_, '_>,
-    lookup: impl FnOnce(Text<'_>) -> Result<T, DecodeError>,
+fn derived_unit<'input, T>(
+    decoder: &mut Decoder<'input, '_>,
+    lookup: impl FnOnce(Text<'input>) -> Result<T, DecodeError>,
 ) -> Result<T, DecodeError> {
     match decoder.peek_kind()? {
         ValueKind::String => lookup(decoder.string()?),
