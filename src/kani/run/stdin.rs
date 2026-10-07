@@ -202,6 +202,40 @@ mod tests {
     use std::os::fd::AsFd;
 
     /// Trace: FR-034-AC-16, FR-034-AC-17
+    /// Tests transfer of an actual captured description, not full helper exec-entry coverage.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn per_run_clone_keeps_open_capture_and_the_original_shared_file_position() {
+        let source =
+            rustix::fs::memfd_create("per-run-original-input", rustix::fs::MemfdFlags::empty())
+                .unwrap();
+        rustix::io::write(&source, b"abcdef").unwrap();
+        rustix::fs::seek(&source, rustix::fs::SeekFrom::Start(0)).unwrap();
+        let captured = OriginalStdin::capture(source.as_fd()).unwrap();
+        let per_run = captured.clone_for_run().unwrap();
+        let (OriginalStdin::Open(original), OriginalStdin::Open(run)) = (captured, per_run) else {
+            panic!("transport CLOEXEC must not reclassify original Open as Closed");
+        };
+        assert!(rustix::io::fcntl_getfd(&run)
+            .unwrap()
+            .contains(rustix::io::FdFlags::CLOEXEC));
+        let mut first = [0; 1];
+        assert_eq!(rustix::io::read(&original, &mut first).unwrap(), 1);
+        assert_eq!(&first, b"a");
+        let mut remaining = [0; 5];
+        assert_eq!(rustix::io::read(&run, &mut remaining).unwrap(), 5);
+        assert_eq!(&remaining, b"bcdef");
+        assert_eq!(
+            rustix::fs::seek(&source, rustix::fs::SeekFrom::Current(0)).unwrap(),
+            6
+        );
+        assert!(matches!(
+            OriginalStdin::Closed.clone_for_run().unwrap(),
+            OriginalStdin::Closed
+        ));
+    }
+
+    /// Trace: FR-034-AC-16, FR-034-AC-17
     #[test]
     fn original_cloexec_source_is_closed_at_the_inherited_exec_boundary() {
         let (source, _writer) = rustix::pipe::pipe_with(rustix::pipe::PipeFlags::CLOEXEC).unwrap();
