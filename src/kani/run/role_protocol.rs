@@ -337,6 +337,7 @@ pub(super) enum TerminalDisposition {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(super) enum OwnerStopCause {
     ResourceExhausted,
+    TimedOut,
 }
 
 /// O's terminal transaction remains separate from the already consumed I lease. A decoded
@@ -381,4 +382,220 @@ pub(super) enum CallerTerminalControl {
         authority: RunAuthority,
         bytes: u64,
     },
+}
+
+/// Exact alternatives on C's one original startup stream. OwnerStop can shorten the original
+/// clock under irreversible cancellation; it cannot authorize any phase or attest cleanup.
+pub(super) enum OuterStartupControl {
+    Phase(OuterPhaseReply),
+    OwnerStop {
+        authority: RunAuthority,
+        peaks: MeasuredPeaks,
+        stop: StopStamp,
+        cause: OwnerStopCause,
+    },
+}
+
+impl OuterStartupControl {
+    pub(super) fn rights_count(&self) -> usize {
+        match self {
+            Self::Phase(reply) => reply.rights_count(),
+            Self::OwnerStop { .. } => 0,
+        }
+    }
+
+    pub(super) fn clock_only(&self) -> bool {
+        matches!(self, Self::OwnerStop { .. })
+    }
+}
+
+#[derive(Clone, Copy, Deserialize)]
+enum StartupReplyKind {
+    MonitorSpawned,
+    InnerClaimed,
+    GateReleased,
+    Committed,
+}
+
+// Flat borrowed/scalar decoding avoids serde's internally-tagged Content accumulator. First
+// select the tag without owning ignored fields, then enforce that selected variant's exact map.
+#[derive(Deserialize)]
+struct StartupReplySelector {
+    kind: StartupReplyKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SimplePhaseReply {
+    kind: StartupReplyKind,
+    authority: RunAuthority,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClaimedPhaseReply {
+    kind: StartupReplyKind,
+    authority: RunAuthority,
+    start: u64,
+    namespace: NamespaceIdentity,
+}
+
+#[derive(Deserialize)]
+enum StopDispositionKind {
+    OwnerStop,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StopDisposition {
+    kind: StopDispositionKind,
+    cause: OwnerStopCause,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StopCommittedReply {
+    kind: StartupReplyKind,
+    authority: RunAuthority,
+    peaks: MeasuredPeaks,
+    stop: StopStamp,
+    disposition: StopDisposition,
+}
+
+/// Decode only a phase reply or the existing complete typed nonreport commit. No fallback to
+/// report/Ready/Dispatch parsing exists. Preflight bounds integer/string parser scratch paths;
+/// every second pass checks the exact selected schema, duplicate fields and complete JSON EOF.
+pub(super) fn decode_outer_startup(
+    payload: &[u8],
+) -> Result<OuterStartupControl, super::control::ControlError> {
+    use super::control::ControlError;
+    use serde::de::Error as _;
+    let invalid = || {
+        ControlError::InvalidEncoding(serde_json::Error::custom("unexpected outer startup reply"))
+    };
+    super::startup_cause::check_scratch_free_json(payload)
+        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
+    let selected: StartupReplySelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selected.kind {
+        StartupReplyKind::MonitorSpawned | StartupReplyKind::GateReleased => {
+            let reply: SimplePhaseReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            let phase = match reply.kind {
+                StartupReplyKind::MonitorSpawned => OuterPhaseReply::MonitorSpawned {
+                    authority: reply.authority,
+                },
+                StartupReplyKind::GateReleased => OuterPhaseReply::GateReleased {
+                    authority: reply.authority,
+                },
+                StartupReplyKind::InnerClaimed | StartupReplyKind::Committed => {
+                    return Err(invalid())
+                }
+            };
+            Ok(OuterStartupControl::Phase(phase))
+        }
+        StartupReplyKind::InnerClaimed => {
+            let reply: ClaimedPhaseReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(reply.kind, StartupReplyKind::InnerClaimed) {
+                return Err(invalid());
+            }
+            Ok(OuterStartupControl::Phase(OuterPhaseReply::InnerClaimed {
+                authority: reply.authority,
+                start: reply.start,
+                namespace: reply.namespace,
+            }))
+        }
+        StartupReplyKind::Committed => {
+            let reply: StopCommittedReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(reply.kind, StartupReplyKind::Committed)
+                || !matches!(reply.disposition.kind, StopDispositionKind::OwnerStop)
+            {
+                return Err(invalid());
+            }
+            Ok(OuterStartupControl::OwnerStop {
+                authority: reply.authority,
+                peaks: reply.peaks,
+                stop: reply.stop,
+                cause: reply.disposition.cause,
+            })
+        }
+    }
+}
+
+/// Fixed owning scalar decode/storage reservation, separate from the already retained frame
+/// payload/right buffers. No String/Vec/Content accumulator belongs to this schema decoder.
+pub(super) fn outer_startup_decode_bytes() -> Result<u64, super::control::ControlError> {
+    let packet = [
+        std::mem::size_of::<SimplePhaseReply>(),
+        std::mem::size_of::<ClaimedPhaseReply>(),
+        std::mem::size_of::<StopCommittedReply>(),
+    ]
+    .into_iter()
+    .max()
+    .ok_or(super::control::ControlError::EncodedBytesExceeded)?;
+    let total = packet
+        .checked_add(std::mem::size_of::<StartupReplySelector>())
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<OuterStartupControl>()))
+        .ok_or(super::control::ControlError::EncodedBytesExceeded)?;
+    u64::try_from(total).map_err(|_| super::control::ControlError::EncodedBytesExceeded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kani::run::role_deadline::StopOrigin;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-38.
+    #[test]
+    fn provisional_stop_decoder_requires_exact_complete_metadata_and_never_accepts_report() {
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Outer).unwrap();
+        let original = serde_json::to_value(OuterTerminalReply::Committed {
+            authority,
+            peaks: MeasuredPeaks {
+                tree_rss_bytes: 17,
+                charged_bytes: 31,
+            },
+            stop,
+            disposition: TerminalDisposition::OwnerStop {
+                cause: OwnerStopCause::TimedOut,
+            },
+        })
+        .unwrap();
+        for field in ["kind", "authority", "peaks", "stop", "disposition"] {
+            let mut missing = original.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(
+                decode_outer_startup(&serde_json::to_vec(&missing).unwrap()).is_err(),
+                "{field}"
+            );
+            let mut wrong = original.clone();
+            wrong[field] = serde_json::Value::Null;
+            assert!(
+                decode_outer_startup(&serde_json::to_vec(&wrong).unwrap()).is_err(),
+                "{field}"
+            );
+        }
+        let mut extra = original.clone();
+        extra["unknown"] = true.into();
+        assert!(decode_outer_startup(&serde_json::to_vec(&extra).unwrap()).is_err());
+        let mut report = original.clone();
+        report["disposition"] = serde_json::json!({ "kind": "Report" });
+        assert!(decode_outer_startup(&serde_json::to_vec(&report).unwrap()).is_err());
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let mut trailing = bytes.clone();
+        trailing.extend_from_slice(b"{}");
+        assert!(decode_outer_startup(&trailing).is_err());
+        let encoded = String::from_utf8(bytes).unwrap();
+        let duplicate = encoded.replacen(
+            "\"kind\":\"Committed\"",
+            "\"kind\":\"Committed\",\"kind\":\"Committed\"",
+            1,
+        );
+        assert!(decode_outer_startup(duplicate.as_bytes()).is_err());
+        let escaped = encoded.replacen("Committed", "\\u0043ommitted", 1);
+        assert!(decode_outer_startup(escaped.as_bytes()).is_err());
+    }
 }

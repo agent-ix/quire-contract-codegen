@@ -91,7 +91,7 @@ pub(super) struct OuterSampling {
     collector: ReportCollector,
     settings: RunSettings,
     stops: StopTimeline,
-    resource_stopped: bool,
+    owner_stop: Option<OwnerStopCause>,
 }
 
 /// One actual O actor composes the existing production phases, I completion and terminal
@@ -118,7 +118,7 @@ enum OuterRunState {
     AwaitReportEof,
     Terminal,
     Committed,
-    ResourceStopped,
+    OwnerStopped,
 }
 
 /// Private production progress only; none of these variants grants C evidence or cleanup credit.
@@ -128,6 +128,7 @@ pub(super) enum OuterRunProgress {
     BackendDispatched,
     BackendCompleted,
     ResourceExhausted,
+    OwnerStopped { cause: OwnerStopCause },
     TerminalCommitted,
 }
 
@@ -149,10 +150,11 @@ impl OuterRunOwner {
         let completion = InnerCompletion::prepare()?;
         let terminal_prepared = TerminalPreparation::prepare()?;
         let mut sampling = OuterSampling::prepare(outer, launcher, settings)?;
-        let exhausted = matches!(sampling.tick(outer, caller)?, MemoryTick::Exhausted(_));
-        let monitor = if exhausted {
+        sampling.tick(outer, caller)?;
+        let stopped = sampling.owner_stop.is_some();
+        let monitor = if stopped {
             // Preserve the actual complete sample/ledger instead of losing this independent
-            // setup resource stop as a generic startup error. No writer or child is exposed.
+            // setup owner stop as a generic startup error. No writer or child is exposed.
             None
         } else {
             Some(sampling.prepare_inner_monitor(outer, caller_pin, inner_endpoint)?)
@@ -166,8 +168,8 @@ impl OuterRunOwner {
             terminal: None,
             inner_settlement: None,
             startup_deadline,
-            state: if exhausted {
-                OuterRunState::ResourceStopped
+            state: if stopped {
+                OuterRunState::OwnerStopped
             } else {
                 OuterRunState::Startup
             },
@@ -201,13 +203,26 @@ impl OuterRunOwner {
         if self
             .sampling
             .as_ref()
-            .is_some_and(|sampling| sampling.resource_stopped)
+            .is_some_and(|sampling| sampling.owner_stop.is_some())
         {
-            // A later lower RSS sample cannot undo the genuine earlier resource stop or
+            // A later lower RSS sample cannot undo the genuine earlier owner stop or
             // reopen startup/Dispatch/report progress while the same owner settles children.
-            self.state = OuterRunState::ResourceStopped;
+            self.state = OuterRunState::OwnerStopped;
         }
-        if matches!(self.state, OuterRunState::ResourceStopped) {
+        if matches!(self.state, OuterRunState::OwnerStopped) {
+            if self
+                .phases
+                .pending_reply
+                .as_ref()
+                .is_some_and(|reply| reply.send.has_partial_frame())
+            {
+                // A stop commit cannot replace or splice an already started C/O phase frame.
+                // Refusal retains the actual role owners for the caller's bounded cancellation.
+                return Err(SamplingError::UnexpectedPhase);
+            }
+            // Zero-progress replies never entered the stream. Any fully emitted reply remains
+            // queued for C's same original framer; neither case authorizes more O phase work.
+            drop(self.phases.pending_reply.take());
             // Keep complete actual observations and discarded-reader work during every real
             // M stop/reap attempt. M reap is separate from actual outer INIT termination.
             let sampling = self
@@ -225,7 +240,7 @@ impl OuterRunOwner {
                 None => Some(MonitorStopSettlement::NotCreated),
             };
             let Some(settlement) = settlement else {
-                return Ok(OuterRunProgress::ResourceExhausted);
+                return sampling.stop_progress();
             };
             // For the nonreport branch only, actual O termination later confirms its unclaimed
             // tree (FR034-279/285..292). No InnerSettlement, report EOF or seal is manufactured.
@@ -273,9 +288,9 @@ impl OuterRunOwner {
                         .ok_or(SamplingError::InvalidMonitorTransition)?,
                     self.startup_deadline,
                 )?;
-                if sampling.resource_stopped {
-                    self.state = OuterRunState::ResourceStopped;
-                    return Ok(OuterRunProgress::ResourceExhausted);
+                if sampling.owner_stop.is_some() {
+                    self.state = OuterRunState::OwnerStopped;
+                    return sampling.stop_progress();
                 }
                 if matches!(progress, PhaseProgress::GateReleased) {
                     self.state = OuterRunState::Backend;
@@ -294,8 +309,8 @@ impl OuterRunOwner {
                     CompletionProgress::Pending => Ok(OuterRunProgress::Pending),
                     CompletionProgress::Dispatched => Ok(OuterRunProgress::BackendDispatched),
                     CompletionProgress::Exhausted => {
-                        self.state = OuterRunState::ResourceStopped;
-                        Ok(OuterRunProgress::ResourceExhausted)
+                        self.state = OuterRunState::OwnerStopped;
+                        sampling.stop_progress()
                     }
                     CompletionProgress::Completed(_) => {
                         self.state = OuterRunState::AwaitCompletedClose;
@@ -304,13 +319,13 @@ impl OuterRunOwner {
                 }
             }
             OuterRunState::AwaitCompletedClose => {
-                let (tick, closed) = self
+                let (_tick, closed) = self
                     .terminal_prepared
                     .as_mut()
                     .ok_or(SamplingError::InvalidTerminalTransition)?
                     .receive_completed_close(sampling, &self.completion, outer, caller)?;
-                if matches!(tick, MemoryTick::Exhausted(_)) {
-                    return Ok(OuterRunProgress::ResourceExhausted);
+                if sampling.owner_stop.is_some() {
+                    return sampling.stop_progress();
                 }
                 if closed {
                     self.state = OuterRunState::AwaitInnerSettlement;
@@ -326,8 +341,9 @@ impl OuterRunOwner {
                 if Instant::now() >= cutoff {
                     return Err(SamplingError::Deadline(DeadlineError::Expired));
                 }
-                if matches!(sampling.tick(outer, caller)?, MemoryTick::Exhausted(_)) {
-                    return Ok(OuterRunProgress::ResourceExhausted);
+                sampling.tick(outer, caller)?;
+                if sampling.owner_stop.is_some() {
+                    return sampling.stop_progress();
                 }
                 if matches!(self.state, OuterRunState::AwaitInnerSettlement) {
                     self.inner_settlement = self
@@ -362,7 +378,7 @@ impl OuterRunOwner {
                 self.state = OuterRunState::Terminal;
                 Ok(OuterRunProgress::Pending)
             }
-            OuterRunState::Terminal | OuterRunState::Committed | OuterRunState::ResourceStopped => {
+            OuterRunState::Terminal | OuterRunState::Committed | OuterRunState::OwnerStopped => {
                 Err(SamplingError::InvalidTerminalTransition)
             }
         }
@@ -476,7 +492,7 @@ impl TerminalPreparation {
         }
         self.poisoned = true;
         let tick = sampling.tick(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
+        if sampling.owner_stop.is_some() {
             self.poisoned = false;
             return Ok((tick, false));
         }
@@ -607,9 +623,12 @@ impl TerminalPreparation {
         monitor_stop: MonitorStopSettlement,
         deadline: Instant,
     ) -> Result<TerminalDelivery, SamplingError> {
-        if self.poisoned || !sampling.resource_stopped || Instant::now() >= deadline {
+        if self.poisoned || Instant::now() >= deadline {
             return Err(SamplingError::InvalidTerminalTransition);
         }
+        let cause = sampling
+            .owner_stop
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
         let original = observation_deadline(&sampling.settings, &sampling.stops)?
             .ok_or(SamplingError::InvalidTerminalTransition)?;
         if deadline > original {
@@ -628,9 +647,7 @@ impl TerminalPreparation {
             read_ack: self.read_ack,
             bytes: None,
             deadline,
-            disposition: TerminalDisposition::OwnerStop {
-                cause: OwnerStopCause::ResourceExhausted,
-            },
+            disposition: TerminalDisposition::OwnerStop { cause },
             discarded: Some(sampling.collector),
             monitor_stop: Some(monitor_stop),
             poisoned: false,
@@ -934,7 +951,7 @@ impl InnerMonitor {
             return Err(SamplingError::InvalidMonitorTransition);
         }
         let tick = sampling.tick(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
+        if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
             return Ok(tick);
         }
         let InnerMonitorState::Gated(claim) =
@@ -966,7 +983,7 @@ impl InnerMonitor {
             return Err(SamplingError::InvalidMonitorTransition);
         }
         let tick = sampling.tick(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
+        if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
             return Ok((tick, false));
         }
         let deadline = sampling
@@ -1044,7 +1061,7 @@ impl InnerCompletion {
         monitor: &InnerMonitor,
     ) -> Result<CompletionProgress, SamplingError> {
         let tick = sampling.tick(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
+        if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
             return Ok(CompletionProgress::Exhausted);
         }
         if !matches!(monitor.state, InnerMonitorState::Bootstrapped) {
@@ -1222,7 +1239,7 @@ impl OuterPhases {
         );
         if let Some(reply) = self.pending_reply.as_mut() {
             let tick = sampling.tick(outer, caller)?;
-            if matches!(tick, MemoryTick::Exhausted(_)) {
+            if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
                 return Ok(PhaseProgress::Exhausted);
             }
             let deadline = sampling
@@ -1251,7 +1268,7 @@ impl OuterPhases {
         }
         if matches!(self.phase, OuterPhase::Bootstrapping) {
             let (tick, sent) = monitor.bootstrap_tick(sampling, outer, caller, startup_deadline)?;
-            if matches!(tick, MemoryTick::Exhausted(_)) {
+            if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
                 return Ok(PhaseProgress::Exhausted);
             }
             if sent {
@@ -1268,7 +1285,7 @@ impl OuterPhases {
         }
         if matches!(self.phase, OuterPhase::Claiming) {
             let (tick, claimed) = monitor.claim_tick(sampling, outer, caller, startup_deadline)?;
-            if matches!(tick, MemoryTick::Exhausted(_)) {
+            if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
                 return Ok(PhaseProgress::Exhausted);
             }
             if claimed {
@@ -1291,7 +1308,7 @@ impl OuterPhases {
             return Ok(PhaseProgress::Pending);
         }
         let tick = sampling.tick(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
+        if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
             return Ok(PhaseProgress::Exhausted);
         }
         let deadline = sampling
@@ -1336,7 +1353,7 @@ impl OuterPhases {
             }
             (OuterPhase::ClaimedGated, OuterPhaseCommand::ReleaseGate { .. }) => {
                 let tick = monitor.release_gate(sampling, outer, caller, startup_deadline)?;
-                if matches!(tick, MemoryTick::Exhausted(_)) {
+                if matches!(tick, MemoryTick::Exhausted(_)) || sampling.owner_stop.is_some() {
                     return Ok(PhaseProgress::Exhausted);
                 }
                 self.phase = OuterPhase::Bootstrapping;
@@ -1410,9 +1427,16 @@ impl OuterSampling {
             ledger,
             collector,
             stops: StopTimeline::prepare(settings.started).map_err(SamplingError::Deadline)?,
-            resource_stopped: false,
+            owner_stop: None,
             settings,
         })
+    }
+
+    fn stop_progress(&self) -> Result<OuterRunProgress, SamplingError> {
+        let cause = self
+            .owner_stop
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        Ok(OuterRunProgress::OwnerStopped { cause })
     }
 
     /// One real observation followed by finite collector work. Independently observed resource
@@ -1445,20 +1469,42 @@ impl OuterSampling {
             outer,
             caller,
         )?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
-            self.stops
-                .capture_once(StopOrigin::Outer)
-                .map_err(SamplingError::Deadline)?;
-            // The genuine independent complete sample selects stop mode. Closing only the
-            // collector's still-owned writer does not signal/reap M/I or prove writer EOF.
-            self.resource_stopped = true;
-            self.collector
-                .begin_owner_stop()
-                .map_err(SamplingError::Report)?;
+        if self.owner_stop.is_none() {
+            // Only a fresh complete observation may select a resource stop. It precedes the
+            // clock check, so genuine memory excess wins simultaneous observed work expiry.
+            let cause = if matches!(tick, MemoryTick::Exhausted(_)) {
+                Some(OwnerStopCause::ResourceExhausted)
+            } else if self
+                .stops
+                .active_deadline(self.settings.settlement_reserve, self.settings.deadline)
+                .map_err(SamplingError::Deadline)?
+                .is_none()
+                && self
+                    .settings
+                    .work_deadline()
+                    .map_err(SamplingError::Deadline)?
+                    .is_some_and(|deadline| Instant::now() >= deadline)
+            {
+                // An already observed completion ended work; its settlement cannot be turned
+                // into a later work timeout. Never-elapsing work has no manufactured cutoff.
+                Some(OwnerStopCause::TimedOut)
+            } else {
+                None
+            };
+            if let Some(cause) = cause {
+                self.stops
+                    .capture_once(StopOrigin::Outer)
+                    .map_err(SamplingError::Deadline)?;
+                self.owner_stop = Some(cause);
+                // Close only the collector's still-owned writer. This is not child settlement.
+                self.collector
+                    .begin_owner_stop()
+                    .map_err(SamplingError::Report)?;
+            }
         }
         let deadline = observation_deadline(&self.settings, &self.stops)?;
-        if self.resource_stopped {
-            // Do not let malformed/partial report bytes replace the already genuine memory
+        if self.owner_stop.is_some() {
+            // Do not let malformed/partial report bytes replace the already genuine owner-stop
             // candidate. Actual finite reader EOF still requires all actual writers to close.
             self.collector
                 .drain_owner_stop(deadline)
@@ -1485,6 +1531,9 @@ impl OuterSampling {
         outer: &PreparedOuter<'_>,
         bootstrap: RoleEndpoint,
     ) -> Result<OuterMonitorOwner, SamplingError> {
+        if self.owner_stop.is_some() {
+            return Err(SamplingError::InvalidMonitorTransition);
+        }
         OuterMonitorOwner::prepare(
             outer,
             &self.settings.helper,
@@ -1538,7 +1587,7 @@ impl OuterSampling {
         startup_deadline: std::time::Instant,
     ) -> Result<(MemoryTick, Option<GatedClaim>), SamplingError> {
         let tick = self.tick(outer, caller)?;
-        if matches!(tick, MemoryTick::Exhausted(_)) {
+        if self.owner_stop.is_some() {
             return Ok((tick, None));
         }
         let claim = monitor
@@ -1563,7 +1612,7 @@ impl OuterSampling {
         outer: &PreparedOuter<'_>,
         caller: &RoleEndpoint,
     ) -> Result<(SealedReport, TerminalSampling), SamplingError> {
-        if self.resource_stopped {
+        if self.owner_stop.is_some() {
             return Err(SamplingError::InvalidTerminalTransition);
         }
         if !settlement.matches_report(self.collector.identity()) {
