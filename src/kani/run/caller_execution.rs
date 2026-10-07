@@ -222,7 +222,7 @@ impl CallerExecution {
         if self.roles.is_none() {
             self.roles = Some(
                 self.bootstrap
-                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::AfterCommit)
+                    .settle_launcher_chain(&self.clock, LauncherSettlementMode::ObserveOuterExit)
                     .map_err(CallerExecutionError::Bootstrap)?,
             );
         }
