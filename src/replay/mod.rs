@@ -4,6 +4,8 @@
 //! The witness decode types a Kani playback against the persisted argument bindings, and the
 //! function and frame replays build QSL's replay request from the decoded values.
 
+// Binding of QSL composite reports to their retained sent claim.
+pub(crate) mod composite;
 // Native replay of a frame counterexample.
 // Implements: FR-015-AC-33
 pub(crate) mod frame;
