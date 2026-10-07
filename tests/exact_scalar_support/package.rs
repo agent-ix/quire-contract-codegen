@@ -2818,8 +2818,8 @@ pub fn corpus_package() -> PackageBuilder {
         // IR admits a `temporal_clause` only as a `temporal`-operator application over a
         // declared `parameter` with one `temporal_profile` law and a `temporal` formula argument
         // (the QSpec temporal-clause rule), so this node is that minimal clause rather than a
-        // `boolean.not` stand-in. CG refuses it as an unsupported `temporal` family; the refusal
-        // names `TEMPORAL_FORMULA`, the first unsupported node IR reaches from the clause.
+        // `boolean.not` stand-in. CG refuses it as an unsupported `temporal` family; IR checks
+        // the admitted closure in node-id order, which puts this clause before its formula.
         .application_code_with(
             TEMPORAL,
             "temporal",
@@ -3205,8 +3205,9 @@ pub const V_PARAM_WRONG_FORM: u32 = 117;
 /// `a + 1` with the result typed `[0, 29]`: the literal operand has no bound of its own.
 pub const TWO_PARAMETER_LITERAL: u32 = 2056;
 
-/// `p`, a parameter typed by the plain Integer scalar type: it owns no bound.
-pub const V_PARAM_PLAIN: u32 = 118;
+/// `p`, the corpus's plain-Integer parameter: it owns no bound. Reuse its node because
+/// a second parameter with the same body and type has the same structural key.
+pub const V_PARAM_PLAIN: u32 = TEMPORAL_PARAMETER;
 /// `e: Int[1, 9]` and `f: Int[100, 200]`.
 pub const V_PARAM_E: u32 = 119;
 pub const V_PARAM_F: u32 = 120;
@@ -3237,13 +3238,6 @@ pub fn two_parameter_package() -> PackageBuilder {
     let f = builder.bound(&Bound::Integer(100, 200));
     let negated = builder.bound(&Bound::Integer(-9, -1));
     let product = builder.bound(&Bound::Integer(100, 1800));
-    builder.code(
-        V_PARAM_PLAIN,
-        "value",
-        "parameter",
-        &integer_type,
-        parameter_body("p", 0),
-    );
     for (code, bound) in [
         (V_PARAM_E, &e),
         (V_PARAM_F, &f),

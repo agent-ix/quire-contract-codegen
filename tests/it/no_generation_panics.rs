@@ -408,7 +408,7 @@ fn tc_042_ac8_the_body_check_flags_index_and_subtraction_and_passes_their_lookal
 /// `OperationNotRendered`; the unmodified claim is supported.
 #[test]
 fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_rendered() {
-    let (package, claim_map) = scalar_package();
+    let (package, claim_map, _) = scalar_package();
     let target = claim_map
         .items
         .iter()

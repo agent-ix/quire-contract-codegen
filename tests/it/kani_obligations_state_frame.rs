@@ -26,7 +26,12 @@ mod package;
 #[allow(dead_code)]
 pub(crate) mod subject;
 
-use std::{fs, path::PathBuf, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::PathBuf,
+    time::Duration,
+};
 
 use native_twin::{
     playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
@@ -336,13 +341,15 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         &reference_type,
         parameter_body("other", 1),
     );
-    builder.code(
-        shape.scoped(RESULT),
-        "value",
-        "parameter",
-        &key(T_BOOLEAN),
-        parameter_body("result", 1),
-    );
+    if shape.result {
+        builder.code(
+            shape.scoped(RESULT),
+            "value",
+            "parameter",
+            &key(T_BOOLEAN),
+            parameter_body("result", 1),
+        );
+    }
     let field_entry = |declaration: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name});
     let mut modifies = shape
         .modifies
@@ -546,6 +553,17 @@ struct Ids {
     frame: CheckedNodeId,
 }
 
+impl Ids {
+    fn resolved(self, fixture_ids: &package::FixtureIds) -> Self {
+        Self {
+            clause: fixture_ids.resolve(&self.clause),
+            object: fixture_ids.resolve(&self.object),
+            anchor: fixture_ids.resolve(&self.anchor),
+            frame: fixture_ids.resolve(&self.frame),
+        }
+    }
+}
+
 fn ids(shape: &Shape) -> Ids {
     let id = |digest: String| -> CheckedNodeId {
         serde_json::from_value(node_ref(&digest)).expect("node id")
@@ -559,13 +577,13 @@ fn ids(shape: &Shape) -> Ids {
 }
 
 fn fixture(shape: &Shape) -> Fixture {
-    let package = package_for(shape).admit();
+    let (package, fixture_ids) = package_for(shape).admit_resolved();
     let Ids {
         clause,
         object,
         anchor,
         frame,
-    } = ids(shape);
+    } = ids(shape).resolved(&fixture_ids);
     Fixture {
         package,
         clause,
@@ -1246,29 +1264,43 @@ fn arm_shapes() -> Vec<Shape> {
         .collect()
 }
 
-/// A package of `shapes`, with the ids of each shape's nodes.
+/// A package of the selected shapes, with their original arm-table indices.
 struct World {
     package: CheckedPackageV2,
-    ids: Vec<Ids>,
+    ids: BTreeMap<usize, Ids>,
 }
 
-fn world_of(shapes: &[Shape]) -> World {
-    // The corpus package alone nearly fills the default byte ceiling, so a package of many shapes
-    // is read under a larger one.
+fn world_for(indices: &[usize]) -> World {
+    let shapes = arm_shapes();
+    let selected = indices
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(|index| (index, &shapes[index]))
+        .collect::<Vec<_>>();
+    // The corpus package alone nearly fills the default byte ceiling, so even a small selected
+    // group is read under a larger one. Each test selects only the shapes whose clauses it uses.
     let limits = CheckedPackageReadLimits {
         bytes: 8 << 20,
         ..CheckedPackageReadLimits::bounded()
     };
+    let (package, fixture_ids) =
+        package_of(&selected.iter().map(|(_, shape)| *shape).collect::<Vec<_>>())
+            .admit_with_resolved(limits);
     World {
-        package: package_of(&shapes.iter().collect::<Vec<_>>()).admit_with(limits),
-        ids: shapes.iter().map(ids).collect(),
+        package,
+        ids: selected
+            .iter()
+            .map(|(index, shape)| (*index, ids(shape).resolved(&fixture_ids)))
+            .collect(),
     }
 }
 
-/// The package of every arm shape, admitted once.
-fn world() -> &'static World {
-    static WORLD: std::sync::OnceLock<World> = std::sync::OnceLock::new();
-    WORLD.get_or_init(|| world_of(&arm_shapes()))
+impl World {
+    fn ids(&self, shape: usize) -> &Ids {
+        &self.ids[&shape]
+    }
 }
 
 /// The subject the request's own `subject_path` names, which no `StateFrame` item reads.
@@ -1314,10 +1346,10 @@ fn selected_spec<'a>(
     }
 }
 
-fn spec(shape: usize, role: StateFrameRole) -> Spec<'static> {
+fn spec(world: &World, shape: usize, role: StateFrameRole) -> Spec<'_> {
     Spec {
-        package: &world().package,
-        clause: &world().ids[shape].clause,
+        package: &world.package,
+        clause: &world.ids(shape).clause,
         role,
         state_path: STATE_PATH,
         state_fields: &STATE_FIELDS,
@@ -1325,8 +1357,8 @@ fn spec(shape: usize, role: StateFrameRole) -> Spec<'static> {
     }
 }
 
-fn item(shape: usize, role: StateFrameRole) -> ObligationItem<'static> {
-    spec(shape, role).item()
+fn item(world: &World, shape: usize, role: StateFrameRole) -> ObligationItem<'_> {
+    spec(world, shape, role).item()
 }
 
 fn negotiate(items: &[ObligationItem<'_>]) -> KaniObligationOutcome {
@@ -1576,14 +1608,15 @@ fn tc_025_a_state_frame_item_with_no_bound_is_requires_bound() {
 #[test]
 fn tc_025_a_state_frame_item_outside_the_encoding_has_a_named_reason() {
     use StateFrameRole::{Contract, Frame};
+    let world = world_for(&[OK, REACHES_FUNCTION]);
     let frame_node = Spec {
-        clause: &world().ids[OK].frame,
-        ..spec(OK, Contract)
+        clause: &world.ids(OK).frame,
+        ..spec(&world, OK, Contract)
     }
     .item();
     let items = [
-        item(REACHES_FUNCTION, Contract),
-        item(REACHES_FUNCTION, Frame),
+        item(&world, REACHES_FUNCTION, Contract),
+        item(&world, REACHES_FUNCTION, Frame),
         frame_node,
     ];
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
@@ -1599,7 +1632,7 @@ fn tc_025_a_state_frame_item_outside_the_encoding_has_a_named_reason() {
         records[2].disposition,
         ObligationDisposition::Unsupported {
             reason: UnsupportedObligation::UnknownNodeKind {
-                node_id: world().ids[OK].frame.clone(),
+                node_id: world.ids(OK).frame.clone(),
                 node_tag: "state".to_owned(),
                 semantic_form: "frame".to_owned(),
             }
@@ -1710,9 +1743,15 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
             matches!(refusal, StateFrameRefusal::MalformedClause { .. })
         }),
     ];
+    let world = world_for(
+        &rows
+            .iter()
+            .map(|(_, shape, _, _)| *shape)
+            .collect::<Vec<_>>(),
+    );
     let items = rows
         .iter()
-        .map(|(_, shape, role, _)| item(*shape, *role))
+        .map(|(_, shape, role, _)| item(&world, *shape, *role))
         .collect::<Vec<_>>();
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
     assert_eq!(records.len(), rows.len());
@@ -1733,7 +1772,7 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
     else {
         panic!("a frame effect");
     };
-    assert_eq!(frame, &world().ids[CREATES].frame);
+    assert_eq!(frame, &world.ids(CREATES).frame);
 }
 
 /// An invalid item is a record of its own with its own code, the request is `Rejected` with every
@@ -1846,7 +1885,8 @@ fn tc_025_an_invalid_state_frame_item_rejects_the_request_with_every_record() {
 /// Trace: FR-015-AC-65, TC-025
 #[test]
 fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
-    let one = [item(OK, StateFrameRole::Contract)];
+    let world = world_for(&[OK]);
+    let one = [item(&world, OK, StateFrameRole::Contract)];
     let refuse = |items: &[ObligationItem<'_>], subject_path: &str, unwind: u32| {
         negotiate_kani_obligations(&KaniObligationRequest {
             ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
@@ -1891,11 +1931,12 @@ fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
 /// Trace: FR-015-AC-29, TC-025
 #[test]
 fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse() {
+    let world = world_for(&[NEGATION_GRANTS_ALL, GRANTS_ALL]);
     let refuse = |shape: usize, fields: &[&str]| {
         generate_state_frame_obligations(&StateFrameRequest {
             ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
-            package: &world().package,
-            clause: &world().ids[shape].clause,
+            package: &world.package,
+            clause: &world.ids(shape).clause,
             state_path: STATE_PATH,
             state_fields: fields,
             subject_path: SUBJECT_PATH,

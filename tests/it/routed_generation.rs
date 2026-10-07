@@ -30,7 +30,7 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let (package, claim_map) = scalar_package();
+    let (package, claim_map, _) = scalar_package();
     let generated = claim_map
         .items
         .iter()
@@ -485,10 +485,10 @@ fn tc_033_a_node_gets_identical_bytes_whatever_its_differently_named_siblings() 
 /// Trace: FR-022-AC-9, TC-033
 #[test]
 fn tc_033_nodes_sharing_a_stem_take_stable_ordinals_in_node_order() {
-    let package = package::two_parameter_package().admit();
+    let (package, ids) = package::two_parameter_package().admit_resolved();
     let mut same_operation = [
-        package::code_id(package::TWO_PARAMETER_SUM),
-        package::code_id(package::TWO_PARAMETER_LITERAL),
+        ids.resolve(&package::code_id(package::TWO_PARAMETER_SUM)),
+        ids.resolve(&package::code_id(package::TWO_PARAMETER_LITERAL)),
     ];
     same_operation.sort();
     let [lower, higher] = &same_operation;
@@ -556,8 +556,8 @@ fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_
 }
 
 fn route_two_parameter(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
-    let package = package::two_parameter_package().admit();
-    let node_id = package::code_id(code);
+    let (package, ids) = package::two_parameter_package().admit_resolved();
+    let node_id = ids.resolve(&package::code_id(code));
     let generation = generate_routed(
         &package,
         &[route(0, &node_id)],
@@ -687,8 +687,8 @@ fn tc_033_a_plain_typed_reference_operand_is_requires_bound_with_no_harness() {
 }
 
 fn route_qsl_shaped(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
-    let package = package::qsl_shaped_package().admit();
-    let node_id = package::code_id(code);
+    let (package, ids) = package::qsl_shaped_package().admit_resolved();
+    let node_id = ids.resolve(&package::code_id(code));
     let generation = generate_routed(
         &package,
         &[route(0, &node_id)],
@@ -1035,8 +1035,8 @@ fn routed_alone(package: &CheckedPackageV2, node: &CheckedNodeId) -> (Obligation
 /// Trace: FR-022-AC-8, FR-015-AC-3, FR-015-AC-5, FR-015-AC-14, TC-033
 #[test]
 fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
-    let (package, _) = scalar_package();
-    let node = |code| package::code_id(code);
+    let (package, _, ids) = scalar_package();
+    let node = |code| ids.resolve(&package::code_id(code));
 
     let (record, rejected) = routed_alone(&package, &node(package::MISSING));
     assert_eq!(
