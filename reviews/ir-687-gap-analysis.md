@@ -35,3 +35,11 @@ No test claims the new criteria. Because this change is spec-only, there is no c
 - Exhaustion arriving during a partial send is currently lost.
 
 The pre-Armed section's CODE-gate sentence is accurate: no L/C negative publication route exists, and positive-arm capability publication does not implement it.
+
+## Dispositions
+
+Round 1, re-checked at the branch's round-1 fix head (the commit after an ordinary main merge, subject 'Clarify negative startup publication and settlement contracts'; head named in the Linear marker only), against the newer published guardian review-source backup ref (the one whose head commit is 'Retain producer clock failure with borrowed outer setup custody'). Static, read-only; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:374-384 states no claimed-startup negative route exists today, that retire-on-fresh-exhaustion is pre-byte precedence, and that partial exhaustion can be lost. The cited CODE boundary was verified in the newer guardian source: finish_startup_negative_after_roles requires Reaped Code(0) and otherwise returns OuterExitAbnormal, and caller_public's unsettled cancellation path selects CleanupUnconfirmed |

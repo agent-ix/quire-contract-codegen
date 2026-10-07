@@ -47,3 +47,22 @@ Recorded clean, examined:
 - The absent peak field is worded "no peak transport", never zero.
 
 Merge with the sibling IR-655 head conflicts only at the tail of the FR-034 AC table, where both branches append rows. Resolve it by keeping AC-51..AC-56 followed by AC-57..AC-65. TC-049 auto-merges.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | AC-58 says "mapped sender UID/GID0", but the prose at FR-034:280 says "kernel sender UID/GID0", and L's actual check is on kernel sender credentials. The negative envelope has no mapped_uid field, but "mapped" can be read as a packet claim, which the same section forbids as authority. | spec/kani/functional/FR-034-caller-death-ownership.md:280; spec/kani/functional/FR-034-caller-death-ownership.md:1736 |
+| FND-006 | low | In both new TC-049 procedure sections, steps 2 to 5 run inline inside the paragraph of item 1 (for example "must refuse. 2. Prove ..."). They render as one list item, so the steps cannot be referenced or traced individually. | spec/kani/matrix/TC-049-caller-death-ownership.md:1056-1075; spec/kani/matrix/TC-049-caller-death-ownership.md:1081-1102 |
+| FND-007 | low | The pre-COMMIT rule says "O shall apply existing resource/deadline/refusal precedence", but it states concretely only the exhaustion-over-failure retirement. It does not say whether a work-deadline expiry or an owner refusal established before the first byte also retires an unsent failure. "Unpoisoned" is a source term with no spec definition. | spec/kani/functional/FR-034-caller-death-ownership.md:331-337 |
+
+## Dispositions
+
+Round 1, re-checked at the branch's round-1 fix head (the commit after an ordinary main merge, subject 'Clarify negative startup publication and settlement contracts'; head named in the Linear marker only), against the newer published guardian review-source backup ref (the one whose head commit is 'Retain producer clock failure with borrowed outer setup custody'). Static, read-only; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': COMMIT is defined as the first emitted byte; before it existing precedence applies and a fresh complete exhausting pre-send tick retires a zero-progress failure into OwnerStop while the earliest stop/cutoff never resets; after it the candidate is immutable (FR-034:331-337, AC-65, AC-70); TC step 1 adds failure-first/exhaustion-at-pre-send-tick. No FR-034 text contradicts this: the malformed-content precedence and the confirmed-settlement precedence passages are kept, and the FIRST-stop clock allowance is preserved separately |
+| FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:274-278 states the O→L negative is a NEW route and that the current zero-right OperationalFailure is O→C after arm; the TC 'existing O→L handling' sentence is gone |
+| FND-003 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': the Evidence delivery allocation table now has AC-57..AC-75 rows, plus a separate 'Negative startup transaction expectations' table |
+| FND-004 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': tests.md FR-034 row reads AC-1 through AC-75 and the TC-049 criterion list includes AC-57..AC-75 |

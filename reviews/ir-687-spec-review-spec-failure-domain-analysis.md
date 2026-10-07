@@ -36,3 +36,21 @@ Recorded clean:
 - Key L's forwarding to L-observable state.
 - Define the L-Armed/C-not-Armed split.
 - Give the authenticated forwarded negative an ordering rule against O-channel EOF while C is in AwaitArm.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | After COMMIT, the text says later complete exhaustion "shall not ... stop enforcement", but it never says what enforcement is in that window. Before COMMIT, exhaustion selects OwnerStop and O's existing owned cancellation (outer_sampling.rs exhaustion handling at :2345 and :2380). After COMMIT, it is unspecified whether a late ceiling breach makes O cancel the still-live claimed I and M at once, or whether O keeps waiting for C to close the I lease within the cutoff. One implementer adds an immediate cancellation; another records the fact and waits, leaving the whole-run memory ceiling exceeded until lease close or cutoff. No Test separates the two. | spec/kani/functional/FR-034-caller-death-ownership.md:356-362 |
+| FND-006 | low | The post-L-Armed rule covers a partial or failed direct O→C Armed, but not a partial O→L Armed followed by O failure (L-side partial frame then EOF). It also does not say whether "preserve actual partial bytes/rights solely for cleanup" lets C signal a pidfd received with an unauthenticated partial Armed frame, or only close it. | spec/kani/functional/FR-034-caller-death-ownership.md:289-299 |
+
+## Dispositions
+
+Round 1, re-checked at the branch's round-1 fix head (the commit after an ordinary main merge, subject 'Clarify negative startup publication and settlement contracts'; head named in the Linear marker only), against the newer published guardian review-source backup ref (the one whose head commit is 'Retain producer clock failure with borrowed outer setup custody'). Static, read-only; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': forwarding is keyed to L-observable state ('while L has not accepted a complete positive Armed'); after L accepts Armed, a zero/partial/failed direct O→C Armed is a startup-protocol failure with the original cause honestly possibly unavailable, partial bytes/rights kept for cleanup only, and a partial-Armed-as-positive mutant must fail (FR-034:280-299) |
+| FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': in AwaitArm C services both sources; direct O EOF is only a provisional source-closure fact, a full valid L negative within the original cutoff keeps cause/clock/capability, and an earlier valid negative is not discarded because EOF arrived first (FR-034:300-307, AC-67, TC step 4) |
+| FND-003 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': resource exhaustion is established at completion/evaluation of every named observation and checked sum; sampling start and history establish nothing (FR-034:339-341) |
+| FND-004 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:308-313 and AC-68 exclude pidfd_getfd, setns through the pidfd, process_madvise, other-actor authority and numeric-PID reopening, with an Inspection row |

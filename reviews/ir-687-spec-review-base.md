@@ -38,3 +38,18 @@ The cheapest wrong implementation for each AC, and what catches it:
 ## Verdict
 
 **Not merge-ready on its own merits.** Two medium testability gaps remain. The ids, status, Test/Inspection/Analysis method labels and Expected Results rows are otherwise sound. The examined criteria with no finding are AC-58, AC-59, AC-61, AC-62, AC-63 and AC-64.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | AC-72's runtime Test half cannot tell retention of late exhaustion from dropping it: holding settlement incomplete already forbids normal O Code0 for every implementation, and once settlement completes the planner's semantics give the dropped fact no observable consequence. Only the white-box source-state assertion with a mutant clearing the state at COMMIT can fail. TC-049 claimed-startup step 3 does not name the seam that assertion reads, and it says the runtime witness may stay owed. | spec/kani/functional/FR-034-caller-death-ownership.md:356-362; spec/kani/matrix/TC-049-caller-death-ownership.md:1089-1094 |
+
+## Dispositions
+
+Round 1, re-checked at the branch's round-1 fix head (the commit after an ordinary main merge, subject 'Clarify negative startup publication and settlement contracts'; head named in the Linear marker only), against the newer published guardian review-source backup ref (the one whose head commit is 'Retain producer clock failure with borrowed outer setup custody'). Static, read-only; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:356-362 names WHERE (actual accounting/history/owned-stop custody until settlement, ending with O exit, no after-exit diagnostic) and AC-72 plus TC step 3 add a mutant clearing that state at COMMIT |
+| FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:315-321 and AC-66 require an admitted KCMP_FILE or equivalent open-file-description oracle, reject st_dev/st_ino equality, and require same-O fresh-open and foreign-pidfd negatives; unavailable oracle is UNRUN |

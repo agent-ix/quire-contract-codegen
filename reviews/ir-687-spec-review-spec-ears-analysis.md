@@ -29,3 +29,19 @@ Most prose sentences name an actor (O, L or C) and use "shall", with When/While 
 **Changes requested (medium).** Split AC-65 into atomic criteria. The reservation comment names it as the single later-transaction rule, but each of its six obligations needs its own falsifiable row. Replace the two "may" sentences with explicit shall or shall-not obligations.
 
 Examined with no EARS finding: the triggers and actors at FR-034:274-279, 293-301 and 303-312, and the AC-59, AC-61, AC-62 and AC-64 rows.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | Two split criteria still bundle two obligations each. AC-66 bundles the same-bytes/one-clone route with the Test-oracle requirement. AC-72 bundles private retention until settlement with the no-normal-exit-while-pending rule. | spec/kani/functional/FR-034-caller-death-ownership.md:1744; spec/kani/functional/FR-034-caller-death-ownership.md:1750 |
+
+## Dispositions
+
+Round 1, re-checked at the branch's round-1 fix head (the commit after an ordinary main merge, subject 'Clarify negative startup publication and settlement contracts'; head named in the Linear marker only), against the newer published guardian review-source backup ref (the one whose head commit is 'Retain producer clock failure with borrowed outer setup custody'). Static, read-only; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': the former AC-65 is split into AC-65 and AC-70..AC-75, each one obligation |
+| FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': AC-57..AC-63 are now single obligations, with the remainder moved to AC-66..AC-69 |
+| FND-003 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': the new FR-034 sections contain no permissive may; COMMIT and retirement are explicit shall rules at FR-034:331-337 |
