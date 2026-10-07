@@ -25,10 +25,7 @@ use super::{
     creator,
     namespace::{GuardianIdentity, ReadyIdentityError},
     outer_setup::NamespaceIdentity,
-    protocol::{
-        current_build_identity, BackendExit, BuildIdentity, GuardianControl, GuardianRefusal,
-        RunAuthority,
-    },
+    protocol::{current_build_identity, BackendExit, BuildIdentity, GuardianRefusal, RunAuthority},
     publication::{Publication, Stage},
     report_storage::{PreparedReportRead, ReportError},
     resource_ledger::MeasuredPeaks,
@@ -76,6 +73,7 @@ pub(super) enum CallerBootstrapError {
     TerminalReplyMismatch,
     OuterExitAbnormal,
     OwnerStopObserved,
+    PolicyRefusalObserved,
 }
 
 impl std::fmt::Display for CallerBootstrapError {
@@ -116,7 +114,8 @@ impl std::error::Error for CallerBootstrapError {
             | Self::TerminalTransition
             | Self::TerminalReplyMismatch
             | Self::OuterExitAbnormal
-            | Self::OwnerStopObserved => None,
+            | Self::OwnerStopObserved
+            | Self::PolicyRefusalObserved => None,
         }
     }
 }
@@ -151,6 +150,8 @@ pub(super) struct CallerBootstrap {
     inner_hello_sent: bool,
     inner_auth_failed: bool,
     inner_ready: Option<VerifiedInitReady>,
+    startup_context: super::startup_cause::PreparedStartupContext,
+    policy_refusal: Option<super::startup_envelope::PolicyFailureCause>,
     terminal_receive: TerminalReceive,
     read_ack_storage: Option<FrameStorage>,
     terminal_phase: CallerTerminalPhase,
@@ -337,6 +338,10 @@ impl CallerBootstrap {
             .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
         let receive = PreparedReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let inner_receive = IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
+        let startup_context = super::startup_cause::PreparedStartupContext::new(
+            super::startup_envelope::CONTEXT_BYTES,
+        )
+        .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
         let outer_receive = IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let launcher_receive =
             IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
@@ -371,6 +376,10 @@ impl CallerBootstrap {
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            u64::try_from(startup_context.reserved_bytes())
+                .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
+            super::startup_envelope::inner_startup_decode_bytes()
+                .map_err(CallerBootstrapError::Control)?,
             super::role_protocol::outer_startup_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             u64::try_from(std::mem::size_of::<ExecutionClock>())
@@ -470,6 +479,8 @@ impl CallerBootstrap {
             inner_hello_sent: false,
             inner_auth_failed: false,
             inner_ready: None,
+            startup_context,
+            policy_refusal: None,
             terminal_receive,
             read_ack_storage: Some(read_ack_storage),
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
@@ -585,7 +596,7 @@ impl CallerBootstrap {
                 }
             }
             CallerPhase::ClaimedBootstrap => {
-                if self.inner_ready.is_none() && !self.authenticate_inner_step(cutoff)? {
+                if self.inner_ready.is_none() && !self.authenticate_inner_step(clock, cutoff)? {
                     return Ok(None);
                 }
                 self.require_startup_owners(cutoff)?;
@@ -1411,13 +1422,14 @@ impl CallerBootstrap {
     /// the earliest original work/stop cutoff; this method creates no three-second wait.
     pub(super) fn authenticate_inner_step(
         &mut self,
+        clock: &mut ExecutionClock,
         cutoff: Instant,
     ) -> Result<bool, CallerBootstrapError> {
         if self.inner_auth_failed {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         self.inner_auth_failed = true;
-        let result = self.advance_inner_authentication(cutoff);
+        let result = self.advance_inner_authentication(clock, cutoff);
         if result.is_ok() {
             self.inner_auth_failed = false;
         }
@@ -1426,6 +1438,7 @@ impl CallerBootstrap {
 
     fn advance_inner_authentication(
         &mut self,
+        clock: &mut ExecutionClock,
         cutoff: Instant,
     ) -> Result<bool, CallerBootstrapError> {
         if !matches!(self.phase, CallerPhase::ClaimedBootstrap) || self.inner_ready.is_some() {
@@ -1462,7 +1475,17 @@ impl CallerBootstrap {
         }
         let Some(received) = self
             .inner_receive
-            .advance::<GuardianControl>(&bootstrap.transport(), |_| 0, cutoff)
+            .advance_decode(
+                &bootstrap.transport(),
+                super::startup_envelope::InnerStartupHeader::rights_count,
+                cutoff,
+                |payload| {
+                    super::startup_envelope::decode_inner_startup(
+                        payload,
+                        &mut self.startup_context,
+                    )
+                },
+            )
             .map_err(CallerBootstrapError::Control)?
         else {
             return Ok(false);
@@ -1470,13 +1493,57 @@ impl CallerBootstrap {
         let sender = received
             .credentials
             .ok_or(CallerBootstrapError::MissingSender)?;
-        let control = received.control;
+        let control = match received.control {
+            super::startup_envelope::InnerStartupHeader::Ready(control) => control,
+            super::startup_envelope::InnerStartupHeader::Refused {
+                identity,
+                authority,
+                stop,
+                failure,
+            } => {
+                if identity != self.build_identity
+                    || authority != self.authority
+                    || stop.origin != super::role_deadline::StopOrigin::Backend
+                    || clock.original_deadline() != self.identity_deadline
+                {
+                    return Err(CallerBootstrapError::PhaseReplyMismatch);
+                }
+                // Actual retained I/monitor/O/C chain and mapped credentials are required even
+                // for a negative reply. A reason string or same backend PID cannot bind I.
+                self.verify_ready(sender, 0)
+                    .map_err(StageError::Identity)
+                    .map_err(CallerBootstrapError::Stage)?;
+                let settlement = clock
+                    .adopt_stop(stop, self.identity_clock)
+                    .map_err(CallerBootstrapError::Deadline)?;
+                if Instant::now() >= settlement {
+                    return Err(CallerBootstrapError::Control(ControlError::Deadline));
+                }
+                self.policy_refusal = Some(failure);
+                return Err(CallerBootstrapError::PolicyRefusalObserved);
+            }
+        };
         let ready = super::stages::verify_init_ready(self, control, sender, self.authority)
             .map_err(CallerBootstrapError::Stage)?;
         self.inner_ready = Some(ready);
         self.require_startup_owners(cutoff)?;
         self.publication.publish(Stage::InitReady);
         Ok(true)
+    }
+
+    /// Negative setup metadata is provisional until actual role settlement. Borrowing the
+    /// retained original context here still grants no evidence or output-capture conclusion.
+    pub(super) fn settled_policy_refusal(
+        &self,
+        roles: &CallerRoleSettlement,
+    ) -> Result<(super::startup_envelope::PolicyFailureCause, &str), CallerBootstrapError> {
+        if roles.authority != self.authority || Instant::now() >= roles.cutoff {
+            return Err(CallerBootstrapError::SettlementReplyMismatch);
+        }
+        let cause = self
+            .policy_refusal
+            .ok_or(CallerBootstrapError::UnexpectedPhase)?;
+        Ok((cause, self.startup_context.context()))
     }
 
     /// Consume only the already verified stage. Failed/pending receive attempts never take

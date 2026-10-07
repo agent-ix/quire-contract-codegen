@@ -18,7 +18,9 @@ use command_fds::{CommandFdExt, FdMapping};
 use rustix::process::{getpid, getuid, waitpid, Pid, WaitOptions};
 
 use super::{
-    control::{ControlError, IncrementalReceive, IncrementalSend, PreparedFrame, Transport},
+    control::{
+        ControlError, FrameStorage, IncrementalReceive, IncrementalSend, PreparedFrame, Transport,
+    },
     protocol::{
         BackendExit, BuildIdentity, CallerControl, GuardianControl, GuardianRefusal, StdinControl,
     },
@@ -247,6 +249,8 @@ enum InnerAdmissionState {
     Prepared,
     SendingStart,
     AwaitPolicy,
+    SendingRefusal,
+    Refused,
     AwaitDispatch(ReadyAdmission),
     SendingExec,
     Dispatched,
@@ -257,6 +261,7 @@ pub(super) enum InnerAdmissionProgress {
     Pending,
     Ready,
     Dispatched,
+    Refused,
 }
 
 /// I owns the actual trusted installer throughout admission, including every failed post-spawn
@@ -268,6 +273,10 @@ pub(super) struct PendingInnerBackend {
     dispatch: Option<PreparedInnerDispatch>,
     artifacts: Option<GuardianArtifacts>,
     handoff_child: Option<std::process::Child>,
+    refusal_storage: Option<FrameStorage>,
+    refusal_send: Option<IncrementalSend>,
+    policy_refusal: Option<(super::startup_envelope::PolicyFailureCause, StopStamp)>,
+    stops: StopTimeline,
     deadline: Instant,
     state: InnerAdmissionState,
 }
@@ -302,6 +311,13 @@ impl PendingInnerBackend {
             .map_err(InnerAdmissionError::Guardian)?;
         let installer = super::backend_installer::InstallerOwner::prepare(&input)
             .map_err(InnerAdmissionError::Installer)?;
+        let refusal_storage = FrameStorage::prepare()
+            .map_err(GuardianError::Control)
+            .map_err(InnerAdmissionError::Guardian)?;
+        let stops = StopTimeline::prepare(input.settings.started)
+            .map_err(io::Error::other)
+            .map_err(GuardianError::Io)
+            .map_err(InnerAdmissionError::Guardian)?;
         Ok(Self {
             input: Some(input),
             installer,
@@ -309,6 +325,10 @@ impl PendingInnerBackend {
             dispatch: Some(dispatch),
             artifacts: None,
             handoff_child: None,
+            refusal_storage: Some(refusal_storage),
+            refusal_send: None,
+            policy_refusal: None,
+            stops,
             deadline,
             state: InnerAdmissionState::Prepared,
         })
@@ -340,7 +360,23 @@ impl PendingInnerBackend {
         super::owner_protection::require_protected()
             .map_err(GuardianError::Io)
             .map_err(InnerAdmissionError::Guardian)?;
-        if Instant::now() >= self.deadline {
+        let cutoff = match self.state {
+            InnerAdmissionState::SendingRefusal | InnerAdmissionState::Refused => self
+                .stops
+                .deadline(input.settings.settlement_reserve, input.settings.deadline)
+                .and_then(super::role_deadline::RoleDeadline::local)
+                .map_err(io::Error::other)
+                .map_err(GuardianError::Io)
+                .map_err(InnerAdmissionError::Guardian)?,
+            InnerAdmissionState::Prepared
+            | InnerAdmissionState::SendingStart
+            | InnerAdmissionState::AwaitPolicy
+            | InnerAdmissionState::AwaitDispatch(_)
+            | InnerAdmissionState::SendingExec
+            | InnerAdmissionState::Dispatched
+            | InnerAdmissionState::Transferred => self.deadline,
+        };
+        if Instant::now() >= cutoff {
             return Err(InnerAdmissionError::Guardian(GuardianError::Control(
                 ControlError::Deadline,
             )));
@@ -362,11 +398,41 @@ impl PendingInnerBackend {
                 }
             }
             InnerAdmissionState::AwaitPolicy => {
-                if let Some(admission) = self
-                    .installer
-                    .receive_policy_ready(input, self.deadline)
-                    .map_err(InnerAdmissionError::Installer)?
-                {
+                let admission = match self.installer.receive_policy_ready(input, self.deadline) {
+                    Ok(admission) => admission,
+                    Err(super::backend_installer::InstallerError::PolicyRefused {
+                        failure,
+                        stop,
+                    }) => {
+                        // The actual installer remains in this owner. Capture original metadata
+                        // before any fallible forwarding work, with no I receipt-time trigger.
+                        self.policy_refusal = Some((failure, stop));
+                        self.state = InnerAdmissionState::SendingRefusal;
+                        self.stops
+                            .observe(stop)
+                            .map_err(io::Error::other)
+                            .map_err(GuardianError::Io)
+                            .map_err(InnerAdmissionError::Guardian)?;
+                        let storage = self
+                            .refusal_storage
+                            .take()
+                            .ok_or(InnerAdmissionError::MissingOwnedState)?;
+                        let frame = storage
+                            .encode(&super::startup_envelope::InstallerReply::Refused {
+                                identity: input.settings.identity,
+                                authority: input.settings.authority,
+                                stop,
+                                failure,
+                                context: self.installer.failure_context().as_bytes(),
+                            })
+                            .map_err(GuardianError::Control)
+                            .map_err(InnerAdmissionError::Guardian)?;
+                        self.refusal_send = Some(IncrementalSend::new(frame));
+                        return Ok(InnerAdmissionProgress::Pending);
+                    }
+                    Err(error) => return Err(InnerAdmissionError::Installer(error)),
+                };
+                if let Some(admission) = admission {
                     let hello = self
                         .hello
                         .take()
@@ -382,6 +448,23 @@ impl PendingInnerBackend {
                     return Ok(InnerAdmissionProgress::Ready);
                 }
             }
+            InnerAdmissionState::SendingRefusal => {
+                if self
+                    .refusal_send
+                    .as_mut()
+                    .ok_or(InnerAdmissionError::MissingOwnedState)?
+                    .advance(&input.caller_lease.transport(), &[], cutoff)
+                    .map_err(GuardianError::Control)
+                    .map_err(InnerAdmissionError::Guardian)?
+                {
+                    self.refusal_send = None;
+                    self.state = InnerAdmissionState::Refused;
+                    return Ok(InnerAdmissionProgress::Refused);
+                }
+            }
+            // Never publish Ready or transfer the child after a negative transaction. The
+            // real I lease/outer liveness checks above remain active throughout settlement.
+            InnerAdmissionState::Refused => return Ok(InnerAdmissionProgress::Refused),
             InnerAdmissionState::AwaitDispatch(ready) => {
                 // This is the original strict C-lease receiver, so EOF wins over buffered
                 // authorization. No private installer control substitutes for C Dispatch.
