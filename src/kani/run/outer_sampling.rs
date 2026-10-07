@@ -48,7 +48,10 @@ pub(super) enum SamplingError {
         cause: io::Error,
     },
     Control(ControlError),
-    Report(ReportError),
+    Report {
+        operation: CauseOperation,
+        cause: ReportError,
+    },
     Charge(ChargeError),
     Deadline(DeadlineError),
     InvalidMonitorTransition,
@@ -77,7 +80,7 @@ impl std::error::Error for SamplingError {
         match self {
             Self::Io { cause, .. } => Some(cause),
             Self::Control(error) => Some(error),
-            Self::Report(error) => Some(error),
+            Self::Report { cause, .. } => Some(cause),
             Self::Charge(error) => Some(error),
             Self::Deadline(error) => Some(error),
             Self::InnerIdentity(error) => Some(error),
@@ -422,7 +425,10 @@ impl OuterRunOwner {
             sampling
                 .collector
                 .begin_owner_stop()
-                .map_err(SamplingError::Report)?;
+                .map_err(|cause| SamplingError::Report {
+                    operation: CauseOperation::ReportCollection,
+                    cause,
+                })?;
             sampling.caller_cancelled = true;
             // No bytes from a zero-progress pending reply entered the stream. Never splice
             // a partial response, invent I Completed, or transfer original local C cause.
@@ -1171,7 +1177,10 @@ impl TerminalDelivery {
                         }
                         discarded
                             .drain_owner_stop(Some(self.deadline))
-                            .map_err(SamplingError::Report)?;
+                            .map_err(|cause| SamplingError::Report {
+                                operation: CauseOperation::ReportCollection,
+                                cause,
+                            })?;
                     }
                     TerminalCleanupWitness::Claimed { .. } => {
                         // A delivered descriptor still owes its original bounded read ACK. This
@@ -1788,7 +1797,10 @@ impl InnerCompletion {
                 sampling
                     .collector
                     .begin_owner_stop()
-                    .map_err(SamplingError::Report)?;
+                    .map_err(|cause| SamplingError::Report {
+                        operation: CauseOperation::ReportCollection,
+                        cause,
+                    })?;
                 Ok(CompletionProgress::SetupRefused)
             }
             (
@@ -2122,7 +2134,10 @@ impl OuterSampling {
                 // Close only the collector's still-owned writer. This is not child settlement.
                 self.collector
                     .begin_owner_stop()
-                    .map_err(SamplingError::Report)?;
+                    .map_err(|cause| SamplingError::Report {
+                        operation: CauseOperation::ReportCollection,
+                        cause,
+                    })?;
             }
         }
         let deadline = observation_deadline(&self.settings, &self.stops)?;
@@ -2131,11 +2146,17 @@ impl OuterSampling {
             // candidate. Actual finite reader EOF still requires all actual writers to close.
             self.collector
                 .drain_owner_stop(deadline)
-                .map_err(SamplingError::Report)?;
+                .map_err(|cause| SamplingError::Report {
+                    operation: CauseOperation::ReportCollection,
+                    cause,
+                })?;
         } else {
             self.collector
                 .drain_tick(deadline)
-                .map_err(SamplingError::Report)?;
+                .map_err(|cause| SamplingError::Report {
+                    operation: CauseOperation::ReportCollection,
+                    cause,
+                })?;
         }
         outer
             .require_creator_live()
@@ -2273,7 +2294,10 @@ impl OuterSampling {
         let report = self
             .collector
             .seal(deadline)
-            .map_err(SamplingError::Report)?;
+            .map_err(|cause| SamplingError::Report {
+                operation: CauseOperation::ReportSealing,
+                cause,
+            })?;
         Ok((
             report,
             TerminalSampling {
