@@ -464,6 +464,21 @@ impl PreparedStartupContext {
         &mut self.metadata_fault
     }
 
+    /// Carry the actual selected fixed decoder source without constructing a serde error.
+    /// Only a fact recorded by its required-metadata schema supplies an integrity predicate;
+    /// frame/input/reservation owners separately handle errors with no such fact.
+    pub(super) fn grammar_error(
+        &self,
+        source: super::guardian_decode::DecodeError,
+    ) -> super::control::ControlError {
+        match self.metadata_fault {
+            Some(predicate) => {
+                super::control::ControlError::CauseMetadataGrammar { predicate, source }
+            }
+            None => super::control::ControlError::InvalidGrammar(source),
+        }
+    }
+
     /// Preserve the actual moved decoder error and observed predicate. No error text is parsed,
     /// and an error outside the required-cause seed remains an ordinary encoding refusal.
     pub(super) fn metadata_error(&self, source: serde_json::Error) -> super::control::ControlError {
