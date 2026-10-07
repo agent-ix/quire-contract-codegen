@@ -570,6 +570,12 @@ mod tests {
         assert!(cancellation_commit(&bytes, &mut context, &mut Scratch::default()).is_err());
         assert!(report_start(&bytes, &mut context, &mut Scratch::default()).is_err());
         assert!(terminal_commit(&bytes, &mut context, &mut Scratch::default()).is_err());
+        assert!(super::super::role_protocol::decode_outer_startup(
+            &bytes,
+            &mut context,
+            &mut Scratch::default(),
+        )
+        .is_err());
         assert!(
             super::super::outer_failure::decode(&bytes, &mut Scratch::default(), &mut context)
                 .is_err()

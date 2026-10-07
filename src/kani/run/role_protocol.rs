@@ -590,7 +590,8 @@ pub(super) fn decode_outer_startup(
 ) -> Result<OuterStartupControl, super::control::ControlError> {
     match super::outer_reply::decode(payload, context, scratch)? {
         super::outer_reply::OuterReply::Startup(reply) => Ok(reply),
-        super::outer_reply::OuterReply::Failure(_) => Err(
+        super::outer_reply::OuterReply::Failure(_)
+        | super::outer_reply::OuterReply::ConstructorTimeout(_) => Err(
             super::control::ControlError::InvalidGrammar(super::guardian_decode::DecodeError::new(
                 super::guardian_decode::DecodeSite::Field,
                 super::guardian_decode::DecodeCause::InvalidValue,
