@@ -340,11 +340,20 @@ pub(super) enum TerminalDisposition {
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum OwnerStopCause {
-    ResourceExhausted,
-    TimedOut,
+macro_rules! owner_stop_causes {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub(super) enum OwnerStopCause { $($variant),+ }
+        impl OwnerStopCause {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+
+owner_stop_causes! { ResourceExhausted, TimedOut }
 
 /// O's terminal transaction remains separate from the already consumed I lease. A decoded
 /// commit is provisional until actual normal O/L/thread/capture settlement and stream-end checks.
