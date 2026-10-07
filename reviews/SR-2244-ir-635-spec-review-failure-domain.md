@@ -56,3 +56,11 @@ Round 1, reviewed at e18689d13cff2f4eb85e618e4b55f263d6734de9 (original review a
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | e18689d13cff2f4eb85e618e4b55f263d6734de9: The Node-keyed/Population partition is now stated in Inputs, Behavior, AC-11, AD-003 E-1 and TC-048 step 9, and it matches QSL parity_preimage. See new FND-002: on re-measurement, this finding's original failure scenario overstated reachability. |
+
+### Round 2 dispositions
+
+Round 2, reviewed at 99d202c845ff821824d25806de5dbdbd3a34f306 (custody commit c34efd866f366c33ab2dbe7df2b5d2e3fdb6548d). Reviewer model claude-opus-5-5, session cd5dfa92-5d1b-442d-b3fe-30c6c25b005e, run 945a6196-e006-4287-b605-b96fcbf1f8ee.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-002 | fixed | 99d202c845ff821824d25806de5dbdbd3a34f306: Fixed text now states that Population-keyed metadata stays only in the full CG proving record, outside the admitted QSL composite claim and O-09. A request carrying a Population key gets a typed HarnessUnknownKey refusal in prepare, before identity_tie; the binding-checked Refused report maps to Inconclusive(ReplayRefused), and a CG precheck refusal stays distinct with no report. The same rule appears in Behavior, AC-11, AD-003 E-1 and TC-048 step 9, where the case is an adverse request, not an admitted claim. Re-measured against QSL 30d7beb7: composite_domain derive emits only DomainKey::Node positions; Positions::harness returns ParityBoundRefusal::HarnessUnknownKey (Code::InvalidRuntimeInput) for an unpositioned key; prepare calls harness before identity_tie. Fix diff c34efd8..99d202c touches only these Population hunks; AC-1/7/9/12/13, F rows, Setup Refusal, TC steps 8a/10, scalar E-1 and E-2 are byte-unchanged. No new findings. |
