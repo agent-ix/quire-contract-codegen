@@ -292,8 +292,11 @@ authored).
   node, its authentic occurrence key from the recompiled original package, the obligation
   kind and one argument per operand position in operand order. A self-comparison contributes
   two graph-child argument entries for the same actual parameter, each with only its actual
-  Node-keyed harness bounds naming that parameter. Population-keyed bounds remain in the full
-  claim and CG record, outside O-09 arguments. Repeated positions are not a distinct-node set.
+  Node-keyed harness bounds naming that parameter. Population-keyed metadata remains only in the full
+  CG proving record, outside the admitted QSL composite claim and O-09 arguments. A QSL request
+  carrying a Population-keyed harness bound receives typed `HarnessUnknownKey` during `prepare`,
+  before identity tying; its binding-checked `Refused` report retains ReplayRefused terminal mapping.
+  CG pre-invocation refusal still produces no report or terminal value. Repeated positions are not a distinct-node set.
   A composite literal uses its own actual graph-child node with empty Bounds. An inline integer literal uses the
   actual application/occurrence/position identity with a singleton Range; unsupported
   inline literal forms refuse. Within each Bounds argument, keys sort by canonical encoded

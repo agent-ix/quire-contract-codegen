@@ -133,10 +133,13 @@ and never replace positive QSL evaluation with a verdict double.
    application/occurrence/position and require typed refusal for an unsupported inline literal.
    Sort each argument's BoundEntries by canonical encoded key bytes: paths `[0,0]` before `[0]`
    and `[10]` before `[2]`. Duplicate keys within one argument refuse, while repeated parameter
-   bounds across two positional arguments remain legal. Add a Population-keyed harness bound and
-   require it to remain in the full claim/CG record while both O-09 parameter arguments contain only
-   Node-keyed bounds naming that parameter. Changing only the Population bound leaves O-09 unchanged
-   but changes the full claim identity. Retain actual drawn cardinality/depth
+   bounds across two positional arguments remain legal. Retain Population-keyed metadata only in
+   the full CG proving record, outside the admitted QSL composite claim and O-09 arguments. As a
+   separate adverse request, send a Population-keyed harness bound through the genuine public QSL
+   facade and require `HarnessUnknownKey` during `prepare` before identity tying, a binding-checked
+   `Refused` report and `Inconclusive(ReplayRefused)`. Do not count that request as admitted or as a
+   positive full-claim identity case. Separately assert that CG pre-invocation rejection returns no
+   report or terminal value. Retain actual drawn cardinality/depth
    entries even for unbounded/recursive positions and declared-domain substitution. Independently
    change node, occurrence, operand position, literal graph node/value or drawn bound; require changed
    identity or original membership refusal. Invoke the typed encoder refusal without manufacturing
