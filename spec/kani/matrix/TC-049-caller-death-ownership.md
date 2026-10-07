@@ -102,6 +102,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-36 | PLANNED/UNRUN: independent real socket-stdin admission, actual production capture-pipe inventory and unchanged non-socket/closed-input controls, exact unavailable refusal and absent execution/terminal result (step 23). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; C-only trusted reporter is not backend stdio. |
 | FR-034-AC-37 | PLANNED/UNRUN: independent trusted I/O channel lifetime, actual arbitrary-backend/descendant/sibling-exec noninheritance/reachability and leaked-control mutant (step 24). Untagged until actual Tests. | Any missing ordinary-seam predicate is explicitly owed; existing EOF tests alone do not supply the new confinement criterion. |
 | FR-034-AC-38 | PLANNED/UNRUN: independent normal settlement/join, original-window unavailable confirmation, typed diagnostic-only refusal and no new post-return custody (step 25). Untagged until actual complete Tests. | Any unavailable ordinary-seam observation is explicitly owed; prior death tests or source-only fault discussion do not supply this new criterion. |
+| FR-034-AC-39 | PLANNED/UNRUN: native trusted-process policy/install admission separated from actual post-Dispatch audit-architecture/x32 syscall enforcement; real applicable unconfined positive control, omission mutant and confirmed owned settlement; exact recipe and explicit check-to-exec residuals | Header/open success mislabelled target admission; kernel-rejected fixture counted as filter success; missing compat/x32 control counted complete; pre-Dispatch label for actual post-Dispatch kill; unfiltered retry or stale image authority |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -599,6 +600,36 @@ Steps 22–25 allocate independent new confinement/admission/settlement Tests, a
 fixture DTO, rights, hook or coordination cap; where an ordinary production seam is unavailable,
 record the missing evidence for the existing IR-655 SPEC-before-fixture-CODE process. All old
 criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requirements remain intact.
+
+26. PLANNED/UNRUN (FR-034 AC-39). Source-audit the actual trusted guardian/backend-installer
+    native ABI against the matching policy and the safe installation boundary. Establish native
+    installation success with the actual matched owned roles, then exercise unavailable native
+    policy support and actual installation failure separately: require pre-Dispatch
+    BackendIpcExclusion capability refusal with the retained actual cause, no backend dispatch and
+    confirmed owned settlement. File/header inspection, helper spawn and startup EOF are not
+    target-image ABI or installation-success oracles.
+    On an applicable platform, use a repository-owned real compat/x32 syscall workload built by
+    ordinary test tooling without copied executables or an invented ABI-admission success seam.
+    Require its unconfined owned positive control to execute the actual attempted syscall; kernel
+    rejection before that syscall does not prove the filter. Record unsupported platform or
+    unavailable workload as unavailable/UNRUN evidence, without counting the criterion complete.
+    Execute the same workload through the real filtered backend boundary after authenticated
+    Dispatch, including native entry followed by a compat syscall and an exec/descendant case.
+    Positively observe actual policy termination before the denied syscall's observable effect,
+    actual backend exit and whole-chain settlement. An actual architecture/x32-rule omission
+    mutant must fail that effect/termination oracle before emergency cleanup; restored policy must
+    pass. Preserve all other IPC/privilege policies in these controls. Do not infer image rejection
+    at exec/entry from a syscall kill, or count a kernel-unsupported image as a filter success.
+    For actual unsuccessful termination with no report, require existing Inconclusive NoVerdict
+    after confirmed settlement and original capture/deadline handling; preserve memory/deadline
+    precedence and CleanupUnconfirmed, and distinguish present/malformed/success-without-report
+    cases through their existing mappings. Require no pre-Dispatch unavailable classification for
+    the actual post-Dispatch event, synthetic Failed, fabricated evidence or unfiltered retry.
+    Inspect the production exact-recipe construction and positively exercise admitted script/path
+    and loader/environment behavior under the filter. Report pathname/content/PATH/execvp,
+    shebang/PT_INTERP and loader check-to-exec uncertainty explicitly: an earlier header/open
+    observation is not actual image authority. No installation stability precondition, recipe
+    substitution, inherited execution-FD shortcut or changed writable-path semantics is allowed.
 
 ### Charged-peak evidence constructors (FR-034-AC-32)
 

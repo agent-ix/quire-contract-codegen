@@ -615,7 +615,9 @@ property, not a selected helper entry or implemented environment transport.
 The policy shall prevent `socket(AF_UNIX, ...)` creation and
 AF_UNIX datagram socketpairs. It shall allow anonymous connected SOCK_STREAM socketpairs for
 contained-local IPC and shall not blanket-deny sendmsg. It shall cover legacy socketcall and every
-supported syscall/ABI alias; incompatible or unsupported execution ABIs shall refuse admission.
+supported syscall/ABI alias. Pre-Dispatch ABI admission establishes support for the actual native
+ABI of the trusted guardian/backend-installer process and successful installation of the matching
+policy; it does not establish the ABI or immutable identity of the eventual backend image.
 No inherited socket/listener or io_uring descriptor shall reach arbitrary backend code. The policy
 shall close io_uring socket/operation bypasses by excluding backend io_uring creation/control and
 shall persist across fork, exec, reparenting and nested namespaces without a privilege-based escape.
@@ -627,6 +629,42 @@ network isolation excludes the host abstract address scope. I shall admit no arb
 host-peer endpoint; private proc/PID view shall exclude host descriptor/root aliases. Host ownership
 pidfds and all other trusted descriptors shall remain CLOEXEC outside intended role mappings and
 unavailable to arbitrary backend, sibling exec and backend descendants.
+
+### Native policy admission and actual backend execution ABI
+
+When the actual trusted guardian/backend-installer process ABI lacks an audited matching policy,
+C shall refuse before Dispatch through the existing `CapabilityUnavailable` context naming
+`BackendIpcExclusion`. When policy installation fails, C shall retain its actual cause through the
+same typed unavailable admission path and confirm owned settlement. Header inspection, a successful
+file open, initial helper spawn or startup EOF shall not establish target-image ABI admission.
+
+The installed backend-only policy shall enforce its actual syscall audit-architecture rule and,
+where applicable, the x32 syscall-number/alias exclusion on every backend and descendant syscall.
+An unsupported architecture or x32 alias shall not reach an allowed native-syscall action. The
+policy shall remain installed across exec and descendants; native entry followed by a compat
+syscall must receive the same enforcement. This is syscall-boundary enforcement, not a promise that
+exec rejects every incompatible binary or that no incompatible image/instruction executes before
+its first filtered syscall. Required IPC, privilege, descriptor and ownership protections remain
+mandatory; an ABI mismatch permits no unfiltered retry or weaker policy.
+
+The exact original recipe continues to use its admitted pathname, argv0, arguments, environment,
+cwd and stdio. This contract imposes no executable/interpreter/loader stability precondition and
+claims no binding of a prior file/header inspection to the eventual executed bytes. Path replacement,
+content mutation, PATH/execvp resolution, script interpreter resolution, ELF PT_INTERP resolution
+and loader selection can differ between observation and actual exec. Those check-to-exec residuals
+apply before the first filtered syscall; they do not authorize recipe rewriting, a new inherited
+execution descriptor, changed shared-writable-path semantics or relaxation of installed policy.
+The trusted installer still uses sanitized loader inputs, and only filtered post-Dispatch recipe
+exec restores the original backend environment.
+
+An actual post-Dispatch exec failure or syscall-policy ABI termination shall follow the existing
+bounded backend-result path, rather than retroactive pre-Dispatch unavailable admission. When the
+actual exit is unsuccessful with no report, C shall classify existing Inconclusive
+NoVerdict only after positive whole-chain settlement and original capture/deadline handling. Existing
+memory/deadline candidate precedence and CleanupUnconfirmed override remain unchanged. Present,
+malformed or missing-success reports retain their existing report/classification rules; an ABI
+assumption never fabricates a status, report, evidence, new cause or Failed verdict. No rule here
+promotes an observed-only file check into proof of the actual backend image.
 
 Before backend creation, I shall set and positively confirm PR_SET_DUMPABLE 0 after final
 credential/mapping transitions. I shall remove backend CAP_SYS_PTRACE authority in I's owning user
@@ -1032,6 +1070,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Caller fd0..2 stability throughout setup is a trusted precondition; observed capture inconsistency refuses, with no claim to detect every ambient mutation. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned public rustdoc documents the caller stability precondition/setup window and observed-only capture refusal; target type/device/inode, original O_ACCMODE and FD_CLOEXEC are compared separately from proc-link presence; mutable shared-OFD status flags neither trigger instability refusal nor get rewritten. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
 | FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
 | FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
+| FR-034-AC-39 | PLANNED/UNRUN. Pre-Dispatch ABI admission validates the trusted guardian/backend-installer process's native policy support and actual installation, with unsupported support/install failure through existing BackendIpcExclusion capability refusal and confirmed owned settlement. It claims no actual target-image identity or rejection of every incompatible binary at exec/entry. After Dispatch, actual audit-architecture/x32 syscall enforcement remains installed across exec and descendants, including native entry making a compat syscall; an unconfined real positive control must establish the attempted ABI syscall can run on the applicable platform. An unavailable compat/x32 workload or platform is unavailable/UNRUN evidence, never acceptance credit. A genuine architecture/x32-policy omission mutant fails the enforcement oracle; restored enforcement passes. Actual unsuccessful/no-report backend termination retains existing NoVerdict only after positive whole-chain settlement and original deadline/capture/resource precedence, with CleanupUnconfirmed unchanged; present/malformed/success-without-report cases keep existing rules. Path/content/PATH/interpreter/loader check-to-exec residuals remain explicit without a stability precondition, fake ABI success token, recipe rewrite, new descriptor leak or unfiltered retry. | Test, Analysis |
 
 ## Dependencies
 
