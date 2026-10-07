@@ -8,7 +8,10 @@ use std::{
 };
 
 use super::{
-    control::{private_pair, CallerLease, ControlError, GuardianEndpoint, PreparedFrame, Received},
+    control::{
+        private_pair, CallerLease, ControlError, GuardianEndpoint, IncrementalSend, PreparedFrame,
+        Received, Transport,
+    },
     namespace::{BackendCommand, GuardianIdentity, ReadyIdentityError},
     protocol::{
         current_build_identity, BackendExit, CallerControl, GuardianControl, GuardianRefusal,
@@ -370,6 +373,161 @@ impl PendingDispatch {
             GuardianControl::Refused { reason } => Err(StageError::GuardianRefused(reason)),
             _ => Err(StageError::UnexpectedControl),
         }
+    }
+}
+
+/// Actual C lease custody during nonblocking Dispatch/ACK/completion. No fallible operation
+/// consumes the lease; even a partial send or bad reply retains it until explicit close.
+pub(super) struct CallerLeaseClient {
+    ready: InitReady,
+    dispatch: Option<IncrementalSend>,
+    stdin: StdinControl,
+    prepared_authority: RunAuthority,
+    state: CallerLeaseState,
+    failed: bool,
+}
+
+enum CallerLeaseState {
+    Sending,
+    AwaitAcknowledgment,
+    Running,
+    Completed(BackendCompletion),
+}
+
+pub(super) enum CallerLeaseProgress {
+    Pending,
+    Dispatched,
+    Completed,
+}
+
+impl CallerLeaseClient {
+    /// Uses only the existing pre-L Dispatch frame. The owner stores actual lease custody
+    /// before validating even its own prepared authority; failure never implicitly closes it.
+    pub(super) fn new(ready: InitReady, prepared: PreparedDispatch) -> Self {
+        Self {
+            ready,
+            dispatch: Some(IncrementalSend::new(prepared.frame)),
+            stdin: prepared.stdin,
+            prepared_authority: prepared.authority,
+            state: CallerLeaseState::Sending,
+            failed: false,
+        }
+    }
+
+    pub(super) fn metadata_reservation() -> Result<u64, StageError> {
+        u64::try_from(std::mem::size_of::<Self>())
+            .map_err(|_| StageError::Control(ControlError::EncodedBytesExceeded))
+    }
+
+    /// At most one nonblocking send. C can sample captures/receive O's original stop clock
+    /// between incomplete attempts; no local blocking control allowance replaces its cutoff.
+    pub(super) fn send_step(
+        &mut self,
+        stdin: &OriginalStdin,
+        cutoff: Instant,
+    ) -> Result<bool, StageError> {
+        if self.failed || !matches!(self.state, CallerLeaseState::Sending) {
+            return Err(StageError::UnexpectedControl);
+        }
+        self.failed = true;
+        if self.prepared_authority != self.ready.bootstrap.authority {
+            return Err(StageError::AuthorityMismatch);
+        }
+        let (kind, descriptor) = match stdin {
+            OriginalStdin::Open(descriptor) => (StdinControl::Open, Some(descriptor.as_fd())),
+            OriginalStdin::Closed => (StdinControl::Closed, None),
+        };
+        if kind != self.stdin {
+            return Err(StageError::UnexpectedControl);
+        }
+        let sent = self
+            .dispatch
+            .as_mut()
+            .ok_or(StageError::UnexpectedControl)?
+            .advance(
+                &self.ready.bootstrap.lease.transport(),
+                descriptor.as_slice(),
+                cutoff,
+            )?;
+        if sent {
+            self.dispatch = None;
+            self.state = CallerLeaseState::AwaitAcknowledgment;
+        }
+        self.failed = false;
+        Ok(sent)
+    }
+
+    pub(super) fn transport(&self) -> Transport<'_> {
+        self.ready.bootstrap.lease.transport()
+    }
+
+    /// Called only after the SINGLE retained I framer produced one complete strictly live
+    /// frame. State plus actual pinned sender/run authentication precede either transition.
+    pub(super) fn accept_event(
+        &mut self,
+        owner: &impl GuardianIdentity,
+        control: super::startup_envelope::InnerEventHeader,
+        sender: super::control::PeerCredentials,
+    ) -> Result<CallerLeaseProgress, StageError> {
+        if self.failed {
+            return Err(StageError::UnexpectedControl);
+        }
+        self.failed = true;
+        self.transport().refuse_observable_eof()?;
+        owner.verify_ready(sender, self.ready.mapped_uid)?;
+        let progress = match (&self.state, control) {
+            (
+                CallerLeaseState::AwaitAcknowledgment,
+                super::startup_envelope::InnerEventHeader::Dispatched { authority },
+            ) => {
+                if authority != self.ready.bootstrap.authority {
+                    return Err(StageError::AuthorityMismatch);
+                }
+                self.state = CallerLeaseState::Running;
+                CallerLeaseProgress::Dispatched
+            }
+            (
+                CallerLeaseState::Running,
+                super::startup_envelope::InnerEventHeader::Completed {
+                    authority,
+                    outcome,
+                    stop,
+                },
+            ) => {
+                if authority != self.ready.bootstrap.authority {
+                    return Err(StageError::AuthorityMismatch);
+                }
+                if stop.origin != super::role_deadline::StopOrigin::Inner {
+                    return Err(StageError::UnexpectedControl);
+                }
+                self.state = CallerLeaseState::Completed(BackendCompletion { outcome, stop });
+                CallerLeaseProgress::Completed
+            }
+            (
+                CallerLeaseState::Sending
+                | CallerLeaseState::AwaitAcknowledgment
+                | CallerLeaseState::Running
+                | CallerLeaseState::Completed(_),
+                _,
+            ) => return Err(StageError::UnexpectedControl),
+        };
+        self.failed = false;
+        Ok(progress)
+    }
+
+    pub(super) fn completion(&self) -> Option<&BackendCompletion> {
+        match &self.state {
+            CallerLeaseState::Completed(completion) => Some(completion),
+            CallerLeaseState::Sending
+            | CallerLeaseState::AwaitAcknowledgment
+            | CallerLeaseState::Running => None,
+        }
+    }
+
+    /// Actual close remains the original owner operation, which publishes close-completion
+    /// before LeaseClosing and observes I before any independent escalation.
+    pub(super) fn into_lease(self) -> CallerLease {
+        self.ready.into_lease()
     }
 }
 

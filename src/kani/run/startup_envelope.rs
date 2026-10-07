@@ -330,6 +330,98 @@ pub(super) fn decode_inner_startup(
     }
 }
 
+/// Post-Ready fixed-size events on the same original I lease. Refusal/EOF never stand for
+/// acknowledgement or completion, and no report/cause context is allocated in this phase.
+pub(super) enum InnerEventHeader {
+    Dispatched {
+        authority: RunAuthority,
+    },
+    Completed {
+        authority: RunAuthority,
+        outcome: super::protocol::BackendExit,
+        stop: StopStamp,
+    },
+}
+
+impl InnerEventHeader {
+    pub(super) fn rights_count(&self) -> usize {
+        0
+    }
+}
+
+#[derive(Deserialize)]
+enum InnerEventKind {
+    Dispatched,
+    Completed,
+}
+
+#[derive(Deserialize)]
+struct InnerEventSelector {
+    kind: InnerEventKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DispatchedReply {
+    kind: InnerEventKind,
+    authority: RunAuthority,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CompletedReply {
+    kind: InnerEventKind,
+    authority: RunAuthority,
+    outcome: super::protocol::BackendExit,
+    stop: StopStamp,
+}
+
+pub(super) fn decode_inner_event(payload: &[u8]) -> Result<InnerEventHeader, ControlError> {
+    check_scratch_free_json(payload).map_err(|error| {
+        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
+    })?;
+    let selector: InnerEventSelector =
+        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+    match selector.kind {
+        InnerEventKind::Dispatched => {
+            let reply: DispatchedReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(reply.kind, InnerEventKind::Dispatched) {
+                return Err(ControlError::InvalidEncoding(
+                    <serde_json::Error as de::Error>::custom("expected exact I Dispatched"),
+                ));
+            }
+            Ok(InnerEventHeader::Dispatched {
+                authority: reply.authority,
+            })
+        }
+        InnerEventKind::Completed => {
+            let reply: CompletedReply =
+                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
+            if !matches!(reply.kind, InnerEventKind::Completed) {
+                return Err(ControlError::InvalidEncoding(
+                    <serde_json::Error as de::Error>::custom("expected exact I Completed"),
+                ));
+            }
+            Ok(InnerEventHeader::Completed {
+                authority: reply.authority,
+                outcome: reply.outcome,
+                stop: reply.stop,
+            })
+        }
+    }
+}
+
+pub(super) fn inner_event_decode_bytes() -> Result<u64, ControlError> {
+    let bytes = std::mem::size_of::<InnerEventSelector>()
+        .checked_add(
+            std::mem::size_of::<DispatchedReply>().max(std::mem::size_of::<CompletedReply>()),
+        )
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<InnerEventHeader>()))
+        .ok_or(ControlError::EncodedBytesExceeded)?;
+    u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
+}
+
 /// Fixed decoder-owned values coexist during selection and return; the context capacity is
 /// charged separately from these owning metadata values by the retained caller before L.
 pub(super) fn inner_startup_decode_bytes() -> Result<u64, ControlError> {
@@ -351,6 +443,52 @@ mod tests {
         startup_cause::{ProjectedStartupCause, ProjectionFidelity, StartupJsonError},
     };
     use std::io;
+
+    /// Trace: FR-034-AC-15, FR-034-AC-20, FR-034-AC-38
+    #[test]
+    fn inner_events_preserve_actual_typed_completion_and_refuse_wrong_phase_schema() {
+        use super::super::protocol::{BackendExit, GuardianControl};
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Inner).unwrap();
+        let dispatched = serde_json::to_vec(&GuardianControl::Dispatched { authority }).unwrap();
+        assert!(matches!(decode_inner_event(&dispatched).unwrap(),
+            InnerEventHeader::Dispatched { authority: actual } if actual == authority));
+        let completed = serde_json::to_vec(&GuardianControl::Completed {
+            authority,
+            outcome: BackendExit::Signal(9),
+            stop,
+        })
+        .unwrap();
+        assert!(matches!(decode_inner_event(&completed).unwrap(),
+            InnerEventHeader::Completed { authority: actual, outcome: BackendExit::Signal(9), stop: stamp }
+                if actual == authority && stamp == stop));
+        let original: serde_json::Value = serde_json::from_slice(&completed).unwrap();
+        for field in ["authority", "outcome", "stop"] {
+            let mut missing = original.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(decode_inner_event(&serde_json::to_vec(&missing).unwrap()).is_err());
+            let mut wrong = original.clone();
+            wrong[field] = serde_json::Value::String("wrong-type".to_owned());
+            assert!(decode_inner_event(&serde_json::to_vec(&wrong).unwrap()).is_err());
+        }
+        let mut extra = original.clone();
+        extra["bytes"] = serde_json::Value::Number(1.into());
+        assert!(decode_inner_event(&serde_json::to_vec(&extra).unwrap()).is_err());
+        let mut wrong_phase = original;
+        wrong_phase["kind"] = serde_json::Value::String("Dispatched".to_owned());
+        assert!(decode_inner_event(&serde_json::to_vec(&wrong_phase).unwrap()).is_err());
+        let ready = serde_json::to_vec(&GuardianControl::Ready {
+            identity: current_build_identity(),
+            authority,
+            mapped_uid: 0,
+            creator_pid: 0,
+        })
+        .unwrap();
+        assert!(decode_inner_event(&ready).is_err());
+        let mut trailing = completed;
+        trailing.push(b'x');
+        assert!(decode_inner_event(&trailing).is_err());
+    }
 
     /// Trace: FR-034-AC-15, FR-034-AC-35, FR-034-AC-38, FR-034-AC-39
     #[test]
