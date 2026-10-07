@@ -249,7 +249,7 @@ fn decode_control(
                     if fields.kind.is_some() {
                         return Err(field_error(DecodeCause::DuplicateField));
                     }
-                    fields.kind = Some(ControlKind::from_text(decoder.string()?)?);
+                    fields.kind = Some(ControlKind::from_text(decoder.unit_variant()?)?);
                 }
                 ControlField::Authority => {
                     if fields.authority.is_some() {

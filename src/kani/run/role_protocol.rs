@@ -691,13 +691,20 @@ impl OuterStartupControl {
     }
 }
 
-#[derive(Clone, Copy, Deserialize)]
-enum StartupReplyKind {
-    MonitorSpawned,
-    InnerClaimed,
-    GateReleased,
-    Committed,
+macro_rules! startup_reply_kinds {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Clone, Copy, Deserialize)]
+        pub(super) enum StartupReplyKind { $($variant),+ }
+        impl StartupReplyKind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+
+startup_reply_kinds! { MonitorSpawned, InnerClaimed, GateReleased, Committed }
 
 // Flat borrowed/scalar decoding avoids serde's internally-tagged Content accumulator. First
 // select the tag without owning ignored fields, then enforce that selected variant's exact map.

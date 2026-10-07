@@ -1,18 +1,24 @@
-//! Fixed tag selection on the existing startup receive payload.
+//! One fixed full-union walk on the existing startup receive payload.
 //!
-//! One selected strict decoder owns the remaining schema and JSON EOF. This module owns no
+//! Shared disposition and scalar schemas use the same cursor and scratch. This module owns no
 //! receive cursor, sender/site authority, state transition, cutoff or settlement operation.
 //! A negative reply is provisional clock/error data, never permission for phase or Dispatch.
 
-use std::mem::size_of;
-
-use serde::{de::Error as _, Deserialize};
+use std::mem::{size_of, size_of_val};
 
 use super::{
     control::ControlError,
-    outer_failure::{self, FailureHeader},
-    role_protocol::{decode_outer_startup, OuterStartupControl},
-    startup_cause::{check_scratch_free_json, PreparedStartupContext},
+    guardian_decode::{DecodeCause, DecodeError, DecodeSite, Decoder, ObjectState, Scratch, Text},
+    outer_failure::{FailureHeader, FailureRepresentation, FailureState},
+    outer_failure_decode::{self, Disposition},
+    outer_setup::NamespaceIdentity,
+    protocol::{BuildIdentity, RunAuthority},
+    resource_ledger::MeasuredPeaks,
+    role_control_scalar_decode,
+    role_deadline::StopStamp,
+    role_protocol::{OuterPhaseReply, OuterStartupControl, StartupReplyKind as ReplyKind},
+    role_scalar_decode,
+    startup_cause::PreparedStartupContext,
 };
 
 pub(super) enum OuterReply {
@@ -37,75 +43,232 @@ impl OuterReply {
     }
 }
 
-#[derive(Clone, Copy, Deserialize)]
-enum ReplyKind {
-    MonitorSpawned,
-    InnerClaimed,
-    GateReleased,
-    Committed,
+#[derive(Clone, Copy)]
+enum ReplyField {
+    Kind,
+    Identity,
+    Authority,
+    Stop,
+    Disposition,
+    Start,
+    Namespace,
+    Peaks,
 }
 
-#[derive(Clone, Copy, Deserialize)]
-enum DispositionKind {
-    OwnerStop,
-    SetupRefused,
-    OperationalFailure,
-}
-
-// Flat scalar selectors deliberately ignore other fields WITHOUT owning them. The selected
-// existing strict decoder then rejects unknown/conflicting fields and enforces all field types.
-#[derive(Deserialize)]
-struct ReplySelector {
-    kind: ReplyKind,
-    disposition: Option<DispositionSelector>,
-}
-
-#[derive(Deserialize)]
-struct DispositionSelector {
-    kind: DispositionKind,
-}
-
-/// Select once without speculative decoding, cursor changes or a normal-reply fallback.
-pub(super) fn decode(
-    payload: &[u8],
-    context: &mut PreparedStartupContext,
-    scratch: &mut super::guardian_decode::Scratch,
-) -> Result<OuterReply, ControlError> {
-    check_scratch_free_json(payload)
-        .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
-    let selected: ReplySelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selected.kind {
-        ReplyKind::MonitorSpawned | ReplyKind::InnerClaimed | ReplyKind::GateReleased => {
-            decode_outer_startup(payload).map(OuterReply::Startup)
+impl ReplyField {
+    fn from_text(text: Text<'_>) -> Result<Self, DecodeError> {
+        if text.equals("kind") {
+            Ok(Self::Kind)
+        } else if text.equals("identity") {
+            Ok(Self::Identity)
+        } else if text.equals("authority") {
+            Ok(Self::Authority)
+        } else if text.equals("stop") {
+            Ok(Self::Stop)
+        } else if text.equals("disposition") {
+            Ok(Self::Disposition)
+        } else if text.equals("start") {
+            Ok(Self::Start)
+        } else if text.equals("namespace") {
+            Ok(Self::Namespace)
+        } else if text.equals("peaks") {
+            Ok(Self::Peaks)
+        } else {
+            Err(field_error(DecodeCause::UnknownField))
         }
-        ReplyKind::Committed => {
-            let disposition = selected.disposition.ok_or_else(|| {
-                ControlError::InvalidEncoding(serde_json::Error::missing_field("disposition"))
-            })?;
-            match disposition.kind {
-                DispositionKind::OwnerStop | DispositionKind::SetupRefused => {
-                    decode_outer_startup(payload).map(OuterReply::Startup)
+    }
+}
+
+#[derive(Default)]
+struct ReplyFields {
+    kind: Option<ReplyKind>,
+    identity: Option<BuildIdentity>,
+    authority: Option<RunAuthority>,
+    stop: Option<StopStamp>,
+    disposition: Option<Disposition>,
+    start: Option<u64>,
+    namespace: Option<NamespaceIdentity>,
+    peaks: Option<MeasuredPeaks>,
+}
+
+fn field_error(cause: DecodeCause) -> DecodeError {
+    DecodeError::new(DecodeSite::Field, cause)
+}
+fn required<T>(value: Option<T>) -> Result<T, DecodeError> {
+    value.ok_or_else(|| field_error(DecodeCause::MissingField))
+}
+
+impl ReplyFields {
+    fn finish(self) -> Result<OuterReply, DecodeError> {
+        let authority = required(self.authority)?;
+        match required(self.kind)? {
+            ReplyKind::MonitorSpawned | ReplyKind::GateReleased => {
+                if self.identity.is_some()
+                    || self.stop.is_some()
+                    || self.disposition.is_some()
+                    || self.start.is_some()
+                    || self.namespace.is_some()
+                    || self.peaks.is_some()
+                {
+                    return Err(field_error(DecodeCause::UnknownField));
                 }
-                DispositionKind::OperationalFailure => {
-                    outer_failure::decode(payload, scratch, context).map(OuterReply::Failure)
+                let phase = match required(self.kind)? {
+                    ReplyKind::MonitorSpawned => OuterPhaseReply::MonitorSpawned { authority },
+                    ReplyKind::GateReleased => OuterPhaseReply::GateReleased { authority },
+                    ReplyKind::InnerClaimed | ReplyKind::Committed => {
+                        return Err(field_error(DecodeCause::InvalidValue))
+                    }
+                };
+                Ok(OuterReply::Startup(OuterStartupControl::Phase(phase)))
+            }
+            ReplyKind::InnerClaimed => {
+                if self.identity.is_some()
+                    || self.stop.is_some()
+                    || self.disposition.is_some()
+                    || self.peaks.is_some()
+                {
+                    return Err(field_error(DecodeCause::UnknownField));
+                }
+                Ok(OuterReply::Startup(OuterStartupControl::Phase(
+                    OuterPhaseReply::InnerClaimed {
+                        authority,
+                        start: required(self.start)?,
+                        namespace: required(self.namespace)?,
+                    },
+                )))
+            }
+            ReplyKind::Committed => {
+                if self.start.is_some() || self.namespace.is_some() {
+                    return Err(field_error(DecodeCause::UnknownField));
+                }
+                let stop = required(self.stop)?;
+                match required(self.disposition)? {
+                    Disposition::OperationalFailure {
+                        operation,
+                        state,
+                        representation,
+                    } => {
+                        if self.peaks.is_some() {
+                            return Err(field_error(DecodeCause::UnknownField));
+                        }
+                        Ok(OuterReply::Failure(FailureHeader {
+                            identity: required(self.identity)?,
+                            authority,
+                            stop,
+                            operation,
+                            state,
+                            representation,
+                        }))
+                    }
+                    Disposition::OwnerStop { cause } => {
+                        if self.identity.is_some() {
+                            return Err(field_error(DecodeCause::UnknownField));
+                        }
+                        Ok(OuterReply::Startup(OuterStartupControl::OwnerStop {
+                            authority,
+                            peaks: required(self.peaks)?,
+                            stop,
+                            cause,
+                        }))
+                    }
+                    Disposition::SetupRefused { failure } => {
+                        if self.identity.is_some() {
+                            return Err(field_error(DecodeCause::UnknownField));
+                        }
+                        Ok(OuterReply::Startup(OuterStartupControl::SetupRefused {
+                            authority,
+                            peaks: required(self.peaks)?,
+                            stop,
+                            failure,
+                        }))
+                    }
                 }
             }
         }
     }
 }
 
-/// New selector and result-wrapper storage only. Existing branch decoder storage is separate.
+/// One exact typed union walk, with no selector skip that precedes a required cause visitor.
+/// Same original framer supplies this bounded payload; authentication/state remain actor duties.
+pub(super) fn decode(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut Scratch,
+) -> Result<OuterReply, ControlError> {
+    context.clear();
+    let mut parse = || -> Result<OuterReply, DecodeError> {
+        let mut decoder = Decoder::new(payload, scratch)?;
+        let mut object = decoder.begin_object()?;
+        let mut fields = ReplyFields::default();
+        macro_rules! once {
+            ($slot:expr, $value:expr) => {{
+                if $slot.is_some() {
+                    return Err(field_error(DecodeCause::DuplicateField));
+                }
+                $slot = Some($value?);
+            }};
+        }
+        while let Some(name) = decoder.next_field(&mut object)? {
+            match ReplyField::from_text(name)? {
+                ReplyField::Kind => {
+                    once!(
+                        fields.kind,
+                        ReplyKind::metadata_text(decoder.unit_variant()?)
+                            .ok_or_else(|| field_error(DecodeCause::InvalidValue))
+                    )
+                }
+                ReplyField::Identity => {
+                    once!(fields.identity, role_scalar_decode::identity(&mut decoder))
+                }
+                ReplyField::Authority => once!(
+                    fields.authority,
+                    role_scalar_decode::authority(&mut decoder)
+                ),
+                ReplyField::Stop => once!(fields.stop, role_scalar_decode::stop(&mut decoder)),
+                ReplyField::Disposition => once!(
+                    fields.disposition,
+                    outer_failure_decode::disposition(&mut decoder, context)
+                ),
+                ReplyField::Start => once!(fields.start, decoder.unsigned()),
+                ReplyField::Namespace => once!(
+                    fields.namespace,
+                    role_control_scalar_decode::namespace(&mut decoder)
+                ),
+                ReplyField::Peaks => once!(
+                    fields.peaks,
+                    role_control_scalar_decode::peaks(&mut decoder)
+                ),
+            }
+        }
+        let reply = fields.finish()?;
+        decoder.finish()?;
+        Ok(reply)
+    };
+    let result = parse();
+    outer_failure_decode::checked(result, context).map_err(|source| context.grammar_error(source))
+}
+
+/// Fixed union schema records only; primitive, scalar, cause and shared disposition charges are separate.
 pub(super) fn decode_bytes() -> Result<u64, ControlError> {
-    let branch_payload = size_of::<OuterStartupControl>().max(size_of::<FailureHeader>());
-    let wrapper = size_of::<OuterReply>()
-        .checked_sub(branch_payload)
-        .ok_or(ControlError::EncodedBytesExceeded)?;
-    let bytes = size_of::<ReplySelector>()
-        .checked_add(size_of::<DispositionSelector>())
-        .and_then(|bytes| bytes.checked_add(wrapper))
-        .ok_or(ControlError::EncodedBytesExceeded)?;
-    u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
+    let terms = [
+        size_of::<ReplyFields>(),
+        size_of::<ReplyKind>(),
+        size_of::<ReplyField>(),
+        size_of::<OuterReply>(),
+        size_of::<Result<OuterReply, DecodeError>>(),
+        size_of::<ObjectState>(),
+        size_of::<Text<'static>>(),
+        size_of::<FailureState>(),
+        size_of::<FailureRepresentation>(),
+    ];
+    let mut total =
+        u64::try_from(size_of_val(&terms)).map_err(|_| ControlError::EncodedBytesExceeded)?;
+    for term in terms {
+        total = total
+            .checked_add(u64::try_from(term).map_err(|_| ControlError::EncodedBytesExceeded)?)
+            .ok_or(ControlError::EncodedBytesExceeded)?;
+    }
+    Ok(total)
 }
 
 #[cfg(test)]
@@ -121,7 +284,10 @@ mod tests {
         protocol::{current_build_identity, RunAuthority},
         resource_ledger::MeasuredPeaks,
         role_deadline::{StopOrigin, StopStamp},
-        role_protocol::{OuterPhaseReply, OuterTerminalReply, OwnerStopCause, TerminalDisposition},
+        role_protocol::{
+            decode_outer_startup, OuterPhaseReply, OuterTerminalReply, OwnerStopCause,
+            TerminalDisposition,
+        },
         startup_envelope::PolicyFailureCause,
     };
 
@@ -134,6 +300,45 @@ mod tests {
             context,
             &mut super::super::guardian_decode::Scratch::default(),
         )
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn single_union_walk_keeps_earlier_unknown_kind_before_later_packet_faults() {
+        use crate::kani::run::guardian_decode::{DecodeCause, DecodeError};
+
+        let header = failure();
+        let valid = serde_json::to_string(&NegativeCommit::new(header, &[])).unwrap();
+        let original = match header.representation {
+            FailureRepresentation::Original { cause } => cause,
+            FailureRepresentation::Integrity { .. } => panic!("expected original cause"),
+        };
+        let cause_json = serde_json::to_string(&original).unwrap();
+        let mut unknown_value = serde_json::to_value(original).unwrap();
+        unknown_value["Io"]["kind"] = "UnknownKind".into();
+        let unknown = valid.replace(&cause_json, &serde_json::to_string(&unknown_value).unwrap());
+        assert_ne!(unknown, valid);
+        for packet in [
+            unknown.replace("\"context\":[]", "\"context\":["),
+            format!("{unknown} trailing"),
+        ] {
+            let mut context = PreparedStartupContext::new(0).unwrap();
+            let error = parse(packet.as_bytes(), &mut context)
+                .err()
+                .expect("invalid kind was accepted");
+            let ControlError::CauseMetadataGrammar { predicate, source } = &error else {
+                panic!("actual first cause checking fact was replaced by a selector error")
+            };
+            assert_eq!(*predicate, CauseIntegrityPredicate::UnknownKindMetadata);
+            assert_eq!(source.cause(), DecodeCause::InvalidValue);
+            assert!(std::ptr::eq(
+                source,
+                std::error::Error::source(&error)
+                    .unwrap()
+                    .downcast_ref::<DecodeError>()
+                    .unwrap()
+            ));
+        }
     }
 
     fn authority() -> RunAuthority {
@@ -266,6 +471,109 @@ mod tests {
                     panic!("measured negative changed domain")
                 }
             }
+        }
+    }
+
+    /// Trace: FR-034-AC-15
+    #[test]
+    fn full_union_preserves_owning_unit_maps_and_nullable_opposite_stop_members() {
+        let authority = authority();
+        let peaks = MeasuredPeaks {
+            tree_rss_bytes: 17,
+            charged_bytes: 31,
+        };
+        let stop = StopStamp::capture(StopOrigin::Outer).unwrap();
+        for (disposition, opposite) in [
+            (
+                TerminalDisposition::OwnerStop {
+                    cause: OwnerStopCause::TimedOut,
+                },
+                "failure",
+            ),
+            (
+                TerminalDisposition::SetupRefused {
+                    failure: PolicyFailureCause::ProtectionUnverified,
+                },
+                "cause",
+            ),
+        ] {
+            let mut packet = serde_json::to_value(OuterTerminalReply::Committed {
+                authority,
+                peaks,
+                stop,
+                disposition,
+            })
+            .unwrap();
+            // These forms are admitted by the original scalar derived enum/Option grammar,
+            // although the production serializer emits a string and omits the opposite member.
+            packet["kind"] = serde_json::json!({"Committed": null});
+            let name = packet["disposition"]["kind"].as_str().unwrap().to_owned();
+            packet["disposition"]["kind"] = serde_json::json!({name: null});
+            packet["disposition"][opposite] = serde_json::Value::Null;
+            let bytes = serde_json::to_vec(&packet).unwrap();
+            let old = decode_outer_startup(&bytes).unwrap();
+            let mut context = PreparedStartupContext::new(0).unwrap();
+            let new = parse(&bytes, &mut context).unwrap();
+            match (old, new) {
+                (
+                    OuterStartupControl::OwnerStop {
+                        cause,
+                        authority: old_authority,
+                        peaks: old_peaks,
+                        stop: old_stop,
+                    },
+                    OuterReply::Startup(OuterStartupControl::OwnerStop {
+                        cause: actual,
+                        authority,
+                        peaks,
+                        stop,
+                    }),
+                ) => {
+                    assert_eq!(actual, cause);
+                    assert_eq!(authority, old_authority);
+                    assert_eq!(peaks, old_peaks);
+                    assert_eq!(stop, old_stop);
+                }
+                (
+                    OuterStartupControl::SetupRefused {
+                        failure,
+                        authority: old_authority,
+                        peaks: old_peaks,
+                        stop: old_stop,
+                    },
+                    OuterReply::Startup(OuterStartupControl::SetupRefused {
+                        failure: actual,
+                        authority,
+                        peaks,
+                        stop,
+                    }),
+                ) => {
+                    assert_eq!(actual, failure);
+                    assert_eq!(authority, old_authority);
+                    assert_eq!(peaks, old_peaks);
+                    assert_eq!(stop, old_stop);
+                }
+                _ => panic!("original admitted stop changed branch"),
+            }
+            // A unit map with a non-null body is not an alternate representation.
+            packet["kind"] = serde_json::json!({"Committed": false});
+            let bytes = serde_json::to_vec(&packet).unwrap();
+            assert!(decode_outer_startup(&bytes).is_err());
+            assert!(parse(&bytes, &mut context).is_err());
+            // Duplicate explicit-null Option fields must not disappear as duplicate absence.
+            packet["kind"] = serde_json::json!("Committed");
+            let bytes = serde_json::to_string(&packet).unwrap();
+            let member = format!("\"{opposite}\":null");
+            let doubled = bytes.replacen(&member, &format!("{member},{member}"), 1);
+            assert_ne!(doubled, bytes);
+            assert!(decode_outer_startup(doubled.as_bytes()).is_err());
+            assert!(parse(doubled.as_bytes(), &mut context).is_err());
+            assert!(outer_failure_decode::decode(
+                &serde_json::to_vec(&packet).unwrap(),
+                &mut Scratch::default(),
+                &mut context
+            )
+            .is_err());
         }
     }
 
