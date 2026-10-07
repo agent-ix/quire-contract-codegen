@@ -17,6 +17,7 @@ use super::{
         role_pair, ControlError, FrameStorage, GuardianEndpoint, IncrementalReceive,
         IncrementalSend, PreparedFrame, RoleCaller, RoleEndpoint,
     },
+    cross_role_cause::CauseOperation,
     memory::{LauncherMemory, MemoryObserver},
     namespace::{
         GatedClaim, GuardianIdentity, InnerSettlement, MonitorStopSettlement, OuterMonitorOwner,
@@ -40,7 +41,12 @@ use super::{
 
 #[derive(Debug)]
 pub(super) enum SamplingError {
-    Observation(io::Error),
+    /// Actual O-owned I/O producer site and the unchanged original error. The site is
+    /// retained at the failing call, never inferred from ErrorKind or diagnostic text.
+    Io {
+        operation: CauseOperation,
+        cause: io::Error,
+    },
     Control(ControlError),
     Report(ReportError),
     Charge(ChargeError),
@@ -69,7 +75,7 @@ impl std::fmt::Display for SamplingError {
 impl std::error::Error for SamplingError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Observation(error) => Some(error),
+            Self::Io { cause, .. } => Some(cause),
             Self::Control(error) => Some(error),
             Self::Report(error) => Some(error),
             Self::Charge(error) => Some(error),
@@ -368,16 +374,21 @@ impl OuterRunOwner {
                     .monitor
                     .namespace()
                     .init_terminated()
-                    .map_err(SamplingError::Observation)?
+                    .map_err(|cause| SamplingError::Io {
+                        operation: CauseOperation::MonitorStop,
+                        cause,
+                    })?
                 {
                     return Ok(OuterRunProgress::SetupRefused);
                 }
             }
             let settlement = match self.monitor.as_mut() {
-                Some(monitor) => monitor
-                    .monitor
-                    .stop_monitor_step(cutoff)
-                    .map_err(SamplingError::Observation)?,
+                Some(monitor) => monitor.monitor.stop_monitor_step(cutoff).map_err(|cause| {
+                    SamplingError::Io {
+                        operation: CauseOperation::MonitorStop,
+                        cause,
+                    }
+                })?,
                 None => Some(MonitorStopSettlement::NotCreated),
             };
             let Some(settlement) = settlement else {
@@ -594,7 +605,10 @@ impl OuterRunOwner {
                         .monitor
                         .namespace()
                         .claimed_init_terminated()
-                        .map_err(SamplingError::Observation)?
+                        .map_err(|cause| SamplingError::Io {
+                            operation: CauseOperation::MonitorStop,
+                            cause,
+                        })?
                         == Some(false)
                     {
                         // Only original lease EOF is primary here. No M signal or outer exit
@@ -604,7 +618,10 @@ impl OuterRunOwner {
                     monitor
                         .monitor
                         .stop_monitor_step(cancellation.cutoff)
-                        .map_err(SamplingError::Observation)?
+                        .map_err(|cause| SamplingError::Io {
+                            operation: CauseOperation::MonitorStop,
+                            cause,
+                        })?
                 }
                 None => Some(MonitorStopSettlement::NotCreated),
             };
@@ -696,7 +713,10 @@ impl TerminalSampling {
             )?;
             outer
                 .require_creator_live()
-                .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
+                .map_err(|error| SamplingError::Io {
+                    operation: CauseOperation::OwnerProtection,
+                    cause: io::Error::other(error),
+                })?;
             caller
                 .transport()
                 .refuse_observable_eof()
@@ -1291,12 +1311,21 @@ fn observe_live(
         .map_err(SamplingError::Control)?;
     outer
         .require_creator_live()
-        .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
-    let launcher = launcher.sample().map_err(SamplingError::Observation)?;
+        .map_err(|error| SamplingError::Io {
+            operation: CauseOperation::OwnerProtection,
+            cause: io::Error::other(error),
+        })?;
+    let launcher = launcher.sample().map_err(|cause| SamplingError::Io {
+        operation: CauseOperation::LauncherObservation,
+        cause,
+    })?;
     let deadline = observation_deadline(settings, stops)?;
     let tree = tree
         .observe_until(1, deadline)
-        .map_err(SamplingError::Observation)?;
+        .map_err(|cause| SamplingError::Io {
+            operation: CauseOperation::TreeObservation,
+            cause,
+        })?;
     ledger
         .observe(Some(launcher), Some(tree))
         .map_err(SamplingError::Charge)
@@ -1328,7 +1357,10 @@ impl InnerMonitor {
     pub(super) fn poll_settled(&mut self) -> Result<Option<InnerSettlement>, SamplingError> {
         self.monitor
             .poll_settled()
-            .map_err(SamplingError::Observation)
+            .map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::MonitorReap,
+                cause,
+            })
     }
 
     /// Record the attempt before spawn: any error retains the actual monitor owner and cannot
@@ -1344,7 +1376,10 @@ impl InnerMonitor {
         self.state = InnerMonitorState::SpawnAttempted;
         self.monitor
             .spawn(outer, deadline)
-            .map_err(SamplingError::Observation)?;
+            .map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::MonitorSpawn,
+                cause,
+            })?;
         self.state = InnerMonitorState::Spawned;
         Ok(())
     }
@@ -1398,7 +1433,10 @@ impl InnerMonitor {
         self.monitor
             .namespace()
             .release_bootstrap_gate(claim, Some(deadline), startup_deadline)
-            .map_err(SamplingError::Observation)?;
+            .map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::MonitorClaim,
+                cause,
+            })?;
         self.state = InnerMonitorState::GateReleased;
         Ok(tick)
     }
@@ -1483,8 +1521,12 @@ impl InnerCompletion {
             receive: IncrementalReceive::prepare().map_err(SamplingError::Control)?,
             state: InnerCompletionState::AwaitDispatch,
             frame_deadline: None,
-            refusal_context: PreparedStartupContext::new(CONTEXT_BYTES)
-                .map_err(|error| SamplingError::Observation(io::Error::other(error)))?,
+            refusal_context: PreparedStartupContext::new(CONTEXT_BYTES).map_err(|error| {
+                SamplingError::Io {
+                    operation: CauseOperation::ControlPreparation,
+                    cause: io::Error::other(error),
+                }
+            })?,
         })
     }
 
@@ -1774,10 +1816,14 @@ impl OuterPhases {
                 return Ok(PhaseProgress::Exhausted);
             }
             if claimed {
-                let (start, namespace, pin) = monitor
-                    .monitor
-                    .inner_capability()
-                    .map_err(SamplingError::Observation)?;
+                let (start, namespace, pin) =
+                    monitor
+                        .monitor
+                        .inner_capability()
+                        .map_err(|cause| SamplingError::Io {
+                            operation: CauseOperation::MonitorClaim,
+                            cause,
+                        })?;
                 self.queue_reply(
                     OuterPhaseReply::InnerClaimed {
                         authority: sampling.settings.authority,
@@ -1813,10 +1859,14 @@ impl OuterPhases {
         match (&self.phase, command) {
             (OuterPhase::BeforeMonitor, OuterPhaseCommand::BeginMonitor { .. }) => {
                 monitor.spawn(outer, deadline)?;
-                let pin = monitor
-                    .monitor
-                    .monitor_capability()
-                    .map_err(SamplingError::Observation)?;
+                let pin =
+                    monitor
+                        .monitor
+                        .monitor_capability()
+                        .map_err(|cause| SamplingError::Io {
+                            operation: CauseOperation::MonitorSpawn,
+                            cause,
+                        })?;
                 self.queue_reply(
                     OuterPhaseReply::MonitorSpawned {
                         authority: sampling.settings.authority,
@@ -1885,10 +1935,19 @@ impl OuterSampling {
             .map_err(SamplingError::Deadline)?;
         let collector = ReportCollector::prepare(outer).map_err(SamplingError::Report)?;
         let mut tree =
-            MemoryObserver::prepare(Path::new("/proc")).map_err(SamplingError::Observation)?;
+            MemoryObserver::prepare(Path::new("/proc")).map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::ProcSetup,
+                cause,
+            })?;
         tree.restrict_census(settings.memory_bytes)
-            .map_err(SamplingError::Observation)?;
-        tree.bind_outer(outer).map_err(SamplingError::Observation)?;
+            .map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::TreeObservation,
+                cause,
+            })?;
+        tree.bind_outer(outer).map_err(|cause| SamplingError::Io {
+            operation: CauseOperation::Identity,
+            cause,
+        })?;
         settings
             .setup_deadline
             .local()
@@ -1999,7 +2058,10 @@ impl OuterSampling {
         }
         outer
             .require_creator_live()
-            .map_err(|error| SamplingError::Observation(io::Error::other(error)))?;
+            .map_err(|error| SamplingError::Io {
+                operation: CauseOperation::OwnerProtection,
+                cause: io::Error::other(error),
+            })?;
         caller
             .transport()
             .refuse_observable_eof()
@@ -2024,7 +2086,10 @@ impl OuterSampling {
             &mut self.collector,
             &self.ledger,
         )
-        .map_err(SamplingError::Observation)
+        .map_err(|cause| SamplingError::Io {
+            operation: CauseOperation::MonitorSpawn,
+            cause,
+        })
     }
 
     /// Prepare the actual I bootstrap and monitor as one retained production owner before spawn.
@@ -2043,11 +2108,18 @@ impl OuterSampling {
             report_slot: super::report_storage::REPORT_SLOT,
         })
         .map_err(SamplingError::Control)?;
-        let outer_pin = outer
-            .descriptor()
-            .try_clone_to_owned()
-            .map_err(SamplingError::Observation)?;
-        let caller_pin = caller_pin.try_clone().map_err(SamplingError::Observation)?;
+        let outer_pin =
+            outer
+                .descriptor()
+                .try_clone_to_owned()
+                .map_err(|cause| SamplingError::Io {
+                    operation: CauseOperation::Identity,
+                    cause,
+                })?;
+        let caller_pin = caller_pin.try_clone().map_err(|cause| SamplingError::Io {
+            operation: CauseOperation::Identity,
+            cause,
+        })?;
         let monitor = self.prepare_monitor(outer, endpoint)?;
         Ok(InnerMonitor {
             monitor,
@@ -2076,7 +2148,10 @@ impl OuterSampling {
         let claim = monitor
             .namespace()
             .claim_gated_tick(startup_deadline, &mut self.tree)
-            .map_err(SamplingError::Observation)?;
+            .map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::MonitorClaim,
+                cause,
+            })?;
         Ok((tick, claim))
     }
 
