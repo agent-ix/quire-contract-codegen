@@ -12,7 +12,7 @@ use std::{
 use super::{
     backend_installer::{self, InstallerEntryError},
     guardian::{
-        self, GuardianError, InnerAdmissionError, InnerAdmissionProgress, InnerBackendProgress,
+        GuardianError, InnerAdmissionError, InnerAdmissionProgress, InnerBackendProgress,
         PendingInnerBackend,
     },
     launcher_owner::{self, LauncherError, LauncherOwner},
