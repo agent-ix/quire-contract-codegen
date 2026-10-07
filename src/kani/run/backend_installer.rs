@@ -101,6 +101,8 @@ enum EntryState {
     AwaitExec,
     ExecReceived,
     Failed,
+    SendingRefusal,
+    RefusalDelivered,
 }
 
 /// Actual single-thread sanitized helper, positively owned by I. Its startup descriptor remains
@@ -115,6 +117,7 @@ pub(super) struct InstallerEntry {
     ready: Option<IncrementalSend>,
     exec_receive: IncrementalReceive,
     failure_context: PreparedStartupContext,
+    refusal_deadline: Option<Instant>,
     state: EntryState,
 }
 
@@ -183,6 +186,7 @@ impl InstallerEntry {
             exec_receive: IncrementalReceive::prepare().map_err(InstallerEntryError::Control)?,
             failure_context: PreparedStartupContext::new(startup_envelope::CONTEXT_BYTES)
                 .map_err(InstallerEntryError::Representation)?,
+            refusal_deadline: None,
             state: EntryState::Authenticated,
         })
     }
@@ -280,6 +284,81 @@ impl InstallerEntry {
             context: self.failure_context.context_bytes(),
         })
         .map_err(InstallerEntryError::Control)
+    }
+
+    /// Retain the original failed-installation frame and its genuine producer cutoff. The
+    /// reply cannot be restarted or confused with positive admission after a partial send.
+    pub(super) fn queue_policy_refusal(
+        &mut self,
+        error: &InstallerEntryError,
+    ) -> Result<(), InstallerEntryError> {
+        let frame = self.prepare_policy_refusal(error)?;
+        let InstallerEntryError::Policy { stop, .. } = error else {
+            return Err(InstallerEntryError::UnexpectedState);
+        };
+        let mut stops =
+            StopTimeline::prepare(self.settings.started).map_err(InstallerEntryError::Deadline)?;
+        stops
+            .observe((*stop).map_err(InstallerEntryError::Deadline)?)
+            .map_err(InstallerEntryError::Deadline)?;
+        let cutoff = stops
+            .deadline(self.settings.settlement_reserve, self.settings.deadline)
+            .and_then(|deadline| deadline.local())
+            .map_err(InstallerEntryError::Deadline)?;
+        if Instant::now() >= cutoff {
+            return Err(InstallerEntryError::Deadline(DeadlineError::Expired));
+        }
+        self.refusal_deadline = Some(cutoff);
+        self.ready = Some(IncrementalSend::new(frame));
+        self.state = EntryState::SendingRefusal;
+        Ok(())
+    }
+
+    /// One nonblocking failure-frame step, with the same original producer stop and live
+    /// authenticated I/C authority. A completed send keeps this failed installer alive under
+    /// its actual I-owned Child; it never executes, publishes Ready or supplies teardown proof.
+    pub(super) fn send_policy_refusal(&mut self) -> Result<bool, InstallerEntryError> {
+        if !matches!(self.state, EntryState::SendingRefusal) {
+            return Err(InstallerEntryError::UnexpectedState);
+        }
+        let cutoff = self.require_failed_owner()?;
+        let sent = self
+            .ready
+            .as_mut()
+            .ok_or(InstallerEntryError::UnexpectedState)?
+            .advance(&self.control.transport(), &[], cutoff)
+            .map_err(InstallerEntryError::Control)?;
+        if sent {
+            self.ready = None;
+            self.state = EntryState::RefusalDelivered;
+        }
+        Ok(sent)
+    }
+
+    /// The failed role remains positively pinnable until I receives/forwards the original
+    /// cause and runs ordinary whole-chain settlement. EOF or expiry remains a failure; no
+    /// helper-loop caller may interpret this retained state as successful execution.
+    pub(super) fn require_refusal_custody(&self) -> Result<(), InstallerEntryError> {
+        if !matches!(self.state, EntryState::RefusalDelivered) {
+            return Err(InstallerEntryError::UnexpectedState);
+        }
+        self.require_failed_owner().map(|_| ())
+    }
+
+    fn require_failed_owner(&self) -> Result<Instant, InstallerEntryError> {
+        let cutoff = self
+            .refusal_deadline
+            .ok_or(InstallerEntryError::UnexpectedState)?;
+        if Instant::now() >= cutoff {
+            return Err(InstallerEntryError::Deadline(DeadlineError::Expired));
+        }
+        creator::require_live(&self.inner_pin).map_err(InstallerEntryError::Io)?;
+        creator::require_live(&self.caller_pin).map_err(InstallerEntryError::Io)?;
+        self.control
+            .transport()
+            .refuse_observable_eof()
+            .map_err(InstallerEntryError::Control)?;
+        Ok(cutoff)
     }
 
     fn require_live(&self) -> Result<(), InstallerEntryError> {
@@ -443,6 +522,7 @@ enum InstallerState {
     Spawned,
     AwaitPolicy,
     PolicyReady,
+    PolicyRefused,
     SendingExec,
     ExecQueued,
     ChildTransferred,
@@ -625,6 +705,7 @@ impl InstallerOwner {
                 return Err(InstallerError::AuthorityMismatch);
             }
             self.stops.observe(stop).map_err(InstallerError::Deadline)?;
+            self.state = InstallerState::PolicyRefused;
             return Err(InstallerError::PolicyRefused { failure, stop });
         }
         self.state = InstallerState::PolicyReady;
