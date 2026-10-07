@@ -32,6 +32,10 @@ order with a located diagnostic and no bundle.
    - an oracle-refused package requested through an absent `ClauseRef`.
 2. Request strategy generation for each fixture, and for a `ClauseRef` absent from the package.
 3. Run bound oracle generation over the oracle-refused fixtures.
+4. For FR-008-AC-6, vary each declaration's minimum and maximum across the two just-outside-i64
+   values and the i128 extremes. Assert the strategy's `UnsupportedClause` preserves the oracle's
+   `UnsupportedExpression` code and source span, without a bundle. Exercise direct relation
+   admission over an out-of-range declaration to assert `UnsupportedRelation`.
 
 ## Expected Results
 
@@ -44,3 +48,5 @@ order with a located diagnostic and no bundle.
 - The combined `Assertion` connective returns only `UnsupportedClauseKind`.
 - Every refusal carries the full `ClauseRef`, and no refusal emits an artifact. Expression failures
   carry the exact offending span; `UnknownClause` and `UnsupportedClauseKind` carry no span.
+- No out-of-i64 declaration endpoint or literal is narrowed, clamped or admitted as an i64 strategy
+  value (FR-008-AC-6).

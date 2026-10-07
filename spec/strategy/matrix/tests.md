@@ -12,6 +12,7 @@ type: TestMatrix
 |---|---|---|---|
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | ✅ Covered |
+| FR-008 | FR-008-AC-6 | TC-017 | ✅ Covered (IR-664); both wide minimum and maximum endpoints refuse through the oracle as `UnsupportedClause`, with direct relation conversion refusing as `UnsupportedRelation` |
 | FR-008 | FR-008-CON-1 | Inspection | ✅ Covered |
 | FR-009 | FR-009-AC-1 through FR-009-AC-6 | TC-018 | ✅ Covered |
 | FR-010 | FR-010-AC-1 through FR-010-AC-5 | TC-019 | ✅ Covered |

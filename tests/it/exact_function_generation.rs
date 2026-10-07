@@ -294,7 +294,7 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     let oracles = generate(&package, &functions, &main_items());
 
     let mut ordered: Vec<_> = functions.iter().collect();
-    ordered.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+    ordered.sort_by_key(|function| package.ids.resolve(&function.node_id));
     let survivor_names: Vec<&str> = ordered
         .iter()
         .filter(|f| {
@@ -1477,7 +1477,7 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     let oracles = generate(&package, &functions, &main_items());
 
     let mut ordered: Vec<_> = functions.iter().collect();
-    ordered.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+    ordered.sort_by_key(|function| package.ids.resolve(&function.node_id));
     let survivor_names: Vec<&str> = ordered
         .iter()
         .filter(|f| {

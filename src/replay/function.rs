@@ -185,7 +185,23 @@ fn replay_falsification_through(
             let integer = match value {
                 WitnessValue::Integer(integer) => *integer,
                 WitnessValue::Boolean(boolean) => i128::from(*boolean),
-                _ => {
+                WitnessValue::ExactInteger(_)
+                | WitnessValue::Enum { .. }
+                | WitnessValue::Text(_)
+                | WitnessValue::Rational { .. }
+                | WitnessValue::Decimal { .. }
+                | WitnessValue::Float32(_)
+                | WitnessValue::Float64(_)
+                | WitnessValue::Quantity { .. }
+                | WitnessValue::Reference { .. }
+                | WitnessValue::Option(_)
+                | WitnessValue::Record { .. }
+                | WitnessValue::Tuple { .. }
+                | WitnessValue::Union { .. }
+                | WitnessValue::Sequence(_)
+                | WitnessValue::OrderedSet(_)
+                | WitnessValue::Set(_)
+                | WitnessValue::Bag(_) => {
                     return Err(SpineReplayError::UnsupportedWitnessValue {
                         argument: argument.clone(),
                     })

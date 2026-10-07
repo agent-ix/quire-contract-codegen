@@ -680,3 +680,56 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
 fn artifact(path: String, contents: String) -> Artifact {
     Artifact::new(path, contents)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quire_contract_model::{
+        DependencyName, IntegerDomain, IntegerType, OverflowPolicy, SourceDocumentId,
+        SourceIdentity, SourceLocation, SourceRevision,
+    };
+
+    /// Trace: FR-015-AC-82, TC-025.
+    #[test]
+    fn tc_025_subject_binding_refuses_both_outside_i64_endpoints() {
+        let requirement = RequirementRef::parse("test/kani-subject", "FR-015", 1).unwrap();
+        let dependency = DependencyIdentity::new(
+            requirement,
+            DependencyKind::Input,
+            vec![DependencyName::new("x").unwrap()],
+        )
+        .unwrap();
+        let source = SourceIdentity::new(
+            SourceDocumentId::new("kani-subject-test").unwrap(),
+            SourceRevision::new(1).unwrap(),
+        );
+        let source = SourceSpan::new(
+            SourceLocation::new(source.clone(), 1, 1, 0).unwrap(),
+            SourceLocation::new(source, 1, 2, 1).unwrap(),
+        )
+        .unwrap();
+        for (minimum, maximum) in [
+            (i128::from(i64::MIN) - 1, 0),
+            (i128::MIN, 0),
+            (0, i128::from(i64::MAX) + 1),
+            (0, i128::MAX),
+        ] {
+            let value = IntegerType::new(
+                IntegerDomain::Signed,
+                minimum,
+                maximum,
+                OverflowPolicy::Reject,
+            )
+            .unwrap();
+            let parameter = DependencyParameter {
+                dependency: dependency.clone(),
+                identifier: "x_current".to_owned(),
+                value_type: RustValueType::Integer(value),
+                source: source.clone(),
+            };
+            let diagnostics = subject_binding(&parameter, KaniBindingRole::Argument).unwrap_err();
+            assert_eq!(diagnostics.len(), 1);
+            assert_eq!(diagnostics[0].code, KaniErrorCode::UnsupportedBinding);
+        }
+    }
+}

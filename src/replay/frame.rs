@@ -364,8 +364,7 @@ fn decoded_state(
         .into_iter()
         .map(|(field, value)| {
             // Every binding above is an `i64`, so the decoder yields only integers; the Boolean
-            // arm is the encoding QSL admits for a Boolean (as the function path replays one)
-            // and keeps this match free of a wildcard.
+            // arm handles QSL's Boolean witness encoding explicitly.
             let integer = match value {
                 WitnessValue::Integer(integer) => i64::try_from(integer).map_err(|_| {
                     FrameReplayError::Decode(DecodeFailure::new(
@@ -375,7 +374,23 @@ fn decoded_state(
                     ))
                 })?,
                 WitnessValue::Boolean(boolean) => i64::from(boolean),
-                _ => {
+                WitnessValue::ExactInteger(_)
+                | WitnessValue::Enum { .. }
+                | WitnessValue::Text(_)
+                | WitnessValue::Rational { .. }
+                | WitnessValue::Decimal { .. }
+                | WitnessValue::Float32(_)
+                | WitnessValue::Float64(_)
+                | WitnessValue::Quantity { .. }
+                | WitnessValue::Reference { .. }
+                | WitnessValue::Option(_)
+                | WitnessValue::Record { .. }
+                | WitnessValue::Tuple { .. }
+                | WitnessValue::Union { .. }
+                | WitnessValue::Sequence(_)
+                | WitnessValue::OrderedSet(_)
+                | WitnessValue::Set(_)
+                | WitnessValue::Bag(_) => {
                     return Err(FrameReplayError::Decode(DecodeFailure::new(
                         "kani_witness_unsupported_value",
                         harness.harness_symbol.as_str(),

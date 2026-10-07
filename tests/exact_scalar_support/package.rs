@@ -101,14 +101,13 @@ pub fn id(digest: &str) -> CheckedNodeId {
     serde_json::from_value(node_ref(digest)).expect("node id")
 }
 
-/// Every code this module ever builds a node for, mapped to its real node
-/// id: the computed application digest for an application-bodied node (see
+/// Every code this module ever builds a node for, mapped to its builder-side
+/// id: the provisional application digest for an application-bodied node (see
 /// [`PackageBuilder::application_code`]/[`PackageBuilder::application_bounded`]),
 /// or the readable placeholder [`key`] for a plain node built by
-/// [`PackageBuilder::code`]/[`PackageBuilder::bounded`] (`validate_application_keys`
-/// never re-derives those, so `key(code)` really is their id). [`code_id`]
-/// reads it so a caller building `golden_items()`/`refused_items()` without
-/// a `&mut PackageBuilder` in hand still gets the same id IR would.
+/// [`PackageBuilder::code`]/[`PackageBuilder::bounded`]. [`code_id`] reads it
+/// so callers can build items without a `&mut PackageBuilder`; after admission
+/// [`FixtureIds::resolve`] maps it to the key the checked reader required.
 fn application_registry() -> &'static Mutex<BTreeMap<u32, String>> {
     static REGISTRY: OnceLock<Mutex<BTreeMap<u32, String>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
@@ -136,7 +135,7 @@ fn register_code(code: u32, digest: String) {
     }
 }
 
-/// The node id IR actually assigns for `code`, read from [`application_registry`].
+/// The builder-side node id for `code`, read from [`application_registry`].
 /// Ensures the registry is populated by building the corpus once (discarding
 /// the builder) if this is the first call in the process -- `corpus_package`
 /// registers every code this module defines via `code`/`bounded`/
@@ -588,8 +587,8 @@ impl PackageBuilder {
         self.node_with(&key(code), tag, form, semantic_type, body, &keys)
     }
 
-    /// Registers one application-bodied node with the real `node_id`
-    /// IR-216's `validate_application_keys` re-derives: the SHA-256 digest
+    /// Registers one application-bodied node with a provisional `node_id`
+    /// from the SHA-256 digest
     /// of `{version, node_tag, semantic_form, semantic_type, declaration,
     /// recursion, body}` over sorted-key JSON bytes (Contract IR
     /// `crates/quire-contract-model/src/checked_package/v2/
@@ -599,8 +598,9 @@ impl PackageBuilder {
     /// the digest this call computes. No node this module builds via this
     /// method ever sets `recursion_group`, so `recursion` is always `null`
     /// in the preimage. Also records `code -> digest` in the module's
-    /// application registry so [`code_id`] can look the same digest up
-    /// without rebuilding the node.
+    /// application registry so [`code_id`] can look it up without rebuilding
+    /// the node. Admission uses IR's typed stale-key refusal to resolve this
+    /// builder-side identity to the reader's required key.
     pub fn application_code(
         &mut self,
         code: u32,
@@ -992,12 +992,9 @@ impl PackageBuilder {
     }
 
     /// Adds `dependency` to the already-registered node `target`'s own
-    /// `dependencies` edge list, without touching `target`'s identity: an
-    /// application-bodied node's digest is derived from a preimage that
-    /// excludes `dependencies` (see [`Self::application_code_with`]), and
-    /// every other node's digest is the caller-supplied `digest` parameter
-    /// to `node`/`node_with` -- in both cases identity is fixed before this
-    /// method ever runs. `wire()` rebuilds
+    /// `dependencies` edge list without changing its builder-side id. The
+    /// reader may require a different final id after this change; `wire()`
+    /// resolves it through the reader's typed stale-key refusal and rebuilds
     /// `identity_preimage.identity_projection` fresh from the current node
     /// objects on every call, so the appended edge is reflected consistently
     /// by the next `wire()`/`admit()`.

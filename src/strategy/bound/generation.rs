@@ -933,3 +933,71 @@ fn bound_diagnostic(
 fn artifact(path: String, contents: String) -> Artifact {
     Artifact::new(path, contents)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quire_contract_model::EXECUTABLE_PROJECTION_FORMAT;
+    use serde_json::{json, Value};
+
+    fn span(line: u64) -> Value {
+        let source = json!({"document":"wide-relation", "revision":1});
+        json!({
+            "start":{"source":source,"line":line,"column":1,"byte_offset":line - 1},
+            "end":{"source":source,"line":line,"column":2,"byte_offset":line},
+        })
+    }
+
+    fn wide_clause(minimum: i128, maximum: i128) -> BoundClause {
+        let owner = json!({"package":"test/wide-relation","requirement":"FR-008","revision":1});
+        let anchor = json!({"kind":"pre","operation":"check"});
+        let integer_type = json!({
+            "kind":"integer", "domain":"signed", "minimum":minimum.to_string(),
+            "maximum":maximum.to_string(), "overflow":"reject",
+        });
+        let projection = json!({
+            "format":EXECUTABLE_PROJECTION_FORMAT,
+            "package":{
+                "id":"test/wide-relation", "schema_version":{"major":1,"minor":1},
+                "source":{"document":"wide-relation","revision":1},
+                "requirements":[{"id":"FR-008","revision":1,"source":span(1),"clauses":[{
+                    "id":"check", "kind":"precondition", "anchor":anchor, "source":span(2),
+                    "body":{"node":"reference","identity":{
+                        "requirement":owner,"kind":"input","observation":"current","path":["x"]
+                    }}
+                }]}]
+            },
+            "bindings":[{"clause":{"requirement":owner,"clause":"check"},"expression":{
+                "owner":owner,"types":[],"values":[{
+                    "name":"x","kind":"input","value_type":integer_type,"source":span(3)
+                }],"functions":[],"expression":{
+                    "node":"compare","operator":"less_equal",
+                    "left":{"node":"value_reference","name":"x","observation":"current","source":span(4)},
+                    "right":{"node":"integer_literal","value":"0","value_type":integer_type,"source":span(5)},
+                    "source":span(3)
+                },"expected_type":{"kind":"boolean"},"execution_point":anchor,"clause_root":true
+            }}]
+        });
+        let package = BoundPackage::from_json_bytes(&serde_json::to_vec(&projection).unwrap())
+            .expect("a wide typed IR clause is valid before CG admission");
+        package.clauses()[0].clone()
+    }
+
+    /// Trace: FR-008-AC-6, TC-017.
+    #[test]
+    fn tc_017_direct_relation_admission_refuses_wide_integer_domain() {
+        for (minimum, maximum) in [
+            (i128::from(i64::MIN) - 1, 0),
+            (i128::MIN, 0),
+            (0, i128::from(i64::MAX) + 1),
+            (0, i128::MAX),
+        ] {
+            let clause = wide_clause(minimum, maximum);
+            let Err(refusal) = admit_relation(&clause) else {
+                panic!("wide relation was admitted");
+            };
+            assert_eq!(refusal.code, StrategyErrorCode::UnsupportedRelation);
+            assert!(refusal.source_span.is_some());
+        }
+    }
+}

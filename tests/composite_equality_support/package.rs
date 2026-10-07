@@ -588,8 +588,8 @@ impl PackageBuilder {
         self
     }
 
-    /// Registers one application-bodied `expression` node with the real
-    /// `node_id` IR-216's `validate_application_keys` re-derives: the
+    /// Registers one application-bodied `expression` node with a provisional
+    /// `node_id` from the
     /// SHA-256 digest of `{version, node_tag, semantic_form, semantic_type,
     /// declaration, recursion, body}` over sorted-key JSON bytes
     /// (Contract IR,
@@ -602,7 +602,9 @@ impl PackageBuilder {
     /// on, so `declaration` is always `None` in practice; the preimage still
     /// includes the `None` to match IR's own shape exactly. Also records
     /// `code -> digest` in the module's application registry so
-    /// [`code_id`] can look the same digest up without rebuilding the node.
+    /// [`code_id`] can look the builder-side digest up without rebuilding the
+    /// node. Admission uses IR's typed stale-key refusal to resolve the final
+    /// key required by the checked reader.
     pub fn application_code(&mut self, code: u32, form: &str, body: Value) -> &mut Self {
         self.application_node(code, form, &key(T_BOOLEAN), body)
     }

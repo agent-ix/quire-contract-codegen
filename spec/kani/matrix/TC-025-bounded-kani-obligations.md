@@ -32,6 +32,12 @@ search each harness source for a loop bound; and submit a request with no
 items, with more items than the ceiling, with an unparsable subject path, and
 with an unwind bound on each side of the admissible range.
 
+For FR-015-AC-82, call the clause ABI and subject-binding seams directly with bounded integer
+dependencies whose minimum or maximum is just outside i64 and at the i128 extreme. Assert
+`UnsupportedDependency` in the clause-lowering detail and `UnsupportedBinding` at the subject
+binding seam; neither produces a binding or harness. This direct check remains required even when
+the public Boolean-oracle path refuses the same declaration earlier.
+
 State clauses: generate the operation-contract and frame-effect harnesses of one
 `postcondition` clause over one integer field; read each identity's scope, field
 ranges, granted and forbidden fields and cover count; and submit a clause that is

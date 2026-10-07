@@ -594,14 +594,9 @@ fn analyze_node(
     }
     let analyzed = match expression.kind() {
         ExpressionKind::BooleanLiteral { .. } => RustValueType::Boolean,
-        ExpressionKind::IntegerLiteral { value, value_type } => {
-            if i64::try_from(*value).is_err() {
-                return Err(unsupported_node(
-                    request,
-                    expression,
-                    "the integer literal is not representable as i64",
-                ));
-            }
+        ExpressionKind::IntegerLiteral { value_type, .. } => {
+            // IR checks that the literal lies in its declared type. The typed-node bound check
+            // above therefore also bounds this value before an i64 literal can be rendered.
             if typed_node.value_type() != &ValueType::integer(value_type.clone()) {
                 return Err(unsupported_node(
                     request,
