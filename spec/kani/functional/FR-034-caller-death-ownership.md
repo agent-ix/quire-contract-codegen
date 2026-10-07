@@ -396,6 +396,7 @@ authorize an unsettled result. Missing, partial, malformed or unauthenticated O 
 gain acceptance. Original-cutoff expiry or unconfirmed whole-chain settlement shall retain existing
 CleanupUnconfirmed precedence; no new window, renewed clock or EOF waiver is allocated.
 
+
 Private retention is an Analysis obligation: CODE Analysis shall follow OuterRunOwner's retained
 sampling through publication and actual settlement, including OuterSampling's ledger/history and
 owned-stop state. No current ordinary runtime seam proves private retention; the formerly proposed
@@ -425,6 +426,37 @@ Source Analysis shall inspect the actual owning publication and receive paths in
 `caller_bootstrap.rs::advance_startup` and `finish_startup_negative_after_roles`,
 `outer_sampling.rs::unclaimed_failure_step`, and `helper_entry.rs::run_outer`. These references
 identify CODE gates and the missing claimed path; they supply no runtime proof.
+
+### Queued claimed-phase cleanup during negative receipt
+
+When a COMPLETE expected InnerClaimed from the already authenticated original O is queued on C's
+original startup cursor before O's committed claimed-startup OperationalFailure, C shall retain
+bounded provisional receipt through AC-77-caused I death or original I-lease EOF. A queued positive
+phase shall not preempt that negative merely because its claimed I can no longer pass live-child
+admission. C shall retain the complete prior phase and any received unvalidated I right solely for
+close through owned cleanup, without accepting I identity or advancing the positive phase. This
+raw right shall grant no gate release, Dispatch, signalling, termination-observation or other
+capability. C shall not reopen a numeric PID or substitute a validated I handle. The original
+positive admission checks shall remain required for every actual positive transition.
+
+This exception shall apply only to the complete expected prior claim and following committed
+negative on the SAME retained startup cursor. C shall preserve required prior-frame grammar,
+original authenticated O sender/run binding, ancillary-right policy and ordering; wrong-phase,
+wrong-sender, malformed, partial or extra-right prior traffic shall not gain provisional acceptance.
+C shall neither retry with a new parser nor splice, skip damaged bytes, infer a terminal frame from
+EOF or use a generic startup cancellation fallback. Provisional receipt shall retain the original
+C stop/minimum cutoff and actual owners. It shall neither reset that cutoff nor borrow receipt-time
+allowance, and shall grant no positive report or evidence authority.
+
+C shall expose the original negative only after full original O/build/run/source/state/producer-stop
+authentication and actual I/M/O/L/capture/creator/control-EOF settlement under the original cutoff.
+I death, I-lease EOF, the prior claim or close-only right shall supply neither original cause nor
+settlement. Missing, partial, malformed or unauthenticated following Failure, expired original
+cutoff or unconfirmed whole-chain settlement shall retain existing CleanupUnconfirmed/no-evidence
+precedence; an earlier phase's raw right shall not rescue delivery. No new frame, right, outcome,
+cause, public field, ACK, window, cap or cancellation authority is allocated. Actual fixed pending
+storage/custody and bounded same-cursor integration remain PLANNED/UNRUN CODE duties under the
+existing named accounting; this text supplies no capacity or runtime proof.
 
 ### Startup and termination observations
 
@@ -1801,6 +1833,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-75 | PLANNED/UNRUN (IR-687). A later genuine observation/collector/transport error after COMMIT remains owned through bounded cleanup and prevents normal O Code0 acceptance through existing CleanupUnconfirmed. | Test |
 | FR-034-AC-76 | PLANNED/UNRUN (IR-687). A genuine admitted open-file-description Test oracle distinguishes L's retained-pidfd clone from independently opened same-O and foreign pidfds; inode equality supplies no clone evidence. | Test |
 | FR-034-AC-77 | PLANNED/UNRUN (IR-687). On a fresh complete Exhausted tick after first-byte COMMIT, O immediately initiates the same actual owned cancellation of live claimed I and retained M without waiting for C lease closure, preserving the original cutoff and committed bytes. | Test |
+| FR-034-AC-94 | PLANNED/UNRUN. C preserves the committed claimed-startup negative through a complete expected queued InnerClaimed without positive phase or I-right authority; same-cursor authentication, original cutoff and whole-chain settlement govern the result, with damaged or missing delivery retaining CleanupUnconfirmed/no evidence. | Test, Analysis |
 
 ## Dependencies
 
