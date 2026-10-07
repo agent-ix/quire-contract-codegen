@@ -32,14 +32,30 @@ pub(super) use super::REPORT_SLOT;
 const READ_BYTES: usize = 65_536;
 const READS_PER_TICK: usize = 4;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct PipeIdentity {
-    device: u64,
-    inode: u64,
+macro_rules! pipe_identity_record {
+    ($($variant:ident => $field:ident: $value:ty),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct PipeIdentity { $($field: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum PipeIdentityField { $($variant),+ }
+        impl PipeIdentityField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($field)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
 }
+pipe_identity_record! { Device => device: u64, Inode => inode: u64 }
 
 impl PipeIdentity {
+    /// Parsed numbers only; the actual owned descriptor must still pass verify().
+    pub(super) const fn from_wire_parts(device: u64, inode: u64) -> Self {
+        Self { device, inode }
+    }
+
     fn original(pipe: impl AsFd) -> io::Result<Self> {
         let metadata = fstat(pipe)?;
         if rustix::fs::FileType::from_raw_mode(metadata.st_mode) != rustix::fs::FileType::Fifo {

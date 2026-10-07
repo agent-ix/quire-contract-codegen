@@ -16,27 +16,47 @@ use super::{
     role_deadline::{ExecutionClock, IdentityDeadline, MonotonicInstant, RoleDeadline, StopStamp},
 };
 
-/// C-origin settings, forwarded without replacing the original deadline or run authority.
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RunSettings {
-    /// The original explicitly supplied helper, resolved by C without executable PATH search.
-    pub(super) helper: PathBuf,
-    pub(super) identity: BuildIdentity,
-    pub(super) authority: RunAuthority,
-    pub(super) deadline: IdentityDeadline,
-    /// Mandatory C kernel-clock lower bound, captured before any creating thread/L starts.
-    pub(super) started: MonotonicInstant,
-    /// The same original C-derived R_eff, never a receiving role's new budget.
-    pub(super) settlement_reserve: std::time::Duration,
-    /// Original C-derived cutoff T-R_eff, not a fresh role-local work allowance.
-    pub(super) work_deadline: IdentityDeadline,
-    /// C’s original finite bootstrap cap, bounded by the original identity deadline.
-    pub(super) setup_deadline: RoleDeadline,
-    pub(super) caller_uid: u32,
-    pub(super) caller_gid: u32,
-    pub(super) memory_bytes: NonZeroU64,
-    pub(super) caller_run_buffers: u64,
+// The same declaration supplies both the owning settings type and its positional order.
+macro_rules! run_settings {
+    ($($variant:ident => $(#[$attribute:meta])* $field:ident: $value:ty),+ $(,)?) => {
+        /// C-origin settings, forwarded without replacing the original deadline or run authority.
+        #[derive(Clone, Deserialize, Serialize)]
+        #[serde(deny_unknown_fields)]
+        pub(super) struct RunSettings { $($(#[$attribute])* pub(super) $field: $value),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum SettingsField { $($variant),+ }
+        impl SettingsField {
+            pub(super) fn declared_order() -> &'static [Self] { &[$(Self::$variant),+] }
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($field)) { return Some(Self::$variant); })+
+                None
+            }
+        }
+    };
+}
+run_settings! {
+    Helper =>
+        /// The original explicitly supplied helper, resolved by C without executable PATH search.
+        helper: PathBuf,
+    Identity => identity: BuildIdentity,
+    Authority => authority: RunAuthority,
+    Deadline => deadline: IdentityDeadline,
+    Started =>
+        /// Mandatory C kernel-clock lower bound, captured before any creating thread/L starts.
+        started: MonotonicInstant,
+    SettlementReserve =>
+        /// The same original C-derived R_eff, never a receiving role's new budget.
+        settlement_reserve: std::time::Duration,
+    WorkDeadline =>
+        /// Original C-derived cutoff T-R_eff, not a fresh role-local work allowance.
+        work_deadline: IdentityDeadline,
+    SetupDeadline =>
+        /// C’s original finite bootstrap cap, bounded by the original identity deadline.
+        setup_deadline: RoleDeadline,
+    CallerUid => caller_uid: u32,
+    CallerGid => caller_gid: u32,
+    MemoryBytes => memory_bytes: NonZeroU64,
+    CallerRunBuffers => caller_run_buffers: u64,
 }
 
 impl RunSettings {

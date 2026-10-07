@@ -327,9 +327,25 @@ impl StopTimeline {
 
 /// Explicit mandatory wire state for the original admission. Missing JSON cannot silently
 /// become never-elapsing through serde's implicit missing Option-field behavior.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub(super) enum IdentityDeadline {
+macro_rules! identity_deadlines {
+    ($($variant:ident $({ $($field:ident: $value:ty),+ $(,)? })?),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+        #[serde(tag = "kind", deny_unknown_fields)]
+        pub(super) enum IdentityDeadline { $($variant $({ $($field: $value),+ })?),+ }
+        #[derive(Clone, Copy)]
+        pub(super) enum IdentityDeadlineKind { $($variant),+ }
+        impl IdentityDeadlineKind {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $(if text.equals(stringify!($variant)) { return Some(Self::$variant); })+
+                None
+            }
+            pub(super) fn declared_fields(self) -> &'static [&'static str] {
+                match self { $(Self::$variant => &[$($(stringify!($field)),+)?]),+ }
+            }
+        }
+    };
+}
+identity_deadlines! {
     Finite { deadline: RoleDeadline },
     NeverElapses,
 }
