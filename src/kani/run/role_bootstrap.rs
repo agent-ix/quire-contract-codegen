@@ -7,13 +7,16 @@
 use std::{fs::File, io, os::fd::OwnedFd, time::Instant};
 
 use super::{
-    control::{ControlError, GuardianEndpoint, RoleEndpoint, RoleEntry},
+    control::{
+        ControlError, GuardianEndpoint, IncrementalReceive, PreparedReceive, RoleEndpoint,
+        RoleEntry,
+    },
     creator,
     memory::LauncherMemory,
     outer_setup::{self, LauncherNamespace, NamespaceIdentity, PreparedOuter, SetupError},
     protocol::{BuildIdentity, GuardianRefusal},
     role_deadline::DeadlineError,
-    role_protocol::{InnerBootstrap, LauncherControl, LauncherReply, OuterBootstrap, RunSettings},
+    role_protocol::{LauncherReply, RunSettings},
     spawner::SPAWNER_STACK_BYTES,
 };
 
@@ -26,6 +29,8 @@ pub(super) struct PreparedLauncher {
     pub(super) creator_pin: OwnedFd,
     pub(super) inner_endpoint: Option<GuardianEndpoint>,
     pub(super) outer_endpoint: Option<RoleEndpoint>,
+    pub(super) control_receive: IncrementalReceive,
+    pub(super) decode_scratch: super::guardian_decode::Scratch,
 }
 
 #[derive(Debug)]
@@ -87,26 +92,41 @@ pub(super) fn prepare_launcher(
     initial_deadline: Instant,
 ) -> Result<PreparedLauncher, BootstrapError> {
     let entry = RoleEntry::from_entry_stdin().map_err(BootstrapError::Control)?;
+    let mut frame = PreparedReceive::prepare().map_err(BootstrapError::Control)?;
+    let mut decode_scratch = super::guardian_decode::Scratch::default();
     let received = entry
-        .receive::<LauncherControl>(LauncherControl::rights_count, initial_deadline)
+        .receive_prepared_decode(
+            &mut frame,
+            super::bootstrap_control_decode::LauncherInput::rights_count,
+            initial_deadline,
+            |payload| {
+                super::bootstrap_control_decode::launcher(payload, &mut decode_scratch)
+                    .map_err(ControlError::InvalidGrammar)
+            },
+        )
         .map_err(BootstrapError::Control)?;
-    let LauncherControl::Start { settings } = received.control else {
+    let super::bootstrap_control_decode::LauncherInput::Start { settings } = received.control
+    else {
         return Err(BootstrapError::UnexpectedControl);
     };
-    let [creator_pin, caller_pin, inner, outer]: [OwnedFd; 4] =
-        received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
-            BootstrapError::Control(ControlError::RightsCount {
-                expected: 4,
-                received: rights.len(),
-            })
-        })?;
+    // Original rights stay owned by the original frame until authentication and fallible
+    // settings construction complete. No owned helper pathname is made from an unbound peer.
+    let caller_pin = received
+        .rights
+        .get(1)
+        .ok_or(BootstrapError::UnexpectedControl)?;
     let bootstrap = entry
-        .authenticate(&caller_pin)
+        .authenticate(caller_pin)
         .map_err(BootstrapError::Control)?;
-    let original_deadline = settings
-        .startup_deadline()
-        .map_err(BootstrapError::Deadline)?
-        .min(initial_deadline);
+    let original_deadline = super::role_protocol::startup_deadline_from_parts(
+        settings.deadline,
+        settings.started,
+        settings.settlement_reserve,
+        settings.work_deadline,
+        settings.setup_deadline,
+    )
+    .map_err(BootstrapError::Deadline)?
+    .min(initial_deadline);
     if settings.identity != identity {
         // This authenticated C→L pair exists before unshare or any child. Preserve typed stale-
         // artifact refusal rather than timing out the unrelated C→O channel when no O exists.
@@ -137,6 +157,42 @@ pub(super) fn prepare_launcher(
         }
         return Err(BootstrapError::BuildIdentityMismatch);
     }
+    let creator_pin = received
+        .rights
+        .first()
+        .ok_or(BootstrapError::UnexpectedControl)?;
+    creator::validate_parent_thread(creator_pin, caller_pin).map_err(BootstrapError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(BootstrapError::Control)?;
+    let settings =
+        super::settings_materialize::materialize(settings).map_err(materialization_error)?;
+    if Instant::now() >= original_deadline {
+        return Err(BootstrapError::Deadline(DeadlineError::Expired));
+    }
+    creator::validate_parent_thread(creator_pin, caller_pin).map_err(BootstrapError::Creator)?;
+    bootstrap
+        .transport()
+        .refuse_observable_eof()
+        .map_err(BootstrapError::Control)?;
+    // Reverse wire-order pops preserve the original ancillary buffer's allocation for Settle/Retire.
+    let outer = received
+        .rights
+        .pop()
+        .ok_or(BootstrapError::UnexpectedControl)?;
+    let inner = received
+        .rights
+        .pop()
+        .ok_or(BootstrapError::UnexpectedControl)?;
+    let caller_pin = received
+        .rights
+        .pop()
+        .ok_or(BootstrapError::UnexpectedControl)?;
+    let creator_pin = received
+        .rights
+        .pop()
+        .ok_or(BootstrapError::UnexpectedControl)?;
     if !settings.helper.is_absolute() {
         return Err(BootstrapError::HelperNotAbsolute);
     }
@@ -189,6 +245,8 @@ pub(super) fn prepare_launcher(
         creator_pin,
         inner_endpoint: Some(inner_endpoint),
         outer_endpoint: Some(outer_endpoint),
+        control_receive: IncrementalReceive::from_prepared(frame),
+        decode_scratch,
     })
 }
 
@@ -214,10 +272,20 @@ impl OuterInput {
         initial_deadline: Instant,
     ) -> Result<Self, BootstrapError> {
         let entry = RoleEntry::from_entry_stdin().map_err(BootstrapError::Control)?;
+        let mut frame = PreparedReceive::prepare().map_err(BootstrapError::Control)?;
+        let mut scratch = super::guardian_decode::Scratch::default();
         let received = entry
-            .receive::<OuterBootstrap>(OuterBootstrap::rights_count, initial_deadline)
+            .receive_prepared_decode(
+                &mut frame,
+                super::bootstrap_control_decode::OuterInput::rights_count,
+                initial_deadline,
+                |payload| {
+                    super::bootstrap_control_decode::outer(payload, &mut scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
+            )
             .map_err(BootstrapError::Control)?;
-        let OuterBootstrap::Start {
+        let super::bootstrap_control_decode::OuterInput::Start {
             settings,
             original_mount,
             original_pid,
@@ -226,19 +294,62 @@ impl OuterInput {
         else {
             return Err(BootstrapError::UnexpectedControl);
         };
-        let [launcher_pin, caller_pin, control, inner]: [OwnedFd; 4] =
-            received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
-                BootstrapError::Control(ControlError::RightsCount {
-                    expected: 4,
-                    received: rights.len(),
-                })
-            })?;
+        let launcher_pin = received
+            .rights
+            .first()
+            .ok_or(BootstrapError::UnexpectedControl)?;
         let bootstrap = entry
-            .authenticate(&launcher_pin)
+            .authenticate(launcher_pin)
             .map_err(BootstrapError::Control)?;
         if settings.identity != identity {
             return Err(BootstrapError::BuildIdentityMismatch);
         }
+        let original = super::role_protocol::startup_deadline_from_parts(
+            settings.deadline,
+            settings.started,
+            settings.settlement_reserve,
+            settings.work_deadline,
+            settings.setup_deadline,
+        )
+        .map_err(BootstrapError::Deadline)?
+        .min(initial_deadline);
+        let caller_pin = received
+            .rights
+            .get(1)
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        creator::require_live(launcher_pin).map_err(BootstrapError::Creator)?;
+        creator::require_live(caller_pin).map_err(BootstrapError::Creator)?;
+        bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(BootstrapError::Control)?;
+        let settings =
+            super::settings_materialize::materialize(settings).map_err(materialization_error)?;
+        if Instant::now() >= original {
+            return Err(BootstrapError::Deadline(DeadlineError::Expired));
+        }
+        creator::require_live(launcher_pin).map_err(BootstrapError::Creator)?;
+        creator::require_live(caller_pin).map_err(BootstrapError::Creator)?;
+        bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(BootstrapError::Control)?;
+        let inner = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        let control = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        let caller_pin = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        let launcher_pin = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
         if !settings.helper.is_absolute() {
             return Err(BootstrapError::HelperNotAbsolute);
         }
@@ -253,24 +364,32 @@ impl OuterInput {
             .map_err(BootstrapError::Deadline)?;
         let observation = bootstrap
             .transport()
-            .receive::<OuterBootstrap>(OuterBootstrap::rights_count, original.min(initial_deadline))
+            .receive_prepared_decode(
+                &mut frame,
+                super::bootstrap_control_decode::OuterInput::rights_count,
+                original.min(initial_deadline),
+                |payload| {
+                    super::bootstrap_control_decode::outer(payload, &mut scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
+            )
             .map_err(BootstrapError::Control)?;
-        let OuterBootstrap::LauncherObservation { authority } = observation.control else {
+        let super::bootstrap_control_decode::OuterInput::LauncherObservation { authority } =
+            observation.control
+        else {
             return Err(BootstrapError::UnexpectedControl);
         };
         if authority != settings.authority {
             return Err(BootstrapError::ReplayedAuthority);
         }
-        let [stat, status]: [OwnedFd; 2] =
-            observation
-                .rights
-                .try_into()
-                .map_err(|rights: Vec<OwnedFd>| {
-                    BootstrapError::Control(ControlError::RightsCount {
-                        expected: 2,
-                        received: rights.len(),
-                    })
-                })?;
+        let status = observation
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        let stat = observation
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
         for descriptor in [&stat, &status] {
             if rustix::fs::fstatfs(descriptor)
                 .map_err(|error| BootstrapError::LauncherObservation(error.into()))?
@@ -427,31 +546,92 @@ impl InnerInput {
             return Err(BootstrapError::InnerIdentityMismatch);
         }
         let entry = RoleEntry::from_entry_stdin().map_err(BootstrapError::Control)?;
+        let mut frame = PreparedReceive::prepare().map_err(BootstrapError::Control)?;
+        let mut scratch = super::guardian_decode::Scratch::default();
         let received = entry
-            .receive::<InnerBootstrap>(InnerBootstrap::rights_count, initial_deadline)
+            .receive_prepared_decode(
+                &mut frame,
+                super::bootstrap_control_decode::InnerInput::rights_count,
+                initial_deadline,
+                |payload| {
+                    super::bootstrap_control_decode::inner(payload, &mut scratch)
+                        .map_err(ControlError::InvalidGrammar)
+                },
+            )
             .map_err(BootstrapError::Control)?;
-        if !received.control.expected_report_mapping() {
-            return Err(BootstrapError::WriterMappingMismatch);
-        }
-        let InnerBootstrap::Start {
+        let super::bootstrap_control_decode::InnerInput::Start {
             settings,
             outer_namespace,
             report,
-            report_slot: _,
+            report_slot,
         } = received.control;
-        let [outer_pin, caller_pin, lease]: [OwnedFd; 3] =
-            received.rights.try_into().map_err(|rights: Vec<OwnedFd>| {
-                BootstrapError::Control(ControlError::RightsCount {
-                    expected: 3,
-                    received: rights.len(),
-                })
-            })?;
+        let outer_pin = received
+            .rights
+            .first()
+            .ok_or(BootstrapError::UnexpectedControl)?;
         let outer_bootstrap = entry
-            .authenticate(&outer_pin)
+            .authenticate(outer_pin)
             .map_err(BootstrapError::Control)?;
         if settings.identity != identity {
             return Err(BootstrapError::BuildIdentityMismatch);
         }
+        if report_slot != super::report_storage::REPORT_SLOT {
+            return Err(BootstrapError::WriterMappingMismatch);
+        }
+        let original = super::role_protocol::startup_deadline_from_parts(
+            settings.deadline,
+            settings.started,
+            settings.settlement_reserve,
+            settings.work_deadline,
+            settings.setup_deadline,
+        )
+        .map_err(BootstrapError::Deadline)?
+        .min(initial_deadline);
+        let caller_pin = received
+            .rights
+            .get(1)
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        creator::require_live(outer_pin).map_err(BootstrapError::Creator)?;
+        creator::require_live(caller_pin).map_err(BootstrapError::Creator)?;
+        let creator = outer_bootstrap
+            .transport()
+            .creator_credentials()
+            .map_err(BootstrapError::Control)?;
+        if creator.uid != 0 || creator.gid != 0 {
+            return Err(BootstrapError::OriginalIdentityMismatch);
+        }
+        if NamespaceIdentity::read("/proc/self/ns/pid").map_err(BootstrapError::Creator)?
+            == outer_namespace
+        {
+            return Err(BootstrapError::OuterNamespaceMismatch);
+        }
+        outer_bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(BootstrapError::Control)?;
+        let settings =
+            super::settings_materialize::materialize(settings).map_err(materialization_error)?;
+        if Instant::now() >= original {
+            return Err(BootstrapError::Deadline(DeadlineError::Expired));
+        }
+        creator::require_live(outer_pin).map_err(BootstrapError::Creator)?;
+        creator::require_live(caller_pin).map_err(BootstrapError::Creator)?;
+        outer_bootstrap
+            .transport()
+            .refuse_observable_eof()
+            .map_err(BootstrapError::Control)?;
+        let lease = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        let caller_pin = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
+        let outer_pin = received
+            .rights
+            .pop()
+            .ok_or(BootstrapError::UnexpectedControl)?;
         if !settings.helper.is_absolute() {
             return Err(BootstrapError::HelperNotAbsolute);
         }
@@ -513,5 +693,16 @@ impl InnerInput {
             writer,
             report,
         })
+    }
+}
+
+fn materialization_error(error: super::recipe_decode::MaterializationError) -> BootstrapError {
+    match error {
+        super::recipe_decode::MaterializationError::Grammar(error) => {
+            BootstrapError::Control(ControlError::InvalidGrammar(error))
+        }
+        super::recipe_decode::MaterializationError::Allocation(error) => {
+            BootstrapError::Creator(io::Error::other(error))
+        }
     }
 }

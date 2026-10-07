@@ -33,6 +33,8 @@ mod backend_installer;
 #[cfg(target_os = "linux")]
 mod backend_policy;
 #[cfg(target_os = "linux")]
+mod bootstrap_control_decode;
+#[cfg(target_os = "linux")]
 mod caller_bootstrap;
 #[cfg(target_os = "linux")]
 mod caller_control_decode;

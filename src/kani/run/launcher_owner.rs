@@ -18,7 +18,7 @@ use std::{
 use rustix::process::{pidfd_open, Pid, PidfdFlags, Signal};
 
 use super::{
-    control::{role_pair, ControlError, IncrementalReceive, PreparedFrame, RoleCaller},
+    control::{role_pair, ControlError, PreparedFrame, RoleCaller},
     creator,
     outer_setup::{NamespaceIdentity, PreparedOuter, SetupError},
     protocol::BackendExit,
@@ -102,7 +102,6 @@ pub(super) struct LauncherOwner {
     cancellation_attempted: bool,
     exit: Option<ExitStatus>,
     settlement_attempted: bool,
-    settlement_receive: IncrementalReceive,
 }
 
 impl LauncherOwner {
@@ -138,7 +137,6 @@ impl LauncherOwner {
             cancellation_attempted: false,
             exit: None,
             settlement_attempted: false,
-            settlement_receive: IncrementalReceive::prepare().map_err(LauncherError::Control)?,
         })
     }
 
@@ -337,14 +335,36 @@ impl LauncherOwner {
                 deadline,
             )
             .map_err(LauncherError::Control)?;
-        let acknowledged = self
-            .input
-            .bootstrap
-            .transport()
-            .receive::<LauncherControl>(LauncherControl::rights_count, deadline)
-            .map_err(LauncherError::Control)?;
-        let LauncherControl::Retire { authority } = acknowledged.control else {
-            return Err(LauncherError::UnexpectedSettlementControl);
+        let authority = loop {
+            if let Some(acknowledged) = self
+                .input
+                .control_receive
+                .advance_decode(
+                    &self.input.bootstrap.transport(),
+                    super::bootstrap_control_decode::LauncherInput::rights_count,
+                    deadline,
+                    |payload| {
+                        super::bootstrap_control_decode::launcher(
+                            payload,
+                            &mut self.input.decode_scratch,
+                        )
+                        .map_err(ControlError::InvalidGrammar)
+                    },
+                )
+                .map_err(LauncherError::Control)?
+            {
+                let super::bootstrap_control_decode::LauncherInput::Retire { authority } =
+                    acknowledged.control
+                else {
+                    return Err(LauncherError::UnexpectedSettlementControl);
+                };
+                break authority;
+            }
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .filter(|remaining| !remaining.is_zero())
+                .ok_or(LauncherError::Deadline(DeadlineError::Expired))?;
+            thread::park_timeout(remaining.min(Duration::from_millis(20)));
         };
         if authority != self.input.settings.authority {
             return Err(LauncherError::SettlementAuthorityMismatch);
@@ -416,7 +436,7 @@ impl LauncherOwner {
                     return Err(LauncherError::Deadline(DeadlineError::Expired));
                 }
             }
-            if pending || self.settlement_receive.has_partial_frame() {
+            if pending || self.input.control_receive.has_partial_frame() {
                 // Freeze a finite frame-receive bound on its first observed data; retries never
                 // restart it. The decoded C request must still carry the genuine earlier cutoff.
                 let cutoff = match frame_cutoff {
@@ -436,11 +456,19 @@ impl LauncherOwner {
                     }
                 };
                 let request = if let Some(received) = self
-                    .settlement_receive
-                    .advance::<LauncherControl>(
+                    .input
+                    .control_receive
+                    .advance_decode(
                         &self.input.bootstrap.transport(),
-                        LauncherControl::rights_count,
+                        super::bootstrap_control_decode::LauncherInput::rights_count,
                         cutoff,
+                        |payload| {
+                            super::bootstrap_control_decode::launcher(
+                                payload,
+                                &mut self.input.decode_scratch,
+                            )
+                            .map_err(ControlError::InvalidGrammar)
+                        },
                     )
                     .map_err(LauncherError::Control)?
                 {
@@ -459,7 +487,23 @@ impl LauncherOwner {
                     {
                         return Err(LauncherError::SenderMismatch);
                     }
-                    Some(received.control)
+                    Some(match received.control {
+                        super::bootstrap_control_decode::LauncherInput::Settle {
+                            authority,
+                            deadline,
+                            mode,
+                        } => LauncherControl::Settle {
+                            authority,
+                            deadline,
+                            mode,
+                        },
+                        super::bootstrap_control_decode::LauncherInput::Retire { authority } => {
+                            LauncherControl::Retire { authority }
+                        }
+                        super::bootstrap_control_decode::LauncherInput::Start { .. } => {
+                            return Err(LauncherError::UnexpectedSettlementControl)
+                        }
+                    })
                 } else {
                     None
                 };

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     outer_setup::NamespaceIdentity,
     protocol::{BackendExit, BuildIdentity, GuardianRefusal, RunAuthority},
-    report_storage::{PipeIdentity, REPORT_SLOT},
+    report_storage::PipeIdentity,
     resource_ledger::MeasuredPeaks,
     role_deadline::{ExecutionClock, IdentityDeadline, MonotonicInstant, RoleDeadline, StopStamp},
 };
@@ -268,14 +268,6 @@ impl InnerBootstrap {
     pub(super) fn rights_count(&self) -> usize {
         match self {
             Self::Start { .. } => 3,
-        }
-    }
-
-    /// Slot equality is necessary, never sufficient: O/run authentication and original pipe
-    /// identity verification must precede writer acquisition.
-    pub(super) fn expected_report_mapping(&self) -> bool {
-        match self {
-            Self::Start { report_slot, .. } => *report_slot == REPORT_SLOT,
         }
     }
 }
