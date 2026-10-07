@@ -20,11 +20,11 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
-    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DependencyInput,
-    DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
-    DisagreementCause, Identifier, ObligationIdentity, QualifiedName, ReplayLimits, ReplayRefusal,
-    ReplaySource, ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
-    DEFAULT_REPLAY_INPUT_BYTES,
+    call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DeclaredDomain,
+    DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
+    DisagreementCause, DomainKey, FiniteBound, Identifier, Integer, ObligationIdentity, ProofBound,
+    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource, ScalarLimits,
+    SourceIdentity, Verdict, WireNodeId, WitnessSettlement, DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
@@ -334,6 +334,20 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
         ReplayLimits::default(),
     );
     assert!(matches!(wrong_arm, Err(SpineReplayError::WrongArm)));
+
+    let reader = replay_falsification(
+        "h",
+        "c",
+        &values(1, 5),
+        &parameters,
+        build,
+        ReplayLimits::default().with_input_bytes(1),
+    );
+    assert!(matches!(
+        reader,
+        Err(SpineReplayError::Refused(refusal))
+            if matches!(*refusal, ReplayRefusal::Request(ReplayRequestRefusal::BoundExceeded(_)))
+    ));
 }
 
 /// One dependency selection of the proved lock, with its own source.
@@ -364,9 +378,22 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     let mut shared = dependency_lock();
     shared.identity = "test/mmm".to_owned();
     shared.source = locked("lib-mmm", b"a dependency source");
-    let lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
+    let mut lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
+    let declared = DeclaredDomain::new(ProofBound {
+        domain: DomainKey::Node {
+            node: WireNodeId::from_digest([8; 32]),
+            path: Vec::new(),
+        },
+        bound: FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
+            .expect("nonempty range"),
+    });
+    lock_inputs.declared_domains.push(declared.clone());
+    let expected_stage_limits = lock_inputs.stage_limits.clone();
     let package = ReplayPackage::new(lock_inputs, FUNCTION).expect("the twin compiles");
     let wire = request_of(&package, ReplaySource::Input(Vec::new()));
+
+    assert_eq!(wire.stage_limits, expected_stage_limits);
+    assert_eq!(wire.declared_domains, vec![declared]);
 
     let identities: Vec<_> = wire
         .dependencies
