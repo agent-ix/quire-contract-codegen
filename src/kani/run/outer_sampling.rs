@@ -192,6 +192,9 @@ pub(super) struct OuterRunOwner {
     cancellation: Option<CallerCancellation>,
     state: OuterRunState,
     poisoned: bool,
+    // The failed actor step's actual producer instant, retained before helper publication.
+    // It is distinct from an earlier completion/stop already retained in the same timeline.
+    failure_event: Option<Result<StopStamp, DeadlineError>>,
     // An owner stop before monitor preparation retains the original unexposed I endpoint.
     _unexposed_inner_endpoint: Option<GuardianEndpoint>,
 }
@@ -367,6 +370,7 @@ impl OuterRunPreparation {
                         OuterRunState::Startup
                     },
                     poisoned: false,
+                    failure_event: None,
                     _unexposed_inner_endpoint: inner_endpoint,
                 })
             }
@@ -774,8 +778,32 @@ impl OuterRunOwner {
         let result = self.advance(outer, caller);
         if result.is_ok() {
             self.poisoned = false;
+        } else {
+            // Capture once at this actual failure boundary, before the helper can publish or
+            // encode the original error. Failed clock capture is retained without retry.
+            let event = StopStamp::capture(StopOrigin::Outer);
+            self.failure_event = Some(match event {
+                Ok(stamp) => {
+                    let timeline = match (&mut self.sampling, &mut self.terminal) {
+                        (Some(sampling), _) => Some(&mut sampling.stops),
+                        (None, Some(terminal)) => Some(&mut terminal.sampling.stops),
+                        (None, None) => None,
+                    };
+                    match timeline {
+                        Some(timeline) => timeline.observe(stamp).map(|_| stamp),
+                        None => Ok(stamp),
+                    }
+                }
+                Err(error) => Err(error),
+            });
         }
         result
+    }
+
+    /// Borrow the actual first failed-step clock fact. No consumer may substitute receipt time
+    /// for absent/failed capture, or interpret this stamp as measurement or role settlement.
+    pub(super) fn failure_stop(&self) -> Result<Option<StopStamp>, DeadlineError> {
+        self.failure_event.transpose()
     }
 
     fn advance(
