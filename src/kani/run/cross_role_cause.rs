@@ -46,10 +46,11 @@ macro_rules! wire_metadata_enum {
     };
 }
 
-/// A finite operation name, not permission for every role/operation/phase combination.
-///
-/// The owner must enforce FR-034's actual role/site/state scope before constructing provenance.
-wire_metadata_enum!(CauseOperation {
+wire_metadata_enum!(
+    /// A finite operation name, not permission for every role/operation/phase combination.
+    ///
+    /// The owner must enforce FR-034's actual role/site/state scope before constructing provenance.
+    CauseOperation {
     RoleBootstrap,
     Identity,
     OwnerProtection,
@@ -96,8 +97,9 @@ pub(super) struct CauseCheckerProvenance {
     pub(super) operation: Option<CauseOperation>,
 }
 
-/// The single closed FR-034 cause-integrity predicate inventory.
-wire_metadata_enum!(CauseIntegrityPredicate {
+wire_metadata_enum!(
+    /// The single closed FR-034 cause-integrity predicate inventory.
+    CauseIntegrityPredicate {
     RequiredRepresentationExceededBound,
     RequiredRepresentationFormattingFailed,
     UnnameableOriginalKind,
