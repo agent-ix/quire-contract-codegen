@@ -326,6 +326,19 @@ impl InnerOwnerControl {
     }
 }
 
+/// Private terminal branch authority. An owner stop never attests I completion or report bytes.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(super) enum TerminalDisposition {
+    Report,
+    OwnerStop { cause: OwnerStopCause },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(super) enum OwnerStopCause {
+    ResourceExhausted,
+}
+
 /// O's terminal transaction remains separate from the already consumed I lease. A decoded
 /// commit is provisional until actual normal O/L/thread/capture settlement and stream-end checks.
 #[derive(Deserialize, Serialize)]
@@ -339,6 +352,7 @@ pub(super) enum OuterTerminalReply {
         authority: RunAuthority,
         peaks: MeasuredPeaks,
         stop: StopStamp,
+        disposition: TerminalDisposition,
     },
 }
 

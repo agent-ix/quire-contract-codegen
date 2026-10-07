@@ -28,6 +28,7 @@ use std::{
     fs::{self, File},
     io::{self, Read, Write},
     os::fd::OwnedFd,
+    os::unix::process::ExitStatusExt,
     path::PathBuf,
     process::Child,
     time::Instant,
@@ -234,7 +235,18 @@ pub(super) struct OuterMonitorOwner {
     exit: Option<std::process::ExitStatus>,
     report: super::report_storage::PipeIdentity,
     settlement_published: bool,
+    stop_kill_attempted: bool,
     namespace: NamespaceOwner,
+}
+
+/// Only direct M custody is settled here. Neither variant attests inner or outer teardown.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum MonitorStopSettlement {
+    NotCreated,
+    Reaped {
+        outcome: super::protocol::BackendExit,
+    },
 }
 
 #[cfg(target_os = "linux")]
@@ -256,6 +268,7 @@ impl OuterMonitorOwner {
             exit: None,
             report,
             settlement_published: false,
+            stop_kill_attempted: false,
             namespace,
         })
     }
@@ -329,6 +342,57 @@ impl OuterMonitorOwner {
         Ok(Some(InnerSettlement {
             report: self.report,
         }))
+    }
+
+    /// One nonblocking stop step under the caller's unchanged original settlement cutoff.
+    /// Child custody never transfers out of this owner: absence means no successful spawn.
+    /// A kill attempt, including an ESRCH race, is not reap or namespace-settlement evidence.
+    /// Every error retains the actual Child, pin, namespace owner and any observed exit status.
+    pub(super) fn stop_monitor_step(
+        &mut self,
+        cutoff: Instant,
+    ) -> io::Result<Option<MonitorStopSettlement>> {
+        let require_time = || {
+            if Instant::now() >= cutoff {
+                Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "nested monitor stop settlement cutoff elapsed",
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        require_time()?;
+        let Some(child) = self.child.as_mut() else {
+            // Only the still-prepared Command owns this unexposed mapped writer copy.
+            // Taking it also prevents a later spawn; no absent child needs a reap.
+            drop(self.command.take());
+            require_time()?;
+            return Ok(Some(MonitorStopSettlement::NotCreated));
+        };
+        if self.exit.is_none() {
+            self.exit = child.try_wait()?;
+            if self.exit.is_some() {
+                // Positive M reap retires raw group authority, independently of any I claim.
+                self.namespace.wrapper = None;
+            }
+        }
+        require_time()?;
+        if let Some(exit) = self.exit {
+            let outcome = match (exit.code(), exit.signal()) {
+                (Some(code), None) => super::protocol::BackendExit::Code(code),
+                (None, Some(signal)) => super::protocol::BackendExit::Signal(signal),
+                _ => return Err(unavailable("nested monitor exit status is invalid")),
+            };
+            return Ok(Some(MonitorStopSettlement::Reaped { outcome }));
+        }
+        if !self.stop_kill_attempted {
+            // Mark before the syscall: errors never authorize a second signal attempt.
+            self.stop_kill_attempted = true;
+            child.kill()?;
+        }
+        require_time()?;
+        Ok(None)
     }
 
     /// Clone only this retained direct Child's actual capability for an authenticated O reply.
