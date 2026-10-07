@@ -507,6 +507,48 @@ mod tests {
         }
     }
 
+    /// Trace: FR-034-AC-34, FR-034-AC-38
+    #[test]
+    fn earlier_inner_stop_shortens_cancellation_without_replacing_own_caller_stamp() {
+        let mut stops = StopTimeline::prepare(stamp(StopOrigin::Caller, 10).instant).unwrap();
+        let caller = stamp(StopOrigin::Caller, 20);
+        let inner = stamp(StopOrigin::Inner, 12);
+        let now = stamp(StopOrigin::Caller, 22).instant;
+        stops.observe_at(caller, now).unwrap();
+        stops.observe_at(inner, now).unwrap();
+        let clock = ExecutionClock {
+            original: None,
+            work: None,
+            settlement: None,
+            stops,
+            reserve: SETTLE_RESERVE,
+        };
+        assert_eq!(clock.caller_stop_stamp().unwrap(), caller);
+        assert_eq!(clock.stop_stamp().unwrap(), inner);
+        assert_eq!(
+            clock
+                .stop_deadline(IdentityDeadline::NeverElapses)
+                .unwrap()
+                .seconds,
+            13
+        );
+        // Receiving another role's later genuine trigger cannot restart the common allowance.
+        let mut clock = clock;
+        clock
+            .stops
+            .observe_at(stamp(StopOrigin::Outer, 21), now)
+            .unwrap();
+        assert_eq!(clock.caller_stop_stamp().unwrap(), caller);
+        assert_eq!(clock.stop_stamp().unwrap(), inner);
+        assert_eq!(
+            clock
+                .stop_deadline(IdentityDeadline::NeverElapses)
+                .unwrap()
+                .seconds,
+            13
+        );
+    }
+
     /// Trace: FR-034-AC-15, FR-034-AC-38.
     #[test]
     fn invalid_stamps_cannot_poison_the_retained_earliest_trigger() {
