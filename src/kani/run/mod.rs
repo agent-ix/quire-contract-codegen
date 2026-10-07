@@ -98,15 +98,15 @@ pub(crate) mod fixture;
 pub(crate) fn guardian_entry() -> std::process::ExitCode {
     #[cfg(target_os = "linux")]
     {
-        match guardian::run(protocol::current_build_identity()) {
-            Ok(()) | Err(guardian::GuardianError::Control(control::ControlError::Eof)) => {
-                std::process::ExitCode::SUCCESS
-            }
-            Err(
-                guardian::GuardianError::Control(_)
-                | guardian::GuardianError::Refusal(_)
-                | guardian::GuardianError::Io(_),
-            ) => std::process::ExitCode::FAILURE,
+        // Every role selects only this same actual helper artifact. Unknown/excess argv
+        // refuses before bootstrap; no role can bypass its authenticated retained owner.
+        let role = match role_command::HelperRole::select(std::env::args_os().skip(1)) {
+            Ok(role) => role,
+            Err(_) => return std::process::ExitCode::FAILURE,
+        };
+        match helper_entry::run(role, protocol::current_build_identity()) {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(_) => std::process::ExitCode::FAILURE,
         }
     }
     #[cfg(not(target_os = "linux"))]
