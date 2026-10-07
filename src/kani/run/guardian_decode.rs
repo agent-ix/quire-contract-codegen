@@ -130,11 +130,11 @@ pub(super) struct ArrayState {
 /// Visit an ordinary named record in its owning object or positional sequence grammar.
 /// The declaration supplies field order and lookup; custom map-only schemas do not use this.
 /// No subtree prevalidation, rewind, allocation or additional scratch is performed.
-pub(super) fn record<F: Copy>(
-    decoder: &mut Decoder<'_, '_>,
+pub(super) fn record<'input, F: Copy>(
+    decoder: &mut Decoder<'input, '_>,
     declared: &[F],
-    lookup: impl Fn(Text<'_>) -> Option<F>,
-    mut visit: impl FnMut(&mut Decoder<'_, '_>, F) -> Result<(), DecodeError>,
+    lookup: impl Fn(Text<'input>) -> Option<F>,
+    mut visit: impl FnMut(&mut Decoder<'input, '_>, F) -> Result<(), DecodeError>,
 ) -> Result<(), DecodeError> {
     let error = |cause| DecodeError::new(DecodeSite::Field, cause);
     match decoder.peek_kind()? {
