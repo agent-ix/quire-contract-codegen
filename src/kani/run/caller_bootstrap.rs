@@ -421,6 +421,8 @@ impl CallerBootstrap {
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            super::caller_driver::CallerDriver::metadata_reservation()
+                .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
             u64::try_from(startup_context.reserved_bytes())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
             super::startup_envelope::inner_startup_decode_bytes()
