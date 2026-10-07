@@ -127,7 +127,12 @@ pub(super) struct CallerBootstrap {
     caller_pin: OwnedFd,
     inner_endpoint: Option<OwnedFd>,
     outer_endpoint: Option<OwnedFd>,
-    start_frame: PreparedFrame,
+    start_frame: Option<PreparedFrame>,
+    launcher_start: Option<IncrementalSend>,
+    launcher_start_sent: bool,
+    launcher_ready: bool,
+    launcher_receive: IncrementalReceive,
+    launcher_failed: bool,
     pub(super) report_read: Option<PreparedReportRead>,
     pub(super) dispatch: Option<PreparedDispatch>,
     pub(super) stdin: OriginalStdin,
@@ -135,6 +140,9 @@ pub(super) struct CallerBootstrap {
     pub(super) publication: Arc<Publication>,
     receive: PreparedReceive,
     inner_receive: IncrementalReceive,
+    outer_receive: IncrementalReceive,
+    phase_send: Option<IncrementalSend>,
+    phase_failed: bool,
     inner_hello: Option<IncrementalSend>,
     inner_hello_sent: bool,
     inner_auth_failed: bool,
@@ -167,7 +175,7 @@ pub(super) struct CallerBootstrap {
     outer_pid: Option<i32>,
     monitor_pin: Option<OwnedFd>,
     inner_pin: Option<OwnedFd>,
-    phase_frames: [PreparedFrame; 3],
+    phase_frames: [Option<PreparedFrame>; 3],
     phase: CallerPhase,
     inner_identity: Option<(i32, u64, NamespaceIdentity)>,
 }
@@ -228,6 +236,7 @@ impl CallerRoleSettlement {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
 enum CallerPhase {
     AwaitArm,
     BeforeMonitor,
@@ -237,6 +246,25 @@ enum CallerPhase {
     ClaimedGated,
     AwaitGate,
     ClaimedBootstrap,
+}
+
+/// Explicit C-owned phase selection. A supplied action is not a fixture pause or permission
+/// to advance a different boundary; O still authenticates the existing exact private command.
+#[derive(Clone, Copy)]
+pub(super) enum CallerPhaseAction {
+    BeginMonitor,
+    ClaimInner,
+    ReleaseGate,
+}
+
+impl CallerPhaseAction {
+    fn transition(self) -> (usize, CallerPhase, CallerPhase) {
+        match self {
+            Self::BeginMonitor => (0, CallerPhase::BeforeMonitor, CallerPhase::AwaitMonitor),
+            Self::ClaimInner => (1, CallerPhase::Bootstrap, CallerPhase::AwaitClaim),
+            Self::ReleaseGate => (2, CallerPhase::ClaimedGated, CallerPhase::AwaitGate),
+        }
+    }
 }
 
 enum CallerTerminalPhase {
@@ -302,6 +330,9 @@ impl CallerBootstrap {
             .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
         let receive = PreparedReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let inner_receive = IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
+        let outer_receive = IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
+        let launcher_receive =
+            IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let terminal_receive = TerminalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let read_ack_storage = FrameStorage::prepare().map_err(CallerBootstrapError::Control)?;
         let identity_records =
@@ -335,6 +366,12 @@ impl CallerBootstrap {
         let reservations = [
             u64::try_from(std::mem::size_of::<ExecutionClock>())
                 .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
+            launcher_receive
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
+            outer_receive
+                .reserved_bytes()
+                .map_err(CallerBootstrapError::Control)?,
             inner_receive
                 .reserved_bytes()
                 .map_err(CallerBootstrapError::Control)?,
@@ -402,7 +439,12 @@ impl CallerBootstrap {
             caller_pin,
             inner_endpoint: Some(inner_endpoint.into_child_mapping()),
             outer_endpoint: Some(outer_endpoint.into_child_mapping()),
-            start_frame,
+            start_frame: Some(start_frame),
+            launcher_start: None,
+            launcher_start_sent: false,
+            launcher_ready: false,
+            launcher_receive,
+            launcher_failed: false,
             report_read: Some(report_read),
             dispatch: Some(dispatch),
             stdin,
@@ -410,6 +452,9 @@ impl CallerBootstrap {
             publication,
             receive,
             inner_receive,
+            outer_receive,
+            phase_send: None,
+            phase_failed: false,
             inner_hello: None,
             inner_hello_sent: false,
             inner_auth_failed: false,
@@ -442,7 +487,7 @@ impl CallerBootstrap {
             outer_pid: None,
             monitor_pin: None,
             inner_pin: None,
-            phase_frames,
+            phase_frames: phase_frames.map(Some),
             phase: CallerPhase::AwaitArm,
             inner_identity: None,
         })
@@ -450,7 +495,7 @@ impl CallerBootstrap {
 
     /// Stores actual spawner custody BEFORE any wait/pin/control error. A failed handshake must
     /// be settled by this retained owner; no retry or replacement helper is attempted here.
-    pub(super) fn launch(&mut self) -> Result<(), CallerBootstrapError> {
+    pub(super) fn begin_launch(&mut self) -> Result<(), CallerBootstrapError> {
         if Instant::now() >= self.deadline {
             return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
         }
@@ -467,6 +512,11 @@ impl CallerBootstrap {
             .wait_started(self.deadline)
             .map_err(CallerBootstrapError::Io)?;
         self.identity = Some(identity);
+        Ok(())
+    }
+
+    pub(super) fn launch(&mut self) -> Result<(), CallerBootstrapError> {
+        self.begin_launch()?;
         let identity = self
             .identity
             .as_ref()
@@ -482,7 +532,9 @@ impl CallerBootstrap {
         self.launcher_control
             .transport()
             .send_prepared(
-                &self.start_frame,
+                self.start_frame
+                    .as_ref()
+                    .ok_or(CallerBootstrapError::LaunchAlreadyAttempted)?,
                 &[
                     identity.creator_pin.as_fd(),
                     self.caller_pin.as_fd(),
@@ -496,6 +548,7 @@ impl CallerBootstrap {
         // its independent O-control writer throughout the later live-caller lease observation.
         self.inner_endpoint.take();
         self.outer_endpoint.take();
+        self.launcher_start_sent = true;
         let received = self
             .launcher_control
             .transport()
@@ -505,9 +558,18 @@ impl CallerBootstrap {
                 self.deadline,
             )
             .map_err(CallerBootstrapError::Control)?;
-        let sender = received
-            .credentials
-            .ok_or(CallerBootstrapError::MissingSender)?;
+        let control = received.control;
+        let sender = received.credentials;
+        self.accept_launcher_ready(control, sender)
+    }
+
+    fn accept_launcher_ready(
+        &mut self,
+        control: LauncherReply,
+        sender: Option<super::control::PeerCredentials>,
+    ) -> Result<(), CallerBootstrapError> {
+        let identity = self.launcher_identity()?;
+        let sender = sender.ok_or(CallerBootstrapError::MissingSender)?;
         if sender.pid != identity.launcher_pid.as_raw_pid()
             || sender.uid != self.caller_uid
             || sender.gid != self.caller_gid
@@ -515,11 +577,14 @@ impl CallerBootstrap {
             return Err(CallerBootstrapError::LauncherReplyMismatch);
         }
         creator::require_live(&identity.launcher_pin).map_err(CallerBootstrapError::Io)?;
-        match received.control {
+        match control {
             LauncherReply::Ready {
                 identity,
                 authority,
-            } if identity == self.build_identity && authority == self.authority => Ok(()),
+            } if identity == self.build_identity && authority == self.authority => {
+                self.launcher_ready = true;
+                Ok(())
+            }
             LauncherReply::OuterSettled { .. } => {
                 return Err(CallerBootstrapError::LauncherReplyMismatch)
             }
@@ -532,11 +597,99 @@ impl CallerBootstrap {
         }
     }
 
+    /// One genuine C/L bootstrap send or receive step. The actual creator/Child identity is
+    /// already retained by begin_launch. No O frame may block reception of this parallel source;
+    /// partial rights/bytes remain owned, and errors prevent any second launch/admission attempt.
+    pub(super) fn launch_step(&mut self, cutoff: Instant) -> Result<bool, CallerBootstrapError> {
+        if self.launcher_failed || self.launcher_ready {
+            return Err(CallerBootstrapError::LaunchAlreadyAttempted);
+        }
+        self.launcher_failed = true;
+        let result = self.advance_launch(cutoff.min(self.deadline));
+        if result.is_ok() {
+            self.launcher_failed = false;
+        }
+        result
+    }
+
+    fn advance_launch(&mut self, cutoff: Instant) -> Result<bool, CallerBootstrapError> {
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Control(ControlError::Deadline));
+        }
+        let identity = self
+            .identity
+            .as_ref()
+            .ok_or(CallerBootstrapError::MissingLauncher)?;
+        creator::require_live(&identity.creator_pin).map_err(CallerBootstrapError::Io)?;
+        creator::require_live(&identity.launcher_pin).map_err(CallerBootstrapError::Io)?;
+        self.launcher_control
+            .transport()
+            .refuse_observable_eof()
+            .map_err(CallerBootstrapError::Control)?;
+        if !self.launcher_start_sent {
+            if self.launcher_start.is_none() {
+                let frame = self
+                    .start_frame
+                    .take()
+                    .ok_or(CallerBootstrapError::LaunchAlreadyAttempted)?;
+                self.launcher_start = Some(IncrementalSend::new(frame));
+            }
+            let inner = self
+                .inner_endpoint
+                .as_ref()
+                .ok_or(CallerBootstrapError::EndpointsConsumed)?;
+            let outer = self
+                .outer_endpoint
+                .as_ref()
+                .ok_or(CallerBootstrapError::EndpointsConsumed)?;
+            let sent = self
+                .launcher_start
+                .as_mut()
+                .ok_or(CallerBootstrapError::LaunchAlreadyAttempted)?
+                .advance(
+                    &self.launcher_control.transport(),
+                    &[
+                        identity.creator_pin.as_fd(),
+                        self.caller_pin.as_fd(),
+                        inner.as_fd(),
+                        outer.as_fd(),
+                    ],
+                    cutoff,
+                )
+                .map_err(CallerBootstrapError::Control)?;
+            if sent {
+                self.launcher_start = None;
+                self.launcher_start_sent = true;
+                self.inner_endpoint.take();
+                self.outer_endpoint.take();
+            }
+            return Ok(false);
+        }
+        let Some(received) = self
+            .launcher_receive
+            .advance::<LauncherReply>(
+                &self.launcher_control.transport(),
+                LauncherReply::rights_count,
+                cutoff,
+            )
+            .map_err(CallerBootstrapError::Control)?
+        else {
+            return Ok(false);
+        };
+        let control = received.control;
+        let sender = received.credentials;
+        self.accept_launcher_ready(control, sender)?;
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Control(ControlError::Deadline));
+        }
+        Ok(true)
+    }
+
     /// C accepts only the actual live child of its retained L, authenticated as the O sender.
     /// The received capability is retained before any fallible identity inspection; a failed
     /// publication never authorizes a replacement O or discards the existing role owner's pins.
     pub(super) fn confirm_outer_arm(&mut self) -> Result<NamespaceIdentity, CallerBootstrapError> {
-        if self.outer_pin.is_some() {
+        if self.phase_failed || self.outer_receive.has_partial_frame() || self.outer_pin.is_some() {
             return Err(CallerBootstrapError::ArmAlreadyReceived);
         }
         let launcher = self
@@ -557,14 +710,83 @@ impl CallerBootstrap {
             .rights
             .pop()
             .ok_or(CallerBootstrapError::MissingOuterPin)?;
+        let control = received.control;
+        let sender = received.credentials;
+        self.accept_outer_arm(control, sender, pin, self.deadline)
+    }
+
+    /// Incremental arm reception does not block the parallel L startup channel. A partial
+    /// authentic frame retains its received rights in the pre-L O receiver until the next step.
+    pub(super) fn confirm_outer_arm_step(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<Option<NamespaceIdentity>, CallerBootstrapError> {
+        if self.phase_failed
+            || !matches!(self.phase, CallerPhase::AwaitArm)
+            || self.outer_pin.is_some()
+        {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.phase_failed = true;
+        let result = self.advance_outer_arm(cutoff.min(self.deadline));
+        if result.is_ok() {
+            self.phase_failed = false;
+        }
+        result
+    }
+
+    fn advance_outer_arm(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<Option<NamespaceIdentity>, CallerBootstrapError> {
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Control(ControlError::Deadline));
+        }
+        let launcher = self.launcher_identity()?;
+        creator::require_live(&launcher.creator_pin).map_err(CallerBootstrapError::Io)?;
+        creator::require_live(&launcher.launcher_pin).map_err(CallerBootstrapError::Io)?;
+        self.launcher_control
+            .transport()
+            .refuse_observable_eof()
+            .map_err(CallerBootstrapError::Control)?;
+        let Some(received) = self
+            .outer_receive
+            .advance::<OuterArmReply>(
+                &self.outer_control.transport(),
+                OuterArmReply::rights_count,
+                cutoff,
+            )
+            .map_err(CallerBootstrapError::Control)?
+        else {
+            return Ok(None);
+        };
+        let pin = received
+            .rights
+            .pop()
+            .ok_or(CallerBootstrapError::MissingOuterPin)?;
+        let control = received.control;
+        let sender = received.credentials;
+        self.accept_outer_arm(control, sender, pin, cutoff)
+            .map(Some)
+    }
+
+    fn accept_outer_arm(
+        &mut self,
+        control: OuterArmReply,
+        sender: Option<super::control::PeerCredentials>,
+        pin: OwnedFd,
+        cutoff: Instant,
+    ) -> Result<NamespaceIdentity, CallerBootstrapError> {
+        let launcher = self
+            .identity
+            .as_ref()
+            .ok_or(CallerBootstrapError::MissingLauncher)?;
         self.outer_pin = Some(pin);
         let pin = self
             .outer_pin
             .as_ref()
             .ok_or(CallerBootstrapError::MissingOuterPin)?;
-        let sender = received
-            .credentials
-            .ok_or(CallerBootstrapError::MissingSender)?;
+        let sender = sender.ok_or(CallerBootstrapError::MissingSender)?;
         let OuterArmReply::Armed {
             identity,
             authority,
@@ -572,7 +794,7 @@ impl CallerBootstrap {
             network,
             mapped_uid,
             mapped_gid,
-        } = received.control;
+        } = control;
         if identity != self.build_identity
             || authority != self.authority
             || mapped_uid != 0
@@ -607,7 +829,7 @@ impl CallerBootstrap {
         }
         creator::require_live(pin).map_err(CallerBootstrapError::Io)?;
         creator::require_live(&launcher.launcher_pin).map_err(CallerBootstrapError::Io)?;
-        if Instant::now() >= self.deadline {
+        if Instant::now() >= cutoff {
             return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
         }
         self.outer_namespace = Some(namespace);
@@ -618,45 +840,191 @@ impl CallerBootstrap {
     }
 
     pub(super) fn begin_monitor(&mut self) -> Result<(), CallerBootstrapError> {
-        if !matches!(self.phase, CallerPhase::BeforeMonitor) {
+        if self.phase_failed || !matches!(self.phase, CallerPhase::BeforeMonitor) {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         self.phase = CallerPhase::AwaitMonitor;
         self.outer_control
             .transport()
-            .send_prepared(&self.phase_frames[0], &[], self.deadline)
+            .send_prepared(
+                self.phase_frames
+                    .get(0)
+                    .and_then(Option::as_ref)
+                    .ok_or(CallerBootstrapError::UnexpectedPhase)?,
+                &[],
+                self.deadline,
+            )
             .map_err(CallerBootstrapError::Control)
     }
 
     pub(super) fn claim_inner(&mut self) -> Result<(), CallerBootstrapError> {
-        if !matches!(self.phase, CallerPhase::Bootstrap) {
+        if self.phase_failed || !matches!(self.phase, CallerPhase::Bootstrap) {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         self.phase = CallerPhase::AwaitClaim;
         self.outer_control
             .transport()
-            .send_prepared(&self.phase_frames[1], &[], self.deadline)
+            .send_prepared(
+                self.phase_frames
+                    .get(1)
+                    .and_then(Option::as_ref)
+                    .ok_or(CallerBootstrapError::UnexpectedPhase)?,
+                &[],
+                self.deadline,
+            )
             .map_err(CallerBootstrapError::Control)
     }
 
     pub(super) fn release_gate(&mut self) -> Result<(), CallerBootstrapError> {
-        if !matches!(self.phase, CallerPhase::ClaimedGated) {
+        if self.phase_failed || !matches!(self.phase, CallerPhase::ClaimedGated) {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         self.phase = CallerPhase::AwaitGate;
         self.outer_control
             .transport()
-            .send_prepared(&self.phase_frames[2], &[], self.deadline)
+            .send_prepared(
+                self.phase_frames
+                    .get(2)
+                    .and_then(Option::as_ref)
+                    .ok_or(CallerBootstrapError::UnexpectedPhase)?,
+                &[],
+                self.deadline,
+            )
+            .map_err(CallerBootstrapError::Control)
+    }
+
+    /// One explicit phase-send attempt. All bytes were encoded/reserved before L, and every
+    /// unsuccessful attempt returns to the C multiplexer instead of blocking its other owners.
+    pub(super) fn send_phase_step(
+        &mut self,
+        action: CallerPhaseAction,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        if self.phase_failed {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.phase_failed = true;
+        let result = self.advance_phase_send(action, cutoff.min(self.deadline));
+        if result.is_ok() {
+            self.phase_failed = false;
+        }
+        result
+    }
+
+    fn advance_phase_send(
+        &mut self,
+        action: CallerPhaseAction,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        if !self.launcher_ready || self.launcher_failed {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        let (slot, before, awaiting) = action.transition();
+        if self.phase_send.is_none() {
+            if self.phase != before {
+                return Err(CallerBootstrapError::UnexpectedPhase);
+            }
+            let frame = self
+                .phase_frames
+                .get_mut(slot)
+                .and_then(Option::take)
+                .ok_or(CallerBootstrapError::UnexpectedPhase)?;
+            self.phase_send = Some(IncrementalSend::new(frame));
+            self.phase = awaiting;
+        } else if self.phase != awaiting {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.require_startup_owners(cutoff)?;
+        let sent = self
+            .phase_send
+            .as_mut()
+            .ok_or(CallerBootstrapError::UnexpectedPhase)?
+            .advance(&self.outer_control.transport(), &[], cutoff)
+            .map_err(CallerBootstrapError::Control)?;
+        if sent {
+            self.phase_send = None;
+        }
+        Ok(sent)
+    }
+
+    /// One reply-read attempt from the actual O sender. Rights are retained by this same owner
+    /// before identity inspection. Partial frames keep their actual storage/capabilities until
+    /// another C iteration; the caller supplies the earliest original work/stop cutoff each time.
+    pub(super) fn confirm_phase_step(
+        &mut self,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        if self.phase_failed || self.phase_send.is_some() {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.phase_failed = true;
+        let result = self.advance_phase_reply(cutoff.min(self.deadline));
+        if result.is_ok() {
+            self.phase_failed = false;
+        }
+        result
+    }
+
+    fn advance_phase_reply(&mut self, cutoff: Instant) -> Result<bool, CallerBootstrapError> {
+        if !matches!(
+            self.phase,
+            CallerPhase::AwaitMonitor | CallerPhase::AwaitClaim | CallerPhase::AwaitGate
+        ) {
+            return Err(CallerBootstrapError::UnexpectedPhase);
+        }
+        self.require_startup_owners(cutoff)?;
+        let Some(received) = self
+            .outer_receive
+            .advance::<OuterPhaseReply>(
+                &self.outer_control.transport(),
+                OuterPhaseReply::rights_count,
+                cutoff,
+            )
+            .map_err(CallerBootstrapError::Control)?
+        else {
+            return Ok(false);
+        };
+        let control = received.control;
+        let sender = received.credentials;
+        let pin = received.rights.pop();
+        self.accept_phase_reply(control, sender, pin, cutoff)?;
+        Ok(true)
+    }
+
+    fn require_startup_owners(&self, cutoff: Instant) -> Result<(), CallerBootstrapError> {
+        if Instant::now() >= cutoff {
+            return Err(CallerBootstrapError::Control(ControlError::Deadline));
+        }
+        let launcher = self.launcher_identity()?;
+        creator::require_live(&launcher.creator_pin).map_err(CallerBootstrapError::Io)?;
+        creator::require_live(&launcher.launcher_pin).map_err(CallerBootstrapError::Io)?;
+        creator::require_live(
+            self.outer_pin
+                .as_ref()
+                .ok_or(CallerBootstrapError::MissingOuterPin)?,
+        )
+        .map_err(CallerBootstrapError::Io)?;
+        self.launcher_control
+            .transport()
+            .refuse_observable_eof()
+            .map_err(CallerBootstrapError::Control)?;
+        self.outer_control
+            .transport()
+            .refuse_observable_eof()
             .map_err(CallerBootstrapError::Control)
     }
 
     /// Receive the reply into the already charged buffers. Every received process capability is
     /// installed in this owner BEFORE any fallible identity check, so errors cannot discard custody.
     pub(super) fn confirm_phase(&mut self) -> Result<(), CallerBootstrapError> {
-        if !matches!(
-            self.phase,
-            CallerPhase::AwaitMonitor | CallerPhase::AwaitClaim | CallerPhase::AwaitGate
-        ) {
+        if self.phase_failed
+            || self.phase_send.is_some()
+            || self.outer_receive.has_partial_frame()
+            || !matches!(
+                self.phase,
+                CallerPhase::AwaitMonitor | CallerPhase::AwaitClaim | CallerPhase::AwaitGate
+            )
+        {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         let received = self
@@ -668,14 +1036,27 @@ impl CallerBootstrap {
                 self.deadline,
             )
             .map_err(CallerBootstrapError::Control)?;
+        let control = received.control;
+        let sender = received.credentials;
+        let pin = received.rights.pop();
+        self.accept_phase_reply(control, sender, pin, self.deadline)
+    }
+
+    fn accept_phase_reply(
+        &mut self,
+        control: OuterPhaseReply,
+        sender: Option<super::control::PeerCredentials>,
+        pin: Option<OwnedFd>,
+        cutoff: Instant,
+    ) -> Result<(), CallerBootstrapError> {
         // Select only the expected typed reply; a reordered frame never authorizes a transition.
-        let next = match (&self.phase, &received.control) {
+        let next = match (&self.phase, &control) {
             (CallerPhase::AwaitMonitor, OuterPhaseReply::MonitorSpawned { .. }) => {
-                self.monitor_pin = received.rights.pop();
+                self.monitor_pin = pin;
                 CallerPhase::Bootstrap
             }
             (CallerPhase::AwaitClaim, OuterPhaseReply::InnerClaimed { .. }) => {
-                self.inner_pin = received.rights.pop();
+                self.inner_pin = pin;
                 CallerPhase::ClaimedGated
             }
             (CallerPhase::AwaitGate, OuterPhaseReply::GateReleased { .. }) => {
@@ -683,16 +1064,14 @@ impl CallerBootstrap {
             }
             _ => return Err(CallerBootstrapError::UnexpectedPhase),
         };
-        let sender = received
-            .credentials
-            .ok_or(CallerBootstrapError::MissingSender)?;
+        let sender = sender.ok_or(CallerBootstrapError::MissingSender)?;
         if sender.pid
             != self
                 .outer_pid
                 .ok_or(CallerBootstrapError::MissingOuterPin)?
             || sender.uid != self.caller_uid
             || sender.gid != self.caller_gid
-            || received.control.authority() != self.authority
+            || control.authority() != self.authority
         {
             return Err(CallerBootstrapError::PhaseReplyMismatch);
         }
@@ -701,7 +1080,7 @@ impl CallerBootstrap {
             .as_ref()
             .ok_or(CallerBootstrapError::MissingOuterPin)?;
         creator::require_live(outer).map_err(CallerBootstrapError::Io)?;
-        match received.control {
+        match control {
             OuterPhaseReply::MonitorSpawned { .. } => {
                 let monitor = self
                     .monitor_pin
@@ -764,7 +1143,7 @@ impl CallerBootstrap {
             }
         }
         creator::require_live(outer).map_err(CallerBootstrapError::Io)?;
-        if Instant::now() >= self.deadline {
+        if Instant::now() >= cutoff {
             return Err(CallerBootstrapError::Deadline(DeadlineError::Expired));
         }
         let stage = match &next {
@@ -811,14 +1190,7 @@ impl CallerBootstrap {
         if Instant::now() >= cutoff {
             return Err(CallerBootstrapError::Control(ControlError::Deadline));
         }
-        creator::require_live(&self.launcher_identity()?.launcher_pin)
-            .map_err(CallerBootstrapError::Io)?;
-        creator::require_live(
-            self.outer_pin
-                .as_ref()
-                .ok_or(CallerBootstrapError::MissingOuterPin)?,
-        )
-        .map_err(CallerBootstrapError::Io)?;
+        self.require_startup_owners(cutoff)?;
         let bootstrap = self
             .inner_bootstrap
             .as_mut()
