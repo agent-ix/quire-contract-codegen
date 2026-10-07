@@ -163,6 +163,7 @@ pub(super) struct CallerBootstrap {
     cancel_close_sent: bool,
     cancel_received: bool,
     cancel_phase_drained: bool,
+    cancel_terminal_cursor: bool,
     cancel_phase_pin: Option<OwnedFd>,
     terminal_phase: CallerTerminalPhase,
     identity_records: RefCell<creator::PreparedIdentity>,
@@ -297,6 +298,9 @@ struct PendingOwnerStop {
 
 enum CallerTerminalPhase {
     AwaitDescriptor,
+    /// Actual sealed-descriptor read failed before any ReadCompleted bytes were sent. Only
+    /// cleanup cancellation on the original terminal cursor can follow; no report is accepted.
+    ReadFailed,
     AwaitCommit,
     ReceivedCommit(MeasuredPeaks),
     Finished,
@@ -568,6 +572,7 @@ impl CallerBootstrap {
             cancel_close_sent: false,
             cancel_received: false,
             cancel_phase_drained: false,
+            cancel_terminal_cursor: false,
             cancel_phase_pin: None,
             terminal_phase: CallerTerminalPhase::AwaitDescriptor,
             identity_records: RefCell::new(identity_records),
@@ -1773,6 +1778,8 @@ impl CallerBootstrap {
             return Err(CallerBootstrapError::UnexpectedPhase);
         }
         if self.cancel_close.is_none() {
+            self.cancel_terminal_cursor =
+                matches!(self.terminal_phase, CallerTerminalPhase::ReadFailed);
             clock
                 .capture_caller_stop(self.identity_clock)
                 .map_err(CallerBootstrapError::Deadline)?;
@@ -1826,7 +1833,24 @@ impl CallerBootstrap {
             return Ok(true);
         }
         let (cutoff, _) = self.settlement_clock(clock)?;
-        let (control, sender, pin) = {
+        let (control, sender, pin) = if self.cancel_terminal_cursor {
+            let Some(received) = self
+                .terminal_receive
+                .advance_decode(
+                    &self.outer_control.transport(),
+                    cutoff,
+                    super::role_protocol::decode_cancellation_commit,
+                )
+                .map_err(CallerBootstrapError::Control)?
+            else {
+                return Ok(false);
+            };
+            (
+                CancellationProgress::Terminal(received.control),
+                received.credentials,
+                received.rights.pop(),
+            )
+        } else {
             let Some(received) = self
                 .outer_receive
                 .advance_clock_only_optional(
@@ -1933,7 +1957,11 @@ impl CallerBootstrap {
                     peaks,
                     stop,
                     cause,
-                    OwnerStopReceiver::Startup,
+                    if self.cancel_terminal_cursor {
+                        OwnerStopReceiver::Terminal
+                    } else {
+                        OwnerStopReceiver::Startup
+                    },
                 )?;
                 Ok(true)
             }
@@ -1957,9 +1985,14 @@ impl CallerBootstrap {
         ) {
             return Err(CallerBootstrapError::OuterExitAbnormal);
         }
-        self.outer_receive
-            .confirm_end(&self.outer_control.transport(), roles.cutoff)
-            .map_err(CallerBootstrapError::Control)
+        let ended = if self.cancel_terminal_cursor {
+            self.terminal_receive
+                .confirm_end(&self.outer_control.transport(), roles.cutoff)
+        } else {
+            self.outer_receive
+                .confirm_end(&self.outer_control.transport(), roles.cutoff)
+        };
+        ended.map_err(CallerBootstrapError::Control)
     }
 
     /// Close only C's still-owned pre-Dispatch lease while retaining every process, capture and
@@ -2140,9 +2173,15 @@ impl CallerBootstrap {
             .report_read
             .take()
             .ok_or(CallerBootstrapError::TerminalTransition)?;
-        let report = read
-            .read_received(descriptor, expected_bytes, Some(cutoff))
-            .map_err(CallerBootstrapError::Report)?;
+        let report = match read.read_received(descriptor, expected_bytes, Some(cutoff)) {
+            Ok(report) => report,
+            Err(error) => {
+                // The original descriptor frame has been consumed completely. Keep final
+                // receive custody and the actual local error; do not forge the owed read ACK.
+                self.terminal_phase = CallerTerminalPhase::ReadFailed;
+                return Err(CallerBootstrapError::Report(error));
+            }
+        };
         let ack = ack_storage
             .encode(&CallerTerminalControl::ReadCompleted { authority, bytes })
             .map_err(CallerBootstrapError::Control)?;
@@ -2608,6 +2647,91 @@ mod tests {
         assert_eq!(publication.stage(), None);
         // A complete receipt and EOF still cannot fabricate a normal actual O Child wait.
         let roles = super::CallerRoleSettlement { cutoff, authority };
+        assert!(matches!(
+            caller.finish_cancellation_after_roles(&roles),
+            Err(CallerBootstrapError::OuterExitAbnormal)
+        ));
+    }
+    /// Trace: FR-034-AC-15, FR-034-AC-33, FR-034-AC-34, FR-034-AC-38.
+    #[test]
+    fn sealed_read_failure_cancellation_keeps_the_original_terminal_cursor() {
+        use std::{num::NonZeroU64, sync::Arc, time::Duration};
+        // This exercises only C's real private framer/custody/publication boundary. No helper
+        // is launched, no O namespace is simulated as production, and no cleanup is attested.
+        let mut clock = ExecutionClock::prepare(None, Duration::from_secs(1)).unwrap();
+        let (bootstrap, inner_endpoint) = Bootstrap::new(None).unwrap();
+        let stdin = OriginalStdin::capture_original().unwrap();
+        let dispatch = bootstrap
+            .prepare_dispatch(BackendCommand::new("/bin/true"), &stdin, Vec::new())
+            .unwrap();
+        let authority = bootstrap.authority();
+        let settings = RunSettings {
+            helper: std::env::current_exe().unwrap(),
+            identity: current_build_identity(),
+            authority,
+            deadline: IdentityDeadline::NeverElapses,
+            started: clock.started(),
+            settlement_reserve: clock.reserve(),
+            work_deadline: IdentityDeadline::NeverElapses,
+            setup_deadline: RoleDeadline::from_original(bootstrap.setup_deadline()).unwrap(),
+            caller_uid: rustix::process::getuid().as_raw(),
+            caller_gid: rustix::process::getgid().as_raw(),
+            memory_bytes: NonZeroU64::new(1_073_741_824).unwrap(),
+            caller_run_buffers: 0,
+        };
+        let publication = Arc::new(Publication::default());
+        let mut caller = CallerBootstrap::prepare(
+            settings,
+            bootstrap,
+            inner_endpoint,
+            dispatch,
+            stdin,
+            0,
+            Arc::clone(&publication),
+            &clock,
+        )
+        .unwrap();
+        let endpoint =
+            RoleEndpoint::from_received(caller.outer_endpoint.take().unwrap(), &caller.caller_pin)
+                .unwrap();
+        caller.outer_pin = Some(caller.caller_pin.try_clone().unwrap());
+        caller.outer_pid = Some(rustix::process::getpid().as_raw_nonzero().get());
+        // This is a real private transport/cursor test, not a helper/namespace teardown
+        // oracle. The read failure state supplies no I completion or settlement assertion.
+        caller.terminal_phase = CallerTerminalPhase::ReadFailed;
+        assert!(caller.cancel_close_step(&mut clock).unwrap());
+        assert!(caller.cancel_terminal_cursor);
+        let cutoff = clock.settlement_deadline().unwrap();
+        let cancel = endpoint
+            .transport()
+            .receive::<CallerTerminalControl>(|_| 0, cutoff)
+            .unwrap();
+        assert!(matches!(
+            cancel.control,
+            CallerTerminalControl::CancelClose { .. }
+        ));
+        endpoint
+            .transport()
+            .send(
+                &OuterTerminalReply::Cancelled {
+                    authority,
+                    stop: clock.caller_stop_stamp().unwrap(),
+                },
+                &[],
+                cutoff,
+            )
+            .unwrap();
+        drop(endpoint);
+        assert!(!caller.cancellation_reply_step(&mut clock).unwrap());
+        assert!(caller.cancellation_reply_step(&mut clock).unwrap());
+        assert!(caller.cancel_phase_pin.is_none());
+        assert_eq!(publication.stage(), None);
+        // The terminal framer, rather than a second startup decoder, consumed that exact frame.
+        assert!(caller
+            .terminal_receive
+            .confirm_end(&caller.outer_control.transport(), cutoff)
+            .unwrap());
+        let roles = CallerRoleSettlement { cutoff, authority };
         assert!(matches!(
             caller.finish_cancellation_after_roles(&roles),
             Err(CallerBootstrapError::OuterExitAbnormal)
