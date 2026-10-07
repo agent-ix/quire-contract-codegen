@@ -884,27 +884,42 @@ finite representable typed public sources shall not be replaced by this generic 
 Private finite provenance remains independently authenticated and is not a public stage-query API.
 This adds a public loss-marker type, not a refusal variant, error code or classification catalog.
 
-This SPEC declares a closed private provenance set, independent of unmerged implementation type
-or variant names. Its valid original operational scalar categories are invalid context bound,
-non-installation dependency cause and policy-site/cause mismatch, only when produced by the listed
-operation independently of encoding/checking its required cause representation.
-Its installation dependency facts
-are actual EmptyFilter, Prctl and Seccomp with nested I/O facts, and ThreadSync with its actual PID
-field. Reservation with an opaque TryReserveError is an observed category only. These facts do not
-supply generic original public-source reconstruction. The sending owner shall select them from the
-actual typed predicate, not a similarly named implementation variant; C shall validate their admitted
-fields. Adding or renaming a CODE variant shall not automatically enlarge this set. An unlisted
-custom source uses the declared opaque-loss rule only within an already listed operation and a
-representable outer I/O domain; otherwise its implementation requires a reviewed SPEC allocation.
-Neither a kind-only projection nor prose/type-name matching supplies required provenance.
-The cause domains are mutually exclusive: the sending owner shall first distinguish a failure of
-required cause encoding/checking from an original failure of the listed operation. A required
-representation bound/format/unnamed-kind/OS-kind-mismatch predicate belongs only to the integrity
-rule below, never the valid-original rows, even when wrapped as Other with a boxed first-party
-payload. A wrapper's representable outer kind does not turn that encoding failure into a valid
-original cause. The same exclusion applies to reservation or other custom payloads when they are
-failures of required cause encoding/checking. C shall retain this authenticated typed distinction;
-category names, io::Error kind, source presence and diagnostics shall not select between the domains.
+The cause model has exactly two disjoint domains. ValidOriginal contains only successfully captured
+original kind/errno and payload-presence/loss facts for a listed operation. Its finite dependency
+facts remain actual EmptyFilter, Prctl and Seccomp with nested I/O facts, and ThreadSync with its
+actual PID; an observed Reservation payload supplies no allocation-kind/layout inference. A boxed
+first-party operational cause receives the same original-payload loss treatment as other original
+custom causes unless a stronger existing public-source duty applies. It shall not be reconstructed
+from a representation-error name. CauseIntegrity contains failures of required capture/checking/
+representation instead of a valid original cause; a representable Other wrapper for such a failure
+shall not move it into ValidOriginal. The sending/checking owner and C shall select the domain from
+the actual typed operation and failure predicate, never kind, source presence, diagnostics or a
+similarly named CODE variant. Adding a CODE variant shall not enlarge either declared domain.
+
+The following single finite inventory governs every CauseIntegrity disposition in this subsection,
+including its public carrier/detail-only rules and TC-049 oracle. Checker provenance identifies only
+the independently known role/site that actually observed the predicate: sender capture and C-side
+projection are distinct, and neither shall be inferred from an unverified packet label.
+
+| CauseIntegrity predicate | Actual observed failure |
+| --- | --- |
+| RequiredRepresentationExceededBound | Required cause representation exceeds its existing bound. |
+| RequiredRepresentationFormattingFailed | Formatting required cause representation fails. Optional diagnostic formatting after a valid original cause is retained is excluded. |
+| UnnameableOriginalKind | The capturing owner cannot encode an actual original no-errno kind in the established producer domain; this is not a normalized original cause or support-gate acceptance. |
+| OriginalOsKindMismatch | Actual capture/checking finds the kind and raw-errno representation inconsistent with actual OS conversion; no alleged original kind is replayed. |
+| NonInstallationDependencyCause | Actual installation-cause capture/checking receives a dependency cause outside the allocated installation domain. |
+| PolicySiteCauseMismatch | Actual checking/projection finds the cause domain inconsistent with the independently authenticated policy site. |
+| UnknownKindMetadata | The checking receiver observes unknown kind metadata, without claiming that this was the producer's original kind. |
+| MalformedCauseMetadata | The checking receiver observes malformed cause representation. |
+| IncompleteCauseMetadata | The checking receiver observes incomplete cause custody. |
+
+A complete authenticated sender fault report supplies only its actual observed predicate and known
+provenance. A C-observed checking failure supplies C's actual predicate and independently known
+origin facts; it shall not be described as a delivered sender fault. Neither supplies an original
+remote boxed source. Missing delivery supplies no inferred sender predicate. Unlisted failure
+predicates require a reviewed SPEC allocation, not a kind-only replay, diagnostic-derived category
+or substitution of another predicate. ValidOriginal unlisted custom sources use opaque loss only
+within an already listed operation and the representable outer I/O domain.
 
 The supported no-errno producer/build domain is closed to these named ErrorKinds: NotFound,
 PermissionDenied, ConnectionRefused, ConnectionReset, HostUnreachable, NetworkUnreachable,
@@ -940,8 +955,8 @@ present while the site is absent, and both may be absent. C shall preserve every
 field and shall never fill an absent field from an unverified packet label. A reported sender identity
 shall remain only a claim until independently authenticated. Absence shall not prevent
 construction or public integrity detection, nor supply admission-site authority. Its
-private metadata predicates are UnknownKindMetadata, MalformedCauseMetadata and IncompleteCauseMetadata;
-C shall select the predicate from the observed metadata failure, never prose. It shall retain any
+private predicates are exactly those in the CauseIntegrity inventory above;
+C shall select the predicate from the actual observed failure, never prose. It shall retain any
 actual local decoder/control error, exposed by its source() when present, without an invented
 original producer payload. A caller shall identify integrity failure only by
 cause.get_ref().and_then(|error| error.downcast_ref::<KaniCauseMetadataIntegrityError>()).
@@ -1007,9 +1022,9 @@ requires CODE review and never authorizes transport normalization.
 Required cause representation can itself fail at the sending owner before a valid original cause
 representation exists; a representable outer wrapper for the encoding failure is not such a
 representation. The sender shall retain that actual typed representation failure and select only its
-observed finite predicate: RequiredRepresentationExceededBound, RequiredRepresentationFormattingFailed,
-UnnameableOriginalKind or OriginalOsKindMismatch. These are additional private predicates of
-KaniCauseMetadataIntegrityError, with actual sender-origin provenance; C shall not relabel them as
+observed predicate from the single CauseIntegrity inventory, including an actual non-installation
+dependency cause or policy-site/cause mismatch when observed by that sender.
+KaniCauseMetadataIntegrityError retains the independently known checker role/site; C shall not relabel them as
 original producer I/O kinds, optional diagnostic failure or generic custom-source loss. When the
 existing bounded authenticated negative control can carry that finite fault report, the sender shall
 send it using the same reserved control storage and limits, omitting original-cause replay. C shall
@@ -1023,6 +1038,11 @@ rule. No public cause carrier is added, and evidence/Dispatch remain forbidden f
 with unchanged settlement precedence. The cause denotes the actual required
 representation failure, not an alleged original remote I/O error or original boxed representation
 object. It retains actual finite predicate/origin facts, not an invented original payload.
+
+When C itself detects NonInstallationDependencyCause or PolicySiteCauseMismatch during actual
+capture/checking/projection, it shall retain that actual C-observed predicate with independently
+known role/site facts and use the same cause-bearing integrity or detail-only rule. No sender fault
+report is required for a positively observed C-side failure, and no sender provenance is invented.
 
 If no complete fault report is actually delivered, C shall not claim that a sender predicate was
 received or infer it from EOF/timeouts/diagnostics. An actual incomplete, malformed or unknown cause

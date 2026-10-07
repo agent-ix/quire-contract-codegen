@@ -679,7 +679,11 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     typed cause is retained first, diagnostic detail is omitted, and the original cause/mapping wins.
     Required representation failure is distinct from a valid original operational cause even when wrapped
     as Other with a first-party boxed payload. Audit the sender's actual typed required-representation
-    bound/format/unnamed-kind/OS-kind-mismatch branches without a prior valid original representation.
+    bound/format/unnamed-kind/OS-kind-mismatch branches and actual non-installation dependency
+    cause/policy-site-domain checking failures against the single CauseIntegrity inventory.
+    A valid original cause instead requires successfully captured original facts. Check each
+    actual predicate and its checker role/site: sender capture and C projection are distinct;
+    actual C-side rejection needs no delivered sender report and shall not invent sender provenance.
     Verify that these required encoding/checking predicates match only the integrity consumer row,
     never any valid-original declared-category, reservation or other custom-loss row; the wrapper
     kind/payload does not select another domain. Conversely, a genuine independent operational
@@ -693,6 +697,14 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     A non-delivered fault report shall not produce a fabricated received predicate: require the actual
     C-observed incomplete/malformed cause, transport or ownership branch and original settlement.
     No artificial allocation failure, alternate frame/cap/hook or inferred EOF-as-sender-fault credit.
+    Independently inspect actual non-installation dependency capture rejection and policy-site/cause
+    projection rejection. For genuine available existing I/O-carrier cases require the actual
+    NonInstallationDependencyCause or PolicySiteCauseMismatch integrity predicate, InvalidData/no
+    errno, integrity downcast Some and loss downcast None. Source Analysis shall reject missing
+    inventory/consumer allocation, fake bound/format predicates or generic original-loss projection.
+    C-side rejection retains independently known C checker/site facts; a sender capture fault uses
+    only actual delivered/authenticated sender facts. Existing detail-only observation cases retain
+    private finite predicates without a new public carrier. Unavailable genuine tests remain owed.
     Independently audit every actual declared sender's
     no-errno producer/build domain against all39 closed named kinds, including standard-library and
     dependency branches and actual errno conversions. An added emitted kind must update producer-side
@@ -764,7 +776,9 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     original producer kind/source is unknown for integrity, and the loss marker is absent. Missing or misleading
     integrity semantics fail the independent docs Analysis. Explicitly require docs to distinguish
     required sender encoding/checking failures from valid original boxed operational categories,
-    including the disjoint typed detectors and the fail-closed fault versus unsatisfied CODE gate.
+    including the disjoint typed detectors, the single finite capture/check/representation inventory
+    (including non-installation dependency and policy-site mismatch), actual checker provenance
+    and the fail-closed fault versus unsatisfied CODE gate.
     These public duties apply only to existing I/O-cause carriers; detail-only results retain private
     finite facts/loss without a public original-cause/downcast or stage-query promise.
     Mutants normalizing an actual Other kind to OutOfMemory, erasing OS errno, substituting a typed
@@ -793,7 +807,8 @@ Test credit and their existing Slice 2 obligation.
 | Valid original declared operational-category boxed no-errno cause outside stronger AC-39 duties, independently produced by the listed operation and not its required cause encoding/checking | Actual original named kind/raw None; declared finite facts retained privately, original boxed category unrepresented | Some | None | Original existing site-first/cause-bearing mapping; public marker required even though the category is declared, not an unmarked kind-only projection. |
 | Genuine valid original generic no-errno custom source lost across roles, excluding required cause encoding/checking faults | Exact original named kind, raw errno None, authenticated finite private provenance | Some | None | Original site-first admission or actual existing mapping; loss type denotes no original source identity. |
 | Finite typed public source required and representable under AC-39 | Its required original kind/errno and finite typed source facts | None | None | Stronger AC-39 duties retained; generic loss/integrity types shall not replace that source. |
-| Required sender cause encoding/checking fails before a valid original representation exists, even if wrapped as Other with a boxed payload; complete authenticated finite fault report delivered to an existing I/O-cause-bearing result | InvalidData/raw None, actual finite required-representation predicate and only independently authenticated optional role/site facts | None | Some | Actual integrity cause, not original replay; explicit site-authenticated Unavailable or non-site startup/protocol path. A report not delivered cannot supply this predicate. |
+| Required sender capture/check/representation fails with an actual predicate from the single CauseIntegrity inventory, even if wrapped as Other with a boxed payload; complete authenticated finite fault report delivered to an existing I/O-cause-bearing result | InvalidData/raw None, actual finite required-representation predicate and only independently authenticated optional role/site facts | None | Some | Actual integrity cause, not original replay; explicit site-authenticated Unavailable or non-site startup/protocol path. A report not delivered cannot supply this predicate. |
+| Actual C-side non-installation dependency-domain or policy-site/cause checking/projection rejection | InvalidData/raw None, actual NonInstallationDependencyCause or PolicySiteCauseMismatch and independently known checker/site facts | None | Some | Existing I/O-cause-bearing site-first integrity mapping; no sender report or invented sender origin. A detail-only observation result instead retains this predicate privately. |
 | Unknown, malformed or incomplete cause metadata; negative admission site/state independently authenticated | InvalidData, raw errno None, actual local integrity error with actual private predicate/provenance and decoder source when present | None | Some | MemoryMechanismUnavailable with exact actual admission context, code None/no evidence after settlement; public cause is integrity, never original producer replay. |
 | Cause metadata fault without independently authenticated originating admission site/state; required ownership/protection remains established | InvalidData/no-errno, actual local metadata-integrity error | None | Some | Tool(KaniToolError::Io) with actual launcher path/error; typed cause remains detectable, no invented admission-site context or Dispatch/evidence. |
 | Independent actual C-side ownership/protection check fails while a cause packet is invalid | That check's actual original cause/context, not a substituted metadata error | No generic loss marker on the local cause | None unless that check's actual original cause itself is metadata integrity; its real source identity is preserved | Existing Unavailable from the actual C-side check; false remote admission context/integrity-source substitution is forbidden. |
