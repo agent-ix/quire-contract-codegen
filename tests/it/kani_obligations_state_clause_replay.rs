@@ -26,8 +26,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
-    emitted_fixture, falsified, fixture_declaring, model, native_twin::Twin, playback_state, prove,
-    subject, Declares, Fixture,
+    emitted_fixture, falsified, model, native_twin::Twin, playback_state, prove, subject, Declares,
+    Fixture,
 };
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
@@ -719,7 +719,11 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
             },
         ),
     ] {
-        let fixture = fixture_declaring(declares);
+        let twin = match declares {
+            Declares::Parameter => Twin::with_deposit_parameter(),
+            Declares::Result => Twin::with_deposit_result(),
+        };
+        let fixture = emitted_fixture(&twin, BALANCE);
         // A playback with a field missing would be a different refusal: the shape is read first.
         let mut candidate = inputs(&twin, &fixture, (5, 0), (6, 0));
         candidate.playback.clear();

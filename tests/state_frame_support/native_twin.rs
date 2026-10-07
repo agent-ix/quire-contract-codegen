@@ -386,6 +386,56 @@ impl Twin {
         Self::build(&model::GRANTED, &CLAUSES, 0)
     }
 
+    /// QSL-emitted postcondition package whose operation declares one `other` parameter.
+    pub fn with_deposit_parameter() -> Self {
+        Self::with_deposit_declaration(true, false)
+    }
+
+    /// QSL-emitted postcondition package whose operation declares a Boolean result.
+    pub fn with_deposit_result() -> Self {
+        Self::with_deposit_declaration(false, true)
+    }
+
+    fn with_deposit_declaration(parameter: bool, result: bool) -> Self {
+        let mut twin = Self::new();
+        let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");
+        let account = domain["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == account_type())
+            .expect("account type");
+        let deposit = account["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .iter_mut()
+            .find(|operation| operation["name"] == "deposit")
+            .expect("deposit operation");
+        if parameter {
+            let identity = format!("{}/deposit/other", account_type());
+            deposit["params"] = json!([{
+                "identity": identity,
+                "name": "other",
+                "typeRef": "ix://quire/native/Boolean",
+                "presence": "required",
+                "nullable": false,
+                "defaultKind": "none",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "origin": generated(&identity),
+            }]);
+        }
+        if result {
+            deposit["returns"] = json!({
+                "typeRef": "ix://quire/native/Boolean",
+                "multiplicity": {"lower": 1, "upper": 1, "ordered": false, "unique": true},
+                "nullable": false,
+            });
+        }
+        twin.domain = domain.to_string().into_bytes();
+        twin.unit = unit_source(&hex(&jcs_digest(&twin.domain)), &CLAUSES, 0).into_bytes();
+        twin
+    }
+
     fn with_field_native_type(name: &str, type_ref: &str) -> Self {
         let mut twin = Self::new();
         let mut domain: Value = serde_json::from_slice(&twin.domain).expect("domain document");

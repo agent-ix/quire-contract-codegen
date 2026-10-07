@@ -598,22 +598,6 @@ pub(crate) fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
     }
 }
 
-/// A fixture whose clause's operation declares `declares`.
-pub(crate) fn fixture_declaring(declares: Declares) -> Fixture {
-    fixture(&match declares {
-        Declares::Parameter => Shape {
-            variant: 30,
-            condition: Condition::BalanceAgainstOther,
-            ..Shape::HEALTHY
-        },
-        Declares::Result => Shape {
-            variant: 31,
-            result: true,
-            ..Shape::HEALTHY
-        },
-    })
-}
-
 fn request<'a>(fixture: &'a Fixture, fields: &'a [&'a str]) -> StateFrameRequest<'a> {
     StateFrameRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
