@@ -162,6 +162,8 @@ pub(super) struct CallerBootstrap {
     cancel_close: Option<IncrementalSend>,
     cancel_close_sent: bool,
     cancel_received: bool,
+    cancel_finished: bool,
+    cancel_peaks: Option<MeasuredPeaks>,
     cancel_phase_drained: bool,
     cancel_terminal_cursor: bool,
     cancel_phase_pin: Option<OwnedFd>,
@@ -571,6 +573,8 @@ impl CallerBootstrap {
             cancel_close: None,
             cancel_close_sent: false,
             cancel_received: false,
+            cancel_finished: false,
+            cancel_peaks: None,
             cancel_phase_drained: false,
             cancel_terminal_cursor: false,
             cancel_phase_pin: None,
@@ -1914,8 +1918,12 @@ impl CallerBootstrap {
                 self.cancel_phase_drained = true;
                 Ok(false)
             }
-            CancellationProgress::Terminal(CancellationHeader::Cancelled { authority, stop }) => {
-                if authority != self.authority {
+            CancellationProgress::Terminal(CancellationHeader::Cancelled {
+                authority,
+                stop,
+                peaks,
+            }) => {
+                if authority != self.authority || peaks.charged_bytes < peaks.tree_rss_bytes {
                     return Err(CallerBootstrapError::TerminalReplyMismatch);
                 }
                 match stop.origin {
@@ -1942,6 +1950,7 @@ impl CallerBootstrap {
                 clock
                     .adopt_stop(stop, self.identity_clock)
                     .map_err(CallerBootstrapError::Deadline)?;
+                self.cancel_peaks = Some(peaks);
                 self.cancel_received = true;
                 Ok(true)
             }
@@ -1992,7 +2001,33 @@ impl CallerBootstrap {
             self.outer_receive
                 .confirm_end(&self.outer_control.transport(), roles.cutoff)
         };
-        ended.map_err(CallerBootstrapError::Control)
+        let ended = ended.map_err(CallerBootstrapError::Control)?;
+        if ended {
+            self.cancel_finished = true;
+        }
+        Ok(ended)
+    }
+
+    /// The actual final cancellation sample remains provisional until matching normal role
+    /// custody and exact terminal EOF were both confirmed. It grants no result on its own.
+    pub(super) fn settled_cancellation_peaks(
+        &self,
+        roles: &CallerRoleSettlement,
+    ) -> Result<MeasuredPeaks, CallerBootstrapError> {
+        if !self.cancel_finished
+            || roles.authority != self.authority
+            || Instant::now() >= roles.cutoff
+            || !matches!(
+                self.outer_settled,
+                Some(OuterChildSettlement::Reaped {
+                    outcome: BackendExit::Code(0)
+                })
+            )
+        {
+            return Err(CallerBootstrapError::SettlementReplyMismatch);
+        }
+        self.cancel_peaks
+            .ok_or(CallerBootstrapError::TerminalReplyMismatch)
     }
 
     /// Close only C's still-owned pre-Dispatch lease while retaining every process, capture and
@@ -2631,6 +2666,10 @@ mod tests {
                 &OuterTerminalReply::Cancelled {
                     authority,
                     stop: clock.caller_stop_stamp().unwrap(),
+                    peaks: MeasuredPeaks {
+                        tree_rss_bytes: 1,
+                        charged_bytes: 2,
+                    },
                 },
                 &[],
                 cutoff,
@@ -2716,6 +2755,10 @@ mod tests {
                 &OuterTerminalReply::Cancelled {
                     authority,
                     stop: clock.caller_stop_stamp().unwrap(),
+                    peaks: MeasuredPeaks {
+                        tree_rss_bytes: 1,
+                        charged_bytes: 2,
+                    },
                 },
                 &[],
                 cutoff,
@@ -2726,6 +2769,7 @@ mod tests {
         assert!(caller.cancellation_reply_step(&mut clock).unwrap());
         assert!(caller.cancel_phase_pin.is_none());
         assert_eq!(publication.stage(), None);
+        assert_eq!(caller.cancel_peaks.unwrap().charged_bytes, 2);
         // The terminal framer, rather than a second startup decoder, consumed that exact frame.
         assert!(caller
             .terminal_receive
