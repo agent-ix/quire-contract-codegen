@@ -662,6 +662,8 @@ fn stage_refusal(error: StageError) -> BoundedLaunchError {
             | ControlError::Truncated
             | ControlError::UnknownAncillary
             | ControlError::ProgressPoisoned => GuardianFailureKind::MalformedControl,
+            ControlError::PartialTerminalSend { .. } => GuardianFailureKind::MalformedControl,
+            ControlError::TrailingTerminalBytes => GuardianFailureKind::MalformedControl,
             ControlError::MissingCredentials
             | ControlError::RepeatedCredentials
             | ControlError::ChangedCredentials
