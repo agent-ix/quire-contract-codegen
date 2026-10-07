@@ -4,20 +4,15 @@
 //! selects this schema on its existing receive cursor and authenticates every retained fact.
 //! Required byte structure remains strict even when optional diagnostic text is omitted.
 
-use std::{fmt, mem::size_of};
-
-use serde::{de, de::DeserializeSeed, de::Error as _, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use super::{
-    cause_metadata::CauseSeed,
     control::ControlError,
     cross_role_cause::{CauseIntegrityPredicate, CauseOperation},
     protocol::{BuildIdentity, RunAuthority},
     role_deadline::{DeadlineError, StopStamp},
     role_protocol::RunSettings,
-    startup_cause::{
-        check_scratch_free_json, PreparedStartupContext, StartupBytesSeed, StartupCause,
-    },
+    startup_cause::{PreparedStartupContext, StartupCause},
 };
 
 /// Original replay and a required-representation fault are disjoint typed data.
@@ -128,358 +123,20 @@ impl<'a> NegativeCommit<'a> {
     }
 }
 
-#[derive(Deserialize)]
-enum CommitKind {
-    Committed,
-}
-
-#[derive(Deserialize)]
-enum DispositionKind {
-    OperationalFailure,
-}
-
-#[derive(Deserialize)]
-#[serde(field_identifier, rename_all = "snake_case")]
-enum CommitField {
-    Kind,
-    Identity,
-    Authority,
-    Stop,
-    Disposition,
-}
-
-#[derive(Deserialize)]
-#[serde(field_identifier, rename_all = "snake_case")]
-enum DispositionField {
-    Kind,
-    Operation,
-    State,
-    Representation,
-    Context,
-}
-
-#[derive(Default)]
-struct CommitFields {
-    kind: Option<CommitKind>,
-    identity: Option<BuildIdentity>,
-    authority: Option<RunAuthority>,
-    stop: Option<StopStamp>,
-    disposition: Option<DispositionMetadata>,
-}
-
-#[derive(Default)]
-struct DispositionFields {
-    kind: Option<DispositionKind>,
-    operation: Option<CauseOperation>,
-    state: Option<FailureState>,
-    representation: Option<FailureRepresentation>,
-    context: bool,
-}
-
-struct DispositionMetadata {
-    operation: CauseOperation,
-    state: FailureState,
-    representation: FailureRepresentation,
-}
-
-struct CommitSeed<'a>(&'a mut PreparedStartupContext);
-struct DispositionSeed<'a>(&'a mut PreparedStartupContext);
-
-struct RepresentationSeed<'a>(&'a mut PreparedStartupContext);
-
-#[derive(Deserialize)]
-enum RepresentationTag {
-    Original,
-    Integrity,
-}
-
-#[derive(Deserialize)]
-#[serde(field_identifier)]
-enum RepresentationField {
-    #[serde(rename = "cause")]
-    Cause,
-    #[serde(rename = "predicate")]
-    Predicate,
-}
-
-impl<'de> DeserializeSeed<'de> for RepresentationSeed<'_> {
-    type Value = FailureRepresentation;
-
-    fn deserialize<D: de::Deserializer<'de>>(self, decoder: D) -> Result<Self::Value, D::Error> {
-        decoder.deserialize_map(self)
-    }
-}
-
-impl<'de> de::Visitor<'de> for RepresentationSeed<'_> {
-    type Value = FailureRepresentation;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("one required operational cause representation")
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let tag = map
-            .next_key::<RepresentationTag>()?
-            .ok_or_else(|| A::Error::missing_field("representation"))?;
-        let representation = map.next_value_seed(RepresentationBodySeed(self.0, tag))?;
-        if map.next_key::<RepresentationTag>()?.is_some() {
-            return Err(A::Error::custom("conflicting cause representations"));
-        }
-        Ok(representation)
-    }
-}
-
-struct RepresentationBodySeed<'a>(&'a mut PreparedStartupContext, RepresentationTag);
-
-impl<'de> DeserializeSeed<'de> for RepresentationBodySeed<'_> {
-    type Value = FailureRepresentation;
-
-    fn deserialize<D: de::Deserializer<'de>>(self, decoder: D) -> Result<Self::Value, D::Error> {
-        decoder.deserialize_map(self)
-    }
-}
-
-impl<'de> de::Visitor<'de> for RepresentationBodySeed<'_> {
-    type Value = FailureRepresentation;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("one required cause or integrity predicate")
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let field = map.next_key::<RepresentationField>()?;
-        let representation = match (self.1, field) {
-            (RepresentationTag::Original, Some(RepresentationField::Cause)) => {
-                FailureRepresentation::Original {
-                    cause: map.next_value_seed(CauseSeed::new(self.0.metadata_fault_slot()))?,
-                }
-            }
-            (RepresentationTag::Integrity, Some(RepresentationField::Predicate)) => {
-                FailureRepresentation::Integrity {
-                    predicate: map.next_value()?,
-                }
-            }
-            (RepresentationTag::Original | RepresentationTag::Integrity, None) => {
-                *self.0.metadata_fault_slot() =
-                    Some(CauseIntegrityPredicate::IncompleteCauseMetadata);
-                return Err(A::Error::custom("required cause member missing"));
-            }
-            (RepresentationTag::Original, Some(RepresentationField::Predicate))
-            | (RepresentationTag::Integrity, Some(RepresentationField::Cause)) => {
-                *self.0.metadata_fault_slot() =
-                    Some(CauseIntegrityPredicate::MalformedCauseMetadata);
-                return Err(A::Error::custom("cause representation member mismatch"));
-            }
-        };
-        if map.next_key::<RepresentationField>()?.is_some() {
-            *self.0.metadata_fault_slot() = Some(CauseIntegrityPredicate::MalformedCauseMetadata);
-            return Err(A::Error::custom("extra cause representation member"));
-        }
-        Ok(representation)
-    }
-}
-
-impl<'de> DeserializeSeed<'de> for CommitSeed<'_> {
-    type Value = FailureHeader;
-
-    fn deserialize<D: de::Deserializer<'de>>(self, decoder: D) -> Result<Self::Value, D::Error> {
-        decoder.deserialize_map(self)
-    }
-}
-
-impl<'de> de::Visitor<'de> for CommitSeed<'_> {
-    type Value = FailureHeader;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("one exact negative operational commit")
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut fields = CommitFields::default();
-        while let Some(field) = map.next_key::<CommitField>()? {
-            match field {
-                CommitField::Kind => {
-                    if fields.kind.is_some() {
-                        return Err(A::Error::duplicate_field("kind"));
-                    }
-                    fields.kind = Some(map.next_value()?);
-                }
-                CommitField::Identity => {
-                    if fields.identity.is_some() {
-                        return Err(A::Error::duplicate_field("identity"));
-                    }
-                    fields.identity = Some(map.next_value()?);
-                }
-                CommitField::Authority => {
-                    if fields.authority.is_some() {
-                        return Err(A::Error::duplicate_field("authority"));
-                    }
-                    fields.authority = Some(map.next_value()?);
-                }
-                CommitField::Stop => {
-                    if fields.stop.is_some() {
-                        return Err(A::Error::duplicate_field("stop"));
-                    }
-                    fields.stop = Some(map.next_value()?);
-                }
-                CommitField::Disposition => {
-                    if fields.disposition.is_some() {
-                        return Err(A::Error::duplicate_field("disposition"));
-                    }
-                    fields.disposition = Some(map.next_value_seed(DispositionSeed(self.0))?);
-                }
-            }
-        }
-        let CommitKind::Committed = fields.kind.ok_or_else(|| A::Error::missing_field("kind"))?;
-        let disposition = fields
-            .disposition
-            .ok_or_else(|| A::Error::missing_field("disposition"))?;
-        Ok(FailureHeader {
-            identity: fields
-                .identity
-                .ok_or_else(|| A::Error::missing_field("identity"))?,
-            authority: fields
-                .authority
-                .ok_or_else(|| A::Error::missing_field("authority"))?,
-            stop: fields.stop.ok_or_else(|| A::Error::missing_field("stop"))?,
-            operation: disposition.operation,
-            state: disposition.state,
-            representation: disposition.representation,
-        })
-    }
-}
-
-impl<'de> DeserializeSeed<'de> for DispositionSeed<'_> {
-    type Value = DispositionMetadata;
-
-    fn deserialize<D: de::Deserializer<'de>>(self, decoder: D) -> Result<Self::Value, D::Error> {
-        decoder.deserialize_map(self)
-    }
-}
-
-impl<'de> de::Visitor<'de> for DispositionSeed<'_> {
-    type Value = DispositionMetadata;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("one exact operational failure disposition")
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut fields = DispositionFields::default();
-        while let Some(field) = map.next_key::<DispositionField>()? {
-            match field {
-                DispositionField::Kind => {
-                    if fields.kind.is_some() {
-                        return Err(A::Error::duplicate_field("kind"));
-                    }
-                    fields.kind = Some(map.next_value()?);
-                }
-                DispositionField::Operation => {
-                    if fields.operation.is_some() {
-                        return Err(A::Error::duplicate_field("operation"));
-                    }
-                    fields.operation = Some(map.next_value()?);
-                }
-                DispositionField::State => {
-                    if fields.state.is_some() {
-                        return Err(A::Error::duplicate_field("state"));
-                    }
-                    fields.state = Some(map.next_value()?);
-                }
-                DispositionField::Representation => {
-                    if fields.representation.is_some() {
-                        return Err(A::Error::duplicate_field("representation"));
-                    }
-                    fields.representation = Some(map.next_value_seed(RepresentationSeed(self.0))?);
-                }
-                DispositionField::Context => {
-                    if fields.context {
-                        return Err(A::Error::duplicate_field("context"));
-                    }
-                    map.next_value_seed(self.0.bytes_seed())?;
-                    fields.context = true;
-                }
-            }
-        }
-        let DispositionKind::OperationalFailure =
-            fields.kind.ok_or_else(|| A::Error::missing_field("kind"))?;
-        if !fields.context {
-            return Err(A::Error::missing_field("context"));
-        }
-        let representation = fields
-            .representation
-            .ok_or_else(|| A::Error::missing_field("representation"))?;
-        match representation {
-            FailureRepresentation::Original {
-                cause: StartupCause::Io(_),
-            }
-            | FailureRepresentation::Integrity { .. } => {}
-            FailureRepresentation::Original {
-                cause: StartupCause::Seccompiler(_),
-            } => {
-                return Err(A::Error::custom("operational original cause is not I/O"));
-            }
-        }
-        Ok(DispositionMetadata {
-            operation: fields
-                .operation
-                .ok_or_else(|| A::Error::missing_field("operation"))?,
-            state: fields
-                .state
-                .ok_or_else(|| A::Error::missing_field("state"))?,
-            representation,
-        })
-    }
-}
-
-/// Decode only this negative schema, on borrowed bounded payload and retained context.
-/// A successful parse authenticates no fact and changes no cursor or actor state.
+/// Decode only the negative schema with the caller's already retained fixed workspace.
+/// Actor authentication, original clocks and positive settlement remain independent duties.
 pub(super) fn decode(
     payload: &[u8],
+    scratch: &mut super::guardian_decode::Scratch,
     context: &mut PreparedStartupContext,
 ) -> Result<FailureHeader, ControlError> {
-    context.clear();
-    check_scratch_free_json(payload).map_err(|error| {
-        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
-    })?;
-    let mut decoder = serde_json::Deserializer::from_slice(payload);
-    let header = CommitSeed(context)
-        .deserialize(&mut decoder)
-        .map_err(|source| context.metadata_error(source))?;
-    decoder.end().map_err(ControlError::InvalidEncoding)?;
-    Ok(header)
+    super::outer_failure_decode::decode(payload, scratch, context)
+        .map_err(|source| context.grammar_error(source))
 }
 
-/// Additional fixed decoder objects only; retained frame/right/context allocations are separate.
-/// Every term names actual schema/seed/result or scalar staging storage, with checked arithmetic.
+/// Actual fixed envelope schema delta; primitive/scalar/cause workspaces are charged separately.
 pub(super) fn decode_bytes() -> Result<u64, ControlError> {
-    let bytes = size_of::<CommitFields>()
-        .checked_add(size_of::<DispositionFields>())
-        .and_then(|bytes| bytes.checked_add(size_of::<CommitSeed<'_>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<DispositionSeed<'_>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<RepresentationSeed<'_>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<RepresentationBodySeed<'_>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<RepresentationTag>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<Option<RepresentationField>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<StartupBytesSeed<'_>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<FailureHeader>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<DispositionMetadata>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<FailureRepresentation>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<FailureState>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<Option<CommitField>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<Option<DispositionField>>()))
-        .and_then(|bytes| {
-            bytes.checked_add(size_of::<
-                serde_json::Deserializer<serde_json::de::SliceRead<'_>>,
-            >())
-        })
-        .and_then(|bytes| bytes.checked_add(size_of::<[u8; 4]>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<usize>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<bool>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<Option<u8>>()))
-        .and_then(|bytes| bytes.checked_add(size_of::<Option<u64>>()))
-        .ok_or(ControlError::EncodedBytesExceeded)?;
-    u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
+    super::outer_failure_decode::decode_bytes().map_err(ControlError::InvalidGrammar)
 }
 
 #[cfg(test)]
@@ -492,6 +149,17 @@ mod tests {
         protocol::current_build_identity, role_deadline::StopOrigin,
         startup_cause::StartupSeccompilerCause,
     };
+
+    fn parse(
+        payload: &[u8],
+        context: &mut PreparedStartupContext,
+    ) -> Result<FailureHeader, ControlError> {
+        decode(
+            payload,
+            &mut super::super::guardian_decode::Scratch::default(),
+            context,
+        )
+    }
 
     fn original() -> FailureHeader {
         let mut context = PreparedStartupContext::new(0).unwrap();
@@ -518,7 +186,7 @@ mod tests {
 
     fn refuses(value: &serde_json::Value) {
         let mut context = PreparedStartupContext::new(16).unwrap();
-        assert!(decode(&serde_json::to_vec(value).unwrap(), &mut context).is_err());
+        assert!(parse(&serde_json::to_vec(value).unwrap(), &mut context).is_err());
     }
 
     /// Trace: FR-034-AC-15
@@ -528,7 +196,7 @@ mod tests {
         let mut context = PreparedStartupContext::new(16).unwrap();
         let capacity = context.reserved_bytes();
         let bytes = serde_json::to_vec(&NegativeCommit::new(original, b"actual text")).unwrap();
-        let decoded = decode(&bytes, &mut context).unwrap();
+        let decoded = parse(&bytes, &mut context).unwrap();
         assert_eq!(decoded, original);
         assert_eq!(decoded.rights_count(), 0);
         assert_eq!(context.context(), "actual text");
@@ -541,7 +209,7 @@ mod tests {
             ..original
         };
         let bytes = serde_json::to_vec(&NegativeCommit::new(integrity, &[])).unwrap();
-        assert_eq!(decode(&bytes, &mut context).unwrap(), integrity);
+        assert_eq!(parse(&bytes, &mut context).unwrap(), integrity);
         assert!(context.context().is_empty());
         // The same actual negative decoder must distinguish explicit no-errno from
         // omitted required metadata, rather than inherit serde's Option default.
@@ -560,7 +228,7 @@ mod tests {
             ..original
         };
         let bytes = serde_json::to_vec(&NegativeCommit::new(no_errno, &[])).unwrap();
-        assert_eq!(decode(&bytes, &mut context).unwrap(), no_errno);
+        assert_eq!(parse(&bytes, &mut context).unwrap(), no_errno);
         let mut conflicting = value(integrity);
         conflicting["disposition"]["representation"]["Integrity"]["cause"] =
             value(original)["disposition"]["representation"]["Original"]["cause"].clone();
@@ -590,22 +258,34 @@ mod tests {
             (malformed, CauseIntegrityPredicate::MalformedCauseMetadata),
         ] {
             let bytes = serde_json::to_vec(&input).unwrap();
-            let error = decode(&bytes, &mut context).unwrap_err();
-            let ControlError::CauseMetadata { predicate, source } = &error else {
+            let error = parse(&bytes, &mut context).unwrap_err();
+            let ControlError::CauseMetadataGrammar { predicate, source } = &error else {
                 panic!("required cause fault lost its typed predicate")
             };
             assert_eq!(*predicate, expected);
-            assert!(source.is_data());
+            let expected_source = match expected {
+                CauseIntegrityPredicate::UnknownKindMetadata => {
+                    super::super::guardian_decode::DecodeCause::InvalidValue
+                }
+                CauseIntegrityPredicate::IncompleteCauseMetadata => {
+                    super::super::guardian_decode::DecodeCause::MissingField
+                }
+                CauseIntegrityPredicate::MalformedCauseMetadata => {
+                    super::super::guardian_decode::DecodeCause::UnexpectedToken
+                }
+                other => panic!("unexpected tested predicate: {other:?}"),
+            };
+            assert_eq!(source.cause(), expected_source);
             let actual_source = std::error::Error::source(&error)
                 .unwrap()
-                .downcast_ref::<serde_json::Error>()
+                .downcast_ref::<super::super::guardian_decode::DecodeError>()
                 .unwrap();
             assert!(std::ptr::eq(source, actual_source));
             assert_eq!(context.reserved_bytes(), capacity);
             // A following valid whole decode resets the fault; diagnostic omission alone
             // never authorizes a prior failed required cause or replays its predicate.
             let valid = serde_json::to_vec(&NegativeCommit::new(header, &[])).unwrap();
-            assert_eq!(decode(&valid, &mut context).unwrap(), header);
+            assert_eq!(parse(&valid, &mut context).unwrap(), header);
         }
     }
 
@@ -652,7 +332,7 @@ mod tests {
                 let duplicated = encoded.replacen(&member, &format!("{member},{member}"), 1);
                 assert_ne!(duplicated, encoded);
                 let mut context = PreparedStartupContext::new(16).unwrap();
-                assert!(decode(duplicated.as_bytes(), &mut context).is_err());
+                assert!(parse(duplicated.as_bytes(), &mut context).is_err());
             }
         }
         for nested in [false, true] {
@@ -787,10 +467,10 @@ mod tests {
         refuses(&changed);
         let encoded = serde_json::to_vec(&original).unwrap();
         let mut context = PreparedStartupContext::new(16).unwrap();
-        assert!(decode(&encoded[..encoded.len() - 1], &mut context).is_err());
+        assert!(parse(&encoded[..encoded.len() - 1], &mut context).is_err());
         let mut trailing = encoded;
         trailing.extend_from_slice(b"{}");
-        assert!(decode(&trailing, &mut context).is_err());
+        assert!(parse(&trailing, &mut context).is_err());
     }
 
     /// Trace: FR-034-AC-15
@@ -801,7 +481,7 @@ mod tests {
         let capacity = context.reserved_bytes();
         for diagnostic in [&b"long"[..], &[255][..], &[0xc2][..]] {
             let bytes = serde_json::to_vec(&NegativeCommit::new(header, diagnostic)).unwrap();
-            assert_eq!(decode(&bytes, &mut context).unwrap(), header);
+            assert_eq!(parse(&bytes, &mut context).unwrap(), header);
             assert!(context.context().is_empty());
             assert_eq!(context.reserved_bytes(), capacity);
         }

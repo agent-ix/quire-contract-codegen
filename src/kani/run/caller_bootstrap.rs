@@ -156,6 +156,7 @@ pub(super) struct CallerBootstrap {
     inner_auth_failed: bool,
     inner_ready: Option<VerifiedInitReady>,
     startup_context: super::startup_cause::PreparedStartupContext,
+    decode_scratch: super::guardian_decode::Scratch,
     policy_refusal: Option<super::startup_envelope::PolicyFailureCause>,
     policy_refusal_stop: Option<super::role_deadline::StopStamp>,
     pending_setup_refusal: Option<super::startup_envelope::PolicyFailureCause>,
@@ -428,6 +429,10 @@ impl CallerBootstrap {
             super::startup_envelope::CONTEXT_BYTES,
         )
         .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?;
+        // The fixed workspace belongs to the same original receive owner before L creation.
+        // Its resident bytes are part of Self below; compiler initialization/placement
+        // temporaries still require the supported-build native-storage measurement.
+        let decode_scratch = super::guardian_decode::Scratch::default();
         let outer_receive = IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
         let launcher_receive =
             IncrementalReceive::prepare().map_err(CallerBootstrapError::Control)?;
@@ -462,7 +467,21 @@ impl CallerBootstrap {
             .stderr(Stdio::from(stderr));
         let mut named_buffers = u64::try_from(std::mem::size_of::<Self>())
             .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?;
+        let fixed_decode_transients = super::guardian_decode::decode_bytes()
+            .map_err(|error| CallerBootstrapError::Control(ControlError::InvalidGrammar(error)))?
+            .checked_sub(
+                u64::try_from(std::mem::size_of::<super::guardian_decode::Scratch>())
+                    .map_err(|_| CallerBootstrapError::ReservationUnrepresentable)?,
+            )
+            .ok_or(CallerBootstrapError::ReservationUnrepresentable)?;
         let reservations = [
+            fixed_decode_transients,
+            super::cause_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
+            super::role_scalar_decode::decode_bytes().map_err(|error| {
+                CallerBootstrapError::Control(ControlError::InvalidGrammar(error))
+            })?,
             super::caller_driver::CallerDriver::metadata_reservation()
                 .map_err(|error| CallerBootstrapError::Io(io::Error::other(error)))?,
             super::caller_execution::CallerExecution::additional_metadata()?,
@@ -592,6 +611,7 @@ impl CallerBootstrap {
             inner_auth_failed: false,
             inner_ready: None,
             startup_context,
+            decode_scratch,
             policy_refusal: None,
             policy_refusal_stop: None,
             pending_setup_refusal: None,
@@ -769,7 +789,13 @@ impl CallerBootstrap {
                 &self.outer_control.transport(),
                 super::outer_reply::OuterReply::rights_count,
                 cutoff,
-                |payload| super::outer_reply::decode(payload, &mut self.startup_context),
+                |payload| {
+                    super::outer_reply::decode(
+                        payload,
+                        &mut self.startup_context,
+                        &mut self.decode_scratch,
+                    )
+                },
                 super::outer_reply::OuterReply::clock_only,
             )
             .map_err(CallerBootstrapError::Control)?

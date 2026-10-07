@@ -69,6 +69,7 @@ struct DispositionSelector {
 pub(super) fn decode(
     payload: &[u8],
     context: &mut PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<OuterReply, ControlError> {
     check_scratch_free_json(payload)
         .map_err(|error| ControlError::InvalidEncoding(serde_json::Error::custom(error)))?;
@@ -87,7 +88,7 @@ pub(super) fn decode(
                     decode_outer_startup(payload).map(OuterReply::Startup)
                 }
                 DispositionKind::OperationalFailure => {
-                    outer_failure::decode(payload, context).map(OuterReply::Failure)
+                    outer_failure::decode(payload, scratch, context).map(OuterReply::Failure)
                 }
             }
         }
@@ -124,6 +125,17 @@ mod tests {
         startup_envelope::PolicyFailureCause,
     };
 
+    fn parse(
+        payload: &[u8],
+        context: &mut PreparedStartupContext,
+    ) -> Result<OuterReply, ControlError> {
+        decode(
+            payload,
+            context,
+            &mut super::super::guardian_decode::Scratch::default(),
+        )
+    }
+
     fn authority() -> RunAuthority {
         serde_json::from_value(serde_json::to_value([0_u8; 32]).unwrap()).unwrap()
     }
@@ -149,7 +161,7 @@ mod tests {
 
     fn refuses(value: &serde_json::Value) {
         let mut context = PreparedStartupContext::new(16).unwrap();
-        assert!(decode(&serde_json::to_vec(value).unwrap(), &mut context).is_err());
+        assert!(parse(&serde_json::to_vec(value).unwrap(), &mut context).is_err());
     }
 
     /// Trace: FR-034-AC-15
@@ -170,7 +182,7 @@ mod tests {
         ] {
             let bytes = serde_json::to_vec(&phase).unwrap();
             let mut context = PreparedStartupContext::new(0).unwrap();
-            let decoded = decode(&bytes, &mut context).unwrap();
+            let decoded = parse(&bytes, &mut context).unwrap();
             assert_eq!(decoded.rights_count(), phase.rights_count());
             assert!(!decoded.clock_only());
             let OuterReply::Startup(OuterStartupControl::Phase(actual)) = decoded else {
@@ -224,7 +236,7 @@ mod tests {
             })
             .unwrap();
             let mut context = PreparedStartupContext::new(0).unwrap();
-            let decoded = decode(&bytes, &mut context).unwrap();
+            let decoded = parse(&bytes, &mut context).unwrap();
             assert_eq!(decoded.rights_count(), 0);
             assert!(decoded.clock_only());
             match decoded {
@@ -273,7 +285,7 @@ mod tests {
             let bytes = serde_json::to_vec(&NegativeCommit::new(header, &[255])).unwrap();
             let mut context = PreparedStartupContext::new(1).unwrap();
             let capacity = context.reserved_bytes();
-            let decoded = decode(&bytes, &mut context).unwrap();
+            let decoded = parse(&bytes, &mut context).unwrap();
             assert_eq!(decoded.rights_count(), 0);
             assert!(decoded.clock_only());
             let OuterReply::Failure(actual) = decoded else {
@@ -328,7 +340,7 @@ mod tests {
             let duplicate = encoded.replacen(&member, &format!("{member},{member}"), 1);
             assert_ne!(duplicate, encoded);
             let mut context = PreparedStartupContext::new(0).unwrap();
-            assert!(decode(duplicate.as_bytes(), &mut context).is_err());
+            assert!(parse(duplicate.as_bytes(), &mut context).is_err());
         }
         for replacement in [
             None,
@@ -351,7 +363,7 @@ mod tests {
         let duplicate = encoded.replacen(&member, &format!("{member},{member}"), 1);
         assert_ne!(duplicate, encoded);
         let mut context = PreparedStartupContext::new(0).unwrap();
-        assert!(decode(duplicate.as_bytes(), &mut context).is_err());
+        assert!(parse(duplicate.as_bytes(), &mut context).is_err());
         for tag in [
             "Report",
             "ReportDescriptor",
@@ -378,6 +390,6 @@ mod tests {
         let mut trailing = encoded;
         trailing.extend_from_slice(b"{}");
         let mut context = PreparedStartupContext::new(0).unwrap();
-        assert!(decode(&trailing, &mut context).is_err());
+        assert!(parse(&trailing, &mut context).is_err());
     }
 }
