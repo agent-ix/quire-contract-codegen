@@ -461,6 +461,11 @@ impl CallerLeaseClient {
         self.ready.bootstrap.lease.transport()
     }
 
+    /// Real encoded Dispatch progress, so a running driver cannot resend an acknowledged frame.
+    pub(super) fn sending(&self) -> bool {
+        matches!(self.state, CallerLeaseState::Sending)
+    }
+
     /// Called only after the SINGLE retained I framer produced one complete strictly live
     /// frame. State plus actual pinned sender/run authentication precede either transition.
     pub(super) fn accept_event(

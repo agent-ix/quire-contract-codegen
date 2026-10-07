@@ -286,6 +286,48 @@ enum CallerTerminalPhase {
 }
 
 impl CallerBootstrap {
+    /// The actual prepared finite startup cutoff, never a fresh cap at the caller driver.
+    pub(super) fn startup_cutoff(&self) -> Instant {
+        self.deadline
+    }
+
+    /// The same original O stream is multiplexed during acknowledged backend execution. A
+    /// complete authenticated stop only shortens the clock; this does not accept any result.
+    pub(super) fn driver_control_step(
+        &mut self,
+        clock: &mut ExecutionClock,
+        cutoff: Instant,
+    ) -> Result<bool, CallerBootstrapError> {
+        self.receive_startup_control(clock, cutoff, false)
+    }
+
+    pub(super) fn driver_capture_stop(
+        &self,
+        clock: &mut ExecutionClock,
+    ) -> Result<Instant, CallerBootstrapError> {
+        if clock.original_deadline() != self.identity_deadline {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        }
+        clock
+            .capture_caller_stop(self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)
+    }
+
+    pub(super) fn driver_adopt_completion(
+        &self,
+        clock: &mut ExecutionClock,
+        stop: super::role_deadline::StopStamp,
+    ) -> Result<Instant, CallerBootstrapError> {
+        if clock.original_deadline() != self.identity_deadline
+            || stop.origin != super::role_deadline::StopOrigin::Inner
+        {
+            return Err(CallerBootstrapError::SettingsMismatch);
+        }
+        clock
+            .adopt_stop(stop, self.identity_clock)
+            .map_err(CallerBootstrapError::Deadline)
+    }
+
     /// Assemble actual named C run buffers before creating L. Settings cannot supply or override
     /// this charge: it is computed from the retained reservations and serialized once afterwards.
     /// Opaque incidental std/libc runtime allocations are not assigned a fabricated capacity.
