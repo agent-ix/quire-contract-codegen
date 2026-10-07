@@ -1743,36 +1743,41 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
             matches!(refusal, StateFrameRefusal::MalformedClause { .. })
         }),
     ];
-    let world = world_for(
-        &rows
-            .iter()
-            .map(|(_, shape, _, _)| *shape)
-            .collect::<Vec<_>>(),
-    );
-    let items = rows
-        .iter()
-        .map(|(_, shape, role, _)| item(&world, *shape, *role))
-        .collect::<Vec<_>>();
-    let (records, harnesses) = emitted_state_frame(negotiate(&items));
-    assert_eq!(records.len(), rows.len());
-    for ((label, _, _, check), record) in rows.iter().zip(&records) {
-        assert!(
-            check(refusal_of(record)),
-            "{label}: got {:?}",
-            record.disposition
+    // Each group is one request over one package. Small packages keep the reader-oracle fixture
+    // comfortably below its cumulative work cap without changing any row's refusal assertion.
+    let mut checked_creates = false;
+    for group in rows.chunks(4) {
+        let world = world_for(
+            &group
+                .iter()
+                .map(|(_, shape, _, _)| *shape)
+                .collect::<Vec<_>>(),
         );
+        let items = group
+            .iter()
+            .map(|(_, shape, role, _)| item(&world, *shape, *role))
+            .collect::<Vec<_>>();
+        let (records, harnesses) = emitted_state_frame(negotiate(&items));
+        assert_eq!(records.len(), group.len());
+        assert!(harnesses.is_empty(), "no refused item has a harness");
+        for ((label, shape, _, check), record) in group.iter().zip(&records) {
+            assert!(
+                check(refusal_of(record)),
+                "{label}: got {:?}",
+                record.disposition
+            );
+            if *shape == CREATES {
+                // The effect a frame refusal names is the frame's own node.
+                let StateFrameRefusal::FrameEffectUnsupported { frame, .. } = refusal_of(record)
+                else {
+                    panic!("a frame effect");
+                };
+                assert_eq!(frame, &world.ids(CREATES).frame);
+                checked_creates = true;
+            }
+        }
     }
-    assert!(harnesses.is_empty(), "no refused item has a harness");
-    // The effect a frame refusal names is the frame's own node.
-    let creates = rows
-        .iter()
-        .position(|(label, ..)| *label == "frame creates")
-        .expect("the frame-creates row");
-    let StateFrameRefusal::FrameEffectUnsupported { frame, .. } = refusal_of(&records[creates])
-    else {
-        panic!("a frame effect");
-    };
-    assert_eq!(frame, &world.ids(CREATES).frame);
+    assert!(checked_creates, "the frame-creates row was checked");
 }
 
 /// An invalid item is a record of its own with its own code, the request is `Rejected` with every

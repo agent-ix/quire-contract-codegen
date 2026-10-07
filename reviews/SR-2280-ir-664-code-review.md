@@ -90,3 +90,32 @@ generator uses.
 | FND-001 | deferred | The PR body draft now declares every public API change this finding named, the forced QSL coupling, IR-666 items 1-2 being delivered here, and the driver impact (verified against the draft text). Re-scoping the IR-666 ticket is a planner action on IR-666, whose description still lists those items. That must happen before IR-666 is picked up; it is not a change to this branch |
 | FND-002 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
 | FND-003 | fixed | round-1 fix commit "IR-664: close i64 boundary review findings and fixture ordering" |
+
+## New findings (disposition pass 2)
+
+Reviewed at the branch's fixture-repair head (fix commit "IR-664: resolve admitted fixture IDs
+across scalar and state tests", a fast-forward over "IR-664: record final SHA-free review
+dispositions"; revision recorded in the IR-664 Linear marker). The delta touches six test files
+only. `src/`, `spec/`, `reviews/`, Cargo.lock and `tests/checked_package_support/rekey.rs` are
+unchanged, so the caps and stop conditions are as reviewed.
+
+What was checked and is sound:
+
+- The two deleted assertion lines are replaced by equal or stronger ones: an explicit
+  `Refused` match, and the CREATES frame check through `world.ids`.
+- The builder "dedupe" is not a mechanism. It is one manual alias: `V_PARAM_PLAIN` is now
+  `TEMPORAL_PARAMETER`, the identical `parameter_body("p", 0)` over `T_INTEGER`, which IR keys
+  identically. The deliberate duplicate-operand case (`param(V_PARAM_PLAIN)` twice) keeps its
+  meaning.
+- The RESULT parameter is emitted only for result shapes.
+- The global `OnceLock` world is gone, so there is no global registry left. Each test's
+  `world_for` selects exactly the shapes its rows use, and the refusal table passes every row's
+  shape.
+- The TEMPORAL and FRAME expectation changes follow IR's admitted node-id order. Each now asserts
+  that order explicitly, so a key change fails loudly.
+- The PR body draft records the fixture cost measurement and contains no SHAs.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The 13-shape state-frame refusal table sits near the rekey cap and is slow in the default lane. Its fixture repair takes 224 reader attempts (the author's measurement in the PR body), but the helper charges the full one-million read work per attempt against `MAX_READER_WORK = 256_000_000`, so the cap allows only 256 attempts: 87.5% of the headroom is used. The same test takes about 95 s in the default `make ci` lane; it is a plain `#[test]` with no `kani` ignore. Failure scenario: adding one or two rows, or an IR change that makes a few more keys stale, panics the test with "fixture key repair exceeded its byte/work cap". That fails closed but blocks unrelated work, and CI time grows with every row. Fix: split the table into several smaller worlds (one request per group of rows), or charge the measured work instead of the ceiling, and keep a recorded headroom margin | tests/it/kani_obligations_state_frame.rs:1649-1750, tests/checked_package_support/rekey.rs:17, tests/checked_package_support/rekey.rs:186-192 |
+| FND-005 | low | `tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses` now expects FRAME to carry the FRAMED_OBJECT model blocker, so no test still drives a frame-tagged scalar item to `NoFiniteEncoding`. The IR-81 test's rationale still says "`STATE` and `FRAME` above both land on `NoFiniteEncoding`", which is now false. Correct the comment, and if the frame arm matters, add a frame fixture whose framed object carries no model blocker | tests/it/kani_obligations.rs:1017-1035, tests/it/kani_obligations.rs:1080-1081 |

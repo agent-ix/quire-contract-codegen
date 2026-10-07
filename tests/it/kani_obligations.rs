@@ -1077,8 +1077,9 @@ const RENDERED_OPERATIONS: [&str; 4] = [
 /// `state`/`frame` role pair nor `expression`-tagged (the only family
 /// `generate_exact_scalar_oracles` ever lowers to a `Generated` claim), must not be silently
 /// accounted with a null `kind` and a `Supported` disposition if it ever reaches one. The real
-/// generator already refuses every other `state`-tagged node before that point -- `STATE` and
-/// `FRAME` above both land on `NoFiniteEncoding` -- so this drives the gap directly: `transition`
+/// generator already refuses the other `state`-tagged nodes before that point -- `STATE` lands on
+/// `NoFiniteEncoding`, while `FRAME` reaches its framed model's upstream blocker -- so this
+/// drives the gap directly: `transition`
 /// is a real, admitted `state` form distinct from `frame` (`quire-contract-ir`'s own
 /// `CheckedNodeTag::State::forms()`), and its claim-map entry is hand-appended as `Generated`,
 /// the shape `generate_exact_scalar_oracles` would never itself produce for a non-`expression`
