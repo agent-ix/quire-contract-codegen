@@ -371,8 +371,8 @@ bcca433, QSL #635) and asserts `Failed` through the whole error. The fault readi
 `StateClauseReplayError::Refused` and `CallSite` are listed under FR-029-AC-10, so FR-029-AC-16
 holds only clauses a test asserts. IR-241 owns the planned proof-subject/verified-strength inputs
 and interim NonProductionProof/ShadowCounterexample variants; IR-635 owns their widened
-inconclusive/cover-unsatisfied disagreement case and the parity route. FR-029-AC-17 and AC-19 to
-AC-27 (IR-635 production path) and FR-029-AC-18 (QSL-634) remain planned; AC-28's public
+inconclusive/cover-unsatisfied disagreement case and the parity route. FR-029-AC-17, AC-19 and AC-21 to AC-27 (IR-635 production path), and FR-029-AC-18
+(QSL-634) remain planned; AC-20 has direct report controls, and AC-28's public
 report-binding and refusal pass-through is built and tested under IR-666.
 
 Post state outside its range (pending QSL-634, IR-460). QSL ruled (cited as QSL-634, filed, not

@@ -41,3 +41,13 @@ FR-029-AC-20 and FR-033 Outputs inconsistencies are in SR-2234.
 The amendments are accurate about what IR-666 delivered and what IR-635 still owns, and they
 keep the QSL-owned terminal mapping intact. One ambiguity: the PARTIAL prefixes have no stated
 remaining clause.
+
+## Dispositions
+
+Round 1. Reviewed on the rebased branch `code/ir-666-composite-converter-r2` at its frozen head
+(fix commit "Close composite converter review findings"). The revision is recorded in the IR-666
+Linear marker only.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | round-2 fix commit "Close composite converter review findings": FR-030-AC-15, FR-030-AC-16, FR-033-AC-13 and FR-029-AC-20 now read "IR-635 must reach the same rows from a CG-built request over the original proving context", which names the remaining clause and when it closes |

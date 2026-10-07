@@ -89,3 +89,17 @@ branch.
 | --- | --- | --- | --- |
 | FND-005 | medium | FR-033-AC-7 has contradictory status. Its own row now reads "PARTIAL (IR-666 direct public F-7 converter controls ...)", and the computed matrix tags it (`tc_041_f7_...`). The replay matrix row at line 21 still puts AC-7 under "Planned (IR-635) ... remain unbuilt". spec/tests.md:20 lists only "FR-033-AC-9/12/13" as Partial. Failure scenario: anyone reading the matrix files sees AC-7 as unbuilt while the computed matrix and the FR say otherwise. Fix: move FR-033-AC-7 into the line-22 Partial row and the spec/tests.md list | spec/replay/matrix/tests.md:21-22, spec/tests.md:20, spec/replay/functional/FR-033-composite-parity-replay-binding.md:350 |
 | FND-006 | medium | The kani/matrix/tests.md:52 row for FR-029-AC-17 and AC-19 to AC-27 changed from "Planned (IR-635)" to "Partial (IR-666 direct public converter controls ...); QSL #645 reports exercise F-1 to F-7, V-1 to V-5 ...". The computed matrix shows all ten of those criteria untagged, with no binder. The row claims partial coverage that no traced test backs. FR-029-AC-20, the F-1 to F-7 consumption criterion IR-666 owns, is the one the new tests actually exercise; see SR-2234 FND-001. Failure scenario: the row overstates coverage for nine IR-635 criteria. Fix: keep the row Planned (IR-635), and give FR-029-AC-20 its own row once a test traces it | spec/kani/matrix/tests.md:52 |
+
+Round 2. Reviewed on the rebased branch `code/ir-666-composite-converter-r2` at its frozen head
+(fix commit "Close composite converter review findings"). The revision is recorded in the IR-666
+Linear marker only. Computed matrix, current `main` against head: 589 rows on both sides. Nine
+criteria move from untagged to tagged: FR-029-AC-20, FR-029-AC-28, FR-030-AC-15, FR-030-AC-16,
+FR-030-AC-17, FR-033-AC-7, FR-033-AC-9, FR-033-AC-12 and FR-033-AC-13. Each binder asserts the
+criterion's IR-666 clause on a genuine QSL report. Each criterion that is not fully covered
+carries a PARTIAL or Covered status that names IR-635's remainder. `quire validate` passes on
+every changed document.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | round-2 fix commit "Close composite converter review findings": replay/matrix/tests.md lists FR-033-AC-1 to AC-6, AC-8, AC-10 and AC-11 as Planned, and lists FR-033-AC-7, AC-9, AC-12 and AC-13 as Partial. spec/tests.md:20 reads "FR-033-AC-7/9/12/13" |
+| FND-006 | fixed | round-2 fix commit: kani/matrix/tests.md:52 now reads "Planned (IR-241/IR-635); no traced production-path control yet" for FR-029-AC-17, AC-19 and AC-21 to AC-27, all untagged. FR-029-AC-20 has its own Partial row (line 53), which its three tc_041 binders back |

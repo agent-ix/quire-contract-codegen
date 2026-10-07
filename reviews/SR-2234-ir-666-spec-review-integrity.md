@@ -31,3 +31,20 @@ Status-to-matrix contradictions are recorded in SR-2231 FND-005 and FND-006. The
 The amendments are consistent across documents, with two gaps. The IR-666-labelled FR-029-AC-20
 was left PLANNED and untraced (FND-001). A stale unavailable-consumer clause remains in FR-033
 Outputs (FND-002).
+
+## Dispositions
+
+Round 1. Reviewed on the rebased branch `code/ir-666-composite-converter-r2` at its frozen head
+(fix commit "Close composite converter review findings"). The revision is recorded in the IR-666
+Linear marker only.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | round-2 fix commit "Close composite converter review findings": FR-029-AC-20 reads "PARTIAL (IR-666 direct F-1 to F-7 report consumption covered; IR-635 must reach these rows ...)". It is traced by the three tc_041 F-row tests and has its own kani matrix row |
+| FND-002 | fixed | round-2 fix commit: FR-033 Outputs now reads "CG setup failure before invoking QSL, missing report or wrong-claim report returns a typed refusal without a terminal value" |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | Two references were not updated after FR-029-AC-20 became PARTIAL. FR-029's closing status paragraph still says "FR-029-AC-17 and AC-19 to AC-27 (IR-635 production path) ... remain planned", which now includes AC-20. The new AC-20 matrix row cites TC-041, and its binders are `tc_041_` tests, but the TC-041 Test Case Summary row lists only FR-030-AC-1 to AC-17 and FR-029-AC-28. TC-041's own steps do not name FR-029-AC-20. Fix: write "AC-17, AC-19 and AC-21 to AC-27" in the paragraph and add FR-029-AC-20 to TC-041's summary row (or cite only TC-048 on line 53) | spec/kani/functional/FR-029-run-outcome-terminal-record.md:374-376, spec/kani/matrix/tests.md:53, spec/kani/matrix/tests.md:87 |

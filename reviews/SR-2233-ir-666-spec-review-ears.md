@@ -26,3 +26,13 @@ bullet is a requirement statement.
 ## Verdict
 
 EARS conformance is unchanged apart from the one descriptive Behavior bullet.
+
+## Dispositions
+
+Round 1. Reviewed on the rebased branch `code/ir-666-composite-converter-r2` at its frozen head
+(fix commit "Close composite converter review findings"). The revision is recorded in the IR-666
+Linear marker only.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | round-2 fix commit "Close composite converter review findings": the bullet is split into "The converter shall expose ..." with "Each operation shall take ... and return ...", and the event-driven "When the report is absent or `report.claim()` differs from the retained sent identity, the converter shall return `CompositeReportError::MissingReport` or `CompositeReportError::ClaimMismatch`, respectively, with no terminal value" |

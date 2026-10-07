@@ -93,3 +93,15 @@ builder, invocation or original-artifact binding was added; the only src change 
 converter. Cargo.toml and Cargo.lock are untouched. The diff has no SHA, local path or conflict
 marker. The branch is one commit behind `main` (IR-682, FR-034/TC-049 only). `git merge-tree`
 reports a clean merge.
+
+Round 2. Reviewed on the rebased branch `code/ir-666-composite-converter-r2` at its frozen head
+(fix commit "Close composite converter review findings"; 3 commits ahead of `main`, 0 behind).
+The revision is recorded in the IR-666 Linear marker only. This is a static re-check. No file
+under `src/` and neither Cargo file changed since round 1, so the public surface is still the
+five items interface-001 declares.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | round-2 fix commit "Close composite converter review findings". The test is now `tc_041_bound_prepare_refusal_precedes_disagreed`, it sets `evidence.refinement = Refinement::Disagreed`, and it requires a QSL `Refused` (`BoundExceeded`) result with `ReplayRefused(code)`. A QSL change that let F-1 win over `prepare` would hit the `else { panic!(..) }` arm, so that mutant dies. It now traces FR-029-AC-28, FR-030-AC-17 and TC-041 |
+| FND-005 | fixed | round-2 fix commit: F-4 and F-5 both assert `incomplete.limit_kind.as_str() == "value_occurrences"`. That is quire-exact's `LimitKind::ValueOccurrences` spelling at the lock-pinned revision |
+| FND-006 | fixed | round-2 fix commit: the filtered bounds are bound to `parameter_bounds` before `ParityArgument { .. }`. Every line now fits the 100-column width, and the statement is laid out normally |
