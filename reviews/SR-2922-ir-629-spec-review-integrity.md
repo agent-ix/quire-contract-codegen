@@ -54,6 +54,12 @@ carry. Several restatements of the changed types were left stale.
 | FND-007 | low | interface-001 does not list CG's new public descriptor-to-kind conversion that the driver must call. | spec/core/functional/interface-001-codegen-api.md:159-166 |
 | FND-008 | low | For a Process(id) identity mismatch, the value of BackendKindDisagrees.converted is unspecified. | spec/routed/functional/FR-022-routed-generation.md:269 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | low | Only `kind` is made private. `backend` stays a public routed field, so a 'mismatched' item is reachable from outside CG, yet AC-4, AC-18 and TC-046 step 4 call it internal-only. | spec/routed/functional/FR-022-routed-generation.md:110, 185, 199, 274, 288 |
+
 ## Dispositions
 
 Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
@@ -66,3 +72,5 @@ Round 1, against the fix-round head recorded in the IR-629 Linear dispositions m
 | FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-005 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-006 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-007 | fixed | round 2: fix commit 'spec(CG): close IR-629 review disposition findings' |
+| FND-008 | fixed | round 2: fix commit 'spec(CG): close IR-629 review disposition findings' |

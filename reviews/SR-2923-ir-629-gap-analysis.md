@@ -46,6 +46,12 @@ labels do not match what is actually gated.
 | --- | --- | --- | --- |
 | FND-006 | medium | TC-046 has no row for a bounded item with an uncovered bounds[].kind on a provider advertising both modes, so a mutant that skips the domain check whenever 'unbounded' is advertised survives. | spec/routed/matrix/TC-046-process-provider-settlement.md:33-47 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | TC-046's two unbounded rows that advertise 'unbounded' leave finite_bound_available unset, so a mutant that gates 'supported' on it survives whichever value the test picks. | spec/routed/matrix/TC-046-process-provider-settlement.md:48-49 |
+
 ## Dispositions
 
 Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
@@ -57,3 +63,4 @@ Round 1, against the fix-round head recorded in the IR-629 Linear dispositions m
 | FND-003 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-005 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-006 | fixed | round 2: fix commit 'spec(CG): close IR-629 review disposition findings' |

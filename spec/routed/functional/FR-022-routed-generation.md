@@ -103,12 +103,12 @@ output belong to IR-629; they do not change this crate boundary.
   constructor `RoutedGenerationItem::from_descriptor(request_index, node_id,
   backend, descriptor) -> Result<RoutedGenerationItem,
   RoutedItemConstructionError>`:
-  - `request_index`: the item's index in the driver's request, as FR-019's
+  - `request_index` (public): the item's index in the driver's request, as FR-019's
     `ItemSettlement::request_index` numbered it;
-  - `node_id`: the IR `CheckedNodeId` of the item's checked node. The driver
+  - `node_id` (public): the IR `CheckedNodeId` of the item's checked node. The driver
     reads it from its own request item at that index;
-  - `backend`: the routed `Candidate`;
-  - `kind`: a private `BackendKind` field set by the constructor through
+  - `backend` (private): the routed `Candidate` fixed by the constructor;
+  - `kind` (private): a `BackendKind` field set by the constructor through
     `BackendKind::from_descriptor` (FR-019). The driver passes the same CG
     descriptor it projected for negotiation and cannot supply a hand-built
     `Process(id)` as an item's kind.
@@ -182,21 +182,22 @@ output belong to IR-629; they do not change this crate boundary.
   request-index-ordered output for every permutation of the routed-item slice.
 - The generator shall take each item's backend and backend kind from its
   routed input.
-- CG shall make `RoutedGenerationItem.kind` private.
+- CG shall make `RoutedGenerationItem.backend` and `.kind` private.
+- CG shall leave `RoutedGenerationItem.request_index` and `.node_id` public.
 - CG shall require the public constructor above for a caller to create a
   routed item.
 - For a linked descriptor named `kani`, CG's constructor shall select `Kani`.
 - For a process-origin descriptor, CG's constructor shall select
   `Process(descriptor.identity)`, regardless of identity text.
-- For a linked descriptor with a process-like name, CG's constructor shall
-  refuse construction rather than select `Process`.
+- For a linked descriptor whose identity has no built-in kind, CG's
+  constructor shall refuse with `UnknownLinkedBackend`.
 - The generator shall compute no candidate set, read no backend registry, settle no
   disposition and choose no backend.
 - If an item's routed kind does not match its routed backend's identity under
   the built-in lookup or `Process(id)` identity comparison, then the generator shall refuse
   the whole call with `BackendKindDisagrees`, naming the request index, the
   routed backend, the routed kind and the converted kind or its absence, with
-  nothing generated. For an internal `Process(id)` mismatch, `converted` shall
+  nothing generated. For a crate-internal `Process(id)` mismatch, `converted` shall
   be `Some(Process(item.backend.identity))`; for a built-in lookup miss it is
   `None`.
 - If two routed items share one request index, then the generator shall
@@ -271,7 +272,7 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-1 | Generation dispatches one arm per variant of the closed `BackendKind` through an exhaustive `match` with no catch-all, and `GenerationContexts::has` handles each variant; adding a variant without either arm does not compile. `Process` requires no context. | Analysis |
 | FR-022-AC-2 | For a set of routed Kani items, each record and harness in the output equals what `negotiate_kani_obligations` returns for the same items in ascending request-index order with the same context. The one difference is that every index inside a record is the driver's request index, and each harness is paired with the record whose `harness_symbol` names it. | Test (TC-033) |
 | FR-022-AC-3 | The entry point accepts no backend registry, candidate set, extent or capability kind, and constructs no FR-019 `Disposition`. | Test (TC-033) |
-| FR-022-AC-4 | PLANNED (IR-629 internal-invariant test migration). An internally malformed routed Kani item whose backend identity has no CG built-in kind, or converts to a kind other than Kani, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, with no artifact. | Test (TC-033) |
+| FR-022-AC-4 | PLANNED (IR-629 internal-invariant test migration). A crate-internal malformed routed Kani item whose private backend identity has no CG built-in kind, or converts to a kind other than Kani, refuses the whole call as `BackendKindDisagrees`, naming the request index, backend, routed kind and converted kind or its absence, with no artifact. | Test (TC-033) |
 | FR-022-AC-5 | Two routed items with one request index refuse as `DuplicateRequestIndex` naming it. A routed Kani item without Kani context refuses as `MissingKindContext` naming Kani. Each returns no artifact. | Test (TC-033) |
 | FR-022-AC-6 | A Kani group-level refusal (for example an unwind outside `1..=1024`, or an unparsable subject path) is returned as `Kani` carrying the unchanged `KaniObligationError`, with no artifact. | Test (TC-033) |
 | FR-022-AC-7 | A Kani group containing an `invalid_request` item is listed in `rejected`, and every Kani item's record is returned with no harness. A `DuplicateItem`'s `first_index` names the driver's request index of the first occurrence. | Test (TC-033) |
@@ -285,9 +286,9 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-15 | The Kani arm routes the packages QSL emits for `x + 1` over `x: Int[0, 9]` into `Int[0, 10]`, `x + y` over `Int[0, 9]` and `Int[10, 20]` into `Int[10, 29]`, and `-z` over `Int[0, 9]` into `Int[-9, 0]` (a literal as a reference to its own `value` node, the declared bound on a narrowing `conversion` consuming the plain-typed arithmetic node) to supported harnesses with arguments `[0, 9]` and `[1, 1]`; `[0, 9]` and `[10, 20]`; and `[0, 9]`, each asserting the result against the conversion's bound (`[0, 10]`, `[10, 29]`, `[-9, 0]`). In that shape a plain-Integer parameter beside a bounded one, and a reference to a `value` node whose body is not a literal, settle `requires_bound`, and a node narrowed to two distinct bounds is `oracle_refused` `AmbiguousBound`, none with a harness. | Test (TC-033) |
 | FR-022-AC-16 | Two Kani harnesses with one `harness_symbol` refuse the call as `DuplicateHarness` naming the second harness's `module::harness` path, and no harness is overwritten or dropped. | Test (TC-033) |
 | FR-022-AC-17 | PLANNED (IR-629). A routed `Process(id)` item appears exactly once with its own identity and empty `KindOutput::Process`, without a generation context or membership in `BackendKind::ALL`. | Test (TC-046) |
-| FR-022-AC-18 | PLANNED (IR-629). An internally mismatched routed `Process(id)` item refuses the whole call as `BackendKindDisagrees` with `converted=Some(Process(item.backend.identity))` and no generated output. | Test (TC-046) |
+| FR-022-AC-18 | PLANNED (IR-629). A crate-internal routed `Process(id)` item whose private backend and kind disagree refuses the whole call as `BackendKindDisagrees` with `converted=Some(Process(item.backend.identity))` and no generated output. | Test (TC-046) |
 | FR-022-AC-19 | PLANNED (IR-629). Permuting a routed-item slice containing Kani and multiple process identities leaves its request-index-ordered output unchanged. | Test (TC-046) |
-| FR-022-AC-20 | PLANNED (IR-629). `RoutedGenerationItem.kind` is private, and external callers cannot create an item with a hand-built `Process(id)`; construction passes through `from_descriptor`. | Analysis |
+| FR-022-AC-20 | PLANNED (IR-629). `RoutedGenerationItem.backend` and `.kind` are private while `request_index` and `node_id` remain public; external callers cannot create an item with a hand-built `Process(id)` or reassign its backend after `from_descriptor` construction. | Analysis |
 | FR-022-AC-21 | PLANNED (IR-629). `from_descriptor` constructs Kani for a linked `kani` descriptor and `Process(id)` for a process descriptor with the same identity text. An unknown linked identity never produces Process. | Test (TC-046) |
 | FR-022-AC-22 | PLANNED (IR-629). `from_descriptor` rejects a backend identity different from the descriptor identity as `DescriptorBackendMismatch`, naming both; it rejects an unknown linked identity as `UnknownLinkedBackend`, naming the backend. Neither refusal produces a routed item. | Test (TC-046) |
 

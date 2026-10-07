@@ -47,6 +47,12 @@ inputs in a way that excludes the input it then compares.
 | FND-005 | low | New shall-obligations (classify named candidates by origin; expose a descriptor-to-kind conversion) sit in a 'Measured present fact' paragraph, not in Behavior, and the conversion has no name or signature. | spec/routed/functional/FR-019-capability-settlement.md:186-195 |
 | FND-006 | low | FR-019-AC-20 (and to a lesser degree AC-19) is compound: descriptor members, domains affecting coverage, and bounds not affecting it. | spec/routed/functional/FR-019-capability-settlement.md:245, 244 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | FR-022's 'linked descriptor with a process-like name' is undefined. The rule it implies (every unknown linked identity refuses) is already stated by AC-22. | spec/routed/functional/FR-022-routed-generation.md:191-192 |
+
 ## Dispositions
 
 Round 1, against the fix-round head recorded in the IR-629 Linear dispositions marker.
@@ -57,3 +63,5 @@ Round 1, against the fix-round head recorded in the IR-629 Linear dispositions m
 | FND-002 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-003 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
 | FND-004 | fixed | fix commit 'spec(CG): resolve IR-629 process review findings' |
+| FND-005 | fixed | round 2: fix commit 'spec(CG): close IR-629 review disposition findings' |
+| FND-006 | fixed | round 2: fix commit 'spec(CG): close IR-629 review disposition findings' |

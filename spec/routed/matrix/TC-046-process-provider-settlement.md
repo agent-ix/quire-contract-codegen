@@ -29,8 +29,9 @@ from `DomainKey`. Verify the empty generation arm and absence of plugin calls
    `Process(id)` even though `ALL` lists built-in kinds only. Construct routed
    items through `RoutedGenerationItem::from_descriptor`: compare a linked
    `kani` descriptor and a process descriptor also named `kani`; try a linked
-   descriptor with an unknown process-like identity, and mismatched backend
-   and descriptor identities. Inspect whether callers can set `kind` directly.
+   descriptor with an identity that has no built-in kind, and mismatched backend
+   and descriptor identities. Inspect whether callers can set `backend` or
+   `kind` directly after construction.
 2. Settle the following single-candidate rows. Keep the requested capability
    kind fixed and vary only the listed manifest advertisement or item extent.
 
@@ -45,8 +46,8 @@ from `DomainKey`. Verify the empty generation arm and absence of plugin calls
    | bounded, one `bounds[].kind` absent from `domains` | both modes for kind | `unsupported`, `unsupported_projection`/`unsupported-requested-capability` |
    | bounded, covered domain | `unbounded` only for kind | `unsupported`, `unsupported_projection`/`unsupported-requested-capability` |
    | bounded, one `bounds[].kind` absent from `domains` | `unbounded` only for kind | `unsupported`, `unsupported_projection`/`unsupported-requested-capability` |
-   | unbounded | `unbounded` for kind, with unrelated or omitted `domains` | `supported` |
-   | unbounded | both modes for kind, with one `domains[].kind` unadvertised | `supported` |
+   | unbounded, `finite_bound_available=false` | `unbounded` for kind, with unrelated or omitted `domains` | `supported` |
+   | unbounded, `finite_bound_available=true` | both modes for kind, with one `domains[].kind` unadvertised | `supported` |
    | unbounded, `finite_bound_available=true`, all `domains[].kind` advertised | `bounded` only for kind | `requires-bound` |
    | unbounded, `finite_bound_available=false`, all `domains[].kind` advertised | `bounded` only for kind | `unsupported`, `unsupported_projection`/`unbounded-extent` |
    | unbounded, `finite_bound_available=true`, one `domains[].kind` absent | `bounded` only for kind | `unsupported`, `unsupported_projection`/`unsupported-requested-capability` |
@@ -64,17 +65,19 @@ from `DomainKey`. Verify the empty generation arm and absence of plugin calls
    advertisements and inspect for process starts. Route a supported
    `Process(id)` item to generation with no process context; inspect its output
    under a permutation of Kani and two process identities. In a CG internal
-   test, mutate the private routed `Process(id)` identity so it disagrees with
-   the routed backend.
+   test, construct or mutate an item whose private routed `Process(id)` kind
+   disagrees with its private backend; an external caller cannot produce that
+   mismatch through the public constructor.
 
 ## Expected Results
 
 1. `ALL` contains finite built-in Kani; CG's conversion and the named-backend
    path reach `Process(id)` and receive one disposition (FR-019-AC-11).
    `from_descriptor` constructs Kani for linked `kani` and Process for process
-   `kani`; unknown linked identity refuses as `UnknownLinkedBackend`, and a
-   backend/descriptor mismatch refuses as `DescriptorBackendMismatch` naming
-   both. External callers cannot set `kind` directly (FR-022-AC-20 to AC-22).
+   `kani`; a linked identity with no built-in kind refuses as
+   `UnknownLinkedBackend`, and a backend/descriptor mismatch refuses as
+   `DescriptorBackendMismatch` naming both. External callers cannot set
+   `backend` or `kind` directly (FR-022-AC-20 to AC-22).
 2. Every row has its stated disposition and cause. An unbounded item never
    settles `supported` on `bounded`-only advertisement (FR-019-AC-12,
    FR-019-AC-16, FR-019-AC-17, FR-019-AC-21, FR-019-AC-22).
