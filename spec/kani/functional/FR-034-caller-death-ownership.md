@@ -269,6 +269,53 @@ retains bounded outer cancellation, without resetting the deadline.
 - After original lease closure, O shall retain the separate final-report delivery channel.
 - If IPC admission capability is unavailable, then C shall confirm owned cleanup before refusal.
 
+### Pre-Armed negative cleanup capability custody
+
+When O emits a genuine `Committed` / `OperationalFailure` during startup before positive
+`Armed`, O shall send that existing negative envelope to L with zero ancillary rights. L shall
+retain its actual O `Child` and original O pidfd independently of arm publication. L shall
+accept the negative only from that actual Child PID with kernel sender UID/GID 0, matching the
+existing build/run authority, actual negative startup state and original O producer stop stamp.
+An envelope's labels shall not establish its sender, operation or admission site.
+
+When that authenticated negative reaches L while C awaits arm publication (`AwaitArm`), L shall
+forward the SAME envelope bytes over the existing authenticated L→C bootstrap control with
+EXACTLY ONE clone of L's actual retained O pidfd. This forwarding shall precede L's existing
+caller-selected O settlement wait. This explicitly changes the typed ancillary-rights
+contract for this L→C negative context from zero to one; the O→L context remains zero. L shall
+neither reconstruct the cause or producer clock nor encode a substitute `Armed` reply. C shall
+validate the actual L sender/build/run and expected startup state through the existing authenticated
+L chain, and retain the supplied capability bound to the actual L-owned O that produced the
+negative. L's O-PID and mapped UID/GID checks remain required; forwarding does not replace them
+with socket-creator credentials or packet claims. The same negative outside this allocated state
+shall not acquire this one-right interpretation.
+
+The transferred pidfd shall grant C cleanup/source custody of that exact O only: retained
+termination observation and, when required by existing cancellation, signal authority over that
+owned O. It shall not grant a direct O `Child` to C, authority over another process or M/I, or a
+reopened numeric-PID substitute. L retains the actual O Child and its real wait obligation.
+Neither the descriptor nor the negative shall establish parent-death arming, namespace/network
+admission, positive `Armed`, positive startup-phase advancement, report authority or backend Dispatch.
+Missing, extra, wrong-type or substituted rights shall refuse; received rights and original owners
+shall remain owned through the existing bounded refusal/cleanup path rather than being accepted
+through a zero-right fallback.
+
+C shall provisionally retain the authenticated original negative cause/source facts and adopt its
+original O producer stop stamp BEFORE waiting for L's actual O-Child result. This only shortens
+the original earliest-stop cutoff, clipped to the original deadline; it shall not create a
+receipt-time stamp or reset the FIRST-stop settlement allowance when the work deadline is absent.
+Provisional negative custody shall supply no execution evidence or final failure result. C shall
+expose the existing original-cause failure only AFTER L's actual O Child wait and the required
+L, capture, creator and control-EOF settlement under that same cutoff. Unconfirmed settlement
+retains `CleanupUnconfirmed` precedence; an authenticated negative or ready pidfd alone shall
+not prove this whole chain. This amendment adds no frame, ACK, window, resource cap, public field
+or refusal category; all control/capability state remains charged within the existing ceilings.
+
+This custody route and its checks are CODE-gated and PLANNED/UNRUN. Current positive-arm capability
+publication alone does not implement negative-state capability acquisition or provide its Test
+evidence. Required producer/source authentication and original-cause representation remain governed
+by the existing cross-role refusal-cause contract.
+
 ### Startup and termination observations
 
 The stage boundaries and cancellation observations are cumulative only where explicitly stated:
@@ -1514,6 +1561,14 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-48 | PLANNED/UNRUN (IR-682). The named heap inventory covers actual returned Rust capacities times element size, metadata and simultaneous lifetimes, excluding incidental allocator chunk overhead. A larger actual capacity or overlapping temporary omitted from the checked caller-buffer sum fails the conformance claim. | Analysis |
 | FR-034-AC-49 | PLANNED/UNRUN (IR-682). A change to the source head, resolved consumer configuration/compiler, resulting executable or loaded runtime/bound premises invalidates the former proof and requires analysis again. A stale proof or merely matching caller/helper artifact does not satisfy native-accounting conformance. | Analysis |
 | FR-034-AC-50 | PLANNED/UNRUN (IR-682). Missing or incomplete proof, or a proven bound exceeding the independently declared runtime charge, leaves the configuration UNPROVEN and fails the conformance gate; a missing actual named charge retains the existing runtime refusal. This build gate introduces no runtime refusal/public capability or evidence of completed Analysis; the initial release configuration and other eligible configurations remain UNPROVEN until their own proofs exist. | Analysis |
+| FR-034-AC-57 | PLANNED/UNRUN (IR-687). An authenticated pre-Armed O OperationalFailure reaches L with zero rights; forwarding the SAME negative bytes to C in AwaitArm carries exactly one clone of L's actual retained O pidfd. The typed rights contract is state-specific, and no other negative context gains this right. | Test |
+| FR-034-AC-58 | PLANNED/UNRUN (IR-687). L authenticates the negative's actual O Child PID and kernel UID/GID 0 plus original build/run/state; C authenticates its actual L chain and binds the received capability to that same L-owned O. Wrong actor, credentials, build/run or state refuses without deriving authority from packet labels. | Test |
+| FR-034-AC-59 | PLANNED/UNRUN (IR-687). A missing, extra, wrong-type or substituted negative capability refuses while retaining actual received rights and owners for bounded cleanup; a zero-right fallback never admits this L→C AwaitArm negative. | Test |
+| FR-034-AC-60 | PLANNED/UNRUN (IR-687). The transferred O pidfd permits only that O's cleanup/source custody, termination observation and existing owned cancellation. It never supplies a C direct Child, M/I or foreign-process authority, or numeric-PID reopening. | Test, Inspection |
+| FR-034-AC-61 | PLANNED/UNRUN (IR-687). Negative capability custody grants no Armed, namespace/network admission, positive phase advancement, report or Dispatch authority; an actual pre-arm failure cannot create M or execute the production backend. | Test |
+| FR-034-AC-62 | PLANNED/UNRUN (IR-687). C adopts the authenticated original O producer stop provisionally before L's actual Child wait, preserving the earliest original cutoff including absent work deadline; delayed delivery never generates a receipt-time stop or resets settlement allowance. | Test |
+| FR-034-AC-63 | PLANNED/UNRUN (IR-687). C exposes the original-cause failure only after actual O Child wait at L and required L/capture/creator/control-EOF settlement under the original cutoff. A provisional negative or ready pidfd is insufficient; unavailable confirmation retains CleanupUnconfirmed precedence and no evidence. | Test |
+| FR-034-AC-64 | PLANNED/UNRUN (IR-687). The pre-arm negative route reuses the existing bounded controls and ceilings without a new frame, ACK, window, cap or public API/refusal category; retaining the extra cleanup descriptor does not relax existing descriptor/accounting obligations. | Inspection |
 
 ## Dependencies
 

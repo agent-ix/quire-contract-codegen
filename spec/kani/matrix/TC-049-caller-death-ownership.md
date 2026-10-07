@@ -963,6 +963,34 @@ Expected failure: a missing/stale premise, unresolved path or exceeded declarati
 leaves the configuration UNPROVEN. Missing proof is not a new runtime refusal.
 Other candidate native policies/configurations remain UNPROVEN until their own proofs.
 
+### Pre-Armed negative capability checks
+
+These IR-687 checks are PLANNED/UNRUN and CODE-gated. Use the real C/L/O roles and original
+bounded controls; no fabricated Armed, role identity, Child result or termination witness.
+
+1. At genuine O startup failure before Armed and before ANY M creation, retain L's actual O
+   Child/pidfd. Observe O→L Committed OperationalFailure with zero rights. Verify L receives the
+   actual Child PID/UID/GID 0, matching build/run/state and original producer stop, then forwards
+   unchanged bytes to C AwaitArm with exactly one real clone. Compare the clone with L's retained
+   capability using actual descriptor identity; C authenticates L independently. A different
+   sender, credential, build/run, state or foreign capability must refuse.
+2. Exercise missing/extra/wrong-type/substituted rights and that same negative outside AwaitArm.
+   Verify exact state-selected cardinality, owned received-descriptor cleanup and no zero-right
+   fallback. Observe no positive Armed, namespace admission, phase progression, M or backend marker.
+   Inspect that cancellation uses only the retained O capability and L still owns/reaps the real
+   O Child; C never fabricates a direct Child, M/I pin or reopened numeric-PID authority.
+3. Delay L's actual O Child wait after the genuine producer stop and full forwarded negative.
+   Verify C retains the cause and adopts the original O stamp provisionally BEFORE that wait;
+   delaying receipt/wait cannot move the cutoff later. Exercise finite and absent work deadlines
+   with the original FIRST-stop allowance. No interim execution evidence or final failure is
+   accepted, even if the O pidfd is ready.
+4. Observe real O Child wait, L/capture/creator settlement and required control EOF before the
+   existing original-cause failure becomes final. An unavailable confirmation within the same
+   original cutoff must produce CleanupUnconfirmed rather than a fake normal cleanup/cause result.
+   Inspect that all new live descriptor/control state is charged to existing ceilings and the
+   only wire change is this state-selected L→C ancillary-rights count: no new frame/ACK/window,
+   public field/refusal or resource cap. Existing O→L zero-right negative handling remains intact.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -997,6 +1025,14 @@ Other candidate native policies/configurations remain UNPROVEN until their own p
 | FR-034-AC-48 | PLANNED/UNRUN Analysis: Returned heap capacities, metadata and overlap inside declared charge; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
 | FR-034-AC-49 | PLANNED/UNRUN Analysis: Reanalysis after source/build/compiler/runtime/artifact/premise change; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
 | FR-034-AC-50 | PLANNED/UNRUN Analysis: Bound fits independent declaration; missing proof is UNPROVEN, missing charge uses existing refusal; actual per-criterion receipt required | Omitted or stale required fact, falsely completed method row or runtime proof-availability classification |
+| FR-034-AC-57 | PLANNED/UNRUN: O→L zero-right negative, unchanged L→C bytes with one actual O-pidfd clone in AwaitArm | Global rights change; reconstructed cause/clock; foreign descriptor |
+| FR-034-AC-58 | PLANNED/UNRUN: actual O Child PID/UID/GID 0 and authenticated L/build/run/state bind cleanup custody | Packet labels or socket creator substitute for actual sender chain |
+| FR-034-AC-59 | PLANNED/UNRUN: invalid rights/context refuses with actual owned cleanup | Zero-right fallback; missing/extra/substituted authority admitted |
+| FR-034-AC-60 | PLANNED/UNRUN: retained capability addresses only actual O; L retains real Child wait | Guessed/reopened PID; fictitious C Child or M/I authority |
+| FR-034-AC-61 | PLANNED/UNRUN: negative custody gives no positive namespace/phase/report/Dispatch admission | Armed fabricated; backend/M starts on negative |
+| FR-034-AC-62 | PLANNED/UNRUN: original producer stamp adopted before L wait; earliest original cutoff retained | Receipt-time trigger or reset FIRST-stop allowance |
+| FR-034-AC-63 | PLANNED/UNRUN: final original cause follows actual whole-chain settlement | Ready pidfd/negative bytes substitute for wait, EOF or capture/creator settlement |
+| FR-034-AC-64 | PLANNED/UNRUN: existing control/ceiling allocation and public API preserved | New frame/ACK/window/cap or uncharged extra descriptor |
 
 AC-31 through AC-34 and rewritten FR-017 AC-19 are UNRUN and must compute untagged until actual
 production assertions are implemented. Scenario prose or research probes establish no executable
