@@ -202,6 +202,7 @@ pub(super) struct OuterRunOwner {
     // erases the original event/error nor becomes an inferred admission/timeout fact.
     failure_state: Option<Result<FailureState, DeadlineError>>,
     failure_cause: Option<(CauseOperation, Result<FailureHeader, RepresentationError>)>,
+    unclaimed_failure: Option<PreparationFailureDelivery>,
     // An owner stop before monitor preparation retains the original unexposed I endpoint.
     _unexposed_inner_endpoint: Option<GuardianEndpoint>,
 }
@@ -261,6 +262,14 @@ pub(super) enum PreparationFailureProgress {
     Pending,
     Committed,
     OwnerStopped(OuterRunOwner),
+}
+
+/// A genuine unclaimed startup failure carries no report/measurement/inner settlement.
+/// OwnerStopped resumes the SAME retained actor after an actual independent resource sample.
+pub(super) enum ActivatedFailureProgress {
+    Pending,
+    Committed,
+    OwnerStopped,
 }
 
 struct PreparationFailureDelivery {
@@ -384,6 +393,7 @@ impl OuterRunPreparation {
                     failure_event: None,
                     failure_state: None,
                     failure_cause: None,
+                    unclaimed_failure: None,
                     _unexposed_inner_endpoint: inner_endpoint,
                 })
             }
@@ -857,6 +867,176 @@ impl OuterRunOwner {
         &self,
     ) -> Option<&(CauseOperation, Result<FailureHeader, RepresentationError>)> {
         self.failure_cause.as_ref()
+    }
+
+    /// Negative progress is available only before any actual I claim. The helper retains its
+    /// unchanged original error while this same owner keeps real M/collector/control custody.
+    /// Normal O exit remains provisional until C's actual outer/L/capture/creator settlement.
+    pub(super) fn unclaimed_failure_step(
+        &mut self,
+        outer: &PreparedOuter<'_>,
+        caller: &RoleEndpoint,
+    ) -> Result<ActivatedFailureProgress, SamplingError> {
+        if !self.poisoned || !matches!(self.state, OuterRunState::Startup) {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        if self
+            .monitor
+            .as_mut()
+            .ok_or(SamplingError::InvalidMonitorTransition)?
+            .monitor
+            .namespace()
+            .claimed_init_terminated()
+            .map_err(|cause| SamplingError::Io {
+                operation: CauseOperation::MonitorClaim,
+                cause,
+            })?
+            .is_some()
+        {
+            // The actual stored claim, not a coarse phase enum, excludes this branch even
+            // when binding a newly stored I claim failed before the phase advanced.
+            return Err(SamplingError::InvalidMonitorTransition);
+        }
+        if self
+            .phases
+            .pending_reply
+            .as_ref()
+            .is_some_and(|reply| reply.send.has_partial_frame())
+        {
+            return Err(SamplingError::UnexpectedPhase);
+        }
+        if self.unclaimed_failure.is_none() {
+            let header = match self.failure_cause.as_ref() {
+                Some((_, Ok(header))) => *header,
+                // Unrepresentable causes retain the actual original/checking errors. This
+                // slice cannot invent a cause or reuse a policy-only source-loss exception.
+                Some((_, Err(_))) | None => return Err(SamplingError::InvalidTerminalTransition),
+            };
+            let sampling = self
+                .sampling
+                .as_ref()
+                .ok_or(SamplingError::InvalidMonitorTransition)?;
+            let cutoff = observation_deadline(&sampling.settings, &sampling.stops)?
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            if Instant::now() >= cutoff {
+                return Err(SamplingError::Deadline(DeadlineError::Expired));
+            }
+            // Zero-progress replies cannot authorize the caller. Any already complete queued
+            // phase remains in C's original framer and must retain its real rights for cleanup.
+            drop(self.phases.pending_reply.take());
+            let frame = self
+                .terminal_prepared
+                .as_mut()
+                .and_then(|prepared| prepared.commit.take())
+                .ok_or(SamplingError::InvalidTerminalTransition)?
+                .encode(&NegativeCommit::new(header, &[]))
+                .map_err(SamplingError::Control)?;
+            self.unclaimed_failure = Some(PreparationFailureDelivery {
+                cutoff,
+                send: IncrementalSend::new(frame),
+                monitor_settled: false,
+                collector_stopped: false,
+                committed: false,
+            });
+        }
+        let delivery = self
+            .unclaimed_failure
+            .as_mut()
+            .ok_or(SamplingError::InvalidTerminalTransition)?;
+        if delivery.committed || Instant::now() >= delivery.cutoff {
+            return Err(SamplingError::InvalidTerminalTransition);
+        }
+        let sampling = self
+            .sampling
+            .as_mut()
+            .ok_or(SamplingError::InvalidMonitorTransition)?;
+        sampling.ledger.begin_observation();
+        // Fresh complete accounting is attempted before every finite reap/send step. An
+        // unavailable new observation refuses this attempt; it never recovers stale peaks.
+        let tick = sampling.tick_observation(outer, caller)?;
+        if matches!(tick, MemoryTick::Exhausted(_)) {
+            if delivery.send.has_partial_frame() {
+                return Err(SamplingError::UnexpectedPhase);
+            }
+            let retired = self
+                .unclaimed_failure
+                .take()
+                .ok_or(SamplingError::InvalidTerminalTransition)?;
+            let PreparationFailureDelivery {
+                cutoff,
+                send,
+                monitor_settled,
+                collector_stopped,
+                committed,
+            } = retired;
+            let storage = match send.retire_unsent() {
+                Ok(storage) => storage,
+                Err(send) => {
+                    self.unclaimed_failure = Some(PreparationFailureDelivery {
+                        cutoff,
+                        send,
+                        monitor_settled,
+                        collector_stopped,
+                        committed,
+                    });
+                    return Err(SamplingError::UnexpectedPhase);
+                }
+            };
+            self.terminal_prepared
+                .as_mut()
+                .ok_or(SamplingError::InvalidTerminalTransition)?
+                .commit = Some(storage);
+            self.state = OuterRunState::OwnerStopped;
+            self.poisoned = false;
+            return Ok(ActivatedFailureProgress::OwnerStopped);
+        }
+        if !delivery.collector_stopped {
+            sampling
+                .collector
+                .begin_owner_stop()
+                .map_err(|cause| SamplingError::Report {
+                    operation: CauseOperation::ReportCollection,
+                    cause,
+                })?;
+            delivery.collector_stopped = true;
+        }
+        if !delivery.monitor_settled {
+            if self
+                .monitor
+                .as_mut()
+                .ok_or(SamplingError::InvalidMonitorTransition)?
+                .monitor
+                .stop_monitor_step(delivery.cutoff)
+                .map_err(|cause| SamplingError::Io {
+                    operation: CauseOperation::MonitorStop,
+                    cause,
+                })?
+                .is_none()
+            {
+                return Ok(ActivatedFailureProgress::Pending);
+            }
+            // Positive actual M reap/NotCreated is separate from unclaimed-tree termination.
+            // I has no claim token here; actual normal O termination later proves its tree.
+            delivery.monitor_settled = true;
+            drop(self._unexposed_inner_endpoint.take());
+        }
+        if Instant::now() >= delivery.cutoff {
+            return Err(SamplingError::Deadline(DeadlineError::Expired));
+        }
+        if delivery
+            .send
+            .advance(&caller.transport(), &[], delivery.cutoff)
+            .map_err(SamplingError::Control)?
+        {
+            if Instant::now() >= delivery.cutoff {
+                return Err(SamplingError::Deadline(DeadlineError::Expired));
+            }
+            delivery.committed = true;
+            self.state = OuterRunState::Committed;
+            Ok(ActivatedFailureProgress::Committed)
+        } else {
+            Ok(ActivatedFailureProgress::Pending)
+        }
     }
 
     fn advance(

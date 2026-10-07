@@ -61,6 +61,9 @@ mod creator;
 // Registration alone does not replace the existing production launch orchestration.
 #[cfg(target_os = "linux")]
 mod cause_metadata;
+// One borrowed fixed-workspace grammar decoder; schema migration remains source work.
+#[cfg(target_os = "linux")]
+mod guardian_decode;
 #[cfg(target_os = "linux")]
 mod outer_caller;
 #[cfg(target_os = "linux")]
