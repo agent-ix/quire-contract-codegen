@@ -861,7 +861,6 @@ actual settlement or original deadline is changed.
 | --- | --- | --- |
 | I/O error with a raw OS errno | The sending owner shall retain the exact errno and actual ErrorKind. | C shall reconstruct the public I/O cause directly from that errno and verify its kind on the same running platform; C shall reject a kind mismatch. No wrapper shall erase the public raw_os_error or invent an errno. |
 | I/O error with no raw errno and no custom payload | The sending owner shall retain the actual named ErrorKind and absence of errno/payload. | C shall reconstruct that kind without a custom source or loss marker. The supported producer/build domain below supplies complete kind coverage. |
-| Valid original declared finite provenance category, excluding required cause-representation faults | The sending owner shall select the actual typed category/fields from the declared private set below and record any source loss. | C shall retain these facts as authenticated private provenance, not reconstruct an original generic public source/downcast chain from them. Only when this is a valid original no-errno boxed operational category, not a failure of required cause encoding/checking, whose payload is lost and the existing public result carries io::Error, C shall preserve its actual kind with KaniCrossRoleCauseLoss; every required-representation fault uses the separate integrity-fault rule below, even if its sender-side wrapper is an io::Error with a named kind and custom payload. Stronger AC-39 representable public-source duties remain unchanged. |
 | Valid original positively observed reservation payload or Reservation wrapper, excluding required cause-representation faults | The sending owner shall retain actual outer I/O facts and its observed reservation category, wrapper and operation. | C shall preserve the actual no-errno kind with the public KaniCrossRoleCauseLoss marker; C shall infer neither allocation-versus-capacity kind nor layout from diagnostics and shall not manufacture an identical Reservation payload. |
 | Other valid original trusted custom payload, excluding required cause-representation faults and stronger existing public-source duties | The sending owner shall retain actual outer I/O facts and the typed listed operation with explicit unrepresented-payload/chain status. | C shall preserve the actual no-errno kind with KaniCrossRoleCauseLoss; C shall invent no original source, downcast identity or diagnostic-derived category. |
 
@@ -910,8 +909,8 @@ projection are distinct, and neither shall be inferred from an unverified packet
 | NonInstallationDependencyCause | Actual installation-cause capture/checking receives a dependency cause outside the allocated installation domain. |
 | PolicySiteCauseMismatch | Actual checking/projection finds the cause domain inconsistent with the independently authenticated policy site. |
 | UnknownKindMetadata | The checking receiver observes unknown kind metadata, without claiming that this was the producer's original kind. |
-| MalformedCauseMetadata | The checking receiver observes malformed cause representation. |
-| IncompleteCauseMetadata | The checking receiver observes incomplete cause custody. |
+| MalformedCauseMetadata | The checking receiver observes malformed required cause/envelope metadata; optional diagnostic payload decoding alone is excluded. |
+| IncompleteCauseMetadata | The checking receiver observes incomplete required cause/envelope custody; an incomplete UTF-8 scalar in otherwise complete optional diagnostic bytes is excluded. |
 
 A complete authenticated sender fault report supplies only its actual observed predicate and known
 provenance. A C-observed checking failure supplies C's actual predicate and independently known
@@ -1058,6 +1057,24 @@ from that original authenticated cause. The required-representation-failure case
 without a previously representable original cause; it shall not override retained original cause
 custody because optional detail failed. Optional detail shall remain bounded UTF-8 diagnostic data
 and shall supply no cause, role, operation or public classification.
+
+Required cause metadata includes actual kind/errno facts and mandatory envelope identity, authority,
+site/state, applicable stop and field-presence/type/framing obligations. A mandatory context field
+remains required envelope structure: absence, duplicate fields, a non-byte-array value, non-u8
+members or broken/incomplete enclosing framing cannot be accepted as an omitted diagnostic.
+Omitting diagnostic text shall preserve that structure with empty context bytes. Within a complete
+bounded structurally valid context byte array, the bytes are optional diagnostic payload, not
+kind/errno or authority metadata. C shall discard diagnostic text that exceeds its retention bound,
+is invalid UTF-8 or ends in an incomplete UTF-8 scalar, without changing an independently validated
+and authenticated original cause, its public errno/kind or mapping. Such text supplies no integrity
+predicate and no classification duty; public docs shall permit absent/lossy diagnostics. Existing
+whole-control encoded-byte limits and complete-frame/ancillary/authentication checks remain
+mandatory: whole-packet truncation or invalid required metadata uses the actual CauseIntegrity
+predicate and existing carrier/detail-only mapping, never a claimed valid original replay.
+A decoder shall distinguish those structural/mandatory failures from optional payload rendering
+failure; failure of the current combined context decoder is not implementation evidence that both
+are cause-metadata faults. This distinction remains CODE-gated/UNRUN and allocates no new field,
+frame, capacity, acknowledgment or deadline.
 
 The sending helper shall charge its actual encode/context storage to its measured owned-role
 accounting and existing backing terms. C shall charge actual receive/context/metadata storage to

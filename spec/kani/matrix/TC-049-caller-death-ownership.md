@@ -677,6 +677,18 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     bound independently; both fit existing whole-control/whole-run caps and original cutoffs.
     Analyze optional diagnostic formatting-error and over-bound branches: the representable original
     typed cause is retained first, diagnostic detail is omitted, and the original cause/mapping wins.
+    Audit receiver-side required context presence/type/framing separately from optional diagnostic
+    byte rendering. With independently authenticated valid original EPERM metadata and a complete
+    bounded context byte array containing invalid UTF-8 or a trailing incomplete UTF-8 scalar,
+    require unchanged original raw errno/kind/mapping, no integrity/loss marker on this OS cause,
+    and omitted diagnostic text. A diagnostic retention-bound excess within the whole-control cap
+    likewise drops text. A missing/duplicate context field, non-u8 or non-array value, broken or
+    truncated complete-frame structure or invalid mandatory kind/authority is required metadata
+    failure: require its actual integrity predicate and existing site-first carrier/detail treatment,
+    not alleged EPERM replay. Empty context bytes satisfy required presence while omitting text.
+    Analyze the frozen combined seed as a CODE separation obligation, not executed acceptance.
+    Mutants treating malformed optional UTF-8 as cause integrity or accepting broken mandatory
+    framing as an omitted diagnostic must fail independently; genuine unavailable seams remain UNRUN.
     Required representation failure is distinct from a valid original operational cause even when wrapped
     as Other with a first-party boxed payload. Audit the sender's actual typed required-representation
     bound/format/unnamed-kind/OS-kind-mismatch branches and actual non-installation dependency
@@ -765,7 +777,7 @@ criteria, assertions, genuine mutant parity and one-CODE-PR/full-gate requiremen
     public downcast reconstruction or stage query. Unavailable genuine cases remain zero Test credit.
     Inspect the public single/batch bounded API and MemoryMechanismUnavailable rustdoc for listed
     cross-role scope, typed public marker detection, finite private provenance/opaque loss, observed
-    source presence, intact local-source
+    source presence, absent/lossy optional diagnostics versus mandatory envelope structure, intact local-source
     retention and absence of a public role/stage query promise. Verify explicit public projection
     scope versus existing detail-only observation/settlement results: private finite facts/loss only,
     no original-cause/downcast promise or diagnostic-derived classification. Missing/misleading docs fail this
@@ -804,10 +816,10 @@ Test credit and their existing Slice 2 obligation.
 | Valid original raw OS error | Exact original raw errno and verified kind | None | None | Original site-first admission or other actual existing mapping; direct errno reconstruction, no wrapper. |
 | Valid original payload-free InvalidData | InvalidData, raw errno None, no custom payload | None | None | Original site-first admission; no fabricated custom source. |
 | Genuine local custom InvalidData | Original InvalidData/raw errno and original custom object | None | None | Original local mapping/source retained; get_ref Some alone is not integrity. |
-| Valid original declared operational-category boxed no-errno cause outside stronger AC-39 duties, independently produced by the listed operation and not its required cause encoding/checking | Actual original named kind/raw None; declared finite facts retained privately, original boxed category unrepresented | Some | None | Original existing site-first/cause-bearing mapping; public marker required even though the category is declared, not an unmarked kind-only projection. |
 | Genuine valid original generic no-errno custom source lost across roles, excluding required cause encoding/checking faults | Exact original named kind, raw errno None, authenticated finite private provenance | Some | None | Original site-first admission or actual existing mapping; loss type denotes no original source identity. |
 | Finite typed public source required and representable under AC-39 | Its required original kind/errno and finite typed source facts | None | None | Stronger AC-39 duties retained; generic loss/integrity types shall not replace that source. |
 | Required sender capture/check/representation fails with an actual predicate from the single CauseIntegrity inventory, even if wrapped as Other with a boxed payload; complete authenticated finite fault report delivered to an existing I/O-cause-bearing result | InvalidData/raw None, actual finite required-representation predicate and only independently authenticated optional role/site facts | None | Some | Actual integrity cause, not original replay; explicit site-authenticated Unavailable or non-site startup/protocol path. A report not delivered cannot supply this predicate. |
+| Independently authenticated valid original EPERM with complete required metadata/context byte-array framing; optional diagnostic UTF-8 invalid/incomplete or diagnostic retention bound exceeded within whole-control cap | Original raw errno/kind unchanged; diagnostic text dropped | None | None | Original admission/cause mapping; optional rendering failure supplies no integrity predicate. Missing/invalid required field/framing instead uses actual metadata-integrity row. |
 | Actual C-side non-installation dependency-domain or policy-site/cause checking/projection rejection | InvalidData/raw None, actual NonInstallationDependencyCause or PolicySiteCauseMismatch and independently known checker/site facts | None | Some | Existing I/O-cause-bearing site-first integrity mapping; no sender report or invented sender origin. A detail-only observation result instead retains this predicate privately. |
 | Unknown, malformed or incomplete cause metadata; negative admission site/state independently authenticated | InvalidData, raw errno None, actual local integrity error with actual private predicate/provenance and decoder source when present | None | Some | MemoryMechanismUnavailable with exact actual admission context, code None/no evidence after settlement; public cause is integrity, never original producer replay. |
 | Cause metadata fault without independently authenticated originating admission site/state; required ownership/protection remains established | InvalidData/no-errno, actual local metadata-integrity error | None | Some | Tool(KaniToolError::Io) with actual launcher path/error; typed cause remains detectable, no invented admission-site context or Dispatch/evidence. |
