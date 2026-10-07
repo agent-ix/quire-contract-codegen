@@ -269,6 +269,163 @@ retains bounded outer cancellation, without resetting the deadline.
 - After original lease closure, O shall retain the separate final-report delivery channel.
 - If IPC admission capability is unavailable, then C shall confirm owned cleanup before refusal.
 
+### Pre-Armed negative cleanup capability custody
+
+When L awaits its first authenticated O arm result, L shall select between the existing Armed
+envelope and a newly allocated zero-right Committed/OperationalFailure negative on its existing O
+bootstrap channel. O shall send this negative to L with zero ancillary rights. This is a NEW
+receive/publication route; current zero-right OperationalFailure is O→C after arm, not O→L. L shall
+retain its real O Child and original pidfd independently of arm publication.
+
+L shall authenticate the negative from its actual retained Child PID with kernel sender UID/GID0,
+original build/run authority, genuine source/state and producer stamp. L shall forward the SAME
+bytes and EXACTLY ONE clone of that retained pidfd over existing L→C bootstrap while L has not
+accepted a complete positive Armed. C shall select this negative only in its own AwaitArm receive
+state, authenticate the actual L chain and original O bindings, and adopt the original O stamp
+before L wait. No packet label or socket creator replaces current sender identity.
+Missing/extra/wrong/substituted rights shall refuse through retained owned cleanup; no zero-right
+fallback.
+
+If O emits only a partial Armed frame to L and then fails or closes its source, L shall retain that
+partial frame and any received rights solely for disposal through owned cleanup. L shall neither
+accept Armed nor append, splice or authenticate a later negative through that partial frame. This
+remains startup-protocol failure with the original cause potentially unavailable; L's actual
+retained Child/pidfd authority shall still settle its owned O. No new negative route or clock window
+is allocated for that damaged frame.
+
+The positive split is O→L Armed acceptance followed by direct O→C Armed publication, NOT L
+forwarding Armed. Once L accepts a complete positive Armed, it shall not use this pre-arm negative
+forwarding route. A partial direct O→C Armed shall remain partial with its actual ancillary custody;
+no negative splice/replacement or startup admission follows. Zero progress shall not establish
+positive arm acceptance. After L accepts Armed, a failed zero-progress or partial direct O→C Armed
+publication shall remain startup-protocol failure, with no promise that the original producer cause
+is available. C shall retain partial bytes without admission and close any pidfd received with an
+unauthenticated partial Armed frame. That unvalidated descriptor grants C no signalling,
+termination-observation or other authority; existing independently authenticated L/owner custody
+shall perform containment. C shall not grant positive admission, splice or return unconfirmed normal
+settlement. A genuine partial-Armed-as- positive mutant shall fail the no-admission/whole-chain
+assertion. A later measured need for post-L- Armed negative routing requires a separate allocated
+slice; no future duty is promised here.
+
+While C remains AwaitArm, C shall service the L bootstrap as well as the direct O source. Direct O
+EOF shall supply no original cause or admission; C shall retain it as a provisional source-closure
+fact while the existing original startup/stop cutoff admits completion of the authenticated L
+negative route. Only a full valid L negative grants original cause/cleanup custody and original-
+clock adoption. Partial/malformed or missing negative at cutoff fails with unchanged bounded
+cleanup, no evidence and no generic startup EOF waiver. Earlier valid negative shall not be
+discarded merely because direct O EOF was observed first.
+
+C shall use the transferred pidfd only for exact O termination observation and existing owned-
+cancellation signalling; L shall retain its direct Child/wait obligation. C shall not obtain a
+fictional Child, M/I/other-actor authority, reopen a numeric PID, call pidfd_getfd, enter namespaces
+through setns on the pidfd or use process_madvise. This restricts the allocated negative capability;
+it asserts no new escalation versus positive O custody. No
+Armed/namespace/network/phase/report/Dispatch admission follows.
+
+Test evidence shall prove the clone's actual open-file-description identity with L's retained
+descriptor through an admitted genuine KCMP_FILE or equivalent identity oracle; st_dev/st_ino
+equality is insufficient. Tests shall distinguish the genuine clone from an independent same-O
+pidfd_open and foreign pidfd. Missing kernel permissions/safe facility yields unavailable Test
+evidence, never an inode fallback or passing skip. This allocates no mandatory runtime KCMP
+operation or new capability category; source-bound actual clone production and existing sender/Child
+authentication remain CODE duties.
+
+C shall expose the original failure only after real O Child wait at L, L/capture/creator/control-EOF
+settlement under the original earliest producer cutoff. C shall not infer whole-chain settlement
+from a ready pidfd. When settlement is unconfirmed, C shall retain CleanupUnconfirmed with no
+evidence. The route changes no envelope type, ACK, window, cap, public field or category. New O→L
+negative selection, L→C forwarding, dual-source AwaitArm handling and genuine clone identity remain
+PLANNED CODE gates.
+
+### Claimed-startup negative terminal transaction
+
+COMMIT shall mean the FIRST emitted byte of the existing terminal frame, not producer error
+creation, encoding, observation start, receipt or complete delivery. Before COMMIT, O shall apply
+existing resource/deadline/refusal precedence. A successful fresh complete exhausting pre-send tick
+shall retire a zero-progress OperationalFailure and select existing OwnerStop even when the genuine
+failure occurred earlier. Only a known offset-zero sender with no failed or ambiguous prior progress
+attempt shall retire. Here unpoisoned means the actual retained send owner has no unrecovered send,
+EOF, deadline or progress error; successful nonblocking zero progress is distinct from such a
+failure. O shall retain a poisoned sender through the bounded failure path, without reset or
+substitute emission. No first-established-error override applies. The independently retained
+earliest genuine producer stop/minimum cutoff shall not reset when selection changes.
+
+Before COMMIT, O shall also retire an unsent Failure when an independently established candidate is
+selected by the existing owner-stop or authenticated refusal rules. An eligible original work-
+deadline expiry selects TimedOut; a fresh complete exhausting tick takes priority over simultaneous
+eligible expiry. An earlier completion or stop already ending work shall not become a new work
+timeout when settlement later crosses the work deadline. The original whole cutoff remains
+mandatory; its expiry during unconfirmed settlement retains CleanupUnconfirmed, not a fresh timeout
+allowance. A genuinely authenticated setup/policy refusal retains its existing actual site/phase
+classification beneath a selected owner stop; unknown labels, damaged controls or arbitrary later
+errors shall not manufacture such a refusal. These rules shall neither invent a total ordering among
+unrelated error sites nor relax malformed-report or unavailable-confirmation precedence.
+
+A producer failure is established only by the actual typed error/cause/state and original stamp.
+Resource exhaustion is established only at completion/evaluation of every named observation and
+checked charge sum; sampling start and history alone establish none. O shall include all due ticks
+and the required fresh complete tick before initial emission. Failed or incomplete current
+measurements shall refuse that send attempt, not supply historical/default peaks. Malformed report
+resource/deadline precedence remains mandatory.
+
+After COMMIT, O shall preserve that one candidate's bytes without rewrite/splice/second terminal
+frame. When the selected candidate is genuine OperationalFailure, O shall publish this existing
+frame before I/M settlement so C can close the actual original I lease. Full authenticated receipt
+grants only provisional cause/clock custody. O shall positively confirm the claimed I termination
+and separately reap its actual M Child before normal O return. C shall require actual
+O/L/capture/creator/EOF whole-chain settlement under the original minimum cutoff before its final
+result. C shall interpret normal O Code0 here only as a settled negative transaction, never public
+Success.
+
+Every due observation shall continue through cleanup after COMMIT. O shall retain later successful
+complete exhaustion in actual accounting/history/owned-stop custody until actual settlement. These
+private facts end with O exit; C shall not infer an after-exit diagnostic or new peak transport.
+They shall not upgrade the committed failure to success, stop enforcement, omit any actor or permit
+normal O Code0 while teardown is incomplete. On the completed exhausting tick, O shall initiate
+cancellation of the still-live claimed I and retained M through the same actual owned authority,
+before waiting for C lease closure or proceeding with another publication attempt. O shall use the
+retained I pin for actual signal/confirmation and the retained real M Child for its separate
+cancellation/reap, clipped to the original cutoff without a new allowance. Committed bytes shall
+remain unchanged.
+
+When AC-77 cancellation causes genuine claimed-I death or I-lease EOF during delivery, C shall
+retain those facts without letting them preempt completion and full authentication of O's committed
+frame within the original cutoff. C shall preserve the authentic original cause if that transaction
+completes; I death or lease EOF alone shall neither replace that cause with a transport refusal nor
+authorize an unsettled result. Missing, partial, malformed or unauthenticated O delivery shall not
+gain acceptance. Original-cutoff expiry or unconfirmed whole-chain settlement shall retain existing
+CleanupUnconfirmed precedence; no new window, renewed clock or EOF waiver is allocated.
+
+Private retention is an Analysis obligation: CODE Analysis shall follow OuterRunOwner's retained
+sampling through publication and actual settlement, including OuterSampling's ledger/history and
+owned-stop state. No current ordinary runtime seam proves private retention; the formerly proposed
+hold-settlement-open Test is not retention evidence. Applicable runtime evidence for the separate
+cancellation and settlement obligations remains owed through the existing SPEC-before-fixture-CODE
+allocation. Current NamespaceOwner::cleanup has a blocking five-second poll and does not reap M;
+CODE shall not borrow it as a new finite-step guarantee. A bounded claimed cancellation step using
+that same authority is still a CODE gate, not an implemented API or runtime witness.
+
+A later genuine observation/collector/transport error after COMMIT shall remain owned through
+cleanup and prevent normal O Code0 acceptance; the existing abnormal/absent O settlement path shall
+preserve CleanupUnconfirmed and shall not expose the original candidate as a final result. No second
+frame or reconstructed cause is allocated. The CODE boundary is
+CallerBootstrap::finish_startup_negative_after_roles requiring real Reaped Code(0), with
+caller_public's unsettled cancellation error path selecting CleanupUnconfirmed. Current propagation
+can discard a later owned error; CODE shall provide actual retention and fail-closed normal exit.
+
+An absent peak field shall mean no peak transport/evidence, never actual zero, no historical
+complete observation or current validity. Complete historical maxima shall not repair a failed
+current tick. No claimed-startup negative route exists today: unclaimed_failure_step excludes actual
+I claims, retire-on-fresh-exhaustion is prebyte precedence, and current partial exhaustion can be
+lost. Claimed publication-versus-settlement state, later successful exhaustion lifetime and later-
+error custody/consequence are PLANNED/UNRUN CODE gates, not current behavior claims.
+
+Source Analysis shall inspect the actual owning publication and receive paths in
+`src/kani/run/launcher_owner.rs::confirm_arm` and `publish_outer_arm`,
+`caller_bootstrap.rs::advance_startup` and `finish_startup_negative_after_roles`,
+`outer_sampling.rs::unclaimed_failure_step`, and `helper_entry.rs::run_outer`. These references
+identify CODE gates and the missing claimed path; they supply no runtime proof.
+
 ### Startup and termination observations
 
 The stage boundaries and cancellation observations are cumulative only where explicitly stated:
@@ -326,8 +483,10 @@ pins, captures and original deadline. Both stay in the original caller; this sep
 exports the lease nor transfers ownership of the outer chain. Explicit cancellation in InitReady or
 Dispatched invokes the production `close_lease_and_observe` operation: it consumes and closes
 `CallerLease`, disables further caller Dispatch, and retains `RunOwner` while observing claimed INIT
-termination. No independent INIT cancellation or escalation signal is sent during this LeaseClosing
-phase. Pending guardian authorization still obeys observable EOF precedence. The same operation
+termination. C shall send no independent INIT cancellation or escalation signal during this
+LeaseClosing phase. This restriction on C shall not prevent O's separate post-COMMIT owned
+cancellation required by AC-77. Termination caused by that cancellation shall never count as
+lease-EOF evidence. Pending guardian authorization still obeys observable EOF precedence. The same operation
 handles cancellation before and after Dispatch, not a test-only hook.
 
 LeaseClosing has a finite observation cap clamped to the remaining original identity deadline. Its
@@ -1172,7 +1331,9 @@ The retained-gate case shall separately require positive owned I termination whi
 gate remains retained, followed by actual gate close. Early close and omitted I-confirmation
 mutants shall independently fail with record-emission unchanged. Absence of a backend marker
 shall not prove order. The independent ignored-inner-lease-EOF mutant shall remain required and
-shall never be paired with another mutant or rescued by outer cancellation.
+shall never be paired with another mutant or rescued by outer cancellation. O's independent
+AC-77 post-COMMIT cancellation remains required on a genuine exhausting tick, but its caused
+termination shall never satisfy the ignored-inner-lease-EOF predicate or supply lease-EOF evidence.
 
 Every original assertion, adverse patch and FR-028-AC-21/FR-017-AC-24 trace obligation shall remain
 until measured replacement parity. Parity requires restored controls to pass and each named
@@ -1619,6 +1780,27 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-54 | PLANNED/UNRUN. During cancellation with the original gate retained, O's independently validated actual I confirmation precedes actual gate close; the producer-order predicate rejects early-close and omitted-confirmation controls. | Test, Analysis |
 | FR-034-AC-55 | PLANNED/UNRUN. Independently checked final-source Analysis establishes contained teardown authority through actual namespace INIT death and retained owner settlement, with no sampled-PID membership kill path; the separate AC-24 non-INIT-watcher runtime adverse/restored control remains owed. | Analysis |
 | FR-034-AC-56 | PLANNED/UNRUN. Published-source Analysis establishes O's final complete accounting after actual I confirmation, retained M reap, writer EOF and immutable seal for successful report Commit, with all later due ticks preserved; earlier final accounting invalidates literal-FINAL-oracle retirement. | Analysis |
+| FR-034-AC-57 | PLANNED/UNRUN (IR-687). When L awaits its first O arm result, the newly allocated authenticated O→L OperationalFailure carries zero ancillary rights. | Test |
+| FR-034-AC-58 | PLANNED/UNRUN (IR-687). L accepts that negative only from its actual retained O Child PID with kernel sender UID/GID0 and the original build/run/source/state/stamp authority. | Test |
+| FR-034-AC-59 | PLANNED/UNRUN (IR-687). For L→C AwaitArm negatives, C rejects missing, extra, wrong-type or substituted rights through owned cleanup, without a zero-right fallback. | Test |
+| FR-034-AC-60 | PLANNED/UNRUN (IR-687). The negative O pidfd grants C only exact O termination observation and existing owned-cancellation signalling, while L retains its direct Child/wait obligation. | Test, Inspection |
+| FR-034-AC-61 | PLANNED/UNRUN (IR-687). Negative capability custody grants no Armed, namespace/network, phase, report or Dispatch admission. | Test |
+| FR-034-AC-62 | PLANNED/UNRUN (IR-687). C adopts the authentic O producer stop before L wait and preserves the original earliest cutoff, including absent work deadline, without receipt-time reset. | Test |
+| FR-034-AC-63 | PLANNED/UNRUN (IR-687). C exposes a negative original-cause result only after actual O Child wait at L and required L/capture/creator/control-EOF settlement under that cutoff. | Test |
+| FR-034-AC-64 | PLANNED/UNRUN (IR-687). The new negative routes reuse existing charged controls and ceilings without a new envelope type, ACK, window, cap or public category. | Inspection |
+| FR-034-AC-65 | PLANNED/UNRUN (IR-687). Before first-byte COMMIT, a fresh complete exhausting pre-send tick retires an unsent genuine OperationalFailure into existing OwnerStop under existing precedence, even when the failure occurred earlier. | Test |
+| FR-034-AC-66 | PLANNED/UNRUN (IR-687). Only the allocated L-local pre-arm negative route forwards the same bytes to C with exactly one clone of L’s retained O pidfd. | Test |
+| FR-034-AC-67 | PLANNED/UNRUN (IR-687). C authenticates the L-forwarded negative only in AwaitArm through the actual L chain and original O/run/build bindings. | Test |
+| FR-034-AC-68 | PLANNED/UNRUN (IR-687). C does not use the negative pidfd for pidfd_getfd, pidfd setns, process_madvise, other-actor authority or numeric-PID reopening. | Inspection |
+| FR-034-AC-69 | PLANNED/UNRUN (IR-687). Missing or abnormal whole-chain settlement overrides the provisional negative with existing CleanupUnconfirmed and no execution evidence. | Test |
+| FR-034-AC-70 | PLANNED/UNRUN (IR-687). The first emitted terminal byte irreversibly fixes the candidate; partial/full publication cannot be rewritten, spliced or followed by a second terminal frame. | Test |
+| FR-034-AC-71 | PLANNED/UNRUN (IR-687). O includes every due observation and a genuine fresh complete named-input tick before initial terminal emission; failed current input never borrows historical/default peaks. | Test |
+| FR-034-AC-72 | PLANNED/UNRUN (IR-687). After COMMIT, later successful complete exhaustion stays in actual private O accounting until genuine settlement; retention is an Analysis obligation with no current runtime seam or Test credit. | Analysis |
+| FR-034-AC-73 | PLANNED/UNRUN (IR-687). A claimed-startup negative publication remains provisional until positive actual I termination and separate real M Child reap, with required writer EOF/final due accounting before normal O return. | Test |
+| FR-034-AC-74 | PLANNED/UNRUN (IR-687). The negative’s absent peak field supplies no zero measurement, no-history claim or current-validity substitute. | Test |
+| FR-034-AC-75 | PLANNED/UNRUN (IR-687). A later genuine observation/collector/transport error after COMMIT remains owned through bounded cleanup and prevents normal O Code0 acceptance through existing CleanupUnconfirmed. | Test |
+| FR-034-AC-76 | PLANNED/UNRUN (IR-687). A genuine admitted open-file-description Test oracle distinguishes L's retained-pidfd clone from independently opened same-O and foreign pidfds; inode equality supplies no clone evidence. | Test |
+| FR-034-AC-77 | PLANNED/UNRUN (IR-687). On a fresh complete Exhausted tick after first-byte COMMIT, O immediately initiates the same actual owned cancellation of live claimed I and retained M without waiting for C lease closure, preserving the original cutoff and committed bytes. | Test |
 
 ## Dependencies
 
