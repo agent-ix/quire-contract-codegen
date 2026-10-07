@@ -56,6 +56,12 @@ Merge with the sibling IR-655 head conflicts only at the tail of the FR-034 AC t
 | FND-006 | low | In both new TC-049 procedure sections, steps 2 to 5 run inline inside the paragraph of item 1 (for example "must refuse. 2. Prove ..."). They render as one list item, so the steps cannot be referenced or traced individually. | spec/kani/matrix/TC-049-caller-death-ownership.md:1056-1075; spec/kani/matrix/TC-049-caller-death-ownership.md:1081-1102 |
 | FND-007 | low | The pre-COMMIT rule says "O shall apply existing resource/deadline/refusal precedence", but it states concretely only the exhaustion-over-failure retirement. It does not say whether a work-deadline expiry or an owner refusal established before the first byte also retires an unsent failure. "Unpoisoned" is a source term with no spec definition. | spec/kani/functional/FR-034-caller-death-ownership.md:331-337 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | AC-77 has O cancel the claimed I immediately on a post-COMMIT exhausting tick, and that cancellation can fire while C is already in LeaseClosing after closing the I lease. The LeaseClosing text says "No independent INIT cancellation or escalation signal is sent during this LeaseClosing phase", and the stage-2 text says the ignored-inner-lease-EOF mutant "shall never be paired with another mutant or rescued by outer cancellation". Neither sentence is scoped against AC-77. A LeaseCloseObservation could then record a confirmed I termination that O's cancellation caused, not lease EOF. The text should limit the LeaseClosing sentence to C's own signals and state that an AC-77-caused termination is never lease-EOF evidence. | spec/kani/functional/FR-034-caller-death-ownership.md:478-479; spec/kani/functional/FR-034-caller-death-ownership.md:1324; spec/kani/functional/FR-034-caller-death-ownership.md:384-389 |
+
 ## Dispositions
 
 Round 1, re-checked at the branch's round-1 fix head (the commit after an ordinary main merge, subject 'Clarify negative startup publication and settlement contracts'; head named in the Linear marker only), against the newer published guardian review-source backup ref (the one whose head commit is 'Retain producer clock failure with borrowed outer setup custody'). Static, read-only; no build, test, Kani or replay run.
@@ -66,3 +72,11 @@ Round 1, re-checked at the branch's round-1 fix head (the commit after an ordina
 | FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:274-278 states the O→L negative is a NEW route and that the current zero-right OperationalFailure is O→C after arm; the TC 'existing O→L handling' sentence is gone |
 | FND-003 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': the Evidence delivery allocation table now has AC-57..AC-75 rows, plus a separate 'Negative startup transaction expectations' table |
 | FND-004 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': tests.md FR-034 row reads AC-1 through AC-75 and the TC-049 criterion list includes AC-57..AC-75 |
+
+Round 2, re-checked at the branch's round-2 fix head (after an ordinary main merge; subject 'Clarify negative terminal cancellation and atomic evidence obligations'; head named in the Linear marker only), against the newer published guardian review-source backup ref. Static, read-only; make spec passes; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | fix commit 'Clarify negative terminal cancellation and atomic evidence obligations': AC-58 now reads 'kernel sender UID/GID0', matching the prose at FR-034:280 |
+| FND-006 | still-open | the claimed-startup procedure is now five separate items, but in the pre-Armed procedure step 2 ('Prove actual open-file-description identity ...') still runs inline at the end of item 1 ('... wrong state must refuse. 2.'), so it renders inside item 1 (TC-049 Pre-Armed negative capability checks, item 1) |
+| FND-007 | fixed | fix commit 'Clarify negative terminal cancellation and atomic evidence obligations': FR-034:347-363 defines unpoisoned (no unrecovered send, EOF, deadline or progress error; successful nonblocking zero progress is distinct) and states pre-COMMIT retirement for an eligible work-deadline expiry (TimedOut, with exhaustion winning a simultaneous expiry) and for an authenticated owner-stop or refusal, without a total ordering or relaxed malformed-report precedence; TC step 1 exercises both |

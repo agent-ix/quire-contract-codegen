@@ -45,3 +45,9 @@ Round 1, re-checked at the branch's round-1 fix head (the commit after an ordina
 | FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': the former AC-65 is split into AC-65 and AC-70..AC-75, each one obligation |
 | FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': AC-57..AC-63 are now single obligations, with the remainder moved to AC-66..AC-69 |
 | FND-003 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': the new FR-034 sections contain no permissive may; COMMIT and retirement are explicit shall rules at FR-034:331-337 |
+
+Round 2, re-checked at the branch's round-2 fix head (after an ordinary main merge; subject 'Clarify negative terminal cancellation and atomic evidence obligations'; head named in the Linear marker only), against the newer published guardian review-source backup ref. Static, read-only; make spec passes; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | fix commit 'Clarify negative terminal cancellation and atomic evidence obligations': the oracle obligation moved from AC-66 to the new AC-76, and AC-72 keeps only private retention; post-COMMIT cancellation is the separate AC-77 |

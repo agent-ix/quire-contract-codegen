@@ -1057,8 +1057,9 @@ All procedures are PLANNED/UNRUN; they supply no prior-row execution credit.
 
 1. Genuine pre-L-Armed O failure: inspect actual O→L zero-right frame and same L→C bytes with one
    actual retained clone. Authenticate actual ChildPID UID/GID0, L chain, build/run/source state and
-   producer stamp independently. Substitutions, missing/extra rights and wrong state must refuse. 2.
-   Prove actual open-file-description identity with admitted KCMP_FILE/equivalent kernel oracle;
+   producer stamp independently. Substitutions, missing/extra rights and wrong state must refuse.
+
+2. Prove actual open-file-description identity with admitted KCMP_FILE/equivalent kernel oracle;
    independently open a pidfd to the SAME O and to another positively owned actor, and require both
    clone negatives to fail. Inode equality never substitutes. Unavailable oracle is UNRUN/zero
    evidence credit, not passing skip or new runtime capability mandate.
@@ -1105,7 +1106,11 @@ All procedures are PLANNED/UNRUN; they supply no prior-row execution credit.
 3. After first byte, produce a genuine fresh complete Exhausted tick while the real C lease remains
    positively open. Require actual retained claimed-I cancellation and separate retained-M
    cancellation/reap to begin on that tick under the original cutoff, before waiting for C lease
-   closure. A wait-for-lease mutant must fail. Missing ordinary actor/order witness remains owed; no
+   closure. A wait-for-lease mutant must fail. Deliver the authentic O frame while AC-77-caused I death or
+   lease EOF is observed: C must complete authentication by the original cutoff without transport
+   preemption of the original cause; partial/invalid delivery and unconfirmed settlement still
+   refuse with existing CleanupUnconfirmed precedence. Such termination supplies no lease-EOF
+   witness. Missing ordinary actor/order witness remains owed; no
    fake tick or signal trace. Separately perform AC72 Analysis of OuterRunOwner.sampling and the
    actual ledger/history/owner_stop lifetime through true settlement; no runtime retention credit
    from holding settlement pending. AC73 independently requires actual positive I termination,

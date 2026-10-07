@@ -388,6 +388,14 @@ retained I pin for actual signal/confirmation and the retained real M Child for 
 cancellation/reap, clipped to the original cutoff without a new allowance. Committed bytes shall
 remain unchanged.
 
+When AC-77 cancellation causes genuine claimed-I death or I-lease EOF during delivery, C shall
+retain those facts without letting them preempt completion and full authentication of O's committed
+frame within the original cutoff. C shall preserve the authentic original cause if that transaction
+completes; I death or lease EOF alone shall neither replace that cause with a transport refusal nor
+authorize an unsettled result. Missing, partial, malformed or unauthenticated O delivery shall not
+gain acceptance. Original-cutoff expiry or unconfirmed whole-chain settlement shall retain existing
+CleanupUnconfirmed precedence; no new window, renewed clock or EOF waiver is allocated.
+
 Private retention is an Analysis obligation: CODE Analysis shall follow OuterRunOwner's retained
 sampling through publication and actual settlement, including OuterSampling's ledger/history and
 owned-stop state. No current ordinary runtime seam proves private retention; the formerly proposed
@@ -475,8 +483,10 @@ pins, captures and original deadline. Both stay in the original caller; this sep
 exports the lease nor transfers ownership of the outer chain. Explicit cancellation in InitReady or
 Dispatched invokes the production `close_lease_and_observe` operation: it consumes and closes
 `CallerLease`, disables further caller Dispatch, and retains `RunOwner` while observing claimed INIT
-termination. No independent INIT cancellation or escalation signal is sent during this LeaseClosing
-phase. Pending guardian authorization still obeys observable EOF precedence. The same operation
+termination. C shall send no independent INIT cancellation or escalation signal during this
+LeaseClosing phase. This restriction on C shall not prevent O's separate post-COMMIT owned
+cancellation required by AC-77. Termination caused by that cancellation shall never count as
+lease-EOF evidence. Pending guardian authorization still obeys observable EOF precedence. The same operation
 handles cancellation before and after Dispatch, not a test-only hook.
 
 LeaseClosing has a finite observation cap clamped to the remaining original identity deadline. Its
@@ -1321,7 +1331,9 @@ The retained-gate case shall separately require positive owned I termination whi
 gate remains retained, followed by actual gate close. Early close and omitted I-confirmation
 mutants shall independently fail with record-emission unchanged. Absence of a backend marker
 shall not prove order. The independent ignored-inner-lease-EOF mutant shall remain required and
-shall never be paired with another mutant or rescued by outer cancellation.
+shall never be paired with another mutant or rescued by outer cancellation. O's independent
+AC-77 post-COMMIT cancellation remains required on a genuine exhausting tick, but its caused
+termination shall never satisfy the ignored-inner-lease-EOF predicate or supply lease-EOF evidence.
 
 Every original assertion, adverse patch and FR-028-AC-21/FR-017-AC-24 trace obligation shall remain
 until measured replacement parity. Parity requires restored controls to pass and each named

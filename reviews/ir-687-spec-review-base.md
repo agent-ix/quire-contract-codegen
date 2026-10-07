@@ -53,3 +53,9 @@ Round 1, re-checked at the branch's round-1 fix head (the commit after an ordina
 | --- | --- | --- |
 | FND-001 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:356-362 names WHERE (actual accounting/history/owned-stop custody until settlement, ending with O exit, no after-exit diagnostic) and AC-72 plus TC step 3 add a mutant clearing that state at COMMIT |
 | FND-002 | fixed | fix commit 'Clarify negative startup publication and settlement contracts': FR-034:315-321 and AC-66 require an admitted KCMP_FILE or equivalent open-file-description oracle, reject st_dev/st_ino equality, and require same-O fresh-open and foreign-pidfd negatives; unavailable oracle is UNRUN |
+
+Round 2, re-checked at the branch's round-2 fix head (after an ordinary main merge; subject 'Clarify negative terminal cancellation and atomic evidence obligations'; head named in the Linear marker only), against the newer published guardian review-source backup ref. Static, read-only; make spec passes; no build, test, Kani or replay run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | fix commit 'Clarify negative terminal cancellation and atomic evidence obligations': AC-72 is now Analysis only (FR-034:391-399, AC-72 row); the hold-settlement-open Test is explicitly not retention evidence, and TC-049 step 3 names OuterRunOwner.sampling and its ledger/history/owner_stop lifetime as the Analysis seam |
