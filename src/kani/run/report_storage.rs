@@ -150,6 +150,20 @@ pub(super) fn acquire_inner_writer(expected: &PipeIdentity) -> Result<File, Repo
     if writer.as_raw_fd() == REPORT_SLOT {
         return Err(ReportError::WriterSlot);
     }
+    verify_owned_writer(expected, &writer)?;
+    // This is the only raw-slot operation: REPORT_SLOT is the authenticated, occupied mapping
+    // in single-thread entry, with no intervening close/rebind. EINTR/error never retries the
+    // integer; the caller must use its already-owned cancellation path instead.
+    nix::unistd::close(REPORT_SLOT).map_err(ReportError::WriterClose)?;
+    Ok(writer)
+}
+
+/// Validate a genuinely owned report writer against ORIGINAL authenticated O identity. I uses
+/// this after safe reopening and the trusted installer uses it after exact SCM_RIGHTS delivery.
+pub(super) fn verify_owned_writer(
+    expected: &PipeIdentity,
+    writer: impl AsFd,
+) -> Result<(), ReportError> {
     expected.verify(&writer)?;
     let access = rustix::fs::fcntl_getfl(&writer)?;
     if access & rustix::fs::OFlags::ACCMODE != rustix::fs::OFlags::WRONLY
@@ -158,11 +172,7 @@ pub(super) fn acquire_inner_writer(expected: &PipeIdentity) -> Result<File, Repo
     {
         return Err(ReportError::WriterAccess);
     }
-    // This is the only raw-slot operation: REPORT_SLOT is the authenticated, occupied mapping
-    // in single-thread entry, with no intervening close/rebind. EINTR/error never retries the
-    // integer; the caller must use its already-owned cancellation path instead.
-    nix::unistd::close(REPORT_SLOT).map_err(ReportError::WriterClose)?;
-    Ok(writer)
+    Ok(())
 }
 
 /// O alone owns its reader/memfd; the spawn writer is transferred exactly once to child mapping.

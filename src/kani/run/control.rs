@@ -25,7 +25,7 @@ use rustix::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 
-const CONTROL_BYTES: usize = 65_536;
+pub(super) const CONTROL_BYTES: usize = 65_536;
 const RECEIVED_RIGHTS: usize = 4;
 const ANCILLARY_BYTES: usize = rustix::cmsg_space!(ScmRights(RECEIVED_RIGHTS), ScmCredentials(1));
 

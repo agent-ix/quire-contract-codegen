@@ -408,6 +408,8 @@ pub(super) struct InnerInput {
     pub(super) outer_bootstrap: RoleEndpoint,
     pub(super) caller_lease: GuardianEndpoint,
     pub(super) writer: File,
+    /// Original O identity retained after safe I acquisition, never resampled from a new writer.
+    pub(super) report: super::report_storage::PipeIdentity,
 }
 
 impl InnerInput {
@@ -509,6 +511,7 @@ impl InnerInput {
             outer_bootstrap,
             caller_lease,
             writer,
+            report,
         })
     }
 }

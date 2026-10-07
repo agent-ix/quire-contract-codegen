@@ -24,6 +24,8 @@ mod control;
 #[cfg(target_os = "linux")]
 mod backend_exec;
 #[cfg(target_os = "linux")]
+mod backend_installer;
+#[cfg(target_os = "linux")]
 mod backend_policy;
 #[cfg(target_os = "linux")]
 mod caller_bootstrap;
@@ -60,6 +62,8 @@ mod role_deadline;
 mod role_protocol;
 #[cfg(target_os = "linux")]
 mod spawner;
+#[cfg(target_os = "linux")]
+mod startup_cause;
 
 #[cfg(target_os = "linux")]
 mod protocol;
