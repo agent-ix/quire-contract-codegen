@@ -484,9 +484,23 @@ impl<'fd> Transport<'fd> {
         expected_rights: impl FnOnce(&T) -> usize,
         eof: ReceiveEof,
     ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
+        self.finish_receive_decode(buffer, credentials, expected_rights, eof, |payload| {
+            serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)
+        })
+    }
+
+    /// Framing/credentials/rights and EOF policy stay shared with ordinary typed controls. A
+    /// role-specific decoder may borrow its prepared context without another owning String.
+    fn finish_receive_decode<'buffer, T>(
+        &self,
+        buffer: &'buffer mut PreparedReceive,
+        credentials: Option<PeerCredentials>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        eof: ReceiveEof,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+    ) -> Result<PreparedReceived<'buffer, T>, ControlError> {
         self.check_receive_state(eof)?;
-        let control =
-            serde_json::from_slice(&buffer.payload).map_err(ControlError::InvalidEncoding)?;
+        let control = decode(&buffer.payload)?;
         let expected = expected_rights(&control);
         if expected > RECEIVED_RIGHTS {
             return Err(ControlError::ExcessRights);
@@ -924,6 +938,37 @@ impl IncrementalReceive {
         deadline: Instant,
         eof: ReceiveEof,
     ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        self.advance_decode_mode(transport, expected_rights, deadline, eof, |payload| {
+            serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)
+        })
+    }
+
+    /// The same single-recvmsg bounded actor path, with a role-specific seeded decoder. This
+    /// always keeps strict EOF precedence; only the distinct final receiver drains normal exit.
+    pub(super) fn advance_decode<'buffer, T>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
+        self.advance_decode_mode(
+            transport,
+            expected_rights,
+            deadline,
+            ReceiveEof::Refuse,
+            decode,
+        )
+    }
+
+    fn advance_decode_mode<'buffer, T>(
+        &'buffer mut self,
+        transport: &Transport<'_>,
+        expected_rights: impl FnOnce(&T) -> usize,
+        deadline: Instant,
+        eof: ReceiveEof,
+        decode: impl FnOnce(&[u8]) -> Result<T, ControlError>,
+    ) -> Result<Option<PreparedReceived<'buffer, T>>, ControlError> {
         if self.poisoned {
             return Err(ControlError::ProgressPoisoned);
         }
@@ -981,11 +1026,12 @@ impl IncrementalReceive {
         }
         // Set successful progress before lending the owned rights. A decoding/validation failure
         // permanently poisons this owner, while a caller may explicitly take valid rights.
-        let received = transport.finish_receive_mode(
+        let received = transport.finish_receive_decode(
             &mut self.buffer,
             self.credentials,
             expected_rights,
             eof,
+            decode,
         )?;
         self.active = false;
         self.poisoned = false;

@@ -64,6 +64,8 @@ mod role_protocol;
 mod spawner;
 #[cfg(target_os = "linux")]
 mod startup_cause;
+#[cfg(target_os = "linux")]
+mod startup_envelope;
 
 #[cfg(target_os = "linux")]
 mod protocol;

@@ -23,8 +23,10 @@ use super::{
     protocol::{BuildIdentity, RunAuthority, StdinControl},
     role_bootstrap::InnerInput,
     role_command::HelperRole,
-    role_deadline::{DeadlineError, StopOrigin, StopStamp},
-    role_protocol::{BackendInstallerControl, BackendInstallerReply, RunSettings},
+    role_deadline::{DeadlineError, StopOrigin, StopStamp, StopTimeline},
+    role_protocol::{BackendInstallerControl, RunSettings},
+    startup_cause::{PreparedStartupContext, RepresentationError},
+    startup_envelope::{self, InstallerReply, InstallerReplyHeader, PolicyFailureCause},
     stdin::OriginalStdin,
 };
 
@@ -33,6 +35,12 @@ pub(super) enum InstallerError {
     Io(io::Error),
     Control(ControlError),
     Report(super::report_storage::ReportError),
+    Representation(RepresentationError),
+    Deadline(DeadlineError),
+    PolicyRefused {
+        failure: PolicyFailureCause,
+        stop: StopStamp,
+    },
     UnexpectedState,
     MissingChild,
     MissingPin,
@@ -50,6 +58,7 @@ pub(super) enum InstallerEntryError {
     Control(ControlError),
     Report(super::report_storage::ReportError),
     Deadline(DeadlineError),
+    Representation(RepresentationError),
     Policy {
         cause: super::backend_policy::BackendPolicyError,
         stop: Result<StopStamp, DeadlineError>,
@@ -74,6 +83,7 @@ impl std::error::Error for InstallerEntryError {
             Self::Control(error) => Some(error),
             Self::Report(error) => Some(error),
             Self::Deadline(error) => Some(error),
+            Self::Representation(error) => Some(error),
             Self::Policy { cause, .. } => Some(cause),
             Self::InvalidRole
             | Self::IdentityMismatch
@@ -104,6 +114,7 @@ pub(super) struct InstallerEntry {
     startup_deadline: Instant,
     ready: Option<IncrementalSend>,
     exec_receive: IncrementalReceive,
+    failure_context: PreparedStartupContext,
     state: EntryState,
 }
 
@@ -170,6 +181,8 @@ impl InstallerEntry {
             startup_deadline,
             ready: None,
             exec_receive: IncrementalReceive::prepare().map_err(InstallerEntryError::Control)?,
+            failure_context: PreparedStartupContext::new(startup_envelope::CONTEXT_BYTES)
+                .map_err(InstallerEntryError::Representation)?,
             state: EntryState::Authenticated,
         })
     }
@@ -190,7 +203,7 @@ impl InstallerEntry {
             return Err(InstallerEntryError::Policy { cause, stop });
         }
         self.require_live()?;
-        let ready = PreparedFrame::encode(&BackendInstallerReply::PolicyReady {
+        let ready = PreparedFrame::encode(&InstallerReply::PolicyReady {
             identity: self.settings.identity,
             authority: self.settings.authority,
         })
@@ -198,6 +211,75 @@ impl InstallerEntry {
         self.ready = Some(IncrementalSend::new(ready));
         self.state = EntryState::Installed;
         Ok(())
+    }
+
+    /// Capture the concrete original cause without prose classification or unbounded formatting.
+    /// A clock/representation failure remains refusal; it cannot fabricate a successful Ready.
+    pub(super) fn prepare_policy_refusal(
+        &mut self,
+        error: &InstallerEntryError,
+    ) -> Result<PreparedFrame, InstallerEntryError> {
+        if !matches!(self.state, EntryState::Failed) {
+            return Err(InstallerEntryError::UnexpectedState);
+        }
+        let InstallerEntryError::Policy { cause, stop } = error else {
+            return Err(InstallerEntryError::UnexpectedState);
+        };
+        let stop = (*stop).map_err(InstallerEntryError::Deadline)?;
+        if stop.origin != StopOrigin::Backend {
+            return Err(InstallerEntryError::IdentityMismatch);
+        }
+        use super::backend_policy::BackendPolicyError;
+        let failure = match cause {
+            BackendPolicyError::UnsupportedArchitecture => {
+                PolicyFailureCause::UnsupportedArchitecture
+            }
+            BackendPolicyError::InvalidProgram => PolicyFailureCause::InvalidProgram,
+            BackendPolicyError::NotBackend => PolicyFailureCause::NotBackend,
+            BackendPolicyError::ProtectionUnverified => PolicyFailureCause::ProtectionUnverified,
+            BackendPolicyError::Preparation(error) => PolicyFailureCause::Preparation {
+                cause: self
+                    .failure_context
+                    .capture_io(error)
+                    .map_err(InstallerEntryError::Representation)?,
+            },
+            BackendPolicyError::Privilege(error) => PolicyFailureCause::Privilege {
+                cause: self
+                    .failure_context
+                    .capture_io(error)
+                    .map_err(InstallerEntryError::Representation)?,
+            },
+            #[cfg(any(
+                target_arch = "x86_64",
+                target_arch = "aarch64",
+                target_arch = "riscv64"
+            ))]
+            BackendPolicyError::Filter(error) => PolicyFailureCause::Filter {
+                cause: self
+                    .failure_context
+                    .capture_seccompiler(error)
+                    .map_err(InstallerEntryError::Representation)?,
+            },
+        };
+        if matches!(
+            failure,
+            PolicyFailureCause::UnsupportedArchitecture
+                | PolicyFailureCause::InvalidProgram
+                | PolicyFailureCause::NotBackend
+                | PolicyFailureCause::ProtectionUnverified
+        ) {
+            self.failure_context
+                .capture_context(cause)
+                .map_err(InstallerEntryError::Representation)?;
+        }
+        PreparedFrame::encode(&InstallerReply::Refused {
+            identity: self.settings.identity,
+            authority: self.settings.authority,
+            stop,
+            failure,
+            context: self.failure_context.context_bytes(),
+        })
+        .map_err(InstallerEntryError::Control)
     }
 
     fn require_live(&self) -> Result<(), InstallerEntryError> {
@@ -341,6 +423,9 @@ impl std::error::Error for InstallerError {
             Self::Io(error) => Some(error),
             Self::Control(error) => Some(error),
             Self::Report(error) => Some(error),
+            Self::Representation(error) => Some(error),
+            Self::Deadline(error) => Some(error),
+            Self::PolicyRefused { .. } => None,
             Self::UnexpectedState
             | Self::MissingChild
             | Self::MissingPin
@@ -391,6 +476,8 @@ pub(super) struct InstallerOwner {
     identity: BuildIdentity,
     authority: RunAuthority,
     state: InstallerState,
+    failure_context: PreparedStartupContext,
+    stops: StopTimeline,
 }
 
 impl InstallerOwner {
@@ -425,6 +512,10 @@ impl InstallerOwner {
             identity: input.settings.identity,
             authority: input.settings.authority,
             state: InstallerState::Prepared,
+            failure_context: PreparedStartupContext::new(startup_envelope::CONTEXT_BYTES)
+                .map_err(InstallerError::Representation)?,
+            stops: StopTimeline::prepare(input.settings.started)
+                .map_err(InstallerError::Deadline)?,
         })
     }
 
@@ -497,10 +588,12 @@ impl InstallerOwner {
         input.caller_lease.transport().refuse_observable_eof()?;
         creator::require_live(&input.outer_pin)?;
         creator::require_live(&input.caller_pin)?;
-        let Some(received) = self.receive.advance::<BackendInstallerReply>(
+        let context = &mut self.failure_context;
+        let Some(received) = self.receive.advance_decode(
             &self.control.transport(),
-            BackendInstallerReply::rights_count,
+            InstallerReplyHeader::rights_count,
             deadline,
+            |payload| startup_envelope::decode(payload, context),
         )?
         else {
             return Ok(None);
@@ -521,20 +614,29 @@ impl InstallerOwner {
         {
             return Err(InstallerError::InvalidPid);
         }
-        let BackendInstallerReply::PolicyReady {
-            identity,
-            authority,
-        } = received.control;
-        if identity != self.identity {
+        if received.control.identity() != self.identity {
             return Err(InstallerError::BuildIdentityMismatch);
         }
-        if authority != self.authority {
+        if received.control.authority() != self.authority {
             return Err(InstallerError::AuthorityMismatch);
+        }
+        if let InstallerReplyHeader::Refused { stop, failure, .. } = received.control {
+            if stop.origin != StopOrigin::Backend {
+                return Err(InstallerError::AuthorityMismatch);
+            }
+            self.stops.observe(stop).map_err(InstallerError::Deadline)?;
+            return Err(InstallerError::PolicyRefused { failure, stop });
         }
         self.state = InstallerState::PolicyReady;
         Ok(Some(InstallerAdmission {
             authority: self.authority,
         }))
+    }
+
+    /// Borrowed original context is provisional until the caller/outer owner authenticates the
+    /// forwarded failure and confirms whole-chain settlement. It grants no public conclusion.
+    pub(super) fn failure_context(&self) -> &str {
+        self.failure_context.context()
     }
 
     /// Only the actual C/I Dispatch receiver calls this transition. The exact recipe and stdin
