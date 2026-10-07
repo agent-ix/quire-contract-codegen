@@ -7,6 +7,8 @@
 
 use std::{error::Error, fmt};
 
+use serde::{Deserialize, Serialize};
+
 /// An original producer in the finite trusted-helper scope; neither C nor external M is one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RemoteCauseRole {
@@ -29,7 +31,7 @@ pub(super) enum CauseCheckerRole {
 /// A finite operation name, not permission for every role/operation/phase combination.
 ///
 /// The owner must enforce FR-034's actual role/site/state scope before constructing provenance.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(super) enum CauseOperation {
     RoleBootstrap,
     Identity,
@@ -78,7 +80,7 @@ pub(super) struct CauseCheckerProvenance {
 }
 
 /// The single closed FR-034 cause-integrity predicate inventory.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(super) enum CauseIntegrityPredicate {
     RequiredRepresentationExceededBound,
     RequiredRepresentationFormattingFailed,

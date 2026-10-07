@@ -461,6 +461,7 @@ impl CallerBootstrap {
             super::caller_execution::CallerExecution::additional_metadata()?,
             super::startup_projection::metadata_reservation()
                 .map_err(CallerBootstrapError::Control)?,
+            super::outer_failure::decode_bytes().map_err(CallerBootstrapError::Control)?,
             super::role_protocol::cancellation_progress_decode_bytes()
                 .map_err(CallerBootstrapError::Control)?,
             u64::try_from(startup_context.reserved_bytes())
