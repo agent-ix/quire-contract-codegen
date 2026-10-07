@@ -34,20 +34,35 @@ pub(super) struct BuildIdentity {
     pub(super) lifecycle: GuardianLifecycle,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum GuardianProtocol {
-    PrivateBoundedLease,
+macro_rules! identity_variants {
+    ($name:ident { $($variant:ident),+ $(,)? }) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub(super) enum $name { $( $variant, )+ }
+        impl $name {
+            pub(super) fn metadata_text(text: super::guardian_decode::Text<'_>) -> Option<Self> {
+                $( if text.equals(stringify!($variant)) { return Some(Self::$variant); } )+
+                None
+            }
+        }
+    };
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(super) enum GuardianLifecycle {
-    NamespaceInitTypedDispatchLeaseEof,
-}
+identity_variants!(GuardianProtocol {
+    PrivateBoundedLease
+});
+identity_variants!(GuardianLifecycle {
+    NamespaceInitTypedDispatchLeaseEof
+});
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(super) struct RunAuthority([u8; 32]);
 
 impl RunAuthority {
+    /// Unverified parsed bytes only; all actual retained-run equality/authentication is separate.
+    pub(super) const fn from_wire_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub(super) fn fresh() -> io::Result<Self> {
         let mut bytes = [0; 32];
         File::open("/dev/urandom")?.read_exact(&mut bytes)?;
