@@ -17,7 +17,8 @@ use super::{
     },
     launcher_owner::{self, LauncherError, LauncherOwner},
     outer_sampling::{
-        OuterRunPreparation, OuterRunProgress, PreparationFailureProgress, SamplingError,
+        ActivatedFailureProgress, OuterRunPreparation, OuterRunProgress,
+        PreparationFailureProgress, SamplingError,
     },
     protocol::BuildIdentity,
     role_bootstrap::{self, BootstrapError, InnerInput, OuterInput, OuterParts},
@@ -114,10 +115,22 @@ fn run_outer(identity: BuildIdentity, initial: Instant) -> Result<(), HelperEntr
         },
     };
     loop {
-        match owner
-            .tick(&guard, &caller_control)
-            .map_err(HelperEntryError::Sampling)?
-        {
+        let progress = match owner.tick(&guard, &caller_control) {
+            Ok(progress) => progress,
+            Err(original) => loop {
+                // The SAME owner and original error survive each negative cleanup attempt.
+                // A failed attempt never grants normal exit or a synthetic original cause.
+                match owner.unclaimed_failure_step(&guard, &caller_control) {
+                    Ok(ActivatedFailureProgress::Committed) => return Ok(()),
+                    Ok(ActivatedFailureProgress::OwnerStopped) => {
+                        break OuterRunProgress::Pending;
+                    }
+                    Ok(ActivatedFailureProgress::Pending) => thread::park_timeout(ACTOR_TICK),
+                    Err(_) => return Err(HelperEntryError::Sampling(original)),
+                }
+            },
+        };
+        match progress {
             OuterRunProgress::TerminalCommitted => return Ok(()),
             OuterRunProgress::Pending
             | OuterRunProgress::Startup(_)
