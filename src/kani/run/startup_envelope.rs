@@ -1,16 +1,16 @@
 //! Exact, allocation-bounded private trusted-installer reply decoding.
 //!
 //! Context is original UTF-8 carried as byte values, not an escaped JSON String. Scalar/tag
-//! preflight excludes serde_json scratch paths before the seeded schema decoder touches data.
+//! decoding uses one supplied fixed scratch buffer and the owning finite schema inventories.
 //! The actual owner still authenticates sender/run/build/phase/stamp and confirms cleanup.
 
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use super::{
     control::{ControlError, CONTROL_BYTES},
     protocol::{BuildIdentity, RunAuthority},
     role_deadline::StopStamp,
-    startup_cause::{check_scratch_free_json, PreparedStartupContext, StartupCause},
+    startup_cause::{PreparedStartupContext, StartupCause},
 };
 
 /// Derived from the existing whole control limit, not another execution/capture budget. The
@@ -157,74 +157,38 @@ macro_rules! inner_frame_kinds {
 
 inner_frame_kinds! { Ready, Dispatched, Completed, Refused }
 
-#[derive(Deserialize)]
-struct InnerReplySelector {
-    kind: InnerFrameKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct InnerReadyReply {
-    kind: InnerFrameKind,
-    identity: BuildIdentity,
-    authority: RunAuthority,
-    mapped_uid: u32,
-    creator_pid: i32,
-}
-
-/// Flat schemas avoid serde's internally tagged Content accumulator. The context decoder
-/// borrows the original frame and copies only validated UTF-8 into C's pre-L reservation.
+/// Startup-only view of the one exact I reply grammar on the original owner-held cursor.
 pub(super) fn decode_inner_startup(
     payload: &[u8],
     context: &mut PreparedStartupContext,
     scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<InnerStartupHeader, ControlError> {
-    context.clear();
-    check_scratch_free_json(payload).map_err(|error| {
-        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
-    })?;
-    let selector: InnerReplySelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selector.kind {
-        InnerFrameKind::Ready => {
-            let ready: InnerReadyReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(ready.kind, InnerFrameKind::Ready) {
-                return Err(ControlError::InvalidEncoding(
-                    <serde_json::Error as de::Error>::custom("expected exact I Ready"),
-                ));
-            }
-            Ok(InnerStartupHeader::Ready(
-                super::protocol::GuardianControl::Ready {
-                    identity: ready.identity,
-                    authority: ready.authority,
-                    mapped_uid: ready.mapped_uid,
-                    creator_pid: ready.creator_pid,
-                },
-            ))
+    match super::inner_reply_decode::decode(payload, scratch, context)
+        .map_err(|source| context.grammar_error(source))?
+    {
+        super::inner_reply_decode::InnerReply::Ready(control) => {
+            Ok(InnerStartupHeader::Ready(control))
         }
-        InnerFrameKind::Dispatched | InnerFrameKind::Completed => {
-            Err(ControlError::InvalidEncoding(
-                <serde_json::Error as de::Error>::custom("expected exact I startup reply"),
-            ))
-        }
-        InnerFrameKind::Refused => match decode(payload, context, scratch)? {
-            InstallerReplyHeader::Refused {
-                identity,
-                authority,
-                stop,
-                failure,
-            } => Ok(InnerStartupHeader::Refused {
-                identity,
-                authority,
-                stop,
-                failure,
-            }),
-            InstallerReplyHeader::PolicyReady { .. } => Err(ControlError::InvalidEncoding(
-                <serde_json::Error as de::Error>::custom("expected exact I refusal"),
-            )),
-        },
+        super::inner_reply_decode::InnerReply::Refused {
+            identity,
+            authority,
+            stop,
+            failure,
+        } => Ok(InnerStartupHeader::Refused {
+            identity,
+            authority,
+            stop,
+            failure,
+        }),
+        super::inner_reply_decode::InnerReply::Event(_) => Err(unexpected_inner_reply()),
     }
+}
+
+fn unexpected_inner_reply() -> ControlError {
+    ControlError::InvalidGrammar(super::guardian_decode::DecodeError::new(
+        super::guardian_decode::DecodeSite::Field,
+        super::guardian_decode::DecodeCause::InvalidValue,
+    ))
 }
 
 /// Post-Ready fixed-size events on the same original I lease. Refusal/EOF never stand for
@@ -246,74 +210,19 @@ impl InnerEventHeader {
     }
 }
 
-#[derive(Deserialize)]
-struct InnerEventSelector {
-    kind: InnerFrameKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DispatchedReply {
-    kind: InnerFrameKind,
-    authority: RunAuthority,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CompletedReply {
-    kind: InnerFrameKind,
-    authority: RunAuthority,
-    outcome: super::protocol::BackendExit,
-    stop: StopStamp,
-}
-
-pub(super) fn decode_inner_event(payload: &[u8]) -> Result<InnerEventHeader, ControlError> {
-    check_scratch_free_json(payload).map_err(|error| {
-        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
-    })?;
-    let selector: InnerEventSelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selector.kind {
-        InnerFrameKind::Ready | InnerFrameKind::Refused => Err(ControlError::InvalidEncoding(
-            <serde_json::Error as de::Error>::custom("expected exact I event"),
-        )),
-        InnerFrameKind::Dispatched => {
-            let reply: DispatchedReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, InnerFrameKind::Dispatched) {
-                return Err(ControlError::InvalidEncoding(
-                    <serde_json::Error as de::Error>::custom("expected exact I Dispatched"),
-                ));
-            }
-            Ok(InnerEventHeader::Dispatched {
-                authority: reply.authority,
-            })
-        }
-        InnerFrameKind::Completed => {
-            let reply: CompletedReply =
-                serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-            if !matches!(reply.kind, InnerFrameKind::Completed) {
-                return Err(ControlError::InvalidEncoding(
-                    <serde_json::Error as de::Error>::custom("expected exact I Completed"),
-                ));
-            }
-            Ok(InnerEventHeader::Completed {
-                authority: reply.authority,
-                outcome: reply.outcome,
-                stop: reply.stop,
-            })
-        }
+/// Event-only view; no Ready/refusal can authorize Dispatch acknowledgement or completion.
+pub(super) fn decode_inner_event(
+    payload: &[u8],
+    context: &mut PreparedStartupContext,
+    scratch: &mut super::guardian_decode::Scratch,
+) -> Result<InnerEventHeader, ControlError> {
+    match super::inner_reply_decode::decode(payload, scratch, context)
+        .map_err(|source| context.grammar_error(source))?
+    {
+        super::inner_reply_decode::InnerReply::Event(event) => Ok(event),
+        super::inner_reply_decode::InnerReply::Ready(_)
+        | super::inner_reply_decode::InnerReply::Refused { .. } => Err(unexpected_inner_reply()),
     }
-}
-
-pub(super) fn inner_event_decode_bytes() -> Result<u64, ControlError> {
-    let bytes = std::mem::size_of::<InnerEventSelector>()
-        .checked_add(
-            std::mem::size_of::<DispatchedReply>().max(std::mem::size_of::<CompletedReply>()),
-        )
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<InnerEventHeader>()))
-        .ok_or(ControlError::EncodedBytesExceeded)?;
-    u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
 }
 
 /// The original I-to-O stream permits a policy-negative event only before Dispatched. The
@@ -334,56 +243,49 @@ impl InnerOwnerHeader {
     }
 }
 
-#[derive(Deserialize)]
-struct InnerOwnerSelector {
-    kind: InnerFrameKind,
-}
-
+/// Owner-side events/negative view, with no Ready authorization in this phase.
 pub(super) fn decode_inner_owner(
     payload: &[u8],
     context: &mut PreparedStartupContext,
     scratch: &mut super::guardian_decode::Scratch,
 ) -> Result<InnerOwnerHeader, ControlError> {
-    check_scratch_free_json(payload).map_err(|error| {
-        ControlError::InvalidEncoding(<serde_json::Error as de::Error>::custom(error))
-    })?;
-    let selector: InnerOwnerSelector =
-        serde_json::from_slice(payload).map_err(ControlError::InvalidEncoding)?;
-    match selector.kind {
-        InnerFrameKind::Ready => Err(ControlError::InvalidEncoding(
-            <serde_json::Error as de::Error>::custom("expected exact I owner event"),
-        )),
-        InnerFrameKind::Dispatched | InnerFrameKind::Completed => {
-            decode_inner_event(payload).map(InnerOwnerHeader::Event)
-        }
-        InnerFrameKind::Refused => match decode(payload, context, scratch)? {
-            InstallerReplyHeader::Refused {
-                identity,
-                authority,
-                stop,
-                failure,
-            } => Ok(InnerOwnerHeader::Refused {
-                identity,
-                authority,
-                stop,
-                failure,
-            }),
-            InstallerReplyHeader::PolicyReady { .. } => Err(ControlError::InvalidEncoding(
-                <serde_json::Error as de::Error>::custom("expected exact I owner refusal"),
-            )),
-        },
+    match super::inner_reply_decode::decode(payload, scratch, context)
+        .map_err(|source| context.grammar_error(source))?
+    {
+        super::inner_reply_decode::InnerReply::Event(event) => Ok(InnerOwnerHeader::Event(event)),
+        super::inner_reply_decode::InnerReply::Refused {
+            identity,
+            authority,
+            stop,
+            failure,
+        } => Ok(InnerOwnerHeader::Refused {
+            identity,
+            authority,
+            stop,
+            failure,
+        }),
+        super::inner_reply_decode::InnerReply::Ready(_) => Err(unexpected_inner_reply()),
     }
 }
 
-/// Fixed decoder-owned values coexist during selection and return; the context capacity is
-/// charged separately from these owning metadata values by the retained caller before L.
-pub(super) fn inner_startup_decode_bytes() -> Result<u64, ControlError> {
-    let bytes = std::mem::size_of::<InnerReplySelector>()
-        .checked_add(
-            std::mem::size_of::<InnerReadyReply>().max(std::mem::size_of::<InstallerReplyHeader>()),
-        )
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<InnerStartupHeader>()))
-        .ok_or(ControlError::EncodedBytesExceeded)?;
+/// Fixed subset-view output values coexist with the shared parser's returned union.
+/// These are separate from its schema delta and the resident scratch/context capacities;
+/// declared layout sums do not establish supported-build native-stack highwater.
+pub(super) fn inner_reply_view_bytes() -> Result<u64, ControlError> {
+    use std::mem::{size_of, size_of_val};
+    let terms = [
+        size_of::<InnerStartupHeader>(),
+        size_of::<InnerEventHeader>(),
+        size_of::<InnerOwnerHeader>(),
+        size_of::<Result<InnerStartupHeader, ControlError>>(),
+        size_of::<Result<InnerEventHeader, ControlError>>(),
+        size_of::<Result<InnerOwnerHeader, ControlError>>(),
+    ];
+    let bytes = terms.iter().try_fold(size_of_val(&terms), |bytes, term| {
+        bytes
+            .checked_add(*term)
+            .ok_or(ControlError::EncodedBytesExceeded)
+    })?;
     u64::try_from(bytes).map_err(|_| ControlError::EncodedBytesExceeded)
 }
 
@@ -406,6 +308,14 @@ mod tests {
     context_parsed!(decode, super::InstallerReplyHeader);
     context_parsed!(decode_inner_startup, super::InnerStartupHeader);
     context_parsed!(decode_inner_owner, super::InnerOwnerHeader);
+    fn decode_inner_event(payload: &[u8]) -> Result<super::InnerEventHeader, super::ControlError> {
+        super::decode_inner_event(
+            payload,
+            &mut super::PreparedStartupContext::new(super::CONTEXT_BYTES).unwrap(),
+            &mut super::super::guardian_decode::Scratch::default(),
+        )
+    }
+    use super::super::startup_cause::check_scratch_free_json;
     use crate::kani::run::cross_role_cause::{
         CauseOperation, RemoteCauseProvenance, RemoteCauseRole,
     };
@@ -477,6 +387,68 @@ mod tests {
             .unwrap()
             .insert("outcome".to_owned(), serde_json::json!({"Code":0}));
         assert!(decode_inner_owner(&serde_json::to_vec(&extra).unwrap(), &mut received).is_err());
+    }
+
+    /// Trace: FR-034-AC-15, FR-034-AC-39
+    #[test]
+    fn context_free_inner_events_preserve_original_diagnostics_and_do_not_enter_startup() {
+        use super::super::protocol::{BackendExit, GuardianControl};
+        let authority = RunAuthority::fresh().unwrap();
+        let stop = StopStamp::capture(StopOrigin::Inner).unwrap();
+        let mut context = PreparedStartupContext::new(CONTEXT_BYTES).unwrap();
+        context
+            .capture_io(&io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "actual policy diagnostic",
+            ))
+            .unwrap();
+        let original = context.context().to_owned();
+        let capacity = context.reserved_bytes();
+        let mut scratch = super::super::guardian_decode::Scratch::default();
+        let dispatched = serde_json::to_vec(&GuardianControl::Dispatched { authority }).unwrap();
+        let completed = serde_json::to_vec(&GuardianControl::Completed {
+            authority,
+            outcome: BackendExit::Code(0),
+            stop,
+        })
+        .unwrap();
+        for (payload, is_completion) in [(&dispatched, false), (&completed, true)] {
+            match super::decode_inner_event(payload, &mut context, &mut scratch).unwrap() {
+                InnerEventHeader::Dispatched { authority: actual } => {
+                    assert!(!is_completion);
+                    assert_eq!(actual, authority);
+                }
+                InnerEventHeader::Completed {
+                    authority: actual,
+                    outcome,
+                    stop: actual_stop,
+                } => {
+                    assert!(is_completion);
+                    assert_eq!(actual, authority);
+                    assert_eq!(outcome, BackendExit::Code(0));
+                    assert_eq!(actual_stop, stop);
+                }
+            }
+            assert_eq!(context.context(), original);
+            assert_eq!(context.reserved_bytes(), capacity);
+            assert!(super::decode_inner_startup(payload, &mut context, &mut scratch).is_err());
+            assert_eq!(context.context(), original);
+            assert_eq!(context.reserved_bytes(), capacity);
+        }
+        let ready = serde_json::to_vec(&GuardianControl::Ready {
+            identity: current_build_identity(),
+            authority,
+            mapped_uid: 0,
+            creator_pid: 0,
+        })
+        .unwrap();
+        assert!(matches!(
+            super::decode_inner_startup(&ready, &mut context, &mut scratch).unwrap(),
+            InnerStartupHeader::Ready(GuardianControl::Ready { authority: actual, .. }) if actual == authority
+        ));
+        assert!(super::decode_inner_owner(&ready, &mut context, &mut scratch).is_err());
+        assert_eq!(context.context(), original);
+        assert_eq!(context.reserved_bytes(), capacity);
     }
 
     /// Trace: FR-034-AC-15, FR-034-AC-20, FR-034-AC-38
@@ -580,7 +552,8 @@ mod tests {
                 mapped_uid: 0, creator_pid: 0,
             }) if actual_identity == identity && actual_authority == authority)
         );
-        assert!(receiver.context().is_empty());
+        // Ready has no context field: preserve the pending original refusal diagnostic.
+        assert_eq!(receiver.context(), original.to_string());
         assert_eq!(receiver.reserved_bytes(), capacity);
         let original_ready: serde_json::Value = serde_json::from_slice(&ready).unwrap();
         for field in ["identity", "authority", "mapped_uid", "creator_pid"] {
