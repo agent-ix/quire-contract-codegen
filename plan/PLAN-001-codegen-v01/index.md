@@ -8,7 +8,6 @@ description: "Contents of the PLAN-001 codegen plan bundle."
 ## Contents
 
 - [Plan overview](./plan.md)
-- [Update log](./log.md)
 - [Task-001: Foundation specification](./tasks/Task-001-foundation-spec.md)
 - [Task-002: Foundation evidence](./tasks/Task-002-foundation-evidence.md)
 - [Task-004: Deterministic oracles](./tasks/Task-004-oracles.md)
