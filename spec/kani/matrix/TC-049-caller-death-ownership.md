@@ -210,6 +210,10 @@ are independently PLANNED/UNRUN, with no prior Test, method-row or controlled M-
 | FR-034-AC-91 | PLANNED/UNRUN Test, step 29n: ordinary unbound execution. | Explicit binding is fixture data, never mandatory ordinary startup. |
 | FR-034-AC-92 | PLANNED/UNRUN Test, step 29o: selected sample. | No startup tick substitution, C-to-O ACK response, sample pause or synthetic tick. |
 | FR-034-AC-93 | PLANNED/UNRUN Analysis, step 29p: feature-on native proof. | Feature-off proof supplies no feature-on credit; missing capacity/highwater leaves UNPROVEN. |
+| FR-034-AC-95 | PLANNED/UNRUN Test, early-report check a: actual O-origin phase identity before binding. | No existing fixture supplies runtime backing. |
+| FR-034-AC-96 | PLANNED/UNRUN Test, early-report check b: C admission/refusal and custody. | Authenticated provenance is not independent backing verification. |
+| FR-034-AC-97 | PLANNED/UNRUN Test, early-report check c: actual O echo validation. | A C-only comparison cannot back this check. |
+| FR-034-AC-98 | PLANNED/UNRUN Test, Analysis, early-report check d: feature-off absence and ordinary feature-on control. | No borrowed feature-off capacity or runtime credit. |
 
 ## Test Procedure
 
@@ -1219,6 +1223,38 @@ the independent CODE reviewer checks them before CODE acceptance. No synthetic a
 hook, sampling pause or borrowed capacity proof is supplied. Analysis or a matrix method row never
 completes this Test or binds the whole mixed criterion.
 
+### Early report identity checks (FR-034-AC-95 through FR-034-AC-98)
+
+These standalone checks are PLANNED/UNRUN. The fixture CODE author supplies genuine original C/O
+owners, matching helper and production carrier construction through the owning IR-655 gate; the
+independent CODE reviewer checks actual source, storage, schedule and runtime evidence. No synthetic
+phase, default report identity or fabricated authority supplies a positive control.
+
+a. AC-95: For both birth and retained-gate scenarios, observe O's actual retained report creation,
+   the fully admitted original MonitorSpawned carrying its device/inode, and subsequent binding
+   construction in order. Independently compare the producer's retained pipe identity with the
+   carried value and original build/run. Require exactly the existing M pidfd right and no extra
+   frame/channel/response. A substitute-pipe identity producer mutant or binding-before-admission
+   mutant must fail. Scenario-specific ACK/gate and ordinary sampling requirements remain owed.
+b. AC-96: Exercise missing/null/malformed field, wrong actual sender/run/build association,
+   contradictory retained value and late/reordered phase using the real allowed control seam.
+   Require typed refusal, no observation writer transfer or positive authority, original cutoff
+   and actual endpoint/right closure plus whole-chain settlement. Include a valid expected phase
+   control; missing-as-default, late-claim acceptance and leaked-right mutants must fail. C retains
+   authenticated O provenance; it must not claim an independent backing check without a descriptor.
+c. AC-97: Send an otherwise genuine binding with another actual pipe's valid identity, wrong
+   original run/build/scenario or forbidden rights, and require O refusal before observation
+   retention/emission with actual received-right close and required settlement. The positive
+   control echoes the admitted original identity and succeeds only against O's same retained
+   collector and existing scenario preconditions. An omitted actual collector-equality check
+   mutant must fail independently of C's provenance admission.
+d. AC-98: Compare exact feature-off paired consumer/helper schema, decoder/storage and artifact
+   paths with their original phase bytes and one-right behavior; require absence of the field and
+   its feature branches in BOTH artifacts. Separately run genuine feature-on ordinary unbound
+   execution and require no observation endpoint, binding or emission. Analysis accounts for actual
+   feature-on simultaneous field/codec lifetimes under the existing named formula and separate
+   native proof. Missing actual artifact/capacity/runtime evidence gives no completion credit.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -1326,6 +1362,15 @@ independent CODE-review acceptance; all runtime Tests remain UNRUN.
 | FR-034-AC-91 | Ordinary matched feature-on execution without binding has no observer endpoint/emission and remains available. | Requiring the absent fixture envelope or emitting without binding fails; matched features alone are not selection. |
 | FR-034-AC-92 | C transfers after actual adopted-orphan ACK; O next complete tick follows receipt; C releases same worker only after validated sample. | Startup/pre-binding tick, fabricated ACK or sample, and premature worker release fails birth-construction predicate; no pause/response allowed. |
 | FR-034-AC-93 | Separate exact feature-on paired artifacts prove finite native workspace no greater than independently declared charge. | Borrowed feature-off proof, unknown capacity/lifetime/highwater or missing actual comparison leaves UNPROVEN; no runtime completion credit. |
+
+### Early report identity expectations (PLANNED/UNRUN)
+
+| Authority | Required observation | Regression caught |
+|---|---|---|
+| FR-034-AC-95 | Actual original O collector identity arrives in authenticated MonitorSpawned before either selected binding; only existing M right. | Substituted producer identity, binding before admission or extra transport/right. |
+| FR-034-AC-96 | Missing/wrong/malformed/late claim refuses, with no writer transfer/authority and actual owned close/settlement under original cutoff. | Default identity, late acceptance, leaked right or receipt granting authority. |
+| FR-034-AC-97 | O checks binding against actual retained original report and C/build/run/scenario before observation acceptance. | Omitted backing equality, foreign pipe/run/scenario accepted or failed binding emits. |
+| FR-034-AC-98 | Feature-off paired artifacts/bytes exclude field and branches; feature-on unbound control remains available without observation endpoint/emission. | Feature-off field leakage, changed frame/right or ordinary binding requirement. |
 
 ## Settlement reserve research receipt
 
