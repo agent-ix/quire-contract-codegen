@@ -28,9 +28,9 @@ Measured on a detached worktree at the reviewed sha:
   old id anywhere in its body.
 - **Citations.** I grepped the whole repo, not only spec/ and plan/, for each old id
   (REV-015, REV-018..REV-022, SR-008..SR-021) and each old filename. What remains:
-  - plan/PLAN-001-codegen-v01/log.md:16,23 and Task-009:59 cite SR-014..SR-017. Those ids
-    still belong to the dated 2026-09-12 code-review and gap-analysis files they meant, so the
-    citations are now unambiguous.
+  - The [former plan log at the reviewed SHA](https://github.com/agent-ix/quire-contract-codegen/blob/5d37b92e874c9ea2fa9aff9603e1010f12fee4de/plan/PLAN-001-codegen-v01/log.md#L16-L23)
+    and Task-009:59 cite SR-014..SR-017. Those ids still belong to the dated 2026-09-12
+    code-review and gap-analysis files they meant, so the citations are now unambiguous.
   - The dated files cite each other as SR-016 and SR-018. Both ids are unchanged.
   - SR-041:218,245 mention SR-016/SR-017 as matrix history. Those are the kept dated ids.
   - SR-658:54,81 describe the old duplicates as history. A review record, rightly left as
