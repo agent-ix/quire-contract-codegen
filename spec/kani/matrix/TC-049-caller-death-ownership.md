@@ -1265,8 +1265,13 @@ profile, manufactured process or simulated successful profile observation suppli
 control. Establish concrete safe access and supported full-build/kernel/runtime premises first.
 
 a. AC-99: Read actual same-O required SigIgn/SigBlk/SigPnd/ShdPnd/TracerPid/thread/identity facts from its authenticated
-   private proc view and prove ignored, unblocked, untraced single-thread stability through each
-   selected live-reader and broken-reader write. Supply supported-kernel pending semantics,
+   private proc view and prove ignored, unblocked single-thread stability through each selected
+   live-reader and broken-reader write. Independently prove INITIAL actual O untraced state under
+   the supported configuration using independently checkable evidence valid across PID namespaces,
+   including ancestor-namespace tracing invisible to its private
+   TracerPid, and stability of that actual state through each write. Private-proc zero alone,
+   even unchanged, or a declarative no-tracer assumption supplies no initial-untraced proof.
+   Without an actual proof source, the configuration remains unsupported/UNPROVEN/no-write. Supply supported-kernel pending semantics,
    actual syscall permissions/configuration, preservation of preexisting/foreign-origin pending
    signals and complete simultaneous accounting/native storage under AC-93's independently declared
    finite charge. An existing proc parser buffer/length bound supplies no actual owner capacity proof.
@@ -1280,6 +1285,10 @@ b. AC-100: Exercise default, caught, blocked, traced, multiple-thread, changing 
    required fields, wrong identity and actual query/permission failures at the allowed owning
    seams. Require no write attempt, latched private observation failure, continued ordinary O
    ticks/control/settlement under the original cutoff and C fixture failure before cleanup.
+   Include a real ancestor-PID-namespace tracer attached to the actual O but invisible in its
+   private proc TracerPid. Require refusal or eligibility UNPROVEN/no-write; a private-zero-only
+   eligibility mutant must fail. Missing genuine safe control construction remains UNRUN and
+   unsupported for writing, never an assumed untraced profile or new query/tracing authority.
    A write-on-unproved-profile mutant must fail independently of later dead pins/cleanup.
    Preserve the separate AC-90 full/EPIPE/error and ignored-inner-EOF mutant; profile failure
    cannot rescue it through O exit/cancellation. Unavailable genuine adverse construction stays
@@ -1406,8 +1415,8 @@ independent CODE-review acceptance; all runtime Tests remain UNRUN.
 
 | Criterion | Required restored result | Independently failing adverse result |
 |---|---|---|
-| FR-034-AC-99 | Actual original O satisfies the complete conditional profile and per-write stability/pending/permission/accounting proof with genuine normal-helper controls. | Inheritance/snapshot/probe substitution or missing kernel/runtime/capacity proof cannot permit a write. |
-| FR-034-AC-100 | Ineligible/unproved/query-failed profile causes no observation write and private failure, with ordinary ticks/control/settlement unchanged under original cutoff. | Write-on-unproved profile, pending alteration, observation-triggered cancellation/exit or cleanup repair fails. |
+| FR-034-AC-99 | Actual original O satisfies the complete conditional profile, independent INITIAL untraced proof and per-write stability/pending/permission/accounting proof with genuine normal-helper controls. | Inheritance/snapshot/probe substitution, private TracerPid zero alone or missing kernel/runtime/capacity proof cannot permit a write. |
+| FR-034-AC-100 | Ineligible/unproved/query-failed profile causes no observation write and private failure, with ordinary ticks/control/settlement unchanged under original cutoff. | Hidden real ancestor tracer must refuse or leave eligibility UNPROVEN/no-write; write-on-unproved profile, pending alteration, observation-triggered cancellation/exit or cleanup repair fails. |
 
 ## Settlement reserve research receipt
 

@@ -1680,9 +1680,14 @@ claim successful EOF cancellation from that cleanup. No later outer teardown rep
 For this feature-only observation writer, O shall write only when its actual original runtime
 observes SIGPIPE ignored AND unblocked, no tracing and one thread, and the supported complete
 consumer/helper configuration proves that disposition, mask, tracing and single-thread state
-remain unchanged through each write. O shall obtain these observations from its authenticated
-private proc view of the same actual O, using required SigIgn, SigBlk, SigPnd, ShdPnd,
-TracerPid, task/thread and identity facts with complete checked parsing. Absent, duplicated,
+remain unchanged through each write. O shall obtain the required SigIgn, SigBlk, SigPnd, ShdPnd,
+TracerPid, task/thread and identity facts from its authenticated private proc view of the same
+actual O with complete checked parsing. The CODE author shall additionally prove the INITIAL
+actual O is untraced using independently checkable initial-state evidence valid across PID
+namespaces, including any ancestor tracer invisible in that view. Private-proc TracerPid zero,
+even if stable, or a declarative no-tracer assumption shall not establish initial untraced state.
+Missing actual independently checkable supported-configuration proof shall leave eligibility
+UNPROVEN and prohibit observation writing without changing ordinary O flow. Absent, duplicated,
 malformed, truncated, identity-inconsistent or unavailable required facts shall not establish
 eligibility. The CODE author shall establish
 actual supported-kernel signal semantics, syscall permissions, complete linked/runtime configuration
