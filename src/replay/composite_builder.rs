@@ -242,7 +242,7 @@ impl OriginalCompositeEqContext {
             let bounds = match &operand.domain {
                 CheckedCompositeOperandDomain::Literal => Vec::new(),
                 CheckedCompositeOperandDomain::Parameter { .. } => harness_bounds.iter()
-                    .filter(|bound| matches!(&bound.domain, DomainKey::Node { node, .. } if *node == child))
+                    .filter(|bound| matches!(bound.domain(), DomainKey::Node { node, .. } if *node == child))
                     .cloned().collect(),
             };
             Ok(ParityArgument {
@@ -269,7 +269,7 @@ impl OriginalCompositeEqContext {
             obligation_kind: preimage.obligation_kind.clone(),
             harness_bounds: harness_bounds
                 .iter()
-                .filter(|bound| matches!(bound.domain, DomainKey::Node { .. }))
+                .filter(|bound| matches!(bound.domain(), DomainKey::Node { .. }))
                 .cloned()
                 .collect(),
             limits: self.inputs.accounting_limits,

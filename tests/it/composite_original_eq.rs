@@ -7,10 +7,10 @@ use std::collections::BTreeMap;
 
 use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, FiniteBound, InconclusiveCause, Integer, OperandIdentity, ParityBoundRefusal,
-    ProofBound, Refinement, ReplayLimits, ReplayRefusal, ScalarIdentityMismatch, ScalarLimits,
-    SourceIdentity, StageLimits, SuppliedLibrary, TerminalValue, VerifiedShadow,
-    VerifiedShadowResult, WireNodeId,
+    DomainKey, DomainKind, FiniteBound, InconclusiveCause, Integer, OperandIdentity,
+    ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
+    ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits, SuppliedLibrary,
+    TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
 use quire_contract_codegen::{
     CompositeBuildError, DependencyLock, LockedSource, OriginalCompositeEqContext, ReplayInputs,
@@ -205,18 +205,21 @@ fn parameter_bounds(
         .into_iter()
         .flat_map(|node| {
             [
-                ProofBound {
-                    domain: DomainKey::Node { node, path: vec![] },
-                    bound: FiniteBound::cardinality(3),
-                },
-                ProofBound {
-                    domain: DomainKey::Node {
+                ProofBound::new(
+                    DomainKey::Node { node, path: vec![] },
+                    Some(DomainKind::Collection),
+                    FiniteBound::cardinality(3),
+                )
+                .unwrap(),
+                ProofBound::new(
+                    DomainKey::Node {
                         node,
                         path: vec![0],
                     },
-                    bound: FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
-                        .unwrap(),
-                },
+                    Some(DomainKind::Integer),
+                    FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64)).unwrap(),
+                )
+                .unwrap(),
             ]
         })
         .collect()
@@ -231,13 +234,17 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
     let (node, occurrence) = application(&package, "f");
     let bounds = parameter_bounds(&package, &node, &occurrence);
     let mut supplied_bounds = bounds.clone();
-    supplied_bounds.push(ProofBound {
-        domain: DomainKey::Population {
-            member_type: WireNodeId::from_hex(&node.digest).unwrap(),
-            ordinal: 0,
-        },
-        bound: FiniteBound::cardinality(7),
-    });
+    supplied_bounds.push(
+        ProofBound::new(
+            DomainKey::Population {
+                member_type: WireNodeId::from_hex(&node.digest).unwrap(),
+                ordinal: 0,
+            },
+            Some(DomainKind::Population),
+            FiniteBound::cardinality(7),
+        )
+        .unwrap(),
+    );
     let original = package
         .composite_application_operands(&node, &occurrence, 100_000)
         .unwrap();
@@ -258,7 +265,7 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
             panic!("composite bounds")
         };
         assert_eq!(entries.entries().len(), 2);
-        assert!(entries.entries().iter().all(|entry| matches!(entry.domain, DomainKey::Node { node, .. } if node.to_string() == child.digest.as_ref())));
+        assert!(entries.entries().iter().all(|entry| matches!(entry.domain(), DomainKey::Node { node, .. } if node.to_string() == child.digest.as_ref())));
     }
     let obligation = parity_obligation(request.preimage()).unwrap();
     let verified = VerifiedShadow {
@@ -293,14 +300,15 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                     panic!("graph child")
                 };
-                ProofBound {
-                    domain: DomainKey::Node {
+                ProofBound::new(
+                    DomainKey::Node {
                         node: WireNodeId::from_hex(&child.digest).unwrap(),
                         path: vec![0],
                     },
-                    bound: FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
-                        .unwrap(),
-                }
+                    Some(DomainKind::Integer),
+                    FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64)).unwrap(),
+                )
+                .unwrap()
             })
             .collect::<Vec<_>>();
         let request = original
@@ -335,7 +343,7 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
                 };
                 assert_eq!(entries.entries().len(), 1);
                 assert!(entries.entries().iter().all(
-                    |entry| matches!(entry.domain, DomainKey::Node { node, .. } if node == child)
+                    |entry| matches!(entry.domain(), DomainKey::Node { node, .. } if *node == child)
                 ));
             }
         }
@@ -511,15 +519,37 @@ fn another_functions_node_reaches_binding_checked_qsl_refusal() {
 fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "f");
+    let (other_node, other_occurrence) = application(&package, "g");
+    let other_operands = package
+        .composite_application_operands(&other_node, &other_occurrence, 100_000)
+        .unwrap();
+    let other_parameter = other_operands
+        .operands
+        .iter()
+        .find(|operand| {
+            matches!(
+                &operand.domain,
+                CheckedCompositeOperandDomain::Parameter { .. }
+            )
+        })
+        .expect("g has a record parameter with an Integer field");
+    let CheckedScalarOperandChild::GraphChild(child) = &other_parameter.child else {
+        panic!("parameter graph child")
+    };
     let key = DomainKey::Node {
-        node: WireNodeId::from_hex(&node.digest).unwrap(),
-        path: vec![],
+        node: WireNodeId::from_hex(&child.digest).unwrap(),
+        path: vec![0],
     };
     let mut bounds = parameter_bounds(&package, &node, &occurrence);
-    bounds.push(ProofBound {
-        domain: key.clone(),
-        bound: FiniteBound::cardinality(3),
-    });
+    assert!(bounds.iter().all(|bound| bound.domain() != &key));
+    bounds.push(
+        ProofBound::new(
+            key.clone(),
+            Some(DomainKind::Integer),
+            FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64)).unwrap(),
+        )
+        .unwrap(),
+    );
     let request = context(package, "f")
         .request(&node, &occurrence, &bounds, 100_000)
         .unwrap();
