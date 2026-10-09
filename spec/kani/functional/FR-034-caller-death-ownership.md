@@ -1481,8 +1481,11 @@ post-wait checks around its FIRST uncached retained Child Some(status). Exact or
 sole-waiter history, SIGCHLD neither ignored nor SA_NOCLDWAIT and no prior consuming wait shall be
 established. The post-query ECHILD alone cannot distinguish competing waiter, auto-reap or wrong
 parent; the independent verifier shall check the actual operation and those premises. Fabricated
-Some, cached Some, competing wait, auto-reap, live None and zombie Some shall not satisfy genuine
-consuming-reap provenance. No stored event or copied history provides this proof. Safe method and
+Some, cached Some, competing wait, auto-reap, live None and a bare or unconsumed zombie status
+shall not satisfy genuine consuming-reap provenance. A waitable zombie positively established by
+same-child WNOWAIT shall pass the restored control when the actual parent's FIRST uncached Child
+Some performs its consuming reap and the independent post-query returns ECHILD under the established
+sole-waiter/disposition/history premises. No stored event or copied history provides this proof. Safe method and
 production-profile feasibility remain PLANNED/UNRUN; the controlled standalone probe supplies no
 production or mutation credit.
 
