@@ -206,7 +206,7 @@ are independently PLANNED/UNRUN, with no prior Test, method-row or controlled M-
 | FR-034-AC-87 | PLANNED/UNRUN Test, step 29j: producer order. | Receipt time/late fill cannot repair order. |
 | FR-034-AC-88 | PLANNED/UNRUN Test, Analysis, step 29k: schedule preservation. | Actual new schema/rights/actor receive integration is UNRUN, not existing API support. |
 | FR-034-AC-89 | PLANNED/UNRUN Test, step 29l: completion-before-close. | No new I frame or synthetic stop; cleanup remains immediate. |
-| FR-034-AC-90 | PLANNED/UNRUN Test, Analysis, step 29m: write-fault noninterference. | Socket NOSIGNAL/inherited disposition gives no pipe proof; no ignored-EOF rescue or later-cleanup repair. |
+| FR-034-AC-90 | PLANNED/UNRUN Test, Analysis, step 29m: write-fault noninterference. | Inherited disposition, one snapshot or socket NOSIGNAL alone gives no pipe proof; the conditional actual-O observed-profile route requires complete evidence. No ignored-EOF rescue or later-cleanup repair. |
 | FR-034-AC-91 | PLANNED/UNRUN Test, step 29n: ordinary unbound execution. | Explicit binding is fixture data, never mandatory ordinary startup. |
 | FR-034-AC-92 | PLANNED/UNRUN Test, step 29o: selected sample. | No startup tick substitution, C-to-O ACK response, sample pause or synthetic tick. |
 | FR-034-AC-93 | PLANNED/UNRUN Analysis, step 29p: feature-on native proof. | Feature-off proof supplies no feature-on credit; missing capacity/highwater leaves UNPROVEN. |
@@ -214,6 +214,8 @@ are independently PLANNED/UNRUN, with no prior Test, method-row or controlled M-
 | FR-034-AC-96 | PLANNED/UNRUN Test, early-report check b: C admission/refusal and custody. | Authenticated provenance is not independent backing verification. |
 | FR-034-AC-97 | PLANNED/UNRUN Test, early-report check c: actual O echo validation. | A C-only comparison cannot back this check. |
 | FR-034-AC-98 | PLANNED/UNRUN Test, Analysis, early-report check d: feature-off absence and ordinary feature-on control. | No borrowed feature-off capacity or runtime credit. |
+| FR-034-AC-99 | PLANNED/UNRUN Test, Analysis, observed-profile check a: actual original O eligibility and complete evidence. | Inheritance, one snapshot and external probes do not back actual O/runtime stability. |
+| FR-034-AC-100 | PLANNED/UNRUN Test, observed-profile check b: no write on ineligible or unproved profile, with ordinary-flow noninterference. | No new production refusal/classification or later-cleanup repair. |
 
 ## Test Procedure
 
@@ -972,7 +974,7 @@ Test credit and their existing Slice 2 obligation.
     j. AC-87 (producer order): Require actual checked producer ordinals and strict I/M-before-seal and I-before-gate-close order. Move real operations after seal, invert/overflow ordinal and require independent failures with emission unchanged.
     k. AC-88 (schedule preservation): Inspect and execute ordinary ticks/control/cutoffs during absent, partial and full new binding and event progress; require no suppressed tick or ACK/pause permission.
     l. AC-89 (completion-before-close): Compare genuine retained completion reception/carrier and original lease-close order; independently move carrier fill after close and require failure.
-    m. AC-90 (write-fault noninterference): Establish actual feature-on helper SIGPIPE safety/profile and pending-signal cleanup premises. Close reader or force genuine full/error write at an available seam; O latches/ends observation writes but preserves production controls/ticks and cannot cancel/exit from this fault. C seals missing/partial failure before ordinary cleanup.
+    m. AC-90 (write-fault noninterference): Establish actual feature-on helper conditional ignored/unblocked/untraced stable single-thread SIGPIPE eligibility and unchanged pending premises under the profile checks below. Close reader or force genuine full/error write at an available seam; O latches/ends observation writes but preserves production controls/ticks and cannot cancel/exit from this fault. C seals missing/partial failure before ordinary cleanup.
     n. AC-91 (ordinary unbound execution): Run ordinary matched feature-on execution with no binding and inspect no endpoint/emission or requirement for that envelope; compare unchanged production behavior.
     o. AC-92 (selected sample): Positively acknowledge and pin genuine adopted orphan, retain writer until then, transfer after Armed/ACK, require O next completed ordinary tick after consuming binding, then release same worker and verify own child ACK.
     p. AC-93 (feature-on native proof): Supply separate exact feature-on paired consumer/helper artifact Analysis using supported native-workspace method and independently declared charge, with simultaneous lifetimes and all actual external/runtime premises.
@@ -1255,6 +1257,34 @@ d. AC-98: Compare exact feature-off paired consumer/helper schema, decoder/stora
    feature-on simultaneous field/codec lifetimes under the existing named formula and separate
    native proof. Missing actual artifact/capacity/runtime evidence gives no completion credit.
 
+### Observed SIGPIPE profile checks (FR-034-AC-99/100)
+
+These independent checks are PLANNED/UNRUN through the genuine fixture CODE gate. Use the matched
+normal helper and actual original O, original run and observation endpoint. No inherited probe
+profile, manufactured process or simulated successful profile observation supplies the positive
+control. Establish concrete safe access and supported full-build/kernel/runtime premises first.
+
+a. AC-99: Read actual same-O required SigIgn/SigBlk/SigPnd/ShdPnd/TracerPid/thread/identity facts from its authenticated
+   private proc view and prove ignored, unblocked, untraced single-thread stability through each
+   selected live-reader and broken-reader write. Supply supported-kernel pending semantics,
+   actual syscall permissions/configuration, preservation of preexisting/foreign-origin pending
+   signals and complete simultaneous accounting/native storage under AC-93's independently declared
+   finite charge. An existing proc parser buffer/length bound supplies no actual owner capacity proof.
+   Require genuine broken-pipe behavior without SIGPIPE termination, pending drain/recreation,
+   inherited mask leak or altered ordinary controls/ticks/settlement. Independently omit actual
+   O acquisition, substitute another process/profile or use snapshot-only eligibility; each fails
+   the actual-origin or stability proof before write. Missing real-helper/configuration/capacity
+   evidence leaves this criterion unbacked, never a skipped-green Test or borrowed Analysis.
+b. AC-100: Exercise default, caught, blocked, traced, multiple-thread, changing and otherwise
+   unproved profiles using genuine supported controls, plus missing/duplicate/malformed/truncated
+   required fields, wrong identity and actual query/permission failures at the allowed owning
+   seams. Require no write attempt, latched private observation failure, continued ordinary O
+   ticks/control/settlement under the original cutoff and C fixture failure before cleanup.
+   A write-on-unproved-profile mutant must fail independently of later dead pins/cleanup.
+   Preserve the separate AC-90 full/EPIPE/error and ignored-inner-EOF mutant; profile failure
+   cannot rescue it through O exit/cancellation. Unavailable genuine adverse construction stays
+   UNRUN, never authorizes a feature-only signal-policy hook or production behavior change.
+
 ## Expected Results
 
 | Authority | Required observation | Regression caught |
@@ -1371,6 +1401,13 @@ independent CODE-review acceptance; all runtime Tests remain UNRUN.
 | FR-034-AC-96 | Missing/wrong/malformed/late claim refuses, with no writer transfer/authority and actual owned close/settlement under original cutoff. | Default identity, late acceptance, leaked right or receipt granting authority. |
 | FR-034-AC-97 | O checks binding against actual retained original report and C/build/run/scenario before observation acceptance. | Omitted backing equality, foreign pipe/run/scenario accepted or failed binding emits. |
 | FR-034-AC-98 | Feature-off paired artifacts/bytes exclude field and branches; feature-on unbound control remains available without observation endpoint/emission. | Feature-off field leakage, changed frame/right or ordinary binding requirement. |
+
+### Observed SIGPIPE profile expectations (PLANNED/UNRUN)
+
+| Criterion | Required restored result | Independently failing adverse result |
+|---|---|---|
+| FR-034-AC-99 | Actual original O satisfies the complete conditional profile and per-write stability/pending/permission/accounting proof with genuine normal-helper controls. | Inheritance/snapshot/probe substitution or missing kernel/runtime/capacity proof cannot permit a write. |
+| FR-034-AC-100 | Ineligible/unproved/query-failed profile causes no observation write and private failure, with ordinary ticks/control/settlement unchanged under original cutoff. | Write-on-unproved profile, pending alteration, observation-triggered cancellation/exit or cleanup repair fails. |
 
 ## Settlement reserve research receipt
 
