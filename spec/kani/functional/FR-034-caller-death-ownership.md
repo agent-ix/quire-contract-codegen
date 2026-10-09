@@ -1670,12 +1670,58 @@ pins before escalation, separate outer confirmation and original assertion/mutan
 O shall latch full/EPIPE/other observation-write failure, disable further observation writes and
 continue the same ordinary production sampling/control/settlement path. Observation failure shall
 never initiate O cancellation, I signalling, early exit or outer escalation. The CODE author shall
-establish a proven-safe feature-only SIGPIPE suppression mechanism before any pipe write, including
-pending-signal/cleanup behavior; inherited disposition and socket MSG_NOSIGNAL shall not supply that
-proof. O shall not let SIGPIPE terminate it or rescue an ignored-EOF mutant. Missing proof blocks
-fixture CODE; no new global signal policy or blanket production suppression is allocated. C shall
-seal missing/partial/failed observations as typed fixture failure before ordinary cleanup, never
+establish the conditional observed SIGPIPE profile below before any observation pipe write,
+including unchanged pending-signal behavior. Inherited disposition, a single observed snapshot or
+socket MSG_NOSIGNAL alone shall not supply that proof. O shall not let SIGPIPE terminate it or rescue
+an ignored-EOF mutant. Missing proof blocks positive observation writing; no new global signal policy
+or blanket production suppression is allocated. C shall seal missing/partial/failed observations as typed fixture failure before ordinary cleanup, never
 claim successful EOF cancellation from that cleanup. No later outer teardown repairs a failed oracle.
+
+For this feature-only observation writer, O shall write only when its actual original runtime
+observes SIGPIPE ignored AND unblocked, no tracing and one thread, and the supported complete
+consumer/helper configuration proves that disposition, mask, tracing and single-thread state
+remain unchanged through each write. O shall obtain the required SigIgn, SigBlk, SigPnd, ShdPnd,
+TracerPid, task/thread and identity facts from its authenticated private proc view of the same
+actual O with complete checked parsing. The CODE author shall additionally prove the INITIAL
+actual O is untraced using independently checkable initial-state evidence valid across PID
+namespaces, including any ancestor tracer invisible in that view. Private-proc TracerPid zero,
+even if stable, or a declarative no-tracer assumption shall not establish initial untraced state.
+Missing actual independently checkable supported-configuration proof shall leave eligibility
+UNPROVEN and prohibit observation writing without changing ordinary O flow. Absent, duplicated,
+malformed, truncated, identity-inconsistent or unavailable required facts shall not establish
+eligibility. The CODE author shall establish
+actual supported-kernel signal semantics, syscall permissions, complete linked/runtime configuration
+and no concurrent disposition/mask change, tracing or competing signal consumer during that interval.
+A startup default, inherited profile, source absence of thread creation, one census or one snapshot
+alone shall not prove stability. Actual normal-helper O observations and live-reader/broken-reader
+controls shall be supplied before positive observation activation; external probes shall not replace
+these controls. This allocation qualifies the former mechanism-only requirement; it allocates no
+signal handler installation, mask mutation/restoration, pending-signal consumption/recreation,
+signalfd, global policy or signal-based observation transport.
+
+For default, caught, blocked, traced, multithreaded, changing or otherwise unproved profiles, or any
+required query/parse/permission failure, O shall latch private observation failure and perform NO
+observation write. It shall disable further observation writes and continue the same ordinary
+production sampling/control/settlement under the original cutoff. C shall seal missing/failed
+observation as typed fixture failure before unchanged cleanup. Profile refusal shall not become
+production cancellation, I signalling, early O exit, new public failure classification or successful
+ignored-inner-EOF evidence. No unsupported profile shall gain writing permission from a later
+cleanup result. Preexisting pending signals, including foreign-origin pending signals, shall remain
+unchanged: the profile check/write shall not drain, recreate or normalize them. The CODE proof shall establish
+that preservation and actual signal-delivery/interference premises in its eligible configuration,
+not assume default PID1 immunity or infer an absence of foreign inputs.
+
+All query/parser records, actual capacities, retained/transient/native syscall storage and overlapping
+lifetimes shall enter the existing feature-on accounting/native proof before exposure. Named C
+storage remains caller_run_buffers and O storage remains owned_RSS under the existing formula;
+AC-93 independently declared finite native charge also covers profile query/parser/storage overlap.
+An existing proc parser or logical length bound shall not prove this new owner's actual retained/
+transient capacity or native charge. No new term, numerical cap or reserve is allocated.
+Unsafe or unavailable access, incomplete configuration, permission, capacity or native-workspace
+proof shall leave eligibility UNPROVEN, not authorize a
+write or a weaker profile. All profile, pending, ordinary-flow, actual normal-helper and supported
+kernel/runtime evidence remains PLANNED/UNRUN. Feature-off consumers and helpers shall contain no
+profile query/parser/check/write branch from this allocation under the existing absence obligation.
 
 C/O shall use five count-sized fixed event slots, one in-progress fixed frame and fixed binding/
 completion metadata, with no heap event history or dynamic error source. The CODE author shall
@@ -2078,6 +2124,8 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-96 | PLANNED/UNRUN. C admits only the expected authenticated early report claim and refuses absent, malformed, wrong or late claims without writer transfer or new authority, retaining actual owned custody and original cutoffs. | Test |
 | FR-034-AC-97 | PLANNED/UNRUN. O accepts the observation binding only after actual retained-report equality and original C/build/run/scenario validation; wrong backing or binding refuses with existing owned settlement. | Test |
 | FR-034-AC-98 | PLANNED/UNRUN. Feature-off consumers and helpers contain no early-report field, storage/decoder branch or bytes, and preserve the original phase frame and sole right; feature-on unbound execution creates no observation endpoint or emission. | Test, Analysis |
+| FR-034-AC-99 | PLANNED/UNRUN. O permits observation writes only with actual ignored/unblocked/untraced single-thread observations and complete supported configuration, stability, pending, permission and accounting proof through each write. | Test, Analysis |
+| FR-034-AC-100 | PLANNED/UNRUN. O latches private observation failure without writing for every unsupported, malformed, unavailable or unproved profile, preserving ordinary sampling/control/settlement and original cutoff. | Test |
 
 ## Dependencies
 
