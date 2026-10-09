@@ -56,8 +56,8 @@ status rows (FND-002).
 | FND-003 | low | FR-033-AC-12 is tagged by the wrong node/occurrence/function control, which never supplies Disagreed evidence. Precedence holds by construction (no evidence can be supplied before `request` succeeds), so the binding is weak but not wrong; the test's doc should say it demonstrates precedence structurally, not by a Disagreed input. | tests/it/composite_original_eq.rs:352-374 |
 ## Dispositions
 
-| FND | outcome | sha/reason |
+| FND | outcome | evidence/reason |
 | --- | --- | --- |
-| FND-001 | fixed | e8cf5261ac45: Added independent controls for semantic PackageMismatch and retained/recompiled ContextMismatch. Removed CG occurrence/function membership precheck; QSL membership refusal is tested instead. Status now names the measured cases. |
-| FND-002 | fixed | e8cf5261ac45: An unrelated Node bound reaches QSL prepare; test asserts binding-checked HarnessUnknownKey Refused report and Inconclusive terminal even with Disagreed. Status rows explicitly name the route. |
-| FND-003 | fixed | e8cf5261ac45: Wrong-node test doc now states no disagreement is supplied; separate QSL refusal tests supply Disagreed and assert precedence. AC-12 status distinguishes structural versus QSL controls. |
+| FND-001 | fixed | Verified: Added independent controls for semantic PackageMismatch and retained/recompiled ContextMismatch. Removed CG occurrence/function membership precheck; QSL membership refusal is tested instead. Status now names the measured cases. |
+| FND-002 | fixed | Verified: An unrelated Node bound reaches QSL prepare; test asserts binding-checked HarnessUnknownKey Refused report and Inconclusive terminal even with Disagreed. Status rows explicitly name the route. |
+| FND-003 | fixed | Verified: Wrong-node test doc now states no disagreement is supplied; separate QSL refusal tests supply Disagreed and assert precedence. AC-12 status distinguishes structural versus QSL controls. |

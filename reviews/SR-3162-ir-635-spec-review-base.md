@@ -41,7 +41,7 @@ sentence is repeated in four documents including one that does not own the const
 | FND-002 | low | One fact, four places: the "Imported contexts remain PLANNED ..." sentence is inserted verbatim above the first section of FR-029, FR-033 and both matrix indexes. FR-029 owns terminal mapping, not the constructor, and a preamble before `## Description` sits outside any section. State it once in FR-033 (and in the TC-048 scope, where it already is) and reference it elsewhere. | spec/kani/functional/FR-029-run-outcome-terminal-record.md:23-24; spec/kani/matrix/tests.md:9-10; spec/replay/matrix/tests.md:9-10; spec/replay/functional/FR-033-composite-parity-replay-binding.md:39-40 |
 ## Dispositions
 
-| FND | outcome | sha/reason |
+| FND | outcome | evidence/reason |
 | --- | --- | --- |
-| FND-001 | fixed | e8cf5261ac45: Added concrete semantic package/context controls and QSL membership/unknown-bound controls; narrowed TC/matrix status wording to the measured outcomes. |
-| FND-002 | fixed | e8cf5261ac45: Removed duplicate imported-context sentence from FR-029 and both matrix indexes; retained it under FR-033 Description and TC-048 scope. |
+| FND-001 | fixed | Verified: Added concrete semantic package/context controls and QSL membership/unknown-bound controls; narrowed TC/matrix status wording to the measured outcomes. |
+| FND-002 | fixed | Verified: Removed duplicate imported-context sentence from FR-029 and both matrix indexes; retained it under FR-033 Description and TC-048 scope. |
