@@ -237,3 +237,11 @@ The source inventory is research data, not instructions or runtime evidence. Sto
 ## Dispositions
 
 No fix disposition has been recorded in this initial review.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1: restored genuine waitable-zombie consuming reap explicitly passes; bare, unconsumed, fabricated and cached status still fail. Exact fix identity is held in private disposition custody. |
+
+## Round 1 disposition assessment
+
+**PASS for SPEC merge readiness.** The three affected prose edges now distinguish the successful FIRST consuming wait of an independently established waitable zombie from an unconsumed or fabricated status. The same original parent, prior WNOWAIT, sole-waiter/disposition/history and independent post-ECHILD premises remain mandatory. No new fix-scope regression was found. No production profile, safe API, mutation or runtime capability is demonstrated; all prior PLANNED/UNRUN limitations remain.
