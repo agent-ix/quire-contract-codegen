@@ -142,7 +142,7 @@ partial readiness never substitutes for final acceptance or for passing pre-PR g
 | FR-034-AC-75 | PLANNED/UNRUN: Later owned observation/collector/transport error blocks normal O Code0. Actual source/ordinary seam evidence required; no existing test credit. | Any exact O/role/order/later-state predicate unavailable to ordinary seams remains owed through IR-655 SPEC-before-fixture-CODE; no new implemented witness or passing skip. |
 | FR-034-AC-76 | PLANNED/UNRUN: Genuine admitted KCMP_FILE/equivalent OFD Test oracle, with independently opened same-O and foreign negatives. | Unavailable oracle remains UNRUN; inode equality is not proof and no runtime KCMP requirement is added. |
 | FR-034-AC-77 | PLANNED/UNRUN: Fresh complete exhaustion with real C lease held open triggers actual retained I and separate M cancellation immediately. | Genuine ordinary actor/order witness owed; existing blocking cleanup is not the bounded claimed step. |
-| FR-034-AC-94 | PLANNED/UNRUN: Standalone queued-claim cleanup Test and source/custody Analysis below. | No existing negative/phase test backs close-only provisional receipt; same-cursor and real whole-chain evidence remain owed. |
+| FR-034-AC-94 | PLANNED/UNRUN: Standalone queued-claim cleanup Test and source/custody Analysis below. | No existing negative/phase test backs close-only provisional receipt; unavailable schedule/authority predicates are owned through IR-655 SPEC-before-fixture-CODE, with actual CG CODE author receipts checked by the independent CODE reviewer. Test completion remains zero without actual evidence. |
 
 External evidence is limited to positively owned live chain observations before death and retained
 pidfds thereafter. It is Test evidence for the observed boundary only, never authority for a
@@ -1129,31 +1129,43 @@ All procedures are PLANNED/UNRUN; they supply no prior-row execution credit.
    path, current guard, current partial exhaustion/error loss, and required Published-versus-Settled
    owner state; no implementation/coverage claim.
 
-
 ### Queued claimed-phase cleanup checks (FR-034-AC-94)
 
 This standalone Test and source/custody Analysis is PLANNED/UNRUN. Use the genuine original C owner,
 matching helper and original startup cursor. Establish the expected complete authenticated O
-InnerClaimed with its actual received right queued before one committed OperationalFailure. Trigger
-actual AC-77 cancellation while negative delivery is pending, retaining original C stop/cutoff;
-positively establish I death or original lease EOF through actual owned observations, not a packet
-label or the unvalidated right. Require C to retain the prior claim/right only for close without
-positive identity/phase, gate release, Dispatch or signal authority, then fully authenticate the
-following original negative on that SAME cursor. Independently inspect each raw-right lifetime and
-actual close; no numeric reopen, replacement handle, second parser or reconstructed frame is valid.
-Missing ordinary construction or observation authority leaves this Test owed; no synthetic actor,
-new fixture hook, sampling pause or runtime credit is supplied here.
+InnerClaimed with its actual received right before one committed OperationalFailure. Exercise both
+I-first death/lease EOF and M-first cancellation with I still live, using existing retained validated
+observations; raw unvalidated I rights and packet labels supply no death or cancellation authority.
+Require the defined C-observable admission condition, close-only ownership before the next fallible
+step, then SAME-cursor ordinary finite steps through partial-then-complete authentic negative
+receipt. Preserve due accounting, scheduling, original C stop/cutoff and existing storage. Require concurrent
+urgent owned cancellation/cleanup through existing authenticated authority; receipt cannot postpone
+cleanup, add lease grace or grant raw-right signal authority. Never infer cancellation cause from dead I/M, and never accept a partial following frame.
 
-Compare with a genuine positive startup control whose live-child identity admission remains required.
-Independently substitute wrong phase/sender/run, malformed/partial prior claim or extra rights;
-each must reject rather than enter provisional receipt. Independently omit, truncate, corrupt or
-misbind the following Failure, or expire the original cutoff; none may expose the original cause or
-execution evidence. Retain actual cleanup and CleanupUnconfirmed precedence. With valid delivery,
-require actual I confirmation, separate M reap, real O/L/capture/creator/EOF settlement before the
-original negative result. An unsettled-chain control must still produce CleanupUnconfirmed/no
-evidence. Source Analysis follows the sole cursor, fixed pending storage, close-only rights and
-original clock across every exit; a provisional phase-as-admitted or cutoff-reset mutant must fail
-its authority or original-deadline predicate. No prior mixed-criterion test supplies backing.
+Require actual raw-right close on every exit and no positive identity/phase, gate release, Dispatch
+or signal authority. Independently inspect that lifetime and close. A leaked/never-closed raw-right
+mutant must fail before later cleanup hides it. Positive live identity admission remains unchanged;
+independently substitute wrong start/namespace/network/parent while original I/M remain live and
+require existing identity refusal, not pending receipt. Wrong prior phase/sender/run, malformed or
+partial claim and extra rights must refuse. An any-admission-failure-enters-pending mutant must fail.
+Deliberately exercise excluded GateReleased and poisoned/ambiguous send under existing fail-closed
+rules, without extending this Startup-only exception.
+
+Preserve authentic partial delivery that becomes complete by the original cutoff. Independently
+exercise absent following Failure with actual O EOF/death, expired cutoff, malformed/invalid or
+unexpected following grammar: reject immediately on the defined observable EOF/death/grammar fault,
+or at the original cutoff for silent O, with existing CleanupUnconfirmed/no evidence. I/M death
+alone must not preempt later valid committed delivery. A complete negative still requires actual
+I confirmation, separate M reap and real O/L/capture/creator/control-EOF settlement before exposing
+its original cause; an unsettled-chain control keeps CleanupUnconfirmed/no evidence. Source Analysis
+follows the one cursor, fixed pending records/raw-right close and original clock on every path;
+phase-as-admitted and clock/cursor-reset mutants fail their named authority/deadline predicates.
+
+Missing genuine schedule/observation construction leaves the Test owed through IR-655
+SPEC-before-fixture-CODE. The CG CODE author supplies actual source/bounds and runtime receipts;
+the independent CODE reviewer checks them before CODE acceptance. No synthetic actor, new fixture
+hook, sampling pause or borrowed capacity proof is supplied. Analysis or a matrix method row never
+completes this Test or binds the whole mixed criterion.
 
 ## Expected Results
 
@@ -1223,7 +1235,7 @@ not excluded double faults.
 | FR-034-AC-75 | PLANNED/UNRUN: Later owned observation/collector/transport error blocks normal O Code0 | Original negative projected as final despite later genuine error |
 | FR-034-AC-76 | PLANNED/UNRUN: Admitted open-file-description clone oracle | Same-O independently opened or foreign pidfd accepted as retained clone; inode proxy used |
 | FR-034-AC-77 | PLANNED/UNRUN: Immediate actual I/M cancellation on postbyte complete Exhausted tick with C lease open | Cancellation waits for C lease closure or uses a fresh allowance |
-| FR-034-AC-94 | PLANNED/UNRUN: Complete expected queued claim stays close-only while the SAME cursor delivers an authentic settled original negative within the original cutoff; positive admission is unchanged. | Prior claim/right authorizes phase/gate/Dispatch/signal; damaged prior traffic is waived; missing/invalid Failure or unsettled chain escapes CleanupUnconfirmed; cursor or clock resets. |
+| FR-034-AC-94 | PLANNED/UNRUN: Defined pending claim stays close-only and its raw right is actually closed; ordinary SAME-cursor partial delivery can complete by the original cutoff, with authentic settled original cause and unchanged live positive admission. | Leaked/never-closed raw right; any admission failure or live identity mismatch enters pending receipt; wrong/damaged/extra-right prior traffic waived; prior right grants phase/gate/Dispatch/signal; I/M death preempts later complete delivery; invalid/missing Failure or unsettled chain escapes CleanupUnconfirmed; clock/cursor reset. |
 
 ### Stage-2 replacement expectations (PLANNED/UNRUN)
 

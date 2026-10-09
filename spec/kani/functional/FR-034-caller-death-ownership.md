@@ -396,7 +396,6 @@ authorize an unsettled result. Missing, partial, malformed or unauthenticated O 
 gain acceptance. Original-cutoff expiry or unconfirmed whole-chain settlement shall retain existing
 CleanupUnconfirmed precedence; no new window, renewed clock or EOF waiver is allocated.
 
-
 Private retention is an Analysis obligation: CODE Analysis shall follow OuterRunOwner's retained
 sampling through publication and actual settlement, including OuterSampling's ledger/history and
 owned-stop state. No current ordinary runtime seam proves private retention; the formerly proposed
@@ -429,34 +428,51 @@ identify CODE gates and the missing claimed path; they supply no runtime proof.
 
 ### Queued claimed-phase cleanup during negative receipt
 
-When a COMPLETE expected InnerClaimed from the already authenticated original O is queued on C's
-original startup cursor before O's committed claimed-startup OperationalFailure, C shall retain
-bounded provisional receipt through AC-77-caused I death or original I-lease EOF. A queued positive
-phase shall not preempt that negative merely because its claimed I can no longer pass live-child
-admission. C shall retain the complete prior phase and any received unvalidated I right solely for
-close through owned cleanup, without accepting I identity or advancing the positive phase. This
-raw right shall grant no gate release, Dispatch, signalling, termination-observation or other
-capability. C shall not reopen a numeric PID or substitute a validated I handle. The original
-positive admission checks shall remain required for every actual positive transition.
+InnerClaimed means O's outer phase reply carrying the claimed INIT pidfd for the stage table's
+ClaimedGated admission. The startup cursor means C's single retained direct-O startup control
+stream, including its actual incremental receive state and ancillary-right custody.
 
-This exception shall apply only to the complete expected prior claim and following committed
-negative on the SAME retained startup cursor. C shall preserve required prior-frame grammar,
-original authenticated O sender/run binding, ancillary-right policy and ordering; wrong-phase,
-wrong-sender, malformed, partial or extra-right prior traffic shall not gain provisional acceptance.
-C shall neither retry with a new parser nor splice, skip damaged bytes, infer a terminal frame from
-EOF or use a generic startup cancellation fallback. Provisional receipt shall retain the original
-C stop/minimum cutoff and actual owners. It shall neither reset that cutoff nor borrow receipt-time
-allowance, and shall grant no positive report or evidence authority.
+When C receives a COMPLETE expected InnerClaimed with valid required grammar, original O sender/run
+binding and exact declared rights, but cannot complete live-child/parent admission because I or
+its previously authenticated M is no longer live or the original lease has reached EOF, C shall
+enter close-only pending-claim receipt without inferring why either actor died. C shall first
+exclude any positively established start/namespace/network/parent identity mismatch while the
+original I/M are live; such a defect shall retain the existing identity refusal and shall not
+enter pending receipt. Successful full live identity admission shall take the unchanged positive
+path. Authenticated M death is observable parent state only, never cancellation cause or raw-I
+identity authority. No generic admission-error catch shall select pending receipt.
 
-C shall expose the original negative only after full original O/build/run/source/state/producer-stop
-authentication and actual I/M/O/L/capture/creator/control-EOF settlement under the original cutoff.
-I death, I-lease EOF, the prior claim or close-only right shall supply neither original cause nor
-settlement. Missing, partial, malformed or unauthenticated following Failure, expired original
-cutoff or unconfirmed whole-chain settlement shall retain existing CleanupUnconfirmed/no-evidence
-precedence; an earlier phase's raw right shall not rescue delivery. No new frame, right, outcome,
-cause, public field, ACK, window, cap or cancellation authority is allocated. Actual fixed pending
-storage/custody and bounded same-cursor integration remain PLANNED/UNRUN CODE duties under the
-existing named accounting; this text supplies no capacity or runtime proof.
+C shall own the pending raw I right before the next fallible step, retain it solely for actual
+close through owned cleanup on every exit, and grant it no positive identity, phase, gate release,
+Dispatch, signal, termination-observation or other authority. C shall not reopen a numeric PID,
+substitute a validated I handle or use the raw right to establish actor death. C shall continue
+only the SAME original startup cursor using ordinary finite actor steps and scheduling, with due
+accounting/cutoff checks unchanged and existing receive storage reused. Partial following delivery
+may complete within the original cutoff; no partial frame shall be accepted as a negative. C shall
+preserve the original C stop/minimum cutoff without a new timer, cap, allowance or receipt-time reset.
+C shall concurrently continue required urgent owned cancellation/cleanup under existing independently
+authenticated owner authority. Pending receipt shall not postpone that cleanup, wait out a new lease
+grace period or grant signal authority to the unvalidated I right.
+
+C shall fully authenticate the following original OperationalFailure against actual retained O,
+original build/run/source/state/producer stop before retaining provisional cause/clock custody.
+C shall expose its original cause only after actual I/M/O/L/capture/creator/control-EOF settlement
+under that original cutoff, and shall actually close the pending raw right through owned cleanup.
+C shall immediately reject malformed, invalid or unexpected following grammar. When O control EOF
+or actual O death leaves no complete authentic Failure, or the original cutoff expires, C shall
+select existing CleanupUnconfirmed/no evidence through retained cleanup. A silent live O remains
+bounded by that cutoff. I/M death or lease EOF alone shall not substitute a cause, preempt completion
+of authentic committed delivery or authorize an unsettled result.
+
+C shall refuse wrong-phase/sender/run, malformed, partial or extra-right prior traffic instead of
+entering pending receipt. C shall deliberately exclude a queued GateReleased reply: fully successful
+GateReleased enters Backend, outside this Startup-only exception, and failed/ambiguous emission
+remains poisoned/refusal under existing rules. C shall neither skip damaged bytes nor splice, retry
+with a new parser, infer a terminal from EOF or adopt a generic cancellation parser fallback. This
+allocation changes no positive admission check, frame, right, outcome, cause, public field, ACK,
+window, cap or cancellation authority. Actual fixed pending storage/custody and bounded same-cursor
+integration remain PLANNED/UNRUN CODE duties under existing named accounting; no capacity or runtime
+proof is supplied.
 
 ### Startup and termination observations
 
@@ -1833,7 +1849,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-75 | PLANNED/UNRUN (IR-687). A later genuine observation/collector/transport error after COMMIT remains owned through bounded cleanup and prevents normal O Code0 acceptance through existing CleanupUnconfirmed. | Test |
 | FR-034-AC-76 | PLANNED/UNRUN (IR-687). A genuine admitted open-file-description Test oracle distinguishes L's retained-pidfd clone from independently opened same-O and foreign pidfds; inode equality supplies no clone evidence. | Test |
 | FR-034-AC-77 | PLANNED/UNRUN (IR-687). On a fresh complete Exhausted tick after first-byte COMMIT, O immediately initiates the same actual owned cancellation of live claimed I and retained M without waiting for C lease closure, preserving the original cutoff and committed bytes. | Test |
-| FR-034-AC-94 | PLANNED/UNRUN. C preserves the committed claimed-startup negative through a complete expected queued InnerClaimed without positive phase or I-right authority; same-cursor authentication, original cutoff and whole-chain settlement govern the result, with damaged or missing delivery retaining CleanupUnconfirmed/no evidence. | Test, Analysis |
+| FR-034-AC-94 | PLANNED/UNRUN. C disposes the defined pending claim through actual close of its raw I right without positive admission or capability; invalid prior traffic and live identity mismatches refuse, while the defined same-cursor negative receipt preserves the original cause only after authenticated delivery and whole-chain settlement. | Test, Analysis |
 
 ## Dependencies
 
