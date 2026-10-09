@@ -27,3 +27,11 @@ IR-698 code and Rust review of the exact PR #329 diff. The QSL constructor and a
 - Examined contracts: QSL `ProofBound::new` at locked `b8981dc`; CG FR-024-AC-11, AC-17, AC-18 and FR-033-AC-7, AC-12 as context; AD-002 seam description.
 - Rust idioms: no new panic on the production path, no unsafe or lint suppression, and constructor refusal is propagated as a typed error and classified as a CG defect. Test `expect` calls guard fixed fixture invariants.
 - Gate evidence: author-provided pre-PR `make ci` and real Kani receipts refer to this exact head; this reviewer did not repeat full gates.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | b1f08af89b98d23635a5d64547c08a98e3485a70 (local, unpublished at disposition) |
+
+The local fix replaces AD-002's two-field description with `DomainKey`, `Option<DomainKind>` and `FiniteBound`, names `ProofBound::new`, specifies the integer and collection pairings, and records `StateClauseReplayError::ProofBound(ProofBoundRefusal)` as a pre-replay CG defect mapped to `Failed`. The original finding and reviewed PR head above are preserved.
