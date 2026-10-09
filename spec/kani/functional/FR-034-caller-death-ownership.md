@@ -1498,6 +1498,51 @@ A complete conservative-charge observation shall cover every named formula term 
 owned tree; it is not whole-C memory or a complete caller runtime allocation bound. No whole-C RSS
 proxy, requested-stack proxy, raised budget or fallback shall supply missing named accounting.
 
+### Early report identity for feature-only observation binding
+
+Where guardian-test-support is enabled, O shall include a required typed `report: PipeIdentity`
+field in the EXISTING `OuterPhaseReply::MonitorSpawned` carrier. O shall obtain this device/inode
+identity from its actual retained ReportCollector after report creation and before emitting that
+phase. The existing M pidfd shall remain the carrier's sole right. This field shall allocate no
+new frame, reply, channel, ACK, right or authority. Report construction and this phase's finite
+send/receive shall retain their existing accounting, cutoff and ownership obligations.
+
+C shall retain the report claim only after complete expected MonitorSpawned admission on the
+original startup cursor: actual O sender, original run, retained matching build authenticated at
+Armed, live retained O and actual M-child capability checks, grammar, rights and original cutoff.
+C shall retain the admitted identity with that original owner; it shall not independently claim
+report-backing verification without a report descriptor. This phase shall precede construction
+of either selected Stage2ObservationBinding. C shall echo the retained identity with the original
+build/run and selected scenario, subject to all existing scenario preconditions. Neither the
+identity nor its receipt shall supply Armed, validated I identity, gate release, Dispatch, signal,
+report acceptance, cancellation or cleanup authority.
+
+Missing/malformed identity, an unexpected or late phase, wrong sender/run/build binding or a
+contradiction with retained identity shall fail closed under the existing typed control/fixture
+refusal and owned-settlement rules. C shall not transfer the observation writer using an absent,
+default, substituted or late identity. All received rights and prepared observation endpoints
+shall remain owned on fallible paths and close through existing cleanup within the original
+cutoffs. No refusal shall bypass the close-only queued-claim rules or alter existing cause and
+CleanupUnconfirmed precedence.
+
+Before accepting Stage2ObservationBinding or retaining its writer as an observation endpoint,
+O shall compare the echoed PipeIdentity with its actual original retained ReportCollector, and
+validate the original C/build/run and supported selected scenario. A structurally valid identity
+for another pipe shall fail this actual equality check; authenticated provenance alone shall not
+prove backing equality. Wrong report/run/scenario, missing or malformed binding and forbidden
+rights shall retain the existing refusal, close and settlement duties, without observation
+emission or new control authority. No C-only claimed comparison shall replace O's actual check.
+
+The sole feature-on exception in the observation-transport section shall additionally cover this
+field's O capture/encoding and C decoding/authenticated retention on the existing phase. In
+feature-off consumer AND helper builds, its declaration, decoding/storage branches and encoded
+bytes shall be absent; original MonitorSpawned bytes and sole M right shall remain unchanged.
+Feature-on ordinary unbound execution shall remain available: this phase metadata shall create
+no observation endpoint, binding, write or observation authority. Feature-on storage and encoding
+shall satisfy the existing named formula, actual capacities and separate native-workspace proof;
+this slice shall supply no new numeric cap, reserve, budget or acceptance credit. Genuine fixture
+construction and runtime verification remain PLANNED/UNRUN through the owning fixture CODE gate.
+
 ### Feature-only stage-2 observation transport
 
 Where guardian-test-support is enabled, the single fixture operation shall use the genuine C owner,
@@ -2029,6 +2074,10 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-92 | PLANNED/UNRUN. For birth, O announces the next completed ordinary tick after binding transferred only following genuine adopted-orphan acknowledgement. | Test |
 | FR-034-AC-93 | PLANNED/UNRUN. The CODE verifier establishes the separately declared feature-on observation native-workspace bound from its own exact paired artifacts and premises. | Analysis |
 | FR-034-AC-94 | PLANNED/UNRUN. C disposes the defined pending claim through actual close of its raw I right without positive admission or capability; invalid prior traffic and live identity mismatches refuse, while the defined same-cursor negative receipt preserves the original cause only after authenticated delivery and whole-chain settlement. | Test, Analysis |
+| FR-034-AC-95 | PLANNED/UNRUN. O supplies the actual retained report PipeIdentity in the existing authenticated MonitorSpawned phase before either selected observation binding, retaining its sole existing M right. | Test |
+| FR-034-AC-96 | PLANNED/UNRUN. C admits only the expected authenticated early report claim and refuses absent, malformed, wrong or late claims without writer transfer or new authority, retaining actual owned custody and original cutoffs. | Test |
+| FR-034-AC-97 | PLANNED/UNRUN. O accepts the observation binding only after actual retained-report equality and original C/build/run/scenario validation; wrong backing or binding refuses with existing owned settlement. | Test |
+| FR-034-AC-98 | PLANNED/UNRUN. Feature-off consumers and helpers contain no early-report field, storage/decoder branch or bytes, and preserve the original phase frame and sole right; feature-on unbound execution creates no observation endpoint or emission. | Test, Analysis |
 
 ## Dependencies
 
