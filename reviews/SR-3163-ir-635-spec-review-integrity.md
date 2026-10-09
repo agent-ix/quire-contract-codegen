@@ -38,3 +38,8 @@ the function" is authoritative, which is how the CG-local heuristic in SR-3160 F
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | Ambiguous ownership of the membership rule: interface-001 `request` says "require original function/node/occurrence membership" and FR-033-AC-1 says the node/occurrence "must belong to the actual retained proving context", without naming the authority. QSL's `locate` already defines it (checked-body membership plus the occurrence's `Body { function }` origin). Two implementers would read this differently (CG source-region containment versus QSL's origin), and the code took the CG-local reading. The spec should state that membership is QSL's (or a named IR accessor's) definition and that a CG precheck, if kept, must not refuse what that owner admits. | spec/core/functional/interface-001-codegen-api.md (OriginalCompositeEqContext::request); spec/replay/functional/FR-033-composite-parity-replay-binding.md (FR-033-AC-1 row) |
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e8cf5261ac45: Interface-001 and FR-033 now name QSL composite-site locator as selected-function body/occurrence membership authority; CG precheck is removed. |

@@ -67,3 +67,12 @@ be re-run on the final head before merge.
 | FND-003 | low | Error precedence runs derivation before authentication: `request` calls the accessor and the membership walk on the caller-supplied package before `check_recompiled_context` authenticates it, so an inauthentic context surfaces as `Operands` or `NodeOutsideFunction` rather than `ContextMismatch`. No wrong success is possible (the request is returned only after the equality check), but the reported cause depends on the node chosen. | src/replay/composite_builder.rs:228-232, 281 |
 | FND-004 | low | `entry.regions.iter().all(..)` is vacuously true for a source-map entry with no regions, so such an occurrence passes the `OccurrenceOutsideFunction` precheck for any function. QSL would still refuse later, so this degrades a CG precheck into a QSL report rather than producing a wrong value. | src/replay/composite_builder.rs:371-381 |
 | FND-005 | low | Idiom: public `OriginalCompositeEqRequest` has no `Debug` while every sibling public type derives it; `Display` for `PackageRead` and `PackageReadLimit` prints the cause with `{:?}` instead of a message; the membership walk does a linear `find` over all graph nodes per visited id (quadratic, unmetered, while the IR projection it follows is work-metered). | src/replay/composite_builder.rs:96-97, 346-352, 406-413 |
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e8cf5261ac45: QSL owns selected-function body and occurrence membership at invocation, returning a binding-checked refusal report. |
+| FND-002 | fixed | e8cf5261ac45: Added semantic package/context mismatch, literal nonempty-bound filtering, Population-key filtering, and QSL wrong-function/unknown-Node-bound report controls. Removed the CG occurrence precheck; malformed admitted package-id paths are not constructible through IR admission. |
+| FND-003 | accepted-no-change | Projection and O-09 encoding still precede exact context authentication because public QSL StageLimits decoding needs the genuine wire. FR-033 Dependencies and interface-001 state this cause precedence; request returns only after exact context check. No incorrect success path observed. |
+| FND-004 | fixed | e8cf5261ac45: Removed the entire CG-local source-region membership precheck and its vacuous all() condition. QSL now owns membership. |
+| FND-005 | fixed | e8cf5261ac45: Request now implements Debug, package read errors use typed fields in Display, and the quadratic CG membership walk is removed. |
