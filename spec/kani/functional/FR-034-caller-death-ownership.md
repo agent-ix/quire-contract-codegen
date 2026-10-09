@@ -426,6 +426,54 @@ Source Analysis shall inspect the actual owning publication and receive paths in
 `outer_sampling.rs::unclaimed_failure_step`, and `helper_entry.rs::run_outer`. These references
 identify CODE gates and the missing claimed path; they supply no runtime proof.
 
+### Queued claimed-phase cleanup during negative receipt
+
+InnerClaimed means O's outer phase reply carrying the claimed INIT pidfd for the stage table's
+ClaimedGated admission. The startup cursor means C's single retained direct-O startup control
+stream, including its actual incremental receive state and ancillary-right custody.
+
+When C receives a COMPLETE expected InnerClaimed with valid required grammar, original O sender/run
+binding and exact declared rights, but cannot complete live-child/parent admission because I or
+its previously authenticated M is no longer live or the original lease has reached EOF, C shall
+enter close-only pending-claim receipt without inferring why either actor died. C shall first
+exclude any positively established start/namespace/network/parent identity mismatch while the
+original I/M are live; such a defect shall retain the existing identity refusal and shall not
+enter pending receipt. Successful full live identity admission shall take the unchanged positive
+path. Authenticated M death is observable parent state only, never cancellation cause or raw-I
+identity authority. No generic admission-error catch shall select pending receipt.
+
+C shall own the pending raw I right before the next fallible step, retain it solely for actual
+close through owned cleanup on every exit, and grant it no positive identity, phase, gate release,
+Dispatch, signal, termination-observation or other authority. C shall not reopen a numeric PID,
+substitute a validated I handle or use the raw right to establish actor death. C shall continue
+only the SAME original startup cursor using ordinary finite actor steps and scheduling, with due
+accounting/cutoff checks unchanged and existing receive storage reused. Partial following delivery
+may complete within the original cutoff; no partial frame shall be accepted as a negative. C shall
+preserve the original C stop/minimum cutoff without a new timer, cap, allowance or receipt-time reset.
+C shall concurrently continue required urgent owned cancellation/cleanup under existing independently
+authenticated owner authority. Pending receipt shall not postpone that cleanup, wait out a new lease
+grace period or grant signal authority to the unvalidated I right.
+
+C shall fully authenticate the following original OperationalFailure against actual retained O,
+original build/run/source/state/producer stop before retaining provisional cause/clock custody.
+C shall expose its original cause only after actual I/M/O/L/capture/creator/control-EOF settlement
+under that original cutoff, and shall actually close the pending raw right through owned cleanup.
+C shall immediately reject malformed, invalid or unexpected following grammar. When O control EOF
+or actual O death leaves no complete authentic Failure, or the original cutoff expires, C shall
+select existing CleanupUnconfirmed/no evidence through retained cleanup. A silent live O remains
+bounded by that cutoff. I/M death or lease EOF alone shall not substitute a cause, preempt completion
+of authentic committed delivery or authorize an unsettled result.
+
+C shall refuse wrong-phase/sender/run, malformed, partial or extra-right prior traffic instead of
+entering pending receipt. C shall deliberately exclude a queued GateReleased reply: fully successful
+GateReleased enters Backend, outside this Startup-only exception, and failed/ambiguous emission
+remains poisoned/refusal under existing rules. C shall neither skip damaged bytes nor splice, retry
+with a new parser, infer a terminal from EOF or adopt a generic cancellation parser fallback. This
+allocation changes no positive admission check, frame, right, outcome, cause, public field, ACK,
+window, cap or cancellation authority. Actual fixed pending storage/custody and bounded same-cursor
+integration remain PLANNED/UNRUN CODE duties under existing named accounting; no capacity or runtime
+proof is supplied.
+
 ### Startup and termination observations
 
 The stage boundaries and cancellation observations are cumulative only where explicitly stated:
@@ -1980,6 +2028,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-91 | PLANNED/UNRUN. Ordinary feature-on execution without authenticated binding creates no observation endpoint or emission and remains available. | Test |
 | FR-034-AC-92 | PLANNED/UNRUN. For birth, O announces the next completed ordinary tick after binding transferred only following genuine adopted-orphan acknowledgement. | Test |
 | FR-034-AC-93 | PLANNED/UNRUN. The CODE verifier establishes the separately declared feature-on observation native-workspace bound from its own exact paired artifacts and premises. | Analysis |
+| FR-034-AC-94 | PLANNED/UNRUN. C disposes the defined pending claim through actual close of its raw I right without positive admission or capability; invalid prior traffic and live identity mismatches refuse, while the defined same-cursor negative receipt preserves the original cause only after authenticated delivery and whole-chain settlement. | Test, Analysis |
 
 ## Dependencies
 
