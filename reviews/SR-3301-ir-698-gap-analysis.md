@@ -3,7 +3,7 @@ id: SR-3301
 title: "Gap analysis of IR-698 ProofBound adaptation"
 type: SpecReview
 analysis: gap-analysis
-scope: "agent-ix/quire-contract-codegen@4604e545a554340178f82e812d36c8366cd74615; spec/, src/replay/state_clause.rs, tests/it/composite_parity_converter.rs, tests/it/kani_obligations_state_clause_replay.rs, tests/it/skeleton_spine.rs"
+scope: "agent-ix/quire-contract-codegen PR #329; spec/, src/replay/state_clause.rs, tests/it/composite_parity_converter.rs, tests/it/kani_obligations_state_clause_replay.rs, tests/it/skeleton_spine.rs"
 review_set: subset
 ---
 
