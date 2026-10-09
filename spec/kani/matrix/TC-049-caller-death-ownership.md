@@ -1259,10 +1259,6 @@ d. AC-98: Compare exact feature-off paired consumer/helper schema, decoder/stora
 
 | Authority | Required observation | Regression caught |
 |---|---|---|
-| FR-034-AC-95 | Actual original O collector identity arrives in authenticated MonitorSpawned before either selected binding; only existing M right. | Substituted producer identity, binding before admission or extra transport/right. |
-| FR-034-AC-96 | Missing/wrong/malformed/late claim refuses, with no writer transfer/authority and actual owned close/settlement under original cutoff. | Default identity, late acceptance, leaked right or receipt granting authority. |
-| FR-034-AC-97 | O checks binding against actual retained original report and C/build/run/scenario before observation acceptance. | Omitted backing equality, foreign pipe/run/scenario accepted or failed binding emits. |
-| FR-034-AC-98 | Feature-off paired artifacts/bytes exclude field and branches; feature-on unbound control remains available without observation endpoint/emission. | Feature-off field leakage, changed frame/right or ordinary binding requirement. |
 | FR-034-AC-1/2/3/7 | Trusted bootstrap is distinct from production Dispatch; verified outer authority covers unclaimed inner stages; inner claim precedes Dispatch | EOF starts subject; signal/monitor exit falsely confirms teardown; claim-to-Dispatch gap |
 | FR-034-AC-4/5/6 | Exclusive original-caller pair and actual kernel Ready sender/INIT chain precede Dispatch | Public rendezvous capture; wrong pair or creator/sender credentials; arbitrary parent |
 | FR-034-AC-8/9 | Kernel INIT teardown cancels escaped, late-born and nested descendants, preserving other runs | Kill only sampled PIDs; cancel another run |
@@ -1366,6 +1362,15 @@ independent CODE-review acceptance; all runtime Tests remain UNRUN.
 | FR-034-AC-91 | Ordinary matched feature-on execution without binding has no observer endpoint/emission and remains available. | Requiring the absent fixture envelope or emitting without binding fails; matched features alone are not selection. |
 | FR-034-AC-92 | C transfers after actual adopted-orphan ACK; O next complete tick follows receipt; C releases same worker only after validated sample. | Startup/pre-binding tick, fabricated ACK or sample, and premature worker release fails birth-construction predicate; no pause/response allowed. |
 | FR-034-AC-93 | Separate exact feature-on paired artifacts prove finite native workspace no greater than independently declared charge. | Borrowed feature-off proof, unknown capacity/lifetime/highwater or missing actual comparison leaves UNPROVEN; no runtime completion credit. |
+
+### Early report identity expectations (PLANNED/UNRUN)
+
+| Authority | Required observation | Regression caught |
+|---|---|---|
+| FR-034-AC-95 | Actual original O collector identity arrives in authenticated MonitorSpawned before either selected binding; only existing M right. | Substituted producer identity, binding before admission or extra transport/right. |
+| FR-034-AC-96 | Missing/wrong/malformed/late claim refuses, with no writer transfer/authority and actual owned close/settlement under original cutoff. | Default identity, late acceptance, leaked right or receipt granting authority. |
+| FR-034-AC-97 | O checks binding against actual retained original report and C/build/run/scenario before observation acceptance. | Omitted backing equality, foreign pipe/run/scenario accepted or failed binding emits. |
+| FR-034-AC-98 | Feature-off paired artifacts/bytes exclude field and branches; feature-on unbound control remains available without observation endpoint/emission. | Feature-off field leakage, changed frame/right or ordinary binding requirement. |
 
 ## Settlement reserve research receipt
 
