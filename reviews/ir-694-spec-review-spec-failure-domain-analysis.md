@@ -49,3 +49,13 @@ Recorded clean, examined:
 - The raw right grants no signalling or termination-observation authority.
 - The bounded pending storage is one prior frame plus its declared right, under the existing named
   accounting.
+
+## Dispositions
+
+Replacement Codex disposition, round 1, on the frozen published PR head. Reviewer run 3911c05e-0b3e-4a4f-bac7-379bbc166b22. The original findings above are unchanged.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | The trigger includes authenticated M death while I remains live; TC-049 separately exercises M-first order. |
+| FND-002 | fixed | Live identity mismatch keeps existing refusal; the TC tests those identities and the any-admission-failure mutant. |
+| FND-003 | fixed | The scope expressly excludes queued GateReleased and leaves ambiguous emission fail closed. |

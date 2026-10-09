@@ -67,3 +67,13 @@ Recorded clean, examined:
 - AC-77, AC-57..AC-77 and AC-24 are not weakened. AC-24's lease-EOF cancellation is untouched.
 - Actors C, O, I and M are named.
 - AC-94 is PLANNED/UNRUN and claims no code credit.
+
+## Dispositions
+
+Replacement Codex disposition, round 1, on the frozen published PR head. Reviewer run 3911c05e-0b3e-4a4f-bac7-379bbc166b22. The original findings above are unchanged.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | C now chooses pending receipt from observable failed live admission, keeps the same cursor and cutoff, and leaves successful live admission on the positive path. |
+| FND-002 | fixed | AC-94 now requires actual raw-right close and refusal of invalid prior traffic and live identity mismatches; TC-049 names the leaked/never-closed mutant. |
+| FND-003 | fixed | The section defines InnerClaimed by ClaimedGated and the retained direct-O startup cursor. |

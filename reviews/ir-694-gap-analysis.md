@@ -38,3 +38,11 @@ Ticket: IR-694. Plan completion: not assessed. This is a planless gap analysis.
 **No coverage inflation and no code credit claimed. One low finding:** name the allocation route
 for the owed Test, for example the existing IR-655 SPEC-before-fixture-CODE route, as the AC-75
 row does.
+
+## Dispositions
+
+Replacement Codex disposition, round 1, on the frozen published PR head. Reviewer run 3911c05e-0b3e-4a4f-bac7-379bbc166b22. The original findings above are unchanged.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | The allocation and procedure route missing genuine construction through IR-655 with CG CODE author receipts and independent CODE review; Test credit stays zero. |

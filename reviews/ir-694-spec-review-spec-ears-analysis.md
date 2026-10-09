@@ -34,3 +34,11 @@ pre-existing, on FR-017 line 174, which this PR does not touch.
 **EARS-clean for the tooling. One low style finding.** Actors C, O, I and M are named. No
 `shall`-style non-canonical warning is introduced, and the AC row follows the neighbouring
 declarative form.
+
+## Dispositions
+
+Replacement Codex disposition, round 1, on the frozen published PR head. Reviewer run 3911c05e-0b3e-4a4f-bac7-379bbc166b22. The original findings above are unchanged.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | The rewritten normative sentences assign C as the responsible actor. |

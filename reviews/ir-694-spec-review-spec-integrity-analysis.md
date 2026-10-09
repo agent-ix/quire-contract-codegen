@@ -44,3 +44,12 @@ as claimed: 615 to 616 records, all prior records unchanged, AC-94 PLANNED/UNRUN
 Merge-order note, not a defect: the open IR-689 branch edits the same two tests.md rows and appends
 AC-78..AC-93 to the FR-034 AC table. Whichever merges second needs a textual rebase that keeps
 AC-78..AC-93 ahead of AC-94.
+
+## Dispositions
+
+Replacement Codex disposition, round 1, on the frozen published PR head. Reviewer run 3911c05e-0b3e-4a4f-bac7-379bbc166b22. The original findings above are unchanged.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-94 is now one pending-claim custody/disposal transaction. The TC tests its conditions independently and expressly denies partial Test or matrix completion; the all-or-nothing criterion has no ambiguous partial status. |
+| FND-002 | fixed | The correction removes both extra blank lines. |
