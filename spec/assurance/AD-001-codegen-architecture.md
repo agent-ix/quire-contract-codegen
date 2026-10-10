@@ -144,12 +144,15 @@ The caller retains the returned evidence.
 A falsified run's concrete playback goes through these steps:
 
 1. The witness join types the playback against the harness's persisted argument bindings (FR-016).
-2. The backend adapter hands common CG intake typed assignments, backend identity, opaque
-   obligation identity, declared domains, source/provenance and replay packet. Native playback
-   text stays inside that adapter (FR-024-AC-36).
+2. The backend adapter hands common CG intake one typed outcome: either a successful submission
+   of assignments, backend identity, opaque obligation identity, declared domains,
+   source/provenance and replay packet members, or a decode refusal carrying backend identity,
+   obligation identity and typed cause. Native playback text stays inside that adapter
+   (FR-024-AC-36).
 3. Common intake checks every declared domain and QSL admission before replay. The adapter
    renders backend-witness values for `Witness::parse`; CG reconstructs QSL's `WitnessEnvelope`
-   and reports decode, domain and admission refusals as typed evidence failures
+   and reports the adapter's decode refusal or its own domain and admission refusals as typed
+   evidence failures
    (FR-024-AC-37). FR-016 retains Kani-specific decoding and refusal ownership.
 4. CG builds the replay request from the admitted envelope and the proving run's package
    reference, byte provision and limits, and calls `qsl_replay::replay`.
@@ -163,7 +166,9 @@ For a minimized failure, CG owns an immutable lineage record referring to the ex
 envelope, opaque obligation and parent revision. QSL's envelope and packet have no lineage member;
 CG neither copies nor extends them. Rejected candidates create no revision. A retained Witness
 reduction uses its own backend re-run transcript, and Input remains Input (FR-024-AC-38 to
-FR-024-AC-40).
+FR-024-AC-40). Prior envelopes remain equal to pre-proposal clones under QSL's
+`WitnessEnvelope<P>: Eq`; prior CG record identity, parent, obligation and typed evidence fields
+remain equal to captured values.
 
 ### Failure view
 
@@ -179,7 +184,7 @@ success fallback, and no requirement converts one into another.
 | CG → RT | Generated calls into `quire_contract_runtime::exact`: kernel scalar operations, `check_equality`, `PackageDeclarations::check`, `CheckedPackage::call`, `Meter`, `Outcome` | Contract Runtime | Emits calls and charges nothing itself. |
 | QSL → CG | The FR-331 envelope, its `candidates`, and the registered descriptor's typed `ProviderOrigin` | QSpec owns the envelope and candidate wire; QSL `route` computes candidates and its registry holds origin | The driver projects one QSL registry descriptor to CG's own descriptor, copying identity, advertised pairs and `origin()` without changing meaning. FR-019 reads that value; FR-022 generates for what was routed. No direct CG dependency on `qsl-route` and no origin member is added to FR-331 wire. |
 | CG → QSL | `Witness`, `ReplaySource`, the counterexample envelope `WitnessEnvelope`, `ObligationIdentity`, the replay request, `replay` and `replay_frame` | QSL `qsl-replay` | Builds them and calls the facade. Target: no copy of these types in CG or in Contract IR; see Current state. |
-| Backend adapter → CG common intake | Typed assignments, backend identity, QSL obligation identity, declared domains, source/provenance and replay packet | CG intake; QSL owns envelope and identity types | Adapter keeps native text and decoding; common intake checks domains and QSL admission before replay and reports typed evidence failures. |
+| Backend adapter → CG common intake | Typed success submission (assignments, backend identity, QSL obligation identity, declared domains, source/provenance, replay packet members) or typed decode refusal (backend identity, obligation identity, cause) | CG intake; QSL owns envelope and identity types | Adapter keeps native text and decoding; common intake reports decode refusal, then checks domains and QSL admission for a successful submission before replay. |
 | CG → QSL | The FR-331 terminal value of a run | QSL `qsl-replay` | The Kani adapter maps `KaniRunOutcome` to `TerminalValue` in one total match, one value per run (FR-029). An item settled `unsupported` at negotiation has no terminal value. |
 | CG ↔ Kani | The option vector in, the exported JSON report and the printed concrete playback out | Kani | Only `src/kani_transcript.rs` reads either. The verdict comes from the report; the playback is a payload. |
 

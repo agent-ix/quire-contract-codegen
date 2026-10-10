@@ -44,8 +44,9 @@ This requirement states what the generator puts into those types, and does not r
 [FR-016](./FR-016-witness-native-replay.md) owns decoding a Kani playback, the adapter refusals and
 the partition of replay outcomes. This requirement owns what reaches QSL.
 
-The common intake takes a typed submission from any backend adapter. It owns admission and
-lineage across adapters; each adapter owns its backend-native text and decoding. A CG-owned
+The common intake takes a typed outcome from any backend adapter: a successful submission or a
+decode refusal. It owns admission and lineage across adapters; each adapter owns its backend-native
+text and decoding. A CG-owned
 immutable lineage record refers to, but is not a member or copy of, QSL's envelope.
 
 ## Scope
@@ -82,6 +83,10 @@ members against the operation's declaration in the domain package.
   backend witness submission carries decoded values and the adapter's rendered transcript; a
   corpus submission carries canonical assignments and `Input` provenance. Backend-native text
   is consumed only inside its adapter and never crosses this boundary.
+- The adapter outcome is either that successful typed submission or a typed decode refusal
+  containing the producing backend identity, opaque obligation identity and adapter-owned decode
+  cause. The refusal arm contains no assignments, replay packet or backend-native text. FR-016
+  defines Kani's decode causes and its mapping into this arm.
 - A counterexample from one of two sources:
   - a backend counterexample: an [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md) `falsified`
     run's playback, decoded by FR-016 into values named by their argument bindings;
@@ -130,12 +135,18 @@ members against the operation's declaration in the domain package.
 
 ## Behavior
 
-- The common intake shall accept only typed adapter submissions. An adapter shall keep native
-  counterexample text inside its own boundary and submit decoded, parameter-bound assignments,
-  backend identity, opaque obligation identity, declared domains, source/provenance and replay
-  packet members. The intake shall preserve the adapter's backend and source identities in the
-  completed QSL packet;
-  it shall not parse backend-native text or recompute an obligation identity.
+- The common intake shall accept only a typed adapter outcome.
+- When an adapter submits success, it shall include decoded, parameter-bound assignments, backend
+  identity, opaque obligation identity, declared domains, source/provenance and replay packet
+  members.
+- When an adapter submits a decode refusal, it shall include only backend identity, obligation
+  identity and its typed decode cause.
+- The adapter shall keep native counterexample text inside its own boundary.
+- The intake shall preserve a successful submission's backend and source identities in the
+  completed QSL packet. It shall not parse backend-native text or recompute an obligation identity.
+- When an adapter outcome is a decode refusal, the common intake shall return a typed decode
+  evidence failure retaining the adapter's cause, without building an envelope or calling native
+  replay. FR-016 determines Kani's decode cause and refusal category.
 - When preparing native replay, the intake shall check every assignment against its corresponding
   declared domain and admit the completed packet through QSL's `Witness::parse` (for a Witness
   source) and `WitnessEnvelope::reconstruct`. A failed check shall stop before replay.
@@ -327,6 +338,11 @@ members against the operation's declaration in the domain package.
   unchanged. A candidate rejected for invalid domain, QSL admission refusal, failed backend
   re-run or changed verdict shall create no revision; the previously retained evidence remains
   unchanged.
+- When a reduction is retained or rejected, CG shall preserve the prior revision identifier,
+  parent reference, opaque obligation identity, QSL envelope value and typed replay evidence.
+  The prior envelope remains equal to a clone captured before the proposal under QSL's
+  `WitnessEnvelope<P>: Eq`; the prior record's identity, parent, obligation and evidence fields
+  remain equal to their captured typed values. No byte serialization is required.
 - The generator shall define none of `Witness`, `ReplaySource`, `WitnessEnvelope`,
   `TerminalRecord` or `ObligationIdentity`.
 - The generator shall import none of those types from Contract IR.
@@ -370,10 +386,10 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-33 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A postcondition harness generated from the package QSL emits for the twin, with no identity alignment, is replayed through `StateClauseReplay::new` and `replay`: the debit mutation settles `reproduced-with-evaluated-witness` with category `violation` and evaluated `false`; the unmutated subject over the same pre state settles `inconclusive` with cause `Verdicts` (FR-024-AC-16); the clause id is the one `call_site` names for `BalanceNeverDrops`, and the declared field ranges equal those returned by the accessor, including an unread ranged field. | Test (TC-035) |
 | FR-024-AC-34 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the real playback of the falsified frame harness of a forbidden write (FR-024-AC-30) and the falsified postcondition harness of a debit mutation (FR-024-AC-18) replay and settle as those criteria state, each harness generated from QSL's emitted package using accessor-derived ranges. The modules `kani_obligations_state_frame` and `kani_obligations_state_clause_replay` are selected by the `kani_obligations` filter of `make kani`. | Test (TC-035) |
 | FR-024-AC-35 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A falsified frame or postcondition harness draws a present model field whose accessor type has no `i64` range (for example `IntRange` with a lower endpoint below `i64::MIN` and an upper endpoint of -1), and playback binds an `i64` value outside that model range. QSL refuses the pre state and settlement is `Inconclusive` with `ReplayRefused` (FR-029-AC-16), naming the field and its persisted `TypeNotRange` reason; it never reports `Verified` or a violation. Playback inside the model range is unaffected, and an unread present `IntRange` within `i64` is bounded and is never reported as unranged. The source and IR range ceiling is `i128::MIN..=i128::MAX`. Same-model wide-range replay evidence is blocked by QSL-642; an IR-admitted selected-model override alone is not such evidence. | Test (TC-035) |
-| FR-024-AC-36 | Two distinct test backend adapters submit equivalent typed assignments through one common intake contract carrying each adapter's backend identity, the same opaque obligation identity, declared domains, source/provenance and replay packet members. Native text is observed only within its own adapter; the common intake neither parses native text nor remints the obligation identity, and QSL receives each adapter's original backend and source identity in a complete packet. | Test (TC-035) |
-| FR-024-AC-37 | Before any native replay, an out-of-domain assignment yields a typed out-of-domain evidence failure; an incomplete or QSL-refused witness/packet yields a typed QSL admission evidence failure retaining its cause. A decode failure reported by an adapter and a replay verdict disagreement remain distinct typed evidence failures. None settles as contract success or contract failure, and none of the pre-replay failures invokes replay. Kani's exact decode and refusal partition remain governed by FR-016. | Test (TC-035) |
-| FR-024-AC-38 | Starting from one admitted original failure, one valid reduced candidate that preserves the failure becomes a new CG lineage revision referring to its exact admitted QSL envelope, its exact parent revision and the unchanged opaque obligation identity; the original envelope, evidence and lineage record remain byte-for-byte unchanged. No lineage member is added to QSL's envelope or packet. | Test (TC-035) |
-| FR-024-AC-39 | From a retained failure revision, an out-of-domain reduction and a domain-valid reduction that changes the native verdict each create no revision and leave the retained chain and prior evidence unchanged; a later valid reduction names the actual retained parent, with no skipped or substituted parent. | Test (TC-035) |
+| FR-024-AC-36 | Two distinct test backend adapters each produce a typed outcome: success carries equivalent assignments, each adapter's backend identity, the same opaque obligation identity, declared domains, source/provenance and replay packet members; decode refusal carries only backend identity, obligation identity and typed cause. Native text is observed only within its own adapter; the common intake neither parses native text nor remints the obligation identity, and QSL receives each successful adapter's original backend and source identity in a complete packet. | Test (TC-035) |
+| FR-024-AC-37 | The common intake maps an adapter's decode-refusal arm to a typed decode evidence failure retaining its cause, with no envelope or replay. Before native replay, an out-of-domain assignment yields a distinct typed domain evidence failure; an incomplete or QSL-refused witness/packet yields a distinct typed QSL admission evidence failure retaining its cause. A replay verdict disagreement remains a distinct typed evidence failure. None settles as contract success or contract failure, and none of the pre-replay failures invokes replay. Kani's exact decode and refusal partition remain governed by FR-016. | Test (TC-035) |
+| FR-024-AC-38 | Starting from one admitted original failure, one valid reduced candidate that preserves the failure becomes a new CG lineage revision referring to its exact admitted QSL envelope, its exact parent revision and the unchanged opaque obligation identity. After retention, the original QSL envelope compares equal to its pre-reduction clone by `WitnessEnvelope<P>: Eq`, and the original CG record's revision identity, parent, obligation and typed evidence fields read back equal to their captured values. No lineage member is added to QSL's envelope or packet. | Test (TC-035) |
+| FR-024-AC-39 | From a retained failure revision, an out-of-domain reduction and a domain-valid reduction that changes the native verdict each create no revision. After each rejection, every prior QSL envelope compares equal to its pre-proposal clone and every prior CG record's revision identity, parent, obligation and typed evidence fields equal their captured values; a later valid reduction names the actual retained parent, with no skipped or substituted parent. | Test (TC-035) |
 | FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. A retained reduced `Input` envelope remains `Input`, contains its own canonical assignments and gains no backend witness or backend-evidence settlement. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect

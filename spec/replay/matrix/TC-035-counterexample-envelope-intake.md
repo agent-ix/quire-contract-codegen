@@ -36,8 +36,10 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
    Begin with an admitted original failure. Retain the valid equivalent reduction, then propose
    the two invalid reductions from that retained parent, and finally retain another valid
-   reduction. Read every lineage record, parent reference, obligation identity, envelope, backend
-   transcript and replay result before and after each proposal.
+   reduction. Before each proposal clone each retained QSL envelope and capture each CG record's
+   revision identity, parent reference, obligation identity and typed replay evidence. Compare
+   the captured values with those read back after each proposal; use QSL envelope equality and
+   inspect each retained backend transcript and replay result.
 8. Submit a counterexample through the generator's replay entry point and pass the `Witness`,
    `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` and `ObligationIdentity` values it produces
    directly to `qsl_replay`'s own functions.
@@ -97,8 +99,9 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     opaque obligation identity, declared domains, source/provenance and replay packet members at
     the adapter boundary, then the complete packet at QSL admission. Separately submit a decode
     refusal, an out-of-domain assignment, a QSL-refused packet and a native replay verdict
-    disagreement; record the typed
-    outcomes, contract settlement and whether replay ran.
+    disagreement. Send the decode refusal through the adapter outcome's refusal arm, with its
+    backend identity, obligation identity and typed cause but no assignments, packet or native
+    text; record the common intake's typed result, contract settlement and whether replay ran.
 
 ## Expected Results
 
@@ -116,7 +119,9 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 7. Only valid failure-preserving candidates are retained (FR-024-AC-7, FR-024-AC-9). The root
    and both retained revisions refer to their exact QSL envelopes and unchanged obligation;
    each child names the actual retained parent. The invalid-domain and verdict-changing proposals
-   create no revision or change to previous envelopes, records or evidence (FR-024-AC-38,
+   create no revision. Each prior envelope compares equal to its clone captured before the
+   proposal using QSL's `WitnessEnvelope<P>: Eq`; prior CG record identity, parent, obligation and
+   typed evidence fields read back equal to their captured values (FR-024-AC-38,
    FR-024-AC-39). Each retained `Witness` envelope carries its own re-run transcript bound to its
    reduced assignments, and each retained `Input` envelope remains `Input` without backend
    evidence (FR-024-AC-8, FR-024-AC-40).
@@ -211,10 +216,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     range is unaffected, and an unread present `IntRange` within `i64` is never called
     unranged. Build the out-of-`i64` model type through a selected-model-document override
     with recomputed digests on a QSL-emitted graph (FR-024-AC-35, IR-624).
-33. Both adapters use the same typed intake while their native text stays inside each adapter;
-    QSL receives the submitted backend, obligation and source without reminting. The four refusals
-    remain distinct typed evidence failures with their causes, never contract success or failure.
-    Decode, domain and QSL admission refusals invoke no replay (FR-024-AC-36,
+33. Both adapters use the same typed outcome boundary while their native text stays inside each
+    adapter; QSL receives each successful submission's backend, obligation and source without
+    reminting. The decode-refusal arm reaches common intake with the original typed cause and no
+    successful submission or envelope. The four refusals remain distinct typed evidence failures,
+    never contract success or failure. Decode, domain and QSL admission refusals invoke no replay
+    (FR-024-AC-36,
     FR-024-AC-37). Kani-specific refusal details follow FR-016.
 
 ## Status
