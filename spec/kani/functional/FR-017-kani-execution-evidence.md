@@ -9,6 +9,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/FR-022
     type: depends_on
+  - target: ix://agent-ix/quire-contract-codegen/FR-035
+    type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
   - target: ix://agent-ix/quire-specification/FR-196
@@ -18,7 +20,7 @@ relationships:
 
 ## Description
 
-When a caller runs an FR-015 harness, the code generator shall invoke the
+When a caller runs an FR-015, FR-022/FR-014 or FR-035 harness, the code generator shall invoke the
 installed Kani backend and retain the backend's own reported outcome as typed
 execution evidence. A caller may hand the generator several harnesses to run together
 (FR-017-AC-21 to FR-017-AC-25); the generator then forms groups, runs each
@@ -35,20 +37,23 @@ report that lacks, repeats or adds a harness, a playback for a non-member) refus
 classifies none of its members and leaves every other group's result as it is. The generator
 does not split or retry a refused group.
 
-FR-015 emits harnesses and typed
-refusals and asserts nothing about whether one ever ran; this requirement owns
-the run and everything read back from it.
+FR-015 and FR-035 emit harnesses and typed refusals and assert nothing about
+whether one ever ran; this requirement owns the run and everything read back
+from it. The FR-035 caller-ingress harness is a distinct executable kind, separate
+from both checked-package harness kinds. Its evidence keeps the caller
+Text-admission identity rather than claiming a checked node or contract role.
 
 ## Inputs
 
-- One harness of either kind this requirement generates: an FR-015 contract
+- One harness of any kind this requirement executes: an FR-015 contract
   harness (`KaniObligationHarness`, contract role in
   `ObligationKind`) or an FR-022/FR-014 exact-scalar harness
-  (`KaniScalarObligationHarness`, no contract role). Either way its identity
-  carries the option vector to invoke, the unwind bound and the solver. The two identity types are distinct
-  structs (`KaniObligationIdentity`, `ScalarObligationIdentity`); this
+  (`KaniScalarObligationHarness`, no contract role), or the distinct FR-035
+  caller Text-admission harness (no contract role, with a typed caller claim
+  identity naming profile, bounds and finite payload class). Each identity
+  carries the option vector to invoke, the unwind bound and the solver. This
   requirement reads the same handful of facts from whichever one the caller
-  hands it, through one borrowed view, rather than owning two execution
+  hands it, through one borrowed view, rather than owning separate execution
   paths.
 - For a batch, the list of such harnesses, each with the request fields below. The
   caller passes the list to the batch entry `execute_kani_obligations` in `kani/run/execute.rs`;
@@ -63,8 +68,10 @@ the run and everything read back from it.
 
 - Execution evidence naming the harness path, the exact invocation, and the
   backend-reported outcome. The obligation-kind field is the contract harness's
-  role for a contract harness, and `None` for an exact-scalar harness, which
-  has no contract role to report.
+  role for a contract harness, and `None` for an exact-scalar or caller
+  Text-admission harness, neither of which has a contract role. Caller
+  Text-admission evidence carries its typed caller-ingress identity so it
+  cannot be attributed to a checked-package scalar claim.
 - A typed refusal, and no run, when the launcher is absent or when the crate
   does not contain the harness.
 
@@ -222,12 +229,20 @@ the run and everything read back from it.
   inconclusive with the reason that applies: the process failed before exporting a report,
   a failure carried no counterexample, or the report listed no cover property
   so non-vacuity was not observed.
-- The generator shall run either harness kind through the one execution path:
+- The generator shall run the FR-035 caller harness through the same execution path as the other kinds:
   the byte-for-byte crate check, the launch and the outcome classification
   read the identity, the source artifact, the unwind bound, the solver
   and the option vector from whichever kind's identity the caller supplied,
   and none of those steps branches on which kind it is, except that the
   classification applies the zero-checks rule to every harness but a precondition harness.
+- When executing an FR-035 caller Text-admission harness, the generator shall
+  retain its typed caller-ingress identity from the selected harness in the
+  execution evidence, bind the outcome and any playback to that identity and
+  harness path, and carry `None` for contract obligation kind. It shall apply
+  the same report-based verified, cover-unsatisfied, falsified-playback and
+  inconclusive classifications and the same source-mismatch and infrastructure
+  refusals as for the other harness kinds. A refused launch or report shall
+  produce no verified caller-admission claim.
 - The generator shall retain, in the evidence of a single run, the obligation kind when the
   harness carries one, the harness path, the invoked
   launcher path, the complete argument vector, the unwind bound, the solver,
@@ -290,12 +305,15 @@ the run and everything read back from it.
 | FR-017-AC-23 | A group's report that lacks a requested harness, holds one twice or holds an unrequested one refuses the group with a typed cause and classifies no member; a member whose source is not in the crate refuses the whole batch with `HarnessNotInCrate` and launches nothing; a falsified member's playback is the first counterexample block headed for its own path and never another member's block, a member that fails two property checks (two counterexample blocks under its path, as real Kani prints) takes the first, as the same harness alone does, and neither it nor its neighbours lose their evidence, a failed property check with no block headed for its path is that member inconclusive with no counterexample, as in a single run; a block headed for a path that is not a member refuses the group. | Test (TC-043) |
 | FR-017-AC-24 | A launcher that exits on its own after leaving a real grandchild in its process group has that grandchild killed by the time the run returns, the same as on a timeout. | Test (TC-043) |
 | FR-017-AC-25 | A capture thread that panics, or whose poll or read of the stream errs, refuses the run with `kani_output_unread`; the run is never classified from empty text. | Test (TC-043) |
+| FR-017-AC-26 | A generated FR-035 caller Text-admission harness enters the same production execution path in single and compatible batch runs; its evidence carries the exact typed caller identity (profile, bounds and finite payload class) supplied with that harness and `None` for contract obligation kind. A matching successful report with a satisfied cover and successful agreement assertion classifies `Verified`; an unsatisfied cover classifies `CoverUnsatisfied` with counts; a failed agreement assertion with its own concrete playback classifies `Falsified` with that playback. A source-mismatched harness, missing launcher or malformed report retains the existing typed refusal and yields no verified caller claim; a report with no cover or a failed assertion with no playback is inconclusive under the existing rules. The outcome and playback remain bound to the caller identity and selected harness path, never to a checked node or another batch member. PLANNED (IR-494). | Test (TC-027, TC-050) |
 
 ## Dependencies
 
 - **Upstream**: [FR-015](./FR-015-bounded-kani-obligations.md),
   [FR-022](../../routed/functional/FR-022-routed-generation.md), whose `generate_routed` is the source
   of the exact-scalar harness this requirement also runs,
+  [FR-035](../../oracle/functional/FR-035-caller-text-admission.md), which supplies the distinct
+  caller Text-admission harness and identity,
   [interface-001](../../core/functional/interface-001-codegen-api.md).
 - **Downstream**: [TC-027](../matrix/TC-027-kani-execution-evidence.md),
   [TC-043](../matrix/TC-043-kani-batching-and-output-bounds.md),

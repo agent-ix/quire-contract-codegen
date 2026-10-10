@@ -56,6 +56,8 @@ the diagnostics and the evidence contract. AD-001 describes the architecture and
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
 generators, the input model, the backend adapter, Kani tractability and the generated subject ABI.
 ADR-005 records the open original guardian-gate architecture decision and its activation hold.
+ADR-006 proposes the distinct caller Text-admission route and scopes ADR-001's checked-package
+input decision to expression and contract claims.
 [tests.md](tests.md) indexes the per-subsystem matrices that map every criterion to its test case.
 
 | Area | Requirements | Test cases |
@@ -64,6 +66,7 @@ ADR-005 records the open original guardian-gate architecture decision and its ac
 | No panic on a generation or analysis path | NFR-005 | TC-042 |
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
+| Caller Text admission | [FR-035](oracle/functional/FR-035-caller-text-admission.md) proposed generated admission oracle and bounded proof; [FR-017](kani/functional/FR-017-kani-execution-evidence.md) planned caller-harness execution evidence | [TC-050](oracle/matrix/TC-050-caller-text-admission.md) planned runtime and real-Kani checks |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification |
 | Real-Kani lane gating | NFR-006 | TC-045 |

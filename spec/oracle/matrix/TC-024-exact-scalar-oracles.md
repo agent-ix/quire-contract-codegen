@@ -43,10 +43,14 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
-   `numeric.convert_rounding`, `numeric.convert`, `quantity.convert` to each
+   `numeric.convert_rounding`, `quantity.convert` to each
    target); derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
+   Keep the six `TextAdmission` fixtures in the refused corpus and check that
+   Contract IR rejects each attempted text-operand `numeric.convert` node.
+   None contributes a generated function, a derived descriptor or runtime
+   agreement evidence for caller admission.
 7. Generate and derive an integer add over two parameters typed by distinct
    `integer_range` domains `[0, 9]` and `[10, 20]` with its result typed by
    `[0, 29]`, and read the claim's checked bounds; refuse the descriptor over
@@ -92,7 +96,8 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
 
 ## Expected Results
 
-Every family is generated; every refused item is absent from the source and
+Every catalogued expression family in FR-014-AC-2 is generated; every refused
+item is absent from the source and
 carries its typed reason; a descriptor unequal to its IR bound is refused, and
 one naming a different law, a different mode, or a different catalogued
 operation, over equal bounds is generated only as `caller_declared`, while a
@@ -104,6 +109,10 @@ three executions agree on every vector; the generated crate compiles with
 derives to its declared descriptor and generates `ir_confirmed`, and every
 node with no derivable descriptor is refused with its typed
 `ClaimDerivationRefusal`.
+
+The six attempted text-admission conversion nodes remain refused by Contract
+IR. Their refusal is evidence of the checked-package boundary, not evidence
+that a caller `TextPayload` was admitted or proved.
 
 For the bounded-parameter and QSL-shaped steps:
 
