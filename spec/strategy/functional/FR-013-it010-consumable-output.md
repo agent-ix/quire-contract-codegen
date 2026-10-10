@@ -53,7 +53,7 @@ require any serialized case format or schema owned by this repository for that c
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-013-AC-1 | A consumer fixture crate whose manifest depends only on the generated artifact, `proptest`, and `quire-contract-runtime` compiles under denied warnings, draws `VersionUnchanged` cases, and reads the selected `versionNumber` StateField at `"pre"` and `"post"` through the generated typed-identity, path and observation constants. | Test (TC-022) |
+| FR-013-AC-1 | A consumer fixture crate that includes the generated Rust source and whose manifest depends only on `proptest` and `quire-contract-runtime` compiles under denied warnings, draws `VersionUnchanged` cases, and reads the selected `versionNumber` StateField at `"pre"` and `"post"` through the generated typed-identity, path and observation constants. | Test (TC-022) |
 | FR-013-AC-2 | The generated bundle contains no serialized case, census, or summary file, and the change adds no file under `schemas/`. | Test (TC-022) |
 | FR-013-AC-4 | The generated Rust header carries the selected checked clause id and authentic claim occurrence, and generating two distinct selected claims from one package produces different headers and artifact paths. | Test (TC-022) |
 | FR-013-AC-5 | interface-001 `bound_strategy_slice.consumer` records the case, census, and runner surface a downstream consumer compiles against. | Inspection |

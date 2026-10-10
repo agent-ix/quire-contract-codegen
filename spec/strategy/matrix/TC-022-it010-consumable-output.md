@@ -10,15 +10,16 @@ relationships:
 
 ## Description
 
-Verify that a downstream crate can compile and read generated bound strategies using only the
-generated Rust, `proptest`, and `quire-contract-runtime`, that the header names the source clause,
-and that no local serialized format exists.
+Verify that a downstream crate can include and compile the generated bound-strategy Rust source
+with only `proptest` and `quire-contract-runtime` as manifest dependencies. Verify that its header
+names the source clause and no local serialized format exists.
 
 ## Test Procedure
 
-1. Generate the `VersionUnchanged` strategy bundle from a fresh QSL-produced, IR-admitted V2 package with direct `self.versionNumber = pre(self.versionNumber)`. Write it into a consumer fixture crate whose
-   manifest depends only on `proptest` and `quire-contract-runtime`, and build that crate under denied
-   warnings.
+1. Generate the `VersionUnchanged` strategy bundle from a fresh QSL-produced, IR-admitted V2
+   package with direct `self.versionNumber = pre(self.versionNumber)`. Include the generated Rust
+   source in a consumer fixture crate whose manifest depends only on `proptest` and
+   `quire-contract-runtime`, and build that crate under denied warnings.
 2. In the fixture, draw cases and read each value through the generated typed V2 identity, selected-path and observation constants; read the out-of-domain array the same way.
 3. List the bundle's files, and diff `schemas/` against the base revision.
 4. Generate two distinct authentic checked claim occurrences from one package, and compare the headers and the artifact
