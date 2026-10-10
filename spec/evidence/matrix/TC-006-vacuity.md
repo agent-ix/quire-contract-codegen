@@ -81,21 +81,34 @@ result and cannot discharge coverage.
    `basis`, omit a required witness component, add an unknown witness member, place a witness on
    closed scope, or remove one from a decisive basis. The QSL reader must return a located refusal
    before CG classifies a clause. Feed the QSL FR-267 `unknown_edition` command-error envelope
-   separately after QSL-688 allocates its typed intake; it must retain stage `profile`, code
-   `unknown_edition`, `basis: unavailable`, and no witness as an error, never become a successful
-   clause run.
+   through that same strict reader; its distinct typed variant must retain stage `profile`, code
+   `unknown_edition`, `basis: unavailable`, no witness and the defined message/details as an
+   error, never become a successful clause run. Remove its required member, add a clause-run-only
+   member or witness, change its basis, violate code-specific cause/details, or change its format:
+   each must yield a located reader refusal before CG receipt binding.
 3. Give CG a genuine QSL semantic-success document with a decisive witness but no execution of
-   its generated Rust campaign or no producer-authenticated source/map/LLVM binding. Conversely,
+   its generated Rust campaign or no producer-authenticated source/map binding. Conversely,
    run a generated campaign and measure its probes while QSL's clause run reports violation,
    refusal, undefined, incomplete, unsupported or internal failure; exercise a QSpec cancellation
    form separately only when QSL provides such a producer case. Check that each
    fact stays typed and independent, none is inferred from the other, and no missing generated-run
-   evidence or adverse result can discharge coverage or grant IR FR-045 proof credit. Repeat with
-   the generated source or map independently changed after a producer receipt is available.
+   evidence or adverse result can discharge coverage or grant IR FR-045 proof credit.
+4. For each valid decoded clause-run or command-error variant, omit the CG receipt, omit each
+   required association independently, or supply only caller-declared matching paths, QSL
+   `package_id`, or self-declared producer metadata. Check a structured absent/unauthenticated
+   binding diagnostic retains the decoded QSL outcome and available input identities, with no
+   campaign qualification or measured classification. Supply an authenticated CG receipt
+   associating the exact result, producer execution, generated source and source map; check the
+   binding succeeds without upgrading the QSL outcome. Then independently replace each of those
+   four inputs while keeping the receipt, including replacements with matching path or QSL
+   `package_id`; each mismatch must be identified and refuse binding. A matching receipt never
+   upgrades a command error or adverse clause-run result. The LLVM producer identity and actual
+   probe observations remain independent CG coverage inputs.
 
-These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 must settle the
-independent generated-campaign producer binding. The existing `analyze_bound_coverage` primitive
-does not consume a QSL result and is not evidence for these steps.
+These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
+separate authenticated result/execution/source/map receipt to CG, whose trusted authority and
+verifier still need implementation. The existing `analyze_bound_coverage` primitive does not
+consume a QSL result and is not evidence for these steps.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
 completion of bound analysis, native-run binding, or a consuming obligation.
