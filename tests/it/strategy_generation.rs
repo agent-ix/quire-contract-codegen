@@ -58,7 +58,7 @@ fn embedded_source(source: &str) -> String {
     format!("//{crate_docs}\n{}\n", lines.collect::<Vec<_>>().join("\n"))
 }
 
-/// TC-004.
+/// Trace: FR-002-AC-4, FR-002-AC-6
 #[test]
 fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraints() {
     let requirement = requirement();
@@ -580,7 +580,7 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
     assert_eq!(resource_limit.path, "generated.rust");
 }
 
-/// TC-004.
+/// Trace: FR-002-AC-6
 #[test]
 fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
     let requirement = requirement();
