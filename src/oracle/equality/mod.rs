@@ -586,10 +586,10 @@ pub struct CompositeEqualityOracles {
 
 /// Generate composite equality oracles for `items` from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
-/// `UnknownRuntimeVariant` (a Contract Runtime `#[non_exhaustive]` enum
-/// yielded a variant this generator does not know); every per-item problem is
-/// a refusal in the claim map.
+/// Fails as a whole for an invalid work-limit setting, generated-source or
+/// publication bounds, claim-map serialization, or an unknown Contract Runtime
+/// `#[non_exhaustive]` variant. Item-specific problems are refusals in the
+/// claim map.
 pub fn generate_composite_equality_oracles(
     package: &CheckedPackageV2,
     items: &[CompositeEqualityItem],
@@ -630,7 +630,7 @@ pub fn generate_composite_equality_oracles(
     let requested: Vec<CheckedNodeId> = by_key.values().map(|item| item.node_id.clone()).collect();
     let lowering = package.lower(&requested, &lowering_profile());
 
-    let mut source = SourceBuilder::default();
+    let mut source = SourceBuilder::new(limits.source_bytes)?;
     let mut claims = Vec::with_capacity(by_key.len());
     // Generated claims as (claim position, key, item, checked item), rendered once every
     // generated oracle is named.
@@ -1457,6 +1457,21 @@ struct RenderedItem {
     right_target: Option<String>,
 }
 
+impl RenderedItem {
+    fn source_bytes(&self) -> usize {
+        self.composites
+            .iter()
+            .map(String::len)
+            .chain([
+                self.left_source.len(),
+                self.left_target.as_ref().map_or(0, String::len),
+                self.right_source.len(),
+                self.right_target.as_ref().map_or(0, String::len),
+            ])
+            .fold(0usize, usize::saturating_add)
+    }
+}
+
 fn render_item(generated: &CheckedItem<'_>) -> Result<RenderedItem, RenderError> {
     // Every reachable record/tuple declaration, in the same `NodeKey`
     // order `TypeEnvironment::new` admitted at generation time.
@@ -1491,9 +1506,14 @@ fn render_and_emit<T>(
     render: impl Fn(&T) -> Result<RenderedItem, RenderError>,
 ) -> Result<(), OracleGenerationError> {
     let mut rendered = Vec::with_capacity(pending.len());
+    let mut rendered_bytes = 0usize;
     for (claim, key, item, checked) in pending {
         let result = render(&checked);
         if let Some(rendered_item) = settle_render(&mut claims[claim], result)? {
+            rendered_bytes = rendered_bytes.saturating_add(rendered_item.source_bytes());
+            if rendered_bytes > source.limit {
+                return Err(source_too_large(source.limit));
+            }
             rendered.push((claim, key, item, rendered_item));
         }
     }
@@ -1504,7 +1524,7 @@ fn render_and_emit<T>(
             .collect(),
     );
     for ((claim, _, item, rendered_item), symbol) in rendered.into_iter().zip(names) {
-        source.item(&symbol, item, &rendered_item);
+        source.item(&symbol, item, &rendered_item)?;
         if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
             claim.environment_symbol = format!("environment_{symbol}");
             claim.oracle_symbol = format!("oracle_{symbol}");
@@ -1538,11 +1558,19 @@ fn settle_render(
     }
 }
 
-#[derive(Default)]
 struct SourceBuilder {
     functions: String,
     modules: Vec<(String, String)>,
     module_declarations: String,
+    charged_bytes: usize,
+    limit: usize,
+}
+
+#[cfg(test)]
+impl Default for SourceBuilder {
+    fn default() -> Self {
+        Self::new(MAX_GENERATED_SOURCE_BYTES).expect("default source limit admits header")
+    }
 }
 
 // Debug Rust codegen can retain temporaries from sequential statements in a
@@ -1551,7 +1579,40 @@ struct SourceBuilder {
 const MAX_DECLARATIONS_PER_FUNCTION: usize = 128;
 
 impl SourceBuilder {
-    fn item(&mut self, symbol: &str, item: &CompositeEqualityItem, rendered: &RenderedItem) {
+    fn new(limit: usize) -> Result<Self, OracleGenerationError> {
+        if SOURCE_HEADER.len() > limit {
+            return Err(source_too_large(limit));
+        }
+        Ok(Self {
+            functions: String::new(),
+            modules: Vec::new(),
+            module_declarations: String::new(),
+            charged_bytes: SOURCE_HEADER.len(),
+            limit,
+        })
+    }
+
+    fn charge(&mut self, bytes: usize) -> Result<(), OracleGenerationError> {
+        let next = self.charged_bytes.saturating_add(bytes);
+        if next > self.limit {
+            return Err(source_too_large(self.limit));
+        }
+        self.charged_bytes = next;
+        Ok(())
+    }
+
+    fn append_function(&mut self, text: String) -> Result<(), OracleGenerationError> {
+        self.charge(text.len())?;
+        self.functions.push_str(&text);
+        Ok(())
+    }
+
+    fn item(
+        &mut self,
+        symbol: &str,
+        item: &CompositeEqualityItem,
+        rendered: &RenderedItem,
+    ) -> Result<(), OracleGenerationError> {
         let RenderedItem {
             composites,
             left_source,
@@ -1573,18 +1634,18 @@ impl SourceBuilder {
             && composite_bytes <= MAX_ARTIFACT_BYTES / 2
         {
             if composites.is_empty() {
-                self.functions.push_str(&format!(
+                self.append_function(format!(
                     "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    Ok(Vec::new())\n}}\n"
-                ));
+                ))?;
             } else {
                 let declarations = composites
                     .iter()
                     .map(|value| format!("    declarations.push({value});\n"))
                     .collect::<String>();
-                self.functions.push_str(&format!(
+                self.append_function(format!(
                     "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::with_capacity({});\n{declarations}    Ok(declarations)\n}}\n",
                     composites.len()
-                ));
+                ))?;
             }
         } else {
             let mut chunk_calls = String::new();
@@ -1597,7 +1658,7 @@ impl SourceBuilder {
                         || chunk.len().saturating_add(declaration.len() + 26)
                             > MAX_ARTIFACT_BYTES / 2)
                 {
-                    self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls);
+                    self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls)?;
                     chunk_index += 1;
                     chunk.clear();
                     chunk_count = 0;
@@ -1608,21 +1669,21 @@ impl SourceBuilder {
                 chunk_count += 1;
             }
             if !chunk.is_empty() {
-                self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls);
+                self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls)?;
             }
-            self.functions.push_str(&format!(
+            self.append_function(format!(
                 "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
-            ));
+            ))?;
         }
 
-        self.functions.push_str(&format!(
+        self.append_function(format!(
             "\nfn left_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({left_source})\n}}\n\
              fn left_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({left_target})\n}}\n\
              fn right_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({right_source})\n}}\n\
              fn right_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({right_target})\n}}\n"
-        ));
+        ))?;
 
-        self.functions.push_str(&format!(
+        self.append_function(format!(
             "\n/// `{}`. Its operation identity is caller-declared: CheckedPackage V2 carries\n\
              /// an operator class, not this operator law.\n\
              pub fn environment_{symbol}() -> Result<rt::TypeEnvironment, EnvironmentError> {{\n\
@@ -1632,9 +1693,8 @@ impl SourceBuilder {
              \x20   rt::TypeEnvironment::new(composites, core::iter::empty::<rt::ObjectTypeDeclaration>())\n\
              \x20       .map_err(EnvironmentError::Declaration)\n}}\n",
             item.operator.identity()
-        ));
-
-        self.functions.push_str(&format!(
+        ))?;
+        self.append_function(format!(
             "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut rt::Meter,\n) -> rt::Outcome<bool> {{\n\
              \x20   let left_source = match left_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
@@ -1670,7 +1730,8 @@ impl SourceBuilder {
              \x20   checked.evaluate(left, right, meter)\n}}\n",
             item.operator.identity(),
             item.operator.path()
-        ));
+        ))?;
+        Ok(())
     }
 
     fn add_composite_module(
@@ -1679,16 +1740,17 @@ impl SourceBuilder {
         index: usize,
         declarations: &str,
         calls: &mut String,
-    ) {
+    ) -> Result<(), OracleGenerationError> {
         let name = format!("composites_{symbol}_{index}");
-        self.module_declarations.push_str(&format!("mod {name};\n"));
-        self.modules.push((
-            format!("src/{name}.rs"),
-            format!("use super::*;\npub(super) fn declarations() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n"),
-        ));
+        let module_declaration = format!("mod {name};\n");
+        let module_source = format!("use super::*;\npub(super) fn declarations() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n");
+        self.charge(module_declaration.len().saturating_add(module_source.len()))?;
+        self.module_declarations.push_str(&module_declaration);
+        self.modules.push((format!("src/{name}.rs"), module_source));
         calls.push_str(&format!(
             "    declarations.extend({name}::declarations()?);\n"
         ));
+        Ok(())
     }
 
     fn finish(&self, limit: usize) -> Result<Vec<Artifact>, OracleGenerationError> {
@@ -1722,11 +1784,7 @@ impl SourceBuilder {
         for (path, contents) in &self.modules {
             total = total.saturating_add(contents.len());
             if total > limit {
-                return Err(OracleGenerationError::SourceTooLarge {
-                    bytes: total,
-                    limit,
-                    setting: "cg.equality.source_bytes",
-                });
+                return Err(source_too_large(limit));
             }
             artifacts.push(artifact(path, contents.clone()));
         }
@@ -1741,14 +1799,18 @@ fn append_source(
 ) -> Result<(), OracleGenerationError> {
     let needed = source.len().saturating_add(text.len());
     if needed > limit {
-        return Err(OracleGenerationError::SourceTooLarge {
-            bytes: needed,
-            limit,
-            setting: "cg.equality.source_bytes",
-        });
+        return Err(source_too_large(limit));
     }
     source.push_str(text);
     Ok(())
+}
+
+fn source_too_large(limit: usize) -> OracleGenerationError {
+    OracleGenerationError::SourceTooLarge {
+        bytes: limit + 1,
+        limit,
+        setting: "cg.equality.source_bytes",
+    }
 }
 
 /// Render one admitted `CompositeDeclaration` as a Rust expression of type
@@ -2238,7 +2300,7 @@ mod tests {
             nodes.push(expression);
         }
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
-        let mut source = SourceBuilder::default();
+        let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");
         let outcomes = records
             .iter()
             .zip(&items)
@@ -2253,7 +2315,9 @@ mod tests {
                 ) {
                     Ok(checked) => {
                         let rendered = render_item(&checked).expect("healthy item renders");
-                        source.item(&format!("test{index}"), item, &rendered);
+                        source
+                            .item(&format!("test{index}"), item, &rendered)
+                            .expect("synthetic item source fits");
                         Ok(())
                     }
                     Err(ItemCheckError::Refusal(refusal)) => Err(refusal),
@@ -2547,6 +2611,59 @@ mod tests {
             resolve_type(&graph, &BTreeMap::new(), &mut sibling, &node_id('f')),
             Ok(ValueType::Integer)
         );
+
+        let cyclic = EqualityOperandDescriptor::typed(node_id('b'));
+        let healthy = EqualityOperandDescriptor::typed(node_id('f'));
+        let requests = [(cyclic.clone(), cyclic), (healthy.clone(), healthy)];
+        let (cycle_items, cycle_source) = check_synthetic_items_with_limits(
+            nodes.clone(),
+            &requests,
+            CompositeEqualityLimits {
+                type_resolution_work_units: 3,
+                ..CompositeEqualityLimits::default()
+            },
+        );
+        assert_eq!(
+            cycle_items,
+            vec![
+                Err(CompositeEqualityRefusal::TypeResolutionCycle {
+                    repeated_type_node_id: node_id('b'),
+                }),
+                Ok(()),
+            ]
+        );
+        let cycle_lib = test_source(cycle_source);
+        assert!(!cycle_lib.contains("oracle_test0"));
+        assert!(cycle_lib.contains("oracle_test1"));
+
+        let mut denied_nodes = nodes;
+        let mut extra = denied_nodes[1].clone();
+        extra.node_id = node_id('5');
+        extra.semantic_type = node_id('5');
+        extra.body["members"][0]["target"] = json!(node_id('b'));
+        denied_nodes[1].body["members"][0]["target"] = json!(node_id('5'));
+        denied_nodes.push(extra);
+        let (denied_items, denied_source) = check_synthetic_items_with_limits(
+            denied_nodes,
+            &requests,
+            CompositeEqualityLimits {
+                type_resolution_work_units: 2,
+                ..CompositeEqualityLimits::default()
+            },
+        );
+        assert_eq!(
+            denied_items,
+            vec![
+                Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                    limit: 2,
+                    consumed: 3,
+                }),
+                Ok(()),
+            ]
+        );
+        let denied_lib = test_source(denied_source);
+        assert!(!denied_lib.contains("oracle_test0"));
+        assert!(denied_lib.contains("oracle_test1"));
     }
 
     /// Trace: FR-018-AC-31, TC-029.
@@ -2569,6 +2686,33 @@ mod tests {
                 consumed: u64::MAX,
             })
         );
+    }
+
+    /// Trace: FR-018-AC-30, TC-029.
+    #[test]
+    fn source_limit_refuses_before_a_function_or_module_fragment_is_appended() {
+        let limit = SOURCE_HEADER.len();
+        let mut source = SourceBuilder::new(limit).expect("header fits exactly");
+        assert_eq!(
+            source.append_function("x".to_owned()),
+            Err(OracleGenerationError::SourceTooLarge {
+                bytes: limit + 1,
+                limit,
+                setting: "cg.equality.source_bytes",
+            })
+        );
+        assert!(source.functions.is_empty());
+        assert_eq!(source.charged_bytes, limit);
+        assert_eq!(
+            source.add_composite_module("test", 0, "x", &mut String::new()),
+            Err(OracleGenerationError::SourceTooLarge {
+                bytes: limit + 1,
+                limit,
+                setting: "cg.equality.source_bytes",
+            })
+        );
+        assert!(source.modules.is_empty());
+        assert!(source.module_declarations.is_empty());
     }
 
     /// Trace: FR-018-AC-28, FR-018-AC-30, TC-029.

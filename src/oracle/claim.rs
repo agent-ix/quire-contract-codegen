@@ -72,8 +72,7 @@ pub struct ClaimMap<C> {
 /// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
-    /// The generated source exceeds
-    /// [`MAX_GENERATED_SOURCE_BYTES`](crate::core::artifact::MAX_GENERATED_SOURCE_BYTES).
+    /// Generated source exceeds the effective caller-selected byte ceiling.
     SourceTooLarge {
         /// First source size that exceeds the selected ceiling.
         bytes: usize,
