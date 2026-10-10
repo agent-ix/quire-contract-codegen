@@ -24,9 +24,11 @@ IR-703's public accessor and a real QSL ConfigVersion V2 producer fixture are av
    hand-built topology fixtures synthetic; they do not establish QSL producer behavior.
 2. Through public IR admission, construct an invariant with a direct typed `amount < 7` comparison,
    `amount` bounded 0..=1000, and its reversed-order counterpart. Inspect authored operand order,
-   operator, provenance, observation and literal position.
-3. Put a valid requested claim beside an oracle-refused sibling in one package. Request each claim
-   separately. Also exercise a whole-generation oracle error, arithmetic and Boolean operands,
+   operator, provenance, observation and literal position. Assert QSL lowers ConfigVersion's `=`
+   to `quire.op.integer.eq` on the admitted package.
+3. Put a valid requested claim beside a comparison-oracle-refused sibling in one package. Request
+   each claim separately. Exercise a selected-claim oracle-construction failure, each of the six
+   operators through the planned V2 comparison-oracle path, arithmetic and Boolean operands,
    an alias, a literal-only comparison, same-read and mixed-observation read pairs.
 4. Exercise unknown clause, absent claim, unsupported clause kind and malformed comparison, alone
    and in combinations that establish FR-008's first-defect order. Compare each IR accessor cause,
@@ -42,7 +44,9 @@ IR-703's public accessor and a real QSL ConfigVersion V2 producer fixture are av
   each 0..=1000, with shared project id and selected claim; its let-bound alias refuses.
 - The invariant admits `Less`, `amount` and literal 7; reversing operands preserves authored order.
 - The good selected claim succeeds beside a refused sibling. The refused selected claim and a
-  whole-generation failure emit no artifact. Other ineligible shapes refuse at their own locus.
+  selected-claim oracle-construction failure emit no artifact. All six operators produce
+  executable oracles whose results agree with relation tags. Other ineligible shapes refuse at
+  their own locus.
 - Refusals preserve typed first cause and contextual structural location; no child id is presented
   as a unique source occurrence. No refusal emits part of a bundle.
 - Out-of-i64 endpoints and literals never narrow, wrap or clamp. Unequal read ranges refuse at

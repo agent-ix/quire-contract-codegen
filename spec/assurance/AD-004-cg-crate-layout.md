@@ -1329,8 +1329,9 @@ The strategy replacement consumes IR FR-038-AC-202 through AC-209's public claus
 comparison accessor (IR-703, planned/unrun) over `CheckedPackageV2`, a checked clause id and an
 authentic claim occurrence. Contract IR owns operand provenance, observation, identity and exact
 i128 bounds. `strategy/bound` owns CG's narrower equal-domain i64 admission, constructive
-population and census. `strategy/harness` owns campaign execution; `oracle` supplies the selected
-V2 claim's oracle or typed refusal. The selected claim is the admission unit even when a sibling
+population and census. `strategy/harness` owns campaign execution; `oracle` must add the
+planned six-operator V2 comparison oracle for the selected claim or its typed refusal. The existing exact scalar generator
+does not cover integer eq/ne. The selected claim is the admission unit even when a sibling
 claim is refused; generated output remains atomic for the selected request. A real QSL-produced,
 IR-admitted ConfigVersion direct Post/Pre comparison is required before claiming this code path.
 

@@ -93,10 +93,11 @@ FR-008's planned strategy request selects a checked clause id and authentic clai
 `CheckedPackageV2`. Contract IR owns the clause-context comparison accessor and decides operator,
 operand provenance, observation, identity and exact i128 bounds (IR FR-038-AC-202 through AC-209,
 planned/unrun under IR-703). CG consumes that typed result, admits its narrower equal-domain i64
-relation, then constructs FR-009 through FR-013 populations, census, runner and consumer fields. The
-V2 scalar oracle claim map can refuse an item independently; CG applies only the selected claim's
-refusal to a strategy request. Any refusal leaves its selected request with no source bundle. CG
-uses neither a private V2 body decoder nor a second schema.
+relation, then constructs FR-009 through FR-013 populations, census, runner and consumer fields.
+CG must add a V2 comparison-oracle path for all six operators over the accessor's ordered operands. Its current exact scalar generator covers integer ordering but has no integer eq/ne
+descriptor, so it cannot serve as the complete strategy comparison oracle. CG applies a typed
+comparison-oracle refusal only to the selected claim; a sibling refusal does not poison it. Any
+refusal leaves its selected request with no source bundle. CG uses neither a private V2 body decoder nor a second schema.
 
 The active V1 strategy entry currently consumes `BoundPackage` and `ClauseRef`. Its replacement
 change deletes that public V1 entry as it introduces the V2 selected-claim entry; it does not keep
