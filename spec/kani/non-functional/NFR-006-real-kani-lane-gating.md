@@ -34,30 +34,32 @@ relationships:
   `/tmp/agent-e-heavy-build.lock`, and shall run the lane's tests with `--test-threads=1`.
 - The `make kani-gate` target shall exit non-zero unless the lane's tests all passed, the number that
   ran equals the number the lane's filters list for `--ignored`, and that number is greater than zero.
-- The `make kani-gate` target shall print one evidence line of the form `kani-gate:
-  result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>
-  head=<commit>`, with `kani` the version the launcher reports and `head` the commit the lane ran on.
+- The `make kani-gate` target shall print one run-result line of the form `kani-gate:
+  result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
+  with `kani` the version the launcher reports. The line describes the run; it is not a
+  transferable approval or a substitute for running the gate on the candidate under review.
 - The `make kani-gate` target shall read the tree state and the head commit before the build and read
   them again after the run, and shall print `result=failed` and exit non-zero if either read differs.
 - If the working tree is dirty, then `make kani-gate` shall print `tree=dirty` and exit non-zero.
 - If the `cargo-kani` launcher is absent, then `make kani-gate` shall run no test, print `kani-gate:
   not run: launcher absent` and exit non-zero.
-- When a change touches a path in the Kani-touching set, the change's author shall run `make
-  kani-gate` on the change's final head and put its evidence line in the pull request body.
-- If a pull request touches a path in the Kani-touching set, then the merger shall not merge it until
-  its body carries an evidence line with `result=passed`, `tree=clean` and a `head` equal to the pull
-  request's head commit.
-- If a pull request touches a path in the Kani-touching set, `origin/main` holds a commit that touches
-  the set and the pull request's head does not contain it, then the merger shall not merge the pull request until the head contains it and
-  `make kani-gate` has passed on the new head.
-- If a pull request touches a path in the Kani-touching set and the lane did not run, then the pull
-  request body shall carry `kani-gate: not run: <reason>`, and the merge rule above still holds.
-- If a pull request body carries `kani-gate: not run: <reason>`, then the body shall not describe the
-  change as verified by the real-Kani lane.
-- When `make kani-scope` prints `not required`, the pull request body shall carry the line `kani-gate:
-  not required`.
-- When a version tag is about to be pushed, the person pushing it shall run `make kani-gate` on the
-  tagged commit and record the evidence line in the release ticket.
+- When a change touches a path in the Kani-touching set, the author shall run the actual full
+  `make kani-gate` on a clean, stable candidate immediately before opening its pull request.
+- When merging a pull request that touches the Kani-touching set, the merger shall verify that
+  the candidate checked out for review contains the pull request's current changes.
+- When the current Kani-touching candidate is ready to merge, the merger shall run the actual
+  full `make kani-gate` on that clean, stable candidate. A copied pull-request status line does
+  not satisfy this obligation.
+- When preparing a Kani-touching merge, the merger shall compare the paths changed on
+  `origin/main` since the candidate's merge base against the Kani-touching set. If `origin/main` has changed that set
+  and the candidate does not contain those changes, the merger shall update the candidate from
+  current `origin/main` and rerun the full gate on the updated clean candidate.
+- If a required lane cannot run or fails, the pull request shall remain unmerged. It cannot be
+  described as verified by the real-Kani lane or waived by a written reason.
+- When `make kani-scope` prints `not required`, no real-Kani run is required for that change.
+- When preparing to push a version tag, the person pushing it shall run the actual full
+  `make kani-gate` on the clean, stable candidate to be tagged. A copied release-ticket line is
+  insufficient.
 - The `make ci` target shall not depend on `kani-gate` or `kani`.
 - The Kani-touching set shall contain the target of every `include!`, `include_str!`,
   `include_bytes!` and `#[path]` named in a `tests/it` file that holds a lane test, and in each file
@@ -138,25 +140,26 @@ Kani or toolchain upgrade, and for a merge that combined two passing heads.
 files included, and runs twice per change; the lane's cost would dominate it, contend for the lock
 and push agents to skip `make ci`.
 
-**What the evidence line is.** The line is text pasted into a pull request. It can be copied from
-another run or typed by hand, and nothing in the repository checks it: enforcement is the merger's
-inspection, and a mechanical check on a hosting system is an open decision. The `head` match narrows
-the hole, since a line from another commit does not match; it says nothing about the merge result when
-another Kani-touching change lands in between, which is why the merger repeats the gate once `origin/main`
-has moved over the set, and the pre-tag run covers the rest. The line names the commit it ran on, and
-`ran` against `expected` makes a filter that matches nothing, which libtest reports as success, read as
-`failed`.
+**What the run result is.** The gate prints its own counts, version and clean-tree status so the
+operator can inspect the completed process and its exit status. A copied line in a pull request or
+release ticket is not evidence that the current candidate was tested. The author runs the lane before
+opening a Kani-touching pull request; the merger runs it again on the current candidate and checks
+whether source reachable by the lane changed on `origin/main` since the candidate's merge base. If it
+did, those changes must be incorporated before the merge run. Internal before/after commit reads
+detect a candidate that moves during a run; no commit identifier must be published or compared by hand.
+The `ran`/`expected` check makes a filter that matches nothing, which libtest reports as success,
+read as `failed`.
 
-**One rule, no merge on a skip.** A pull request in the set merges only with a passing line at its head.
-`not run: <reason>` does not make it mergeable: it states what was not verified, so a pull request that
-waits for a host with Kani says why. Whether the owner may ever waive the lane for one change, and
-who may record that, is an owner decision (Open decisions); until the owner rules, the answer is no.
+**One rule, no merge on a skip.** A pull request in the set merges only after the actual full gate
+passes on the clean current candidate. A launcher-absent or skipped run cannot make it mergeable.
+Whether the owner may ever waive the lane for one change, and who may record that, is an owner
+decision (Open decisions); until the owner rules, the answer is no.
 
 ## Measurement and Evaluation
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Merged pull requests touching the Kani-touching set with no `result=passed` line at their head | 0 | 0 | inspection |
+| Merged pull requests touching the Kani-touching set without an actual full gate passing on the current candidate immediately before merge | 0 | 0 | inspection of the run and candidate |
 | Lane runs reported `passed` with `ran` different from `expected` or `ran` of 0 | 0 | 0 | contract-testing |
 | `#[ignore = "kani lane: ..."]` tests the lane does not select | 0 | 0 | contract-testing |
 
@@ -170,17 +173,17 @@ who may record that, is an owner decision (Open decisions); until the owner rule
 | NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
 | NFR-006-AC-5 | `make kani-gate` starts the lane's `cargo test` once with `--test-threads=1`, holds the lock named by `KANI_LOCK` while it runs, and does not start it while another process holds that lock. | Test (TC-045) |
 | NFR-006-AC-6 | `make kani-gate` exits non-zero and prints `result=failed` when the lane's filters list zero tests, when fewer tests run than are listed, and when any test fails; it exits zero and prints `result=passed` only when every listed test ran and passed and the count is above zero. | Test (TC-045) |
-| NFR-006-AC-7 | The evidence line of a passing run has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` and `head` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, `tree=clean` and `head` the commit the lane ran on; a run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
+| NFR-006-AC-7 | The passing run-result line has the fields `result`, `ran`, `expected`, `elapsed`, `kani`, `tree` in that order, with `ran` equal to `expected`, a non-empty `kani` equal to the version the launcher reports, and `tree=clean`; it has no commit token. A run whose launcher reports no version prints `result=failed`. | Test (TC-045) |
 | NFR-006-AC-8 | When the tree state or the head commit read after the run differs from the one read before the build, `make kani-gate` prints `result=failed` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-9 | With a dirty working tree `make kani-gate` prints `tree=dirty`, never `result=passed`, and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-10 | With no `cargo-kani` launcher `make kani-gate` starts no test, prints `kani-gate: not run: launcher absent` and exits non-zero. | Test (TC-045) |
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
 | NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
-| NFR-006-AC-13 | The body of a merged pull request that touched the Kani-touching set carries a `kani-gate` line with `result=passed`, `tree=clean` and a `head` equal to the pull request's last commit. | Inspection |
-| NFR-006-AC-14 | The head of a merged pull request that touched the Kani-touching set contains every commit of `origin/main` that touched the set at the time of the merge. | Inspection |
-| NFR-006-AC-15 | The body of a pull request that touched the Kani-touching set and ran no lane carries `kani-gate: not run: <reason>`, does not state that the real-Kani lane verified the change, and the pull request is unmerged. | Inspection |
-| NFR-006-AC-16 | The body of a pull request for which `make kani-scope` printed `not required` carries `kani-gate: not required`. | Inspection |
-| NFR-006-AC-17 | The release ticket of a pushed version tag carries a `kani-gate` line with `result=passed` and a `head` equal to the tagged commit. | Inspection |
+| NFR-006-AC-13 | For a Kani-touching pull request, the author runs the full gate on its clean, stable candidate before opening it, and the merger runs it again on the clean, stable current candidate before merge; both actual processes exit successfully with all expected tests run. A copied body line alone cannot satisfy either run. | Inspection |
+| NFR-006-AC-14 | Before a Kani-touching merge, the merger compares paths changed on `origin/main` since the candidate's merge base with the Kani-touching set; when there is overlap absent from the candidate, the candidate is updated from current main and the full gate passes again on the updated clean candidate before merge. | Inspection |
+| NFR-006-AC-15 | A Kani-touching pull request whose required lane did not run or failed remains unmerged and does not claim real-Kani verification; a written explanation does not waive the gate. | Inspection |
+| NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani run under this requirement. | Inspection |
+| NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean, stable candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
 
 ## Open decisions
@@ -200,8 +203,7 @@ who may record that, is an owner decision (Open decisions); until the owner rule
 
 TC-045 drives the two targets with stand-in launcher and `cargo` executables, a fixture list of changed
 paths, a temporary lock path and a source walk of the `#[ignore]`d tests. The pull-request and
-release-ticket criteria are inspection of the pull request body, the pull request's commits and the
-release ticket.
+release criteria inspect the actual gate processes, candidate and main-path freshness.
 
 ## Dependencies
 
