@@ -55,6 +55,7 @@ FR-031 by gating a change that can alter what real Kani proves on the real-Kani 
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
 generators, the input model, the backend adapter, Kani tractability and the generated subject ABI.
+ADR-005 records the open original guardian-gate architecture decision and its activation hold.
 [tests.md](tests.md) indexes the per-subsystem matrices that map every criterion to its test case.
 
 | Area | Requirements | Test cases |
@@ -92,7 +93,7 @@ are in `assurance/`, decision records in `decisions/`, and every SpecReview in t
 | Core | `spec/core/` | The stakeholder need, the library and CLI interface and publication conformance, and the reproducibility, atomic-publication and provenance-boundary properties every subsystem shares | `lib` (crate root), `publication`, `oracle` (the shared lowering core, imported by strategy, kani and oracle modules) | AD-001, quire-contract-ir:ADR-0056 | Contract codegen lane |
 | Strategy | `spec/strategy/` | Tri-state proptest harnesses, bound numeric and state strategies, constructive populations, boundary campaigns and shrinking, and the strategy output consumable by Contract Runtime | `harness`, `strategy`, `bound`, `bound_strategy` | AD-001, ADR-001 | Contract codegen lane |
 | Oracle | `spec/oracle/` | Exact complete-V1 scalar, composite-equality and function-application oracle generation and its agreement with the runtime | `exact_scalar`, `composite_equality`, `exact_function`, `generation` | AD-001, ADR-001 | Contract codegen lane |
-| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `src/kani/` (generation, finite-input lowerers, corpus, run, output and terminal maps) | AD-001, AD-003, AD-004, ADR-001 to ADR-004 | Contract codegen lane |
+| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `src/kani/` (generation, finite-input lowerers, corpus, run, output and terminal maps) | AD-001, AD-003, AD-004, ADR-001 to ADR-005 | Contract codegen lane |
 | Routed | `spec/routed/` | Capability settlement at one negotiation point, routed generation per backend kind, and the backend adapter contract | `capability`, `routed_generation` | AD-001, ADR-002 | Contract codegen lane |
 | Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `replay::witness`, `replay::function`, `replay::frame`, `kani::output::playback` | AD-001, AD-002, AD-003, ADR-001 | Contract codegen lane |
 | Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence | `vacuity`, `bound_coverage` | AD-001, AD-003 | Contract codegen lane |
