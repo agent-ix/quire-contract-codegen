@@ -11,6 +11,12 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-runtime/FR-273
     type: references
+  - target: ix://agent-ix/quire-contract-runtime/FR-275
+    type: references
+  - target: ix://agent-ix/quire-specification/FR-460
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-030
+    type: references
   - target: ix://agent-ix/quire-contract-ir/FR-036
     type: references
   - target: ix://agent-ix/quire-contract-ir/FR-038
@@ -115,13 +121,16 @@ bodies to address that way at all.
 - An admitted `CheckedPackageV2` read through Contract IR's strict reader.
 - A request of items, each naming: (a) the package's declared functions, each a checked node whose
   body is a `binary` scalar expression (FR-014's forms), a `binary` equality expression (FR-018's
-  forms), or a nested `call` expression (this requirement's own form, recursively bounded exactly
-  as `CheckingLimits::depth` bounds it at runtime), its declared parameter types in order and its
+  forms), or a nested `call` expression (this requirement's own form), its
+  declared parameter types in order and its
   declared result type; and (b) one checked `call` expression node naming one declared function and
   its argument operands, each either a literal or a reference to an admitted value, in the same
   literal/reference shape FR-014 §Inputs already defines.
 - The declaration closure reachable from every function's parameter and result types, in the same
   `composite_type`/`scalar_type`/`bounded_domain` encoding FR-018 §Inputs already defines.
+- A caller-selected per-function generation work limit covering body analysis and
+  source emission. Its published default is 65,536 units; the caller may raise
+  it to fit a larger admitted body.
 - Contract Runtime with the `exact` feature, as this repository's `Cargo.toml` names it.
 
 As in FR-014 and FR-018, the V2 transport carries each function declaration's own operator and
@@ -159,6 +168,26 @@ come from the request, not from this generator's own inference.
   index }` its position in the assembled `functions: Vec<FunctionDeclaration>` gives it, ordered by
   the function's declaring node id, in node-id order, the same total order FR-014
   already uses.
+- For each lowered function body, the generator shall analyze expression nodes
+  and child edges on an explicit heap worklist, then emit a flat static
+  single-assignment sequence in dependency order. Each emitted temporary shall
+  name a previously emitted operand or a literal; a nested `call` shall use the
+  completed argument temporaries in source operand order. The emitter shall not
+  nest generated Rust expression trees or closures in proportion to source
+  nesting depth. Neither analysis, location-path construction, emission nor
+  release of CG-owned work frames shall use native call-stack frames in
+  proportion to body size or depth.
+- The generator shall charge one work unit before entering each body node, one
+  before following each child edge, and one before emitting each assignment or
+  call statement. The per-function counter shall span analysis and emission,
+  reset for the next function, and govern the worklist and temporary storage at
+  at most constant growth per charged unit. On the first denied charge, the
+  generator shall refuse all items bound to that function as
+  `ExactFunctionRefusal::GenerationWorkExhausted { limit, consumed }`, where
+  `limit` is the effective caller setting and `consumed` is the first denied
+  unit, and shall publish no partial function, symbol or location-map entry.
+  A failed Contract IR lowering record shall retain the earlier lowering
+  refusal and no generation work shall run for that record.
 - If lowering any declared function's body fails — an unlowerable node, a form none of the three
   classifiers admits, or a nested `call` whose own callee is not among the request's declared
   functions — then the generator shall refuse every item bound to that function with a typed
@@ -181,9 +210,18 @@ come from the request, not from this generator's own inference.
   refusal, whose `limit` and `consumed` are the body lowering's. When both lowerings fail for bytes
   the two refusals are equal in `limit`, and `consumed` is the call-node lowering's.
 - When every declared function's body lowers, the generator shall assemble a `PackageDeclarations`
-  and admit it through `PackageDeclarations::check(CheckMode::Linked, limits)` with
-  `limits.depth() = MAX_CALL_DEPTH`. If `check` refuses, the generator shall refuse every item bound
-  to that package with the reported `CheckRefusal`s and emit no function for any of them.
+  and admit it through `PackageDeclarations::check(CheckMode::Linked, limits)`.
+  The generator shall set no fixed call-depth budget. If `check` refuses, the
+  generator shall refuse every item bound to that package with the reported
+  `CheckRefusal`s and emit no function for any of them.
+- The generated sequence shall use explicit control-flow branches where needed
+  to preserve the source tree's left-to-right evaluation order and the owning
+  operation's charge-before-work order. A
+  denied runtime charge shall return `Incomplete` before the operation or its
+  later sibling executes; the generator shall not precompute a later operand
+  across that charge point. This requirement governs emitted order and source
+  shape; QSL-owned evaluation and the pending Contract Runtime FR-275 deletion
+  govern execution of a function call after emission.
 - When a package admits, the generator shall emit, for each requested `call` item naming one of its
   functions, an oracle function that validates no input itself and instead calls
   `CheckedPackage::call` with the item's function name and the caller's arguments, `ObjectEnvironment`
@@ -288,7 +326,7 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-4 | An `InputRefusal::Arity`, `::WrongValueKind`, `::DanglingReference` or `::UnknownFunction` supplied at call time is returned by the generated oracle unchanged, before any charge, and no `Meter` observes a refused call. | Test (TC-031) |
 | FR-021-AC-5 | The declared arity is decided before any per-argument check, each argument's value kind and carried references are validated in parameter order, and all of that precedes the `function.call` charge, which itself precedes the function's body, on every generated oracle call — matching FR-273-AC-2. | Test (TC-031) |
 | FR-021-AC-6 | A function whose declared operator requirements name a capability no registered backend can discharge is marked `unsupported` at generation time, naming the capability, before any item naming it is applied; no oracle is emitted for such an item, and the disposition is never an `Outcome` variant, never an `InputRefusal`, and takes no `Meter`. | Test (TC-031) |
-| FR-021-AC-7 | Re-entry reached from a generated oracle is bounded by one `CheckingLimits::depth` (`MAX_CALL_DEPTH`) budget shared across all three of `CheckedPackage::call`, `CheckedPackage::evaluate` and `Frame::call`, refusing `Refusal::CheckedInvariant` before any charge once exceeded, so a generated body that re-enters by any of the three paths is bounded by the same per-`CheckedPackage` budget as its entry call — matching FR-273-AC-7. | Test (TC-031) |
+| FR-021-AC-7 | The generator sets no `MAX_CALL_DEPTH` or other fixed depth ceiling when analyzing, emitting or admitting a function body. A 100,000-node nested-call chain under a caller-selected generation work limit sufficient for all charged units produces flat assignments on a 512 KiB stack; lowering or generation reports only its respective work limit at the first denied unit, never a depth refusal. The generated call's execution is verified against the QSL-owned application authority when its iterative evaluator is available. PLANNED (IR-511; execution dependency QSL-358/RT FR-275). | Test (TC-031) |
 | FR-021-AC-8 | Only a package assembled and admitted under `CheckMode::Linked` is ever applicable; no generated oracle in the corpus applies a package this generator checked under `CheckMode::Kernel`, and `check`'s own refusal of `CheckMode::Kernel` is what makes that true. | Inspection (TC-031) |
 | FR-021-AC-9 | Every generated oracle function returns `Outcome<Value>`, never `Value` or `bool`: with a denial injected at the `function.call` charge point, the oracle yields `Outcome::Incomplete` naming that point, the denied charge is not applied, and never a completed value. | Test (TC-031) |
 | FR-021-AC-10 | A function whose declared parameter or result type reaches a `reference` composite form at any depth is refused as blocked on quire-spec-language#120 for every item naming it, emits no code, and admits no charge on any `Meter`. | Test (TC-031) |
@@ -306,6 +344,8 @@ come from the request, not from this generator's own inference.
 | FR-021-AC-22 | When two or more declarations share one declaring node id, none of them appears in the emitted `checked_package()` or in `location-map.json`, and every item naming one of them is refused with `ExactFunctionRefusal::DuplicateDeclaringNode { node_id }` (the shared node id; the smallest in node-id order when the item's name is held by duplicate groups on several node ids) before Stage 1 classification: never `UnknownFunction`, never `AmbiguousFunctionName` (the node-id refusal takes precedence when the declarations also share a name), never `DuplicateRequest` (two items on one `call` node naming different members, or one such item requested twice, each carry the node-id refusal), and no claim-map entry records another function's name, oracle symbol or `Origin::Body` index. A declaration with its own distinct node id that shares a name with one of them is absent from `checked_package()` and from `location-map.json`. A declared function whose nested `call` names such a function is refused as `UnknownCallee`. The refusal and these outputs are identical under every permutation of the request order. Every item naming a function with a distinct declaring node id, and not a duplicate name, has a claim-map entry equal to the one the same request produces with the duplicate declarations removed. | Test (TC-031) |
 | FR-021-AC-23 | A `failed` lowering record is refused as `ExactFunctionRefusal::LoweringWorkExhausted` for the `work` limit, as `LoweringByteLimitExceeded { limit, consumed }` with the record's `limit` and `consumed` for the `bytes` limit (Contract IR FR-038-AC-95), and as `LoweringLimitUnrecognised` with `limit_kind` the snake_case name FR-014 states for each of `nodes`, `edges`, `occurrences` and `diagnostics`, never as another arm's refusal and without a panic. The mapping is asserted on hand-built `Failed` records given to `lowered_binary_body`, the one function that maps a record to a refusal, in a `#[cfg(test)]` module the code change adds to the function module (it has none today), so a mapping of an unrecognised kind to `LoweringWorkExhausted` in this module fails it. That a body failure refuses only that function's items, and leaves an unrelated function's items unchanged, is FR-021-AC-12's and is asserted by its existing `tc_031_ac12_*` tests, not re-asserted on hand-built records, because the isolation lives in the classification loop that takes its records from `lower`. Through a whole call of the function generator whose input is read under a byte ceiling that admits the checked package and is one byte below the shorter of the canonical lengths of the two lowered contract packages of that call (the one lowered for the function bodies and the one lowered for the requested `call` nodes; the fixture makes both longer than the checked package), every body record and every call-node record fails for bytes, so every function is absent and every item is refused as `LoweringByteLimitExceeded` with `limit` equal to that ceiling and `consumed` equal to the call-node lowering's, which the fixture makes differ from the body lowering's `consumed` (read by lowering each request alone under the same ceiling), so the call-node-first order of the Behavior section is asserted through the call. | Test (TC-031) |
 | FR-021-AC-24 | Items on one `call` node, with equal argument operands, that name functions absent from the request's declarations each get their own claim-map entry. Requesting `zz_unknown` and `aa_unknown` on one node yields two entries, in that order: `UnknownFunction { name: "aa_unknown" }`, then `UnknownFunction { name: "zz_unknown" }` (function name compared byte-wise over its UTF-8 bytes, case-sensitively), and no `DuplicateRequest`; the entries are identical under both request orders. Requesting `Zz_unknown` and `aa_unknown` yields `Zz_unknown` first, because `Z` (0x5A) sorts before `a` (0x61). Requesting `zz_unknown` twice on one node still yields one entry, `DuplicateRequest`. Requesting a declared `add_fn` and `zz_unknown` on one node yields two entries: `UnknownFunction { name: "zz_unknown" }` ordered before the entry generated for `add_fn` (an item naming no declared function ranks before one that does), identical to the entries each item gets when requested alone. Requesting `zz_unknown` once yields `UnknownFunction { name: "zz_unknown" }` as before. Items on one `call` node naming the two members of a duplicate-node pair are two entries ordered by function name in the same byte order: with `m_multi` and `z_pair` declared on node id N2 and `m_multi` and `q_extra` declared on the smaller node id N1, requesting `m_multi` and `z_pair` yields `DuplicateDeclaringNode { node_id: N1 }` (for `m_multi`, whose name the smaller group also holds), then `DuplicateDeclaringNode { node_id: N2 }` (for `z_pair`), under both request orders; with `z_multi` and `a_pair` in place of `m_multi` and `z_pair` the order is `{ N2 }` (for `a_pair`) then `{ N1 }` (for `z_multi`). The name orders only items equal on the call node, declaring node id and arguments, so items whose declaring node ids differ are ordered by declaring node id first: with `a_pair` and `z_pair` declared on N2, `z_pair` and `q_extra` on N1, and `a_pair` alone on N3 (N1 < N2 < N3), requesting `a_pair` and `z_pair` yields `DuplicateDeclaringNode { node_id: N1 }` (for `z_pair`), then `DuplicateDeclaringNode { node_id: N2 }` (for `a_pair`), under both request orders, because `a_pair` resolves to the larger N3 and `z_pair` to N2. No new refusal variant is added. | Test (TC-031) |
+| FR-021-AC-25 | Across analysis and emission of one body, the counter charges each node entry, child edge and emitted assignment or call exactly once in source traversal order; a setting equal to the required units emits the complete function, and one less refuses that function as `GenerationWorkExhausted { limit, consumed: limit + 1 }` before the denied action, with no partial symbol or location-map entry and no change to an unrelated function. A failed Contract IR lowering record keeps its lowering refusal and incurs no generation charge. PLANNED (IR-511). | Test (TC-031) |
+| FR-021-AC-26 | A left operand that denies at its runtime charge stops the generated flat sequence before the right operand's charge; when the left succeeds, the right charge follows it and precedes the parent operation. The generated result and admitted charge sequence equal an independently assembled shallow body of the same meaning. PLANNED (IR-511). | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -320,7 +360,7 @@ written.
 | FR-021-AC-4 | Emit a generic refusal that discards which `InputRefusal` variant the runtime actually returned. |
 | FR-021-AC-5 | Validate arguments out of parameter order, or charge `function.call` after invoking the body instead of before. |
 | FR-021-AC-6 | Generate the oracle anyway and let an unsupported capability surface as a runtime panic or an ordinary refusal instead of a pre-generation disposition. |
-| FR-021-AC-7 | Omit the depth bound from a nested `Frame::call` site, or hardcode a depth limit different from `MAX_CALL_DEPTH`. |
+| FR-021-AC-7 | Keep `MAX_CALL_DEPTH`, emit one nested Rust expression per source node, or recurse in the generator; the deep chain refuses at a fixed depth or overflows the small stack despite sufficient work budget. |
 | FR-021-AC-8 | Admit a `CheckMode::Kernel` package and generate an oracle from it. |
 | FR-021-AC-9 | Emit a function returning plain `Value`, as `src/oracle.rs` does for Boolean connectives before FR-018's fix; a denial then has no representable result. |
 | FR-021-AC-10 | Generate the item and let the runtime refuse a reference-typed argument at call time instead of refusing it at generation time. |
@@ -338,6 +378,8 @@ written.
 | FR-021-AC-22 | Key classification by position but resolve an item's function by name or node id, so two declarations with one node id both survive and the second item takes the first function's oracle symbol and claim-map index; refuse only the first (or only the later-sorted) declaration so its same-node sibling survives and the item reports `UnknownFunction` or depends on request order; check the name before the node id so a declaration sharing both reports `AmbiguousFunctionName`; exempt a distinct-node-id declaration that shares a name with the pair so it enters the package and answers to the pair's name; or refuse the whole request instead of only the duplicate declarations. |
 | FR-021-AC-23 | Keep the single `Failed` arm that reports every failure as `LoweringWorkExhausted`, so a byte-ceiling failure reads as work exhaustion; or leave a `_ => LoweringWorkExhausted` or `_ => unreachable!(..)` arm for an unrecognised kind; or report the function's body-lowering `consumed` for an item whose call-node lowering failed first. |
 | FR-021-AC-24 | Key an item by the call node, applied function's declaring node id and arguments only, so every unknown name on one call node shares one key and the second name is reported as `DuplicateRequest` and lost (the `zz_unknown` and `aa_unknown` example fails); or key an item by its request position, so the same unknown name requested twice yields two entries (the `zz_unknown` twice example fails); or put the name ahead of the declaring node id in the key, so `add_fn` sorts before `zz_unknown` (the `add_fn` and `zz_unknown` example fails); or compare names case-insensitively, so `aa_unknown` sorts before `Zz_unknown` (the `Zz_unknown` example fails); or break ties by request position, so the order changes with the request order (the both-orders check fails, and so does the duplicate-node pair example, whose order is `{ N1 }`, `{ N2 }` for `m_multi` and `z_pair` and reversed for `z_multi` and `a_pair`). |
+| FR-021-AC-25 | Charge only nodes and omit emission, check the limit after emitting an instruction, or expose a partly emitted function; the one-unit-below boundary produces the wrong count, a partial symbol, or changes a healthy sibling. |
+| FR-021-AC-26 | Evaluate both child temporaries before checking the left child's result; the right charge occurs despite a left denial. |
 
 ## Dependencies
 
@@ -345,6 +387,16 @@ written.
   [FR-018](./FR-018-composite-equality-oracles.md), Contract IR FR-036/FR-038 (CheckedPackage V2
   lowering), Contract Runtime FR-273 (function-application call surface).
 - **Downstream**: [TC-031](../matrix/TC-031-function-application-oracles.md).
+
+## Status
+
+The `quire_contract_runtime::exact` paths and FR-273 call details elsewhere in
+this artifact describe the current port and its existing tests. They are
+pending the ownership migration in Contract Runtime FR-275 (IR-349) and
+QSL-358. This IR-511 amendment specifies CG's analysis and emission only; it
+does not select the future owner path, preserve the runtime port, or add an
+alias, wrapper or compatibility surface. The deep execution assertion in
+FR-021-AC-7 remains planned until the QSL-owned evaluator is available.
 
 ## Out of Scope
 

@@ -216,6 +216,18 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `LoweringWorkExhausted`. Run the long chain in a subprocess to detect stack exhaustion.
     The seam supplies a synthetic lowered graph,
     so Contract IR's separate lowering ceiling does not preempt this check.
+18. Deep type walk (FR-018-AC-28 and AC-29, planned, IR-511). At the same
+    synthetic lowered-graph seam, construct an admitted 100,000-entry acyclic
+    chain and an equivalent shallow declaration closure. Run resolution in a
+    subprocess on a 512 KiB stack, first with the default limit, then with
+    a caller-selected limit exactly equal to its entries, then one below.
+    Assert the first denied counts, a completed oracle with the shallow case's
+    result, and absence of any depth refusal. In separate cyclic fixtures,
+    place the repeated entry immediately below and at the work boundary;
+    assert `TypeResolutionCycle` after a successful entry charge and
+    `TypeResolutionWorkExhausted` at the denied entry, respectively. In every
+    refusal case, assert a healthy sibling generates unchanged and no refused
+    item emits a symbol.
 
 ## Expected Results
 

@@ -45,7 +45,8 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    classifiers admits, or a nested `call` naming a function absent from the request; (e) a `call`
    expression node applying an admitted function, with a duplicate copy of the same node id under
    the same binding; (f) one or more `call` nodes over model, relation, state, temporal and protocol
-   forms; and (g) a nested-`call` chain deep enough to reach `MAX_CALL_DEPTH` when executed.
+   forms; and (g) a 100,000-node nested-`call` chain whose lowered graph is
+   supplied at the generator seam, independently of upstream reader limits.
 2. Generate twice and with a permuted request; compare bytes with each other, and inspect claim-map ordering by the `call` node id, then the applied function's
    declaring node id, then each argument operand's source node id, every node id compared in
    node-id order.
@@ -75,11 +76,18 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 5. Re-execute the corpus with a denial injected at the `function.call` charge point; confirm
    `Outcome::Incomplete` naming that point and that the denied charge was not applied — every
    counter equal to those of the same run stopped immediately before that point.
-6. Execute the deep nested-`call` chain of step 1(g); confirm `Refusal::CheckedInvariant` once
-   `MAX_CALL_DEPTH` is exceeded, before any further charge, and that no vector in the corpus applies
-   a package this generator checked under `CheckMode::Kernel` — inspect that `check` itself refuses
-   `CheckMode::Kernel` unconditionally, which is what makes that true by construction rather than by
-   sampling.
+6. Analyze and emit the deep chain of step 1(g) on a 512 KiB stack with a
+   caller-selected generation work limit equal to the measured node, edge and
+   instruction charges. Confirm complete flat assignments, no depth setting
+   or fixed depth refusal, deterministic source and location-map paths.
+   Set the limit one unit lower and confirm `GenerationWorkExhausted` names
+   that limit and its first denied unit, with no emitted symbol or location
+   entry for the refused function while a healthy sibling remains unchanged.
+   Independently make Contract IR lowering fail for work and confirm its
+   existing lowering refusal wins before any generation charge. Inspect that
+   `check` refuses `CheckMode::Kernel` unconditionally; no corpus oracle applies
+   such a package. Execution of this deep chain remains planned against the
+   QSL-owned iterative evaluator and the RT FR-275 migration.
 7. Walk the generated location map for the multi-form package of step 1(a): for every recorded
    entry, independently re-derive the `Location{origin, path}` by walking that same function's
    original request expression tree from its root (the function's own `Origin::Body { function,
@@ -177,6 +185,14 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     `tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name` and
     `tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names`.
 
+13. Flat-order denial (FR-021-AC-26, planned, IR-511). In a shallow body
+    with observable left and right operand charges, deny the left charge and
+    assert the right charge never occurs. Admit the left charge
+    and deny the right; assert the exact admitted prefix and `Incomplete` at
+    the right point. Compare a deep flat body and an equivalent shallow body
+    for outcome and admitted charge order once the QSL-owned application
+    authority can execute both.
+
 ## Expected Results
 
 Every admitted function's body lowers and every admitted package generates oracles for its `call`
@@ -186,7 +202,8 @@ each refused with their own distinct typed blocker rather than one collapsed rea
 identical across runs and orderings; the native `CheckedPackage::call` leg agrees on outcome,
 charges and counters for every generated item, driven from the request rather than the generated
 crate, while the authority leg is 🚧 Planned; every injected denial yields `Incomplete` at its point
-without applying that charge; the depth bound refuses `CheckedInvariant` once exceeded and no
+without applying that charge; deep analysis and flat emission obey the
+caller-selected generation work limit without a fixed depth refusal and no
 generated oracle ever applies a `CheckMode::Kernel` package; the location map round-trips to the
 request's own expression trees with no execution required; and no generated code reads or depends
 on `Evaluation.location`/`.losses` becoming non-empty; the emitted corpus source has zero
@@ -203,4 +220,4 @@ Function-body semantics beyond what FR-014's and FR-018's own oracles already ve
 separately asserted here: a function body is a delegation to those same generators' lowering, so
 step 4's agreement check already covers a scalar or equality sub-expression's own correctness
 through its own family's corpus; this test's own new surface is admission, application, charge
-sequencing, capability negotiation, depth bounding, and the static location map.
+sequencing, capability negotiation, charged iterative generation, and the static location map.
