@@ -1336,12 +1336,49 @@ or M reap moved after report sealing shall fail strict order, not pass because a
 No emitted record subsystem or synthetic settlement token is allocated to establish these facts.
 If independent operation/order observation cannot be constructed, that Test remains UNBACKED.
 
-The retained-gate case shall separately require actual owned I termination confirmation while the
-original O gate is retained, followed by actual gate close. Early-close and omitted-confirmation
-mutants remain independent and shall not pass from marker absence or later teardown. A cached C
-phase or serialized gate-retained flag cannot establish this predicate. Genuine bounded production
-signal/confirmation/close integration remains owed, as does an independent witness of that actual
-order. No feature-only kill authority, pause or replacement gate transport is allocated.
+For supported cooperative retained-gate cancellation, the actual original O gate owner shall retain
+the gate through actual owned I termination confirmation and only then perform actual gate close.
+This operation-order claim is conditional on the independently established signal/namespace and
+confirmation-availability fault premises below. Early-close and omitted-confirmation mutants remain
+independent and shall not pass from marker absence, later teardown or a CleanupUnconfirmed label.
+A cached C phase or serialized gate-retained flag cannot establish either operation. Genuine bounded
+production signal/confirmation/close integration remains owed, as does an independent witness of
+that actual order. No feature-only kill authority, pause or replacement gate transport is allocated.
+
+### Retained-gate cooperative order and unavailable-confirmation fault domain
+
+The supported cooperative ordering claim shall require the existing AC-38 kernel fault precondition:
+actual SIGKILL delivery and PID-namespace teardown permit owned settlement confirmation by the
+applicable original settlement deadline. Its signal/namespace and observation premises shall be
+established independently from the actual supported kernel/runtime/owner paths and genuine restored
+controls, not defined as “the confirmation happened.” The actual original validated I pin shall remain
+owned, and the required bounded signal/confirmation attempts and due ordinary observations shall run
+under that deadline. Source Analysis shall identify the concrete signal, namespace, retained-pin and
+observation paths; genuine operation/ordering controls shall test them. A skipped poll, lost pin,
+wrong owner, omitted attempt or early-close implementation defect shall not establish a kernel fault
+or excuse a cooperative ordering failure. No fault diagnosis follows solely from deadline expiry,
+unavailable observation, failed syscall or a test withholding confirmation.
+
+If genuine owned I confirmation remains unavailable at the applicable original cutoff despite the
+required actual bounded attempts and retained original authority, execution shall follow AC-38's
+CleanupUnconfirmed return with no evidence, verdict, outcome, confirmed cleanup or operation-order
+credit. There shall be no deadline reset, post-return custodian, leaked ownership or unbounded Drop.
+This is an explicit live unavailable-confirmation abandonment case, not fatal-owner cancellation
+and not successful cooperative close. Remaining original O gate references shall be disposed by
+their actual owned cleanup/Drop or, on actual O exit, by kernel descriptor-table closure; the
+last-reference close, if it occurs, is abandonment and shall not claim preceding I confirmation.
+C's typed refusal is not the gate-close actor or proof that all aliases closed. Other actual received
+rights shall be disposed through their existing owned cleanup, without transferring deferred custody
+in the error. Any independently observable remaining ownership or absence of close shall remain
+unconfirmed; no serialized category reconstructs an unobserved close or supplies its order.
+
+The healthy restored cooperative path shall still prove I confirmation before actual gate close.
+The unavailable-confirmation adverse path shall prove only bounded refusal and honest abandonment,
+not AC-54/87's successful ordering. Fatal C/group or O kernel closure remains a distinct abrupt-death
+case and grants neither claim. Original caller/group-death, early-release and whole-chain obligations
+remain owed. Gate/lease alias exclusion, a safe C-owned release API, a five-right Start/ancillary
+allocation and finite additive stream/kernel/native reservation are not established or allocated by
+this fault-domain amendment; current O gate topology and exact production rights remain unchanged.
 The ignored-inner-EOF mutant shall remain separate and unrescued by outer cancellation. AC-77's
 post-COMMIT cancellation remains required but its termination shall never supply lease-EOF evidence.
 
@@ -1857,7 +1894,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-51 | PLANNED/UNRUN. Given genuine live-I construction preconditions, the child's own acknowledgement establishes release-dependent birth after the actual completed ordinary O sample. | Test, Analysis |
 | FR-034-AC-52 | PLANNED/UNRUN. Actual retained-I pidfd termination confirmation strictly precedes matching kernel report seal; independently observed fabricated-live-I and late-poll controls fail without stored-record or ordinal proof. | Test, Analysis |
 | FR-034-AC-53 | PLANNED/UNRUN. Actual retained M consuming Child wait/reap strictly precedes matching kernel report seal; independent fabricated-reap and late-reap controls fail without cached Some, copied history or ordinal proof. | Test, Analysis |
-| FR-034-AC-54 | PLANNED/UNRUN. During cancellation with the original O gate retained, actual I confirmation precedes actual gate close; independent early-close and omitted-confirmation controls fail. Cached C stage or gate-retained flag establishes neither fact; unavailable genuine operation/order construction remains UNBACKED. | Test, Analysis |
+| FR-034-AC-54 | PLANNED/UNRUN. On the independently grounded supported cooperative cancellation path, the actual original O gate owner retains the gate through actual I confirmation before actual close; early-close and omitted-confirmation controls fail without marker, stage or refusal-label proof. Genuine unavailable confirmation at the original cutoff follows AC-38 CleanupUnconfirmed with explicit actual-owner abandonment/right disposal and no ordering or cleanup credit, never a renamed fatal close or diagnosis of kernel fault. Healthy restored order and unavailable-confirmation refusal are separate controls; missing genuine construction remains UNBACKED. | Test, Analysis |
 | FR-034-AC-55 | PLANNED/UNRUN. Independently checked final-source Analysis establishes contained teardown authority through actual namespace INIT death and retained owner settlement, with no sampled-PID membership kill path; the separate AC-24 non-INIT-watcher runtime adverse/restored control remains owed. | Analysis |
 | FR-034-AC-56 | PLANNED/UNRUN. Published-source Analysis establishes O's final complete accounting after actual I confirmation, retained M reap, writer EOF and immutable seal for successful report Commit, with all later due ticks preserved; earlier final accounting invalidates literal-FINAL-oracle retirement. | Analysis |
 | FR-034-AC-57 | PLANNED/UNRUN (IR-687). When L awaits its first O arm result, the newly allocated authenticated O→L OperationalFailure carries zero ancillary rights. | Test |
@@ -1890,7 +1927,7 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-84 | PLANNED/UNRUN. Every remaining fixture reporter/control/report endpoint is excluded from untrusted child/exec mappings and public control handles through actual descriptor checks. | Test, Analysis |
 | FR-034-AC-85 | PLANNED/UNRUN. Actual retained M consuming reap is not established by repeated or cached Child Some(status); an independent genuine-operation predicate rejects cache-only or fabricated success. | Test |
 | FR-034-AC-86 | PLANNED/UNRUN. O establishes same-M parent-only prior-WNOWAIT/FIRST-uncached-Some/post-ECHILD provenance under the original sole-waiter/disposition/history; independent checks reject fabricated, cached or missing consuming-operation facts without stored history as proof. | Test, Analysis |
-| FR-034-AC-87 | PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal and actual I confirmation precedes retained-gate close; independent late-operation/early-close mutants fail. Producer ordinal certificates are retired. | Test |
+| FR-034-AC-87 | PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal. On AC-54's independently grounded supported cooperative path, actual I confirmation precedes retained-gate close; late-operation/early-close mutants fail. AC-38 unavailable-confirmation abandonment at the original cutoff grants no seal, order or cleanup credit; a skipped poll, lost pin or owner defect is not a kernel-fault diagnosis. Producer ordinal certificates are retired. | Test |
 | FR-034-AC-88 | PLANNED/UNRUN. O preserves every due ordinary sample and existing control/cutoff transition without observation ACK, pause, stored publication permission or suppressed tick. | Test, Analysis |
 | FR-034-AC-89 | PLANNED/UNRUN. Genuine original I Completed reception and original stop adoption precede actual original lease close, without a separate stored completion certificate. | Test |
 | FR-034-AC-90 | PLANNED/UNRUN. Any remaining optional fixture write failure does not terminate O or alter ordinary sampling/control/settlement/cancellation; it cannot rescue ignored EOF. The certificate pipe writer is retired, not activated by this condition. | Test, Analysis |
