@@ -40,3 +40,11 @@ Ticket: IR-494. The caller ingress boundary, the finite 21-payload class, twelve
 ## Verdict
 
 One medium requirement accuracy finding. The checked-expression and caller ingress distinction, 1 + 4 + 16 = 21 payload count, six profiles times two bounds, constructor refusal boundary, and Planned evidence labels need no correction in this diff.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | c55c6ca6984a2d19c79c99243bdedc986653eb33 |
+
+After excerpt (FR-035 Dependencies): "Contract Runtime's own `exact` text and accounting API, which defines and exports `admit_text`, `TextPayload`, `TextType` and `Meter`." FR-035 Description also names Contract Runtime's own `exact::admit_text` API.

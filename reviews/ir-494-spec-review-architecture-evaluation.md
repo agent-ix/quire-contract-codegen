@@ -35,3 +35,11 @@ Ticket: IR-494. The proposal assigns caller `TextPayload` construction and admis
 ## Verdict
 
 The ingress and checked-expression responsibilities have clear owners. The production proof execution boundary needs an explicit owner before implementation can claim verified caller admission evidence.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | c55c6ca6984a2d19c79c99243bdedc986653eb33 |
+
+After excerpt (FR-017 Behavior): "When executing an FR-035 caller Text-admission harness, the generator shall retain its typed caller-ingress identity from the selected harness in the execution evidence, bind the outcome and any playback to that identity and harness path, and carry `None` for contract obligation kind." FR-017-AC-26 and TC-027/TC-050 keep this execution route Planned until implementation.
