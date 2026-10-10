@@ -20,6 +20,7 @@ relationships:
   `src/publication/**`, `tests/it/kani_*.rs`, `tests/it/skeleton_spine.rs`,
   `tests/it/bounded_kani_corpus.rs`, `tests/it/scratch_crate.rs`,
   `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`,
+  `tests/checked_package_support/rekey.rs`,
   `tests/state_frame_support/**`, `schemas/kani-*.schema.json`,
   `schemas/generated-rust-kani-*.schema.json`, `Cargo.toml` and
   `Cargo.lock`.
@@ -40,6 +41,9 @@ relationships:
   transferable approval or a substitute for running the gate on the candidate under review.
 - The `make kani-gate` target shall read the tree state and the head commit before the build and read
   them again after the run, and shall print `result=failed` and exit non-zero if either read differs.
+- When `origin/main` has changed a Kani-touching path since the candidate's merge base and the
+  candidate does not contain current `origin/main`, `make kani-gate` shall refuse before the lane
+  runs and name the changed paths. It shall permit unrelated main movement.
 - If the working tree is dirty, then `make kani-gate` shall print `tree=dirty` and exit non-zero.
 - If the `cargo-kani` launcher is absent, then `make kani-gate` shall run no test, print `kani-gate:
   not run: launcher absent` and exit non-zero.
@@ -50,10 +54,8 @@ relationships:
 - When the current Kani-touching candidate is ready to merge, the merger shall run the actual
   full `make kani-gate` on that clean, stable candidate. A copied pull-request status line does
   not satisfy this obligation.
-- When preparing a Kani-touching merge, the merger shall compare the paths changed on
-  `origin/main` since the candidate's merge base against the Kani-touching set. If `origin/main` has changed that set
-  and the candidate does not contain those changes, the merger shall update the candidate from
-  current `origin/main` and rerun the full gate on the updated clean candidate.
+- When `make kani-gate` reports stale Kani-reaching main changes, the merger shall update the
+  candidate from current `origin/main` and rerun the full gate on the updated clean candidate.
 - If a required lane cannot run or fails, the pull request shall remain unmerged. It cannot be
   described as verified by the real-Kani lane or waived by a written reason.
 - When `make kani-scope` prints `not required`, no real-Kani run is required for that change.
@@ -82,7 +84,8 @@ The Kani-touching set is the code the lane reaches: the lane's tests call genera
 through `src/publication` (`kani_witness_join`), and reach their harness fixtures through
 `tests/it/scratch_crate.rs` (which copies `Cargo.lock` into every scratch crate) and the `#[path]`
 modules `tests/exact_scalar_support/package.rs` and `tests/state_frame_support/**`, the first of
-which `include!`s `tests/checked_package_support/base.rs`. The rule is by file, not by test: a lane
+which `include!`s `tests/checked_package_support/base.rs` and `#[path]`-includes
+`tests/checked_package_support/rekey.rs`. The rule is by file, not by test: a lane
 file's `include_str!` of `tests/state_frame_support/subject.rs` compiles the subject into the real-Kani
 crate, and its `include_str!`s of the Kani schemas (`schemas/kani-proof-graph-v2.schema.json`,
 `schemas/generated-rust-kani-v2.schema.json`, `schemas/kani-corpus-proof-graph-v1.schema.json`)
@@ -145,7 +148,7 @@ operator can inspect the completed process and its exit status. A copied line in
 release ticket is not evidence that the current candidate was tested. The author runs the lane before
 opening a Kani-touching pull request; the merger runs it again on the current candidate and checks
 whether source reachable by the lane changed on `origin/main` since the candidate's merge base. If it
-did, those changes must be incorporated before the merge run. Internal before/after commit reads
+did, the gate refuses until those changes are incorporated. Internal before/after commit reads
 detect a candidate that moves during a run; no commit identifier must be published or compared by hand.
 The `ran`/`expected` check makes a filter that matches nothing, which libtest reports as success,
 read as `failed`.
@@ -167,7 +170,7 @@ decision (Open decisions); until the owner rules, the answer is no.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`, `tests/state_frame_support/model.rs`, `schemas/kani-proof-graph-v2.schema.json`, `schemas/generated-rust-kani-v2.schema.json`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
+| NFR-006-AC-1 | `make kani-scope` prints `required` and the path for each of `src/kani/generate/negotiate.rs`, `src/oracle/boolean_v1.rs`, `src/routed/generate.rs`, `src/replay/witness.rs`, `src/core/identity.rs`, `src/publication/mod.rs`, `tests/it/kani_batching.rs`, `tests/it/skeleton_spine.rs`, `tests/it/bounded_kani_corpus.rs`, `tests/it/kani_obligations_state_frame.rs`, `tests/it/scratch_crate.rs`, `tests/exact_scalar_support/package.rs`, `tests/checked_package_support/base.rs`, `tests/checked_package_support/rekey.rs`, `tests/state_frame_support/model.rs`, `schemas/kani-proof-graph-v2.schema.json`, `schemas/generated-rust-kani-v2.schema.json`, `Cargo.toml` and `Cargo.lock`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-2 | `make kani-scope` prints `not required` for each of `spec/kani/functional/FR-017-kani-execution-evidence.md`, `reviews/REV-018-bound-coverage-observations.md`, `src/strategy/mod.rs`, `src/evidence/mod.rs`, `Makefile` and `.github/workflows/ci.yml`, each fed alone. | Test (TC-045) |
 | NFR-006-AC-3 | A rename of `src/kani/old.rs` to `src/strategy/new.rs`, and a rename of `src/strategy/old.rs` to `src/kani/new.rs`, each print `required`. | Test (TC-045) |
 | NFR-006-AC-4 | `make -n kani` and `make -n kani-gate` expand to the same `cargo test` command line, and that line holds each of the six filters `kani_obligations`, `skeleton_spine`, `kani_witness_join`, `bounded_kani_corpus`, `kani_generation` and `kani_batching`. | Test (TC-045) |
@@ -180,7 +183,7 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-11 | The tests marked `#[ignore = "kani lane: ..."]` in `tests/it` are exactly the `#[ignore]`d tests of `tests/it` whose path holds one of the `make kani` filters. | Test (TC-045) |
 | NFR-006-AC-12 | `make -n ci` expands to no `kani` or `kani-gate` command. | Test (TC-045) |
 | NFR-006-AC-13 | For a Kani-touching pull request, the author runs the full gate on its clean, stable candidate before opening it, and the merger runs it again on the clean, stable current candidate before merge; both actual processes exit successfully with all expected tests run. A copied body line alone cannot satisfy either run. | Inspection |
-| NFR-006-AC-14 | Before a Kani-touching merge, the merger compares paths changed on `origin/main` since the candidate's merge base with the Kani-touching set; when there is overlap absent from the candidate, the candidate is updated from current main and the full gate passes again on the updated clean candidate before merge. | Inspection |
+| NFR-006-AC-14 | Given Kani-reaching paths changed on `origin/main` since the candidate's merge base and main absent from the candidate, `make kani-gate` refuses before running tests and names those paths. Given only non-touching main changes, it may run. The merger updates a stale candidate from current main and the full gate passes on the updated clean candidate before merge. | Test (TC-045) and Inspection |
 | NFR-006-AC-15 | A Kani-touching pull request whose required lane did not run or failed remains unmerged and does not claim real-Kani verification; a written explanation does not waive the gate. | Inspection |
 | NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani run under this requirement. | Inspection |
 | NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean, stable candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
