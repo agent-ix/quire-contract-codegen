@@ -95,6 +95,21 @@ and its evidence carries `None` for obligation kind. Then narrow the same harnes
 to `[0, 5]`, below the bound the oracle enforces, and confirm the run is `Falsified` with a
 counterexample.
 
+Caller Text-admission harness (FR-017-AC-26): use the generated FR-035
+`Text[1,1]` harness and its typed caller identity. Run it through the same
+production executor, singly and beside a compatible scalar harness in a
+batch. A real successful report with a satisfied cover and successful
+agreement assertion is `Verified`; an unsatisfied cover is
+`CoverUnsatisfied` with its counts; the changed admission call of TC-050 is
+`Falsified` with playback for this harness path. Check that evidence retains
+the selected caller identity, path and `None` contract obligation kind, and
+never assigns its playback to the other batch member. Present a crate whose
+source lacks the harness, an absent launcher and a malformed report; each
+keeps its existing typed refusal and produces no verified caller claim. A
+report with no cover or a failed assertion without matching playback is
+inconclusive. This route is Planned until FR-035 implementation supplies the
+harness; no current TC-027 result is credited to it.
+
 Generation/execution boundary: negotiate obligations that refuse before a harness exists —
 unbounded, non-finite, model-dependent, frame and definedness-bearing items, and whole-request
 refusals (`KaniObligationError`) such as an empty request, an unparsable subject path, an
@@ -118,6 +133,11 @@ inconclusive as an exhausted bound and not falsified, and the succeeded
 unwinding check in a listing is verified. The run with zero successful checks is inconclusive
 with the vacuous-proof reason (FR-017-AC-13), unless it is a precondition harness, which its
 cover summary decides.
+
+For a caller Text-admission harness, the same classifications apply while the
+evidence remains bound to its caller identity and harness path, never a
+checked-package node. The caller route and its real-Kani outcomes are Planned
+under FR-017-AC-26.
 
 The launcher, exercised with real short-lived processes: a `Duration::MAX`
 timeout does not panic; a capture thread told to stop returns what is already in its pipe, stops

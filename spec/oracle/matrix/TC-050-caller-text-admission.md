@@ -5,6 +5,8 @@ type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-035
     type: verifies
+  - target: ix://agent-ix/quire-contract-codegen/FR-017
+    type: verifies
 ---
 # TC-050: Verify caller TextPayload admission and bounded Kani agreement
 
@@ -35,14 +37,25 @@ text comparison and the six refused text-operand conversion nodes.
    `{e, U+0301, U+00E9, U+1F600}` as UTF-8, construct the public
    `TextPayload`, and compare the generated oracle with a separate direct
    runtime call. Check that each harness identity records its class, profile
-   and bound, each has exactly one final cover, and the installed Kani backend
-   verifies every assertion with the cover satisfied (FR-035-AC-4).
+   and bound, each has exactly one final cover, and run each through the
+   FR-017 production executor against the installed Kani backend. Check
+   `Verified` with the cover satisfied, evidence bound to the caller identity
+   and selected harness path, and `None` for contract obligation kind
+   (FR-035-AC-4, FR-017-AC-26).
 4. Mutate only the generated admission call or its declared type in a copy so
    an out-of-bound member of the symbolic class is accepted. Rerun real Kani;
-   require a concrete playback that violates the agreement assertion. Restore
-   the generated call and verify with the same harness and options
-   (FR-035-AC-5).
-5. Request an unbounded or unsupported payload class. Check its typed
+   require `Falsified` with a concrete playback for that harness's agreement
+   assertion. Restore the generated call and verify with the same harness and
+   options (FR-035-AC-5, FR-017-AC-26).
+5. Through the same production executor, run the caller harness with a cover
+   the bounded class cannot satisfy, a source-mismatched crate, an absent
+   launcher and a malformed backend report. Require `CoverUnsatisfied` with
+   counts for the cover, the established typed refusal for each setup/report
+   failure, and no verified caller claim. A report with no cover and a failed
+   assertion without matching playback are inconclusive. In a compatible
+   mixed batch, bind each outcome and playback to its own harness path and
+   caller identity (FR-017-AC-26).
+6. Request an unbounded or unsupported payload class. Check its typed
    disposition, absent harness and absence of `ir_confirmed` or checked node
    identity. Retain the TC-024 check that all six text-operand
    `numeric.convert` attempts are refused by Contract IR; none is a successful
@@ -55,5 +68,7 @@ admitted payload, profile, bound and injected charge failure. Invalid UTF-8
 stops at payload construction before admission. The twelve real-Kani harnesses
 cover exactly the stated 21-sequence finite class and verify with satisfied
 covers; the changed admission call is falsified with concrete playback and the
-restored call verifies. Unsupported proof requests produce no harness. This
+restored call verifies. The production evidence retains the caller identity;
+unsatisfied covers and infrastructure failures cannot become verified caller
+claims. Unsupported proof requests produce no harness. This
 test does not count refused checked-package conversions as admission proofs.

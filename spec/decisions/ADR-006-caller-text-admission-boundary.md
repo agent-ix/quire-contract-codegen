@@ -50,7 +50,11 @@ explicitly caller-declared ingress route under FR-035. That route has no
 checked node id, `ir_confirmed` provenance or QSL term identity. It does not
 enter FR-015's per-obligation checked-package Kani claim model or FR-025's
 Boolean/`i64` subject ABI; its own finite symbolic input and identity are
-required by FR-035.
+required by FR-035. [FR-017](../kani/functional/FR-017-kani-execution-evidence.md)
+is the production executor for all three harness kinds. It retains the typed
+caller-ingress identity with the backend outcome and playback and applies its
+existing report, cover and infrastructure classifications without treating
+the caller claim as `ir_confirmed`.
 
 The generated admission oracle calls Contract Runtime `exact::admit_text` on
 a publicly constructed `TextPayload`. The proof harness selects zero to two
@@ -78,6 +82,8 @@ text-comparison route remains under FR-014 and TC-024.
   Planned coverage until real runtime and Kani controls run.
 - FR-015 and FR-025 continue to govern their admitted-package obligations;
   the caller proof has a distinct identity and unsupported-class refusal.
+- FR-017 owns execution and evidence for the caller harness under its existing
+  verified, cover-unsatisfied, falsified, inconclusive and refusal taxonomy.
 - QSL-694's text-to-number parsing exploration is related and does not block
   caller `TextPayload` admission.
 

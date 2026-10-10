@@ -18,7 +18,7 @@ When a caller requests runtime Text admission, the code generator shall emit an
 oracle and a separately bounded Kani obligation for a caller-owned
 `TextPayload` and declared `TextType`. This is a caller-ingress claim, not a
 claim about an expression node in an admitted `CheckedPackageV2`. The oracle
-calls `quire-exact::admit_text` through Contract Runtime's `exact` API and
+calls Contract Runtime's own `exact::admit_text` API and
 returns its outcome and metering unchanged. Its evidence identifies the
 caller-declared profile, inclusive length bounds, payload class and proof
 configuration, without `ir_confirmed` provenance, a checked node id or a QSL
@@ -49,7 +49,10 @@ records the architecture boundary.
 ## Outputs
 
 - A deterministic generated admission oracle and its caller-ingress claim
-  identity, separate from FR-014's per-node claim map.
+  identity, separate from FR-014's per-node claim map. The identity accompanies
+  the generated harness through [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)
+  execution evidence, so a Kani outcome identifies the profile, bounds and
+  finite payload class it actually concerns.
 - For each supported profile and declared bounded type in the proof request,
   one Kani harness whose identity records that profile, type bounds, the exact
   symbolic source class, solver/options and its non-vacuity cover.
@@ -104,8 +107,10 @@ records the architecture boundary.
 
 ## Dependencies
 
-- **Upstream**: Contract Runtime's `exact` text and accounting API, which
-  re-exports `quire-exact::admit_text`, `TextPayload`, `TextType` and `Meter`.
+- **Upstream**: Contract Runtime's own `exact` text and accounting API, which
+  defines and exports `admit_text`, `TextPayload`, `TextType` and `Meter`.
+- **Execution**: [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)
+  classifies and retains evidence for the generated caller harness.
 - **Related**: [FR-014](./FR-014-exact-scalar-oracles.md) for checked-package
   text comparison. QSL-694 explores text-to-number parsing inside a term; it
   does not gate this caller-ingress operation.
