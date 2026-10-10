@@ -35,3 +35,9 @@ The revised interface, FR-004 acceptance criteria, TC-006 controls and evidence 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | high | The receipt authenticates the QSL result, producer execution, generated source and source map, but AC-10 does not bind the LLVM export bytes or probe observations to that execution. An export from another run of the same source/map can be substituted while its declared tool/version remains present, allowing a false measured classification and coverage discharge. Require a trusted association of the export to the authenticated run, then test independent export substitution in TC-006. | spec/evidence/functional/FR-004-vacuity-evidence.md:139; spec/evidence/matrix/TC-006-vacuity.md:96 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | b3586d9cd3cad3b2613a080e876c2fb776d9a68b — AC-10 now authenticates exact LLVM export bytes/probes to the same producing run; TC-006 tests a different run with identical source/map and tool/version. |
