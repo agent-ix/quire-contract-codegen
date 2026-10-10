@@ -17,11 +17,11 @@ every real-Kani test (NFR-006). The pull-request and release criteria are inspec
 
 ## Test Procedure
 
-The targets call `scripts/kani_scope.sh` and `scripts/kani_gate.sh` (planned), and the Makefile
+The targets call `scripts/kani_scope.sh` and `scripts/kani_gate.sh`, and the Makefile
 defines the `kani` recipe once, in a variable the gate calls. A test can hand them stand-in
 executables on `PATH` for `cargo`, `cargo-kani` and `git`, and a temporary lock file through
 `KANI_LOCK`, without installing Kani and without touching `/tmp/agent-e-heavy-build.lock`. The test is
-`tests/it/kani_gate.rs` (planned) and runs in the default `cargo test`. It starts no nested `cargo
+`tests/it/kani_gate.rs` and runs in the default `cargo test`. It starts no nested `cargo
 test` and holds no host-wide lock.
 
 1. Scope, required (NFR-006-AC-1): feed each of the nineteen paths of NFR-006-AC-1 alone as the
@@ -96,6 +96,6 @@ gate passes on its current clean candidate; a copied status line is insufficient
 
 ## Implementation
 
-Planned: `scripts/kani_scope.sh`, `scripts/kani_gate.sh`, the `kani-scope` and `kani-gate` targets and
-the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`. Steps 1 to 12 are tests;
-step 13 is inspection. No CI workflow is part of this test case.
+Implemented: `scripts/kani_scope.sh`, `scripts/kani_gate.sh`, the `kani-scope` and `kani-gate`
+targets and the shared `kani` recipe variable in `Makefile`, and `tests/it/kani_gate.rs`.
+Steps 1 to 12 are tests; step 13 is inspection. No CI workflow is part of this test case.

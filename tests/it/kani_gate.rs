@@ -230,8 +230,19 @@ fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
     let sandbox = Sandbox::new();
     let output = sandbox.gate().output().expect("passing gate");
     assert!(output.status.success(), "{}", stdout(&output));
-    assert!(stdout(&output).contains("result=passed ran=2 expected=2"));
-    assert!(stdout(&output).contains("kani=Kani 1.0 tree=clean"));
+    let result = stdout(&output)
+        .lines()
+        .find(|line| line.starts_with("kani-gate: result="))
+        .expect("one gate result")
+        .to_owned();
+    let elapsed = result
+        .strip_prefix("kani-gate: result=passed ran=2 expected=2 elapsed=")
+        .and_then(|rest| rest.strip_suffix("s kani=Kani 1.0 tree=clean"))
+        .expect("result field order, version and tree");
+    assert!(
+        !elapsed.is_empty() && elapsed.bytes().all(|byte| byte.is_ascii_digit()),
+        "elapsed must be a nonnegative integer number of seconds: {result}"
+    );
     assert!(!stdout(&output).contains("head="));
     assert_eq!(
         fs::read_to_string(sandbox.root.join("run-marker"))

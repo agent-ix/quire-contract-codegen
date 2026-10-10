@@ -121,8 +121,8 @@ charged to any other change. Real-Kani cost is large. This repository records on
 timings: two oracle tests at 111 s (SR-1459); the `skeleton_spine` lane at 157 s on an unmodified head
 (SR-1423); three scalar tests at 908 s (SR-647); nine tests over four modules at 1056 s (SR-690),
 when the lane was smaller than it is now; and the IR-604 ticket's statement that the quire-integration
-exemplar takes about 530 s serial. The lane now holds 23 tests across seven files and no full-lane
-time is recorded here. A required lane at every change would charge a spec-only or review-only change
+exemplar takes about 530 s serial. The lane now holds 27 tests across seven files; the full lane
+ran in 1,308 s on the IR-617 pre-PR candidate. A required lane at every change would charge a spec-only or review-only change
 that cost for no evidence, and `make ci` runs twice per change; so the rule keys on paths and `make
 ci` stays as it is. The set is a path list, so `make kani-scope` decides it from the diff with no
 judgement. The lane is run in full, not as a per-path subset, because one emitter change can reach
