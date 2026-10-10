@@ -391,10 +391,11 @@ fn make_targets_share_one_real_lane_and_ci_excludes_it() {
         .trim()
         .strip_prefix("flock /tmp/agent-e-heavy-build.lock ")
         .expect("Kani command under lock");
-    assert!(
-        gate.contains(shared),
-        "gate must run the identical full command"
-    );
+    let gated = gate
+        .trim()
+        .strip_prefix("/usr/bin/bash scripts/kani_gate.sh /tmp/agent-e-heavy-build.lock -- ")
+        .expect("verified Kani command under the same lock");
+    assert_eq!(gated, shared, "gate must run the identical full command");
     for filter in [
         "kani_obligations",
         "skeleton_spine",
