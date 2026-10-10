@@ -13,7 +13,8 @@ relationships:
 ## Description
 
 Verify actual generated-oracle probes against native LLVM export, and ultimately keep measured
-coverage, runtime accounting, native execution outcome, and obligation discharge distinct.
+coverage, runtime accounting, generated-campaign execution, QSL clause-run outcome, and obligation
+discharge distinct.
 
 ## Test Procedure
 
@@ -62,11 +63,58 @@ serialized. Check accepted/rejected/discarded accounting independently and rejec
 with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
 
 For the native-run binding control, record the generated source and source map actually handed to
-the coverage producer. Analyze those same artifacts with the resulting export and campaign run;
-then replace the map, source, revision or run independently while preserving the other inputs.
+the coverage producer and the exact LLVM export bytes produced by the authenticated run. Analyze
+those same artifacts and export with the resulting campaign run; then replace the map, source,
+revision, run or export bytes independently while preserving the other inputs. The export
+substitution includes a second run of the same source/map under the same LLVM tool/version but
+different probe counts, proving that tool/version and path agreement cannot authenticate probes.
 Also omit or change the LLVM producer tool/version identity. The successful case reports that
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
-result and cannot discharge coverage.
+result without measured classification or coverage discharge.
+
+## Planned native-run-result/2 consumer controls
+
+1. Obtain QSL FR-267's genuine `native-run-result/2` documents for `AllBelow` over `high`
+   (decisive counterexample with witness), `AllBelow` over `low` (closed scope without witness),
+   and exhausted work (unavailable without witness). Feed each through QSL's strict reader, then
+   the planned CG `analyze_coverage` input. Compare typed stage, category, truth, basis and each
+   assigned witness component with independently authored expectations; do not compare the reader
+   output to itself as the oracle.
+2. In separate documents change the `format` to `/1` and `/3`, omit `format`, omit or change
+   `basis`, omit a required witness component, add an unknown witness member, place a witness on
+   closed scope, or remove one from a decisive basis. The QSL reader must return a located refusal
+   before CG classifies a clause. Feed the QSL FR-267 `unknown_edition` command-error envelope
+   through that same strict reader; its distinct typed variant must retain stage `profile`, code
+   `unknown_edition`, `basis: unavailable`, no witness and the defined message/details as an
+   error, never become a successful clause run. Remove its required member, add a clause-run-only
+   member or witness, change its basis, violate code-specific cause/details, or change its format:
+   each must yield a located reader refusal before CG receipt binding.
+3. Give CG a genuine QSL semantic-success document with a decisive witness but no execution of
+   its generated Rust campaign or no producer-authenticated source/map binding. Conversely,
+   run a generated campaign and measure its probes while QSL's clause run reports violation,
+   refusal, undefined, incomplete, unsupported or internal failure; exercise a QSpec cancellation
+   form separately only when QSL provides such a producer case. Check that each
+   fact stays typed and independent, none is inferred from the other, and no missing generated-run
+   evidence or adverse result can discharge coverage or grant IR FR-045 proof credit.
+4. For each valid decoded clause-run or command-error variant, omit the CG receipt, omit each
+   required association independently, or supply only caller-declared matching paths, QSL
+   `package_id`, or self-declared producer metadata. Check a structured absent/unauthenticated
+   binding diagnostic retains the decoded QSL outcome and available input identities, with no
+   campaign qualification or measured classification. Supply an authenticated CG receipt
+   associating the exact result, producer execution, generated source, source map and exact LLVM
+   export bytes from the same run; check the binding succeeds without upgrading the QSL outcome.
+   Then independently replace each of those
+   five inputs while keeping the receipt, including replacements with matching path or QSL
+   `package_id`; for export substitution, use a different run of the same source and map with
+   the same LLVM tool/version but different probe counts. Each mismatch must be identified and
+   refuse binding before any measured classification. A matching receipt never upgrades a command
+   error or adverse clause-run result. The LLVM producer identity and actual probe observations
+   remain CG coverage inputs, not QSL result members.
+
+These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
+separate authenticated result/execution/source/map/export receipt to CG, whose trusted authority and
+verifier still need implementation. The existing `analyze_bound_coverage` primitive does not
+consume a QSL result and is not evidence for these steps.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
 completion of bound analysis, native-run binding, or a consuming obligation.
