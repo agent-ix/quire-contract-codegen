@@ -76,16 +76,16 @@ operations:
     semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition
   - name: prepare_checked_arithmetic
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CheckedArithmeticRequest]
-    output: ArithmeticLowering | KaniOutcome
-    semantics: bounded checked-arithmetic lowering; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay Contract IR typed non-Boolean outcomes, never an assumption or partial artifact
+    output: ArithmeticLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
+    semantics: CG-owned bounded checked-arithmetic lowering over the IR finite-input/profile/dispatch ABI; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay IR typed non-Boolean outcomes, never an assumption or partial artifact
   - name: prepare_bounded_collection_query
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
-    output: CollectionLowering | KaniOutcome
-    semantics: bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay typed non-Boolean outcomes with no partial artifact
+    output: CollectionLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
+    semantics: CG-owned bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay IR typed non-Boolean outcomes with no partial artifact
   - name: prepare_finite_graph_reaches
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, GraphRequest]
-    output: GraphLowering | KaniOutcome
-    semantics: finite reference-graph reachability lowering; identity, snapshot and reference validation stay Contract IR-owned, and malformed or exhausted requests stay typed non-Boolean outcomes
+    output: GraphLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
+    semantics: CG-owned positive-length finite reference-graph reachability over IR-validated objects and references, with sorted depth-first expansion and a bound before each new identity; malformed or exhausted requests stay IR typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | BoundedCorpusError

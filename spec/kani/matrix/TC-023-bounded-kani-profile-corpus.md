@@ -20,9 +20,9 @@ replayed through QSL's replay facade.
 
 ## Test Procedure
 
-For each semantic family, execute canonical valid boundary cases and malformed,
+For each CG-owned semantic family, execute canonical valid boundary cases and malformed,
 incomplete, unavailable, refused, inconclusive, exhausted, and counterexample
-cases. Generate all codegen artifacts from the same validated Contract IR
+cases. Generate all codegen artifacts from CG-owned request and result types over the same validated Contract IR
 selection, run the generated oracle/strategy/Kani cases where the profile is
 supported, compare classifications with native execution, and replay every
 retained counterexample through the public QSL replay boundary.
@@ -35,7 +35,10 @@ Every supported case has matching typed classification across backends. Every un
 typed non-Boolean result and no partial artifact or proof claim. Every retained
 counterexample either reproduces native false or reports a typed replay
 non-success (unbacked). The dependency graph keeps Contract IR below codegen. Every
-generated `#[kani::proof]` symbol carries its corpus case's name: the family label
+finite-graph case expands identities in sorted depth-first order: a branch explored before the
+target branch consumes its expansion budget, while a target on an edge of the current identity
+is found without expanding the target. The generated graph oracle uses the same order and bound.
+Every generated `#[kani::proof]` symbol carries its corpus case's name: the family label
 plus the SHA-256 of the case's canonical content (construct, every request field, the finite
 input with its objects and references in sorted order, the profile selection and the
 normalized dependency census), the same name its artifact paths carry. The same request
