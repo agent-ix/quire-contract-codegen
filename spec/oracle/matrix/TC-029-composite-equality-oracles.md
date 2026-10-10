@@ -228,6 +228,20 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `TypeResolutionWorkExhausted` at the denied entry, respectively. In every
     refusal case, assert a healthy sibling generates unchanged and no refused
     item emits a symbol.
+19. Source bytes (FR-018-AC-30, planned, IR-511). Measure the flat Rust
+    source required for the 100,000-entry closure. Run once under the
+    1,048,576-byte default and assert `SourceTooLarge` names that effective
+    limit when exceeded. Raise the caller byte limit to the measured count,
+    generate and compile the complete crate, then lower it by one byte and
+    assert refusal before publication with no partial artifact. Inspect that
+    the generated type declarations have constant nesting per source item,
+    each module fits the publication artifact limit, and the bundle fits its
+    own byte limit.
+20. Work-limit representation (FR-018-AC-31, planned, IR-511). Supply
+    `u64::MAX` as the type-resolution work limit and assert
+    `InvalidTypeResolutionWorkLimit` before lowering or any item charge.
+    Supply `u64::MAX - 1` to a counter seam at its last admissible unit and
+    assert the first denied `consumed` is `u64::MAX`, without wraparound.
 
 ## Expected Results
 

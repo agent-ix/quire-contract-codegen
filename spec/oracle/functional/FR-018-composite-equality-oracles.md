@@ -82,7 +82,12 @@ rather than a formality.
   nodes those types need.
 - A caller-selected per-item type-resolution work limit. When omitted, its
   published default is 65,536 entries; callers may raise it to fit larger
-  admitted packages.
+  admitted packages. Its setting name is
+  `cg.equality.type_resolution_work_units`.
+- A caller-selected generated-source byte limit for this request. Its default
+  is 1,048,576 bytes, matching the current `MAX_GENERATED_SOURCE_BYTES`.
+  A caller may raise it for a larger admitted oracle using
+  `cg.equality.source_bytes`.
 - Contract Runtime with the `exact` feature, as this repository's `Cargo.toml` names it.
 
 As in FR-014, the V2 transport carries each application term's `operation`
@@ -169,9 +174,15 @@ in the `NODE_KEY_DOMAIN` domain.
   it shall refuse only that item as
   `CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit,
   consumed }`, with `limit` the effective setting and `consumed` the first
-  denied entry, and emit no symbols. This budget is independent of
+  denied entry; the refusal also names its stable setting name, and emits no
+  symbols. This budget is independent of
   `COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT`, which governs Contract IR lowering;
   neither is a nesting-depth limit.
+- The type-resolution work limit shall be a `u64` in the range `0..u64::MAX`.
+  If a caller supplies `u64::MAX`, the generator shall reject the request as
+  `InvalidTypeResolutionWorkLimit` before lowering or charging any item: a
+  `u64` refusal cannot encode the first denied count after that setting.
+  For every admitted setting, the first denied count is representable.
 - Type resolution shall use an explicit charged walk whose native call-stack
   use does not grow with input size or nesting depth. Its working storage shall
   grow by at most a constant per charged entry. Rendering the reconstructed
@@ -186,6 +197,18 @@ in the `NODE_KEY_DOMAIN` domain.
   after charging the entry and before following any child. For a long acyclic
   chain, the generator shall report a work refusal only at the first denied
   entry, without a panic or process abort.
+- The generator shall render the reconstructed closure as a flat sequence of
+  bounded-size declarations and temporaries, not as a Rust constructor tree
+  nested once per type entry. The total generated Rust source byte count shall
+  be charged against the effective caller-selected source limit before bytes
+  are appended; at the first denied byte, the whole request shall return its
+  existing `SourceTooLarge` error with the effective limit and needed byte
+  count and the `cg.equality.source_bytes` setting, and publish no partial
+  artifact. Its default preserves the existing
+  1,048,576-byte refusal. A raised limit shall admit a larger source when each
+  artifact fits the publication byte limits; when source exceeds one artifact,
+  the generator shall partition it into deterministic instruction-order
+  modules so no emitted artifact exceeds its publication limit.
 - For the QSpec List record, the generator shall read `next` through its
   `binding(next, aggregate([binding(optional, reference Option<List>)]))`
   structure, follow the option node's sole payload reference to List, and emit
@@ -371,6 +394,8 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-27 | Reading the QSpec Tree `kids` field's direct reference to `collection_bounds` follows that node's `semantic_type` to `Sequence<Tree>`, reads its sole element reference as the Tree `NodeKey`, and reconstructs cardinality `[0,3]` from that bound node's named `min` and `max`; changing the semantic type to a non-sequence, dropping or duplicating either bound, or making either value non-integer refuses only that item with a typed cause and emits no code, never silently yielding an unbounded collection. PLANNED (IR-643). | Test (TC-029) |
 | FR-018-AC-28 | With a caller-selected limit of at least 100,000, an admitted acyclic type chain of 100,000 entries reconstructs and generates an oracle with the same result as an equivalent shallow type on a 512 KiB stack; the default limit refuses it at entry 65,537, and a selected limit one below its entry count refuses it at the first denied entry. No depth setting or fixed depth refusal participates in either run. PLANNED (IR-511). | Test (TC-029) |
 | FR-018-AC-29 | A cycle detected after a charged repeated entry reports `TypeResolutionCycle` without following a child; if that repeated entry is the first denied work entry, `TypeResolutionWorkExhausted` wins and reports the effective limit and first denied count. An unaffected sibling keeps its original disposition in either case. PLANNED (IR-511). | Test (TC-029) |
+| FR-018-AC-30 | The 100,000-entry acyclic closure renders as flat source without a type-depth-sized constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge` naming that limit when the source exceeds it, and under a caller limit equal to its measured source bytes it emits a complete, compilable oracle within the publication artifact and bundle byte limits. One byte less refuses before that byte is appended and publishes no partial artifact. PLANNED (IR-511). | Test (TC-029) |
+| FR-018-AC-31 | A caller-selected type-resolution work limit of `u64::MAX` refuses as `InvalidTypeResolutionWorkLimit` before lowering or charging; with `u64::MAX - 1`, the first denied count fits in the `u64` `consumed` field and is reported without wraparound. PLANNED (IR-511). | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -415,6 +440,8 @@ without one is not written.
 | FR-018-AC-27 | Expect an inline second bounds reference in the Sequence body, or reject every bounded domain whose semantic type is not scalar; the QSpec Tree item refuses. Ignoring a missing bound instead generates an unbounded collection. |
 | FR-018-AC-28 | Keep a fixed 65,536-entry ceiling even after the caller raises the work limit, or use recursive Rust calls for each nested type; the 100,000-entry case refuses or exhausts the 512 KiB stack. |
 | FR-018-AC-29 | Detect the cycle before charging the repeated entry, or follow its child before checking the work limit; the boundary case reports the wrong refusal or visits a child that should not run. |
+| FR-018-AC-30 | Retain the fixed source ceiling, emit one nested constructor per type level, or measure bytes only after publishing; the 100,000-entry case refuses despite a sufficient caller byte limit, overflows a compiler stack, or leaks partial output. |
+| FR-018-AC-31 | Accept `u64::MAX` and increment a `u64` on its first denied charge; the reported count wraps to zero or the process panics. |
 
 ## Dependencies
 
