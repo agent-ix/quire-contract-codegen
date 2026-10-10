@@ -10,7 +10,7 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-019 | FR-019-AC-1 (Kani arm), FR-019-AC-2 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | ⚠️ AC-1 process arm planned in TC-046; remaining listed criteria covered |
+| FR-019 | FR-019-AC-1 (Kani arm), FR-019-AC-2 through FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | TC-030 | 🚧 Planned; generic TC-030 tests exist, but Quire finds no criterion-level trace tags for these ACs, including AC-3; AC-1 process arm remains planned in TC-046 |
 | FR-019 | FR-019-AC-9 | Analysis | ✅ Covered |
 | FR-022 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-5, FR-022-AC-7 through FR-022-AC-15 | TC-033 | ✅ Existing Kani behavior covered; test literals need constructor migration in IR-629 code |
 | FR-022 | FR-022-AC-4 | TC-033, TC-046 | ⚠️ Existing direct-item mismatch test is tagged; a crate-internal test is planned when `backend` and `kind` become private |
@@ -48,8 +48,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10 | ✅ Covered |
-| TC-030 | QSL FR-335 concrete collection control | Integration | P0 | FR-019-AC-24 | 🚧 Planned; QSL owns source fixture and quire-integration owns composed run |
+| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10, FR-019-AC-24 | 🚧 Planned; generic tests have no criterion-level tags, and QSL FR-335 collection composition is pending in quire-integration |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-022-AC-16, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-4 | 🚧 Planned |
 | TC-046 | Verify process-provider settlement and empty generation | Integration | P0 | FR-019-AC-1 (process arm), FR-019-AC-11, FR-019-AC-12, FR-019-AC-13, FR-019-AC-16, FR-019-AC-17, FR-019-AC-18, FR-019-AC-19, FR-019-AC-20, FR-019-AC-21, FR-019-AC-22, FR-019-AC-23, FR-022-AC-17, FR-022-AC-18, FR-022-AC-19, FR-022-AC-21, FR-022-AC-22 | 🚧 Planned |
