@@ -1,54 +1,49 @@
 ---
 id: TC-017
-title: "Verify bound-clause domain derivation and refusal"
+title: "Verify checked V2 clause strategy admission and refusal"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-008
     type: verifies
 ---
-# TC-017: Verify bound-clause domain derivation and refusal
+# TC-017: Verify checked V2 clause strategy admission and refusal
 
 ## Description
 
-Verify that bound strategy generation takes its domain from the IR integer declarations, admits
-exactly the oracle-admitted single-comparison slice, and refuses every other clause in the stated
-order with a located diagnostic and no bundle.
+Verify selected-claim V2 strategy admission through IR's public clause-context comparison accessor,
+exact domain checks, first-defect diagnostics and atomic bundle output. This case is planned until
+IR-703's public accessor and a real QSL ConfigVersion V2 producer fixture are available.
 
 ## Test Procedure
 
-1. Build `BoundPackage` fixtures through the public IR API:
-   - ConfigVersion `VersionUnchanged` shaped as quire-spec-language FR-034 projects it
-     (`Postcondition`, one state declaration for the `versionNumber` field named by an SL-style field
-     alias `SymbolName`, 0..=1000, `Post` left, `Pre` right);
-   - SL's `integer-healthy` invariant `amount < 7` (0..=1000);
-   - oracle-refused clauses: a `Numeric` addition, a `NumericNegate`, and a clause carrying a
-     definedness obligation;
-   - strategy-refused clauses: a total-and connective over two integer comparisons, `amount == amount`,
-     a Boolean equality, Boolean literal/reference/negation roots, a Text operand, a literal-only
-     comparison, and a comparison of `Current` and `Pre` reads of one declaration;
-   - an `Assertion` clause and a `Case` clause over `amount < 7`;
-   - a clause that is both an `Assertion` and a Boolean connective, and one that is both an
-     `Assertion` and oracle-refused;
-   - an oracle-refused package requested through an absent `ClauseRef`.
-2. Request strategy generation for each fixture, and for a `ClauseRef` absent from the package.
-3. Run bound oracle generation over the oracle-refused fixtures.
-4. For FR-008-AC-6, vary each declaration's minimum and maximum across the two just-outside-i64
-   values and the i128 extremes. Assert the strategy's `UnsupportedClause` preserves the oracle's
-   `UnsupportedExpression` code and source span, without a bundle. For FR-008-CON-3, call relation
-   admission directly with the same out-of-range declarations and assert `UnsupportedRelation`.
-   For FR-008-CON-4, call the production literal-conversion boundary with each just-outside-i64
-   value and i128 extreme and assert `UnsupportedRelation` with the clause's source span.
+1. Produce a fresh ConfigVersion V2 package in QSL from the direct postcondition
+   `self.versionNumber = pre(self.versionNumber)`, admit it through Contract IR and select its
+   authentic clause id and claim occurrence. Request a strategy and inspect the census, relation,
+   output and diagnostic fields. Independently request the let-bound
+   `let s=pre(self) in s.versionNumber` form and assert typed operand ineligibility. Label any
+   hand-built topology fixtures synthetic; they do not establish QSL producer behavior.
+2. Through public IR admission, construct an invariant with a direct typed `amount < 7` comparison,
+   `amount` bounded 0..=1000, and its reversed-order counterpart. Inspect authored operand order,
+   operator, provenance, observation and literal position.
+3. Put a valid requested claim beside an oracle-refused sibling in one package. Request each claim
+   separately. Also exercise a whole-generation oracle error, arithmetic and Boolean operands,
+   an alias, a literal-only comparison, same-read and mixed-observation read pairs.
+4. Exercise unknown clause, absent claim, unsupported clause kind and malformed comparison, alone
+   and in combinations that establish FR-008's first-defect order. Compare each IR accessor cause,
+   clause/claim, structural path and reached child id with CG's diagnostic. Assert no unique
+   expression source occurrence is attributed to a child id.
+5. Vary each exact read endpoint and literal across i64::MIN - 1, i64::MAX + 1, i128::MIN and
+   i128::MAX. Exercise two reads whose ranges are separately i64-representable but unequal, then
+   equal. Check all refusal paths and the complete-bundle/zero-artifact boundary.
 
 ## Expected Results
 
-- `VersionUnchanged` and `amount < 7` produce the census stated in FR-008-AC-1 and FR-008-AC-2.
-- Each oracle-refused fixture returns `UnsupportedClause` with the same lower-level code, terminal
-  state, and span that step 3 reports.
-- Each strategy-refused fixture returns `UnsupportedRelation` with terminal state `unsupported`.
-- The `Assertion` and `Case` fixtures return `UnsupportedClauseKind`; the absent `ClauseRef` returns
-  `UnknownClause` with `invalid-input`.
-- The combined `Assertion` connective returns only `UnsupportedClauseKind`.
-- Every refusal carries the full `ClauseRef`, and no refusal emits an artifact. Expression failures
-  carry the exact offending span; `UnknownClause` and `UnsupportedClauseKind` carry no span.
-- No out-of-i64 declaration endpoint or literal is narrowed, clamped or admitted as an i64 strategy
-  value (FR-008-CON-3, FR-008-CON-4).
+- The real ConfigVersion direct form admits two `State` entries in authored `Post`, `Pre` order,
+  each 0..=1000, with shared project id and selected claim; its let-bound alias refuses.
+- The invariant admits `Less`, `amount` and literal 7; reversing operands preserves authored order.
+- The good selected claim succeeds beside a refused sibling. The refused selected claim and a
+  whole-generation failure emit no artifact. Other ineligible shapes refuse at their own locus.
+- Refusals preserve typed first cause and contextual structural location; no child id is presented
+  as a unique source occurrence. No refusal emits part of a bundle.
+- Out-of-i64 endpoints and literals never narrow, wrap or clamp. Unequal read ranges refuse at
+  operand one even when both fit i64; equal ranges may admit.

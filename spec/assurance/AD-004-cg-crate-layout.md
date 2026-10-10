@@ -1322,3 +1322,19 @@ FR-015 V2 contract input (step 4c).
   rule for `ReplayRefused` is relayed.
 - The `quire-canonical` API names (`to_vec`, `Limits`, `sha256`), QSL's tag pin and the driver's
   one-copy gate are relayed and were not checked.
+
+## IR-364 V2 strategy replacement gate
+
+The strategy replacement consumes IR FR-038-AC-202 through AC-209's public clause-context
+comparison accessor (IR-703, planned/unrun) over `CheckedPackageV2`, a checked clause id and an
+authentic claim occurrence. Contract IR owns operand provenance, observation, identity and exact
+i128 bounds. `strategy/bound` owns CG's narrower equal-domain i64 admission, constructive
+population and census. `strategy/harness` owns campaign execution; `oracle` supplies the selected
+V2 claim's oracle or typed refusal. The selected claim is the admission unit even when a sibling
+claim is refused; generated output remains atomic for the selected request. A real QSL-produced,
+IR-admitted ConfigVersion direct Post/Pre comparison is required before claiming this code path.
+
+The same code change that introduces the V2 public strategy entry removes the V1
+`BoundPackage`/`ClauseRef` strategy entry and its V1-only harness reader. This gate does not delete
+V1 readers in `evidence`, `oracle/boolean_v1.rs`, `oracle/bound_v1.rs` or Kani before their own
+replacement gates. The caller-constraint `strategy/campaign.rs` is unaffected.

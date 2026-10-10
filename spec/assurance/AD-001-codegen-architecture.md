@@ -87,6 +87,25 @@ The routed path runs in four steps:
 FR-015 is the one Kani generator. Each of its harnesses embeds the FR-014 oracle of its claim,
 records the ceilings it runs under and names its family (FR-028).
 
+### V2 strategy admission view
+
+FR-008's planned strategy request selects a checked clause id and authentic claim occurrence from
+`CheckedPackageV2`. Contract IR owns the clause-context comparison accessor and decides operator,
+operand provenance, observation, identity and exact i128 bounds (IR FR-038-AC-202 through AC-209,
+planned/unrun under IR-703). CG consumes that typed result, admits its narrower equal-domain i64
+relation, then constructs FR-009 through FR-013 populations, census, runner and consumer fields. The
+V2 scalar oracle claim map can refuse an item independently; CG applies only the selected claim's
+refusal to a strategy request. Any refusal leaves its selected request with no source bundle. CG
+uses neither a private V2 body decoder nor a second schema.
+
+The active V1 strategy entry currently consumes `BoundPackage` and `ClauseRef`. Its replacement
+change deletes that public V1 entry as it introduces the V2 selected-claim entry; it does not keep
+both as supported strategy APIs. This gate is scoped to strategy and its harness. V1 Boolean/Kani
+oracle consumers have separate retirement dependencies and are not claimed retired by this slice.
+The QSL-produced ConfigVersion direct postcondition is the admission control; its let-bound alias
+is a typed refusal. IR-703 and the QSL producer fixture must exist before CG V2 implementation can
+claim the corresponding runtime tests.
+
 ### Runtime `exact` surface view
 
 Every generated oracle crate calls `quire_contract_runtime::exact` and interprets no expression
