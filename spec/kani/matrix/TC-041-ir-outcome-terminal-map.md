@@ -1,6 +1,6 @@
 ---
 id: TC-041
-title: "Verify the total map from a Contract IR Kani outcome to QSL's terminal value"
+title: "Verify the Kani and SMT terminal maps, proof basis and certification"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-030
@@ -8,14 +8,16 @@ relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-029
     type: verifies
 ---
-# TC-041: Verify the total map from a Contract IR Kani outcome to QSL's terminal value
+# TC-041: Verify the Kani and SMT terminal maps, proof basis and certification
 
 ## Description
 
 Verify that each pair of Contract IR `KaniOutcome` and replay settlement maps to the QSL terminal
 value FR-030's table states, that refusal kinds survive the map, that a `Counterexample` is
 `Refuted` only with a reproduced replay, that the `Unavailable` cause code selects the unavailability
-cause, and that the map is one match with no wildcard arm.
+cause, and that the map is one match with no wildcard arm. Verify separately that the registered
+SMT backend preserves its bounded-complete or inductive basis and maps checked, unchecked and
+rejected certificates to their distinct terminal results and certification.
 
 ## Test Procedure
 
@@ -24,7 +26,8 @@ cause, and that the map is one match with no wildcard arm.
    code STD-001 does not register.
 3. Map `TimedOut`, `ResourceExhausted` and `Cancelled`.
 4. Map `Proved` with a transcript count of three SUCCESS checks and with a count of zero, and map
-   `Counterexample` with a reproduced replay.
+   `Counterexample` with a reproduced replay. Inspect the basis, certification and category of
+   both proof payloads, and confirm the counterexample has no proof fields.
 5. Map `Inconclusive` with cause `kani_vacuous_proof`, and with another cause.
 6. Map `Unavailable` with cause `kani_solver_absent`, with `kani_backend_absent`, and with another
    cause.
@@ -59,14 +62,33 @@ cause, and that the map is one match with no wildcard arm.
     changes one observation member. Inspect whether a report and terminal record exist, and the
     actual result, QSL code and category when they do.
 
+17. For each SMT proof basis `BoundedComplete { depth: 3 }` and
+    `Inductive { depth: 1 }`, pass a certificate whose queries and checked Alethe proof steps
+    FR-314 verifies, then no certificate, then a certificate whose only issue is one unchecked
+    `hole` or `lia_generic` step. Inspect the full result, basis/depth, certification and first
+    unverifiable step. Mutate the certificate to a foreign query, a mismatched basis shape, an
+    invalid checked step, and a missing final empty clause; inspect the exact QSL rejection rule
+    and locus and confirm no proof result exists.
+18. On one accepted SMT item, make Z3 agree and then disagree with cvc5 on the same query;
+    repeat the disagreement while FR-314 rejects that item's certificate for a foreign query,
+    and inspect the one terminal cause and the retained parity failure with both verdicts.
+    Remove Z3 and inspect the warning. On a refuted SMT item, make FR-197 replay reproduce,
+    disagree, refuse without fault, and fault. Include a solver inconclusive/stop outcome, an
+    item refused during negotiation, and inspect the typed SMT boundary to confirm it cannot
+    consume a Kani outcome. Inspect terminal cardinality, typed causes, proof fields and retained
+    paired verdicts.
+
 ## Expected Results
 
 1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
 2. `Declined` with three distinct causes, each carrying the outcome's code unchanged as
    `DeclineCode::Std001`, the unregistered code included (FR-030-AC-2).
 3. `Incomplete` with three distinct causes (FR-030-AC-3).
-4. `Proved { success_checks: 3 }`, `Proved { success_checks: 0 }` and `Refuted` (FR-030-AC-4).
-5. `Proved { success_checks: 0 }` and `Failed` (FR-030-AC-5).
+4. `Proved { basis: Checks { success_checks: 3 }, certification: Certified }`, a zero-check
+   `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` read as
+   inconclusive/vacuous, and `Refuted` without proof fields (FR-030-AC-4, FR-030-AC-18).
+5. The zero-check `Proved` payload with `Checks`/`Certified` and inconclusive/vacuous category,
+   then `Failed` with no proof fields (FR-030-AC-5, FR-030-AC-18).
 6. `Unsupported(SolverAbsent)`, `Unsupported(BackendAbsent)` and `Unsupported(BackendAbsent)`
    (FR-030-AC-8).
 7. The `match` over the pair has no wildcard arm (FR-030-AC-7).
@@ -97,9 +119,28 @@ cause, and that the map is one match with no wildcard arm.
     one observation member changes; the valid composite report is not `UnexpectedSettlement`
     (FR-029-AC-28; FR-030-AC-17).
 
+17. Both SMT bases retain their exact depth. A verified certificate gives `Proved`/`Certified`;
+    an absent or unverifiable certificate gives `Proved`/`Uncertified`, never `Trusted`, with the
+    first unchecked step retained when present. Each shown-wrong certificate gives
+    `Inconclusive(CertificateRejected { rule, at })` with the exact rule and locus, no `Proved`
+    value and no basis or certification (FR-030-AC-19, FR-030-AC-20).
+18. Z3 disagreement without certificate rejection is inconclusive with both verdicts. When a
+    foreign-query certificate is also rejected, the one terminal cause is
+    `CertificateRejected { rule: QueryMismatch, at: Query { part } }`, retaining the actual
+    QSL locus; the parity failure and both solver verdicts remain alongside the terminal,
+    with no proof basis or certification. Agreement changes no certification;
+    absent Z3 retains its warning and cvc5 result. Only reproduced replay produces `Refuted`;
+    disagreement, non-fault refusal and fault produce their own non-proof results. Every
+    expressible accepted SMT settlement has one terminal result with no `Tested`; negotiation
+    refusal has none from this map, and the typed SMT boundary cannot consume a Kani outcome
+    (FR-030-AC-21, FR-030-AC-22).
+
 ## Status
 
-Steps 1 to 13 are implemented in `tests/it/terminal_map.rs`. IR-666's public converter tests
+Steps 1 to 13 cover the existing Kani outcome map in `tests/it/terminal_map.rs`; the
+`ProofBasis`/`Certification` assertions and SMT steps 17 to 18 are planned after QSL
+FR-127/FR-314 and the registered SMT backend are available. The current Kani tests assert
+the earlier count-only payload and do not yet satisfy the amended criteria. IR-666's public converter tests
 exercise steps 14 to 16 against genuine QSL F-1 to F-7 reports, including native causes, limit
 stages, complete identity binding and the `prepare` refusal. The original-artifact builder,
 same-artifact native execution and production invocation remain planned under IR-635. Step 7's
