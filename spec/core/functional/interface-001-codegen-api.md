@@ -49,10 +49,10 @@ operations:
     output: PublishedBundleIdentity | IO diagnostic
     semantics: stage and validate the complete bundle, then replace the destination directory; caller serializes destination writers; inspection/read failures return io_failed with unchanged state; failed rollback reports unknown and preserves backup/staging for recovery; post-commit cleanup failures report published; process crashes between directory renames and power-loss durability remain outside the portable rollback guarantee
   - name: analyze_coverage
-    status: planned; public IR-owned bound population is available, native run-result contract and aggregate analysis integration remain pending
-    inputs: [bound executable population, generated source and maps actually used by the native coverage producer, LLVM coverage JSON bytes and producer tool/version, native run identity and requirement/revision, source root, runtime campaign report, execution outcome]
-    output: versioned structured AnalysisOutcome including non-success diagnostics, run and LLVM producer identities, and available clause observations
-    semantics: analysis binds the run to its actual generated source and source map; coverage obligation succeeds only for nonempty complete exercised population with successful bound execution, so oracle success with an unobserved implication consequent is adverse; successful serialization is not successful coverage; IR FR-045 owns proof eligibility and credit; never executes LLVM
+    status: planned; public IR-owned bound population is available, QSL native-run-result/2 production and aggregate analysis integration remain pending
+    inputs: [bound executable population, generated source and maps actually used by the native coverage producer, LLVM coverage JSON bytes and producer tool/version, native generated-campaign execution and source/map binding receipt, QSL strict-reader result for native-run-result/2 or its located refusal, source root, runtime campaign report]
+    output: versioned structured AnalysisOutcome including non-success diagnostics, independent QSL clause-run disposition and generated-campaign execution facts, run and LLVM producer identities, and available clause observations
+    semantics: consume QSL's typed /2 reader result without a CG wire parser or /1 fallback; a QSL clause-run success, decisive witness or command-error envelope never authenticates execution of CG-generated Rust, source/map bytes or LLVM probes; bind the generated campaign to its actual source and source map through an independent producer receipt; coverage obligation succeeds only for nonempty complete exercised population with successful bound generated execution, so oracle success with an unobserved implication consequent is adverse; successful serialization is not successful coverage; IR FR-045 owns proof eligibility and credit; never executes LLVM
   - name: analyze_bound_coverage
     status: implemented phase A; full native-run analysis remains pending
     inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
@@ -368,6 +368,9 @@ coverage_analysis_slice:
   revision: compare IR and source-map u64 revision to runtime RevisionId using the canonical decimal string without leading zeroes
   invalid_input: stable non-success analysis outcome retains available diagnostics without fabricated measured classifications
   default_gate: every executable clause exercised and native execution passed; adverse or unavailable coverage cannot discharge obligation; no automated human sufficiency or exception decision
+  qsl_native_result: the planned analyze_coverage entry accepts only the QSL strict reader's typed native-run-result/2 result or located wire refusal; its clause-run stage/category/truth, basis and optional witness remain QSL semantic facts, separate from CG generated-campaign execution, CampaignReport counts, LLVM observations and a producer-authenticated source/map receipt (FR-004)
+  qsl_result_refusals: missing or non-/2 format and malformed basis/witness remain located reader refusals; a command-error envelope is a separate non-success input whose typed intake remains allocated by QSL-688; no content sniffing, /1 fallback, message parsing, invented witness member, or mapping a QSL result to generated-run success
+  qsl_result_gate: success with a decisive witness is still insufficient for generated-campaign execution or coverage; violation, refusal, undefined, incomplete, cancelled, unsupported, internal failure and command error cannot discharge the consuming obligation; the planned source/map receipt must identify the actual generated artifacts and LLVM producer independently of the /2 document
 compatibility:
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: crate AGPL-3.0-or-later; emitted Rust carries the MIT OR Apache-2.0 SPDX identity required by NFR-002

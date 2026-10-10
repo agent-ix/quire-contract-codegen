@@ -13,7 +13,8 @@ relationships:
 ## Description
 
 Verify actual generated-oracle probes against native LLVM export, and ultimately keep measured
-coverage, runtime accounting, native execution outcome, and obligation discharge distinct.
+coverage, runtime accounting, generated-campaign execution, QSL clause-run outcome, and obligation
+discharge distinct.
 
 ## Test Procedure
 
@@ -67,6 +68,34 @@ then replace the map, source, revision or run independently while preserving the
 Also omit or change the LLVM producer tool/version identity. The successful case reports that
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
 result and cannot discharge coverage.
+
+## Planned native-run-result/2 consumer controls
+
+1. Obtain QSL FR-267's genuine `native-run-result/2` documents for `AllBelow` over `high`
+   (decisive counterexample with witness), `AllBelow` over `low` (closed scope without witness),
+   and exhausted work (unavailable without witness). Feed each through QSL's strict reader, then
+   the planned CG `analyze_coverage` input. Compare typed stage, category, truth, basis and each
+   assigned witness component with independently authored expectations; do not compare the reader
+   output to itself as the oracle.
+2. In separate documents change the `format` to `/1` and `/3`, omit `format`, omit or change
+   `basis`, omit a required witness component, add an unknown witness member, place a witness on
+   closed scope, or remove one from a decisive basis. The QSL reader must return a located refusal
+   before CG classifies a clause. Feed the QSL FR-267 `unknown_edition` command-error envelope
+   separately after QSL-688 allocates its typed intake; it must retain stage `profile`, code
+   `unknown_edition`, `basis: unavailable`, and no witness as an error, never become a successful
+   clause run.
+3. Give CG a genuine QSL semantic-success document with a decisive witness but no execution of
+   its generated Rust campaign or no producer-authenticated source/map/LLVM binding. Conversely,
+   run a generated campaign and measure its probes while QSL's clause run reports violation,
+   refusal, undefined, incomplete, unsupported or internal failure; exercise a QSpec cancellation
+   form separately only when QSL provides such a producer case. Check that each
+   fact stays typed and independent, none is inferred from the other, and no missing generated-run
+   evidence or adverse result can discharge coverage or grant IR FR-045 proof credit. Repeat with
+   the generated source or map independently changed after a producer receipt is available.
+
+These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 must settle the
+independent generated-campaign producer binding. The existing `analyze_bound_coverage` primitive
+does not consume a QSL result and is not evidence for these steps.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
 completion of bound analysis, native-run binding, or a consuming obligation.

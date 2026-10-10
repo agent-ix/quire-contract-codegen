@@ -27,12 +27,18 @@ per-requirement vacuity report without executing a coverage producer itself.
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export bytes, its producer tool and version, and native runtime campaign
   results identifying the generated source and source map actually used for that run.
+- Separately, a QSL strict-reader result for a `native-run-result/2` clause-run document, or its
+  located wire refusal. This is QSL source-clause evaluation, not execution of the generated
+  campaign; its producer implementation is pending QSL-520 and source-binding allocation is
+  pending QSL-688.
 
 ## Outputs
 
 - A versioned analysis outcome containing trusted observations, per-clause classifications where
   measurable, structured diagnostics, and an explicit non-success state for
   adverse, unavailable, unsupported, malformed, or inconclusive analysis.
+- Distinct retained facts for the QSL clause-run disposition and the generated Rust campaign's
+  execution/coverage state; neither fact is synthesized from the other.
 
 ## Behavior
 
@@ -65,14 +71,30 @@ per-requirement vacuity report without executing a coverage producer itself.
   outcome independently. It shall verify run/requirement/revision bindings; a successful test outcome
   cannot coexist with failed postconditions, and positive oracle observation cannot coexist with
   zero recorded invocations when the run declares the generated campaign as its only execution source.
+- The planned aggregate analyzer shall consume `native-run-result/2` only through QSL's strict
+  reader. It shall retain the typed clause-run stage, category, truth where present, settlement
+  basis and optional witness without parsing display text or making an absent component `null`,
+  zero or a default. A located wire refusal, including an absent or non-`/2` format, or a QSL
+  command-error envelope is not a successful clause-run result; QSL-688 owns its typed intake
+  boundary. The analyzer shall not add a
+  `/1` reader, schema copy, or version inference from payload members.
+- The analyzer shall keep QSL source-clause evaluation separate from generated Rust campaign
+  execution. QSL `success`, `closed-scope`, or a decisive witness cannot establish that CG's
+  generated artifact ran; QSL `violation`, refusal, undefined, incomplete, cancelled, unsupported
+  or internal failure remains a typed adverse/non-success semantic fact and cannot be promoted to
+  passed generated execution. A command-error envelope retains its stage/code/cause/details as an
+  error, never as a Boolean clause result. No QSL witness or LLVM probe alone grants IR FR-045
+  completed-proof credit.
 - Source-map requirement/revision identity shall equal the runtime campaign identity, and duplicate,
   missing, ambiguous, malformed, summary-only, or unsupported-version coverage input shall remain
   a structured non-success analysis outcome.
-- The native run shall identify its requirement and revision and the generated source and source map
-  its producer used. Successful analysis shall use that same source map and generated source, rather
-  than an independently supplied map that merely names the same requirement. The report shall retain
-  the LLVM export producer's tool and version identity alongside the run identity. Missing or
-  conflicting producer, run, revision, source, or map identity shall prevent coverage discharge.
+- The generated-campaign producer receipt shall identify the run's requirement and revision and
+  the generated source and source map actually used, independently of the QSL clause-run document.
+  Successful analysis shall use that same source map and generated source, rather than an
+  independently supplied map that merely names the same requirement. The report shall retain the
+  LLVM export producer's tool and version identity alongside the generated-run
+  identity. Missing or conflicting producer, run, revision, source, or map identity shall prevent
+  coverage discharge. The receipt shape and QSL `/2` source-binding split remain pending QSL-688.
 - A non-success analysis outcome shall retain its diagnostics without claiming that invalid or
   absent inputs were analyzed successfully.
 - Coverage filenames shall match source-map artifact paths only after stripping the caller-declared
@@ -99,8 +121,10 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-7 | Removing an expected clause, consequent, evaluation probe, or all clauses prevents successful analysis; the expected census comes from bound typed IR. | Test (TC-006) |
 | FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test |
 | FR-004-AC-9 | Complete bound observations without a native campaign run are reported as observations only and never as a passed coverage result. Valid informational-only populations retain their references as no executable work. | Test |
-| FR-004-AC-10 | PLANNED. A native-run coverage result binds the analyzed source map and generated source to the ones its producer used, matches their requirement and revision to the campaign, and reports the LLVM producer tool and version; a changed or missing run/map/source binding or producer identity yields non-success without coverage discharge. | Test |
+| FR-004-AC-10 | PLANNED. An independently authenticated generated-campaign producer receipt binds the analyzed source map and generated source to the ones actually run, matches their requirement and revision to the campaign, and reports the LLVM producer tool and version; a changed or missing run/map/source binding or producer identity yields non-success without coverage discharge. A QSL `native-run-result/2` document alone does not supply this receipt. | Test |
 | FR-004-AC-11 | PLANNED. The consuming report retains vacuity and native outcome as evidence for IR FR-045; an oracle-success run with an unobserved consequent denies the coverage obligation, and LLVM probe observations alone produce no completed-proof credit or separate eligible denominator. | Test |
+| FR-004-AC-12 | PLANNED. CG consumes QSL's typed strict-reader result for exact `native-run-result/2`: a decisive basis retains its witness with its assigned members, while `closed-scope` or `unavailable` retains no witness. Missing or other versions, missing/unknown basis, malformed witness and contradictory basis/witness are located wire refusals with no clause classification or coverage discharge; no `/1` fallback or CG copy of the wire reader exists. | Test |
+| FR-004-AC-13 | PLANNED. QSL `run_clause` success and a decisive witness remain source-clause facts and do not count as generated-campaign execution or LLVM coverage; QSL violation, refusal, undefined, incomplete, cancelled, unsupported, internal failure and command-error envelope remain distinct typed adverse/non-success facts, with no inferred Boolean success, proof credit or coverage discharge. | Test |
 
 ## Implementation boundary
 
@@ -115,6 +139,11 @@ diagnosed, rather than allocate fabricated zero observations. Full ClauseRefs on
 ordered clause retain per-requirement membership without duplicating or summing campaign counts.
 Native campaign-run binding is planned; FR-004/TC-006 remain planned until it and a consuming
 obligation exist.
+
+`native-run-result/2` consumption is also planned. QSL-520 must deliver the producer and strict
+reader. QSL-688 must settle how a generated-campaign producer receipt binds the actual CG artifact,
+source map and LLVM export independently of a QSL clause run; this specification does not treat
+the `/2` document as that receipt.
 
 IR FR-045 owns source-derived proof eligibility, denominators, and completed-proof credit;
 this analyzer supplies execution observations and the coverage-obligation decision only.
