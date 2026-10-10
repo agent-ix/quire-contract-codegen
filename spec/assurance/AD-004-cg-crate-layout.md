@@ -430,7 +430,7 @@ What happens to the other generators:
 | `generate_kani_bundle` | Deleted at step 4f, after step 4e, the QSL-owned move of the QI exemplars and the control passing on the V2 contract arm (4c). Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
 | `kani_obligations` scalar, precondition, contract renderers | Become family lowerers; the template text moves into `render.rs`. Until 4c the precondition and contract families keep their V1 input. |
 | `state_frame` renderers | Become the frame lowerer. |
-| `bounded_kani_corpus` renderer | Keeps its own template until QSL-353 lands (an interim exception to L-3; its cover is FR-015-AC-55, IR-464); then its hand-built package lowerer is retired and its cases render through `render.rs` (step 4g). It returns no `KaniOutcome` at generation time: a verdict comes only from a run. |
+| `bounded_kani_corpus` renderer | Keeps its own template until QSL-353 lands (an interim exception to L-3; its cover is FR-015-AC-55, IR-464); then its hand-built package lowerer is retired and its cases render through `render.rs` (step 4g). Before step 4g, the hand-built path returns a generated-case `KaniOutcome` classification under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
 
 **Requirement (regression test the one generator must keep passing).** QSL's real-Kani arithmetic
 control, recorded as QSL-342 QI #10, passes at every step of the migration, on the path that

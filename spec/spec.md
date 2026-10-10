@@ -104,7 +104,7 @@ The current Kani module and public-surface ownership map is:
 | `kani/generate/{negotiate,outcome,scalar,precondition,contract,frame}` and `negotiate_kani_obligations` | FR-015; FR-025 for argument/subject ABI | V2 scalar and state/frame items live; V2 contract-clause items planned (FR-015-AC-38 to AC-49). |
 | `kani/generate/{clause,v1_bundle}` and `generate_kani_bundle` | FR-015 interim bundle criteria; FR-025 ABI | V1 input and bundle live pending AD-004 steps 4c to 4f; no second enduring Kani generator is authorized by ADR-001 Q1. |
 | `kani/generate/lower/{bounded_kani_profile,definedness_arithmetic,finite_reference_graphs,bounded_collections}` and their four public classifier/lowering operations | FR-015-AC-82 to AC-89 | Live finite-input auxiliaries pending the AD-004 V2 migration. |
-| `kani/generate/corpus/bounded_kani_corpus` and `generate_bounded_kani_corpus_case` | FR-015-AC-51 to AC-58 and AC-90 to AC-94 | Live four-artifact finite-input corpus; its native replay is planned. |
+| `kani/generate/corpus/bounded_kani_corpus` and `generate_bounded_kani_corpus_case` | FR-015-AC-51 to AC-58 and AC-90 to AC-95 | Live four-artifact finite-input corpus; its generated-case classification retires at AD-004 step 4g under AC-95, and its native replay is planned. |
 | `kani/{abi,census,identity}` | FR-015 proof census and identity; FR-025 symbolic argument and subject ABI | Live support vocabulary; composite leaf ABI remains planned. |
 | `kani/{run,output,classify}` and the execution operations | FR-017, with FR-028 proof ceilings and NFR-006's real-Kani lane | Live run and report processing. |
 | `kani/terminal` | FR-029 and FR-030 | Live terminal maps; the backend adapter trait remains planned. |

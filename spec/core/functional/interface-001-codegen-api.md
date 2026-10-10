@@ -92,7 +92,7 @@ operations:
     output: GraphLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
     semantics: CG-owned positive-length finite reference-graph reachability over IR-validated objects and references, with sorted depth-first expansion and a bound before each new identity; malformed or exhausted requests stay IR typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
-    status: live interim four-artifact corpus under FR-015-AC-51 to AC-58 and AC-90 to AC-94; native replay remains planned; AD-004 step 4g governs its migration
+    status: live interim four-artifact corpus under FR-015-AC-51 to AC-58 and AC-90 to AC-94; native replay remains planned; AD-004 step 4g removes its generation-time KaniOutcome under planned FR-015-AC-95
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | BoundedCorpusError
     semantics: one bounded Kani corpus case and its proof dependency graph; a refusal is a BoundedCorpusError whose Outcome variant carries the typed KaniOutcome (its code a quire_contract_model Std001Code) and whose OutcomeConstruction variant carries Contract IR's refusal to build a non-success outcome; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a serialization failure of the case's proof graph refuses as kani_corpus_serialization_failed (NFR-005)

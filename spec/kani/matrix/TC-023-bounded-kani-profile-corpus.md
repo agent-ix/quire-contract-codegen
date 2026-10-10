@@ -12,11 +12,13 @@ relationships:
 
 Verify the current bounded-profile classifier, three CG-owned finite-input
 lowerers and four-artifact corpus emitter against FR-015-AC-82 through
-FR-015-AC-94. The generated `KaniOutcome` is a case classification; only
-FR-017's installed-backend run provides proof evidence. The corpus retains no
+FR-015-AC-95. Before AD-004 step 4g, the hand-built path's generated
+`KaniOutcome` is a case classification; after step 4g, generation returns no
+`KaniOutcome`. Only FR-017's installed-backend run provides proof evidence.
+The corpus retains no
 counterexample packet, so native replay remains planned and unbacked. Current
 source tests carry `TC-023` trace tags, but none binds FR-015-AC-82 through
-FR-015-AC-94 yet; the computed matrix reports those criteria untagged.
+FR-015-AC-95 yet; the computed matrix reports those criteria untagged.
 
 ## Test Procedure
 
@@ -29,6 +31,9 @@ finite input; compare their selected family, profile, case identity and oracle
 truth value. Vary one case input at a time, reorder graph objects and edges,
 repeat emission through one registry, and submit invalid dependency censuses.
 Run the installed backend for FR-015-AC-57's healthy and falsifying cases.
+After AD-004 step 4g, check that neither successful nor refused corpus
+generation returns a `KaniOutcome`, then classify a successful case's run under FR-017
+(FR-015-AC-95; planned).
 Inspect the resolved Cargo graph for a reverse Contract IR-to-codegen dependency.
 
 Planned replay procedure: once a corpus case retains a real QSL source and
@@ -42,8 +47,10 @@ Every profile request has one ordered disposition per construct, or one typed
 request refusal. Each successful lowering returns the exact family result and
 each adverse case its original typed non-Boolean refusal, with no partial
 artifact or proof claim. One admitted corpus case has all four artifacts and
-one generated case outcome; a refused case has none and does not claim an
-identity. Native replay remains unbacked. The dependency graph keeps Contract
+one generated case classification until AD-004 step 4g retires that path;
+after step 4g, the artifacts have no generation-time `KaniOutcome` or proof
+verdict. A refused case has no artifacts and claims no identity. Native replay
+remains unbacked. The dependency graph keeps Contract
 IR below codegen. Every
 finite-graph case expands identities in sorted depth-first order: a branch explored before the
 target branch consumes its expansion budget, while a target on an edge of the current identity
@@ -66,7 +73,8 @@ source id, leaves no artifact and records no case identity in the registry
 (FR-015-AC-51). The context of every typed outcome and refusal the corpus
 returns (proved, counterexample, dependency-invalid, identity-collision,
 a lowering refusal and the mismatch refusal) is the revision of the profile
-selection (FR-015-AC-52).
+selection while the hand-built path remains (FR-015-AC-52); its `Proved` and
+`Counterexample` values classify generated cases rather than Kani runs.
 
 Implemented (IR-464): the harness every corpus case emits, of each of the arithmetic, graph
 and collection families, ends with exactly one `kani::cover!` after its assertion of the

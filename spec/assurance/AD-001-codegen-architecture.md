@@ -259,7 +259,9 @@ The views and decisions above state the target. At this revision:
   `BoundPackage`. FR-015's V2 contract-clause criteria remain planned, so AD-004's steps 4c
   through 4g have not yet retired these paths. The bounded-profile classifier, three
   finite-input lowerers and corpus emitter have interim ownership under FR-015-AC-82 to
-  FR-015-AC-94; the corpus retains no counterexample packet and claims no native replay.
+  FR-015-AC-94; its current generated-case classification retires at AD-004 step 4g
+  under planned FR-015-AC-95. The corpus retains no counterexample packet or
+  native replay result.
 - No backend adapter trait exists yet. The runner enforces a wall-clock and memory ceiling,
   and `src/kani/terminal.rs` maps a Kani run outcome paired with its replay settlement to a
   QSL terminal value (FR-029); neither fact completes the planned adapter trait.
