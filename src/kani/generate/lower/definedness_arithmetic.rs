@@ -1,22 +1,92 @@
-//! Definedness-preserving checked arithmetic admission for generated backends.
+//! CG-owned checked arithmetic admission over IR's validated finite input and typed outcome.
 
 use quire_contract_ir::kani::{
-    lower_checked_arithmetic, ArithmeticLowering, CheckedArithmeticRequest, DispatchIndex,
-    KaniOutcome, KaniProfile, ValidatedFiniteInput,
+    DispatchIndex, KaniOutcomeKind, KaniProfile, SemanticFamily, ValidatedFiniteInput,
 };
+use quire_contract_model::{std001_code, NumericOperator};
 
-/// Produces the native reviewed arithmetic plan before code generation may render an artifact.
-///
-/// Division by zero, checked overflow, invalid ranges, profile refusal, and dispatch mismatch are
-/// returned as Contract IR typed non-Boolean outcomes; no generator may replace them with an
-/// assumption or a partial artifact.
+use super::{admit_family, refusal, FamilyLoweringError};
+
+/// An exact arithmetic request with an inclusive result domain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CheckedArithmeticRequest {
+    /// Source clause identity.
+    pub source_id: &'static str,
+    /// Checked operation.
+    pub operator: NumericOperator,
+    /// Left operand.
+    pub left: i128,
+    /// Right operand.
+    pub right: i128,
+    /// Inclusive result minimum.
+    pub minimum: i128,
+    /// Inclusive result maximum.
+    pub maximum: i128,
+}
+
+/// The admitted request and its exact result; this is not a Kani verdict.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArithmeticLowering {
+    /// Original request.
+    pub request: CheckedArithmeticRequest,
+    /// Checked value in the selected domain.
+    pub value: i128,
+}
+
+/// Prepares one defined arithmetic operation for generated artifacts.
 pub fn prepare_checked_arithmetic(
     profile: &KaniProfile,
     dispatch: &DispatchIndex,
-    input: &ValidatedFiniteInput,
+    _input: &ValidatedFiniteInput,
     request: CheckedArithmeticRequest,
-) -> Result<ArithmeticLowering, KaniOutcome> {
-    lower_checked_arithmetic(profile, dispatch, input, request)
+) -> Result<ArithmeticLowering, FamilyLoweringError> {
+    admit_family(
+        profile,
+        dispatch,
+        "checked-arithmetic",
+        SemanticFamily::DefinednessArithmetic,
+        request.source_id,
+    )?;
+    if request.minimum > request.maximum {
+        return Err(refusal(
+            KaniOutcomeKind::InvalidInput,
+            std001_code!("kani_arithmetic_range_invalid"),
+            request.source_id,
+            profile,
+        ));
+    }
+    let value = match request.operator {
+        NumericOperator::Add => request.left.checked_add(request.right),
+        NumericOperator::Subtract => request.left.checked_sub(request.right),
+        NumericOperator::Multiply => request.left.checked_mul(request.right),
+        NumericOperator::Divide | NumericOperator::Remainder if request.right == 0 => {
+            return Err(refusal(
+                KaniOutcomeKind::Refused,
+                std001_code!("kani_definedness_nonzero_divisor"),
+                request.source_id,
+                profile,
+            ));
+        }
+        NumericOperator::Divide => request.left.checked_div(request.right),
+        NumericOperator::Remainder => request.left.checked_rem(request.right),
+    };
+    let Some(value) = value else {
+        return Err(refusal(
+            KaniOutcomeKind::Refused,
+            std001_code!("kani_definedness_checked_range"),
+            request.source_id,
+            profile,
+        ));
+    };
+    if !(request.minimum..=request.maximum).contains(&value) {
+        return Err(refusal(
+            KaniOutcomeKind::Refused,
+            std001_code!("kani_definedness_checked_range"),
+            request.source_id,
+            profile,
+        ));
+    }
+    Ok(ArithmeticLowering { request, value })
 }
 
 #[cfg(test)]
@@ -85,6 +155,7 @@ mod tests {
             },
         )
         .expect_err("zero divisor must refuse");
+        let outcome = outcome.outcome().expect("IR outcome was built");
         assert_eq!(outcome.kind, KaniOutcomeKind::Refused);
         assert_eq!(outcome.code.as_str(), "kani_definedness_nonzero_divisor");
         assert_eq!(outcome.boolean_claim(), None);
@@ -160,6 +231,7 @@ mod tests {
             },
         )
         .expect_err("outside result must not lower");
+        let refused = refused.outcome().expect("IR outcome was built");
         assert_eq!(refused.code.as_str(), "kani_definedness_checked_range");
         assert_eq!(refused.boolean_claim(), None);
     }

@@ -43,12 +43,19 @@ pub use kani::generate::corpus::bounded_kani_corpus::{
     BoundedCorpusError, BoundedCorpusFamily, BoundedCorpusRequest, CorpusProofDependencyGraph,
     EmittedCorpusIdentities, CORPUS_PROOF_GRAPH_SCHEMA,
 };
-pub use kani::generate::lower::bounded_collections::prepare_bounded_collection_query;
+pub use kani::generate::lower::bounded_collections::{
+    prepare_bounded_collection_query, CollectionLowering, CollectionQuery, QueryKind,
+};
 pub use kani::generate::lower::bounded_kani_profile::{
     classify_bounded_kani_profile, BoundedKaniProfile,
 };
-pub use kani::generate::lower::definedness_arithmetic::prepare_checked_arithmetic;
-pub use kani::generate::lower::finite_reference_graphs::prepare_finite_graph_reaches;
+pub use kani::generate::lower::definedness_arithmetic::{
+    prepare_checked_arithmetic, ArithmeticLowering, CheckedArithmeticRequest,
+};
+pub use kani::generate::lower::finite_reference_graphs::{
+    prepare_finite_graph_reaches, GraphLowering, GraphRequest,
+};
+pub use kani::generate::lower::FamilyLoweringError;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,

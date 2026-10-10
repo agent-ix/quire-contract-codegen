@@ -113,10 +113,10 @@ success.
   O-24 says the envelope carries a tool pin; whether CG must supply one or QSL derives it is
   routed to QSL (R-Q9), not decided here.
 - The seam to QSL is the `qsl-replay` Rust API, asserted by compilation. The seam to IR is IR's
-  crate API, asserted by compilation. CG reads model items through IR's root-crate glob today;
-  IR-347 (as relayed by the IR planner) moves the Kani family lowerings (`lower_checked_arithmetic`,
-  `lower_query`, `lower_reaches`) out of IR into CG and has IR delete them after, and CG then
-  reads the model crate for model items, so the glob goes away.
+  crate API, asserted by compilation. CG reads model items through its direct `quire-contract-model` dependency.
+  IR-347 implements the three Kani semantic-family lowerings and their request/result types in CG;
+  IR export removal follows after this consumer move. The validated finite-input/profile/dispatch
+  interfaces and typed `KaniOutcome` remain IR-owned.
 - Cause codes cross IR to CG as `quire_contract_model::Std001Code` (IR FR-044), not as strings:
   `KaniOutcome.code`, `KaniProviderRecord.cause` and the `CapabilityDisposition` codes carry the
   type, which guarantees the STD-001 code form and nothing else. A code STD-001 registers outside

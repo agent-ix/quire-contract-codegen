@@ -1,6 +1,6 @@
 //! Integrated bounded-Kani corpus generation over Contract IR's validated finite ABI.
 //!
-//! The Contract IR lowerers remain the semantic authority.  This module owns the codegen-side
+//! CG owns the semantic-family lowerers. This module owns the codegen-side
 //! vertical slice: once one lowering is admitted, it renders the four corpus roles (oracle,
 //! strategy, Kani harness, and proof-dependency graph) from the same profile selection, finite
 //! input, and declared proof-dependency census.  A non-success outcome returns before any role is
@@ -10,9 +10,9 @@ use std::{collections::BTreeSet, fmt::Write as _};
 
 use qsl_replay::ByteDigest;
 use quire_contract_ir::kani::{
-    CheckedArithmeticRequest, CollectionQuery, DispatchIndex, FiniteInput, FiniteObject,
-    FiniteReference, GraphRequest, KaniOutcome, KaniOutcomeError, KaniOutcomeKind, KaniProfile,
-    PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds, ValidatedFiniteInput,
+    DispatchIndex, FiniteInput, FiniteObject, FiniteReference, KaniOutcome, KaniOutcomeError,
+    KaniOutcomeKind, KaniProfile, PopulationCompleteness, ProfileSelection, ResourceBounds,
+    ValidatedFiniteInput,
 };
 use quire_contract_model::{std001_code, Std001Code};
 use serde::{Deserialize, Serialize};
@@ -25,9 +25,12 @@ use crate::{
     },
     kani::generate::census_validation::{deterministic_json, validate_dependencies},
     kani::generate::lower::{
-        bounded_collections::prepare_bounded_collection_query,
-        definedness_arithmetic::prepare_checked_arithmetic,
-        finite_reference_graphs::prepare_finite_graph_reaches,
+        bounded_collections::{prepare_bounded_collection_query, CollectionQuery, QueryKind},
+        definedness_arithmetic::{
+            prepare_checked_arithmetic, ArithmeticLowering, CheckedArithmeticRequest,
+        },
+        finite_reference_graphs::{prepare_finite_graph_reaches, GraphLowering, GraphRequest},
+        FamilyLoweringError,
     },
 };
 
@@ -419,6 +422,15 @@ impl From<KaniOutcomeError> for BoundedCorpusError {
     }
 }
 
+impl From<FamilyLoweringError> for BoundedCorpusError {
+    fn from(error: FamilyLoweringError) -> Self {
+        match error {
+            FamilyLoweringError::Outcome(outcome) => Self::Outcome(outcome),
+            FamilyLoweringError::OutcomeConstruction(error) => Self::OutcomeConstruction(error),
+        }
+    }
+}
+
 impl std::fmt::Display for BoundedCorpusError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -476,7 +488,7 @@ impl CorpusRefusal {
 /// [`KaniOutcome`] described below, and [`BoundedCorpusError::OutcomeConstruction`] is Contract
 /// IR's refusal to build a non-success outcome, which this function cannot produce today.
 ///
-/// Contract IR performs profile/dispatch/finite-population validation and semantic lowering first.
+/// Contract IR validates the finite population; CG checks profile/dispatch and lowers semantics first.
 /// Consequently a refused, invalid, incomplete, or exhausted case returns its original typed
 /// outcome and this function emits no artifact.  Generated Kani source uses a concrete case and
 /// intentionally contains no `kani::assume` call.
@@ -593,10 +605,10 @@ pub fn generate_bounded_kani_corpus_case(
                 .collect::<Vec<_>>()
                 .join(", ");
             let predicate = match lowered.query.kind {
-                quire_contract_ir::kani::QueryKind::ForAllNonNegative => {
+                QueryKind::ForAllNonNegative => {
                     "values.iter().all(|value| *value >= 0i128)".to_owned()
                 }
-                quire_contract_ir::kani::QueryKind::ExistsEqual(expected) => {
+                QueryKind::ExistsEqual(expected) => {
                     format!("values.iter().any(|value| *value == {expected}i128)")
                 }
             };
@@ -658,7 +670,7 @@ const fn checked_method(operator: quire_contract_model::NumericOperator) -> &'st
     }
 }
 
-fn render_arithmetic_oracle(lowered: &quire_contract_ir::kani::ArithmeticLowering) -> String {
+fn render_arithmetic_oracle(lowered: &ArithmeticLowering) -> String {
     let operator = checked_method(lowered.request.operator);
     format!(
         "{}i128.{operator}({}i128).is_some_and(|value| value >= {}i128 && value <= {}i128)",
@@ -669,10 +681,7 @@ fn render_arithmetic_oracle(lowered: &quire_contract_ir::kani::ArithmeticLowerin
     )
 }
 
-fn render_graph_oracle(
-    lowered: &quire_contract_ir::kani::GraphLowering,
-    input: &ValidatedFiniteInput,
-) -> String {
+fn render_graph_oracle(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> String {
     let mut edges = input
         .input()
         .references
@@ -757,8 +766,8 @@ fn render_artifacts(
 mod tests {
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
-        FiniteReference, GraphRequest, KaniOutcome, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
-        PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds, SemanticFamily,
+        FiniteReference, KaniOutcome, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
+        PopulationCompleteness, ProfileSelection, ResourceBounds, SemanticFamily,
     };
     use quire_contract_model::{std001_code, NumericOperator, Std001Code};
 
@@ -766,6 +775,7 @@ mod tests {
         generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,
         EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
+    use super::{CheckedArithmeticRequest, CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
     type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
@@ -913,7 +923,7 @@ mod tests {
     }
 
     fn arithmetic(source_id: &'static str, left: i128, right: i128) -> BoundedCorpusRequest {
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id,
             operator: NumericOperator::Add,
             left,
@@ -936,7 +946,7 @@ mod tests {
                 field_id: "next".to_owned(),
                 max_expansions: 2,
             }),
-            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+            BoundedCorpusRequest::Collection(CollectionQuery {
                 source_id: "source".to_owned(),
                 values: vec![2, 2, 7],
                 max_items: 3,
@@ -1156,7 +1166,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+            BoundedCorpusRequest::Collection(CollectionQuery {
                 source_id: "counterexample-case".to_owned(),
                 values: vec![2, 2, 7],
                 max_items: 3,
@@ -1287,7 +1297,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+            BoundedCorpusRequest::Collection(CollectionQuery {
                 source_id: "source".to_owned(),
                 values: vec![1, 2],
                 max_items: 1,
@@ -1339,7 +1349,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
                 source_id: "checked-zero",
                 operator: NumericOperator::Subtract,
                 left: 1,
@@ -1367,7 +1377,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
                 source_id: "out-of-i64-range",
                 operator: NumericOperator::Add,
                 left,
@@ -1392,7 +1402,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+            BoundedCorpusRequest::Collection(CollectionQuery {
                 source_id: "source".to_owned(),
                 values: vec![2, 2, 7],
                 max_items: 3,
@@ -1456,7 +1466,7 @@ mod tests {
     }
 
     fn collection(max_items: usize, source_id: &str) -> BoundedCorpusRequest {
-        BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+        BoundedCorpusRequest::Collection(CollectionQuery {
             source_id: source_id.to_owned(),
             values: vec![2, 2, 7],
             max_items,
@@ -1592,7 +1602,7 @@ mod tests {
         operator: NumericOperator,
         [left, right, minimum, maximum]: [i128; 4],
     ) -> BoundedCorpusRequest {
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id,
             operator,
             left,
@@ -1656,7 +1666,7 @@ mod tests {
     #[test]
     fn tc_023_every_collection_request_field_changes_the_identity() {
         let query = |source_id: &str, values: Vec<i128>, max_items, kind| {
-            BoundedCorpusRequest::Collection(quire_contract_ir::kani::CollectionQuery {
+            BoundedCorpusRequest::Collection(CollectionQuery {
                 source_id: source_id.to_owned(),
                 values,
                 max_items,

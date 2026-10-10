@@ -296,7 +296,7 @@ Migration order, not moved.
 | `kani_obligations` (the rest) | kani | `kani/generate/{negotiate,outcome,record,clause,scalar,precondition,contract}.rs` | split (step 2f), item by item as the step 2f item map says; it adds `outcome.rs`, `record.rs` and `clause.rs` to the four files this row first named, because the items the families share need a home below all of them |
 | `state_frame` | kani | `kani/generate/frame.rs`; `StateFrameHarness`, `StateFrameProperty` to `kani/identity.rs` | moved whole at step 2f, unsplit; one entry with `negotiate` at step 4d |
 | `bounded_kani_corpus` | kani | `kani/generate/corpus/bounded_kani_corpus.rs` | moved whole at step 2f, old file name kept, no split; its package lowerer retired after QSL-353 (step 4g) |
-| `bounded_kani_profile`, `bounded_collections`, `definedness_arithmetic`, `finite_reference_graphs` | kani | `kani/generate/lower/{bounded_kani_profile,bounded_collections,definedness_arithmetic,finite_reference_graphs}.rs` | moved whole at step 2f, old file names kept; today thin callers of IR's Kani family lowerings. The planner's decision, relayed for IR-347 and not verified here: those lowerings (`lower_checked_arithmetic`, `lower_query`, `lower_reaches`, IR `src/kani/mod.rs:19`) move out of IR into CG and IR deletes them afterwards, so CG takes them over and the forwarders go. The AD fixes the destination only; IR-347 schedules it |
+| `bounded_kani_profile`, `bounded_collections`, `definedness_arithmetic`, `finite_reference_graphs` | kani | `kani/generate/lower/{bounded_kani_profile,bounded_collections,definedness_arithmetic,finite_reference_graphs}.rs` | moved whole at step 2f, old file names kept; CG owns the three semantic-family lowerings and their request/result types. Its corpus consumes them directly and retains IR-owned profile, dispatch, validated finite input and typed outcome interfaces. IR-347 removes the former IR exports after the CG consumer move |
 | `kani_execution` | kani | `kani/run/{tool,harness,launch,report_file,execute}.rs`, `kani/classify.rs` | split (step 2f): classification to `classify.rs`, everything that launches or reads a file to `run/` |
 | `kani_transcript` | kani | `kani/output/report.rs`, `kani/output/playback.rs` | split (step 2f): `counterexample_playback` and its four `PLAYBACK_*` constants to `playback.rs`, the typed report parse to `report.rs`. PR 210 (merged) put the report parse here |
 | `kani_witness_join` | replay | `kani/output/playback.rs` (the block scan and `DecodeFailure`, step 2f); `replay/witness.rs` (the decode, step 2g) | split across two steps; the item map says which item goes where |
@@ -788,7 +788,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      lowerer is retired, the rows are backed from QSL-emitted packages built through the facade,
      and a corpus case with symbolic input is rendered through `render.rs` under the cover rule;
      a case with no symbolic input is not rendered as a proof. L-3 lands after 4f and 4g. The Kani family lowerings
-     move in from IR when IR-347 schedules it (relayed).
+     are implemented in CG by IR-347; IR removal follows this consumer change.
 5. **One output reader and the terminal map.** The playback scanning already sits in
    `kani/output/playback.rs` (step 2f moved it verbatim); this step changes the interface:
    `playback.rs` returns typed entries and its own typed refusal, `replay/witness.rs` takes them
@@ -1077,7 +1077,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
 | Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4g for the corpus |
-| The IR-forwarding thin modules | `kani/generate/lower/*` | IR-347 schedules the move |
+| The three semantic-family forwarding modules | `kani/generate/lower/{definedness_arithmetic,bounded_collections,finite_reference_graphs}.rs` | IR-347 replaces the forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 
 #### Item tables
@@ -1335,8 +1335,8 @@ FR-015 V2 contract input (step 4c).
   the acyclic file order inside `kani/generate/` are the coder's to confirm by compiling, and a
   disagreement is fixed in this AD, not worked around in the code.
 - Whether IR exposes a typed body-term decoder today was not checked; IR's layout AD is a separate
-  ticket. The IR-347 lowering move and IR's `BoundPackage` retirement are relayed and not
-  verified. The C-09 terminal cases were checked against QSL's merged ADR-011 T-13; the closed-set
+  ticket. The IR-347 CG lowering move is implemented here; IR export removal and its `BoundPackage`
+  retirement remain separate work. The C-09 terminal cases were checked against QSL's merged ADR-011 T-13; the closed-set
   rule for `ReplayRefused` is relayed.
 - The `quire-canonical` API names (`to_vec`, `Limits`, `sha256`), QSL's tag pin and the driver's
   one-copy gate are relayed and were not checked.

@@ -17,14 +17,15 @@ use std::{
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, BoundedCorpusRequest,
-    CorpusProofDependencyGraph, EmittedCorpusIdentities, KaniInconclusiveReason, KaniRunOutcome,
-    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+    CheckedArithmeticRequest, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
+    GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
+    ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
-    CapabilityDisposition, CapabilityEntry, CollectionQuery, DispatchIndex, FiniteInput,
-    FiniteObject, FiniteReference, GraphRequest, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
-    PopulationCompleteness, ProfileSelection, QueryKind, ResourceBounds, SemanticFamily,
+    CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
+    FiniteReference, KaniOutcomeKind, KaniProfile, ModuleDescriptor, PopulationCompleteness,
+    ProfileSelection, ResourceBounds, SemanticFamily,
 };
 use quire_contract_model::NumericOperator;
 
@@ -150,7 +151,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id: "source",
             operator: NumericOperator::Add,
             left: 1,
@@ -223,7 +224,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id: "source",
             operator: NumericOperator::Add,
             left: 1,
@@ -266,6 +267,71 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
         classify_corpus(&generated, "corpus_case_graph"),
         KaniRunOutcome::Verified
     );
+}
+
+/// A branch outside the shortest route consumes the depth-first expansion budget before the
+/// target branch; the generated oracle and native admission must agree at the boundary.
+///
+/// Trace: TC-023.
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_023_branching_graph_oracle_preserves_native_expansion_budget() {
+    let (profile, dispatch, input) = fixture();
+    let mut offered = input.input().clone();
+    offered.bounds.max_objects = 5;
+    offered.bounds.max_references = 4;
+    offered
+        .objects
+        .extend(["c", "d", "target"].map(|identity| FiniteObject {
+            identity: identity.to_owned(),
+            type_id: "node".to_owned(),
+            snapshot_id: "s".to_owned(),
+        }));
+    offered.references = [("a", "c"), ("b", "d"), ("c", "target"), ("a", "b")]
+        .into_iter()
+        .map(|(source_id, target_id)| FiniteReference {
+            source_id: source_id.to_owned(),
+            field_id: "next".to_owned(),
+            target_id: target_id.to_owned(),
+        })
+        .collect();
+    let input = offered.validate().expect("branching finite input");
+    let request = GraphRequest {
+        source_id: "source".to_owned(),
+        start_id: "a".to_owned(),
+        target_id: "target".to_owned(),
+        field_id: "next".to_owned(),
+        max_expansions: 4,
+    };
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(request.clone()),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .expect("four expansions admit the target branch");
+    assert_eq!(
+        classify_corpus(&generated, "corpus_case_graph"),
+        KaniRunOutcome::Verified
+    );
+
+    let exhausted = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(GraphRequest {
+            max_expansions: 3,
+            ..request
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .expect_err("the third expansion enters the other branch");
+    assert_eq!(exhausted.code().as_str(), "kani_graph_expansion_exhausted");
 }
 
 /// A true collection case classifies `Verified`, and a false graph case is `Falsified` with the
@@ -328,7 +394,7 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id: "source",
             operator: NumericOperator::Add,
             left: 1,
@@ -479,7 +545,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
     let requests = [
         (
             "corpus arithmetic",
-            BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+            BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
                 source_id: "source",
                 operator: NumericOperator::Add,
                 left: 1,
@@ -537,7 +603,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
     let cases = [
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id: "source",
             operator: NumericOperator::Add,
             left: 1,
@@ -606,7 +672,7 @@ fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published
         &profile,
         &dispatch,
         &input,
-        BoundedCorpusRequest::Arithmetic(quire_contract_ir::kani::CheckedArithmeticRequest {
+        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
             source_id: "source",
             operator: NumericOperator::Add,
             left: 1,
