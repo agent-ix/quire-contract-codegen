@@ -72,11 +72,37 @@ pub struct ClaimMap<C> {
 /// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
-    /// The generated source exceeds
-    /// [`MAX_GENERATED_SOURCE_BYTES`](crate::core::artifact::MAX_GENERATED_SOURCE_BYTES).
+    /// Generated source exceeds the effective caller-selected byte ceiling.
     SourceTooLarge {
-        /// Generated size.
+        /// First source size that exceeds the selected ceiling.
         bytes: usize,
+        /// Effective source byte ceiling.
+        limit: usize,
+        /// Stable name of the setting that selected the ceiling.
+        setting: &'static str,
+    },
+    /// A caller-selected type-resolution limit cannot represent its first denied count.
+    InvalidTypeResolutionWorkLimit,
+    /// One generated artifact exceeds its publication byte ceiling.
+    ArtifactTooLarge {
+        /// Artifact byte count.
+        bytes: usize,
+        /// Publication ceiling per artifact.
+        limit: usize,
+    },
+    /// The generated crate has more artifacts than publication permits.
+    ArtifactCountExceeded {
+        /// Artifact count.
+        count: usize,
+        /// Publication ceiling for artifacts.
+        limit: usize,
+    },
+    /// The complete generated bundle exceeds its publication byte ceiling.
+    BundleTooLarge {
+        /// Bundle byte count.
+        bytes: usize,
+        /// Publication ceiling for a bundle.
+        limit: usize,
     },
     /// The claim map could not be serialized.
     ClaimMapSerialization,

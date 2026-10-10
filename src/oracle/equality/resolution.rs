@@ -6,7 +6,6 @@ use super::{
     CheckedNodeTag, CheckedSemanticNodeV2, CollectionKind, CollectionType, CompositeDeclaration,
     CompositeEqualityRefusal, CompositeShape, FieldDeclaration, Graph, NodeKey, Presence,
     TypeClosure, ValueType, COLLECTION_BOUNDS_MEMBERS,
-    COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -37,9 +36,9 @@ enum Frame {
 impl TypeClosure {
     fn charge(&mut self) -> Result<(), CompositeEqualityRefusal> {
         self.work_consumed = self.work_consumed.saturating_add(1);
-        if self.work_consumed > COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT {
+        if self.work_consumed > self.work_limit {
             return Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
-                limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+                limit: self.work_limit,
                 consumed: self.work_consumed,
             });
         }

@@ -1416,7 +1416,7 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
         .collect::<Vec<_>>();
     assert!(matches!(
         generate_exact_scalar_oracles(&package, &items),
-        Err(OracleGenerationError::SourceTooLarge { bytes })
+        Err(OracleGenerationError::SourceTooLarge { bytes, .. })
             if bytes > quire_contract_codegen::MAX_GENERATED_SOURCE_BYTES
     ));
 }

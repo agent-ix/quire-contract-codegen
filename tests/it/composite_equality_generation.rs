@@ -20,9 +20,10 @@ use crate::common::panic_scan::{non_test_code, panic_tokens_in};
 use crate::scratch_crate::{runtime_dependency, seed_lock};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
-    CompositeEqualityItem, CompositeEqualityOracles, CompositeEqualityRefusal,
-    DeclarationRefusalCause, EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind,
-    RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
+    CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
+    CompositeEqualityRefusal, DeclarationRefusalCause, EqualityOperandDescriptor,
+    EqualityOperatorKind, IllTypedCauseKind, OracleGenerationError, RecordedSchedule,
+    UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
     CheckedNodeTag, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
@@ -127,12 +128,30 @@ fn generate(package: &FixturePackage, items: &[CompositeEqualityItem]) -> Fixtur
         .cloned()
         .map(|item| package.ids.resolve_item(item))
         .collect::<Vec<_>>();
-    let output =
-        generate_composite_equality_oracles(&package.checked, &items).expect("generation succeeds");
+    let output = generate_composite_equality_oracles(&package.checked, &items, Default::default())
+        .expect("generation succeeds");
     FixtureOracles {
         output,
         ids: package.ids.clone(),
     }
+}
+
+/// Trace: FR-018-AC-31, TC-029.
+#[test]
+fn invalid_type_resolution_work_limit_refuses_before_lowering() {
+    let package = admit(corpus_package());
+    let result = generate_composite_equality_oracles(
+        &package.checked,
+        &[],
+        CompositeEqualityLimits {
+            type_resolution_work_units: u64::MAX,
+            ..CompositeEqualityLimits::default()
+        },
+    );
+    assert_eq!(
+        result,
+        Err(OracleGenerationError::InvalidTypeResolutionWorkLimit)
+    );
 }
 
 fn contents<'o>(oracles: &'o CompositeEqualityOracles, path: &str) -> &'o str {
@@ -272,18 +291,20 @@ fn assert_recursive_item_generation(
         list_block.contains(&format!("rt::CompositeDeclaration::new({list_key}, ")),
         "List declaration: {list_block}"
     );
-    assert!(list_block.contains(&format!(
-        "rt::FieldDeclaration::new(\"next\", rt::ValueType::Composite({list_key}), rt::Presence::Optional)"
-    )));
+    assert!(list_block.contains("rt::FieldDeclaration::new(\"next\", {"));
+    assert!(list_block.contains(&format!("rt::ValueType::Composite({list_key})")));
+    assert!(list_block.contains("rt::Presence::Optional)"));
     let tree_block = composites_block(lib, &tree_claim.oracle_symbol);
     let tree_key = emitted_key(&tree);
     assert!(
         tree_block.contains(&format!("rt::CompositeDeclaration::new({tree_key}, ")),
         "Tree declaration: {tree_block}"
     );
-    assert!(tree_block.contains(&format!(
-        "rt::FieldDeclaration::new(\"kids\", rt::ValueType::collection(rt::CollectionType::new(rt::CollectionKind::Sequence, rt::ValueType::Composite({tree_key}), rebuild_cardinality(0, 3)?)), rt::Presence::Required)"
-    )));
+    assert!(tree_block.contains("rt::FieldDeclaration::new(\"kids\", {"));
+    assert!(tree_block.contains(&format!("rt::ValueType::Composite({tree_key})")));
+    assert!(tree_block.contains("rt::CollectionKind::Sequence"));
+    assert!(tree_block.contains("rebuild_cardinality(0, 3)?"));
+    assert!(tree_block.contains("rt::Presence::Required)"));
 }
 
 /// Optional local conformance against the private QSpec fixture. The public
@@ -1404,9 +1425,14 @@ fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
     let _ = generated(only_claim(&oracles, E_TUPLE));
     let int = "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
     let text = "rt::ValueType::Text(rebuild_text(0, 16, rt::TextProfile::Nfc)?)";
+    let tuple = lib
+        .find("rt::CompositeShape::Tuple(vec![")
+        .expect("tuple declaration");
+    let int_position = lib[tuple..].find(int).expect("integer tuple member");
+    let text_position = lib[tuple..].find(text).expect("text tuple member");
     assert!(
-        lib.contains(&format!("rt::CompositeShape::Tuple(vec![{int}, {text}, ])")),
-        "the declaration must be Tuple[Int[-100,100], Text(0,16,Nfc)]:\n{lib}"
+        int_position < text_position,
+        "tuple members must retain their order"
     );
 }
 

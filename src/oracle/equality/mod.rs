@@ -64,7 +64,9 @@
 //! `bounded_domain` nodes, and reconstructing a concrete `QuantityUnit`
 //! requires walking a unit graph this generator does not read.
 
-use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
+use crate::core::artifact::{
+    Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES, MAX_GENERATED_SOURCE_BYTES,
+};
 use crate::core::naming::unique_names;
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
@@ -94,6 +96,24 @@ pub const COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT: u64 = 65_536;
 
 /// Type-node entries permitted while resolving one equality item.
 pub const COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT: u64 = 65_536;
+
+/// Caller limits for one composite equality generation request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompositeEqualityLimits {
+    /// Maximum charged type-node entries for each requested item.
+    pub type_resolution_work_units: u64,
+    /// Maximum bytes of generated Rust source across the request.
+    pub source_bytes: usize,
+}
+
+impl Default for CompositeEqualityLimits {
+    fn default() -> Self {
+        Self {
+            type_resolution_work_units: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+            source_bytes: MAX_GENERATED_SOURCE_BYTES,
+        }
+    }
+}
 
 /// Name of the generated crate.
 pub const COMPOSITE_EQUALITY_CRATE_NAME: &str = "quire-composite-equality-oracles";
@@ -566,14 +586,18 @@ pub struct CompositeEqualityOracles {
 
 /// Generate composite equality oracles for `items` from an admitted package.
 ///
-/// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization` or
-/// `UnknownRuntimeVariant` (a Contract Runtime `#[non_exhaustive]` enum
-/// yielded a variant this generator does not know); every per-item problem is
-/// a refusal in the claim map.
+/// Fails as a whole for an invalid work-limit setting, generated-source or
+/// publication bounds, claim-map serialization, or an unknown Contract Runtime
+/// `#[non_exhaustive]` variant. Item-specific problems are refusals in the
+/// claim map.
 pub fn generate_composite_equality_oracles(
     package: &CheckedPackageV2,
     items: &[CompositeEqualityItem],
+    limits: CompositeEqualityLimits,
 ) -> Result<CompositeEqualityOracles, OracleGenerationError> {
+    if limits.type_resolution_work_units == u64::MAX {
+        return Err(OracleGenerationError::InvalidTypeResolutionWorkLimit);
+    }
     let graph: Graph<'_> = package
         .graph()
         .nodes
@@ -606,7 +630,7 @@ pub fn generate_composite_equality_oracles(
     let requested: Vec<CheckedNodeId> = by_key.values().map(|item| item.node_id.clone()).collect();
     let lowering = package.lower(&requested, &lowering_profile());
 
-    let mut source = SourceBuilder::default();
+    let mut source = SourceBuilder::new(limits.source_bytes)?;
     let mut claims = Vec::with_capacity(by_key.len());
     // Generated claims as (claim position, key, item, checked item), rendered once every
     // generated oracle is named.
@@ -618,7 +642,13 @@ pub fn generate_composite_equality_oracles(
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
         } else {
-            match check_item(&graph, &bounds_by_type, record, item) {
+            match check_item(
+                &graph,
+                &bounds_by_type,
+                record,
+                item,
+                limits.type_resolution_work_units,
+            ) {
                 Ok(generated) => {
                     let claim =
                         ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
@@ -667,24 +697,43 @@ pub fn generate_composite_equality_oracles(
         blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
         items: claims,
     };
-    let lib = source.finish();
-    if lib.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
-    }
+    let source_artifacts = source.finish(limits.source_bytes)?;
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
         .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     map_bytes.push(b'\n');
     let map_text =
         String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
+    let mut artifacts = Vec::with_capacity(source_artifacts.len() + 2);
+    artifacts.push(artifact(
+        "Cargo.toml",
+        oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
+    ));
+    artifacts.extend(source_artifacts);
+    artifacts.push(artifact("claim-map.json", map_text));
+    if artifacts.len() > MAX_ARTIFACTS {
+        return Err(OracleGenerationError::ArtifactCountExceeded {
+            count: artifacts.len(),
+            limit: MAX_ARTIFACTS,
+        });
+    }
+    let mut bundle_bytes = 0usize;
+    for artifact in &artifacts {
+        if artifact.contents.len() > MAX_ARTIFACT_BYTES {
+            return Err(OracleGenerationError::ArtifactTooLarge {
+                bytes: artifact.contents.len(),
+                limit: MAX_ARTIFACT_BYTES,
+            });
+        }
+        bundle_bytes = bundle_bytes.saturating_add(artifact.contents.len());
+    }
+    if bundle_bytes > MAX_BUNDLE_BYTES {
+        return Err(OracleGenerationError::BundleTooLarge {
+            bytes: bundle_bytes,
+            limit: MAX_BUNDLE_BYTES,
+        });
+    }
     Ok(CompositeEqualityOracles {
-        artifacts: vec![
-            artifact(
-                "Cargo.toml",
-                oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
-            ),
-            artifact("src/lib.rs", lib),
-            artifact("claim-map.json", map_text),
-        ],
+        artifacts,
         claim_map,
     })
 }
@@ -792,6 +841,7 @@ fn check_item<'r>(
     bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
     record: &'r CompleteLoweringRecordV2,
     item: &CompositeEqualityItem,
+    type_resolution_work_units: u64,
 ) -> Result<CheckedItem<'r>, ItemCheckError> {
     let node = lowered(record)?;
     if node.node_tag != CheckedNodeTag::Expression {
@@ -819,7 +869,10 @@ fn check_item<'r>(
         .ok_or(CompositeEqualityRefusal::BodyMismatch)?;
     check_operand_types(graph, arguments, item)?;
 
-    let mut closure = TypeClosure::default();
+    let mut closure = TypeClosure {
+        work_limit: type_resolution_work_units,
+        ..TypeClosure::default()
+    };
     let left_source = resolve_type(graph, bounds_by_type, &mut closure, &item.left.source_type)?;
     let left_target = item
         .left
@@ -1040,13 +1093,25 @@ fn check_operand_types(
 // Type and declaration-closure reconstruction
 // ---------------------------------------------------------------------------
 
-#[derive(Default)]
 struct TypeClosure {
     composites: BTreeMap<NodeKey, CompositeDeclaration>,
     in_progress: BTreeSet<NodeKey>,
     work_consumed: u64,
+    work_limit: u64,
     /// Every V2 node id whose declaration entered the closure, ascending.
     node_ids: Vec<CheckedNodeId>,
+}
+
+impl Default for TypeClosure {
+    fn default() -> Self {
+        Self {
+            composites: BTreeMap::new(),
+            in_progress: BTreeSet::new(),
+            work_consumed: 0,
+            work_limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+            node_ids: Vec::new(),
+        }
+    }
 }
 
 fn node_key(node_id: &CheckedNodeId) -> Result<NodeKey, CompositeEqualityRefusal> {
@@ -1385,23 +1450,35 @@ impl From<OracleGenerationError> for RenderError {
 
 /// The rendered Rust expressions of one item, before it is named.
 struct RenderedItem {
-    composites: String,
+    composites: Vec<String>,
     left_source: String,
     left_target: Option<String>,
     right_source: String,
     right_target: Option<String>,
 }
 
+impl RenderedItem {
+    fn source_bytes(&self) -> usize {
+        self.composites
+            .iter()
+            .map(String::len)
+            .chain([
+                self.left_source.len(),
+                self.left_target.as_ref().map_or(0, String::len),
+                self.right_source.len(),
+                self.right_target.as_ref().map_or(0, String::len),
+            ])
+            .fold(0usize, usize::saturating_add)
+    }
+}
+
 fn render_item(generated: &CheckedItem<'_>) -> Result<RenderedItem, RenderError> {
     // Every reachable record/tuple declaration, in the same `NodeKey`
     // order `TypeEnvironment::new` admitted at generation time.
-    let composites: String = generated
+    let composites: Vec<String> = generated
         .composites
         .iter()
-        .map(|declaration| {
-            render_composite_declaration(declaration)
-                .map(|rendered| format!("{rendered},\n        "))
-        })
+        .map(render_composite_declaration)
         .collect::<Result<_, _>>()?;
     let target = |target: &Option<ValueType>| -> Result<Option<String>, RenderError> {
         target.as_ref().map(render_value_type).transpose()
@@ -1429,9 +1506,14 @@ fn render_and_emit<T>(
     render: impl Fn(&T) -> Result<RenderedItem, RenderError>,
 ) -> Result<(), OracleGenerationError> {
     let mut rendered = Vec::with_capacity(pending.len());
+    let mut rendered_bytes = 0usize;
     for (claim, key, item, checked) in pending {
         let result = render(&checked);
         if let Some(rendered_item) = settle_render(&mut claims[claim], result)? {
+            rendered_bytes = rendered_bytes.saturating_add(rendered_item.source_bytes());
+            if rendered_bytes > source.limit {
+                return Err(source_too_large(source.limit));
+            }
             rendered.push((claim, key, item, rendered_item));
         }
     }
@@ -1442,7 +1524,7 @@ fn render_and_emit<T>(
             .collect(),
     );
     for ((claim, _, item, rendered_item), symbol) in rendered.into_iter().zip(names) {
-        source.item(&symbol, item, &rendered_item);
+        source.item(&symbol, item, &rendered_item)?;
         if let ClaimDisposition::Generated(claim) = &mut claims[claim].result {
             claim.environment_symbol = format!("environment_{symbol}");
             claim.oracle_symbol = format!("oracle_{symbol}");
@@ -1476,13 +1558,61 @@ fn settle_render(
     }
 }
 
-#[derive(Default)]
 struct SourceBuilder {
     functions: String,
+    modules: Vec<(String, String)>,
+    module_declarations: String,
+    charged_bytes: usize,
+    limit: usize,
 }
 
+#[cfg(test)]
+impl Default for SourceBuilder {
+    fn default() -> Self {
+        Self::new(MAX_GENERATED_SOURCE_BYTES).expect("default source limit admits header")
+    }
+}
+
+// Debug Rust codegen can retain temporaries from sequential statements in a
+// function frame. Keep each generated constructor small enough for a 512 KiB
+// caller stack independently of source-byte artifact partitioning.
+const MAX_DECLARATIONS_PER_FUNCTION: usize = 128;
+
 impl SourceBuilder {
-    fn item(&mut self, symbol: &str, item: &CompositeEqualityItem, rendered: &RenderedItem) {
+    fn new(limit: usize) -> Result<Self, OracleGenerationError> {
+        if SOURCE_HEADER.len() > limit {
+            return Err(source_too_large(limit));
+        }
+        Ok(Self {
+            functions: String::new(),
+            modules: Vec::new(),
+            module_declarations: String::new(),
+            charged_bytes: SOURCE_HEADER.len(),
+            limit,
+        })
+    }
+
+    fn charge(&mut self, bytes: usize) -> Result<(), OracleGenerationError> {
+        let next = self.charged_bytes.saturating_add(bytes);
+        if next > self.limit {
+            return Err(source_too_large(self.limit));
+        }
+        self.charged_bytes = next;
+        Ok(())
+    }
+
+    fn append_function(&mut self, text: String) -> Result<(), OracleGenerationError> {
+        self.charge(text.len())?;
+        self.functions.push_str(&text);
+        Ok(())
+    }
+
+    fn item(
+        &mut self,
+        symbol: &str,
+        item: &CompositeEqualityItem,
+        rendered: &RenderedItem,
+    ) -> Result<(), OracleGenerationError> {
         let RenderedItem {
             composites,
             left_source,
@@ -1497,18 +1627,63 @@ impl SourceBuilder {
         let left_target = optional(left_target);
         let right_target = optional(right_target);
 
-        self.functions.push_str(&format!(
-            "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    Ok(vec![{composites}])\n}}\n"
-        ));
+        let composite_bytes = composites.iter().fold(0usize, |size, declaration| {
+            size.saturating_add(declaration.len() + 2)
+        });
+        if composites.len() <= MAX_DECLARATIONS_PER_FUNCTION
+            && composite_bytes <= MAX_ARTIFACT_BYTES / 2
+        {
+            if composites.is_empty() {
+                self.append_function(format!(
+                    "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    Ok(Vec::new())\n}}\n"
+                ))?;
+            } else {
+                let declarations = composites
+                    .iter()
+                    .map(|value| format!("    declarations.push({value});\n"))
+                    .collect::<String>();
+                self.append_function(format!(
+                    "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::with_capacity({});\n{declarations}    Ok(declarations)\n}}\n",
+                    composites.len()
+                ))?;
+            }
+        } else {
+            let mut chunk_calls = String::new();
+            let mut chunk = String::new();
+            let mut chunk_index = 0usize;
+            let mut chunk_count = 0usize;
+            for declaration in composites {
+                if !chunk.is_empty()
+                    && (chunk_count == MAX_DECLARATIONS_PER_FUNCTION
+                        || chunk.len().saturating_add(declaration.len() + 26)
+                            > MAX_ARTIFACT_BYTES / 2)
+                {
+                    self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls)?;
+                    chunk_index += 1;
+                    chunk.clear();
+                    chunk_count = 0;
+                }
+                chunk.push_str("    declarations.push(");
+                chunk.push_str(declaration);
+                chunk.push_str(");\n");
+                chunk_count += 1;
+            }
+            if !chunk.is_empty() {
+                self.add_composite_module(symbol, chunk_index, &chunk, &mut chunk_calls)?;
+            }
+            self.append_function(format!(
+                "\nfn composites_{symbol}() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{chunk_calls}    Ok(declarations)\n}}\n"
+            ))?;
+        }
 
-        self.functions.push_str(&format!(
+        self.append_function(format!(
             "\nfn left_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({left_source})\n}}\n\
              fn left_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({left_target})\n}}\n\
              fn right_source_{symbol}() -> Result<rt::ValueType, ReconstructionError> {{\n    Ok({right_source})\n}}\n\
              fn right_target_{symbol}() -> Result<Option<rt::ValueType>, ReconstructionError> {{\n    Ok({right_target})\n}}\n"
-        ));
+        ))?;
 
-        self.functions.push_str(&format!(
+        self.append_function(format!(
             "\n/// `{}`. Its operation identity is caller-declared: CheckedPackage V2 carries\n\
              /// an operator class, not this operator law.\n\
              pub fn environment_{symbol}() -> Result<rt::TypeEnvironment, EnvironmentError> {{\n\
@@ -1518,9 +1693,8 @@ impl SourceBuilder {
              \x20   rt::TypeEnvironment::new(composites, core::iter::empty::<rt::ObjectTypeDeclaration>())\n\
              \x20       .map_err(EnvironmentError::Declaration)\n}}\n",
             item.operator.identity()
-        ));
-
-        self.functions.push_str(&format!(
+        ))?;
+        self.append_function(format!(
             "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut rt::Meter,\n) -> rt::Outcome<bool> {{\n\
              \x20   let left_source = match left_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
@@ -1556,17 +1730,44 @@ impl SourceBuilder {
              \x20   checked.evaluate(left, right, meter)\n}}\n",
             item.operator.identity(),
             item.operator.path()
-        ));
+        ))?;
+        Ok(())
     }
 
-    fn finish(self) -> String {
-        let mut source = SOURCE_HEADER.to_owned();
+    fn add_composite_module(
+        &mut self,
+        symbol: &str,
+        index: usize,
+        declarations: &str,
+        calls: &mut String,
+    ) -> Result<(), OracleGenerationError> {
+        let name = format!("composites_{symbol}_{index}");
+        let module_declaration = format!("mod {name};\n");
+        let module_source = format!("use super::*;\npub(super) fn declarations() -> Result<Vec<rt::CompositeDeclaration>, ReconstructionError> {{\n    let mut declarations = Vec::new();\n{declarations}    Ok(declarations)\n}}\n");
+        self.charge(module_declaration.len().saturating_add(module_source.len()))?;
+        self.module_declarations.push_str(&module_declaration);
+        self.modules.push((format!("src/{name}.rs"), module_source));
+        calls.push_str(&format!(
+            "    declarations.extend({name}::declarations()?);\n"
+        ));
+        Ok(())
+    }
+
+    fn finish(&self, limit: usize) -> Result<Vec<Artifact>, OracleGenerationError> {
+        let mut source = String::new();
+        append_source(&mut source, SOURCE_HEADER, limit)?;
+        append_source(&mut source, &self.module_declarations, limit)?;
         // A helper is needed when the item functions call it or a needed helper does. The table
         // lists callees first, so one pass from the last helper to the first settles the
         // transitive closure.
         let mut needed: BTreeSet<&str> = BTreeSet::new();
         for helper in RECONSTRUCTION_HELPERS.iter().rev() {
-            if self.functions.contains(&format!("{}(", helper.name)) || needed.contains(helper.name)
+            if self.functions.contains(&format!("{}(", helper.name))
+                || self
+                    .modules
+                    .iter()
+                    .any(|(_, text)| text.contains(&format!("{}(", helper.name)))
+                || needed.contains(helper.name)
             {
                 needed.insert(helper.name);
                 needed.extend(helper.calls);
@@ -1574,11 +1775,41 @@ impl SourceBuilder {
         }
         for helper in RECONSTRUCTION_HELPERS {
             if needed.contains(helper.name) {
-                source.push_str(helper.source);
+                append_source(&mut source, helper.source, limit)?;
             }
         }
-        source.push_str(&self.functions);
-        source
+        append_source(&mut source, &self.functions, limit)?;
+        let mut total = source.len();
+        let mut artifacts = vec![artifact("src/lib.rs", source)];
+        for (path, contents) in &self.modules {
+            total = total.saturating_add(contents.len());
+            if total > limit {
+                return Err(source_too_large(limit));
+            }
+            artifacts.push(artifact(path, contents.clone()));
+        }
+        Ok(artifacts)
+    }
+}
+
+fn append_source(
+    source: &mut String,
+    text: &str,
+    limit: usize,
+) -> Result<(), OracleGenerationError> {
+    let needed = source.len().saturating_add(text.len());
+    if needed > limit {
+        return Err(source_too_large(limit));
+    }
+    source.push_str(text);
+    Ok(())
+}
+
+fn source_too_large(limit: usize) -> OracleGenerationError {
+    OracleGenerationError::SourceTooLarge {
+        bytes: limit + 1,
+        limit,
+        setting: "cg.equality.source_bytes",
     }
 }
 
@@ -1631,70 +1862,82 @@ fn presence_path(presence: Presence) -> &'static str {
 fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
     enum Task<'a> {
         Value(&'a ValueType),
-        CloseOption,
-        CloseCollection { minimum: u64, maximum: u64 },
+        FinishOption,
+        FinishCollection {
+            kind: CollectionKind,
+            minimum: u64,
+            maximum: u64,
+        },
     }
 
-    let mut rendered = String::new();
+    let mut rendered = String::from("{\n");
     let mut tasks = vec![Task::Value(value_type)];
+    let mut values = Vec::new();
+    let mut next_slot = 0usize;
     while let Some(task) = tasks.pop() {
-        match task {
-            Task::CloseOption => rendered.push(')'),
-            Task::CloseCollection { minimum, maximum } => {
-                rendered.push_str(&format!(", rebuild_cardinality({minimum}, {maximum})?))"))
+        let expression = match task {
+            Task::FinishOption => {
+                let child = values
+                    .pop()
+                    .ok_or_else(|| OracleGenerationError::unknown_variant("ValueType"))?;
+                format!("rt::ValueType::option({child})")
+            }
+            Task::FinishCollection {
+                kind,
+                minimum,
+                maximum,
+            } => {
+                let child = values
+                    .pop()
+                    .ok_or_else(|| OracleGenerationError::unknown_variant("ValueType"))?;
+                format!("rt::ValueType::collection(rt::CollectionType::new({}, {child}, rebuild_cardinality({minimum}, {maximum})?))", collection_kind_path(kind)?)
             }
             Task::Value(value_type) => match value_type {
-                ValueType::Boolean => rendered.push_str("rt::ValueType::Boolean"),
-                ValueType::Integer => rendered.push_str("rt::ValueType::Integer"),
-                ValueType::Int(interval) => rendered.push_str(&format!(
-                    "rt::ValueType::Int({})",
-                    render_interval(interval)
-                )),
-                ValueType::Rational(domain) => rendered.push_str(&format!(
+                ValueType::Boolean => "rt::ValueType::Boolean".to_owned(),
+                ValueType::Integer => "rt::ValueType::Integer".to_owned(),
+                ValueType::Int(interval) => {
+                    format!("rt::ValueType::Int({})", render_interval(interval))
+                }
+                ValueType::Rational(domain) => format!(
                     "rt::ValueType::Rational(rebuild_rational({}, {})?)",
                     render_interval(domain.numerator()),
                     render_interval(domain.denominator())
-                )),
-                ValueType::Decimal(decimal) => rendered.push_str(&format!(
-                    "rt::ValueType::Decimal({})",
-                    render_decimal_type(decimal)?
-                )),
+                ),
+                ValueType::Decimal(decimal) => {
+                    format!("rt::ValueType::Decimal({})", render_decimal_type(decimal)?)
+                }
                 ValueType::Float(rt::IeeeWidth::Binary32) => {
-                    rendered.push_str("rt::ValueType::Float(rt::IeeeWidth::Binary32)");
+                    "rt::ValueType::Float(rt::IeeeWidth::Binary32)".to_owned()
                 }
                 ValueType::Float(rt::IeeeWidth::Binary64) => {
-                    rendered.push_str("rt::ValueType::Float(rt::IeeeWidth::Binary64)");
+                    "rt::ValueType::Float(rt::IeeeWidth::Binary64)".to_owned()
                 }
                 ValueType::Quantity(_) => {
                     return Err(RenderError::UnsupportedValueType { family: "quantity" });
                 }
-                ValueType::Text(text_type) => rendered.push_str(&format!(
+                ValueType::Text(text_type) => format!(
                     "rt::ValueType::Text(rebuild_text({}, {}, {})?)",
                     text_type.min(),
                     text_type.max(),
                     profile_path(text_type.profile())?
-                )),
-                ValueType::Enum(key) => {
-                    rendered.push_str(&format!("rt::ValueType::Enum({})", render_key(*key)));
-                }
+                ),
+                ValueType::Enum(key) => format!("rt::ValueType::Enum({})", render_key(*key)),
                 ValueType::Option(payload) => {
-                    rendered.push_str("rt::ValueType::option(");
-                    tasks.push(Task::CloseOption);
+                    tasks.push(Task::FinishOption);
                     tasks.push(Task::Value(payload));
+                    continue;
                 }
                 ValueType::Composite(key) => {
-                    rendered.push_str(&format!("rt::ValueType::Composite({})", render_key(*key)));
+                    format!("rt::ValueType::Composite({})", render_key(*key))
                 }
                 ValueType::Collection(collection) => {
-                    rendered.push_str(&format!(
-                        "rt::ValueType::collection(rt::CollectionType::new({}, ",
-                        collection_kind_path(collection.kind())?
-                    ));
-                    tasks.push(Task::CloseCollection {
+                    tasks.push(Task::FinishCollection {
+                        kind: collection.kind(),
                         minimum: collection.bound().minimum(),
                         maximum: collection.bound().maximum(),
                     });
                     tasks.push(Task::Value(collection.element()));
+                    continue;
                 }
                 ValueType::Reference(_) => {
                     return Err(RenderError::UnsupportedValueType {
@@ -1703,8 +1946,17 @@ fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
                 }
                 &_ => return Err(OracleGenerationError::unknown_variant("ValueType").into()),
             },
-        }
+        };
+        let slot = format!("t{next_slot}");
+        rendered.push_str(&format!("let {slot} = {expression};\n"));
+        values.push(slot);
+        next_slot += 1;
     }
+    let root = values
+        .pop()
+        .ok_or_else(|| OracleGenerationError::unknown_variant("ValueType"))?;
+    rendered.push_str(&root);
+    rendered.push_str("\n}");
     Ok(rendered)
 }
 
@@ -1779,6 +2031,16 @@ fn artifact(path: &str, contents: String) -> Artifact {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn test_source(source: SourceBuilder) -> String {
+        source
+            .finish(MAX_GENERATED_SOURCE_BYTES)
+            .expect("test source fits")
+            .into_iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("library source exists")
+            .contents
+    }
 
     fn recursive_shape_nodes() -> Vec<CheckedSemanticNodeV2> {
         let reference = |digit| json!({"term": "reference", "target": node_id(digit)});
@@ -1949,9 +2211,32 @@ mod tests {
     }
 
     fn check_synthetic_items(
-        mut nodes: Vec<CheckedSemanticNodeV2>,
+        nodes: Vec<CheckedSemanticNodeV2>,
         operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
     ) -> (Vec<Result<(), CompositeEqualityRefusal>>, String) {
+        let (outcomes, source) = check_synthetic_items_with_limits(
+            nodes,
+            operands,
+            CompositeEqualityLimits {
+                source_bytes: usize::MAX,
+                ..CompositeEqualityLimits::default()
+            },
+        );
+        let lib = source
+            .finish(usize::MAX)
+            .expect("synthetic source is complete")
+            .into_iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("synthetic library exists")
+            .contents;
+        (outcomes, lib)
+    }
+
+    fn check_synthetic_items_with_limits(
+        mut nodes: Vec<CheckedSemanticNodeV2>,
+        operands: &[(EqualityOperandDescriptor, EqualityOperandDescriptor)],
+        limits: CompositeEqualityLimits,
+    ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
         assert!(operands.len() <= 2, "fixture has two distinct item ids");
         let mut records = Vec::new();
         let mut items = Vec::new();
@@ -2015,16 +2300,24 @@ mod tests {
             nodes.push(expression);
         }
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
-        let mut source = SourceBuilder::default();
+        let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");
         let outcomes = records
             .iter()
             .zip(&items)
             .enumerate()
             .map(|(index, (record, item))| {
-                match check_item(&graph, &BTreeMap::new(), record, item) {
+                match check_item(
+                    &graph,
+                    &BTreeMap::new(),
+                    record,
+                    item,
+                    limits.type_resolution_work_units,
+                ) {
                     Ok(checked) => {
                         let rendered = render_item(&checked).expect("healthy item renders");
-                        source.item(&format!("test{index}"), item, &rendered);
+                        source
+                            .item(&format!("test{index}"), item, &rendered)
+                            .expect("synthetic item source fits");
                         Ok(())
                     }
                     Err(ItemCheckError::Refusal(refusal)) => Err(refusal),
@@ -2034,7 +2327,7 @@ mod tests {
                 }
             })
             .collect();
-        (outcomes, source.finish())
+        (outcomes, source)
     }
 
     fn check_synthetic_item(
@@ -2283,6 +2576,375 @@ mod tests {
             .expect("small-stack worker starts")
             .join()
             .expect("deep Option operations fit the worker stack");
+    }
+
+    /// Trace: FR-018-AC-29, TC-029.
+    #[test]
+    fn cycle_refusal_follows_its_charged_entry_and_work_refusal_wins_at_the_boundary() {
+        let mut nodes = recursive_shape_nodes();
+        nodes[1].body["members"][0]["target"] = json!(node_id('b'));
+        let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+        let mut cycle = TypeClosure {
+            work_limit: 3,
+            ..TypeClosure::default()
+        };
+        assert_eq!(
+            resolve_type(&graph, &BTreeMap::new(), &mut cycle, &node_id('b')),
+            Err(CompositeEqualityRefusal::TypeResolutionCycle {
+                repeated_type_node_id: node_id('b')
+            })
+        );
+        assert_eq!(cycle.work_consumed, 2);
+        let mut denied = TypeClosure {
+            work_limit: 1,
+            ..TypeClosure::default()
+        };
+        assert_eq!(
+            resolve_type(&graph, &BTreeMap::new(), &mut denied, &node_id('b')),
+            Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                limit: 1,
+                consumed: 2
+            })
+        );
+        let mut sibling = TypeClosure::default();
+        assert_eq!(
+            resolve_type(&graph, &BTreeMap::new(), &mut sibling, &node_id('f')),
+            Ok(ValueType::Integer)
+        );
+
+        let cyclic = EqualityOperandDescriptor::typed(node_id('b'));
+        let healthy = EqualityOperandDescriptor::typed(node_id('f'));
+        let requests = [(cyclic.clone(), cyclic), (healthy.clone(), healthy)];
+        let (cycle_items, cycle_source) = check_synthetic_items_with_limits(
+            nodes.clone(),
+            &requests,
+            CompositeEqualityLimits {
+                type_resolution_work_units: 3,
+                ..CompositeEqualityLimits::default()
+            },
+        );
+        assert_eq!(
+            cycle_items,
+            vec![
+                Err(CompositeEqualityRefusal::TypeResolutionCycle {
+                    repeated_type_node_id: node_id('b'),
+                }),
+                Ok(()),
+            ]
+        );
+        let cycle_lib = test_source(cycle_source);
+        assert!(!cycle_lib.contains("oracle_test0"));
+        assert!(cycle_lib.contains("oracle_test1"));
+
+        let mut denied_nodes = nodes;
+        let mut extra = denied_nodes[1].clone();
+        extra.node_id = node_id('5');
+        extra.semantic_type = node_id('5');
+        extra.body["members"][0]["target"] = json!(node_id('b'));
+        denied_nodes[1].body["members"][0]["target"] = json!(node_id('5'));
+        denied_nodes.push(extra);
+        let (denied_items, denied_source) = check_synthetic_items_with_limits(
+            denied_nodes,
+            &requests,
+            CompositeEqualityLimits {
+                type_resolution_work_units: 2,
+                ..CompositeEqualityLimits::default()
+            },
+        );
+        assert_eq!(
+            denied_items,
+            vec![
+                Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                    limit: 2,
+                    consumed: 3,
+                }),
+                Ok(()),
+            ]
+        );
+        let denied_lib = test_source(denied_source);
+        assert!(!denied_lib.contains("oracle_test0"));
+        assert!(denied_lib.contains("oracle_test1"));
+    }
+
+    /// Trace: FR-018-AC-31, TC-029.
+    #[test]
+    fn maximum_work_setting_refuses_and_last_denied_count_is_representable() {
+        let mut closure = TypeClosure {
+            work_limit: u64::MAX - 1,
+            work_consumed: u64::MAX - 1,
+            ..TypeClosure::default()
+        };
+        assert_eq!(
+            resolve_type(
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &mut closure,
+                &node_id('a')
+            ),
+            Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                limit: u64::MAX - 1,
+                consumed: u64::MAX,
+            })
+        );
+    }
+
+    /// Trace: FR-018-AC-30, TC-029.
+    #[test]
+    fn source_limit_refuses_before_a_function_or_module_fragment_is_appended() {
+        let limit = SOURCE_HEADER.len();
+        let mut source = SourceBuilder::new(limit).expect("header fits exactly");
+        assert_eq!(
+            source.append_function("x".to_owned()),
+            Err(OracleGenerationError::SourceTooLarge {
+                bytes: limit + 1,
+                limit,
+                setting: "cg.equality.source_bytes",
+            })
+        );
+        assert!(source.functions.is_empty());
+        assert_eq!(source.charged_bytes, limit);
+        assert_eq!(
+            source.add_composite_module("test", 0, "x", &mut String::new()),
+            Err(OracleGenerationError::SourceTooLarge {
+                bytes: limit + 1,
+                limit,
+                setting: "cg.equality.source_bytes",
+            })
+        );
+        assert!(source.modules.is_empty());
+        assert!(source.module_declarations.is_empty());
+    }
+
+    /// Trace: FR-018-AC-28, FR-018-AC-30, TC-029.
+    #[test]
+    fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
+        const RECORDS: usize = 50_000;
+        let (artifacts, root) = std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let id = |number: usize| CheckedNodeId {
+                    domain: "quire.checked-semantic-node/v1".into(),
+                    digest: format!("{number:064x}").into(),
+                };
+                let root = id(1);
+                let leaf = id(2 * RECORDS + 1);
+                let mut nodes: Vec<CheckedSemanticNodeV2> = Vec::with_capacity(2 * RECORDS + 1);
+                for index in 0..RECORDS {
+                    let record = id(index + 1);
+                    let option = id(RECORDS + index + 1);
+                    let payload = if index + 1 == RECORDS { leaf.clone() } else { id(index + 2) };
+                    nodes.push(serde_json::from_value(json!({
+                        "node_id": record,
+                        "schema_version": "quire.checked-semantic-graph/v2",
+                        "node_tag": "composite_type",
+                        "semantic_form": "record",
+                        "semantic_type": record,
+                        "dependencies": [],
+                        "occurrences": [],
+                        "body": {"term": "aggregate", "members": [{
+                            "term": "binding", "name": "next", "value": {
+                                "term": "aggregate", "members": [{
+                                    "term": "binding", "name": "optional", "value": {
+                                        "term": "reference", "target": option
+                                    }
+                                }]
+                            }
+                        }]}
+                    })).expect("record node"));
+                    nodes.push(serde_json::from_value(json!({
+                        "node_id": option,
+                        "schema_version": "quire.checked-semantic-graph/v2",
+                        "node_tag": "composite_type",
+                        "semantic_form": "option",
+                        "semantic_type": option,
+                        "dependencies": [],
+                        "occurrences": [],
+                        "body": {"term": "aggregate", "members": [{"term": "reference", "target": payload}]}
+                    })).expect("option node"));
+                }
+                nodes.push(serde_json::from_value(json!({
+                    "node_id": leaf,
+                    "schema_version": "quire.checked-semantic-graph/v2",
+                    "node_tag": "scalar_type",
+                    "semantic_form": "boolean",
+                    "semantic_type": leaf,
+                    "dependencies": [],
+                    "occurrences": [],
+                    "body": {"term": "aggregate", "members": []}
+                })).expect("leaf node"));
+
+                let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
+                let mut default = TypeClosure::default();
+                assert_eq!(
+                    resolve_type(&graph, &BTreeMap::new(), &mut default, &root),
+                    Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                        limit: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+                        consumed: COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT + 1,
+                    })
+                );
+                let entry_count = 2 * RECORDS as u64 + 1;
+                let mut one_below = TypeClosure {
+                    work_limit: entry_count - 1,
+                    ..TypeClosure::default()
+                };
+                assert_eq!(
+                    resolve_type(&graph, &BTreeMap::new(), &mut one_below, &root),
+                    Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                        limit: entry_count - 1,
+                        consumed: entry_count,
+                    })
+                );
+                let deep = EqualityOperandDescriptor::typed(root.clone());
+                let healthy = EqualityOperandDescriptor::typed(leaf.clone());
+                let requests = [(deep.clone(), deep), (healthy.clone(), healthy)];
+                for limit in [
+                    COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+                    entry_count - 1,
+                ] {
+                    let (outcomes, source) = check_synthetic_items_with_limits(
+                        nodes.clone(),
+                        &requests,
+                        CompositeEqualityLimits {
+                            type_resolution_work_units: limit,
+                            source_bytes: usize::MAX,
+                        },
+                    );
+                    assert_eq!(
+                        outcomes,
+                        vec![
+                            Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                                limit,
+                                consumed: limit + 1,
+                            }),
+                            Ok(()),
+                        ]
+                    );
+                    let source = source.finish(usize::MAX).expect("sibling source");
+                    let lib = source
+                        .iter()
+                        .find(|artifact| artifact.path == "src/lib.rs")
+                        .expect("sibling library");
+                    assert!(!lib.contents.contains("oracle_test0"));
+                    assert!(lib.contents.contains("oracle_test1"));
+                }
+                let operand = EqualityOperandDescriptor::typed(root.clone());
+                let (outcomes, source) = check_synthetic_items_with_limits(
+                    nodes,
+                    &[(operand.clone(), operand)],
+                    CompositeEqualityLimits {
+                        type_resolution_work_units: entry_count + 1,
+                        source_bytes: usize::MAX,
+                    },
+                );
+                assert_eq!(outcomes, vec![Ok(())]);
+                let all = source.finish(usize::MAX).expect("complete source");
+                let bytes: usize = all.iter().map(|artifact| artifact.contents.len()).sum();
+                assert!(bytes > MAX_GENERATED_SOURCE_BYTES);
+                assert!(matches!(
+                    source.finish(MAX_GENERATED_SOURCE_BYTES),
+                    Err(OracleGenerationError::SourceTooLarge { limit: MAX_GENERATED_SOURCE_BYTES, setting: "cg.equality.source_bytes", .. })
+                ));
+                assert_eq!(
+                    source.finish(bytes - 1),
+                    Err(OracleGenerationError::SourceTooLarge {
+                        bytes,
+                        limit: bytes - 1,
+                        setting: "cg.equality.source_bytes",
+                    })
+                );
+                let exact = source.finish(bytes).expect("exact source limit admits");
+                assert!(exact.iter().all(|artifact| artifact.contents.len() <= MAX_ARTIFACT_BYTES));
+                assert!(exact.iter().any(|artifact| artifact.path != "src/lib.rs"));
+                (exact, root)
+            })
+            .expect("small-stack worker starts")
+            .join()
+            .expect("deep generation fits 512 KiB stack");
+
+        let scratch =
+            std::env::temp_dir().join(format!("cg-ir496-fr018-deep-{}", std::process::id()));
+        std::fs::create_dir_all(scratch.join("src")).expect("scratch source directory");
+        std::fs::create_dir_all(scratch.join("tests")).expect("scratch test directory");
+        std::fs::write(
+            scratch.join("Cargo.toml"),
+            oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
+        )
+        .expect("scratch manifest");
+        std::fs::copy(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"),
+            scratch.join("Cargo.lock"),
+        )
+        .expect("scratch lock");
+        for artifact in &artifacts {
+            std::fs::write(scratch.join(&artifact.path), &artifact.contents)
+                .expect("generated source");
+        }
+        let test = format!(
+            r#"
+use quire_composite_equality_oracles::{{environment_test0, oracle_test0}};
+use quire_contract_runtime::exact as rt;
+
+#[test]
+fn deep_matches_shallow() {{
+    std::thread::Builder::new().stack_size(512 * 1024).spawn(|| {{
+    let deep = environment_test0().expect("deep environment");
+    let deep_key = rt::NodeKey::from_hex("{}").expect("deep key");
+    let deep_value = deep.record(deep_key, vec![]).expect("absent optional field");
+    let shallow_key = rt::NodeKey::from_hex("{}").expect("shallow key");
+    let shallow = rt::TypeEnvironment::new(vec![rt::CompositeDeclaration::new(
+        shallow_key,
+        "shallow",
+        rt::CompositeShape::Record(vec![rt::FieldDeclaration::new(
+            "next", rt::ValueType::Boolean, rt::Presence::Optional,
+        )]),
+    )], core::iter::empty::<rt::ObjectTypeDeclaration>()).expect("shallow environment");
+    let shallow_value = shallow.record(shallow_key, vec![]).expect("absent optional field");
+    let limits = rt::ScalarLimits {{
+        integer_bits: u64::MAX, decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX, text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX, normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX, value_occurrences: u64::MAX,
+        work_units: u64::MAX, result_units: u64::MAX,
+    }};
+    let actual = oracle_test0(&deep, &deep_value, &deep_value, &mut rt::Meter::new(limits));
+    let expected = shallow.check_equality(
+        rt::EqualityOperator::Equal,
+        rt::EqualityOperand::typed(rt::ValueType::Composite(shallow_key)),
+        rt::EqualityOperand::typed(rt::ValueType::Composite(shallow_key)),
+    ).expect("shallow equality").evaluate(&shallow_value, &shallow_value, &mut rt::Meter::new(limits));
+    assert_eq!(actual, expected);
+    assert_eq!(actual, rt::Outcome::Completed(true));
+    }}).expect("runtime worker starts").join().expect("runtime fits 512 KiB");
+}}
+"#,
+            root.digest,
+            "f".repeat(64)
+        );
+        std::fs::write(scratch.join("tests/deep.rs"), test).expect("deep agreement test");
+        let output = std::process::Command::new(env!("CARGO"))
+            .args([
+                "test",
+                "--offline",
+                "--quiet",
+                "--test",
+                "deep",
+                "--",
+                "--nocapture",
+            ])
+            .env(
+                "CARGO_TARGET_DIR",
+                concat!(env!("CARGO_MANIFEST_DIR"), "/target/generated-equality"),
+            )
+            .current_dir(&scratch)
+            .output()
+            .expect("generated crate test starts");
+        std::fs::remove_dir_all(&scratch).expect("remove scratch crate");
+        assert!(
+            output.status.success(),
+            "generated crate failed: {} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     /// Trace: FR-018-AC-25, TC-029.
@@ -2661,7 +3323,7 @@ mod tests {
 
     fn rendered_item() -> RenderedItem {
         RenderedItem {
-            composites: String::new(),
+            composites: Vec::new(),
             left_source: "rt::ValueType::Integer".to_owned(),
             left_target: None,
             right_source: "rt::ValueType::Integer".to_owned(),
@@ -2785,7 +3447,7 @@ mod tests {
                 Ok(rendered_item())
             }
         });
-        (result, claims, source.finish())
+        (result, claims, test_source(source))
     }
 
     fn symbols(claim: &CompositeEqualityClaim) -> Option<(&str, &str)> {
