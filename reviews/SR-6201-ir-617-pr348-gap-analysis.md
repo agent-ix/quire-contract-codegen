@@ -41,3 +41,9 @@ Plan completion: not assessed. Computed Test Matrix checked for NFR-006 only; re
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The computed matrix marks AC-7 tagged, but its only tagged test does not assert elapsed or the required field order; the criterion is only partly verified. | tests/it/kani_gate.rs:231-235 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 76949effd19906b82b4438828a1d7b311bbaab13 |

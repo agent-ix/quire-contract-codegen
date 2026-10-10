@@ -42,3 +42,9 @@ The changed requirement and test case validate structurally; TC-045 and the suit
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | TC-045 still labels the gate scripts and executable test planned although they exist on the reviewed head; the suite index also marks TC-045 planned and says those files do not exist. | spec/kani/matrix/TC-045-real-kani-lane-gate.md:20-24 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 76949effd19906b82b4438828a1d7b311bbaab13 |

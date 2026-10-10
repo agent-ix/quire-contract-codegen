@@ -42,3 +42,16 @@ The NFR-006 cost rationale has a stale lane count; other changed obligations are
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The rationale fixes the lane at 23 tests, but the source has 27 tests tagged `kani lane:` and the reviewed full gate ran 27/27. The cost argument now relies on a stale count and timing statement. | spec/kani/non-functional/NFR-006-real-kani-lane-gating.md:124 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | NFR-006 says the 27 lane tests are in seven files, but they are in eight files. | spec/kani/non-functional/NFR-006-real-kani-lane-gating.md:124 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 76949effd19906b82b4438828a1d7b311bbaab13 |
+| FND-002 | still-open | The source has 27 tagged ignored tests in eight tests/it files, so the revised seven-file count remains inaccurate. |

@@ -37,3 +37,9 @@ Rust test/control review found partial AC-7 assertion; shell gate paths otherwis
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The gate result test checks two substrings and absence of head=, but never asserts the required elapsed field or exact field order. A reordered or incomplete result line would pass this test. | tests/it/kani_gate.rs:231-235 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 76949effd19906b82b4438828a1d7b311bbaab13 |
