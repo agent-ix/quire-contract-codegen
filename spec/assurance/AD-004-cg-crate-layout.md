@@ -178,7 +178,11 @@ src/
     naming.rs                 bounded readable components, unique names, symbol derivation
   oracle/                     FR-014, FR-018, FR-021, FR-031 (boolean_v1.rs)
     claim.rs                  ClaimMap, ClaimDisposition, OracleGenerationError (was generation)
-    scalar/                   was exact_scalar, split along derivation, lowering and rendering
+    scalar/                   was exact_scalar; step 2d moves it whole, step 3 splits it
+      mod.rs                  public scalar API and generation orchestration
+      derive.rs               descriptor derivation from admitted nodes
+      lower.rs                checked-node access, bounds and operation validation
+      render.rs               generated oracle source and artifact construction
     equality/                 was composite_equality
     function/                 was exact_function
     boolean_v1.rs             V1 Boolean oracle; deleted with V1 (see One input model)
@@ -274,7 +278,7 @@ Migration order, not moved.
 | `publication` (`ArtifactBundle`, limits, `PublicationDiagnostic`, `PublicationErrorCode`, `PublicationDestinationState`) | core | `core/artifact.rs` | split (step 2a); the destination state is a field of the diagnostic, so it moves with it |
 | `publication` (writer, published identity) | publication | `publication/publish.rs` | split |
 | `generation` | oracle | `oracle/claim.rs` | moved |
-| `exact_scalar` | oracle | `oracle/scalar/`; walkers to `core/ir/` | split |
+| `exact_scalar` | oracle | `oracle/scalar/{mod,derive,lower,render}.rs`; shared walkers to `core/ir/` | moved whole to `oracle/scalar/mod.rs` at step 2d; split with typed node access at step 3 |
 | `composite_equality` | oracle | `oracle/equality/` | moved |
 | `exact_function` | oracle | `oracle/function/` | moved |
 | `bound` | oracle | `oracle/bound_v1.rs` | moved; V1 input, so `evidence` and `strategy` import it downward |
@@ -601,7 +605,10 @@ requirement is authored.
 - L-1. `src/` has the directories `core`, `oracle`, `strategy`, `evidence`, `kani`, `replay`,
   `routed` and `publication`, plus `lib.rs`, and every module in the map above lives in the one the
   map names. Test: a layout test lists `src/` and compares with a directory list held in the test;
-  once step 7 lands the registry rows by directory, it reads the registry instead.
+  once step 7 lands the registry rows by directory, it reads the registry instead. The scalar
+  file split is an additional step 3 exit check: `oracle/scalar/` declares `derive`, `lower` and
+  `render` from `mod.rs`, and the scalar-specific logic resides in those files as the target tree
+  assigns. The step 2 layout test does not require those files before step 3.
 - L-2. The import graph is acyclic and follows the dependency direction above, `#[cfg(test)]`
   modules included, and no file imports an item through the crate root. Test: a layout test that
   reads `use crate::` lines and flags a bare `crate::<Item>` path in code (inline types, calls;
@@ -724,8 +731,19 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    (L-1, L-2) lands with 2g; it reads `use` lines and also flags `crate::<Item>` with no module
    segment in code outside string literals. It does not read comments, so the doc links are
    rewritten by 2g-0 and not checked by the test.
-3. **Typed node access.** `core/ir` with the operator enum, then `state_frame`, `exact_scalar`,
-   `composite_equality` and `exact_function` onto it, one PR each. L-8 lands with the last.
+3. **Typed node access and the scalar split.** `core/ir` with the operator enum, then
+   `state_frame`, `exact_scalar`, `composite_equality` and `exact_function` onto it, one PR each.
+   The `exact_scalar` PR starts from the step 2d result, where the complete implementation is in
+   `oracle/scalar/mod.rs`. It moves shared checked-node walkers into `core/ir`, moves descriptor
+   derivation to `oracle/scalar/derive.rs`, node lowering, bounds and operation checks to
+   `oracle/scalar/lower.rs`, and source and artifact rendering to `oracle/scalar/render.rs`.
+   `mod.rs` keeps the public scalar types and entry points and orchestrates those stages; it does
+   not retain their implementations. File-local helpers and tests move with the behavior they
+   exercise. The exit check inspects those module responsibilities and the step 3 scalar file
+   layout, then runs the existing scalar generation and agreement tests plus the repository gate
+   on the code PR. The public API, claim/refusal outcomes and emitted artifacts remain equivalent;
+   this step introduces no old-path forwarding module or other compatibility layer. L-8 lands
+   with the last typed-node-access PR.
 4. **The one generator.**
    - 4a: confirm the regression requirement (L-5) before anything else in this step: the
      quire-integration exemplars pass against CG's branch on the V1 path that serves the control
