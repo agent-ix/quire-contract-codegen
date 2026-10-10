@@ -19,8 +19,7 @@ relationships:
 ## Description
 
 The generator shall deliver bound strategy, census, and runner output as typed generated Rust, so a
-downstream crate can place every case's values into its own runtime inputs by declaration name and
-observation. The generator shall not
+downstream crate can place every case's values into its own runtime inputs by typed declaration identity, selected path and observation. The generator shall not
 require any serialized case format or schema owned by this repository for that consumption.
 
 ## Inputs
@@ -32,36 +31,31 @@ require any serialized case format or schema owned by this repository for that c
 ## Outputs
 
 - Generated Rust whose public case type exposes:
-  - one `i64` field per read, named with the same identifier the clause's generated oracle uses for
-    that dependency parameter;
-  - for each field, a constant pair of the IR declaration `SymbolName` as `&'static str` and the IR
-    observation's serialized name (`"current"`, `"pre"`, or `"post"`) as `&'static str`. For a
-    quire-spec-language field projection the `SymbolName` is SL's deterministic field alias, and a
-    consumer maps it back to the model field through SL's read correspondence (quire-spec-language
-    FR-034);
+  - one `i64` field per read, named with the identifier derived from that read's typed V2 dependency identity and observation;
+  - for each field, constants exposing the typed V2 declaration/provenance identity,
+    normalized selected path, and observation (`"current"`, `"pre"`, or `"post"`), so the consumer
+    can bind the value without recovering a V1 `SymbolName` or parsing generated source;
   - the expectation tag, for in-domain cases.
 
 ## Behavior
 
-- Every generated case type shall carry the exact IR declaration name and observation name of each
-  read, so a consumer needs no mapping table of its own.
-- The generator shall take field identifiers from bound oracle generation's dependency parameter
-  names.
+- Every generated case type shall carry constants rendered from each read's typed V2 declaration identity, provenance kind, selected path and observation, so a consumer needs no mapping table of its own.
+- The generator shall derive field identifiers from the same typed V2 dependency identity and
+  observation used by its selected-claim oracle, with deterministic collision handling.
 - Generated output shall depend only on `proptest`, `quire-contract-runtime`, and `core`/`std`.
 - Generated output shall not depend on quire-spec-language, which depends on this crate.
 - The generator shall not emit a JSON, YAML, or other serialized case, census, or summary format.
 - This slice shall add no file under `schemas/`.
-- The generated Rust header shall state the full `ClauseRef`.
-- For a read of an input declaration, whose observation is always `current` under
-  quire-contract-ir FR-014, the generated observation name shall be `"current"`.
+- The generated Rust header shall state the selected checked clause id and authentic claim occurrence.
+- For a typed `OperationInput` read, the generated observation name shall be `"current"`.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-013-AC-1 | A consumer fixture crate whose manifest depends only on the generated artifact, `proptest`, and `quire-contract-runtime` compiles under denied warnings, draws `VersionUnchanged` cases, and reads the `versionNumber` field's declaration, by its SL field-alias `SymbolName`, at `"pre"` and `"post"` through the generated name and observation constants. | Test (TC-022) |
+| FR-013-AC-1 | A consumer fixture crate that includes the generated Rust source and whose manifest depends only on `proptest` and `quire-contract-runtime` compiles under denied warnings, draws `VersionUnchanged` cases, and reads the selected `versionNumber` StateField at `"pre"` and `"post"` through the generated typed-identity, path and observation constants. | Test (TC-022) |
 | FR-013-AC-2 | The generated bundle contains no serialized case, census, or summary file, and the change adds no file under `schemas/`. | Test (TC-022) |
-| FR-013-AC-4 | The generated Rust header carries the full `ClauseRef`, and generating two different `ClauseRef`s from one package produces different headers and artifact paths. | Test (TC-022) |
+| FR-013-AC-4 | The generated Rust header carries the selected checked clause id and authentic claim occurrence, and generating two distinct selected claims from one package produces different headers and artifact paths. | Test (TC-022) |
 | FR-013-AC-5 | interface-001 `bound_strategy_slice.consumer` records the case, census, and runner surface a downstream consumer compiles against. | Inspection |
 
 ## Dependencies

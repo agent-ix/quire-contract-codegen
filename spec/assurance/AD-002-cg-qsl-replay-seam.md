@@ -56,7 +56,11 @@ and who reports each failure.
 | `StateClauseReplayResult` | QSL to CG | QSL | CG reads; the terminal map reads it as FR-029-AC-16 states |
 | `ObligationIdentity` (32 bytes), in the envelope and in the request's obligation-identity slot | CG to QSL | QSL type; CG is to mint the value | see AD-003 |
 | `ReplayResult`, `FrameReplayResult`, `WitnessSettlement`, `Category` (QSL's `ProofCategory`, folded into one `Category` and re-exported by `qsl-replay`) | QSL to CG | QSL | CG reads; CG defines its own verdict only as a partition of QSL's (`ReplayVerdict`) |
-| `DeclaredDomain(ProofBound{DomainKey, FiniteBound})` | CG to QSL (in the envelope) | QSL (re-exported by `qsl-replay`) | CG is to build it from its argument bindings' bounds |
+| `DeclaredDomain(ProofBound)` with a `DomainKey`, `Option<DomainKind>` and `FiniteBound` | CG to QSL (in the envelope) | QSL (re-exported by `qsl-replay`) | CG calls `ProofBound::new`; the domain kind must pair with the finite bound. State-clause field ranges use `Some(DomainKind::Integer)` |
+
+`ProofBound::new` requires `Some(DomainKind)` for cardinality, integer-range and depth bounds;
+`None` is admitted only for harness-drawn `Variants`. CG's sequence bounds use
+`DomainKind::Collection` for cardinality and `DomainKind::Integer` for element ranges.
 
 Nothing else crosses. CG holds no copy of an envelope, witness, replay source, terminal record or
 obligation identity type, and neither does IR. CG's only QSL dependency is the `qsl-replay` crate
@@ -97,6 +101,7 @@ anywhere on this seam, and none is proposed.
 | Dependency selections not admitted, call site not located (`CallSiteRefusal`, a fault among them) | CG wrapping QSL (`ReplayPackageError`, `FrameReplayError`) | typed refusal, no replay; a wrapped fault is still a fault (AD-003, link 7) |
 | A qualified name built from the operation's identifiers is not admitted (`FrameReplayError::Name`) | CG | typed refusal, no replay |
 | The frame witness transcript or the envelope CG built is not admitted (`FrameReplayError::Transcript`, `FrameReplayError::Envelope`, from `WitnessEnvelope::reconstruct`) | CG | typed refusal, no replay; CG built a value its own contract says QSL admits, so AD-003 maps it to a failure |
+| A state-clause integer range cannot be paired with its domain kind by `ProofBound::new` (`StateClauseReplayError::ProofBound(ProofBoundRefusal)`) | CG wrapping QSL's typed constructor refusal | typed error before replay; it carries no QSL replay code and maps to `Failed` as a CG defect under FR-029-AC-16 |
 | `replay` / `replay_frame` refuses the request or envelope | QSL (`ReplayRefusal`) | CG carries it unchanged in `Refused`; it is not a verdict on the evidence |
 | State-clause replay (IR-460): a playback or post state binds no value for a declared state field (`StateClauseReplayError::MissingField`), binds a name that is no state field or one field twice (`UndeclaredField`, `DuplicateField`), a playback value lies outside its field's declared range (`OutOfDomain`), the operation declares a parameter or a result (`UnsupportedOperationShape`), a document is not encodable or a fact it is built from is not readable from the supplied package (`Document`), a name, transcript or envelope is not admitted (`Name`, `Transcript`, `Envelope`) | CG | typed error before any replay and no executor call; each carries no QSL code, so FR-029-AC-16 maps each to `Failed`, never `Incomplete` and never `Inconclusive(ReplayRefused)` |
 | State-clause replay (IR-460): dependency selections not admitted or the clause not located (`StateClauseReplayError::Dependencies`, `CallSite`), or `replay_state_clause` refuses (`Refused`) | CG wrapping QSL | typed error, no result; read as the function and frame paths read the same refusals (FR-029-AC-13, FR-029-AC-16) |

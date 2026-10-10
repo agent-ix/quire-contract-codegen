@@ -34,6 +34,12 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
    occurrence identities QSL reports.
 7. Reduce one `Witness`-arm and one `Input`-arm counterexample with a candidate set that holds a
    failure-preserving candidate, an out-of-domain candidate and a verdict-changing candidate.
+   Begin with an admitted original failure. Retain the valid equivalent reduction, then propose
+   the two invalid reductions from that retained parent, and finally retain another valid
+   reduction. Before each proposal clone each retained QSL envelope and capture each CG record's
+   revision identity, parent reference, obligation identity and typed replay evidence. Compare
+   the captured values with those read back after each proposal; use QSL envelope equality and
+   inspect each retained backend transcript and replay result.
 8. Submit a counterexample through the generator's replay entry point and pass the `Witness`,
    `ReplaySource`, `WitnessEnvelope`, `TerminalRecord` and `ObligationIdentity` values it produces
    directly to `qsl_replay`'s own functions.
@@ -88,6 +94,14 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 27. With the installed backend (`make kani`), replay the real playback of the falsified frame
     harness of a subject that writes a forbidden field, supplying the harness's identity, the
     playback text and the Inputs list, but no obligation identity and no transcript.
+28. Submit equal parameter-bound values from two test backend adapters through the same common intake,
+    with distinct backend identities and native transcript formats. Inspect the typed assignments,
+    opaque obligation identity, declared domains, source/provenance and replay packet members at
+    the adapter boundary, then the complete packet at QSL admission. Separately submit a decode
+    refusal, an out-of-domain assignment, a QSL-refused packet and a native replay verdict
+    disagreement. Send the decode refusal through the adapter outcome's refusal arm, with its
+    backend identity, obligation identity and typed cause but no assignments, packet or native
+    text; record the common intake's typed result, contract settlement and whether replay ran.
 
 ## Expected Results
 
@@ -102,9 +116,15 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
 5. The corpus counterexample is an `Input`-arm envelope keyed by parameter node id. It settles
    `reproduced-without-witness`, and no `Witness` was built (FR-024-AC-5).
 6. Each identity QSL reports equals the one submitted (FR-024-AC-6).
-7. Only the failure-preserving candidate is retained (FR-024-AC-7, FR-024-AC-9). The `Witness`-arm
-   envelope carries its own re-run's transcript (FR-024-AC-8), and the retained `Input`-arm
-   candidate is an `Input`-arm envelope.
+7. Only valid failure-preserving candidates are retained (FR-024-AC-7, FR-024-AC-9). The root
+   and both retained revisions refer to their exact QSL envelopes and unchanged obligation;
+   each child names the actual retained parent. The invalid-domain and verdict-changing proposals
+   create no revision. Each prior envelope compares equal to its clone captured before the
+   proposal using QSL's `WitnessEnvelope<P>: Eq`; prior CG record identity, parent, obligation and
+   typed evidence fields read back equal to their captured values (FR-024-AC-38,
+   FR-024-AC-39). Each retained `Witness` envelope carries its own re-run transcript bound to its
+   reduced assignments, and each retained `Input` envelope remains `Input` without backend
+   evidence (FR-024-AC-8, FR-024-AC-40).
 8. Every value is QSL's own `qsl_replay` type and is accepted by `qsl_replay` unchanged
    (FR-024-AC-10).
 9. `replay` returns the direct `replay_state_clause` result for each run, the two runs' results
@@ -196,10 +216,17 @@ failure-preserving envelopes, and that the generator holds no copy of QSL's repl
     range is unaffected, and an unread present `IntRange` within `i64` is never called
     unranged. Build the out-of-`i64` model type through a selected-model-document override
     with recomputed digests on a QSL-emitted graph (FR-024-AC-35, IR-624).
+33. Both adapters use the same typed outcome boundary while their native text stays inside each
+    adapter; QSL receives each successful submission's backend, obligation and source without
+    reminting. The decode-refusal arm reaches common intake with the original typed cause and no
+    successful submission or envelope. The four refusals remain distinct typed evidence failures,
+    never contract success or failure. Decode, domain and QSL admission refusals invoke no replay
+    (FR-024-AC-36,
+    FR-024-AC-37). Kani-specific refusal details follow FR-016.
 
 ## Status
 
-Partly implemented. Steps 1 to 8 are not: the skeleton spine renders a QSL transcript from decoded
+Partly implemented. Steps 1 to 8 and 28 are planned: the skeleton spine renders a QSL transcript from decoded
 values (`src/replay/function.rs`, TC-026, now through `render_witness`), which is the shape step 2
 checks, but it builds no envelope. Step 8 holds for the decode path: `src/replay/witness.rs` uses
 no Contract IR witness type. The bounded-Kani corpus retains no counterexample packet, so step 5
@@ -227,3 +254,5 @@ merged accessor. Step 27 is a real-Kani test in the module
 `kani_obligations_state_frame`, run through the `kani_obligations` filter of `make kani`. Step 19's
 last case (a clause added on an operation that sorts earlier) is measured on the twin's operations
 `deposit` and `transfer`: a clause added on `deposit` changes the identity of `transfer`.
+FR-024-AC-36 to FR-024-AC-40, including common typed intake and CG lineage retention, are
+planned. No production minimizer or lineage record is claimed by this test case.

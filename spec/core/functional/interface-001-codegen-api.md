@@ -50,9 +50,9 @@ operations:
     semantics: stage and validate the complete bundle, then replace the destination directory; caller serializes destination writers; inspection/read failures return io_failed with unchanged state; failed rollback reports unknown and preserves backup/staging for recovery; post-commit cleanup failures report published; process crashes between directory renames and power-loss durability remain outside the portable rollback guarantee
   - name: analyze_coverage
     status: planned; public IR-owned bound population is available, native run-result contract and aggregate analysis integration remain pending
-    inputs: [bound executable population, generated source and maps, LLVM coverage JSON bytes, native producer and run identities, source root, runtime campaign report, execution outcome]
-    output: versioned structured AnalysisOutcome including non-success diagnostics and available input identities
-    semantics: coverage obligation succeeds only for nonempty complete exercised population with successful bound execution; successful serialization is not successful coverage; never executes LLVM
+    inputs: [bound executable population, generated source and maps actually used by the native coverage producer, LLVM coverage JSON bytes and producer tool/version, native run identity and requirement/revision, source root, runtime campaign report, execution outcome]
+    output: versioned structured AnalysisOutcome including non-success diagnostics, run and LLVM producer identities, and available clause observations
+    semantics: analysis binds the run to its actual generated source and source map; coverage obligation succeeds only for nonempty complete exercised population with successful bound execution, so oracle success with an unobserved implication consequent is adverse; successful serialization is not successful coverage; IR FR-045 owns proof eligibility and credit; never executes LLVM
   - name: analyze_bound_coverage
     status: implemented phase A; full native-run analysis remains pending
     inputs: [public BoundPackage, immutable BoundOracleGeneration, complete artifact bytes, optional LLVM export bytes, source root]
