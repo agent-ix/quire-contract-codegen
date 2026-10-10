@@ -54,3 +54,21 @@ Changes requested: the authored Test method agrees with the catalog advisor for 
 ## Verdict
 
 Changes requested: the authored Test method agrees with the catalog advisor for all thirteen criteria, and the computed matrix calls all thirteen untagged. The TC-023 index omits the newly assigned criteria and still marks the whole case Planned despite its already covered slices.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | The revised TC-023 index labels AC-51, AC-52, AC-55 and AC-57 as Covered current tagged controls, but the computed matrix reports AC-51/52 untagged and AC-57 tagged only by ignored tests. Retain AC-55 as tagged and report the other three with their actual evidence state; do not call the group Covered without a recorded installed-backend run for AC-57. | spec/kani/matrix/tests.md:80 |
+
+## Dispositions
+
+Round 1 reviewed at 1ba28b5311ead95f7e0fdab6ef9a586a2e3fe6ae. The original findings remain unchanged above.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 1ba28b5311ead95f7e0fdab6ef9a586a2e3fe6ae; The TC-023 index now has separate covered and planned rows, and the new AC-82 through AC-95 are listed without code-complete credit. |
+| FND-002 | still-open | Fresh matrix: AC-51/52 untagged; AC-57 tagged only by ignored tests, but index calls all four current tagged controls and Covered. |
+| FND-002 | fixed | d3f790acfac06c034be0924c93eb7cd4cec70556; `spec/kani/matrix/tests.md` separates AC-55 Covered, AC-57 ignored-only, AC-51/52 untagged, and AC-82 through AC-95 planned in the functional and TC-023 index rows. |
+
+Round 2 reviewed at d3f790acfac06c034be0924c93eb7cd4cec70556. Fresh `quire matrix` reports AC-51/52 untagged, AC-55 tagged by a nonignored test, AC-57 tagged only by ignored tests, and AC-95 untagged. The corrected TC-023 index names each state without coverage inflation. No new findings in the one-file correction.

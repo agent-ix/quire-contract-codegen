@@ -54,3 +54,11 @@ Changes requested: FR-015-AC-91 contradicts accepted AD-004 step 4g on generatio
 ## Verdict
 
 Changes requested: FR-015-AC-91 contradicts accepted AD-004 step 4g on generation-time outcomes. The rest of the examined criteria and V1/V2 ownership map are internally coherent.
+
+## Dispositions
+
+Round 1 reviewed at 1ba28b5311ead95f7e0fdab6ef9a586a2e3fe6ae. The original findings remain unchanged above.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 1ba28b5311ead95f7e0fdab6ef9a586a2e3fe6ae; AD-004 and FR-015 now separate the interim generated-case classification from the post-4g run verdict, with AC-95 planned. |
