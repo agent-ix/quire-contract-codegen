@@ -61,11 +61,11 @@ pub use oracle::scalar::{
 
 pub use oracle::equality::{
     generate_composite_equality_oracles, CompositeEqualityClaim, CompositeEqualityItem,
-    CompositeEqualityOracles, CompositeEqualityRefusal, CompositeOperationClaim,
-    CompositeOperationProvenance, DeclarationRefusalCause, EqualityOperandDescriptor,
-    EqualityOperatorKind, GeneratedCompositeEqualityClaim, IllTypedCauseKind, RecordedDescriptor,
-    RecordedSchedule, RecursionEdgesKind, COMPOSITE_EQUALITY_CRATE_NAME,
-    COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
+    CompositeEqualityLimits, CompositeEqualityOracles, CompositeEqualityRefusal,
+    CompositeOperationClaim, CompositeOperationProvenance, DeclarationRefusalCause,
+    EqualityOperandDescriptor, EqualityOperatorKind, GeneratedCompositeEqualityClaim,
+    IllTypedCauseKind, RecordedDescriptor, RecordedSchedule, RecursionEdgesKind,
+    COMPOSITE_EQUALITY_CRATE_NAME, COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::function::{

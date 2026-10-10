@@ -796,7 +796,11 @@ pub fn generate_exact_scalar_oracles(
     };
     let lib = source.finish();
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(OracleGenerationError::SourceTooLarge { bytes: lib.len() });
+        return Err(OracleGenerationError::SourceTooLarge {
+            bytes: lib.len(),
+            limit: MAX_GENERATED_SOURCE_BYTES,
+            setting: "cg.scalar.source_bytes",
+        });
     }
     let mut map_bytes = serde_json::to_vec_pretty(&claim_map)
         .map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
