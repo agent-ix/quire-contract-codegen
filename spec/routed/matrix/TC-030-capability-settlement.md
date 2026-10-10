@@ -7,6 +7,8 @@ relationships:
     type: verifies
   - target: ix://agent-ix/quire-specification/TC-271
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-335
+    type: references
 ---
 # TC-030: Verify capability settlement at one negotiation point
 
@@ -49,6 +51,18 @@ variants with no wildcard, no identity or manifest byte test chooses
 the origin, and CG has no direct `qsl-route` dependency or new FR-331 origin
 wire member. Run this row when IR-633 implements the projection.
 
+For planned FR-019-AC-24, use the QSL FR-335 request for the `+` value-validity
+claim in `f using v(s: Set<Int[0,9999]>): Integer pure { size(s) + 1 }`.
+Supply the already-classified claim item to CG settlement with: (1) an empty
+registry and candidate set; (2) one Kani candidate advertising only bounded
+`value-validity` with `finite_bound_available=true`; (3) a separate bounded
+item requested with `ProofBound::Cardinality{maximum: 8}`; and (4) an added
+unboundable quantity root with `finite_bound_available=false` against that
+bounded-only candidate. Preserve each item's request index across settlement
+and routing. Inspect warning cause, artifact absence and Kani outcome absence.
+QSL TC-845 owns compiling the source into the claim and request fixture;
+quire-integration owns a composed source-to-claim, CG and driver execution.
+
 ## Expected Results
 
 Each item settles exactly one of `supported`, `requires-bound`, `unsupported`
@@ -75,3 +89,11 @@ identity routes none.
 Under FR-019-AC-15, the driver preserves the QSL registry origin as a typed
 CG value without altering identity or advertised pairs; the CG crate boundary
 and FR-331 wire remain as specified.
+
+The planned collection controls settle respectively `unsupported`, warned with
+`value-validity` and no artifact or Kani outcome; `requires-bound`, without a
+substituted bound, artifact or Kani outcome; an independently indexed bounded
+request whose result joins only its own index; and `unsupported`, warned with
+`unsupported_projection`/`unbounded-extent`, without an artifact or Kani
+outcome. The unbounded item's disposition is unchanged by the bounded request.
+Passing generic mode-table controls alone does not complete this collection case.

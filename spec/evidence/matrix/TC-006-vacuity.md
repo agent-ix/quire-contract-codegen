@@ -5,6 +5,8 @@ type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-004
     type: verifies
+  - target: ix://agent-ix/quire-contract-ir/FR-045
+    type: references
 ---
 # TC-006: Distinguish vacuity and unexecuted control flow
 
@@ -38,6 +40,11 @@ Every malformed or mismatched input retains a stable non-success diagnostic with
 measured-zero observation or passed coverage result. The primitive fixture emits no report and makes
 no native campaign binding claim.
 
+The planned aggregate case also consumes a native campaign whose oracle returns all succeed while
+one implication consequent never executes. Its report must classify that clause as `vacuous` and
+the consuming coverage obligation must deny success. IR FR-045 may consume the observation but
+does not count the probe or successful native test as a completed proof.
+
 ## Remaining aggregate controls
 
 Bank complete-package native controls through `generate_bound_oracles` and independently corrupt
@@ -53,6 +60,13 @@ as different cases. Feed vacuous, unexecuted, partial, failed, aborted and unava
 through the consuming obligation gate: each must deny success even if its diagnostic report can be
 serialized. Check accepted/rejected/discarded accounting independently and reject passed execution
 with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
+
+For the native-run binding control, record the generated source and source map actually handed to
+the coverage producer. Analyze those same artifacts with the resulting export and campaign run;
+then replace the map, source, revision or run independently while preserving the other inputs.
+Also omit or change the LLVM producer tool/version identity. The successful case reports that
+identity and the run's requirement/revision; each mismatch or omission is a structured non-success
+result and cannot discharge coverage.
 
 TC-006 and FR-004 matrix rows remain planned: primitive controls are partial implementation, not
 completion of bound analysis, native-run binding, or a consuming obligation.

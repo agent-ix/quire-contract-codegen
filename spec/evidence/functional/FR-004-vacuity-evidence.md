@@ -9,6 +9,8 @@ relationships:
     type: depends_on
   - target: ix://agent-ix/quire-contract-codegen/interface-001
     type: implements
+  - target: ix://agent-ix/quire-contract-ir/FR-045
+    type: references
 ---
 # FR-004: Produce vacuity and rejection evidence
 
@@ -23,7 +25,8 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
-- LLVM coverage JSON export bytes plus native runtime campaign results.
+- LLVM coverage JSON export bytes, its producer tool and version, and native runtime campaign
+  results identifying the generated source and source map actually used for that run.
 
 ## Outputs
 
@@ -65,6 +68,11 @@ per-requirement vacuity report without executing a coverage producer itself.
 - Source-map requirement/revision identity shall equal the runtime campaign identity, and duplicate,
   missing, ambiguous, malformed, summary-only, or unsupported-version coverage input shall remain
   a structured non-success analysis outcome.
+- The native run shall identify its requirement and revision and the generated source and source map
+  its producer used. Successful analysis shall use that same source map and generated source, rather
+  than an independently supplied map that merely names the same requirement. The report shall retain
+  the LLVM export producer's tool and version identity alongside the run identity. Missing or
+  conflicting producer, run, revision, source, or map identity shall prevent coverage discharge.
 - A non-success analysis outcome shall retain its diagnostics without claiming that invalid or
   absent inputs were analyzed successfully.
 - Coverage filenames shall match source-map artifact paths only after stripping the caller-declared
@@ -74,20 +82,25 @@ per-requirement vacuity report without executing a coverage producer itself.
   clauses are all exercised and whose native execution completed successfully. Vacuous, unexecuted,
   and partially exercised results are adverse; unavailable or inconclusive execution cannot pass.
   Artifact serialization success shall never stand in for that coverage result.
+- The report shall expose its per-clause observations and native outcome to the IR FR-045 accounting
+  boundary as evidence about execution and vacuity. It shall neither define another eligible proof
+  denominator nor label a successful native run or observed probe as a completed proof.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-004-AC-1 | An evaluated implication whose consequent is unobserved yields a vacuity finding even when every oracle return was true. | Test (TC-006) |
+| FR-004-AC-1 | An evaluated implication whose consequent is unobserved yields a vacuity finding even when every oracle return was true; the consuming coverage obligation denies success for that clause. | Test |
 | FR-004-AC-2 | A clause whose oracle-evaluation region was not observed is unexecuted, not vacuous. | Test (TC-006) |
 | FR-004-AC-3 | The four measured clause classifications form a total partition; an implication-bearing clause is exercised only when every expected consequent entry probe is observed, and implication-free clauses require observed evaluation. | Test (TC-006) |
-| FR-004-AC-4 | Successful analysis verifies the bound population, source/map, and native execution bindings. | Test (TC-006) |
+| FR-004-AC-4 | Successful analysis verifies the bound population, source/map, and native execution bindings. | Test |
 | FR-004-AC-5 | Malformed, summary-only, identity-mismatched, path-ambiguous, unsupported, or missing observation inputs retain structured non-success outcomes without invented classifications. | Test (TC-006) |
 | FR-004-AC-6 | Campaign counts and test outcome remain complete facts independent of coverage classification. | Test (TC-006) |
 | FR-004-AC-7 | Removing an expected clause, consequent, evaluation probe, or all clauses prevents successful analysis; the expected census comes from bound typed IR. | Test (TC-006) |
-| FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test (TC-006) |
-| FR-004-AC-9 | Complete bound observations without a native campaign run are reported as observations only and never as a passed coverage result. Valid informational-only populations retain their references as no executable work. | Test (TC-006; proposed next slice) |
+| FR-004-AC-8 | Adverse coverage and non-success native execution cannot discharge the coverage obligation merely because a report serialized successfully. | Test |
+| FR-004-AC-9 | Complete bound observations without a native campaign run are reported as observations only and never as a passed coverage result. Valid informational-only populations retain their references as no executable work. | Test |
+| FR-004-AC-10 | PLANNED. A native-run coverage result binds the analyzed source map and generated source to the ones its producer used, matches their requirement and revision to the campaign, and reports the LLVM producer tool and version; a changed or missing run/map/source binding or producer identity yields non-success without coverage discharge. | Test |
+| FR-004-AC-11 | PLANNED. The consuming report retains vacuity and native outcome as evidence for IR FR-045; an oracle-success run with an unobserved consequent denies the coverage obligation, and LLVM probe observations alone produce no completed-proof credit or separate eligible denominator. | Test |
 
 ## Implementation boundary
 
@@ -102,6 +115,9 @@ diagnosed, rather than allocate fabricated zero observations. Full ClauseRefs on
 ordered clause retain per-requirement membership without duplicating or summing campaign counts.
 Native campaign-run binding is planned; FR-004/TC-006 remain planned until it and a consuming
 obligation exist.
+
+IR FR-045 owns source-derived proof eligibility, denominators, and completed-proof credit;
+this analyzer supplies execution observations and the coverage-obligation decision only.
 
 ## Dependencies
 
