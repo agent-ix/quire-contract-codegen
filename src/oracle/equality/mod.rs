@@ -2794,6 +2794,39 @@ mod tests {
                         consumed: entry_count,
                     })
                 );
+                let deep = EqualityOperandDescriptor::typed(root.clone());
+                let healthy = EqualityOperandDescriptor::typed(leaf.clone());
+                let requests = [(deep.clone(), deep), (healthy.clone(), healthy)];
+                for limit in [
+                    COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT,
+                    entry_count - 1,
+                ] {
+                    let (outcomes, source) = check_synthetic_items_with_limits(
+                        nodes.clone(),
+                        &requests,
+                        CompositeEqualityLimits {
+                            type_resolution_work_units: limit,
+                            source_bytes: usize::MAX,
+                        },
+                    );
+                    assert_eq!(
+                        outcomes,
+                        vec![
+                            Err(CompositeEqualityRefusal::TypeResolutionWorkExhausted {
+                                limit,
+                                consumed: limit + 1,
+                            }),
+                            Ok(()),
+                        ]
+                    );
+                    let source = source.finish(usize::MAX).expect("sibling source");
+                    let lib = source
+                        .iter()
+                        .find(|artifact| artifact.path == "src/lib.rs")
+                        .expect("sibling library");
+                    assert!(!lib.contents.contains("oracle_test0"));
+                    assert!(lib.contents.contains("oracle_test1"));
+                }
                 let operand = EqualityOperandDescriptor::typed(root.clone());
                 let (outcomes, source) = check_synthetic_items_with_limits(
                     nodes,
