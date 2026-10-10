@@ -44,6 +44,10 @@ This requirement states what the generator puts into those types, and does not r
 [FR-016](./FR-016-witness-native-replay.md) owns decoding a Kani playback, the adapter refusals and
 the partition of replay outcomes. This requirement owns what reaches QSL.
 
+The common intake takes a typed submission from any backend adapter. It owns admission and
+lineage across adapters; each adapter owns its backend-native text and decoding. A CG-owned
+immutable lineage record refers to, but is not a member or copy of, QSL's envelope.
+
 ## Scope
 
 The state-clause path covers the `postcondition` state clause of one operation over one state
@@ -72,6 +76,12 @@ members against the operation's declaration in the domain package.
 
 ## Inputs
 
+- A typed adapter submission containing parameter-node-keyed assignments, the producing backend's
+  identity, QSL's opaque `ObligationIdentity`, each binding's declared domain, the source arm and
+  its provenance, and the replay packet members supplied by the proving run. A
+  backend witness submission carries decoded values and the adapter's rendered transcript; a
+  corpus submission carries canonical assignments and `Input` provenance. Backend-native text
+  is consumed only inside its adapter and never crosses this boundary.
 - A counterexample from one of two sources:
   - a backend counterexample: an [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md) `falsified`
     run's playback, decoded by FR-016 into values named by their argument bindings;
@@ -108,6 +118,10 @@ members against the operation's declaration in the domain package.
 
 - A `WitnessEnvelope` admitted through `WitnessEnvelope::reconstruct`, whose `ReplaySource` is
   `Witness` for a backend counterexample and `Input` for a corpus counterexample.
+- A typed evidence failure naming decode, out-of-domain, QSL admission or replay-verdict
+  disagreement when that stage refuses; none is a contract success or contract failure.
+- For each retained minimization revision, a CG-owned immutable lineage record referring to its
+  exact QSL envelope, its obligation and its parent revision (except the original root).
 - The replay request built from that envelope and the request members.
 - The QSL replay result for the envelope's arm, or a typed refusal with no replay.
 - For a postcondition state-clause counterexample: a `StateClauseReplay` holding the request and
@@ -116,6 +130,19 @@ members against the operation's declaration in the domain package.
 
 ## Behavior
 
+- The common intake shall accept only typed adapter submissions. An adapter shall keep native
+  counterexample text inside its own boundary and submit decoded, parameter-bound assignments,
+  backend identity, opaque obligation identity, declared domains, source/provenance and replay
+  packet members. The intake shall preserve the adapter's backend and source identities in the
+  completed QSL packet;
+  it shall not parse backend-native text or recompute an obligation identity.
+- When preparing native replay, the intake shall check every assignment against its corresponding
+  declared domain and admit the completed packet through QSL's `Witness::parse` (for a Witness
+  source) and `WitnessEnvelope::reconstruct`. A failed check shall stop before replay.
+- The intake shall report decode, out-of-domain, QSL admission and replay-verdict mismatch as
+  distinct typed evidence failures, with the original cause retained. The intake shall not rewrite
+  any of them as contract success or contract failure. FR-016 owns the Kani-specific decode and
+  refusal mapping; this common rule applies to submissions from every backend adapter.
 - The generator shall build the envelope's `qsl_replay::ObligationIdentity` as the ADR-013 O-09
   digest of the obligation's subject node id, occurrence key, obligation kind and arguments, with
   no `source_span` (AD-003 E-1).
@@ -293,6 +320,13 @@ members against the operation's declaration in the domain package.
   `Witness` arm of its own backend re-run and not the original counterexample's transcript.
 - Where the generator derives reduced candidates from an `Input`-arm counterexample, it shall
   retain only `Input`-arm envelopes that preserve domain validity and the native verdict.
+- The generator shall retain the original failing envelope as the root revision. For each
+  retained reduction it shall create a new immutable CG lineage record identifying that exact
+  admitted QSL envelope, the same opaque obligation identity, and the exact parent revision from
+  which it was reduced. Prior envelopes, replay evidence and lineage records shall remain
+  unchanged. A candidate rejected for invalid domain, QSL admission refusal, failed backend
+  re-run or changed verdict shall create no revision; the previously retained evidence remains
+  unchanged.
 - The generator shall define none of `Witness`, `ReplaySource`, `WitnessEnvelope`,
   `TerminalRecord` or `ObligationIdentity`.
 - The generator shall import none of those types from Contract IR.
@@ -336,6 +370,11 @@ members against the operation's declaration in the domain package.
 | FR-024-AC-33 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A postcondition harness generated from the package QSL emits for the twin, with no identity alignment, is replayed through `StateClauseReplay::new` and `replay`: the debit mutation settles `reproduced-with-evaluated-witness` with category `violation` and evaluated `false`; the unmutated subject over the same pre state settles `inconclusive` with cause `Verdicts` (FR-024-AC-16); the clause id is the one `call_site` names for `BalanceNeverDrops`, and the declared field ranges equal those returned by the accessor, including an unread ranged field. | Test (TC-035) |
 | FR-024-AC-34 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the real playback of the falsified frame harness of a forbidden write (FR-024-AC-30) and the falsified postcondition harness of a debit mutation (FR-024-AC-18) replay and settle as those criteria state, each harness generated from QSL's emitted package using accessor-derived ranges. The modules `kani_obligations_state_frame` and `kani_obligations_state_clause_replay` are selected by the `kani_obligations` filter of `make kani`. | Test (TC-035) |
 | FR-024-AC-35 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A falsified frame or postcondition harness draws a present model field whose accessor type has no `i64` range (for example `IntRange` with a lower endpoint below `i64::MIN` and an upper endpoint of -1), and playback binds an `i64` value outside that model range. QSL refuses the pre state and settlement is `Inconclusive` with `ReplayRefused` (FR-029-AC-16), naming the field and its persisted `TypeNotRange` reason; it never reports `Verified` or a violation. Playback inside the model range is unaffected, and an unread present `IntRange` within `i64` is bounded and is never reported as unranged. The source and IR range ceiling is `i128::MIN..=i128::MAX`. Same-model wide-range replay evidence is blocked by QSL-642; an IR-admitted selected-model override alone is not such evidence. | Test (TC-035) |
+| FR-024-AC-36 | Two distinct test backend adapters submit equivalent typed assignments through one common intake contract carrying each adapter's backend identity, the same opaque obligation identity, declared domains, source/provenance and replay packet members. Native text is observed only within its own adapter; the common intake neither parses native text nor remints the obligation identity, and QSL receives each adapter's original backend and source identity in a complete packet. | Test (TC-035) |
+| FR-024-AC-37 | Before any native replay, an out-of-domain assignment yields a typed out-of-domain evidence failure; an incomplete or QSL-refused witness/packet yields a typed QSL admission evidence failure retaining its cause. A decode failure reported by an adapter and a replay verdict disagreement remain distinct typed evidence failures. None settles as contract success or contract failure, and none of the pre-replay failures invokes replay. Kani's exact decode and refusal partition remain governed by FR-016. | Test (TC-035) |
+| FR-024-AC-38 | Starting from one admitted original failure, one valid reduced candidate that preserves the failure becomes a new CG lineage revision referring to its exact admitted QSL envelope, its exact parent revision and the unchanged opaque obligation identity; the original envelope, evidence and lineage record remain byte-for-byte unchanged. No lineage member is added to QSL's envelope or packet. | Test (TC-035) |
+| FR-024-AC-39 | From a retained failure revision, an out-of-domain reduction and a domain-valid reduction that changes the native verdict each create no revision and leave the retained chain and prior evidence unchanged; a later valid reduction names the actual retained parent, with no skipped or substituted parent. | Test (TC-035) |
+| FR-024-AC-40 | A retained reduced `Witness` envelope holds a transcript from its own backend re-run, bound to its own reduced assignments; it cannot reuse any ancestor's transcript. A retained reduced `Input` envelope remains `Input`, contains its own canonical assignments and gains no backend witness or backend-evidence settlement. | Test (TC-035) |
 
 ### Mutations FR-024-AC-31 to FR-024-AC-35 detect
 
@@ -426,6 +465,9 @@ FR-024-AC-11 to FR-024-AC-30:
   criterion as an obligation row and does not judge it, so the head's unchanged count says
   nothing about FR-024-AC-20 to FR-024-AC-30; each of those has a tagged test of its own, which
   is the evidence they are backed.
+- `FR-024-AC-36` to `FR-024-AC-40` are planned (IR-335). The common typed intake,
+  cross-adapter test, typed evidence failures and immutable CG minimization lineage have no
+  production implementation or tagged test yet.
 - The one adapter transcript rendering function is `render_witness` in `src/replay/function.rs`,
   used by the skeleton spine, the state-clause path and the frame path.
 
