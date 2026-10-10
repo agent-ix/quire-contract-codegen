@@ -687,9 +687,18 @@ fn render_graph_oracle(lowered: &GraphLowering, input: &ValidatedFiniteInput) ->
         .references
         .iter()
         .filter(|edge| edge.field_id == lowered.request.field_id)
+        .collect::<Vec<_>>();
+    // Sort the identities before formatting their Rust literals: Debug escaping changes their
+    // lexical order (for example, `a\n` sorts before `a0` as an identity, but after it escaped).
+    edges.sort_by(|left, right| {
+        left.source_id
+            .cmp(&right.source_id)
+            .then_with(|| left.target_id.cmp(&right.target_id))
+    });
+    let edges = edges
+        .into_iter()
         .map(|edge| format!("({:?}, {:?})", edge.source_id, edge.target_id))
         .collect::<Vec<_>>();
-    edges.sort();
     format!(
         "{{ let edges: &[(&str, &str)] = &[{}]; let mut visited: Vec<&str> = Vec::new(); \
          let mut frontier = vec![{:?}]; while let Some(current) = frontier.pop() {{ \

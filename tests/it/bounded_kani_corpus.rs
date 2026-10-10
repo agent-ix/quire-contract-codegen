@@ -16,10 +16,10 @@ use std::{
 
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
-    classify_kani_run, generate_bounded_kani_corpus_case, BoundedCorpusRequest,
-    CheckedArithmeticRequest, CollectionQuery, CorpusProofDependencyGraph, EmittedCorpusIdentities,
-    GraphRequest, KaniInconclusiveReason, KaniRunOutcome, ProofDependencyKind,
-    ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind,
+    classify_kani_run, generate_bounded_kani_corpus_case, prepare_finite_graph_reaches,
+    BoundedCorpusRequest, CheckedArithmeticRequest, CollectionQuery, CorpusProofDependencyGraph,
+    EmittedCorpusIdentities, GraphRequest, KaniInconclusiveReason, KaniRunOutcome,
+    ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind,
     CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
@@ -332,6 +332,64 @@ fn tc_023_branching_graph_oracle_preserves_native_expansion_budget() {
     )
     .expect_err("the third expansion enters the other branch");
     assert_eq!(exhausted.code().as_str(), "kani_graph_expansion_exhausted");
+}
+
+/// Raw identity ordering must survive Rust literal escaping in the generated graph oracle.
+/// At bound two, visiting `a0` before `a\n` would miss the target.
+///
+/// Trace: TC-023.
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_023_escaped_graph_identity_keeps_native_and_oracle_order() {
+    let (profile, dispatch, input) = fixture();
+    let mut offered = input.input().clone();
+    offered.bounds.max_objects = 4;
+    offered.bounds.max_references = 3;
+    offered
+        .objects
+        .extend(["a\n", "a0", "target"].map(|identity| FiniteObject {
+            identity: identity.to_owned(),
+            type_id: "node".to_owned(),
+            snapshot_id: "s".to_owned(),
+        }));
+    offered.objects.retain(|object| object.identity != "b");
+    offered.references = [("a", "a\n"), ("a", "a0"), ("a\n", "target")]
+        .into_iter()
+        .map(|(source_id, target_id)| FiniteReference {
+            source_id: source_id.to_owned(),
+            field_id: "next".to_owned(),
+            target_id: target_id.to_owned(),
+        })
+        .collect();
+    let input = offered
+        .validate()
+        .expect("escaped finite identity is valid");
+    let request = GraphRequest {
+        source_id: "source".to_owned(),
+        start_id: "a".to_owned(),
+        target_id: "target".to_owned(),
+        field_id: "next".to_owned(),
+        max_expansions: 2,
+    };
+    let native = prepare_finite_graph_reaches(&profile, &dispatch, &input, request.clone())
+        .expect("the newline branch reaches the target on its second expansion");
+    assert!(native.reachable);
+    assert_eq!(native.expanded, ["a", "a\n"]);
+    let generated = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(request),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .expect("native reachability admits the bounded case");
+    assert_eq!(generated.outcome.boolean_claim(), Some(true));
+    assert_eq!(
+        classify_corpus(&generated, "corpus_case_graph"),
+        KaniRunOutcome::Verified
+    );
 }
 
 /// A true collection case classifies `Verified`, and a false graph case is `Falsified` with the
