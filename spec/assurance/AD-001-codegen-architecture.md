@@ -241,18 +241,30 @@ success fallback, and no requirement converts one into another.
 The views and decisions above state the target. At this revision:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue`; it imports no Contract IR witness type.
-  The bounded-Kani corpus (`src/bounded_kani_corpus.rs`) generates and classifies cases and
+  The bounded-Kani corpus (`src/kani/generate/corpus/bounded_kani_corpus.rs`) generates and classifies cases and
   retains no counterexample packet and claims no replay: every caller of the retired replay
   passed a constant closure as its native evaluator, so the verdict was predetermined.
-- Step 2 of the replay view, the domain check before replay, is not built. No `WitnessEnvelope` is
-  built, and only the skeleton spine renders a QSL transcript (`src/replay/function.rs`).
-- The V1 paths are still present: `src/oracle.rs`, `src/kani.rs`, `src/bounded_kani_corpus.rs`,
-  `src/bounded_kani_profile.rs`, and the `BoundClause` arm of
-  FR-015's `ObligationItem`. The FR-002 and FR-008 to FR-013
-  strategy generators still read the V1 `BoundPackage`.
-- No adapter trait exists, a run is held to a caller-declared wall-clock budget with no memory
-  ceiling, and no outcome maps to QSL's terminal
-  value.
+- Function replay (`src/replay/function.rs`) decodes the persisted Kani playback, checks each
+  decoded argument against its declared domain before replay, renders QSL's `Witness` and calls
+  `qsl_replay::replay`. Its function path builds a replay request but no counterexample
+  `WitnessEnvelope`. Frame replay (`src/replay/frame.rs`) checks decoded state-field ranges and
+  the invocation's pre snapshot, constructs a `WitnessPacket`, admits it through
+  `WitnessEnvelope::reconstruct`, then calls `qsl_replay::replay_frame`. That frame packet's
+  `declared_domains` is still empty pending QSL's domain-key decision. The common typed intake
+  of the replay view remains planned; the current paths perform their checks separately.
+- V1 paths remain live: `src/oracle/boolean_v1.rs`,
+  `src/kani/generate/v1_bundle.rs`, `src/kani/generate/corpus/bounded_kani_corpus.rs`,
+  `src/kani/generate/lower/bounded_kani_profile.rs` and the `BoundClause` arm of FR-015's
+  `ObligationItem`. The FR-002 and FR-008 to FR-013 strategy generators still read V1
+  `BoundPackage`. FR-015's V2 contract-clause criteria remain planned, so AD-004's steps 4c
+  through 4g have not yet retired these paths. The bounded-profile classifier, three
+  finite-input lowerers and corpus emitter have interim ownership under FR-015-AC-82 to
+  FR-015-AC-94; its current generated-case classification retires at AD-004 step 4g
+  under planned FR-015-AC-95. The corpus retains no counterexample packet or
+  native replay result.
+- No backend adapter trait exists yet. The runner enforces a wall-clock and memory ceiling,
+  and `src/kani/terminal.rs` maps a Kani run outcome paired with its replay settlement to a
+  QSL terminal value (FR-029); neither fact completes the planned adapter trait.
 - FR-014, FR-015, FR-024 to FR-026, FR-028, FR-029 and the test matrix record which criteria each of these leaves
   planned.
 

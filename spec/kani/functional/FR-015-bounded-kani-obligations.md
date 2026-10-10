@@ -63,6 +63,23 @@ sequences the corpus behind QSL-353, so the guard of FR-015-AC-58 is an inspecti
 emitted text. When a family renders through `HarnessSpec`, its constructor refusal
 (AD-004 L-4) joins the inspection and does not replace it.
 
+Current interim ownership (IR-329): the bounded-profile classifier, the three
+finite-input semantic-family lowerers and the bounded-corpus emitter are auxiliary
+operations of this Kani generator, governed today by FR-015-AC-82 to
+FR-015-AC-94 and by planned FR-015-AC-95 at the step 4g boundary.
+They consume Contract IR's validated finite-input/profile interfaces, not a V2
+clause claim. The corpus emits oracle, strategy, Kani harness and proof graph
+from one admitted case; it does not retain a replay packet or claim a native
+replay result. ADR-001 Q1 and Q3 remain the target: FR-015 is the one Kani
+generation requirement and `CheckedPackageV2` is its one input model. AD-004
+steps 4c through 4g retire the V1 bundle, V1 clause arm and hand-built corpus
+path only after their V2 replacements serve the required families. Until step
+4g retires the hand-built corpus path, its `Proved` or `Counterexample` value
+classifies a generated finite case, not a Kani run. Step 4g removes that
+generation-time `KaniOutcome`; FR-017 supplies the verdict from a run.
+FR-015-AC-95 states that planned retirement boundary. The other criteria
+below own live interim behavior and do not mark that retirement implemented.
+
 ## Inputs
 
 - The FR-014 oracle crate and claim map for the contract's expressions.
@@ -268,11 +285,14 @@ emitted text. When a family renders through `HarnessSpec`, its constructor refus
   `LoweringLimitUnrecognised` (FR-014; IR-547), the negotiation shall report the obligation as
   `OracleRefused` carrying that refusal unchanged, as it does for `LoweringWorkExhausted`
   (FR-015-AC-50).
-- When the bounded Kani corpus generator is given a finite input validated under a different
-  profile selection than the profile offered with it, it shall refuse the case with a typed
-  `InvalidInput` result, record no case identity and emit no artifact (FR-015-AC-51).
-- The bounded Kani corpus generator shall return the revision of the profile selection as the
-  context of every typed outcome and refusal it returns (FR-015-AC-52).
+- Until AD-004 step 4g retires the hand-built bounded Kani corpus path, when
+  that path is given a finite input validated under a different profile
+  selection than the profile offered with it, it shall refuse the case with a
+  typed `InvalidInput` result, record no case identity and emit no artifact
+  (FR-015-AC-51).
+- Until AD-004 step 4g retires the hand-built bounded Kani corpus path, that
+  generator shall return the revision of the profile selection as the context
+  of every typed outcome and refusal it returns (FR-015-AC-52).
 - The generator shall end a V1 bundle harness (`generate_kani_bundle`) with one cover, after
   its contract call, that witnesses the bundle's requires clause and bounds are jointly
   satisfiable (FR-015-AC-54).
@@ -599,8 +619,8 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-48 | The obligation identity of a V2 clause claim is formed by AD-003 E-1 from the clause node id, its occurrence key, the obligation kind, and the arguments each as parameter node id and declared domain for an operation parameter, as E-1 states (the domain FR-015-AC-39 defines). A state field read is named by its declaring node id and field name, never by a node of its own; that E-1 lists parameters only is an open question for the AD-003 owner and E-1 is not widened here. The source span is excluded; changing any included member changes it, and changing the span, the unwind bound or the subject does not. It is a different value from the harness identity record of FR-015-AC-47. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-49 | A V2 invariant claim yields a harness that draws its state and parameters within their declared domains (FR-015-AC-39) and asserts the invariant clause; its subject is the clause itself, with no subject call. Preservation of the invariant under an operation is not specified by this criterion. PLANNED (IR-489). | Test (TC-025) |
 | FR-015-AC-50 | `negotiate` reports an obligation whose scalar refusal is `ExactScalarRefusal::LoweringByteLimitExceeded` or `LoweringLimitUnrecognised` as `Outcome::Unsupported(UnsupportedObligation::OracleRefused { refusal })` with `refusal` equal to the scalar refusal, field for field, and neither is mapped to another `UnsupportedObligation` variant nor to `LoweringWorkExhausted`. | Test (TC-025) |
-| FR-015-AC-51 | A finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. | Test (TC-023) |
-| FR-015-AC-52 | The context of every outcome and refusal the corpus generator returns (proved, counterexample, `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`) is the profile selection's revision. | Test (TC-023) |
+| FR-015-AC-51 | Until AD-004 step 4g retires the hand-built bounded-corpus path, a finite input validated under a profile selection other than the offered profile's is refused as a typed `InvalidInput` `kani_profile_input_mismatch` result naming the request's source id, with no artifact and no case identity recorded. | Test (TC-023) |
+| FR-015-AC-52 | Until AD-004 step 4g retires the hand-built bounded-corpus path, the context of every outcome and refusal that path returns (generated-case `Proved` or `Counterexample`, `kani_corpus_dependency_invalid`, `kani_corpus_identity_collision`, a lowering refusal and `kani_profile_input_mismatch`) is the profile selection's revision. The generated-case values are not Kani run verdicts. | Test (TC-023) |
 | FR-015-AC-53 | Each of the seven harness kinds the generator emits (precondition, V1 contract, scalar, state-clause, frame-effect, V1 bundle and corpus) is subject to the cover-last rule of FR-015-AC-7: exactly one `kani::cover!`, the last statement of the body. What the cover witnesses, by kind: a precondition harness, that the precondition holds within the IR bounds (it asserts nothing); a V1 contract harness (postcondition or invariant), that the requires clause and the IR bounds are jointly satisfiable, after the contract call whose `ensures` is the harness's check; a scalar harness, that the oracle's `Completed` branch is reached; a state-clause harness and a frame-effect harness, that the bounded state is reached and the subject returns; a V1 bundle harness, as FR-015-AC-54 states; a corpus harness, as FR-015-AC-55 states. | Test (TC-025) |
 | FR-015-AC-54 | A V1 bundle harness (`generate_kani_bundle`, the `proof_for_contract` harness it emits for a requires clause, an ensures clause and the bundle's bounded arguments) ends with exactly one `kani::cover!` after the call of its contract, which witnesses that the requires clause and the argument and result bounds are jointly satisfiable, so a run whose requires clause no bounded argument satisfies never reaches it; the bundle's `ensures` is checked at the contract call, so the cover follows every check the harness carries. | Test (TC-025) |
 | FR-015-AC-55 | A bounded-corpus harness, whichever of the arithmetic, graph and collection families the case belongs to, ends with exactly one `kani::cover!` after its `assert!` of the case's oracle, which witnesses that the harness runs to its end past that assertion. | Test (TC-023) |
@@ -630,6 +650,20 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in its order, its `domains` equal the accessor ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names, asserted before replay. The accessor's ascending-name order does not reorder `state_fields`. A request naming a field absent from the accessor is refused; one omitting the clause's or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
 | FR-015-AC-80 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 | FR-015-AC-81 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A present listed model field with `member_type()` of `None`, a non-`IntRange` variant, or `IntRange` outside `i64` is recorded as unranged with `TypeNotRange` in `StateFrameIdentity` and its persisted record, even when no read names it; a present unread `IntRange` within `i64` is recorded in `domains` and is absent from the unranged list. Equal inputs produce byte-identical records; a record naming a field twice is invalid. The model declaration path records no `NoRead` reason. QSL-emission gaps for `None` and out-of-`i64` types are exercised by an admitted QSL-emitted graph with selected-model-document override and recomputed digests. | Test (TC-025) |
+| FR-015-AC-82 | While the bounded-profile classifier remains, a request for distinct named constructs returns one `CapabilityEntry` per requested construct in request order, preserving each selected profile disposition (`Supported`, `Refused` or `Inconclusive`). | Test (TC-023) |
+| FR-015-AC-83 | While the bounded-profile classifier remains, an empty, duplicate or absent construct is a typed `KaniOutcome` refusal rather than a partial disposition census. | Test (TC-023) |
+| FR-015-AC-84 | While the finite-input arithmetic lowerer remains, a profile/dispatch-admitted add, subtract, multiply, divide or remainder returns the exact checked `i128` result only inside the request's inclusive result range. | Test (TC-023) |
+| FR-015-AC-85 | While the finite-input arithmetic lowerer remains, an inverted result range is `InvalidInput`; zero division, checked overflow and a result outside the range are typed refusals, with no arithmetic result or generated artifact. | Test (TC-023) |
+| FR-015-AC-86 | While the finite-graph lowerer remains, a profile/dispatch-admitted request follows only the selected reference field, finds a positive-length path in sorted depth-first order, and checks the expansion bound before entering each new object; a target edge is found without expanding its target. | Test (TC-023) |
+| FR-015-AC-87 | While the finite-graph lowerer remains, a zero expansion bound or unknown endpoint is `InvalidInput`, and exhausting the bound is `ResourceExhausted`, with no graph result or generated artifact. | Test (TC-023) |
+| FR-015-AC-88 | While the finite-collection lowerer remains, a profile/dispatch-admitted `ForAllNonNegative` or `ExistsEqual` query retains input order and duplicates and returns its truth value and examined-item count; a decisive item ends that count, otherwise every item counts. | Test (TC-023) |
+| FR-015-AC-89 | While the finite-collection lowerer remains, an input longer than `max_items` is `ResourceExhausted`, with no query result or generated artifact. | Test (TC-023) |
+| FR-015-AC-90 | While the bounded-corpus emitter remains, one admitted arithmetic, graph or collection case emits all four artifacts (oracle, finite strategy, Kani harness and proof-dependency graph) from the same selected profile, validated finite input and family lowering. | Test (TC-023) |
+| FR-015-AC-91 | Until AD-004 step 4g retires the hand-built bounded-corpus path, that path returns a generation-time case classification of `Proved` when the family lowering's Boolean oracle is true and `Counterexample` when false; neither value is an observed Kani run or native replay verdict. This interim classification ends when step 4g replaces the path. | Test (TC-023) |
+| FR-015-AC-92 | While the bounded-corpus emitter remains, a declared dependency census with an empty or repeated identity, inconsistent kind/state/path or a kind other than `Required` refuses as typed `InvalidInput` with no artifact or case-identity claim; a valid census is normalized into the emitted proof graph. | Test (TC-023) |
+| FR-015-AC-93 | Until AD-004 step 4g retires the hand-built bounded-corpus path, a profile/input mismatch, family-lowering refusal, proof-graph serialization refusal or duplicate case identity returns its typed refusal with the selected profile revision, emits no artifact and claims no new case identity. | Test (TC-023) |
+| FR-015-AC-94 | While the bounded-corpus emitter remains, equal case inputs produce equal artifact paths and contents regardless of emission order, and reordering the same finite graph's objects or references does not change them; changing a request field, selected profile, finite input, ceilings or normalized dependency census changes the case identity and artifact paths. | Test (TC-023) |
+| FR-015-AC-95 | Once AD-004 step 4g replaces the hand-built bounded-corpus path, neither successful nor refused corpus generation returns a `KaniOutcome`; a successful case returns its artifacts, and only an FR-017 backend run can produce a proof verdict. PLANNED (AD-004 step 4g; QSL-353 prerequisite). | Test (TC-023) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 

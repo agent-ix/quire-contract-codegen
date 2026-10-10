@@ -41,6 +41,7 @@ operations:
     output: GeneratedArtifactBundle | StrategyDiagnostic
     semantics: admits only clauses bound oracle generation admits, narrowed to one Compare; domains taken from the clause's IR IntegerType declarations; constructive Holds/Violated populations, an exhaustive in-domain census and an untagged out-of-domain array; a subject-free oracle-conformance runner whose summary reports discard and rejection rates; see bound_strategy_slice
   - name: generate_kani_bundle
+    status: live interim V1 entry; AD-004 step 4f removes it after the V2 contract arm serves its families; FR-015 owns the current bundle cover and ADR-001 Q1 owns the target
     inputs: [typed precondition, typed postcondition, direct checked dependency types and observations, subject path, dependency census]
     output: KaniArtifactBundle | KaniDiagnosticSet
     semantics: deterministic Boolean/i64 Kani source and v2 dependency/binding graph using exact oracle predicates and IR-owned model bounds; generation records proof execution as not_run and never claims proof completion
@@ -71,22 +72,27 @@ operations:
     output: LlvmCoverage | CoverageDiagnostic
     semantics: parses an LLVM full JSON coverage export without executing any producer; parent traversal and backslashes refuse, with no suffix matching or summary fallback (FR-004)
   - name: classify_bounded_kani_profile
+    status: live finite-input auxiliary under FR-015-AC-82 and AC-83; AD-004 step 4g governs retirement of the hand-built corpus path
     inputs: [KaniProfile, requested constructs, source id]
     output: CapabilityEntry list | KaniOutcome
     semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition
   - name: prepare_checked_arithmetic
+    status: live finite-input auxiliary under FR-015-AC-84 and AC-85
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CheckedArithmeticRequest]
     output: ArithmeticLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
     semantics: CG-owned bounded checked-arithmetic lowering over the IR finite-input/profile/dispatch ABI; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay IR typed non-Boolean outcomes, never an assumption or partial artifact
   - name: prepare_bounded_collection_query
+    status: live finite-input auxiliary under FR-015-AC-88 and AC-89
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
     output: CollectionLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
     semantics: CG-owned bounded collection-query lowering; bound exhaustion and profile or dispatch refusal stay IR typed non-Boolean outcomes with no partial artifact
   - name: prepare_finite_graph_reaches
+    status: live finite-input auxiliary under FR-015-AC-86 and AC-87
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, GraphRequest]
     output: GraphLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
     semantics: CG-owned positive-length finite reference-graph reachability over IR-validated objects and references, with sorted depth-first expansion and a bound before each new identity; malformed or exhausted requests stay IR typed non-Boolean outcomes
   - name: generate_bounded_kani_corpus_case
+    status: live interim four-artifact corpus under FR-015-AC-51 to AC-58 and AC-90 to AC-94; native replay remains planned; AD-004 step 4g removes its generation-time KaniOutcome under planned FR-015-AC-95
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, BoundedCorpusRequest, proof dependency census, shared EmittedCorpusIdentities]
     output: BoundedCorpusCase | BoundedCorpusError
     semantics: one bounded Kani corpus case and its proof dependency graph; a refusal is a BoundedCorpusError whose Outcome variant carries the typed KaniOutcome (its code a quire_contract_model Std001Code) and whose OutcomeConstruction variant carries Contract IR's refusal to build a non-success outcome; a case whose identity the shared registry already holds refuses as kani_corpus_identity_collision rather than overwriting earlier artifacts; a serialization failure of the case's proof graph refuses as kani_corpus_serialization_failed (NFR-005)

@@ -92,10 +92,28 @@ are in `assurance/`, decision records in `decisions/`, and every SpecReview in t
 | Core | `spec/core/` | The stakeholder need, the library and CLI interface and publication conformance, and the reproducibility, atomic-publication and provenance-boundary properties every subsystem shares | `lib` (crate root), `publication`, `oracle` (the shared lowering core, imported by strategy, kani and oracle modules) | AD-001, quire-contract-ir:ADR-0056 | Contract codegen lane |
 | Strategy | `spec/strategy/` | Tri-state proptest harnesses, bound numeric and state strategies, constructive populations, boundary campaigns and shrinking, and the strategy output consumable by Contract Runtime | `harness`, `strategy`, `bound`, `bound_strategy` | AD-001, ADR-001 | Contract codegen lane |
 | Oracle | `spec/oracle/` | Exact complete-V1 scalar, composite-equality and function-application oracle generation and its agreement with the runtime | `exact_scalar`, `composite_equality`, `exact_function`, `generation` | AD-001, ADR-001 | Contract codegen lane |
-| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `kani`, `kani_obligations`, `kani_execution`, `kani_transcript`, `bounded_kani_profile`, `bounded_kani_corpus`, `definedness_arithmetic`, `bounded_collections`, `finite_reference_graphs`, `state_frame` | AD-001, AD-003, ADR-002, ADR-003, ADR-004 | Contract codegen lane |
+| Kani | `spec/kani/` | Bounded Kani obligation generation, the generated subject ABI, proof ceilings, execution evidence, and the maps from a Kani run outcome and a Contract IR Kani outcome to QSL's terminal value | `src/kani/` (generation, finite-input lowerers, corpus, run, output and terminal maps) | AD-001, AD-003, AD-004, ADR-001 to ADR-004 | Contract codegen lane |
 | Routed | `spec/routed/` | Capability settlement at one negotiation point, routed generation per backend kind, and the backend adapter contract | `capability`, `routed_generation` | AD-001, ADR-002 | Contract codegen lane |
 | Replay | `spec/replay/` | Witness decoding and native replay of Kani counterexamples, and their submission in QSL's counterexample envelope | `replay::witness`, `replay::function`, `replay::frame`, `kani::output::playback` | AD-001, AD-002, AD-003, ADR-001 | Contract codegen lane |
 | Evidence | `spec/evidence/` | Vacuity and unexecuted-flow evidence | `vacuity`, `bound_coverage` | AD-001, AD-003 | Contract codegen lane |
+
+The current Kani module and public-surface ownership map is:
+
+| Current source or public operation | Normative owner | State |
+| --- | --- | --- |
+| `kani/generate/{negotiate,outcome,scalar,precondition,contract,frame}` and `negotiate_kani_obligations` | FR-015; FR-025 for argument/subject ABI | V2 scalar and state/frame items live; V2 contract-clause items planned (FR-015-AC-38 to AC-49). |
+| `kani/generate/{clause,v1_bundle}` and `generate_kani_bundle` | FR-015 interim bundle criteria; FR-025 ABI | V1 input and bundle live pending AD-004 steps 4c to 4f; no second enduring Kani generator is authorized by ADR-001 Q1. |
+| `kani/generate/lower/{bounded_kani_profile,definedness_arithmetic,finite_reference_graphs,bounded_collections}` and their four public classifier/lowering operations | FR-015-AC-82 to AC-89 | Live finite-input auxiliaries pending the AD-004 V2 migration. |
+| `kani/generate/corpus/bounded_kani_corpus` and `generate_bounded_kani_corpus_case` | FR-015-AC-51 to AC-58 and AC-90 to AC-95 | Live four-artifact finite-input corpus; its generated-case classification retires at AD-004 step 4g under AC-95, and its native replay is planned. |
+| `kani/{abi,census,identity}` | FR-015 proof census and identity; FR-025 symbolic argument and subject ABI | Live support vocabulary; composite leaf ABI remains planned. |
+| `kani/{run,output,classify}` and the execution operations | FR-017, with FR-028 proof ceilings and NFR-006's real-Kani lane | Live run and report processing. |
+| `kani/terminal` | FR-029 and FR-030 | Live terminal maps; the backend adapter trait remains planned. |
+| `replay/{witness,function,frame,state_clause}` and Kani playback scanning in `kani/output/playback` | FR-016 witness decode/native replay and FR-024 QSL envelope intake | Live function/frame paths; common typed intake and corpus replay remain planned. |
+
+FR-003, FR-007 and FR-023 have no active CG requirement artifacts or generator
+ownership. Their historical mentions do not supersede ADR-001's accepted FR-015
+and `CheckedPackageV2` decisions. This map records the current implementation;
+it does not mark V1 retirement or the full IR-329 reconciliation complete.
 
 Two recorded exceptions to the layout convention, both to be settled at the layout AD (IR-344):
 
