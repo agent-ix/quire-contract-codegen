@@ -63,6 +63,18 @@ sequences the corpus behind QSL-353, so the guard of FR-015-AC-58 is an inspecti
 emitted text. When a family renders through `HarnessSpec`, its constructor refusal
 (AD-004 L-4) joins the inspection and does not replace it.
 
+Current interim ownership (IR-329): the bounded-profile classifier, the three
+finite-input semantic-family lowerers and the bounded-corpus emitter are auxiliary
+operations of this Kani generator, governed by FR-015-AC-82 to FR-015-AC-94.
+They consume Contract IR's validated finite-input/profile interfaces, not a V2
+clause claim. The corpus emits oracle, strategy, Kani harness and proof graph
+from one admitted case; it does not retain a replay packet or claim a native
+replay result. ADR-001 Q1 and Q3 remain the target: FR-015 is the one Kani
+generation requirement and `CheckedPackageV2` is its one input model. AD-004
+steps 4c through 4g retire the V1 bundle, V1 clause arm and hand-built corpus
+path only after their V2 replacements serve the required families. The criteria
+below own the live interim behavior and do not mark that retirement implemented.
+
 ## Inputs
 
 - The FR-014 oracle crate and claim map for the contract's expressions.
@@ -630,6 +642,19 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-79 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. From the package QSL emits for the twin's unit, both roles of each clause (`BalanceNeverDrops`, `AuditNeverDrops`) are generated; each identity's `state_fields` equals the request's list in its order, its `domains` equal the accessor ranges of FR-015-AC-77, and its `scope.anchor` and `scope.frame` equal the ids `qsl_replay::call_site` names, asserted before replay. The accessor's ascending-name order does not reorder `state_fields`. A request naming a field absent from the accessor is refused; one omitting the clause's or a granted field is refused as FR-015-AC-29 states. | Test (TC-025) |
 | FR-015-AC-80 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. With the installed backend, the cases of FR-015-AC-30 and FR-015-AC-31 run over harnesses generated from the package QSL emits: the healthy subject verifies, the subject mutated to debit is falsified naming the postcondition, a granted write verifies and a write to an ungranted field is falsified naming that field. | Test (TC-025) |
 | FR-015-AC-81 | PLANNED (IR-624), IR-628 accessor merged; CG dependency update and implementation pending. A present listed model field with `member_type()` of `None`, a non-`IntRange` variant, or `IntRange` outside `i64` is recorded as unranged with `TypeNotRange` in `StateFrameIdentity` and its persisted record, even when no read names it; a present unread `IntRange` within `i64` is recorded in `domains` and is absent from the unranged list. Equal inputs produce byte-identical records; a record naming a field twice is invalid. The model declaration path records no `NoRead` reason. QSL-emission gaps for `None` and out-of-`i64` types are exercised by an admitted QSL-emitted graph with selected-model-document override and recomputed digests. | Test (TC-025) |
+| FR-015-AC-82 | While the bounded-profile classifier remains, a request for distinct named constructs returns one `CapabilityEntry` per requested construct in request order, preserving each selected profile disposition (`Supported`, `Refused` or `Inconclusive`). | Test (TC-023) |
+| FR-015-AC-83 | While the bounded-profile classifier remains, an empty, duplicate or absent construct is a typed `KaniOutcome` refusal rather than a partial disposition census. | Test (TC-023) |
+| FR-015-AC-84 | While the finite-input arithmetic lowerer remains, a profile/dispatch-admitted add, subtract, multiply, divide or remainder returns the exact checked `i128` result only inside the request's inclusive result range. | Test (TC-023) |
+| FR-015-AC-85 | While the finite-input arithmetic lowerer remains, an inverted result range is `InvalidInput`; zero division, checked overflow and a result outside the range are typed refusals, with no arithmetic result or generated artifact. | Test (TC-023) |
+| FR-015-AC-86 | While the finite-graph lowerer remains, a profile/dispatch-admitted request follows only the selected reference field, finds a positive-length path in sorted depth-first order, and checks the expansion bound before entering each new object; a target edge is found without expanding its target. | Test (TC-023) |
+| FR-015-AC-87 | While the finite-graph lowerer remains, a zero expansion bound or unknown endpoint is `InvalidInput`, and exhausting the bound is `ResourceExhausted`, with no graph result or generated artifact. | Test (TC-023) |
+| FR-015-AC-88 | While the finite-collection lowerer remains, a profile/dispatch-admitted `ForAllNonNegative` or `ExistsEqual` query retains input order and duplicates and returns its truth value and examined-item count; a decisive item ends that count, otherwise every item counts. | Test (TC-023) |
+| FR-015-AC-89 | While the finite-collection lowerer remains, an input longer than `max_items` is `ResourceExhausted`, with no query result or generated artifact. | Test (TC-023) |
+| FR-015-AC-90 | While the bounded-corpus emitter remains, one admitted arithmetic, graph or collection case emits all four artifacts (oracle, finite strategy, Kani harness and proof-dependency graph) from the same selected profile, validated finite input and family lowering. | Test (TC-023) |
+| FR-015-AC-91 | While the bounded-corpus emitter remains, its generated outcome is `Proved` when the family lowering's Boolean oracle is true and `Counterexample` when false; neither is an observed Kani run or native replay verdict. | Test (TC-023) |
+| FR-015-AC-92 | While the bounded-corpus emitter remains, a declared dependency census with an empty or repeated identity, inconsistent kind/state/path or a kind other than `Required` refuses as typed `InvalidInput` with no artifact or case-identity claim; a valid census is normalized into the emitted proof graph. | Test (TC-023) |
+| FR-015-AC-93 | While the bounded-corpus emitter remains, a profile/input mismatch, family-lowering refusal, proof-graph serialization refusal or duplicate case identity returns its typed refusal with the selected profile revision, emits no artifact and claims no new case identity. | Test (TC-023) |
+| FR-015-AC-94 | While the bounded-corpus emitter remains, equal case inputs produce equal artifact paths and contents regardless of emission order, and reordering the same finite graph's objects or references does not change them; changing a request field, selected profile, finite input, ceilings or normalized dependency census changes the case identity and artifact paths. | Test (TC-023) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 

@@ -10,31 +10,41 @@ relationships:
 
 ## Description
 
-Verify that the complete selected bounded-Kani corpus preserves one profile
-disposition and typed outcome across native execution, generated oracle,
-strategy, Kani harness and proof graph for arithmetic/definedness, graph, and
-collection cases. Replay of a retained counterexample is not part of what the
-current tests back: the corpus retains no counterexample packet, and the replay
-clauses below are unbacked until each corpus case carries a real QSL source
-replayed through QSL's replay facade.
+Verify the current bounded-profile classifier, three CG-owned finite-input
+lowerers and four-artifact corpus emitter against FR-015-AC-82 through
+FR-015-AC-94. The generated `KaniOutcome` is a case classification; only
+FR-017's installed-backend run provides proof evidence. The corpus retains no
+counterexample packet, so native replay remains planned and unbacked. Current
+source tests carry `TC-023` trace tags, but none binds FR-015-AC-82 through
+FR-015-AC-94 yet; the computed matrix reports those criteria untagged.
 
 ## Test Procedure
 
-For each CG-owned semantic family, execute canonical valid boundary cases and malformed,
-incomplete, unavailable, refused, inconclusive, exhausted, and counterexample
-cases. Generate all codegen artifacts from CG-owned request and result types over the same validated Contract IR
-selection, run the generated oracle/strategy/Kani cases where the profile is
-supported, compare classifications with native execution, and replay every
-retained counterexample through the public QSL replay boundary.
-Inspect the resolved Cargo graph and generated manifests for a reverse Contract
-IR-to-codegen dependency.
+Request supported, refused and inconclusive constructs from one selected
+profile in a reordered subset; submit empty, duplicate and unknown names.
+For each CG-owned semantic family, exercise the admitted boundary and each
+typed refusal of FR-015-AC-84 through FR-015-AC-89. Generate the oracle,
+finite strategy, Kani harness and proof graph from one validated Contract IR
+finite input; compare their selected family, profile, case identity and oracle
+truth value. Vary one case input at a time, reorder graph objects and edges,
+repeat emission through one registry, and submit invalid dependency censuses.
+Run the installed backend for FR-015-AC-57's healthy and falsifying cases.
+Inspect the resolved Cargo graph for a reverse Contract IR-to-codegen dependency.
+
+Planned replay procedure: once a corpus case retains a real QSL source and
+counterexample packet, submit its counterexample through QSL's replay facade
+and compare the typed result. No current test or corpus artifact establishes
+that result.
 
 ## Expected Results
 
-Every supported case has matching typed classification across backends. Every unsupported or adverse case has its original
-typed non-Boolean result and no partial artifact or proof claim. Every retained
-counterexample either reproduces native false or reports a typed replay
-non-success (unbacked). The dependency graph keeps Contract IR below codegen. Every
+Every profile request has one ordered disposition per construct, or one typed
+request refusal. Each successful lowering returns the exact family result and
+each adverse case its original typed non-Boolean refusal, with no partial
+artifact or proof claim. One admitted corpus case has all four artifacts and
+one generated case outcome; a refused case has none and does not claim an
+identity. Native replay remains unbacked. The dependency graph keeps Contract
+IR below codegen. Every
 finite-graph case expands identities in sorted depth-first order: a branch explored before the
 target branch consumes its expansion budget, while a target on an edge of the current identity
 is found without expanding the target. The generated graph oracle uses the same order and bound.
