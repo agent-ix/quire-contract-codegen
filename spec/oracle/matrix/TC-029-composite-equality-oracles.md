@@ -216,6 +216,34 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `LoweringWorkExhausted`. Run the long chain in a subprocess to detect stack exhaustion.
     The seam supplies a synthetic lowered graph,
     so Contract IR's separate lowering ceiling does not preempt this check.
+18. Deep type walk (FR-018-AC-28 and AC-29, planned, IR-511). At the same
+    synthetic lowered-graph seam, construct an admitted 100,000-entry acyclic
+    chain and an equivalent shallow declaration closure. Run resolution in a
+    subprocess on a 512 KiB stack with `cg.equality.source_bytes` raised to
+    the measured flat source size throughout: first with the default
+    type-resolution work limit, then with a caller-selected work limit exactly
+    equal to its entries, then one below.
+    Assert the first denied counts, a completed oracle with the shallow case's
+    result, and absence of any depth refusal. In separate cyclic fixtures,
+    place the repeated entry immediately below and at the work boundary;
+    assert `TypeResolutionCycle` after a successful entry charge and
+    `TypeResolutionWorkExhausted` at the denied entry, respectively. In every
+    refusal case, assert a healthy sibling generates unchanged and no refused
+    item emits a symbol.
+19. Source bytes (FR-018-AC-30, planned, IR-511). Measure the flat Rust
+    source required for the 100,000-entry closure. Run once under the
+    1,048,576-byte default and assert `SourceTooLarge` names that effective
+    limit when exceeded. Raise the caller byte limit to the measured count,
+    generate and compile the complete crate, then lower it by one byte and
+    assert refusal before publication with no partial artifact. Inspect that
+    the generated type declarations have constant nesting per source item,
+    each module fits the publication artifact limit, and the bundle fits its
+    own byte limit.
+20. Work-limit representation (FR-018-AC-31, planned, IR-511). Supply
+    `u64::MAX` as the type-resolution work limit and assert
+    `InvalidTypeResolutionWorkLimit` before lowering or any item charge.
+    Supply `u64::MAX - 1` to a counter seam at its last admissible unit and
+    assert the first denied `consumed` is `u64::MAX`, without wraparound.
 
 ## Expected Results
 

@@ -13,6 +13,10 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-ir/FR-038
     type: references
+  - target: ix://agent-ix/quire-specification/FR-460
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-030
+    type: references
 ---
 # FR-018: Generate exact complete-V1 composite equality oracles
 
@@ -76,6 +80,14 @@ rather than a formality.
   `composite_type` nodes of form `record`, `tuple`, `option`, `sequence`, `set`,
   `bag` and `ordered_set`, their `scalar_type` leaves, and the `bounded_domain`
   nodes those types need.
+- A caller-selected per-item type-resolution work limit. When omitted, its
+  published default is 65,536 entries; callers may raise it to fit larger
+  admitted packages. Its setting name is
+  `cg.equality.type_resolution_work_units`.
+- A caller-selected generated-source byte limit for this request. Its default
+  is 1,048,576 bytes, matching the current `MAX_GENERATED_SOURCE_BYTES`.
+  A caller may raise it for a larger admitted oracle using
+  `cg.equality.source_bytes`.
 - Contract Runtime with the `exact` feature, as this repository's `Cargo.toml` names it.
 
 As in FR-014, the V2 transport carries each application term's `operation`
@@ -150,28 +162,53 @@ in the `NODE_KEY_DOMAIN` domain.
   recursion pass — then the generator shall refuse the item with that
   `DeclarationCause` and emit no code for it, without changing any other item's
   output.
-- The generator shall reconstruct each item's operand types with a separate
-  `COMPOSITE_EQUALITY_TYPE_RESOLUTION_WORK_LIMIT` of 65,536 units. Entering the root type node or
+- The generator shall reconstruct each item's operand types with a separate,
+  caller-selected type-resolution work limit (default 65,536 units). Entering the root type node or
   following one member, option-payload, or collection-element reference or a
   bounded-domain `semantic_type` edge to a type node consumes one unit; the
   counter is shared by that item's two operands
   and conversion targets, and resets for the next item. A repeated reference
   consumes a new unit even when its node was previously resolved or memoized;
   an in-progress record back-edge also consumes its reference-entry unit before
-  closing to the key. Before an entry that
-  would consume unit 65,537, it shall refuse only that item as
-  `CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit: 65_536,
-  consumed: 65_537 }`, with no emitted symbols. This budget is independent of
+  closing to the key. Before an entry that would exceed the effective limit,
+  it shall refuse only that item as
+  `CompositeEqualityRefusal::TypeResolutionWorkExhausted { limit,
+  consumed }`, with `limit` the effective setting and `consumed` the first
+  denied entry; the refusal also names its stable setting name, and emits no
+  symbols. This budget is independent of
   `COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT`, which governs Contract IR lowering;
   neither is a nesting-depth limit.
-- Type resolution shall terminate without Rust call-stack exhaustion. An edge
+- The type-resolution work limit shall be a `u64` in the range `0..u64::MAX`.
+  If a caller supplies `u64::MAX`, the generator shall reject the request as
+  `InvalidTypeResolutionWorkLimit` before lowering or charging any item: a
+  `u64` refusal cannot encode the first denied count after that setting.
+  For every admitted setting, the first denied count is representable.
+- Type resolution shall use an explicit charged walk whose native call-stack
+  use does not grow with input size or nesting depth. Its working storage shall
+  grow by at most a constant per charged entry. Rendering the reconstructed
+  closure and releasing CG-owned work frames shall also avoid native recursion
+  proportional to the input. An edge
   back to a record or tuple declaration already in progress shall close as
   that declaration's `NodeKey`, including a record field reached through an
   `option` payload or `sequence` element. An edge back to an unclosed `option`
   or collection type shall instead refuse only the item as
   `CompositeEqualityRefusal::TypeResolutionCycle { type_node_id }`, naming the
-  repeated node. A long acyclic chain shall reach the work refusal above without
-  a panic or process abort.
+  repeated node. The generator shall report that cycle at the repeated entry
+  after charging the entry and before following any child. For a long acyclic
+  chain, the generator shall report a work refusal only at the first denied
+  entry, without a panic or process abort.
+- The generator shall render the reconstructed closure as a flat sequence of
+  bounded-size declarations and temporaries, not as a Rust constructor tree
+  nested once per type entry. The total generated Rust source byte count shall
+  be charged against the effective caller-selected source limit before bytes
+  are appended; at the first denied byte, the whole request shall return its
+  existing `SourceTooLarge` error with the effective limit and needed byte
+  count and the `cg.equality.source_bytes` setting, and publish no partial
+  artifact. Its default preserves the existing
+  1,048,576-byte refusal. A raised limit shall admit a larger source when each
+  artifact fits the publication byte limits; when source exceeds one artifact,
+  the generator shall partition it into deterministic instruction-order
+  modules so no emitted artifact exceeds its publication limit.
 - For the QSpec List record, the generator shall read `next` through its
   `binding(next, aggregate([binding(optional, reference Option<List>)]))`
   structure, follow the option node's sole payload reference to List, and emit
@@ -352,9 +389,13 @@ reaches it today, so the mapping is asserted where reachable.
 | FR-018-AC-22 | For every pair of operand values in the item's refinement domain (FR-028-AC-16: every case where the domain fits the case cap, the boundary and seeded cases otherwise; every presence state of an option and of an optional field included) of an item whose leaves are Boolean or bounded integers, the generated oracle called with its own environment and a `Meter` whose every limit is `u64::MAX` returns `Outcome::Completed` with the verdict of QSpec FR-149 for the item's operator and admits exactly `equality.plan-form`, `equality.plan`, one `equality.pair` per node of the occurrence-pair tree, then `equality.result-retain`; no such pair returns `Refused` or `Incomplete`. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-23 | For every item of the TC-029 corpus whose leaves are Boolean or bounded integers, the claim-map closure's member names, presence and each integer leaf's inclusive bounds equal those of an independent read of the checked package (the V2 composite and `bounded_domain` nodes read through Contract IR's reader, never through the generator's reconstruction); a closure that dropped a member, narrowed a bound by one or read an optional member as required fails the check. PLANNED (IR-264). | Test (TC-029) |
 | FR-018-AC-24 | Type reconstruction of QSpec's `positive-recursive-records.json` List (through `Option<List>`) and Tree (through `Sequence<Tree>` bounded `[0,3]`) closes each back-edge at the in-progress record key, generates equality items built over both record types, and terminates; a synthetic unclosed `Option` self-cycle and a `Sequence` self-cycle each refuse as `TypeResolutionCycle` naming the repeated type node, without a panic, stack overflow or generated symbol. PLANNED (IR-643). | Test (TC-029) |
-| FR-018-AC-25 | The per-item type-resolution counter charges one unit for each root type-node entry or followed type-node reference or bounded-domain `semantic_type` edge, including a repeated or memoized reference, across both operands and conversion targets, independently of Contract IR lowering; an acyclic chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack exhaustion or generated symbols, while a sibling needing at most 65,536 entries still generates. PLANNED (IR-643). | Test (TC-029) |
+| FR-018-AC-25 | The per-item type-resolution counter charges one unit for each root type-node entry or followed type-node reference or bounded-domain `semantic_type` edge, including a repeated or memoized reference, across both operands and conversion targets, independently of Contract IR lowering; with the default limit, an acyclic chain reaches its 65,537th entry and refuses only its item as `TypeResolutionWorkExhausted { limit: 65_536, consumed: 65_537 }` before further descent and without call-stack exhaustion or generated symbols, while a sibling needing at most 65,536 entries still generates. PLANNED (IR-643). | Test (TC-029) |
 | FR-018-AC-26 | Reading the QSpec List `next` field as `binding(next, aggregate([binding(optional, reference Option<List>)]))` yields exactly one `FieldDeclaration` named `next`, with `Presence::Optional` and payload type `ValueType::Composite(List NodeKey)`; removing or renaming `optional`, adding a second nested member, or targeting a non-option node refuses only that item as malformed, never as a required field or a generated oracle. PLANNED (IR-643). | Test (TC-029) |
 | FR-018-AC-27 | Reading the QSpec Tree `kids` field's direct reference to `collection_bounds` follows that node's `semantic_type` to `Sequence<Tree>`, reads its sole element reference as the Tree `NodeKey`, and reconstructs cardinality `[0,3]` from that bound node's named `min` and `max`; changing the semantic type to a non-sequence, dropping or duplicating either bound, or making either value non-integer refuses only that item with a typed cause and emits no code, never silently yielding an unbounded collection. PLANNED (IR-643). | Test (TC-029) |
+| FR-018-AC-28 | With a caller-selected type-resolution work limit of at least 100,000 and `cg.equality.source_bytes` raised to the measured flat source size, an admitted acyclic type chain of 100,000 entries reconstructs and generates an oracle with the same result as an equivalent shallow type on a 512 KiB stack; with the same raised source-byte limit, the default type-resolution work limit refuses it at entry 65,537, and a selected work limit one below its entry count refuses it at the first denied entry. No depth setting or fixed depth refusal participates in these runs. PLANNED (IR-511). | Test (TC-029) |
+| FR-018-AC-29 | A cycle detected after a charged repeated entry reports `TypeResolutionCycle` without following a child; if that repeated entry is the first denied work entry, `TypeResolutionWorkExhausted` wins and reports the effective limit and first denied count. An unaffected sibling keeps its original disposition in either case. PLANNED (IR-511). | Test (TC-029) |
+| FR-018-AC-30 | The 100,000-entry acyclic closure renders as flat source without a type-depth-sized constructor expression; under the 1,048,576-byte default it returns `SourceTooLarge` naming that limit when the source exceeds it, and under a caller limit equal to its measured source bytes it emits a complete, compilable oracle within the publication artifact and bundle byte limits. One byte less refuses before that byte is appended and publishes no partial artifact. PLANNED (IR-511). | Test (TC-029) |
+| FR-018-AC-31 | A caller-selected type-resolution work limit of `u64::MAX` refuses as `InvalidTypeResolutionWorkLimit` before lowering or charging; with `u64::MAX - 1`, the first denied count fits in the `u64` `consumed` field and is reported without wraparound. PLANNED (IR-511). | Test (TC-029) |
 
 AC-5 requires each listed condition to be refused with its `IllTypedCause`, not
 that the six causes be distinct. Two of them are not: a `convert<T>` operand
@@ -397,6 +438,10 @@ without one is not written.
 | FR-018-AC-25 | Reuse the Contract IR lowering counter for reconstruction, charge only record declarations while skipping option and sequence edges, or recurse through 65,537 acyclic entries before checking the budget; a large item then completes or overflows the stack instead of yielding the named per-item refusal. |
 | FR-018-AC-26 | Expect `next`'s value to be a direct reference and reject QSpec's nested optional binding, or ignore the wrapper and treat the field as required; the List item refuses or generates with the wrong presence. |
 | FR-018-AC-27 | Expect an inline second bounds reference in the Sequence body, or reject every bounded domain whose semantic type is not scalar; the QSpec Tree item refuses. Ignoring a missing bound instead generates an unbounded collection. |
+| FR-018-AC-28 | Keep a fixed 65,536-entry ceiling even after the caller raises the work limit, or use recursive Rust calls for each nested type; the 100,000-entry case refuses or exhausts the 512 KiB stack. |
+| FR-018-AC-29 | Detect the cycle before charging the repeated entry, or follow its child before checking the work limit; the boundary case reports the wrong refusal or visits a child that should not run. |
+| FR-018-AC-30 | Retain the fixed source ceiling, emit one nested constructor per type level, or measure bytes only after publishing; the 100,000-entry case refuses despite a sufficient caller byte limit, overflows a compiler stack, or leaks partial output. |
+| FR-018-AC-31 | Accept `u64::MAX` and increment a `u64` on its first denied charge; the reported count wraps to zero or the process panics. |
 
 ## Dependencies
 
