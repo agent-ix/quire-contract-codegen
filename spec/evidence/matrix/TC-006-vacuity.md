@@ -63,11 +63,14 @@ serialized. Check accepted/rejected/discarded accounting independently and rejec
 with failed postconditions. Use the native runtime CampaignReport, never a private counter type.
 
 For the native-run binding control, record the generated source and source map actually handed to
-the coverage producer. Analyze those same artifacts with the resulting export and campaign run;
-then replace the map, source, revision or run independently while preserving the other inputs.
+the coverage producer and the exact LLVM export bytes produced by the authenticated run. Analyze
+those same artifacts and export with the resulting campaign run; then replace the map, source,
+revision, run or export bytes independently while preserving the other inputs. The export
+substitution includes a second run of the same source/map under the same LLVM tool/version but
+different probe counts, proving that tool/version and path agreement cannot authenticate probes.
 Also omit or change the LLVM producer tool/version identity. The successful case reports that
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
-result and cannot discharge coverage.
+result without measured classification or coverage discharge.
 
 ## Planned native-run-result/2 consumer controls
 
@@ -98,15 +101,18 @@ result and cannot discharge coverage.
    `package_id`, or self-declared producer metadata. Check a structured absent/unauthenticated
    binding diagnostic retains the decoded QSL outcome and available input identities, with no
    campaign qualification or measured classification. Supply an authenticated CG receipt
-   associating the exact result, producer execution, generated source and source map; check the
-   binding succeeds without upgrading the QSL outcome. Then independently replace each of those
-   four inputs while keeping the receipt, including replacements with matching path or QSL
-   `package_id`; each mismatch must be identified and refuse binding. A matching receipt never
-   upgrades a command error or adverse clause-run result. The LLVM producer identity and actual
-   probe observations remain independent CG coverage inputs.
+   associating the exact result, producer execution, generated source, source map and exact LLVM
+   export bytes from the same run; check the binding succeeds without upgrading the QSL outcome.
+   Then independently replace each of those
+   five inputs while keeping the receipt, including replacements with matching path or QSL
+   `package_id`; for export substitution, use a different run of the same source and map with
+   the same LLVM tool/version but different probe counts. Each mismatch must be identified and
+   refuse binding before any measured classification. A matching receipt never upgrades a command
+   error or adverse clause-run result. The LLVM producer identity and actual probe observations
+   remain CG coverage inputs, not QSL result members.
 
 These controls are planned. QSL-520 must deliver the `/2` producer/reader; QSL-688 allocated the
-separate authenticated result/execution/source/map receipt to CG, whose trusted authority and
+separate authenticated result/execution/source/map/export receipt to CG, whose trusted authority and
 verifier still need implementation. The existing `analyze_bound_coverage` primitive does not
 consume a QSL result and is not evidence for these steps.
 
