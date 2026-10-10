@@ -17,6 +17,12 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-spec-language/ADR-029
     type: references
+  - target: ix://agent-ix/quire-spec-language/FR-335
+    type: references
+  - target: ix://agent-ix/quire-contract-ir/FR-036
+    type: references
+  - target: ix://agent-ix/quire-contract-ir/FR-029
+    type: references
 ---
 # FR-019: Settle every capability claim at one negotiation point
 
@@ -65,6 +71,9 @@ nothing says so.
   vocabulary requires it.
 - No artifact for an item settled `unsupported`, `requires-bound` or
   `invalid-request`.
+
+For an unsupported IR profile entry, IR FR-029 owns the absence of an artifact,
+`KaniOutcome` and `TerminalValue`; CG settlement emits no such result.
 
 ## Behavior
 
@@ -281,6 +290,7 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-13 | Settling a process-provider item reaches no plugin: a descriptor whose identity names a non-existent executable settles identically to one with an ordinary identity, apart from the backend each names, and starts nothing, and a descriptor whose identity names an executable that records its own start leaves no record. A mutant arm that starts or resolves the identity as a process either changes the first disposition or leaves the record, and fails this. | Test (TC-046) |
 | FR-019-AC-14 | The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result or artifact member, so settling returns none of them. A change that returns one does not compile against that type. | Analysis |
 | FR-019-AC-15 | PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` projecting exactly QSL layer R's `Linked` and `Process` meanings (QSL FR-288, ADR-029 PV-1); layer R owns that vocabulary. The driver projects each descriptor from `Registry::descriptors()` once into CG's descriptor, copying `id` and advertised pairs unchanged and mapping `origin()` exhaustively, `Linked` to `Linked` and `Process` to `Process`, with no wildcard or origin inference from identity, manifest or provider bytes or a side map. Two registry descriptors identical except for origin produce CG descriptors identical except for origin; a linked Kani descriptor remains `Linked`. The CG dependency graph adds no direct `qsl-route` edge and the FR-331 wire gains no origin field. | Test (TC-030) |
+| FR-019-AC-24 | PLANNED (IR-338). Given QSL FR-335's `value-validity` claim rooted at an unbounded `s: Set<Int[0,9999]>`, an empty candidate registry settles `unsupported` with a warning naming `value-validity` and emits no artifact or Kani outcome; one linked Kani candidate advertising (`value-validity`, `bounded`) with `finite_bound_available=true` settles the unbounded item `requires-bound` without substituting a bound or emitting an artifact; a separately requested bounded `ProofBound::Cardinality{maximum: 8}` item with that same sole candidate settles `supported` under its own request index, while the unbounded item remains `requires-bound`; and an unboundable added root with `finite_bound_available=false` against that candidate settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`. The bounded disposition alone claims no Kani execution outcome. | Test |
 
 ## Dependencies
 
@@ -294,3 +304,6 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
   [TC-046](../matrix/TC-046-process-provider-settlement.md); quire-driver
   IR-609's pre-negotiation conversion and adaptation to the new variant;
   [FR-022](./FR-022-routed-generation.md), the generation arm of the same seam.
+- **Boundary**: QSL FR-335/TC-845 owns the source-to-claim fixture and request writer;
+  quire-integration owns the composed CG and driver run. IR FR-036 owns the absent-capability
+  warning and IR FR-029 owns unsupported entries without artifact or Kani outcome.

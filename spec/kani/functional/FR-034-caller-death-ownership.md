@@ -223,24 +223,24 @@ retains bounded outer cancellation, without resetting the deadline.
 - Regression verification shall fail ownership mutants before separate emergency fixture cleanup.
 - The CG library shall omit guardian-test-support from default features.
 - Where guardian-test-support is enabled, the CG library shall export one fixture operation.
-- The fixture operation shall record immutable raw observations before independent INIT escalation.
+- The fixture operation shall perform independent original-process and lease checks before INIT
+  escalation; stored values shall not certify current gate state.
 - The live-caller fixture operation shall invoke unchanged production cleanup immediately after
   observation.
-- The bounded executor shall publish BeforeMonitor, Bootstrap, ClaimedGated, ClaimedBootstrap and
-  InitReady unconditionally.
 - Production and fixture execution shall select one shared private stage sequence as data.
-- The intentional-death fixture shall report its exact prefix boundary before self-killing.
+- The intentional-death fixture shall use its selected prefix only to choose the shared transition
+  boundary before self-killing; the prefix shall not certify current gate state.
 - The intentional-death fixture shall transfer only its actual owned monitor or validated INIT pin
   to its harness.
 - The fixture operation shall exclude pass/fail oracle evaluation from library execution.
-- The CG verification harness shall judge the defined oracle from pre-escalation raw observations.
-- The bounded executor shall publish private LeaseClosing state after actual caller-lease closure.
-- The bounded executor shall publish that state unconditionally through a monotonic read-only value.
-- The bounded executor shall seal close/publication ordering at the actual publication boundary.
+- The CG verification harness shall judge supported predicates from independently observed
+  original-process and lease behavior before emergency escalation; exact fatal-prefix gate retention
+  remains unbacked.
 - The private Dispatch sender shall queue the unchanged production frame without waiting for ACK.
 - The bounded executor shall wait for Dispatch acknowledgement in a separate bounded transition.
 - The fixture continuation shall resume only its deliberately stopped and pinned INIT.
-- When LeaseClosing is positively observed, the fixture continuation shall send owned-pidfd SIGCONT.
+- The stopped-INIT fixture shall require genuine bounded coordination before owned-pidfd SIGCONT;
+  unavailable coordination shall fail rather than accept a retired stage publication.
 - The fixture operation shall reject unavailable continuation as passing EOF-cancellation evidence.
 - The fixture build shall select the actual package helper through the consumer manifest.
 - The CG verification harness shall build feature-off and feature-on configurations separately.
@@ -481,8 +481,8 @@ The stage boundaries and cancellation observations are cumulative only where exp
 | Stage | Authority and cancellation | Confirming observation |
 |---|---|---|
 | BeforeMonitor: no inner monitor or inner INIT spawned | The same shared sequence has not invoked monitor creation; the original caller owns only its actual setup/lease state. No absent inner child has a process identity or pidfd; any existing L/O retains its actual authority. | Typed NoInit witness, no backend marker and closed actual setup/lease ownership after caller death. |
-| Bootstrap: M created; inner I unclaimed; no Dispatch | O is already verified outer PID 1 with armed parent-death protection before M spawn. C retains L/O authority and bootstrap gate; O retains actual M Child. Bounded exact inner claim remains required before Dispatch. On M failure, info-reader failure or C/L death, outer INIT teardown cancels even blocked unclaimed I. | Actual outer pidfd termination confirms outer namespace teardown; actual claimed inner pin separately confirms inner teardown where available. No fabricated inner pin, host scan or monitor/group exit proves either. |
-| ClaimedGated: INIT pidfd/start/parent/namespace verified and observer bound; gate retained | The same unconditional claim transition retains the validated INIT pin before the separate gate-release transition. Caller/group death cannot authorize a backend; trusted guardian bootstrap still requires the exclusive lease and Dispatch. | Claimed INIT pidfd termination and no production backend marker; gate remains retained at the exact fixture prefix. |
+| Bootstrap: M created; inner I unclaimed; no Dispatch | O is already verified outer PID 1 with armed parent-death protection before M spawn. C retains L/O authority and its original lease; O retains the actual bootstrap gate and M Child. Bounded exact inner claim remains required before Dispatch. On M failure, info-reader failure or C/L death, outer INIT teardown cancels even blocked unclaimed I. | Actual outer pidfd termination confirms outer namespace teardown; actual claimed inner pin separately confirms inner teardown where available. No fabricated inner pin, host scan or monitor/group exit proves either. |
+| ClaimedGated: INIT pidfd/start/parent/namespace verified and observer bound; gate retained | The same unconditional claim transition retains the validated INIT pin before the separate gate-release transition. Caller/group death cannot authorize a backend; trusted guardian bootstrap still requires the exclusive lease and Dispatch. | Independent original claimed INIT pidfd termination and no production backend Dispatch/marker; cached prefix establishes neither gate presence nor absence at report time. Exact fatal-prefix early-release observation remains UNBACKED. |
 | ClaimedBootstrap: INIT pidfd/start/parent/namespace verified; gate released only for trusted bootstrap; no backend Dispatch | bounded executor retains monitor and INIT handles while guardian enters its new session and authenticates the exclusive pair. Failed lease authentication, guardian death or caller loss never authorizes a backend. | Claimed INIT pidfd signals termination on cancellation; no production backend marker. |
 | InitReady: guardian peer/build/session verified; observer ready; no backend Dispatch | bounded executor retains monitor and INIT handles. Lease EOF causes guardian exit; live bounded executor can cancel through the claimed INIT pidfd. Guardian death itself is namespace-INIT death. | Claimed INIT pidfd signals termination before a live caller accepts cleanup; no backend marker. |
 | Dispatched: guardian received positive typed authorization with live lease | Guardian supervises the whole backend namespace. Caller loss causes guardian exit after owned cancellation; guardian death invokes kernel namespace teardown. Live bounded executor confirms claimed INIT termination on every completion or failure. Explicit cancellation first closes the lease and observes guardian exit; bounded escalation uses the claimed INIT pidfd. | Claimed INIT pidfd signals termination before any live-caller proof conclusion; descendants are cancelled through kernel INIT teardown, not an observed-PID list. |
@@ -565,32 +565,29 @@ The operation shall invoke the same private production transitions selected by i
 Its live-caller form shall execute unchanged lease-close and cleanup operations unconditionally. The
 feature shall add no branch inside a production stage and no substitute namespace INIT, worker,
 identity check or cleanup implementation. Its additional fixture-only authority is recording real
-typed observations, arranging bounded positive coordination for pending Dispatch and reporting an
-exact early-stage death witness. Ordinary public execution and positive post-Dispatch caller-death
+typed observations, arranging bounded positive coordination for pending Dispatch and reporting actual original identity/right delivery before early-stage caller death. Ordinary public execution and positive post-Dispatch caller-death
 fixtures remain available without this feature.
 
-The live-caller form shall retain real `RunOwner` handles in the original caller while recording raw
-typed stage, `LeaseCloseObservation`, pinned worker and backend-marker observations before
-independent INIT escalation. The operation shall seal these observations without evaluating a
-pass/fail oracle. The operation shall immediately invoke unchanged production cleanup on success,
-refusal and observation-error paths. The operation shall return immutable raw observations and a
-separate cleanup result only after that cleanup. The operation shall return no lease, process handle
-or cleanup-deferring callback. If observation is lost, overflowed or unavailable, then the fixture
-operation shall record typed failure. The fixture operation shall reject that failure as confirmed
-termination. Urgent resource and identity cancellation remains authoritative.
+The live-caller form shall retain genuine original caller ownership while performing the unchanged
+lease-close, kernel termination observation and cleanup operations. The immediate private
+`LeaseCloseObservation` result may guide production escalation; it shall not be treated as a stored
+certificate of termination or EOF origin. The harness shall independently check the original I pin,
+positively acknowledged worker and backend marker before escalation. A stored stage, boolean,
+ordinal, snapshot or returned category shall establish none of those predicates. Unavailable kernel
+observation shall fail the fixture, and unchanged cleanup shall run on success, refusal and error.
+No lease, cleanup-deferring callback or public ownership handle shall be returned.
 
-For exact early-stage caller deaths, the executor shall use one shared private stage sequence.
-Production shall select the complete sequence and the fixture shall select a bounded prefix as
-ordinary typed data. Both selections shall invoke the same functions in the same order; no copied
-fixture orchestrator, production feature branch, hook or replacement transition is permitted.
-BeforeMonitor, Bootstrap, ClaimedGated, ClaimedBootstrap and InitReady shall publish their actual
-stage through the same private monotonic read-only mechanism as LeaseClosing. Publication shall add
-no I/O, callback, blocking handoff or controller pause. The feature shall expose this read access
-only inside the single fixture operation, not as another public item or production process handle.
-
-The shared sequence shall claim the gated INIT and bind its observer before a separate unconditional
-gate-release transition. ClaimedGated retains the gate; ClaimedBootstrap has released it. A fixture
-shall never label the released gate as retained or bypass actual identity/observer checks.
+For early-stage caller deaths, production and fixture shall use the same functions/order with the
+selected bounded prefix as fixture input only. Normal control phases remain operational admission
+state, not certificates of live behavior. The former unconditional stage-publication mechanism and
+exact-prefix snapshot acceptance are retired; no replacement record or publication is allocated.
+The shared sequence shall still claim the gated INIT and bind its observer before separate actual
+gate release. Actual local O gate ownership may guard an operation, but C's cached phase shall not
+prove that O still retains the gate at C's reporting boundary. Concurrent O failure or fatal exit
+may close the gate independently. The exact fatal-prefix early-release adverse class remains
+UNBACKED until a genuinely independent observable construction exists; absence of a backend marker
+or eventual dead I shall not satisfy it. No ACK, controller pause or C-owned gate redesign is
+allocated.
 
 The harness shall map its anonymous report socketpair only into the first-party fixture's startup
 stdout. Before any process spawn, the fixture shall safely borrow stdout, duplicate it into an
@@ -602,22 +599,22 @@ the monitor, INIT, guardian, backend or unrelated exec. No child stdio option ma
 reuse the reporter as a capture. Failure to establish this exclusion shall fail before monitor
 spawn.
 
-At the selected boundary, the intentional-death fixture shall seal the actual published stage and
-owned caller/monitor/claimed-INIT start and namespace identities, including the actual transferred
-descriptor identity, before invoking the next shared transition. It shall send one bounded typed
-witness through that auxiliary report descriptor. At ClaimedGated or later, the message shall carry
+At the selected boundary, the intentional-death fixture shall transfer actual original
+caller/monitor/claimed-INIT identity metadata and the actual owned descriptor identity through the
+existing auxiliary reporter. This metadata shall describe only genuine operational custody; it
+shall not certify stage, current gate retention or operation order. At ClaimedGated or later, the message shall carry
 exactly one clone of the already-validated owned INIT pidfd through safe ancillary-rights APIs. At
 Bootstrap immediately after monitor spawn but before any INIT claim or gate release, it shall
 instead carry exactly one clone of the actual owned monitor pidfd and typed InitUnclaimed. INIT may
 already exist; InitUnclaimed shall never mean NoInit, nor fabricate an INIT identity or pin. At
 BeforeMonitor, typed NoInit shall record actual no-spawn/setup state and carry no descriptor. An
 unavailable owned monitor pin or required claimed INIT pin shall fail, never establish a passing
-stage witness. The fixture shall never open a replacement pidfd from a reported PID after death. The
+behavioral fixture. The fixture shall never open a replacement pidfd from a reported PID after death. The
 report channel shall never carry the original caller lease or become backend capture.
 
 After the bounded complete send, the same fixture process shall immediately SIGKILL itself or its
 positively owned dedicated caller group, before any next transition. No harness acknowledgement or
-external controller permission shall delay that death. A partial send, absent/overflowed stage,
+external controller permission shall delay that death. A partial send, unavailable actual identity,
 missing pin or failed coordination shall fail the fixture and invoke unchanged owned cleanup while
 the caller lives; no timed success or passing platform skip is permitted. All reporting work remains
 within the original deadline. Reporting and self-kill exist only inside the opt-in fixture
@@ -628,42 +625,39 @@ its dead caller.
 The surviving harness shall retain its actual original-caller Child unreaped and its start/pidfd
 identity until authenticating the report's kernel sender credentials. It shall receive exactly one
 CLOEXEC owned pidfd for Bootstrap or claimed INIT and match its actual descriptor identity and
-reported pin kind to the sealed predeath pin. It shall reject malformed, truncated, wrong-sender,
+reported pin kind to the actual original pin validated before caller death. It shall reject
+malformed, truncated, wrong-sender,
 wrong-type or extra/missing rights and close all rejected descriptors. NoInit shall carry no right.
-For a live claimed INIT, the harness shall verify the transferred pin against sealed start/namespace
+For a live claimed INIT, the harness shall verify the transferred pin against independently observed
+start/namespace
 identity. After INIT death, that predeath validated pin remains termination authority; a reused
 /proc PID cannot substitute. ClaimedGated and later require confirmed caller and INIT death plus no
 pre-Dispatch backend marker. BeforeMonitor instead requires actual no-INIT setup observations,
 closed actual lease/pair ownership and no backend marker, plus termination of any positively owned
 setup child.
 
-Bootstrap shall positively witness monitor creation, no INIT claim, retained gate and no Dispatch
-before self-kill. Its runtime assertion shall require caller and pinned monitor termination, closed
-original-caller gate/lease ownership and no backend marker within bounded observation. It shall not
-infer INIT termination or guardian exit through EOF from monitor readiness, stream EOF or a reported
-PID. No descendant snapshot or after-death scan may invent missing INIT authority: the held gate
-does not prevent all bubblewrap setup forks. The underlying no-unowned-backend and owned-cleanup
-guarantees remain mandatory. Their Bootstrap verification shall separately include source/lifecycle
-Analysis and actual repair under IR-652 of trusted-only gate-EOF bootstrap, exclusive caller-lease
-loss, bounded guardian refusal and namespace-INIT teardown; parent-death handling shall not be
-claimed armed before its actual installation. Analysis shall include INIT creation before startup
-information and the internal map/setup handoff before the public gate; it shall not presume gate EOF
-reaches guardian when the monitor dies before releasing that handoff. The present
-monitor-PDEATH/internal-handoff leak is the named IR-652 implementation gap; the Bootstrap facts do
-not verify or close it. That argument is not a measured INIT-death Test at this boundary.
-ClaimedGated and later retain positive INIT-pidfd termination Tests, and unconfirmed live-caller
-cleanup still refuses.
+Bootstrap shall require actual caller and pinned monitor termination and no backend Dispatch or
+marker under bounded observation after actual C/group death. These observations shall not infer
+unclaimed INIT termination, current gate custody or guardian exit from stream EOF, monitor readiness
+or a reported PID. Actual original I pins, where positively claimed, shall remain independently
+usable after death without numeric-PID reopening. The no-unowned-backend and whole-tree cleanup
+guarantees remain mandatory, including the internal map/setup handoff before the public gate and
+actual parent-death installation order. Missing genuine unclaimed authority or exact native-window
+construction shall remain an explicit AC-31/IR-652 verification gap, not a passing stage-only test.
+Claimed cases shall require actual original I termination, no leaked owned inner processes and no
+backend Dispatch/marker before separate emergency cleanup. Fatal O failure shall not be reported as
+positive live gate custody.
 
 Independent emergency cleanup of only fixture-owned processes shall follow recorded assertions
 without masking them. Structural inspection shall establish shared stage functions/order, safe
 reporter exclusion and feature item exposure only; mandatory AC-24 EOF mutants retain behavioral
-parity evidence. Neither stage-only Bootstrap facts nor structural inspection satisfies the complete
+parity evidence. Neither selected-prefix metadata nor structural inspection satisfies the complete
 namespace-teardown oracle or supplies executable coverage for the Analysis obligation.
 
 A Linux queued-descriptor probe measured one validated INIT pidfd surviving a separate reporter's
 SIGKILL, received CLOEXEC both while INIT was live and after its death. This establishes only the
 queued-pin facility: its host parent owned the actual monitor/INIT/control, not the production
-original-caller Rust path. Actual shared-prefix stage reporting, caller/group death, sender binding,
+original-caller Rust path. Actual original pin delivery, caller/group death, sender binding,
 NoInit/InitUnclaimed observations and the production guardian oracle remain CODE acceptance tests.
 
 A separate Python/kernel reporter probe measured the standard-stdout entry, non-stdio CLOEXEC
@@ -688,47 +682,24 @@ proves neither guardian receipt nor backend creation. The normal executor shall 
 acknowledgement in a separate bounded transition. The stopped-INIT fixture shall not enter that
 acknowledgement wait before closing its lease. The owner shall keep `RunOwner` and the original
 caller alive while invoking the unchanged synchronous `close_lease_and_observe` operation. After
-actual `CallerLease` closure, that production operation shall publish its private LeaseClosing stage
-unconditionally through a monotonic read-only value before waiting for termination. Publication
-shall add no callback, blocking handoff, extra I/O or feature-keyed branch to any production stage.
+actual `CallerLease` closure, production shall continue its existing bounded termination observation
+and cancellation path with the original owner, stop and cutoff. Close-completion/publication
+ordinals, immutable publication snapshots and their later acceptance are retired. The stopped-I
+fixture must still resume or cancel its genuine pinned I and join every owned continuation during
+unconditional cleanup; removal of the snapshot shall not strand I. A genuinely observable bounded
+coordination construction is still owed before this Test can run. This amendment allocates no
+replacement channel, record, timer, callback or grace. Missing coordination shall yield fixture
+failure, never skip/pass. SIGCONT shall remain resumption only and shall not establish cancellation.
+Urgent deadline/resource/identity cancellation shall retain its authority while I is stopped.
 
-The bounded executor shall record a close-completion ordinal only after consuming the exclusive
-`CallerLease` and returning from its actual owned-endpoint close. At actual LeaseClosing
-publication, the executor shall assign a publication ordinal and seal one immutable snapshot
-containing the optional completed-close ordinal and publication ordinal. A bounded per-run sequence
-orders these events without timestamps. Publication shall never late-fill or rewrite that snapshot
-after a later close. If publication is duplicated or ordering is unavailable, then the fixture
-operation shall record typed observation failure. The continuation shall read this exact publication
-snapshot, not a later mutable closed flag. The external harness shall require a present
-close-completion ordinal strictly before the publication ordinal. Early publication therefore fails
-even if a later close occurs before the resumed guardian reads its stream. These ordering facts
-shall complement actual namespace/EOF observations, never replace them or grant a synthetic passing
-value.
-
-The fixture owner shall use an internal owned continuation thread to observe that positive
-publication and send SIGCONT through its positively pinned INIT pidfd. Only that fixture-only
-continuation may resume its deliberately stopped INIT; no external controller grants permission.
-SIGCONT is a resumption signal, not cancellation or escalation, and shall never establish the EOF
-oracle. The guardian shall observe the already closed stream before accepting its buffered Dispatch.
-The fixture continuation shall use bounded observation within the original deadline and join during
-unconditional cleanup. Failed stop/state validation, publication, continuation or resume shall
-record typed coordination failure and trigger owned cleanup, never a passing fixture or platform
-skip. Urgent deadline/resource/identity cancellation retains its authority while INIT is stopped.
-
-Linux namespace/pidfd/stream probes measured owner stop, positive `T` state, queued Dispatch
-followed by exclusive lease close, resume, EOF alongside buffered bytes and confirmed INIT
-termination. These facility observations establish feasibility only; the unconditional Rust
-publication/continuation and production guardian oracle remain unimplemented and require actual CODE
-verification.
-
-The external test harness owns the AC-24 predicate and evaluates it after the operation returns
-following unconditional cleanup, using only sealed observations taken before escalation. For
-pre-Dispatch it requires the sealed close-before-publication ordering, confirmed INIT termination
-before escalation and no production backend marker. For post-Dispatch it requires confirmed INIT
-termination and a dead pinned worker which positively acknowledged startup, both observed before
-escalation. Escalation-required, unavailable observation and a live worker fail the predicate;
-subsequent cleanup success cannot change those observations. The library supplies raw facts, not a
-fixture verdict or fabricated proof evidence.
+The external harness shall require actual original I termination before escalation and no backend
+Dispatch/marker for pre-Dispatch EOF cancellation; post-Dispatch it shall additionally require the
+formerly live positively acknowledged worker dead before escalation. It shall independently reject
+ignored EOF and skipped actual lease close, not merely missing or reordered publication. Later
+cleanup shall not repair a failed pre-escalation predicate. Immediate private observation results
+remain legitimate control flow, but transported copies shall not replace independent kernel
+observations or identify the cause of death. Restored controls and separate containment/session/
+positive-Dispatch/startup-order mutants remain owed. All evidence remains PLANNED/UNRUN.
 
 The packaged caller fixture, library and real helper shall use the same normal, non-`cfg(test)`
 library artifact. The fixture build shall select the package helper from the consumer manifest using
@@ -1352,36 +1323,27 @@ outer cleanup. That Test remains owed until genuinely executed; source Analysis 
 neither its completion nor sampled-membership-mutant runtime credit. No sampling pause, new
 control-kill seam or impossible child-absence acceptance precondition is allocated.
 
-The operation shall return immutable raw observations and separate cleanup results without judging
-an oracle. O shall produce confirmation records ONLY from actual retained-I pidfd poll returning IN
-and actual retained M Child wait/reap returning Some(status), and actual matching seal/gate-close
-boundaries. I-IN is a confirmation witness; I termination authority remains the original C lease
-EOF under AC-24 and existing owned cancellation. I stays INIT after Completed until that EOF;
-Completed shall never be treated as I exit. A token, boolean, eventual dead pin or monitor pidfd
-readiness shall not supply the missing actual operation. Each record shall be bound to the same
-authenticated original run, retained role ownership/report capability and bounded producer order.
-C receipt timestamps or later fill shall not establish O's order. Unavailable, duplicated,
-overflowed, wrong-run or unbound observations shall yield typed fixture failure.
+The harness shall independently verify actual retained-I pidfd termination confirmation and actual
+retained M Child consuming wait/reap strictly before the matching kernel report seal. Actual original
+I stays INIT after authenticated Completed until lease EOF or existing owned cancellation; Completed,
+phase, a token, stored category or eventual dead pin shall not prove the earlier operation. I
+termination authority remains the original C lease EOF and existing owned cancellation.
 
-The harness shall independently require actual I confirmation strictly before matching seal and
-actual M reap strictly before that seal. The I adverse case shall fabricate successful IN while
-retained I is positively live; fabricated early InnerSettlement/seal shall not be accepted while
-claimed descendants live. The M adverse case shall fabricate successful reap while the actual
-retained Child remains unreaped. Each mutation shall change ONLY the underlying call or result;
-record-emission and independent source-check code shall remain byte-unchanged. Source Analysis
-shall define and verify that mutation boundary. A record minted from fabricated success shall fail
-its genuine-operation predicate; deleting the record alongside the call shall not count as a
-passing mutation test. Independently moving real I poll or real M reap after matching seal shall
-fail strict order even when its positive record exists. Restored actual operations before seal
-shall pass. No generic combined settlement token shall satisfy either independent predicate.
+Fabricated live-I IN and fabricated M Some(status) with actual M unreaped shall independently fail
+while the underlying call/result alone is mutated. Any independent observation/checker shall remain
+unchanged; a test that deletes its evidence together with the operation shall not count. Real I poll
+or M reap moved after report sealing shall fail strict order, not pass because an ordinal says so.
+No emitted record subsystem or synthetic settlement token is allocated to establish these facts.
+If independent operation/order observation cannot be constructed, that Test remains UNBACKED.
 
-The retained-gate case shall separately require positive owned I termination while the original
-gate remains retained, followed by actual gate close. Early close and omitted I-confirmation
-mutants shall independently fail with record-emission unchanged. Absence of a backend marker
-shall not prove order. The independent ignored-inner-lease-EOF mutant shall remain required and
-shall never be paired with another mutant or rescued by outer cancellation. O's independent
-AC-77 post-COMMIT cancellation remains required on a genuine exhausting tick, but its caused
-termination shall never satisfy the ignored-inner-lease-EOF predicate or supply lease-EOF evidence.
+The retained-gate case shall separately require actual owned I termination confirmation while the
+original O gate is retained, followed by actual gate close. Early-close and omitted-confirmation
+mutants remain independent and shall not pass from marker absence or later teardown. A cached C
+phase or serialized gate-retained flag cannot establish this predicate. Genuine bounded production
+signal/confirmation/close integration remains owed, as does an independent witness of that actual
+order. No feature-only kill authority, pause or replacement gate transport is allocated.
+The ignored-inner-EOF mutant shall remain separate and unrescued by outer cancellation. AC-77's
+post-COMMIT cancellation remains required but its termination shall never supply lease-EOF evidence.
 
 Every original assertion, adverse patch and FR-028-AC-21/FR-017-AC-24 trace obligation shall remain
 until measured replacement parity. Parity requires restored controls to pass and each named
@@ -1395,10 +1357,10 @@ control is claimed. Replacement trace bindings shall transfer
 only with full genuine original assertions; no partial test may bind an entire mixed criterion.
 
 The fixture shall immediately invoke unchanged owned cleanup after observation success, refusal
-or error, and return no cleanup-deferring callback/process handle. Bounded read-only publication
-shall observe the same unconditional operations; fixture selection shall not change authorization,
+or error, and return no cleanup-deferring callback/process handle. Independent behavioral checks
+shall observe the actual unconditional operations; fixture selection shall not change authorization,
 cancellation, ordinary ticks or production stages. No controller pause or production callback is
-allocated. Before fixture CODE, actual event sources, mutation boundaries, integrated schedule,
+allocated. Before fixture CODE, actual kernel observation sources, mutation boundaries, integrated schedule,
 coordination/storage bounds and simultaneous charged lifetimes shall be grounded. No current
 operation token or stage ordinal is claimed to provide those capabilities. A dedicated off-default,
 noncaller-tunable coordination bound shall be justified by real one-child birth/identity/live-pin
@@ -1498,168 +1460,75 @@ A complete conservative-charge observation shall cover every named formula term 
 owned tree; it is not whole-C memory or a complete caller runtime allocation bound. No whole-C RSS
 proxy, requested-stack proxy, raised budget or fallback shall supply missing named accounting.
 
-### Feature-only stage-2 observation transport
+### Retirement of stored lifecycle certificates
 
-Where guardian-test-support is enabled, the single fixture operation shall use the genuine C owner,
-matching normal helper and unchanged L/O/M/I transitions. This slice specifically qualifies the
-prior exclusion "No DTO, hook, new right, public role field or runtime implementation is delivered
-by this allocation": it allocates the private observation DTO/result extension and one pipe write
-right described here; it delivers no implementation or new public role/authority handle. The sole
-feature-on exception to the earlier no-production-stage-feature-branch and no-I/O rules shall cover
-only C's named binding emission on the existing C/O control, O's binding decode/authentication/receive
-and exclusive right retention, proven-safe feature-only SIGPIPE setup, O's parent-side M provenance
-checks described below, and fixed event capture/nonblocking writes with their observation-fault
-latch. These changes shall be absent from feature-off consumers and helpers. Existing monotonic
-stage publication shall remain unconditional and without I/O, callback, handoff or pause. Feature-off
-stages/frames shall remain unchanged. None of these feature-on changes shall replace an operation,
-supply a substitute actor/identity, choose production control flow or alter cancellation, sampling,
-classification, ownership or original cutoffs.
+The former Stage2ObservationRecord, five-event slots/codec, producer ordinals, separate copied
+completion carrier, observation pipe and Stage2ObservationBinding writer transfer are retired.
+Their sole-purpose early MonitorSpawned report-identity field, decoder branches, endpoint mappings,
+profile-query storage and native workspace shall be removed with them. No replacement record,
+DTO, right, channel, ACK, callback, timer, cap or certificate is allocated. AC-78 through AC-100
+retain their identifiers below with explicit amended obligations; this retirement grants no CODE
+or runtime completion. Historical review findings/dispositions remain historical data.
 
-For the live Stage2 birth and retained-gate scenarios, C shall create one anonymous observation
-pipe before L creation. C shall privately retain the sole read endpoint and sole write endpoint.
-C shall retain the writer until its actual original owner has completed authenticated O Armed
-binding to retained L, original build/run, translated identities and namespaces. For the birth
-scenario, C shall additionally wait for genuine adopted-orphan acknowledgement and retained live
-worker identity before transfer. C shall send the writer directly to O in the NEW feature-only
-`Stage2ObservationBinding` envelope on the EXISTING trusted C/O control transport. That envelope
-shall carry original build/run/report binding, the selected typed scenario and exactly one write
-right, with no read right. C shall close its write copy only after actual transfer completes.
-L shall never receive this write right. O shall own its sole transferred writer until existing
-settlement closes it. All ends/copies shall be OwnedFd/CLOEXEC outside the intended trusted O mapping.
-No endpoint shall reach M, I, arbitrary backend, descendants, sibling exec or a public API.
+The actual original O/build/run admission, genuine I Completed reception before original lease
+close, retained report PipeIdentity and report delivery authority remain unchanged. C shall not
+infer genuine I completion from M exit, EOF, phase or constructed metadata. AC-94's close-only
+queued-claim receipt and original-cause/settlement precedence remain unchanged. Ordinary feature-on
+execution shall require no retired binding or early report field. Feature-off paired consumer/helper
+frames, bytes, rights and production control/sampling behavior shall remain unchanged, with actual
+source/artifact absence Analysis and mechanical checks required for retired items.
 
-O shall authenticate that envelope against its actual original C/run/build/report and supported
-scenario before retaining the right. No binding/right shall grant Armed, Dispatch, report,
-cancellation or cleanup authority. There shall be no reply, ACK, new channel/window/timer/cap or
-scheduling permission. With no authenticated binding, ordinary feature-on execution shall create
-no observation endpoint and emit no observation bytes; absent binding shall not be a startup
-failure. ExactDeath and independent ignored-inner-EOF scenarios shall use no observation writer.
-Feature mismatch and forbidden/wrong/extra rights shall retain existing refusal and custody rules.
+For M provenance, only the actual O parent may perform same-original-M nonblocking WNOWAIT and
+post-wait checks around its FIRST uncached retained Child Some(status). Exact original parent,
+sole-waiter history, SIGCHLD neither ignored nor SA_NOCLDWAIT and no prior consuming wait shall be
+established. The post-query ECHILD alone cannot distinguish competing waiter, auto-reap or wrong
+parent; the independent verifier shall check the actual operation and those premises. Fabricated
+Some, cached Some, competing wait, auto-reap, live None and a bare or unconsumed zombie status
+shall not satisfy genuine consuming-reap provenance. A waitable zombie positively established by
+same-child WNOWAIT shall pass the restored control when the actual parent's FIRST uncached Child
+Some performs its consuming reap and the independent post-query returns ECHILD under the established
+sole-waiter/disposition/history premises. No stored event or copied history provides this proof. Safe method and
+production-profile feasibility remain PLANNED/UNRUN; the controlled standalone probe supplies no
+production or mutation credit.
 
-C's private reader shall accept frames only after its actual Armed binding and completed writer
-transfer. The capability transfer makes pre-Armed O emission impossible: O has no writer then.
-Reported PIDs/epochs, receipt timestamps or packet assertions shall not establish that boundary.
-The harness shall reject unexpected pre-transfer bytes and independently verify the original
-endpoint's ownership/transfer history; it shall not infer a write epoch from later pipe receipt.
-C shall return only immutable raw records and cleanup results, never endpoints or control handles.
-Caller-only reporter exclusion and the original fixture operation's public surface remain required.
+Every due complete ordinary sample, original control transition and cutoff shall continue without
+observation permission or suppression. Real adopted-orphan acknowledgement, actual release-dependent
+birth after a complete ordinary sample and BOTH live/dead pinned identities remain independently
+owed under AC-51/92 and AC-8/10. This amendment does not provide a new sample-announcement mechanism
+or coordination capability. Missing construction remains UNBACKED; it never permits a synthetic
+sample or paused tick. Actual I/M/report/gate operations and all named adverse/restored controls
+remain required before measured replacement parity and transfer of old trace bindings.
 
-After accepting a birth binding, O shall select the NEXT completed ordinary accounting tick after
-that acceptance for `OrdinarySampleCompleted`. Because C transfers only after genuine adopted-worker
-acknowledgement, this tick follows that acknowledgement. Receipt selects an observation, not a tick:
-O shall preserve every due tick before, during and after partial/full binding reception. The existing
-finite C/O receive cursor remains the sole cursor; partial frames shall retain accounting/cutoff
-and existing I-transition rules. The CODE author shall establish actual receive-state feasibility
-while I lives before claiming this construction; a phase/cursor incompatibility shall block CODE,
-not authorize a new channel, pause, callback or synthetic sample. C shall release the same worker
-only after validating this selected sample. O shall not select the first startup/Armed tick or a
-sample predating binding. The dedicated positive-birth coordination bound remains separately owed.
+Removing a sole-purpose allocation shall remove its charge only when its actual allocation and
+all overlapping lifetimes disappear. All surviving reporter, control/capture, identity, parser,
+query and native storage shall remain charged before exposure through the existing named formula,
+actual capacities and independently declared native-workspace proof. C's named storage shall remain
+caller_run_buffers, O's storage owned_RSS, and every retained pipe/backing reservation shall remain
+actual and additive. No logical length proves capacity; no feature-off proof backs retained
+feature-on workspace. Missing initializer/highwater, capacity or simultaneous-lifetime proof leaves
+conformance UNPROVEN. No new cap, charge term or allowance is allocated.
 
-For the retained-gate scenario, O shall accept and authenticate the binding while the actual original
-gate remains retained, before the genuine cancellation initiating operation and before InitConfirmed
-or GateClosed capture. The fixture shall establish this acceptance in the same original owner/cursor
-construction; queued transfer or C's completed send alone shall not prove O acceptance. The CODE author
-shall establish both this held-gate receive construction and IR639 CODE integration of genuine
-bounded C cancellation initiating retained-I signal/confirmation/gate close under the existing
-AC-8, AC-10 and AC-54 teardown/order obligations and original cutoff. This is a CODE prerequisite,
-not a new feature-only kill, control or authority allocation. Generic startup auto-release and a cancellation path that
-merely waits for lease EOF shall not substitute for that construction. Missing feasibility blocks
-retained-gate fixture CODE, never authorizes an ACK, pause, extra channel, timer or changed production
-cancellation. Birth receive-state feasibility and retained-gate acceptance/cancellation feasibility
-are separate owed checks; neither shall borrow the other's proof.
+### Conditional signal safety without certificate writes
 
-The closed private `Stage2ObservationRecord` shall carry existing fixed BuildIdentity, RunAuthority,
-matching report PipeIdentity, retained O process facts and a checked producer ordinal. Process facts
-shall use the original observer-visible PID/start and explicit PID namespace associated with an
-actual retained pin. Gate/backing facts shall use the original retained endpoint device/inode.
-PIDs/native widths shall be checked; start/device/inode/bytes/tick/ordinal fields shall use checked
-unsigned 64-bit encoding. Unavailable translation shall fail the fixture, never reinterpret O PID1
-as a caller-visible host identity. Facts shall contain no handles, paths, strings, diagnostics or
-variable collections. Actual outcome/stop/seal fields shall use owning closed typed representations.
+This amendment removes the sole-purpose observation writer, not the safety condition on any
+remaining optional fixture write. No new write or signal policy is authorized. If such an existing
+write is exercised, actual original O shall be proven SIGPIPE ignored AND unblocked, independently
+untraced across PID namespaces, single-threaded and free of competing signal consumers, with stable
+disposition/mask/tracing state through each write. Authenticated same-O proc identity, SigIgn,
+SigBlk, SigPnd, ShdPnd, TracerPid and task/thread facts shall be completely checked. Private-proc
+TracerPid zero may hide an ancestor tracer; independently checkable initial-state evidence valid
+across PID namespaces is required. Inherited/default disposition, one snapshot, source absence of
+thread creation or socket NOSIGNAL alone shall not establish eligibility.
 
-| Event | Actual boundary payload |
-|-------|-------------------------|
-| `OrdinarySampleCompleted` | Selected next ordinary tick's actual complete-formula charged bytes and tick identity after observation returns. |
-| `InitConfirmed` | Retained claimed I identity and actual pidfd poll-IN confirmation. |
-| `MonitorReaped` | Retained M identity and actual FIRST uncached Child Some(status) with independently established consuming-wait provenance. |
-| `ReportSealed` | Matching actual report backing identity and immutable seals after actual sealing. |
-| `GateClosed` | Original retained gate identity at its actual endpoint close. |
-
-O shall emit each applicable event at most once. The verifier shall require the events applicable
-to its selected scenario and reject missing/duplicate events. O shall capture each payload/ordinal
-at the actual boundary before transmission; checked ordinal overflow shall fail the observation.
-A single owning declaration shall define the five event kinds and their fixed layouts. Frames shall
-have a fixed closed discriminant and fixed-width little-endian scalar payload with zero-validated
-unused variant space. Event frames shall carry no ancillary rights. The reader shall reject unknown
-kinds, incomplete frames, invalid widths/unused space, wrong identity or more than the five events.
-EOF shall not supply an event. No record, token, reported boolean or later dead pin shall prove a call.
-Independent I/seal/gate checks and unchanged-emission fabricated/late-operation mutants remain owed.
-The CODE author shall prove actual frame fit within the pipe atomic-write bound before delivery;
-the CODE reviewer shall reject missing proof rather than permit fragmentation, a new cap or fallback.
-
-For a genuine M-reap witness, O shall perform the parent-only checks on its actual retained direct
-M Child. O shall establish its exact original parent identity and sole-waiter history, with SIGCHLD
-neither ignored nor SA_NOCLDWAIT, and reject any prior consuming wait before FIRST uncached Some.
-O shall use a nonblocking same-child waitid(WNOWAIT) to positively establish waitability before the
-actual consuming Child wait, then make the independent same-child nonblocking query that returns
-ECHILD after that actual Some. The feature-only MonitorReaped payload shall retain these fixed
-operation facts and their checked order, bound to the same original M PID/pidfd, O parent and run.
-No additional event kind or variable history is allocated. The independent fixture verifier shall
-check the bound O-side observations and checker implementation/mutation provenance; it shall not
-issue waitid on non-child M or interpret its own ECHILD as proof of O's reap. O's checks shall remain
-independent of the mutated consuming-wait result and unchanged record emission: fabricated Some,
-cache hit, competing waiter, auto-reap, live None and zombie Some shall not pass the genuine predicate.
-A record alone shall not establish those operations. Missing genuine provenance shall fail the
-fixture, never borrow eventual death. Safe nonblocking methods, actual parent/disposition/history,
-fixed capture storage and production operation order remain PLANNED CODE gates. The controlled
-standalone M probe proves none of those production predicates.
-
-C shall retain fixed `Stage2AuthenticatedCompletion` only from its original authenticated I/C
-Completed reception, with actual outcome/original stop and retained I/build/run/report binding.
-C shall retain that separate carrier before original lease close. M exit, EOF, phase, O records or
-constructed metadata shall not populate it. The carrier shall remain provisional observation only;
-it adds no I frame, response, public control handle or result authority. C shall seal a missing or
-invalid completion as fixture failure before immediate unchanged cleanup. Existing BOTH live/dead
-pins before escalation, separate outer confirmation and original assertion/mutant parity remain owed.
-
-O shall latch full/EPIPE/other observation-write failure, disable further observation writes and
-continue the same ordinary production sampling/control/settlement path. Observation failure shall
-never initiate O cancellation, I signalling, early exit or outer escalation. The CODE author shall
-establish a proven-safe feature-only SIGPIPE suppression mechanism before any pipe write, including
-pending-signal/cleanup behavior; inherited disposition and socket MSG_NOSIGNAL shall not supply that
-proof. O shall not let SIGPIPE terminate it or rescue an ignored-EOF mutant. Missing proof blocks
-fixture CODE; no new global signal policy or blanket production suppression is allocated. C shall
-seal missing/partial/failed observations as typed fixture failure before ordinary cleanup, never
-claim successful EOF cancellation from that cleanup. No later outer teardown repairs a failed oracle.
-
-C/O shall use five count-sized fixed event slots, one in-progress fixed frame and fixed binding/
-completion metadata, with no heap event history or dynamic error source. The CODE author shall
-inventory actual simultaneous lifetimes and checked fixed/encoded/native storage before exposure.
-C's actual named heap/metadata/native storage shall enter caller_run_buffers before L creation;
-O's actual storage remains in owned_RSS. In feature-on bound scenarios, pipe_reserve shall be the
-sum of the existing report-pipe reserve and this observation pipe's actual page-rounded F_GETPIPE_SZ
-reservation, measured before writer exposure with the same enforced no-growth obligation. There
-shall be no separate formula term, configured-cap proxy or raised allowance. This feature-on-only
-charge may legitimately move a near-ceiling run to MemoryExhausted; its outcome shall not substitute
-for feature-off production acceptance or be hidden to preserve a test result.
-
-The CODE author shall supply separate feature-on paired-consumer/helper native-workspace Analysis
-using the supported-build methodology, its exact feature-on roots/flags/runtime and an independently
-declared finite charge. Feature-off proof shall not back that Analysis or the observation workspace.
-This obligation does not expand IR-682's supported production configuration. Unknown actual capacity,
-initializer/highwater or simultaneous lifetime shall leave the feature-on bound UNPROVEN and block
-fixture conformance. No numerical byte/native reserve, timer, coordination cap or new budget is
-allocated. Actual preparation/transport failure shall retain original custody and cutoff.
-
-When guardian-test-support is disabled, the observation types, binding decoder/frame/right mapping,
-pipe creation, events, completion carrier and producer/reader branches shall be absent. The CODE
-author shall provide final supported-source/artifact Analysis and extend the feature-off mechanical
-consumer/helper checks to these helper-side items, beyond public operation nonavailability. The
-independent CODE reviewer shall check that proof. Separate matched normal-library feature-on/off
-invocations and IR-649's downstream production-feature exclusion gate remain required. All runtime,
-transport, SIGPIPE, capacity/native and independent-operation evidence is PLANNED/UNRUN; schema tests,
-method rows and research probes supply no completion credit. This slice leaves all base assertions,
-production controls, original cutoffs, namespace API migration and FR-028-AC-21/FR-017-AC-24 intact.
+Actual normal-helper live-reader/broken-reader controls, complete supported kernel/syscall/runtime
+configuration, permission and full accounting/native-overlap proof shall precede positive writing.
+Default, caught, blocked, traced, multithreaded, changing, malformed/missing/unavailable or unproved
+profiles shall permit no write and leave ordinary sampling/control/settlement and cutoff unchanged.
+No handler installation, mask change/restoration, pending drain/recreation, global policy or new
+transport is allocated. Preexisting foreign-origin pending signals shall remain unchanged. An
+optional write fault shall not terminate O, change cancellation or rescue the ignored-EOF mutant;
+missing independent signal proof leaves eligibility UNPROVEN/no-write. These conditional obligations
+remain PLANNED/UNRUN and confer no activation or fixture acceptance credit.
 
 ### Supported-build proof of named native workspace
 
@@ -1957,21 +1826,21 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-20 | Guardian connection, startup, identity verification and Dispatch use the original monotonic identity deadline without resetting it. An already expired deadline causes no Dispatch and settles inconclusive with the timed-out reason as FR-028 AC-2 states; actual identity-deadline expiry during setup or execution uses the same classification. | Test |
 | FR-034-AC-21 | Guardian connection and handshake have a finite setup cap within the remaining original deadline. Cap expiry while that deadline remains live is a typed setup refusal, distinct from identity-deadline timeout. | Test |
 | FR-034-AC-22 | Control/capture shutdown and cleanup observation waits have finite bounds. Unconfirmed termination refuses with a live caller rather than accepting a proof or claiming physical disappearance of an uninterruptible task. | Test |
-| FR-034-AC-23 | Caller-death fixtures invoke the real matching package guardian from the owning target directory. Feature-on fixtures select shared prefixes as data at BeforeMonitor/NoInit, Bootstrap/InitUnclaimed, ClaimedGated, ClaimedBootstrap and InitReady before exact-boundary caller/group self-kill. Bootstrap transfers one actual monitor pin and Tests only its stage, caller/monitor death, closed gate/lease ownership and no marker. Stage facts alone do not measure outer/inner teardown; AC-31 independently requires exact-boundary whole-tree verification. Claimed prefixes retain one validated INIT pin and require actual INIT termination; NoInit fabricates none. Feature-off public fixtures use a positive production backend marker for immediate post-Dispatch death. No production bypass, sleep-based success or host-scan authority participates. | Test, Analysis |
-| FR-034-AC-24 | Removing lease-EOF cancellation fails pre-Dispatch closed-lease pending-authorization and post-Dispatch surviving-descendant assertions driven by production close_lease_and_observe. Its consumed CallerLease closes independently of live RunOwner monitor/INIT handles. The guardian-test-support fixture operation seals raw LeaseCloseObservation and owned worker/marker observations at the real private boundary before unconditional production cleanup or emergency cleanup. The test harness requires pre-Dispatch confirmed INIT termination with no marker, or post-Dispatch confirmed INIT termination with a dead pinned positively acknowledged worker, all observed before escalation; escalation-required is a failed EOF-cancellation oracle even if later cleanup kills the worker. Pending authorization is ordered by fixture-owned pidfd SIGSTOP and positive T state, queued Dispatch, actual lease closure with unconditional private LeaseClosing publication, then owned continuation SIGCONT. SIGCONT never satisfies the EOF predicate. The sealed publication snapshot must contain an actual completed-close ordinal strictly below its publication ordinal; absent/inverted order fails independent of continuation scheduling. Publication-before-close, missing-publication and skipped-lease-close mutants must fail their named ordering/observation/EOF predicates. The unchanged production frame-send step queues bounded nonblocking Dispatch separately from ACK waiting; fixture-written frames are forbidden except the explicitly allocated guardian-test-support Stage2ObservationBinding on the existing C/O control transport. This observation-only exception cannot fabricate or replace the original I/C Dispatch frame. Separate mutants remove positive Dispatch, replace PID1 with a non-INIT watcher, remove session isolation and break startup close/reap ordering. Restored controls pass. | Test |
+| FR-034-AC-23 | Caller-death fixtures use the actual matching normal helper and shared production functions/order with bounded prefix selection as input only. Actual caller/group death is followed by independent original owned M/I pidfd termination, no backend Dispatch/marker and no leaked owned inner processes before emergency cleanup. Unclaimed Bootstrap supplies no invented INIT pin or teardown credit; AC-31 remains independently owed. Cached prefix or gate-retained metadata proves no live gate. Feature-off positive post-Dispatch controls remain required. | Test, Analysis |
+| FR-034-AC-24 | Actual lease-EOF cancellation passes independent original I termination and no backend Dispatch/marker before escalation, plus death of a positively acknowledged pinned worker after Dispatch. Ignored EOF, skipped actual lease close, removed positive Dispatch, non-INIT watcher, broken session isolation and startup-order mutants independently fail their genuine predicates; later cleanup cannot rescue them. The immediate private LeaseCloseObservation remains control flow, not a stored certificate. Stopped-I pending-authorization coordination remains owed without close/publication snapshots or ordinals; unavailable construction is UNBACKED and cleanup must not strand I. Fixture-written production frames remain forbidden. Restored controls pass. | Test |
 | FR-034-AC-25 | Before backend Dispatch, the helper handshake matches the actual running CG library's build, protocol and lifecycle-capability identity against the actual invoked first-party executable. A stale helper or changed lifecycle implementation refuses, even if a caller supplies a matching version label or digest. Expected identity derives from actual library/helper build artifacts, not caller assertions or manually maintained tracking pins. | Test |
-| FR-034-AC-26 | The guardian's host session and process group are distinct from the original caller's before Ready and backend Dispatch, with no controlling-terminal job-control delivery from that caller's session. Feature-on exact-prefix fixtures kill the caller's whole group before Ready and at InitReady; feature-off public fixtures kill it immediately after positive post-Dispatch startup. Unclaimed Bootstrap records only actual caller/monitor death, no backend marker and closed gate/lease ownership; it does not itself measure outer/inner INIT teardown; AC-31 supplies that independent mandatory gate. Later claimed-INIT termination guarantees remain required; after session isolation guardian lease cleanup remains operational. A directly killed guardian still triggers kernel namespace teardown. | Test |
+| FR-034-AC-26 | The guardian session/group is distinct from the original caller before Ready/Dispatch. Real feature-on caller-group deaths and feature-off positive post-Dispatch death controls require independent owned termination/no backend/no leaked processes. Unclaimed Bootstrap cannot infer I death or held gate from monitor death or cached phase; AC-31 remains separately mandatory. Claimed I termination, operational lease cleanup and directly killed guardian kernel teardown remain required. | Test |
 | FR-034-AC-27 | guardian-test-support is off by default, absent from default features, and exposes exactly one documented fixture operation only when explicitly enabled. A feature-off consumer cannot use that operation. No public lease, process-ownership handle, cancellation entry or cleanup-deferring callback is exported. The private initialized death witness transfers exactly one actual owned monitor or validated INIT pin, with its typed authority; BeforeMonitor transfers none. Reporter startup stdout is safely duplicated into a non-stdio CLOEXEC OwnedFd and itself marked CLOEXEC before any spawn; every child stdio/mapping excludes both report descriptors. | Test, Inspection |
-| FR-034-AC-28 | The live-caller fixture seals raw stage/lease-close and pinned-worker/marker observations before immediate unchanged cleanup on success, refusal and observation failure. The intentional-death form seals/transfers its exact-prefix typed witness before self-kill and does not return; the surviving harness judges it before separate emergency cleanup. One shared all-stages/prefix-as-data sequence invokes the same functions/order. BeforeMonitor/Bootstrap/ClaimedGated/ClaimedBootstrap/InitReady/LeaseClosing publication is unconditional, monotonic and read-only, adding no production I/O, callback, pause or feature branch. LeaseClosing seals actual close/publication ordinals without late fill and follows actual close. Lost/overflowed observations, report-inheritance exclusion failure and failed coordination are typed failures. No library oracle, inferred Bootstrap INIT death or later cleanup masks either harness predicate. | Test, Inspection |
+| FR-034-AC-28 | Fixture prefix selects unchanged production transitions, never certifies live state. Actual original identity/right custody, independent pre-escalation I/worker/marker checks and immediate unchanged cleanup on success/refusal/error replace stored stage/close/publication certificates. Intentional C/group self-death follows complete bounded operational pin delivery without ACK/pause or fabricated result. Missing identity, observation or genuine coordination fails; unavailable exact early-release observation remains UNBACKED. No stored record or later cleanup repairs an oracle. | Test, Inspection |
 | FR-034-AC-29 | The packaged caller fixture and real helper link the same normal library artifact through consumer-manifest package selection with matching target/profile/features/compiler flags. Separate named feature-off/on invocations avoid self dev-dependency feature unification. No cfg-test library or identity override is accepted. The bounded executor refuses feature mismatch in both directions before Dispatch; feature-off consumer compilation verifies absence of the fixture operation. | Test |
 | FR-034-AC-30 | CG publishes the test-only feature contract and allocates production-driver dependency-edge exclusion to IR-649's QSL driver work. The contract requires all downstream production-build profiles to reject direct or transitively unified guardian-test-support. CG inspection verifies the published allocation and checks; downstream assertion evidence is owned by IR-649. | Inspection |
 | FR-034-AC-31 | Real production fixtures fail the merged PR #295 recipe at exact post-clone/pre-internal-child_wait caller death and natural M/info-reader failure, and pass only with confirmed actual outer INIT and unclaimed inner/escaped descendant termination. Exercise C/group, L, O and I death before/after parent-death arm with positive barriers; pre-arm has no inner child and exclusive EOF gives bounded refusal. Original-exclusive-lease race, actual host/outer identity translation, mapping/private-proc capability refusal, real observer, ordinary-caller capability measurement, spawning-thread lifetime and original-deadline assertions are mandatory CODE gates, required before CODE delivery. Existing stage-only witnesses and nine scratch cases do not cover them. | Test |
 | FR-034-AC-32 | The bounded O event loop collects anonymous report pipe into memfd without a backend/collector completion wait cycle. A hard 16 MiB plus one detection-byte retention bound and the defined owned_RSS + caller_run_buffers + page-rounded F_GETPIPE_SZ + page-rounded pre-reserved memfd maximum comparison applies while writing against the original ceiling; unmapped shmem is not zero. Beyond cap yields owned cancellation and single-run KaniRunOutcome::Inconclusive with MemoryExhausted; batches keep whole-batch memory-exhausted refusal, with no member classified. Evidence names the report cap separately; FR-029 maps ResourceExhausted, never Failed or truncated acceptance. Slow/over-cap writers finish or refuse within the original deadline. Genuine installed cargo/Kani 0.68 roundtrip validates mapped FD inheritance and no seek/reread dependency; failure stops CODE pending measured spec revision, with no runtime fallback. O obtains fresh L RSS each tick from an authenticated source valid under private proc, bound to actual L pidfd/start/TGID/liveness and run authority, and receives real finite named C buffer caps from authenticated C-origin authority; setup/every-tick combination requires every input before writer/Dispatch, and missing/stale/unbound inputs refuse. The complete charge covers every named formula term and all actually observed owned roles/descendants, including L; only incidental caller-process allocations outside named terms are excluded, with named caller controls/captures still capped and charged. PreRoleTimeout covers both original-expiry and workdeadline pre-role timeout stops without changing outcomes or settlement. Every emitted evidence carries mandatory `charged_peak: ChargedPeakObservation`: `Observed { bytes }` only from the actual complete O conservative-charge peak, otherwise `NotObserved { reason }` only for `PreRoleTimeout` or `StartupTimeoutBeforeObservation` as allocated above. Startup timeout with an actual complete sample uses Observed; post-Dispatch evidence requires Observed, and absent measurement is execution error with no evidence. No zero/default/cap/C-RSS proxy or changed AC-20 classification is permitted. | Test |
 | FR-034-AC-33 | Authenticated Completed precedes original-lease close, confirmed inner teardown and M termination/reap closing ALL pipe writers, including reopened procfd and descendant copies. Bounded actual-EOF drain precedes immutable WRITE/GROW/SHRINK/SEAL seals, consumer F_GET_SEALS verification and stable actual OwnedFd reads, all under the original deadline. Separate final control/report delivery remains live after lease close. Pre-Completed reader failure cancels O/I. All storage-owner death reclaims backing at final close without persistent report residue or surviving-owner dependence. Inheritance, seal race, concurrent accounting and all-owner-death gates are required before CODE delivery. | Test |
-| FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks the sealed AC-24 pre-escalation EOF oracle; ignored-EOF still fails its named raw predicate before cleanup. Missing conservative backing accounting or immutable sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
+| FR-034-AC-34 | Live-C production close_lease_and_observe retains L/O/M/I ownership and final report control independently of consumed original lease. No outer kill, bootstrap EOF or parent-death cascade masks AC-24's independent pre-escalation EOF and termination checks; ignored-EOF still fails its named actual-behavior predicate before cleanup. Missing conservative backing accounting or immutable kernel report sealing gives typed refusal and owned cancellation. All roles, private namespace/proc setup, controls, report backing and observation use existing whole-run ceilings and original deadline, with no reset or observation gap. | Test |
 | FR-034-AC-35 | PLANNED/UNRUN. L creates private network/root before O, O validates before M, and nested bind / / refers to confined O root. Safe backend-only seccomp/privilege installation before Dispatch preserves the same positively owned PID and original recipe, with no unfiltered Dispatch or extra surviving process/ownership/deadline; policy installation failure is pre-Dispatch, actual recipe exec/failure is post-Dispatch with existing bounded handling/no fabricated evidence; trusted installer starts in sanitized loader environment and restores original backend environment only at filtered recipe exec; I/O/M remain outside that filter. Continuous AF_UNIX socket/datagram-socketpair, legacy syscall/ABI/io_uring and inherited-endpoint exclusion prevents host-peer acquisition/export throughout writable shared source/target/cwd paths, including listeners created after Dispatch. AC authority requires the same real backend unconfined positive control to connect/export at that visible shared prefix; confined real attempts and a genuine omission mutant distinguish protection from absent listeners. Anonymous local stream socketpair IPC remains admitted. Safe-boundary feasibility and genuine installed Cargo/Kani under the actual filter are decisive UNRUN gates; incompatibility stops CODE for SPEC revision, no relaxation. Required capabilities fail through typed pre-Dispatch unavailable admission regardless errno with confirmed owned cleanup; successful admission followed by missing cache/denied rendezvous build failure retains FR-017 NoVerdict and resource precedence. All old contained-death/writer/EOF/seal/deadline/lease obligations remain mandatory. | Test, Analysis |
 | FR-034-AC-36 | PLANNED/UNRUN. C inventories actual backend fd0/fd1/fd2. Real OriginalStdin::Open socket input and failed fstat inspection refuse before Dispatch; actual production fd1/fd2 are capture pipes verified by mapping/inventory Analysis, not caller socket cases. Caller fd0..2 stability throughout setup is a trusted precondition; observed capture inconsistency refuses, with no claim to detect every ambient mutation. C internally captures/pins OriginalStdin before child/control fd reuse, without a public request field; authoritative initial absence/CLOEXEC yields Closed, while later Open inspection EBADF refuses and never creates Closed admission. Pipes/files/terminal/devnull input, original argv0/non-report argv/environment/cwd and captures remain unchanged; C-only AC-27 reporter is excluded from backend stdio. Admission routes BoundedLaunchError::Unavailable regardless errno to the same MemoryMechanismUnavailable with original io::Error cause and mandatory KaniStartupAdmissionCause, distinguishing BackendStdioSocket, BackendStdioInspectionFailed and CapabilityUnavailable from MemoryEnforcement. Planned public rustdoc documents the caller stability precondition/setup window and observed-only capture refusal; target type/device/inode, original O_ACCMODE and FD_CLOEXEC are compared separately from proc-link presence; mutable shared-OFD status flags neither trigger instability refusal nor get rewritten. Planned docs/Display cover bounded startup/input prerequisites, not false missing-memory diagnosis. code()==None; no execution evidence/kind, outcome or fabricated terminal/Failed. Original expiry retains its classification. | Test, Analysis |
-| FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces final EOF/seals/delivery or the unchanged pre-escalation lease oracle. | Test |
+| FR-034-AC-37 | PLANNED/UNRUN. Trusted I retains its exclusive lease through Dispatch; O retains separate final delivery after original lease close. All bootstrap/ownership/report/reporter controls remain owned/CLOEXEC outside intended mappings and unavailable to arbitrary backend, sibling exec and descendants. I confirms non-dumpability after final credentials and backend cannot hold or regain CAP_SYS_PTRACE in I owning user namespace; real backend /proc/1/fd, pidfd_getfd and ptrace gates prove protection independently of host Yama. Actual leaked-control/protection mutants fail before emergency cleanup; restored protection passes. A uniform outside-host independent-authority-theft exclusion applies to all channels without excusing contained acquisition/export or dynamic shared-path peers. No early owner-channel closure or blanket sendmsg denial replaces actual final EOF, kernel report sealing and delivery, or the independent pre-escalation lease checks. | Test |
 | FR-034-AC-38 | PLANNED/UNRUN. Named fixed SETTLE_RESERVE R is measured/rounded; its finite effective reserve stays inside original whole T; short finite ceilings stay admitted with R_eff=min(R,T/2), no minimum-budget cause. At finite workdeadline=T-R_eff stop/cancel; normal returns positively settle/reap all owned roles, captures and existing creator thread by original T before conclusions; original None/overflow never-elapsing work remains admitted and FIRST actual stop starts one R settlement deadline. Confirmed workdeadline expiry preserves existing TimedOut classification naming T; unconfirmed settlement by the applicable deadline overrides every candidate with Err(Guardian { kind: CleanupUnconfirmed, detail }), code()==None, no evidence/verdict/outcome/cleanup claim. No phase/reset/post-expiry grace extends T or whole-run ceilings. Detail is at most 4096 UTF-8 diagnostic-only bytes, never parsed/authority. GuardianFailureKind is non-exhaustive with only CleanupUnconfirmed allocated here; every other failure retains the table's existing public mapping. No new post-return custodian or error-owned cleanup; an exceptional existing kernel-stuck unjoined creator role is truthfully reported/relinquished, never claimed joined/retired. Kernel signal/namespace teardown permitting confirmation by T is an explicit fault precondition, not diagnosed from timeout. Public bounded rustdoc explains both fault preconditions, finite R_eff/None stop-trigger settlement deadlines and classifications. Independent positive timeout/settlement and unavailable-confirmation adverse gates remain UNRUN. | Test, Analysis |
 | FR-034-AC-39 | PLANNED/UNRUN. Native guardian/backend-installer policy support is source/cfg Analysis; unreachable unsupported-native support is not a fabricated runtime Test. Actual installation failures are separate production Tests when available, otherwise unavailable/UNRUN with no Test completion credit. Planned mandatory admission context distinguishes BackendIpcExclusion capability support/filter installation from TrustedOwnerProtection privilege installation, retaining typed cause provenance without message parsing or fabricated errno. The policy terminates the calling process on an unsupported syscall audit architecture; every native x86_64 policy also terminates it for x32 syscall-number/aliases regardless of kernel x32 support. Native entry, exec and descendants retain these rules. Real applicable compat/x32 tests require an unconfined actual-syscall effect control and genuine omission mutant; unavailable workload/tooling/kernel controls yield zero whole-criterion completion credit, not assertion-skipping success. This establishes no immutable target-image identity or universal incompatible-image exec/entry rejection. Actual unsuccessful/no-report termination retains NoVerdict after whole-chain settlement and existing deadline/capture/resource precedence; CleanupUnconfirmed and all other report rules remain unchanged. Path/content/PATH/interpreter/loader/binfmt_misc residuals add no stability precondition, recipe change, descriptor leak or unfiltered retry. | Test, Analysis |
 | FR-034-AC-40 | PLANNED/UNRUN. Only declared trusted role/operation/phase causes use the cross-role representation. Actual kind/errno, independently authenticated optional finite provenance and loss survive privately; public projection applies only to existing io::Error-cause-bearing refusals. Post-admission observation/settlement detail-only results keep their existing shape/mapping, private finite facts/loss and diagnostic-only text, with no public marker/carrier/downcast promise or Tool reclassification; generic original custom sources/chains are lost explicitly, including valid original boxed declared operational categories but excluding required encoding/checking faults, with typed public KaniCrossRoleCauseLoss detectable by get_ref/downcast on no-errno opaque projections. Loss-free OS and payload-free causes remain unmarked; OS projection preserves public errno directly. The closed named-kind domain requires exhaustive actual sender/build source Analysis before CODE delivery; adding an emitted no-errno kind requires producer-side reviewed encoding support first. Genuine admission errors keep site-first Unavailable regardless of kind/errno; a complete bounded authenticated required-representation fault report with no prior representable original cause gives actual InvalidData/no-errno integrity in an existing I/O-cause-bearing result (no loss marker), retaining the actual sender predicate, not original replay; absent reports supply no invented received fault; unknown/malformed/incomplete cause metadata at an independently authenticated negative admission site yields Unavailable with that site's admission context and actual local InvalidData/no-errno KaniCauseMetadataIntegrityError recognized by get_ref/downcast, not original producer replay or a loss marker. Genuine original payload-free/local custom InvalidData must not be misidentified as integrity by kind or source-presence heuristics. Unauthenticated site faults retain the specified startup/protocol path; no Dispatch or evidence. Optional diagnostic failure preserves the retained original cause. Actual producer conversions determine kind/source presence without normalization or allocation-kind/layout inference. Local original sources, stronger AC-39 public-source/provenance duties, existing charges, cutoffs and settlement precedence remain. Public API/refusal rustdoc states the existing I/O-cause-carrier scope versus private-only detail results, get_ref/downcast detection of both KaniCrossRoleCauseLoss and KaniCauseMetadataIntegrityError, required sender-representation fault recognition versus valid original causes, and absence of an original-source/stage-query promise for those projected types. Standalone Analysis and genuine available transport/consumer Tests remain PLANNED/UNRUN with no prior-row credit, forced allocation failure, new refusal catalog, acknowledgment, budget or NotObserved reason. | Test, Analysis |
@@ -1986,9 +1855,9 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-49 | PLANNED/UNRUN (IR-682). A change to the source head, resolved consumer configuration/compiler, resulting executable or loaded runtime/bound premises invalidates the former proof and requires analysis again. A stale proof or merely matching caller/helper artifact does not satisfy native-accounting conformance. | Analysis |
 | FR-034-AC-50 | PLANNED/UNRUN (IR-682). Missing or incomplete proof, or a proven bound exceeding the independently declared runtime charge, leaves the configuration UNPROVEN and fails the conformance gate; a missing actual named charge retains the existing runtime refusal. This build gate introduces no runtime refusal/public capability or evidence of completed Analysis; the initial release configuration and other eligible configurations remain UNPROVEN until their own proofs exist. | Analysis |
 | FR-034-AC-51 | PLANNED/UNRUN. Given genuine live-I construction preconditions, the child's own acknowledgement establishes release-dependent birth after the actual completed ordinary O sample. | Test, Analysis |
-| FR-034-AC-52 | PLANNED/UNRUN. O's independently validated actual retained-I pidfd-IN confirmation record strictly precedes the matching seal; the genuine-operation/order predicate rejects the named fabricated-live-I and late-poll controls. | Test, Analysis |
-| FR-034-AC-53 | PLANNED/UNRUN. O's independently validated actual retained M Child Some(status) reap record strictly precedes the matching seal; the genuine-operation/order predicate rejects the named fabricated-reap and late-reap controls. | Test, Analysis |
-| FR-034-AC-54 | PLANNED/UNRUN. During cancellation with the original gate retained, O's independently validated actual I confirmation precedes actual gate close; the producer-order predicate rejects early-close and omitted-confirmation controls. | Test, Analysis |
+| FR-034-AC-52 | PLANNED/UNRUN. Actual retained-I pidfd termination confirmation strictly precedes matching kernel report seal; independently observed fabricated-live-I and late-poll controls fail without stored-record or ordinal proof. | Test, Analysis |
+| FR-034-AC-53 | PLANNED/UNRUN. Actual retained M consuming Child wait/reap strictly precedes matching kernel report seal; independent fabricated-reap and late-reap controls fail without cached Some, copied history or ordinal proof. | Test, Analysis |
+| FR-034-AC-54 | PLANNED/UNRUN. During cancellation with the original O gate retained, actual I confirmation precedes actual gate close; independent early-close and omitted-confirmation controls fail. Cached C stage or gate-retained flag establishes neither fact; unavailable genuine operation/order construction remains UNBACKED. | Test, Analysis |
 | FR-034-AC-55 | PLANNED/UNRUN. Independently checked final-source Analysis establishes contained teardown authority through actual namespace INIT death and retained owner settlement, with no sampled-PID membership kill path; the separate AC-24 non-INIT-watcher runtime adverse/restored control remains owed. | Analysis |
 | FR-034-AC-56 | PLANNED/UNRUN. Published-source Analysis establishes O's final complete accounting after actual I confirmation, retained M reap, writer EOF and immutable seal for successful report Commit, with all later due ticks preserved; earlier final accounting invalidates literal-FINAL-oracle retirement. | Analysis |
 | FR-034-AC-57 | PLANNED/UNRUN (IR-687). When L awaits its first O arm result, the newly allocated authenticated O→L OperationalFailure carries zero ancillary rights. | Test |
@@ -2012,23 +1881,29 @@ PLANNED/UNRUN; existing bounded teardown defects are not thereby fixed or tests 
 | FR-034-AC-75 | PLANNED/UNRUN (IR-687). A later genuine observation/collector/transport error after COMMIT remains owned through bounded cleanup and prevents normal O Code0 acceptance through existing CleanupUnconfirmed. | Test |
 | FR-034-AC-76 | PLANNED/UNRUN (IR-687). A genuine admitted open-file-description Test oracle distinguishes L's retained-pidfd clone from independently opened same-O and foreign pidfds; inode equality supplies no clone evidence. | Test |
 | FR-034-AC-77 | PLANNED/UNRUN (IR-687). On a fresh complete Exhausted tick after first-byte COMMIT, O immediately initiates the same actual owned cancellation of live claimed I and retained M without waiting for C lease closure, preserving the original cutoff and committed bytes. | Test |
-| FR-034-AC-78 | PLANNED/UNRUN. C accepts observations only after actual original O Armed binding and completed authenticated writer transfer. | Test, Analysis |
-| FR-034-AC-79 | PLANNED/UNRUN. The reader validates the owning five-kind fixed-frame grammar, rejecting unknown, partial or invalid-width/unused-space frames. | Test |
-| FR-034-AC-80 | PLANNED/UNRUN. C populates the separate completion carrier only from genuine original authenticated I Completed. | Test |
-| FR-034-AC-81 | PLANNED/UNRUN. C/O charge actual simultaneous named observation storage and additive observation pipe_reserve before exposure under existing ceilings. | Test, Analysis |
-| FR-034-AC-82 | PLANNED/UNRUN. The CODE verifier establishes complete feature-off absence through supported-source/artifact Analysis and mechanical consumer/helper checks. | Test, Analysis |
-| FR-034-AC-83 | PLANNED/UNRUN. C transfers the sole observation writer directly to O after the scenario preconditions and closes its copy only after transfer completes. | Test |
-| FR-034-AC-84 | PLANNED/UNRUN. C/O exclude observation endpoints from untrusted child/exec mappings and public control handles. | Test, Analysis |
-| FR-034-AC-85 | PLANNED/UNRUN. The verifier requires each applicable event exactly once and rejects missing or duplicate events. | Test |
-| FR-034-AC-86 | PLANNED/UNRUN. O establishes same-M parent-only prior-WNOWAIT/FIRST-uncached-Some/post-ECHILD provenance under the original sole-waiter/disposition/history; the independent verifier rejects fabricated or missing operation facts. | Test, Analysis |
-| FR-034-AC-87 | PLANNED/UNRUN. The verifier establishes checked actual producer order independently of receipt time, rejecting inverted or overflowed ordinals. | Test |
-| FR-034-AC-88 | PLANNED/UNRUN. O preserves every due ordinary sample and existing control/cutoff transition without observation ACK, pause or scheduling permission. | Test, Analysis |
-| FR-034-AC-89 | PLANNED/UNRUN. C retains the genuine completion carrier before original lease close. | Test |
-| FR-034-AC-90 | PLANNED/UNRUN. O latches observation write failure without signal termination or a new cancellation/control action. | Test, Analysis |
-| FR-034-AC-91 | PLANNED/UNRUN. Ordinary feature-on execution without authenticated binding creates no observation endpoint or emission and remains available. | Test |
-| FR-034-AC-92 | PLANNED/UNRUN. For birth, O announces the next completed ordinary tick after binding transferred only following genuine adopted-orphan acknowledgement. | Test |
-| FR-034-AC-93 | PLANNED/UNRUN. The CODE verifier establishes the separately declared feature-on observation native-workspace bound from its own exact paired artifacts and premises. | Analysis |
+| FR-034-AC-78 | PLANNED/UNRUN. C admits actual original O Armed only through genuine retained O/build/run authentication and original owned rights; wrong sender/run or unvalidated capability cannot grant positive admission. | Test, Analysis |
+| FR-034-AC-79 | PLANNED/UNRUN. Actual production control reception rejects malformed, partial or forbidden-right traffic without granting positive phase/Dispatch/report authority; a stored event or EOF never supplies a missing authenticated control. | Test |
+| FR-034-AC-80 | PLANNED/UNRUN. Genuine original authenticated I Completed alone establishes completion reception; M exit, EOF, phase or copied metadata cannot substitute. The separate stored completion certificate is retired. | Test |
+| FR-034-AC-81 | PLANNED/UNRUN. Every surviving actual simultaneous named fixture/control storage and pipe/backing reservation is charged before exposure; retired certificate storage is removed from charges only after its actual allocation disappears. | Test, Analysis |
+| FR-034-AC-82 | PLANNED/UNRUN. Actual supported-source/artifact Analysis and mechanical paired consumer/helper checks establish feature-off absence and unchanged production frames/rights after certificate retirement. | Test, Analysis |
+| FR-034-AC-83 | PLANNED/UNRUN. The original exclusive caller lease closes independently of retained monitor/INIT ownership and does not leak into children; a leaked alias cannot preserve authorization after actual caller death. | Test |
+| FR-034-AC-84 | PLANNED/UNRUN. Every remaining fixture reporter/control/report endpoint is excluded from untrusted child/exec mappings and public control handles through actual descriptor checks. | Test, Analysis |
+| FR-034-AC-85 | PLANNED/UNRUN. Actual retained M consuming reap is not established by repeated or cached Child Some(status); an independent genuine-operation predicate rejects cache-only or fabricated success. | Test |
+| FR-034-AC-86 | PLANNED/UNRUN. O establishes same-M parent-only prior-WNOWAIT/FIRST-uncached-Some/post-ECHILD provenance under the original sole-waiter/disposition/history; independent checks reject fabricated, cached or missing consuming-operation facts without stored history as proof. | Test, Analysis |
+| FR-034-AC-87 | PLANNED/UNRUN. Actual I confirmation/M consuming reap precede report seal and actual I confirmation precedes retained-gate close; independent late-operation/early-close mutants fail. Producer ordinal certificates are retired. | Test |
+| FR-034-AC-88 | PLANNED/UNRUN. O preserves every due ordinary sample and existing control/cutoff transition without observation ACK, pause, stored publication permission or suppressed tick. | Test, Analysis |
+| FR-034-AC-89 | PLANNED/UNRUN. Genuine original I Completed reception and original stop adoption precede actual original lease close, without a separate stored completion certificate. | Test |
+| FR-034-AC-90 | PLANNED/UNRUN. Any remaining optional fixture write failure does not terminate O or alter ordinary sampling/control/settlement/cancellation; it cannot rescue ignored EOF. The certificate pipe writer is retired, not activated by this condition. | Test, Analysis |
+| FR-034-AC-91 | PLANNED/UNRUN. Ordinary feature-on execution remains available without retired observation binding, endpoint, event emission or default identity. | Test |
+| FR-034-AC-92 | PLANNED/UNRUN. Genuine adopted-orphan acknowledgement and release-dependent child birth after an actual complete ordinary O sample remain required without a stored sample-announcement certificate; missing real coordination is UNBACKED. | Test |
+| FR-034-AC-93 | PLANNED/UNRUN. Every surviving feature-on named native workspace has separate supported paired-artifact finite-bound Analysis and an independent charge; sole-purpose certificate workspace retires only with its actual allocation. | Analysis |
 | FR-034-AC-94 | PLANNED/UNRUN. C disposes the defined pending claim through actual close of its raw I right without positive admission or capability; invalid prior traffic and live identity mismatches refuse, while the defined same-cursor negative receipt preserves the original cause only after authenticated delivery and whole-chain settlement. | Test, Analysis |
+| FR-034-AC-95 | PLANNED/UNRUN. Actual O retains the original report backing identity through collection, kernel sealing and final descriptor delivery; a substituted backing cannot satisfy the genuine report predicate. | Test |
+| FR-034-AC-96 | PLANNED/UNRUN. Missing, malformed, wrong or unvalidated original O/build/run/control authority refuses without positive admission, retaining actual received-right custody and original cutoff; no default identity supplies authority. | Test |
+| FR-034-AC-97 | PLANNED/UNRUN. Retired observation-binding echo creates no replacement comparison; actual original report backing equality and delivery/settlement authority remain required. | Test |
+| FR-034-AC-98 | PLANNED/UNRUN. Feature-off paired consumers/helpers retain unchanged phase bytes/rights with no retired early field or branches; ordinary feature-on execution has no retired endpoint/binding requirement. | Test, Analysis |
+| FR-034-AC-99 | PLANNED/UNRUN. Any remaining optional O fixture write requires actual ignored/unblocked/untraced stable single-thread proof, including independent across-PID-namespace initial untraced evidence, pending/permission/configuration/accounting and real normal-helper controls. Certificate-writer retirement supplies no signal proof or activation. | Test, Analysis |
+| FR-034-AC-100 | PLANNED/UNRUN. Unsupported, malformed, unavailable or unproved profiles permit no optional fixture write, preserving pending signals, ordinary flow and original cutoff; no later cleanup or private-proc zero alone repairs eligibility. | Test |
 
 ## Dependencies
 
