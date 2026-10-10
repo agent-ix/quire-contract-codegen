@@ -55,3 +55,4 @@ The NFR-006 cost rationale has a stale lane count; other changed obligations are
 | --- | --- | --- |
 | FND-001 | fixed | 76949effd19906b82b4438828a1d7b311bbaab13 |
 | FND-002 | still-open | The source has 27 tagged ignored tests in eight tests/it files, so the revised seven-file count remains inaccurate. |
+| FND-002 | fixed | 865fe70cd17d4c927589721c50694c6724ebcb38 |
