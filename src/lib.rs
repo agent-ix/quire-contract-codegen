@@ -165,6 +165,10 @@ pub use replay::composite::{
     composite_parity_terminal_value, verified_shadow_terminal_value, CompositeParitySettlement,
     CompositeReportError, VerifiedShadowSettlement,
 };
+pub use replay::composite_builder::{
+    CompositeBuildError, OriginalCompositeEqContext, OriginalCompositeEqReport,
+    OriginalCompositeEqRequest,
+};
 pub use replay::frame::{
     FrameReplay, FrameReplayError, FrameReplayInputs, PreStateFault, ScopeMember,
 };

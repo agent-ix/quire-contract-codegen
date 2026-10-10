@@ -20,7 +20,20 @@ Public-converter controls and remaining production scenarios for
 [FR-033](../functional/FR-033-composite-parity-replay-binding.md),
 [FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
 [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-28. All
-completed-route checks are GATED on IR-635's original-artifact builder and invocation. IR-666
+completed-route checks remain GATED. IR-635's first slice exercises only the public verified Eq
+constructor with supplied verified evidence: parameter/parameter, parameter/literal, literal/literal
+and repeated/self graph children, retained source and exact recompiled context, positional O-09,
+changed source, semantic package and retained/recompiled context refusals, absent-node/occurrence
+and work-ceiling refusals, literal empty-Bounds and Population filtering controls, and genuine
+QSL function-membership/unknown-Node-bound Refused reports through IR-666. QSL owns membership;
+CG checks admitted node/occurrence presence. The QSL controls supply Disagreed and measure its
+common-step precedence; CG structural refusals occur before evidence is accepted.
+Imported contexts refuse with typed `ImportedContextUnsupported`; admitting them remains PLANNED
+until CG retains the original compile's admitted dependency packages. These are partial AC-1/AC-11 Eq-only and AC-9/AC-12 constructor controls, not generated backend
+verification or same-artifact native authentication. Ne awaits IR-690's typed accessor; AC-8's
+complete coverage/refusal matrix, AC-6/AC-7/AC-10 production controls and FR-029 strengths remain
+planned. Literal positives are one-field `Integer` records; bounded-field narrowing literals
+(IR-691) and collection-constructor literals remain gated by IR operand projection. IR-666
 tests the delivered QSL #645 facade through CG's report converter, including F-1 to F-7,
 verified V rows, the full sent identity and `prepare` refusal. FR-028 AC-17/24 retain the
 strength/ceiling evidence checked here; native execution and backend controls use their named lanes
@@ -107,8 +120,8 @@ and never replace positive QSL evaluation with a verdict double.
    production invocation. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.
 
-   **8a. Full sent-claim binding (IR-666 direct public-converter control; IR-635 production
-   invocation planned).** Retain the
+   **8a. Full sent-claim binding (IR-666 direct public-converter control; IR-635 Eq-only verified
+   constructor partial, falsified production invocation planned).** Retain the
    actual sent `CompositeIdentity::new` over request obligation, claim and complete evidence.
    Before any outcome projection, including refusal/generated fault/incomplete, compare the genuine
    public QSL report's `claim()` with it. With that genuine report held fixed, independently change
@@ -210,8 +223,9 @@ gaps. The future terminal payload names have the semantic meaning in FR-029, and
 delivered API must establish their actual Rust representation before positive tests run.
 
 IR-666 directly tests the public facade's claim shape, complete report identity, F rows and V
-rows through the CG converter. The original-artifact builder, same-artifact native observation and
-generated-family controls remain planned under IR-635. Real Text-leaf profile
+rows through the CG converter. IR-635 adds the Eq-only verified constructor controls described
+above. Falsified construction, same-artifact native observation, backend/refinement strength
+production and generated-family controls remain planned under IR-635; Ne awaits IR-690. Real Text-leaf profile
 selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
 remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
 as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact

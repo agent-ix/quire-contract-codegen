@@ -7,6 +7,8 @@
 // Binding of QSL composite reports to their retained sent claim.
 // Implements: FR-033-AC-9, FR-029-AC-28
 pub(crate) mod composite;
+// Original checked-package Eq construction and public verified-shadow invocation.
+pub(crate) mod composite_builder;
 // Native replay of a frame counterexample.
 // Implements: FR-015-AC-33
 pub(crate) mod frame;
