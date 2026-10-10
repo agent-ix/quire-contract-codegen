@@ -22,9 +22,10 @@ FR-028-AC-12, verified by TC-039.
    exactly 8 MiB; and a batch stand-in of N members that prints more than N times 8 MiB.
 2. Drive a capture whose reader thread panics, and one whose pipe read returns an error.
 3. Run a launcher that exits on its own, leaving a real grandchild in its process group.
-4. Build N = 1, 10 and 50 harnesses with equal option vectors and request timeout T, and read the
-   launch's argument vector and the number of launcher processes a stand-in counts; mix two option
-   vectors and two timeouts and count the processes.
+4. Build N = 1, 10 and 50 harnesses with equal option vectors and identity `ProofCeilings`
+   (`wall_clock` T and `memory_bytes` M), and read the launch's argument vector and the number of
+   launcher processes a stand-in counts; mix two option vectors, two wall-clock ceilings and two
+   memory ceilings and count the processes. Drive one grouped process tree above M.
 5. Build a batch whose T is `Duration::MAX` and read its argument vector; in the `make kani` lane
    run a batch at 4294967295 seconds and confirm it runs.
 6. Run batch stand-ins that exit successfully with no report, and unsuccessfully with no report (an
@@ -51,10 +52,12 @@ FR-028-AC-12, verified by TC-039.
 3. The grandchild is killed by the time the run returns (FR-017-AC-24).
 4. One process for each group, with one `--harness <module::harness> --exact` pair per member in
    request order, `--harness-timeout` T and then the shared options; fewer than N processes for
-   N > 1 compatible harnesses; requests naming another launcher, crate directory or target
-   directory are not grouped; the outer bound is N times T (a group that runs longer than T and
-   inside N times T completes) and a group killed at it is refused as timed out with no member
-   classified (FR-017-AC-21).
+   N > 1 compatible harnesses; differing identity wall-clock or memory ceilings, launcher, crate
+   directory or target directory form separate groups. The grouped process tree has one aggregate
+   M ceiling; exceeding it kills and refuses the whole group with no member classified. The outer
+   wall-clock bound is N times T (a group that runs longer than T and inside N times T completes),
+   and a group killed at it is refused as timed out with no member classified (FR-017-AC-21;
+   FR-028-AC-21 covers the memory enforcement mechanism).
 5. The `Duration::MAX` batch carries no `--harness-timeout` and its outer bound does not elapse; the
    batch at 4294967295 seconds runs (FR-017-AC-21, FR-028-AC-12).
 6. The successful exit with no report is refused with the missing-report refusal and no member is
@@ -90,14 +93,16 @@ Launcher stand-ins and real short-lived processes, in `src/kani/run/launch.rs`:
 
 A shell-script launcher that records each process it is started as and the arguments it received,
 in `src/kani/run/execute.rs` (`batch_tests`): the process counts and argument vectors for N = 1, 10
-and 50 compatible harnesses and for mixed option vectors and timeouts, the `--harness-timeout` and
-outer-bound arithmetic including `Duration::MAX` and 4294967295 seconds, a batch killed at its outer
+and 50 compatible harnesses and for mixed option vectors and identity wall-clock ceilings, the
+`--harness-timeout` and outer-bound arithmetic including `Duration::MAX` and 4294967295 seconds, a
+batch killed at its outer
 bound, both no-report exits, the keyed split of a report whose results are in Kani's own order
 rather than the request's (two members sharing the bare symbol `check`), the exit-status
 predicate, the `timeout` entry (a sub-second T rounded up), the lacking, repeating and unrequested
 harness, the member missing from the crate, the grouping of requests that name another launcher,
-crate directory or target directory, the batch that runs longer than T and inside N times T, the
-playback attribution cases (including `tc_043_a_member_failing_two_checks_takes_its_first_block_and_keeps_its_neighbour`,
+crate directory or target directory, distinct identity memory ceilings, the batch that runs longer
+than T and inside N times T, the playback attribution cases (including
+`tc_043_a_member_failing_two_checks_takes_its_first_block_and_keeps_its_neighbour`,
 whose console is the playback section of a real Kani 0.68 batch, verbatim) and the over-limit
 refusal of a group by its member count (steps 4 to 9).
 `tc_043_a_playback_is_taken_by_the_path_it_is_headed_for` in `src/kani/output/playback.rs` covers
@@ -113,4 +118,8 @@ results in the order Kani ran them); no real batch report is stored as a fixture
 
 ## Status
 
-Implemented (IR-277).
+Implemented for FR-017 batching and output bounds (IR-277). Identity memory-ceiling separation is
+covered by `unequal_identity_memory_ceilings_run_in_separate_backend_processes` and
+`unequal_memory_ceilings_plan_separate_groups_with_their_own_selections` in
+`src/kani/run/execute.rs`; grouped aggregate memory exhaustion is covered under TC-039
+(FR-028-AC-21).

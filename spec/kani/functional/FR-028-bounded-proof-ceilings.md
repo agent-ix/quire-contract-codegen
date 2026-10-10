@@ -289,9 +289,10 @@ after another, one report is written at the end (a killed batch leaves none), an
 `--harness-timeout` stops only the slow member, whose entry reads Failure with no checks and exit
 status `timeout`. Using it means a slow member does not discard the results of the others; the
 N times T process bound exists only for a wedged backend. The owner may instead choose a batch
-size limit or a retry of members singly after a batch is refused. Until this requirement lands
-and identities record ceilings, FR-017 groups on equal request timeout, and the memory ceiling
-stays FR-017's "no memory ceiling"; the FR-028 ceilings join the grouping key then.
+size limit or a retry of members singly after a batch is refused. FR-017 now groups on equal
+identity `ProofCeilings`, comprising `wall_clock` and `memory_bytes`. One grouped process tree is
+held to the shared aggregate memory
+ceiling; its wall-clock outer bound is N times the shared `wall_clock` ceiling.
 
 ## Open Questions
 

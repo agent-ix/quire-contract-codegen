@@ -59,8 +59,11 @@ Text-admission identity rather than claiming a checked node or contract role.
   caller passes the list to the batch entry `execute_kani_obligations` in `kani/run/execute.rs`;
   that entry, not the caller, forms the groups.
 - A Kani installation: the `cargo-kani` launcher to invoke.
-- The caller's wall-clock timeout, `KaniExecutionRequest::timeout`, per harness. The run has no memory ceiling
-  (until FR-028 lands); the launcher's stdout and stderr are each bounded to 8 MiB per harness, and a stream over that is refused, never truncated.
+- The harness identity's `ProofCeilings`: `wall_clock` bounds one harness's run and
+  `memory_bytes` bounds aggregate resident memory of its backend process tree (FR-028).
+  `KaniExecutionRequest` carries the harness, installation and crate/target directories;
+  it has no separate timeout field. The launcher's stdout and stderr are each bounded
+  to 8 MiB per harness, and a stream over that is refused, never truncated.
 - The crate directory whose library source contains that harness's generated
   source byte for byte, and the Cargo target directory the run builds into.
 
@@ -147,20 +150,22 @@ Text-admission identity rather than claiming a checked node or contract role.
 - The generator shall leave no process the launcher started in its process group running when a
   run concludes, whether it timed out or the launcher exited on its own.
 - Where harnesses are run as a batch, the generator shall group them by equal option vector (the
-  harness selection removed) and equal request timeout T, and start one launcher process per group.
+  harness selection removed) and equal identity `ProofCeilings` (both `wall_clock` T and
+  `memory_bytes`), and start one launcher process per group.
   One process has one launcher, one working directory and one target directory, so requests that
-  name different ones are never grouped. Until FR-028 lands and identities record ceilings, those
-  are the whole key; the FR-028 ceilings join the key when it does.
+  name different ones are never grouped. The shared process tree is held to the group's one
+  `memory_bytes` ceiling in aggregate; the memory ceiling is not multiplied by member count.
 - Where a group holds more than one harness, the generator shall pass its process one
   `--harness <module::harness> --exact` pair per member, in request order, then `--harness-timeout
   <T>` (whole seconds, rounded up; Kani 0.68 takes it under `-Z unstable-options`, which the launch
   already passes for the report) and the shared options. A group of one is a single run with the
   argument vector the single-run rule below states.
-- If T rounded up to whole seconds exceeds 4294967295, then the generator shall omit
+- If the identity's T rounded up to whole seconds exceeds 4294967295, then the generator shall omit
   `--harness-timeout` from that group's launch, because Kani 0.68 refuses a larger value (exit 2,
   no report); the group then has no per-member bound.
-- Where a group holds more than one harness, the generator shall bound the process to N times T
-  (N the member count, checked multiplication, never elapsing if the product does not fit, as
+- Where a group holds more than one harness, the generator shall bound the process to N times
+  the shared identity's `wall_clock` T (N the member count, checked multiplication, never
+  elapsing if the product does not fit, as
   FR-017-AC-15) and, if it is not done by then, kill its process group. Kani writes its report
   only at the end, so a killed group leaves none and the generator shall refuse it as timed out and
   classify no member. Kani's own per-harness timeout makes that wedge the only way a group is
@@ -220,8 +225,8 @@ Text-admission identity rather than claiming a checked node or contract role.
 - If a batch member's source is not in its crate, then the generator shall refuse the whole batch,
   the call, with `HarnessNotInCrate` before any process starts, not even for the members of
   another group.
-- If the run does not conclude within the caller's timeout, then the generator shall kill it and
-  classify it as inconclusive with the timed-out reason.
+- If a single run does not conclude within its harness identity's `wall_clock` ceiling, then the
+  generator shall kill it and classify it as inconclusive with the timed-out reason.
 - If the backend reported a failed unwinding assertion, then the
   generator shall classify the run as inconclusive with the
   exhausted-loop-bound reason instead of falsified.
@@ -300,7 +305,7 @@ Text-admission identity rather than claiming a checked node or contract role.
 | FR-017-AC-18 | A report that is malformed, of an unknown check or harness status, of another schema version, that holds other than one harness result in a single run, or whose harness states success while it lists a failed, errored, undetermined or unknown check (of any class, including an unwinding assertion) is refused with its own typed cause and never classified, for every obligation kind; a run that exited successfully and exported no report is refused, and one that exited unsuccessfully and exported none is `NoVerdict`. | Test (TC-027) |
 | FR-017-AC-19 | The generator appends `-Z unstable-options --export-json /proc/self/fd/N` after unchanged harness options, with actual child-only anonymous pipe writer N >= 5, and records the actual argv bytes. It uses per-run unnamed report authority, never a named target-directory report or fallback. FR-034 AC-32/33 own collector bounds, resource-stop classification, kernel lifetime and immutable final handoff. Zero-byte EOF means no exported report; nonempty partial/malformed content is refused under AC-18 unless an independently established resource/deadline stop takes precedence with the existing single-run or whole-batch classification. | Test (TC-027) |
 | FR-017-AC-20 | The evidence and the classified run list every check of a real run with its id, class, source file and line and status, a line stated as unknown is absent, and a non-numeric line or a check with no location is a refused report; the view serializes as `id`, `class`, `location { file, line }` and `status` and is not deserializable. | Test (TC-027) |
-| FR-017-AC-21 | N harnesses with equal option vectors (the harness selection removed) and equal request timeout T start exactly one launcher process whose argument vector holds one `--harness <module::harness> --exact` pair per member in request order, `--harness-timeout` T, then the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes; one harness starts one process with the single-run argument vector. The group's outer bound is N times T, never elapsing when the product does not fit, and a group killed at it leaves no report and is refused as timed out with no member classified. A T that rounded up exceeds 4294967295 seconds (a `Duration::MAX` request) launches without `--harness-timeout`. A group that exits successfully with no report is refused with the missing-report refusal and classifies no member; one that exits unsuccessfully with no report (an argument error, a failed build) has every member inconclusive `NoVerdict`. Requests that name another launcher, crate directory or target directory are never grouped. | Test (TC-043) |
+| FR-017-AC-21 | N harnesses with equal option vectors (the harness selection removed) and equal identity `ProofCeilings` (`wall_clock` T and `memory_bytes` M) start exactly one launcher process whose argument vector holds one `--harness <module::harness> --exact` pair per member in request order, `--harness-timeout` T, then the shared options; N harnesses in G such groups start G processes; so N > 1 compatible harnesses start fewer than N processes; one harness starts one process with the single-run argument vector. Requests whose wall-clock or memory ceilings differ start separate processes. The group's process tree is held to one aggregate M; memory exhaustion kills and refuses the whole group with no member classified. The group's outer wall-clock bound is N times T, never elapsing when the product does not fit, and a group killed at it leaves no report and is refused as timed out with no member classified. A T that rounded up exceeds 4294967295 seconds (a `Duration::MAX` identity ceiling) launches without `--harness-timeout`. A group that exits successfully with no report is refused with the missing-report refusal and classifies no member; one that exits unsuccessfully with no report (an argument error, a failed build) has every member inconclusive `NoVerdict`. Requests that name another launcher, crate directory or target directory are never grouped. | Test (TC-043) |
 | FR-017-AC-22 | Over a real or captured batch report, members are matched by `module::harness` path (two members with the bare symbol `check` stay distinct), and each member's outcome, checks and SUCCESS count come from its own entry: a falsified member beside a verified member leaves the verified member verified; a Success member in a non-zero exit with no Failure entry is inconclusive, and with one Failure entry is verified; a Failure entry with no checks and exit status `timeout` is inconclusive timed-out naming T while the others keep their results; a Failure entry with no checks and no timeout is inconclusive with no counterexample; each member's evidence carries its kind, harness path, launcher path, unwind bound, solver, outcome and checks plus the group's argument vector, the member list, a statement that it was a batch, and the exit code. | Test (TC-043) |
 | FR-017-AC-23 | A group's report that lacks a requested harness, holds one twice or holds an unrequested one refuses the group with a typed cause and classifies no member; a member whose source is not in the crate refuses the whole batch with `HarnessNotInCrate` and launches nothing; a falsified member's playback is the first counterexample block headed for its own path and never another member's block, a member that fails two property checks (two counterexample blocks under its path, as real Kani prints) takes the first, as the same harness alone does, and neither it nor its neighbours lose their evidence, a failed property check with no block headed for its path is that member inconclusive with no counterexample, as in a single run; a block headed for a path that is not a member refuses the group. | Test (TC-043) |
 | FR-017-AC-24 | A launcher that exits on its own after leaving a real grandchild in its process group has that grandchild killed by the time the run returns, the same as on a timeout. | Test (TC-043) |
