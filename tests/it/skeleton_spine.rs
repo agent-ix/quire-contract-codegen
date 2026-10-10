@@ -22,9 +22,10 @@ use qsl_replay::WitnessValue;
 use qsl_replay::{
     call_site, ByteDigest, CallSiteRefusal, CanonicalAssignment, Category, Code, DeclaredDomain,
     DependencyInput, DependencyInputRefusal, DependencySelectionsCause, DigestDomain, DigestRecord,
-    DisagreementCause, DomainKey, FiniteBound, Identifier, Integer, ObligationIdentity, ProofBound,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource, ScalarLimits,
-    SourceIdentity, Verdict, WireNodeId, WitnessSettlement, DEFAULT_REPLAY_INPUT_BYTES,
+    DisagreementCause, DomainKey, DomainKind, FiniteBound, Identifier, Integer, ObligationIdentity,
+    ProofBound, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestRefusal, ReplaySource,
+    ScalarLimits, SourceIdentity, Verdict, WireNodeId, WitnessSettlement,
+    DEFAULT_REPLAY_INPUT_BYTES,
 };
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, replay_counterexample,
@@ -396,14 +397,18 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
     shared.identity = "test/mmm".to_owned();
     shared.source = locked("lib-mmm", b"a dependency source");
     let mut lock_inputs = inputs(&native, vec![lock.clone(), shared, earlier]);
-    let declared = DeclaredDomain::new(ProofBound {
-        domain: DomainKey::Node {
-            node: WireNodeId::from_digest([8; 32]),
-            path: Vec::new(),
-        },
-        bound: FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
-            .expect("nonempty range"),
-    });
+    let declared = DeclaredDomain::new(
+        ProofBound::new(
+            DomainKey::Node {
+                node: WireNodeId::from_digest([8; 32]),
+                path: Vec::new(),
+            },
+            Some(DomainKind::Integer),
+            FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
+                .expect("nonempty range"),
+        )
+        .expect("integer range pairs with integer"),
+    );
     lock_inputs.declared_domains.push(declared.clone());
     let expected_stage_limits = lock_inputs.stage_limits.clone();
     let package = ReplayPackage::new(lock_inputs, FUNCTION).expect("the twin compiles");

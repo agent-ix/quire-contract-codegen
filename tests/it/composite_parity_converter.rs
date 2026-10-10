@@ -68,8 +68,8 @@ fn public_report(
 fn public_composite_fixture() -> PublicCompositeFixture {
     use qsl_replay::{
         compile_package, parity_obligation, BoundEntries, ByteDigest, DependencyInput, Domain,
-        DomainKey, FiniteBound, OperandIdentity, ParityArgument, ParityPreimage, ProofBound,
-        SourceIdentity, StageLimits,
+        DomainKey, DomainKind, FiniteBound, OperandIdentity, ParityArgument, ParityPreimage,
+        ProofBound, SourceIdentity, StageLimits,
     };
     use quire_contract_model::{
         CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
@@ -138,24 +138,32 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         .iter()
         .flat_map(|parameter| {
             [
-                ProofBound {
-                    domain: DomainKey::Node {
+                ProofBound::new(
+                    DomainKey::Node {
                         node: *parameter,
                         path: Vec::new(),
                     },
-                    bound: FiniteBound::cardinality(3),
-                },
-                ProofBound {
-                    domain: DomainKey::Node {
+                    Some(DomainKind::Collection),
+                    FiniteBound::cardinality(3),
+                )
+                .expect("sequence cardinality pairs with collection"),
+                ProofBound::new(
+                    DomainKey::Node {
                         node: *parameter,
                         path: vec![0],
                     },
-                    bound: FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
-                        .unwrap(),
-                },
+                    Some(DomainKind::Integer),
+                    FiniteBound::integer_range(Integer::from(0_i64), Integer::from(9_i64))
+                        .expect("nonempty integer range"),
+                )
+                .expect("element range pairs with integer"),
             ]
         })
         .collect::<Vec<_>>();
+    assert!(bounds.as_chunks::<2>().0.iter().all(|pair| {
+        pair[0].kind() == Some(DomainKind::Collection)
+            && pair[1].kind() == Some(DomainKind::Integer)
+    }));
     let claim = CompositeParityClaim {
         node,
         occurrence: origin.clone(),
@@ -175,7 +183,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
                 let parameter_bounds = bounds
                     .iter()
                     .filter(|bound| {
-                        matches!(bound.domain, DomainKey::Node { node, .. } if node == *parameter)
+                        matches!(bound.domain(), DomainKey::Node { node, .. } if node == parameter)
                     })
                     .cloned()
                     .collect();
@@ -596,13 +604,20 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
     other.obligation_kind = "other".to_owned();
     changed.push(other);
     let mut other = sent.clone();
-    other.harness_bounds.push(qsl_replay::ProofBound {
-        domain: qsl_replay::DomainKey::Node {
-            node: sent.node,
-            path: Vec::new(),
-        },
-        bound: qsl_replay::FiniteBound::cardinality(1),
-    });
+    let sequence_domain = other
+        .harness_bounds
+        .first()
+        .expect("the fixture declares a sequence bound")
+        .domain()
+        .clone();
+    other.harness_bounds.push(
+        qsl_replay::ProofBound::new(
+            sequence_domain,
+            Some(qsl_replay::DomainKind::Collection),
+            qsl_replay::FiniteBound::cardinality(1),
+        )
+        .expect("sequence cardinality pairs with collection"),
+    );
     changed.push(other);
     let mut other = sent.clone();
     other.limits.work_units += 1;

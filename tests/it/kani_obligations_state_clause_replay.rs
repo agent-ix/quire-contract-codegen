@@ -14,7 +14,7 @@ use std::cell::RefCell;
 
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
-    DisagreementCause, DomainKey, EvaluatedValue, FiniteBound, Identifier, Integer,
+    DisagreementCause, DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer,
     ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, Verdict, WireNodeId,
     WitnessEnvelope, WitnessSettlement,
 };
@@ -48,6 +48,7 @@ fn tc_035_emitted_model_fields_bind_replay_before_playback() {
     let domains = replay.packet.declared_domains.as_ref().expect("domains");
     assert_eq!(domains.len(), model::FIELDS.len());
     for (position, (domain, (_, (lower, upper)))) in domains.iter().zip(model::FIELDS).enumerate() {
+        assert_eq!(domain.proof_bound().kind(), Some(DomainKind::Integer));
         assert!(matches!(
             domain.domain(),
             DomainKey::Node { path, .. } if path == &[u32::try_from(position).expect("small")]
@@ -549,6 +550,7 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
     for (position, (domain, (_, (minimum, maximum)))) in
         domains.iter().zip(model::FIELDS).enumerate()
     {
+        assert_eq!(domain.proof_bound().kind(), Some(DomainKind::Integer));
         assert_eq!(
             domain.domain(),
             &DomainKey::Node {

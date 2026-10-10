@@ -25,11 +25,11 @@ use std::{collections::BTreeMap, fmt};
 
 use qsl_replay::{
     call_site, replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
-    DeclaredDomain, DigestDomain, DigestRecord, DocumentRef, DomainKey, EmptyQualifiedName,
-    FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound, QualifiedName,
-    ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource, StateClauseCounterexample,
-    StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket, WitnessRefusal,
-    WitnessSettlement,
+    DeclaredDomain, DigestDomain, DigestRecord, DocumentRef, DomainKey, DomainKind,
+    EmptyQualifiedName, FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound,
+    ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
+    StateClauseCounterexample, StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket,
+    WitnessRefusal, WitnessSettlement,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -221,6 +221,8 @@ pub enum StateClauseReplayError {
     Envelope(WitnessRefusal),
     /// A document could not be built.
     Document(DocumentError),
+    /// A declared integer domain could not be paired with its finite range.
+    ProofBound(ProofBoundRefusal),
     /// The framed model declaration does not provide the requested field list.
     ModelFields {
         /// The model declaration node.
@@ -269,6 +271,7 @@ impl fmt::Display for StateClauseReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Envelope(cause) => write!(f, "the envelope is not admitted: {cause}"),
             Self::Document(cause) => write!(f, "a document was not built: {cause}"),
+            Self::ProofBound(cause) => write!(f, "a proof bound was not built: {cause}"),
             Self::ModelFields { object, cause } => {
                 write!(
                     f,
@@ -317,6 +320,7 @@ impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
             | StateClauseReplayError::Transcript(_)
             | StateClauseReplayError::Envelope(_)
             | StateClauseReplayError::Document(_)
+            | StateClauseReplayError::ProofBound(_)
             | StateClauseReplayError::ModelFields { .. }
             | StateClauseReplayError::MissingField { .. }
             | StateClauseReplayError::UndeclaredField { .. }
@@ -930,13 +934,17 @@ fn declared_domains(
         let path = u32::try_from(position).map_err(|_| unreadable(self_parameter))?;
         let bound = FiniteBound::integer_range(Integer::from(minimum), Integer::from(maximum))
             .map_err(|_| unreadable(&shape.scope.object))?;
-        domains.push(DeclaredDomain::new(ProofBound {
-            domain: DomainKey::Node {
-                node: parameter,
-                path: vec![path],
-            },
-            bound,
-        }));
+        domains.push(DeclaredDomain::new(
+            ProofBound::new(
+                DomainKey::Node {
+                    node: parameter,
+                    path: vec![path],
+                },
+                Some(DomainKind::Integer),
+                bound,
+            )
+            .map_err(StateClauseReplayError::ProofBound)?,
+        ));
     }
     Ok(domains)
 }
