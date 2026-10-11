@@ -60,6 +60,9 @@ for package meaning or a source of native bounds.
   `lowered`, or whose represented meaning the selected backend cannot encode.
 - A whole-request refusal with no artifact if the FR-330 reader refuses or
   stops incomplete before CG receives an admitted package.
+- For each generated scalar, composite equality or exact function item, a
+  public claim identified by the admitted FR-330 `identity` together with the
+  exact requested `CheckedNodeId`.
 
 ## Behavior
 
@@ -86,6 +89,40 @@ for package meaning or a source of native bounds.
   `CompleteLoweringResultV2.records` slice, display text and reconstructed
   body shape SHALL NOT decide the same item's capability, bounds, source
   location or generated expression.
+- In each public `GeneratedScalarClaim`, `GeneratedCompositeEqualityClaim` and
+  `GeneratedExactFunctionClaim`, CG SHALL serialize `contract_package_identity`
+  as the exact admitted FR-330 `identity` and `node_id` as the exact requested
+  `CheckedNodeId`. The pair identifies the claim; request index distinguishes
+  repeated positions in the surrounding decision, not the claim's semantic
+  identity. CG SHALL retire the generated claim's `ir_id` member, including its
+  serialized `ir_id` key: FR-330 supplies no per-node IR semantic identity.
+  The containing claim-map entry SHALL retain its requested `node_id`, and
+  existing generated-claim source correspondence, semantic type, operation or
+  descriptor, schedule, origin and checked bounds SHALL retain their admitted
+  or request-defined provenance. The existing `package_id` provenance on
+  equality and function claims SHALL remain the originating checked-package
+  identity, distinct from `contract_package_identity`; the scalar claim SHALL
+  expose that same originating `package_id`. In all three generated claims,
+  `claims`, `bounds` and `dependencies` SHALL serialize as typed
+  `CheckedNodeId` lists. Generated scalar claims SHALL retain `checked_bounds`,
+  while their containing `ExactScalarClaim` SHALL retain `operation`
+  provenance. Equality claims SHALL retain `descriptor`,
+  `declaration_keys`, `declaration_runtime_keys` and `schedule`; function
+  claims SHALL retain `function`, `function_origin` and `declaration_keys`.
+  `semantic_type` and `source_map` SHALL remain present in each family, with
+  source correspondence taken from the admitted package. CG SHALL NOT derive
+  a replacement per-node identity by lowering again or hashing a wire fragment.
+- When forming generated scalar, equality and function claims, CG SHALL obtain
+  reached claim, bound and dependency keys, and any declaration closure based
+  on them, from Contract IR's authoritative traversal of the admitted FR-330
+  graph (IR-766). CG SHALL retain the resulting exact typed keys and each
+  existing claim-family ordering and field semantics. If that traversal cannot
+  resolve a required root, bound or selected dependency, CG SHALL emit no
+  generated claim or artifact for the item and SHALL retain a typed item
+  refusal with the exact requested ID and available admitted source
+  occurrences. A reader refusal or incomplete result remains the
+  whole-request outcome described above. CG SHALL NOT reconstruct a checked
+  graph or perform a second lowering to fill missing keys.
 - CG SHALL preserve independent sibling positions. CG SHALL NOT drop or change
   a representable sibling because another item's typed refusal. If Contract IR reports
   the package byte ceiling and `wire()` is absent, CG SHALL treat the whole
@@ -121,6 +158,8 @@ for package meaning or a source of native bounds.
 | FR-039-AC-4 | Protocol-tagged nodes and their admitted local keyed references remain in the one semantic graph and receive an exact generation or typed unsupported result. A backend does not infer a protocol-target binding that FR-330 does not encode. | Test |
 | FR-039-AC-5 | A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact. CG preserves the reader's typed refusal or limit result and performs no second parse or checked-graph fallback. | Test |
 | FR-039-AC-6 | An item whose admitted package accounting is `failed`, `invalid_body` or `body_incomplete`, or whose `lowered` form is unrepresentable by the selected backend, emits no artifact and retains a distinct typed cause; the package byte-ceiling case emits no artifact for any sibling. | Test |
+| FR-039-AC-7 | Generated scalar, composite equality and exact function claims each serialize `contract_package_identity` equal to the admitted FR-330 `identity` and `node_id` equal to the requested `CheckedNodeId`, with no generated-claim `ir_id` key. Each retains exact `semantic_type`, admitted `source_map`, family-specific provenance, and `package_id` denoting the originating checked package; each serializes typed `claims`, `bounds` and `dependencies`. For the same requested node in two genuinely admitted packages with different identities, the claim identity differs; for two different requested nodes in one admitted package, it also differs. A downstream consumer can join a claim to its admitted meaning by this pair and can use request index only to distinguish repeated request positions. | Test |
+| FR-039-AC-8 | Generated claims' reached claim, bound and dependency keys and dependent declaration closure equal Contract IR's authoritative traversal over the admitted package. A missing required root, bound or selected dependency yields a typed item refusal retaining the exact requested ID and admitted source occurrences, with no generated claim or artifact; a refused or incomplete reader result yields no item claim or artifact. No per-node ID from a second lowering or wire-fragment hash appears. | Test |
 
 ## Dependencies
 
@@ -128,3 +167,5 @@ QSpec `ix://agent-ix/quire-specification/FR-330` owns the closed package and
 reader contract. Contract IR `ix://agent-ix/quire-contract-ir/FR-035` emits it.
 The CG requirement covers consumption only. Protocol-target binding needs a
 QSpec/IR carrier before it can become a CG consumer criterion.
+Contract IR's planned IR-766 admitted-package traversal is required for the
+reached-key portion of generated claims.
