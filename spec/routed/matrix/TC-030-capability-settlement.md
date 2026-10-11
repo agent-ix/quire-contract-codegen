@@ -31,6 +31,57 @@ finite bound available.
 Settle the two-candidate item again under the reverse registration order and
 compare the disposition, the cause and the order of the named candidates.
 
+Use the public negotiation API with typed IR forms and one Kani descriptor.
+For every FR-019-AC-25 row, construct requests for each named family and
+obligation role: Boolean, integer, rational, decimal, IEEE float, text, enum,
+quantity, record/tuple equality, function application, precondition,
+postcondition, invariant, frame, state before/after, bounded collection and
+bounded graph. Include the exact operation identities, type/domain bounds and
+typed claim references required by FR-015; do not replace them with display
+strings. Exercise every supported scalar operation in its family and the
+boundary between a valid finite domain and a missing or non-representable
+bound. For composite equality, vary record and tuple shape, optional members,
+and recursive or over-budget shapes. For functions, exercise supported and
+refused result outcomes. For clauses, cover each kind, dependency role and
+Boolean/integer expression form. For state and frame items, cover before and
+after reads, granted and forbidden fields, and each typed role. For collections
+and graphs, cover bounded and unbounded roots and every admitted finite shape.
+
+Run each valid in-set form against a bounded Kani candidate advertising the
+required mode and verify `supported`. Against a bounded-only candidate, run an
+unbounded form with and without a finite bound and verify `requires-bound` or
+the typed unbounded refusal as AC-31 specifies. Run typed forms outside the
+complete V1/V2 set and malformed in-set forms as separate controls; the former
+settles `unsupported`, warned, with
+`unsupported_projection`/`unsupported-requested-capability` naming its typed
+form before generation, while the latter keeps its FR-015 validation cause.
+Verify no refused form emits an artifact or invokes a generator.
+
+Exercise the V2 clause path separately: use `state`/`state_clause` nodes with
+`operation.member.clause` equal to `precondition`, `postcondition` or
+`invariant`, and bodies and input domains within FR-015-AC-39 through AC-41.
+Compare each with a typed role or body outside the supported V2 subset
+(including an operator outside FR-015-AC-40 and AC-41, as listed in AC-42).
+Verify typed form identity controls settlement and that V2 cases do not stand
+in for any V1 family row.
+
+Run distinct public API controls for an empty candidate set, multiple
+candidates with no named backend, and a supported form whose sole candidate
+cannot satisfy its extent/mode. The empty set retains its missing-capability
+cause, the multiple candidates retain `invalid_capability`/`ambiguous-backend`,
+and the mode/extent control follows the advertised-mode rules. With one
+candidate, make both the typed form and its extent/mode unsupported and verify
+the form refusal settles after candidate/manifest validation but before the
+mode/extent refusal. Change only display/debug formatting for an unchanged
+typed tag/form and verify its disposition, cause and named form identity do
+not change.
+
+For a supported unbounded form on bounded-only Kani, set
+`finite_bound_available=true` and verify `requires-bound` without a substituted
+bound or artifact. Supply a finite bound in a new bounded request and verify
+`supported` retains its exact proof-bound value, domain kind and domain
+identity. Settlement itself emits no artifact or Kani outcome.
+
 Submit one envelope whose `capability_vocabulary` is absent and one whose value
 is another identity, and inspect which kinds were read.
 
@@ -89,6 +140,17 @@ Every variant of the closed backend kind has a dispatched arm.
 No settlement other than `supported` routes a backend, and a manifest repeating an
 identity routes none.
 
+Under FR-019-AC-25 through AC-32, every complete-V1 family and role has a
+valid bounded case that settles `supported` under the required advertisement,
+and the typed out-of-set controls refuse before generation. V2 clause forms
+defined by FR-015-AC-38 through AC-42 are separately admitted or refused
+deterministically. A form refusal names the typed form and precedes extent/mode
+settlement after candidate validation. Empty, ambiguous and mode/extent cases
+retain their own outcomes. Display/debug formatting does not affect form
+settlement. An unbounded `requires-bound` item receives no substituted bound,
+while a new bounded request retains the exact caller-supplied proof-bound value
+and domain identity and settles `supported`.
+
 Under FR-019-AC-15, the driver preserves the QSL registry origin as a typed
 CG value without altering identity or advertised pairs; the CG crate boundary
 and FR-331 wire remain as specified.
@@ -102,3 +164,28 @@ by settlement; and `unsupported`, warned with
 `unsupported_projection`/`unbounded-extent`, without an artifact or Kani
 outcome. The unbounded item's disposition is unchanged by the bounded request.
 Passing generic mode-table controls alone does not complete this collection case.
+
+## FR-019-AC-25 implementation status
+
+The status register describes implementation state against the complete normative set in FR-019-AC-25. A subset marked implemented does not reduce the criterion's scope.
+
+| Form family | STATUS | Implemented subset or planned owner |
+|---|---|---|
+| Boolean scalar | Implemented (subset) | V1 Boolean clause expressions. |
+| Boolean scalar | Planned | Remaining typed Boolean scalar forms; IR-269. |
+| Integer scalar | Implemented (subset) | V1 bounded-integer clauses and V2 confirmed add/subtract/multiply/negate. |
+| Integer scalar | Planned | Remaining integer operation forms; IR-269. |
+| Rational scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
+| Decimal scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
+| IEEE-float scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
+| Text scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
+| Enum scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
+| Quantity scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
+| Record and tuple composite equality | Planned | IR-264 and IR-241; FR-015-AC-69 through AC-76 define bounded-shadow work. |
+| Function application | Implemented (subset) | Integer scalar function application under FR-015-AC-37. |
+| Function application | Planned | Remaining function families; IR-269. |
+| Precondition, postcondition and invariant clauses | Implemented (subset) | Frozen V1 `BoundClause` Boolean/bounded-integer subset. |
+| Precondition, postcondition and invariant clauses | Planned | Complete V1 family coverage and V2 clause claims; IR-269 and IR-489. |
+| Frame clauses, state before/after and frame obligations | Implemented (subset) | Restricted V2 postcondition state/frame roles under FR-015-AC-26 through AC-29 and AC-66 through AC-68. |
+| Frame clauses, state before/after and frame obligations | Planned | Complete V1 and remaining state/frame forms; IR-269. |
+| Bounded collections and graphs | Planned | IR-269; FR-019-AC-24 is negotiation-only and does not claim generation support. |
