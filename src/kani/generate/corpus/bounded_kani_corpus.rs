@@ -947,6 +947,38 @@ mod tests {
         );
     }
 
+    /// Trace: AD-004 L-9, TC-023. This preimage is authored from the fixture fields in RFC 8785
+    /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
+    /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
+    #[test]
+    fn tc_023_case_name_matches_hand_authored_canonical_preimage() {
+        const PREIMAGE: &str = concat!(
+            r#"{"ceilings":{"memoryBytes":17179869184,"wallClock":{"nanos":0,"secs":600}},"#,
+            r#""construct":"checked-arithmetic","dependencies":[],"input":{"bounds":{"#,
+            r#""max_input_bytes":2,"max_objects":2,"max_references":1},"completeness":"complete","#,
+            r#""inputBytes":1,"modelId":"model","objects":[["a","node","s"],["b","node","s"]],"#,
+            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
+            r#""references":[["a","next","b"]],"sourceId":"source"},"#,
+            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
+            r#""request":{"arithmetic":{"left":"1","maximum":"2","minimum":"0","#,
+            r#""operator":"checked_add","right":"1","sourceId":"source"}}}"#,
+        );
+        const DIGEST: &str = "1018f1df0ac4ccf591a06fbcb2e7e7f0e7255331b3f9117aa4f3b1003fd8afb4";
+        assert_eq!(
+            format!("{:x}", qsl_replay::ByteDigest::of(PREIMAGE.as_bytes())),
+            DIGEST,
+            "the hand-authored preimage must retain its fixed digest"
+        );
+        let case = emit(
+            &fixture(),
+            arithmetic("source", 1, 1),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .expect("the fixture is an admitted arithmetic case");
+        assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));
+    }
+
     /// Trace: AD-004 L-9, TC-023. The caller supplies the dependency census, so it can offer a
     /// graph larger than one artifact. The counted preflight refuses before building a JSON tree.
     #[test]
