@@ -76,13 +76,15 @@ decisions the original checked graph or detached lowering records would make.
    differ despite the equal node IDs; assert that the two nodes in the first
    package also have different pairs despite the equal package identity.
    Preserve repeated request positions without treating index as identity.
-8. Exercise an admitted `lowered` item for which the authoritative traversal
-   cannot resolve a required root, bound or selected dependency. Assert a typed
-   item refusal retaining requested identity and available admitted source
-   occurrences, with no generated claim or artifact. Repeat with a reader
-   refusal and incomplete reader outcome; neither reaches an item claim.
-   Inspect the call path for a second lowering, reconstructed checked graph or
-   wire-fragment-derived per-node identifier.
+8. At the Contract IR lowering and strict-reader boundary, exercise inputs
+   with an unresolved required root, bound or selected dependency. Assert that
+   no such input becomes an admitted `lowered` item handed to CG; preserve
+   Contract IR's typed item accounting, reader refusal or incomplete outcome,
+   as applicable, and emit no generated claim or artifact. For a valid
+   package with a `lowered` item, confirm the authoritative traversal returns
+   a complete reached closure. Inspect the call path for a
+   second lowering, reconstructed checked graph or wire-fragment-derived
+   per-node identifier.
 
 ## Expected Results
 
@@ -102,5 +104,6 @@ package identity plus requested node ID as the public claim identity, retain
 the originating checked-package ID and their existing source/provenance fields,
 and omit `ir_id`. The same-node/different-package and
 different-node/same-package controls both change the identity pair. Reached
-keys agree with Contract IR traversal; unresolved required keys refuse the
-item without a claim, and reader refusals stop the request.
+keys agree with Contract IR's total traversal of admitted lowered items;
+unresolved required references never reach CG as lowered items, and reader
+refusals stop the request.

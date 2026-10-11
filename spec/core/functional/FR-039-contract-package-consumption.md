@@ -115,14 +115,15 @@ for package meaning or a source of native bounds.
 - When forming generated scalar, equality and function claims, CG SHALL obtain
   reached claim, bound and dependency keys, and any declaration closure based
   on them, from Contract IR's authoritative traversal of the admitted FR-330
-  graph (IR-766). CG SHALL retain the resulting exact typed keys and each
-  existing claim-family ordering and field semantics. If that traversal cannot
-  resolve a required root, bound or selected dependency, CG SHALL emit no
-  generated claim or artifact for the item and SHALL retain a typed item
-  refusal with the exact requested ID and available admitted source
-  occurrences. A reader refusal or incomplete result remains the
-  whole-request outcome described above. CG SHALL NOT reconstruct a checked
-  graph or perform a second lowering to fill missing keys.
+  graph (IR-766). For an admitted `lowered` item, that traversal is total over
+  its required root, bounds and selected dependencies under Contract IR's
+  FR-035 admission contract. CG SHALL retain its exact typed keys and each
+  existing claim-family ordering and field semantics. An unresolved required
+  reference SHALL NOT reach CG as an admitted `lowered` item: Contract IR's
+  typed item accounting or strict reader owns its refusal. A reader refusal
+  or incomplete result remains the whole-request outcome described above.
+  CG SHALL NOT reconstruct a checked graph or perform a second lowering to
+  fill missing keys.
 - CG SHALL preserve independent sibling positions. CG SHALL NOT drop or change
   a representable sibling because another item's typed refusal. If Contract IR reports
   the package byte ceiling and `wire()` is absent, CG SHALL treat the whole
@@ -159,7 +160,7 @@ for package meaning or a source of native bounds.
 | FR-039-AC-5 | A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact. CG preserves the reader's typed refusal or limit result and performs no second parse or checked-graph fallback. | Test |
 | FR-039-AC-6 | An item whose admitted package accounting is `failed`, `invalid_body` or `body_incomplete`, or whose `lowered` form is unrepresentable by the selected backend, emits no artifact and retains a distinct typed cause; the package byte-ceiling case emits no artifact for any sibling. | Test |
 | FR-039-AC-7 | Generated scalar, composite equality and exact function claims each serialize `contract_package_identity` equal to the admitted FR-330 `identity` and `node_id` equal to the requested `CheckedNodeId`, with no generated-claim `ir_id` key. Each retains exact `semantic_type`, admitted `source_map`, family-specific provenance, and `package_id` denoting the originating checked package; each serializes typed `claims`, `bounds` and `dependencies`. For the same requested node in two genuinely admitted packages with different identities, the claim identity differs; for two different requested nodes in one admitted package, it also differs. A downstream consumer can join a claim to its admitted meaning by this pair and can use request index only to distinguish repeated request positions. | Test |
-| FR-039-AC-8 | Generated claims' reached claim, bound and dependency keys and dependent declaration closure equal Contract IR's authoritative traversal over the admitted package. A missing required root, bound or selected dependency yields a typed item refusal retaining the exact requested ID and admitted source occurrences, with no generated claim or artifact; a refused or incomplete reader result yields no item claim or artifact. No per-node ID from a second lowering or wire-fragment hash appears. | Test |
+| FR-039-AC-8 | For each admitted `lowered` item, Contract IR's authoritative traversal is total over the required root, bounds and selected dependencies, and the generated claim's reached claim, bound and dependency keys and dependent declaration closure equal its output. An unresolved required reference cannot reach CG as an admitted `lowered` item: Contract IR records a typed item refusal or its strict reader refuses the package; a refused or incomplete reader result yields no item claim or artifact. Inspection finds no per-node ID from a second lowering or wire-fragment hash. | Test |
 
 ## Dependencies
 
