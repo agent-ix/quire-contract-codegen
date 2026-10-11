@@ -196,7 +196,12 @@ pub(crate) fn generate_named_boolean_oracle(
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
     match generate_boolean_oracle_build(request, symbol, shape, true)? {
         OracleBuild::Generated(bundle) => Ok(bundle),
-        OracleBuild::Measured(_) => unreachable!("generation requested a measured plan"),
+        OracleBuild::Measured(_) => Err(single_diagnostic(
+            request,
+            GenerationErrorCode::InternalInvariantViolation,
+            "generated.rust",
+            "generation requested retained source but the builder returned a measured plan",
+        )),
     }
 }
 
@@ -209,7 +214,12 @@ pub(crate) fn measure_named_boolean_oracle(
 ) -> Result<usize, Vec<GenerationDiagnostic>> {
     match generate_boolean_oracle_build(request, symbol, shape, false)? {
         OracleBuild::Measured(bytes) => Ok(bytes),
-        OracleBuild::Generated(_) => unreachable!("measurement retained an artifact"),
+        OracleBuild::Generated(_) => Err(single_diagnostic(
+            request,
+            GenerationErrorCode::InternalInvariantViolation,
+            "generated.rust",
+            "measurement requested source-free accounting but the builder retained an artifact",
+        )),
     }
 }
 

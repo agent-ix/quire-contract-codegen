@@ -588,6 +588,72 @@ fn classify_node<'a>(
     }
 }
 
+/// Artifact-free scalar-form classification shared with capability settlement.
+///
+/// This deliberately runs the same typed lowering classifier that the Kani
+/// obligation engine uses, so settlement cannot accept an operation or domain
+/// that its generator refuses.
+pub(crate) fn classify_scalar_form(
+    package: &CheckedPackageV2,
+    node_id: &CheckedNodeId,
+) -> ScalarFormAssessment {
+    let outcome = match crate::oracle::scalar::derive_exact_scalar_items(
+        package,
+        std::slice::from_ref(node_id),
+    )
+    .into_iter()
+    .next()
+    {
+        None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
+        Some(Ok(item)) => {
+            match crate::oracle::scalar::plan_exact_scalar_oracles(package, &[item]) {
+                Ok(plan) => plan
+                    .claims()
+                    .first()
+                    .map(|claim| classify_claim(package, claim))
+                    .unwrap_or(Outcome::Invalid(InvalidObligationItem::UnknownNode)),
+                Err(_) => Outcome::Invalid(InvalidObligationItem::UnknownNode),
+            }
+        }
+        Some(Err(refusal)) => {
+            let claim = ExactScalarClaim {
+                node_id: node_id.clone(),
+                operation: crate::oracle::scalar::OperationClaim {
+                    identity: String::new(),
+                    provenance: crate::oracle::scalar::OperationProvenance::Underived,
+                },
+                result: ClaimDisposition::Refused { refusal },
+            };
+            classify_claim(package, &claim)
+        }
+    };
+    let graph_node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &node.node_id == node_id);
+    let kind = graph_node.and_then(|node| {
+        (&*node.node_tag == "state" && &*node.semantic_form == "frame")
+            .then_some(ObligationKind::Frame)
+    });
+    match refuse_unknown_node_kind(graph_node, kind, outcome) {
+        Outcome::LoweredScalar(_) => ScalarFormAssessment::Supported,
+        Outcome::Unsupported(refusal) => ScalarFormAssessment::Unsupported(refusal),
+        Outcome::RequiresBound(_) => ScalarFormAssessment::RequiresBound,
+        Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
+        Outcome::Lowered(_) | Outcome::StateFrame(_) | Outcome::StateFrameRefused(_) => {
+            ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode)
+        }
+    }
+}
+
+pub(crate) enum ScalarFormAssessment {
+    Supported,
+    RequiresBound,
+    Unsupported(UnsupportedObligation),
+    Invalid(InvalidObligationItem),
+}
+
 /// Guards [`Outcome::LoweredScalar`] against a node whose graph entry does not match the one
 /// recognized `state`/`frame` role pair, and against a node absent from the graph entirely.
 /// [`ClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim

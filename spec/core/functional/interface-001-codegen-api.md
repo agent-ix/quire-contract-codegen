@@ -285,7 +285,7 @@ diagnostics:
     generated: successful supported Boolean-root lowering, including obligation-free bounded-integer comparisons over direct input and state scalar observations
     unsupported: unsupported expression, dependency, obligation, saturating arithmetic (UnsupportedSaturatingArithmetic), or bounded resource
     invalid-input: non-Boolean root or generated-name collision
-    inconclusive: internal syntax or serialization control failure
+    inconclusive: internal syntax, serialization, or generator-mode invariant failure; the latter uses the stable GenerationErrorCode::InternalInvariantViolation code and produces no artifact
     backend-unavailable: reserved for external backends
     io-failed: reserved for atomic publication
   rule: no non-generated state may be converted into a complete artifact claim

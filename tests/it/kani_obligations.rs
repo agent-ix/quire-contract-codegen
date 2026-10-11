@@ -23,7 +23,8 @@ use std::{
 use crate::scratch_crate::{runtime_dependency, write_manifest};
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
-    reference, Bound, MISSING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
+    reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
+    V_BOOLEAN,
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
@@ -39,9 +40,9 @@ use quire_contract_codegen::{
     MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
-    BoundPackage, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef,
-    ContractDependencies, ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
-    RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
+    BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
+    ClauseRef, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 
@@ -347,6 +348,15 @@ pub(crate) fn bound_package(balance_maximum_in_invariant: i64) -> BoundPackage {
     .unwrap_or_else(|diagnostics| panic!("fixture projection must bind: {diagnostics:?}"))
 }
 
+pub(crate) fn ir295_definedness_clause() -> quire_contract_model::BoundClause {
+    bound_package(1000)
+        .clauses()
+        .iter()
+        .find(|clause| clause.identity().clause().as_str() == DEFINEDNESS)
+        .expect("IR-295 fixture contains the definedness clause")
+        .clone()
+}
+
 fn clause(id: &str) -> ClauseRef {
     ClauseRef::new(
         RequirementRef::parse(PACKAGE, "FR-200", 1).unwrap(),
@@ -607,6 +617,26 @@ fn claim_index(
         .iter()
         .position(|claim| &claim.node_id == node_id)
         .expect("test claim map contains selected node")
+}
+
+pub(crate) fn boolean_operation_package() -> (CheckedPackageV2, CheckedNodeId) {
+    const BOOLEAN_AND: u32 = 7_701;
+    let mut builder = corpus_package();
+    builder.application_code_with(
+        BOOLEAN_AND,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.boolean.and"),
+            &key(T_BOOLEAN),
+            vec![reference(&key(V_BOOLEAN)), reference(&key(V_BOOLEAN))],
+        ),
+        &[key(V_BOOLEAN)],
+    );
+    let (package, ids) = builder.admit_resolved();
+    (package, ids.resolve(&code_id(BOOLEAN_AND)))
 }
 
 fn scalar_records(

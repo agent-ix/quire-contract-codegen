@@ -263,57 +263,50 @@ pub enum KaniForm {
         /// The admitted typed clause.
         clause: Box<quire_contract_model::BoundClause>,
     },
-    /// A V2 integer scalar claim whose exact operation identity came from IR.
-    V2IntegerScalarClaim {
-        /// The operation's exact catalog identity.
-        operation_identity: String,
-        /// Whether IR confirmed the operation catalog entry.
-        provenance: KaniOperationProvenance,
-        /// The obligation role, when the graph node is a contract role.
-        role: Option<KaniObligationRole>,
+    /// A claim-map entry and the checked package it was lowered from.
+    ///
+    /// The operation identity, family, and provenance are read from the typed
+    /// claim entry and checked graph; callers cannot assert them independently.
+    V2ScalarClaim {
+        /// The admitted package containing the source node.
+        package: Box<quire_contract_model::CheckedPackageV2>,
+        /// The requested checked node.
+        node_id: quire_contract_model::CheckedNodeId,
     },
     /// A V2 state-clause/frame role handled by the state-frame path.
     V2StateFrame {
-        /// The checked clause role read from the IR node.
-        clause: ClauseKind,
-        /// The requested state/frame obligation role.
+        /// The admitted package containing the state clause.
+        package: Box<quire_contract_model::CheckedPackageV2>,
+        /// The checked state-clause node.
+        clause: quire_contract_model::CheckedNodeId,
+        /// The harness role requested from the checked state-clause node.
         role: KaniObligationRole,
+        /// Rust path of the state ABI.
+        state_path: String,
+        /// State ABI fields in declaration order.
+        state_fields: Vec<String>,
+        /// Rust path of the operation subject.
+        subject_path: String,
     },
-    /// A V1 composite-equality form in the normative set.
-    V1CompositeEquality {
-        /// Record or tuple operands.
-        shape: KaniCompositeShape,
-        /// Equality operator identity.
-        operator: KaniEqualityOperator,
-    },
-    /// A V1 function-application form in the normative set.
-    V1FunctionApplication {
-        /// The exact function operation identity from IR.
-        operation_identity: String,
-    },
-    /// A bounded collection form in the normative set.
-    BoundedCollection {
-        /// The typed collection operation.
-        operation: KaniCollectionOperation,
-    },
-    /// A bounded graph form in the normative set.
-    BoundedGraph {
-        /// The typed graph operation.
-        operation: KaniGraphOperation,
+    /// A checked V2 function declaration and its local checked call item.
+    /// The argument list is a request descriptor and is accepted only when
+    /// it is byte-for-byte the ordered reference list in the call node.
+    V2FunctionApplication {
+        /// The admitted package containing both nodes.
+        package: Box<quire_contract_model::CheckedPackageV2>,
+        /// The checked `function/pure_function` declaration being applied.
+        function_node_id: quire_contract_model::CheckedNodeId,
+        /// The checked local `expression/call` node.
+        call_node_id: quire_contract_model::CheckedNodeId,
+        /// Source argument nodes, in the caller's claimed order.
+        argument_node_ids: Vec<quire_contract_model::CheckedNodeId>,
     },
     /// A typed form outside the normative V1/V2 Kani set.
     OutsideSet {
-        /// The source IR tag.
-        tag: String,
-        /// The source IR form, copied from its typed IR field.
-        form: String,
-    },
-    /// An in-set form rejected by an FR-015 typed validation or lowering rule.
-    Malformed {
-        /// The in-set form's stable typed identity.
-        identity: Box<KaniFormIdentity>,
-        /// The exact FR-015 refusal produced by its typed validation path.
-        refusal: crate::kani::generate::outcome::UnsupportedObligation,
+        /// The admitted package containing the typed node.
+        package: Box<quire_contract_model::CheckedPackageV2>,
+        /// The checked node outside Kani's normative form set.
+        node_id: quire_contract_model::CheckedNodeId,
     },
 }
 
@@ -402,54 +395,6 @@ pub enum KaniObligationRole {
     Frame,
 }
 
-/// Whether the operation identity was confirmed by admitted IR.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniOperationProvenance {
-    /// The admitted IR operation catalog confirmed this identity.
-    IrConfirmed,
-    /// The operation was declared by the caller but not confirmed by IR.
-    CallerDeclared,
-}
-
-/// Shape of a record/tuple equality form.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniCompositeShape {
-    /// Record operands.
-    Record,
-    /// Tuple operands.
-    Tuple,
-}
-
-/// Equality operator identity.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniEqualityOperator {
-    /// Equality.
-    Equal,
-    /// Inequality.
-    NotEqual,
-}
-
-/// Collection operation identity.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniCollectionOperation {
-    /// Universal non-negativity query.
-    ForAllNonNegative,
-    /// Existence of a value equal to the requested value.
-    ExistsEqual,
-}
-
-/// Graph operation identity.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KaniGraphOperation {
-    /// Reachability along the selected reference field.
-    Reachability,
-}
-
 impl KaniFormName {
     const fn label(self) -> &'static str {
         match self {
@@ -465,39 +410,193 @@ impl KaniFormName {
     }
 }
 
-impl KaniCompositeShape {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Record => "record",
-            Self::Tuple => "tuple",
-        }
+fn obligation_role(role: &str) -> Option<KaniObligationRole> {
+    match role {
+        "precondition" => Some(KaniObligationRole::Precondition),
+        "postcondition" => Some(KaniObligationRole::Postcondition),
+        "invariant" => Some(KaniObligationRole::Invariant),
+        _ => None,
     }
 }
 
-impl KaniEqualityOperator {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Equal => "equal",
-            Self::NotEqual => "not_equal",
+fn scalar_operation_family(
+    package: &quire_contract_model::CheckedPackageV2,
+    node_id: &quire_contract_model::CheckedNodeId,
+) -> Option<KaniFormFamily> {
+    use crate::oracle::scalar::{ExactScalarOperation as Op, OrderingOperandKind};
+    let item =
+        crate::oracle::scalar::derive_exact_scalar_items(package, std::slice::from_ref(node_id))
+            .into_iter()
+            .next()?
+            .ok()?;
+    Some(match item.operation {
+        Op::IntegerArithmetic { .. } | Op::IntegerDivision { .. } | Op::IntegerModulo { .. } => {
+            KaniFormFamily::Integer
         }
+        Op::RationalArithmetic { .. } => KaniFormFamily::Rational,
+        Op::Ordering { operands, .. } => match operands {
+            OrderingOperandKind::Integer => KaniFormFamily::Integer,
+            OrderingOperandKind::Rational => KaniFormFamily::Rational,
+            OrderingOperandKind::Decimal => KaniFormFamily::Decimal,
+        },
+        Op::DecimalArithmetic { .. } => KaniFormFamily::Decimal,
+        Op::IeeeArithmetic { .. } | Op::IeeeComparison { .. } | Op::IeeeWidthConversion { .. } => {
+            KaniFormFamily::IeeeFloat
+        }
+        Op::TextAdmission { .. } | Op::TextComparison { .. } => KaniFormFamily::Text,
+        Op::EnumComparison { .. } => KaniFormFamily::Enum,
+        Op::QuantityArithmetic { .. }
+        | Op::QuantityComparison { .. }
+        | Op::QuantityConversion { .. } => KaniFormFamily::Quantity,
+    })
+}
+
+fn checked_node_family(
+    package: &quire_contract_model::CheckedPackageV2,
+    node_id: &quire_contract_model::CheckedNodeId,
+) -> KaniFormFamily {
+    if let Some(family) = scalar_operation_family(package, node_id) {
+        return family;
+    }
+    let identity = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &node.node_id == node_id)
+        .and_then(|node| node.body.get("operation")?.get("identity")?.as_str());
+    match identity {
+        Some(
+            "quire.op.boolean.and"
+            | "quire.op.boolean.or"
+            | "quire.op.boolean.not"
+            | "quire.op.boolean.implies"
+            | "quire.op.boolean.eq"
+            | "quire.op.boolean.ne",
+        ) => KaniFormFamily::Boolean,
+        Some("quire.op.equality.equal" | "quire.op.equality.not_equal") => {
+            KaniFormFamily::CompositeEquality
+        }
+        Some("quire.op.function.apply" | "quire.op.function.call") => {
+            KaniFormFamily::FunctionApplication
+        }
+        Some("quire.op.collection.for_all_non_negative" | "quire.op.collection.exists_equal") => {
+            KaniFormFamily::BoundedCollection
+        }
+        Some("quire.op.graph.reachability") => KaniFormFamily::BoundedGraph,
+        _ => KaniFormFamily::OutsideSet,
     }
 }
 
-impl KaniCollectionOperation {
-    const fn identity(self) -> &'static str {
-        match self {
-            Self::ForAllNonNegative => "for_all_non_negative",
-            Self::ExistsEqual => "exists_equal",
-        }
+fn checked_function_call_matches(
+    package: &quire_contract_model::CheckedPackageV2,
+    function_node_id: &quire_contract_model::CheckedNodeId,
+    call_node_id: &quire_contract_model::CheckedNodeId,
+    argument_node_ids: &[quire_contract_model::CheckedNodeId],
+) -> bool {
+    let graph = &package.graph().nodes;
+    let Some(function) = graph.iter().find(|node| &node.node_id == function_node_id) else {
+        return false;
+    };
+    if &*function.node_tag != "function" || &*function.semantic_form != "pure_function" {
+        return false;
     }
+    let Some(function_members) = function
+        .body
+        .get("members")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    let binding = |name: &str| {
+        function_members
+            .iter()
+            .find(|member| {
+                member.get("term").and_then(serde_json::Value::as_str) == Some("binding")
+                    && member.get("name").and_then(serde_json::Value::as_str) == Some(name)
+            })
+            .and_then(|member| member.get("value"))
+    };
+    let Some(parameters) = binding("parameters")
+        .and_then(|term| term.get("members"))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    let valid_parameters = parameters.iter().all(|term| {
+        resolve_checked_reference(graph, term)
+            .is_some_and(|node| &*node.node_tag == "value" && &*node.semantic_form == "parameter")
+    });
+    let valid_body = binding("body")
+        .and_then(|term| resolve_checked_reference(graph, term))
+        .is_some_and(|node| &*node.node_tag == "expression");
+    if !valid_parameters || !valid_body {
+        return false;
+    }
+    let Some(call) = graph.iter().find(|node| &node.node_id == call_node_id) else {
+        return false;
+    };
+    if &*call.node_tag != "expression"
+        || &*call.semantic_form != "call"
+        || call.body.get("term").and_then(serde_json::Value::as_str) != Some("application")
+        || call
+            .body
+            .get("operator")
+            .and_then(serde_json::Value::as_str)
+            != Some("call")
+        || call
+            .body
+            .pointer("/operation/identity")
+            .and_then(serde_json::Value::as_str)
+            != Some("quire.op.function.call")
+    {
+        return false;
+    }
+    let Some(arguments) = call
+        .body
+        .get("arguments")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    if arguments.len() != argument_node_ids.len() + 1 || parameters.len() != argument_node_ids.len()
+    {
+        return false;
+    }
+    let expected = std::iter::once(function_node_id).chain(argument_node_ids.iter());
+    arguments.iter().zip(expected).all(|(term, expected)| {
+        let Some(target) = term
+            .get("term")
+            .filter(|term| term.as_str() == Some("reference"))
+            .and_then(|_| term.get("target"))
+        else {
+            return false;
+        };
+        let Some(digest) = target.get("digest").and_then(serde_json::Value::as_str) else {
+            return false;
+        };
+        let Some(domain) = target.get("domain").and_then(serde_json::Value::as_str) else {
+            return false;
+        };
+        let actual = graph.iter().find(|node| {
+            node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+        });
+        actual.is_some_and(|node| node.node_id == *expected)
+    })
 }
 
-impl KaniGraphOperation {
-    const fn identity(self) -> &'static str {
-        match self {
-            Self::Reachability => "reachability",
-        }
+fn resolve_checked_reference<'a>(
+    graph: &'a [quire_contract_model::CheckedSemanticNodeV2],
+    term: &serde_json::Value,
+) -> Option<&'a quire_contract_model::CheckedSemanticNodeV2> {
+    if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
+        return None;
     }
+    let target = term.get("target")?;
+    let digest = target.get("digest")?.as_str()?;
+    let domain = target.get("domain")?.as_str()?;
+    graph.iter().find(|node| {
+        node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+    })
 }
 
 impl KaniForm {
@@ -514,67 +613,96 @@ impl KaniForm {
                     ClauseKind::Assertion | ClauseKind::Case | ClauseKind::Information => None,
                 },
             },
-            Self::V2IntegerScalarClaim {
-                operation_identity,
+            Self::V2ScalarClaim { package, node_id } => {
+                let operation_identity = package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == node_id)
+                    .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+                    .map(str::to_owned);
+                let state_clause_role = package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == node_id)
+                    .filter(|node| {
+                        &*node.node_tag == "state" && &*node.semantic_form == "state_clause"
+                    })
+                    .and_then(|node| {
+                        node.body
+                            .get("operation")?
+                            .get("member")?
+                            .get("clause")?
+                            .as_str()
+                    });
+                let identity_family = checked_node_family(package, node_id);
+                KaniFormIdentity {
+                    family: if state_clause_role.is_some() {
+                        KaniFormFamily::StateFrame
+                    } else {
+                        identity_family
+                    },
+                    form: KaniFormName::V2ScalarClaim,
+                    operation_identity: state_clause_role.map(str::to_owned).or(operation_identity),
+                    role: state_clause_role.and_then(obligation_role),
+                }
+            }
+            Self::V2StateFrame {
+                package,
+                clause,
                 role,
                 ..
             } => KaniFormIdentity {
-                family: KaniFormFamily::Integer,
-                form: KaniFormName::V2ScalarClaim,
-                operation_identity: Some(operation_identity.clone()),
-                role: *role,
-            },
-            Self::V2StateFrame { clause, role } => KaniFormIdentity {
                 family: KaniFormFamily::StateFrame,
                 form: KaniFormName::V2StateFrame,
-                operation_identity: Some(
-                    match clause {
-                        ClauseKind::Precondition => "precondition",
-                        ClauseKind::Postcondition => "postcondition",
-                        ClauseKind::Invariant => "invariant",
-                        ClauseKind::Assertion => "assertion",
-                        ClauseKind::Case => "case",
-                        ClauseKind::Information => "information",
-                    }
-                    .to_owned(),
-                ),
+                operation_identity: package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == clause)
+                    .and_then(|node| {
+                        node.body
+                            .get("operation")?
+                            .get("member")?
+                            .get("clause")?
+                            .as_str()
+                    })
+                    .map(str::to_owned),
                 role: Some(*role),
             },
-            Self::V1CompositeEquality { shape, operator } => KaniFormIdentity {
-                family: KaniFormFamily::CompositeEquality,
-                form: KaniFormName::V1CompositeEquality,
-                operation_identity: Some(format!("{}.{}", shape.label(), operator.label())),
-                role: None,
-            },
-            Self::V1FunctionApplication { operation_identity } => KaniFormIdentity {
+            Self::V2FunctionApplication {
+                package,
+                function_node_id: _,
+                call_node_id,
+                ..
+            } => KaniFormIdentity {
                 family: KaniFormFamily::FunctionApplication,
                 form: KaniFormName::V1FunctionApplication,
-                operation_identity: Some(operation_identity.clone()),
+                operation_identity: package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == call_node_id)
+                    .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+                    .map(str::to_owned),
                 role: None,
             },
-            Self::BoundedCollection { operation } => KaniFormIdentity {
-                family: KaniFormFamily::BoundedCollection,
-                form: KaniFormName::BoundedCollection,
-                operation_identity: Some(operation.identity().to_owned()),
-                role: None,
-            },
-            Self::BoundedGraph { operation } => KaniFormIdentity {
-                family: KaniFormFamily::BoundedGraph,
-                form: KaniFormName::BoundedGraph,
-                operation_identity: Some(operation.identity().to_owned()),
-                role: None,
-            },
-            Self::OutsideSet { .. } => KaniFormIdentity {
+            Self::OutsideSet { package, node_id } => KaniFormIdentity {
                 family: KaniFormFamily::OutsideSet,
                 form: KaniFormName::OutsideSet,
-                operation_identity: None,
+                operation_identity: package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == node_id)
+                    .map(|node| node.semantic_form.to_string()),
                 role: None,
             },
-            Self::Malformed { identity, .. } => identity.as_ref().clone(),
         }
     }
 
-    fn preflight(&self, backend: &BackendDescriptor) -> Result<(), Cause> {
+    fn preflight(&self, backend: &BackendDescriptor) -> Result<KaniFormReadiness, Box<Cause>> {
         let identity = self.identity();
         match self {
             Self::V1BoundClause { clause } => {
@@ -589,77 +717,167 @@ impl KaniForm {
                     ),
                 };
                 match refusal {
-                    Some(refusal) => Err(Cause::KaniFormRefused {
+                    Some(refusal) => Err(Box::new(Cause::KaniFormRefused {
                         form: identity,
                         refusal,
                         backend: backend.identity.clone(),
-                    }),
-                    None => Ok(()),
+                    })),
+                    None => Ok(KaniFormReadiness::Ready),
                 }
             }
-            Self::V2IntegerScalarClaim {
-                operation_identity,
-                provenance: KaniOperationProvenance::CallerDeclared,
-                ..
-            } => Err(Cause::KaniFormRefused {
-                form: identity,
-                refusal:
-                    crate::kani::generate::outcome::UnsupportedObligation::CallerDeclaredOperation {
-                        operation_identity: operation_identity.clone(),
-                        blocked_on:
-                            crate::oracle::claim::UpstreamBlocker::OperationIdentityNotConsumed,
-                        derived_domains: Vec::new(),
-                    },
-                backend: backend.identity.clone(),
-            }),
-            Self::V2IntegerScalarClaim {
-                operation_identity,
-                provenance: KaniOperationProvenance::IrConfirmed,
-                ..
-            } if [
-                "quire.op.integer.add",
-                "quire.op.integer.sub",
-                "quire.op.integer.mul",
-                "quire.op.integer.negate",
-            ]
-            .contains(&operation_identity.as_str()) =>
-            {
-                Ok(())
+            Self::V2ScalarClaim { package, node_id } => {
+                use crate::kani::generate::negotiate::ScalarFormAssessment;
+                match crate::kani::generate::negotiate::classify_scalar_form(package, node_id) {
+                    ScalarFormAssessment::Supported => Ok(KaniFormReadiness::Ready),
+                    ScalarFormAssessment::RequiresBound => Ok(KaniFormReadiness::RequiresBound),
+                    ScalarFormAssessment::Unsupported(refusal) => {
+                        Err(Box::new(Cause::KaniFormRefused {
+                            form: identity,
+                            refusal,
+                            backend: backend.identity.clone(),
+                        }))
+                    }
+                    ScalarFormAssessment::Invalid(refusal) => {
+                        Err(Box::new(Cause::KaniFormInvalid {
+                            form: identity,
+                            refusal,
+                            backend: backend.identity.clone(),
+                        }))
+                    }
+                }
             }
-            Self::V2IntegerScalarClaim {
-                operation_identity, ..
-            } => Err(Cause::KaniFormRefused {
-                form: identity,
-                refusal:
-                    crate::kani::generate::outcome::UnsupportedObligation::OperationNotRendered {
-                        operation_identity: operation_identity.clone(),
-                        derived_domains: Vec::new(),
-                    },
-                backend: backend.identity.clone(),
-            }),
             Self::V2StateFrame {
-                clause: ClauseKind::Postcondition,
-                role: KaniObligationRole::Postcondition | KaniObligationRole::Frame,
-            } => Ok(()),
-            Self::V2StateFrame { .. } => Err(Cause::UnsupportedKaniForm {
-                form: identity,
-                backend: backend.identity.clone(),
-            }),
-            Self::V1CompositeEquality { .. }
-            | Self::V1FunctionApplication { .. }
-            | Self::BoundedCollection { .. }
-            | Self::BoundedGraph { .. }
-            | Self::OutsideSet { .. } => Err(Cause::UnsupportedKaniForm {
-                form: identity,
-                backend: backend.identity.clone(),
-            }),
-            Self::Malformed { refusal, .. } => Err(Cause::KaniFormRefused {
-                form: identity,
-                refusal: refusal.clone(),
-                backend: backend.identity.clone(),
-            }),
+                package,
+                clause,
+                role,
+                state_path,
+                state_fields,
+                subject_path,
+            } => {
+                use crate::kani::generate::outcome::StateFrameRole;
+                let actual_clause = package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == clause)
+                    .and_then(|node| {
+                        node.body
+                            .get("operation")?
+                            .get("member")?
+                            .get("clause")?
+                            .as_str()
+                    });
+                let role = match role {
+                    KaniObligationRole::Postcondition => StateFrameRole::Contract,
+                    KaniObligationRole::Frame => StateFrameRole::Frame,
+                    KaniObligationRole::Precondition | KaniObligationRole::Invariant => {
+                        let expected = if *role == KaniObligationRole::Precondition {
+                            "precondition"
+                        } else {
+                            "invariant"
+                        };
+                        if actual_clause != Some(expected) {
+                            return Err(Box::new(Cause::KaniFormInvalid {
+                                form: identity,
+                                refusal: crate::kani::generate::outcome::InvalidObligationItem::UnknownNode,
+                                backend: backend.identity.clone(),
+                            }));
+                        }
+                        StateFrameRole::Contract
+                    }
+                };
+                let state_fields = state_fields.iter().map(String::as_str).collect::<Vec<_>>();
+                let request = crate::kani::generate::frame::StateFrameRequest {
+                    ceilings: crate::kani::generate::frame::default_settlement_ceilings(),
+                    package,
+                    clause,
+                    state_path,
+                    state_fields: &state_fields,
+                    subject_path,
+                    unwind: 4,
+                };
+                match crate::kani::generate::frame::classify_state_frame_role(&request, role) {
+                    Ok(()) => Ok(KaniFormReadiness::Ready),
+                    Err(refusal) => Err(Box::new(Cause::KaniStateFrameRefused {
+                        form: identity,
+                        refusal,
+                        backend: backend.identity.clone(),
+                    })),
+                }
+            }
+            Self::V2FunctionApplication {
+                package,
+                function_node_id,
+                call_node_id,
+                argument_node_ids,
+            } => {
+                let source_matches = checked_function_call_matches(
+                    package,
+                    function_node_id,
+                    call_node_id,
+                    argument_node_ids,
+                );
+                if !source_matches {
+                    return Err(Box::new(Cause::KaniFormInvalid {
+                        form: identity,
+                        refusal: crate::kani::generate::outcome::InvalidObligationItem::UnknownNode,
+                        backend: backend.identity.clone(),
+                    }));
+                }
+                if crate::oracle::function::checked_integer_function_application_is_supported(
+                    package,
+                    function_node_id,
+                    call_node_id,
+                    argument_node_ids,
+                ) {
+                    Ok(KaniFormReadiness::Ready)
+                } else {
+                    Err(Box::new(Cause::KaniFormRefused {
+                        form: identity,
+                        refusal: crate::kani::generate::outcome::UnsupportedObligation::OperationNotRendered {
+                            operation_identity: "quire.op.function.call".to_owned(),
+                            derived_domains: Vec::new(),
+                        },
+                        backend: backend.identity.clone(),
+                    }))
+                }
+            }
+            Self::OutsideSet { package, node_id } => {
+                let node = package
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|node| &node.node_id == node_id);
+                let Some(node) = node else {
+                    return Err(Box::new(Cause::KaniFormInvalid {
+                        form: identity,
+                        refusal: crate::kani::generate::outcome::InvalidObligationItem::UnknownNode,
+                        backend: backend.identity.clone(),
+                    }));
+                };
+                if scalar_operation_family(package, node_id).is_some()
+                    || &*node.semantic_form == "state_clause"
+                {
+                    Err(Box::new(Cause::KaniFormInvalid {
+                        form: identity,
+                        refusal: crate::kani::generate::outcome::InvalidObligationItem::UnknownNode,
+                        backend: backend.identity.clone(),
+                    }))
+                } else {
+                    Err(Box::new(Cause::UnsupportedKaniForm {
+                        form: identity,
+                        backend: backend.identity.clone(),
+                    }))
+                }
+            }
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum KaniFormReadiness {
+    Ready,
+    RequiresBound,
 }
 
 /// One request item.
@@ -783,6 +1001,26 @@ pub enum Cause {
         /// The sole Kani candidate.
         backend: String,
     },
+    /// The typed IR form is malformed or does not belong to its admitted package.
+    #[serde(rename = "invalid-capability")]
+    KaniFormInvalid {
+        /// The form's stable typed identity.
+        form: KaniFormIdentity,
+        /// The FR-015 invalid-item reason.
+        refusal: crate::kani::generate::outcome::InvalidObligationItem,
+        /// The sole Kani candidate.
+        backend: String,
+    },
+    /// A checked state-frame form was refused by its source-backed FR-015 classifier.
+    #[serde(rename = "unsupported-requested-capability")]
+    KaniStateFrameRefused {
+        /// The form's stable typed identity.
+        form: KaniFormIdentity,
+        /// The exact typed state-frame refusal.
+        refusal: crate::kani::generate::outcome::StateFrameRefusal,
+        /// The sole Kani candidate.
+        backend: String,
+    },
     /// An unbounded extent against a bounded-only advertisement, with no finite
     /// bound available.
     UnboundedExtent {
@@ -808,7 +1046,9 @@ impl Cause {
             | Self::UnsupportedDomain { .. }
             | Self::UnsupportedKaniForm { .. }
             | Self::KaniFormRefused { .. }
+            | Self::KaniStateFrameRefused { .. }
             | Self::UnboundedExtent { .. } => "unsupported_projection",
+            Self::KaniFormInvalid { .. } => "invalid_capability",
         }
     }
 }
@@ -901,6 +1141,15 @@ impl ItemSettlement {
                     backend,
                 } => Some(format!(
                     "{backend} refused Kani form {}: {refusal:?}",
+                    form.form.label()
+                )),
+                Cause::KaniFormInvalid { .. } => None,
+                Cause::KaniStateFrameRefused {
+                    form,
+                    refusal,
+                    backend,
+                } => Some(format!(
+                    "{backend} refused Kani state-frame form {}: {refusal}",
                     form.form.label()
                 )),
                 // Exhaustive on purpose. A catch-all here would give the next
@@ -1269,8 +1518,7 @@ fn negotiate_arm(
 
 /// The Kani arm.
 ///
-/// Kani discharges what its manifest advertises, so the advertised-mode
-/// comparison is the whole of its settlement today. It compares the claim's
+/// Kani discharges what its manifest advertises. It compares the claim's
 /// extent against the advertised modes and never narrows the extent to reach a
 /// disposition.
 fn negotiate_kani(
@@ -1279,13 +1527,28 @@ fn negotiate_kani(
     extent: &ExtentClassification,
     kani_form: &KaniForm,
 ) -> Disposition {
-    if let Err(cause) = kani_form.preflight(backend) {
-        return Disposition::Unsupported { cause };
+    let readiness = match kani_form.preflight(backend) {
+        Ok(readiness) => readiness,
+        Err(cause) => match *cause {
+            cause @ Cause::KaniFormInvalid { .. } => return Disposition::InvalidRequest { cause },
+            cause => return Disposition::Unsupported { cause },
+        },
+    };
+    if matches!(readiness, KaniFormReadiness::RequiresBound) {
+        return Disposition::RequiresBound {
+            backend: backend.identity.clone(),
+        };
     }
     let modes = backend.modes_for(kind);
     match extent.extent {
-        Mode::Bounded => Disposition::Supported {
+        Mode::Bounded if modes.contains(&Mode::Bounded) => Disposition::Supported {
             backend: backend.identity.clone(),
+        },
+        Mode::Bounded => Disposition::Unsupported {
+            cause: Cause::UnsupportedRequestedCapability {
+                kind,
+                backend: Some(backend.identity.clone()),
+            },
         },
         Mode::Unbounded if modes.contains(&Mode::Unbounded) => Disposition::Supported {
             backend: backend.identity.clone(),

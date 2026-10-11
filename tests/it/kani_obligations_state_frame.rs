@@ -631,6 +631,40 @@ fn fixture(shape: &Shape) -> Fixture {
     fixture_with_resolver(shape).0
 }
 
+/// Source-backed fixtures for IR-295's exact planned state-frame refusal selectors.
+pub(crate) fn ir295_selector_fixture(negated: bool, grants_every_field: bool) -> Fixture {
+    let modifies: &'static [&'static str] = if grants_every_field {
+        &["audit", "balance"]
+    } else {
+        &model::GRANTED
+    };
+    let shape = Shape {
+        variant: if negated {
+            10
+        } else if grants_every_field {
+            1902
+        } else {
+            0
+        },
+        modifies,
+        condition: if negated {
+            Condition::Negated
+        } else {
+            Condition::PostGePre
+        },
+        ..Shape::HEALTHY
+    };
+    fixture(&shape)
+}
+
+pub(crate) fn ir295_healthy_fixture() -> Fixture {
+    emitted_fixture(&Twin::new(), "BalanceNeverDrops")
+}
+
+pub(crate) fn ir295_state_fields() -> &'static [&'static str] {
+    &STATE_FIELDS
+}
+
 /// The selected model fixture, with graph identities taken from QSL's emitted package.
 pub(crate) fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
     let (package, clause) = twin.emitted_package(clause_name);

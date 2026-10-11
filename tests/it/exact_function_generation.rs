@@ -1642,6 +1642,23 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     ));
 }
 
+/// A caller-selected scalar operator cannot override the checked body operation identity.
+#[test]
+fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
+    let package = admit(ext_corpus_package());
+    let mut declaration = function_add("add_fn");
+    declaration.body = quire_contract_codegen::ExactFunctionBody::Scalar {
+        operator: quire_contract_codegen::IntegerOperator::Subtract,
+    };
+    let oracles = generate(&package, &[declaration], &[item(ITEM_CALL_ADD, "add_fn")]);
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_ADD),
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+}
+
 /// Trace: FR-021-AC-3, TC-031. The claim-map entry for a generated item
 /// records the applied function's name and its `Origin::Body{function,
 /// index}` equal to the request's own declared-function ordering (functions
@@ -3440,4 +3457,56 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     // all, so a JSON-key absence check on `claim-map.json` here would only
     // restate what the type system already guarantees at compile time, not
     // exercise any behavior of this generator.
+}
+
+/// This package uses the FR-021 checked shape: a `function/pure_function`
+/// declaration binds parameter nodes and an expression body; its local call
+/// references the declaration followed by ordered argument references.
+/// Trace: FR-021-AC-27
+#[test]
+fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
+    let (checked, ids) = source_bound_call_package().admit_resolved();
+    let function_name = format!("n{}", key(SOURCE_FUNCTION));
+    let other_name = format!("n{}", key(SOURCE_OTHER_FUNCTION));
+    let function = ids.resolve_function(source_function(&function_name, SOURCE_FUNCTION));
+    let other = ids.resolve_function(source_function(&other_name, SOURCE_OTHER_FUNCTION));
+    let item = ids.resolve_call(source_call());
+
+    let good = generate_exact_function_oracles(
+        &checked,
+        std::slice::from_ref(&function),
+        std::slice::from_ref(&item),
+    )
+    .expect("valid source-backed call is planned");
+    assert!(
+        matches!(
+            good.claim_map.items[0].result,
+            ClaimDisposition::Generated(_)
+        ),
+        "{:?}",
+        good.claim_map.items[0].result
+    );
+
+    let mut wrong_callee = item.clone();
+    wrong_callee.function = other_name;
+    let wrong =
+        generate_exact_function_oracles(&checked, &[function.clone(), other], &[wrong_callee])
+            .expect("wrong source callee is a per-item refusal");
+    assert!(matches!(
+        wrong.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+
+    let mut reordered = item;
+    reordered.argument_node_ids.reverse();
+    let reordered = generate_exact_function_oracles(&checked, &[function], &[reordered])
+        .expect("reordered source arguments are a per-item refusal");
+    assert!(matches!(
+        reordered.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BodyMismatch
+        }
+    ));
 }

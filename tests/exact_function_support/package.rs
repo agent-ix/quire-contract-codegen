@@ -162,6 +162,24 @@ pub const CHAIN_BASE: u32 = 1000;
 pub const CHAIN_LENGTH: u32 = 140; // > rt::MAX_CALL_DEPTH (128)
 pub const ITEM_CALL_CHAIN: u32 = 1500;
 
+/// A genuinely checked FR-021 package used for source-binding adversarial
+/// cases. Unlike `ext_corpus_package`, this declaration is a `function`
+/// node whose parameter and body bindings point to separate checked nodes.
+pub const SOURCE_PARAM_A: u32 = 2600;
+pub const SOURCE_PARAM_B: u32 = 2601;
+pub const SOURCE_BODY: u32 = 2602;
+pub const SOURCE_FUNCTION: u32 = 2603;
+pub const SOURCE_OTHER_FUNCTION: u32 = 2604;
+pub const SOURCE_CALL: u32 = 2605;
+
+fn source_reference(code: u32) -> serde_json::Value {
+    let id = code_id(code);
+    serde_json::json!({
+        "term": "reference",
+        "target": {"domain": id.domain, "digest": id.digest}
+    })
+}
+
 /// `application_code`'s preimage is `{version, node_tag, semantic_form,
 /// semantic_type: T_BOOLEAN (fixed), declaration: None, recursion: null,
 /// body}` -- two calls sharing the same `(semantic_form, body)` pair
@@ -219,6 +237,92 @@ pub fn ext_corpus_package() -> PackageBuilder {
     }
     builder.application_code(ITEM_CALL_CHAIN, "call", body());
     builder
+}
+
+/// One admitted FR-021 function declaration and local call. The call's
+/// first argument is the declaration reference; its remaining references are
+/// ordered exactly as the two declared parameters.
+pub fn source_bound_call_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    for (code, name) in [(SOURCE_PARAM_A, "a"), (SOURCE_PARAM_B, "b")] {
+        builder.code(
+            code,
+            "value",
+            "parameter",
+            T_INTEGER,
+            aggregate(vec![
+                bound_member("name", literal("text", name)),
+                bound_member("level", integer_literal(0)),
+            ]),
+        );
+    }
+    let add_op = serde_json::json!({
+        "identity": "quire.op.integer.add", "laws": [], "mode": null,
+        "member": null, "leaves": []
+    });
+    let body = serde_json::json!({
+        "term": "application", "operator": "binary", "operation": add_op,
+        "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+        "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
+    });
+    builder.application_node(SOURCE_BODY, "binary", &key(T_INTEGER), body);
+    let declaration_body = || {
+        aggregate(vec![
+            serde_json::json!({"term": "binding", "name": "parameters", "value": aggregate(vec![source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)])}),
+            serde_json::json!({"term": "binding", "name": "body", "value": source_reference(SOURCE_BODY)}),
+        ])
+    };
+    builder
+        .code(
+            SOURCE_FUNCTION,
+            "function",
+            "pure_function",
+            T_INTEGER,
+            declaration_body(),
+        )
+        .code(
+            SOURCE_OTHER_FUNCTION,
+            "function",
+            "pure_function",
+            T_INTEGER,
+            declaration_body(),
+        );
+    let call_op = serde_json::json!({
+        "identity": "quire.op.function.call", "laws": [], "mode": null,
+        "member": null, "leaves": []
+    });
+    builder.application_node(
+        SOURCE_CALL,
+        "call",
+        &key(T_INTEGER),
+        serde_json::json!({
+            "term": "application", "operator": "call", "operation": call_op,
+            "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+            "arguments": [source_reference(SOURCE_FUNCTION), source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
+        }),
+    );
+    builder
+}
+
+pub fn source_function(name: &str, code: u32) -> ExactFunctionDeclaration {
+    ExactFunctionDeclaration {
+        node_id: code_id(code),
+        name: name.to_owned(),
+        parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
+        result_type: code_id(T_INTEGER),
+        body: ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::IntegerOperator::Add,
+        },
+        capability_requirements: Vec::new(),
+    }
+}
+
+pub fn source_call() -> ExactFunctionItem {
+    ExactFunctionItem {
+        call_node_id: code_id(SOURCE_CALL),
+        function: format!("n{}", key(SOURCE_FUNCTION)),
+        argument_node_ids: vec![code_id(SOURCE_PARAM_A), code_id(SOURCE_PARAM_B)],
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -647,6 +647,33 @@ pub struct ExactScalarOracles {
     pub claim_map: ClaimMap<ExactScalarClaim>,
 }
 
+/// A checked, typed scalar lowering plan before artifact rendering.
+///
+/// This is the shared authority for Kani settlement and oracle generation: its claims are
+/// derived by lowering the admitted package and checking each operation descriptor against the
+/// checked node. Rendering is a separate step and cannot change the plan's disposition.
+#[derive(Clone, Debug)]
+pub struct ExactScalarPlan {
+    package_id: CheckedSemanticId,
+    claims: Vec<ExactScalarClaim>,
+    pending: Vec<PendingOraclePlan>,
+}
+
+#[derive(Clone, Debug)]
+struct PendingOraclePlan {
+    claim: usize,
+    identity: String,
+    confirmed: bool,
+    operation: ExactScalarOperation,
+}
+
+impl ExactScalarPlan {
+    /// The typed per-node claims that settlement classifies before rendering.
+    pub fn claims(&self) -> &[ExactScalarClaim] {
+        &self.claims
+    }
+}
+
 /// Generate exact scalar oracles for `items` from an admitted package.
 ///
 /// Fails as a whole only with `SourceTooLarge`, `ClaimMapSerialization`, or
@@ -658,6 +685,14 @@ pub fn generate_exact_scalar_oracles(
     package: &CheckedPackageV2,
     items: &[ExactScalarItem],
 ) -> Result<ExactScalarOracles, OracleGenerationError> {
+    render_exact_scalar_plan(plan_exact_scalar_oracles(package, items)?)
+}
+
+/// Build the complete checked scalar plan without publishing generated artifacts.
+pub fn plan_exact_scalar_oracles(
+    package: &CheckedPackageV2,
+    items: &[ExactScalarItem],
+) -> Result<ExactScalarPlan, OracleGenerationError> {
     let mut requests: BTreeMap<&CheckedNodeId, Vec<&ExactScalarOperation>> = BTreeMap::new();
     for item in items {
         requests
@@ -674,10 +709,8 @@ pub fn generate_exact_scalar_oracles(
         .map(|node| (&node.node_id, node))
         .collect::<BTreeMap<_, _>>();
 
-    let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(requests.len());
-    // Generated claims, rendered once every generated oracle is named.
-    let mut pending: Vec<PendingOracle<'_>> = Vec::new();
+    let mut pending: Vec<PendingOraclePlan> = Vec::new();
     for ((node_id, operations), record) in requests.into_iter().zip(&lowering.records) {
         let operation_claim = match operations.as_slice() {
             [operation] => match check_item(&graph, node_id, record, operation) {
@@ -726,11 +759,11 @@ pub fn generate_exact_scalar_oracles(
                                     },
                                 ),
                             };
-                            pending.push(PendingOracle {
+                            pending.push(PendingOraclePlan {
                                 claim: claims.len(),
                                 identity: identity.clone(),
                                 confirmed,
-                                operation,
+                                operation: (*operation).clone(),
                             });
                             (
                                 OperationClaim {
@@ -790,39 +823,51 @@ pub fn generate_exact_scalar_oracles(
             result,
         });
     }
+    Ok(ExactScalarPlan {
+        package_id: lowering.package.source_package_id().clone(),
+        claims,
+        pending,
+    })
+}
+
+/// Render an already checked scalar plan into oracle artifacts.
+pub fn render_exact_scalar_plan(
+    mut plan: ExactScalarPlan,
+) -> Result<ExactScalarOracles, OracleGenerationError> {
+    let mut source = SourceBuilder::default();
     // Each generated oracle is named by its operation; oracles sharing an operation are numbered
     // in node-id order, so a refused or differently requested sibling never renames one.
     let names = unique_names(
-        pending
+        plan.pending
             .iter()
             .map(|oracle| {
                 Ok((
-                    format!("oracle_{}", operation_name(oracle.operation)?),
-                    claims[oracle.claim].node_id.clone(),
+                    format!("oracle_{}", operation_name(&oracle.operation)?),
+                    plan.claims[oracle.claim].node_id.clone(),
                 ))
             })
             .collect::<Result<Vec<_>, OracleGenerationError>>()?,
     );
-    for (oracle, symbol) in pending.iter().zip(names) {
-        source.oracle(&symbol, &oracle.identity, oracle.operation)?;
-        if let ClaimDisposition::Generated(generated) = &mut claims[oracle.claim].result {
+    for (oracle, symbol) in plan.pending.iter().zip(names) {
+        source.oracle(&symbol, &oracle.identity, &oracle.operation)?;
+        if let ClaimDisposition::Generated(generated) = &mut plan.claims[oracle.claim].result {
             if oracle.confirmed {
                 generated.oracle_source =
-                    standalone_oracle_source(&symbol, &oracle.identity, oracle.operation)?;
+                    standalone_oracle_source(&symbol, &oracle.identity, &oracle.operation)?;
             }
             generated.symbol = symbol;
         }
     }
 
     let claim_map = ClaimMap {
-        package_id: lowering.package.source_package_id().clone(),
+        package_id: plan.package_id,
         // No blocker applies to every entry any more: a confirmed claim's
         // provenance is `IrConfirmed`, and an unconfirmed claim's
         // `CallerDeclared` provenance names
         // `UpstreamBlocker::OperationIdentityNotConsumed` per-item, whichever
         // of the cases on `OperationProvenance::CallerDeclared` applies.
         blocked: Vec::new(),
-        items: claims,
+        items: plan.claims,
     };
     let lib = source.finish();
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
@@ -2785,15 +2830,6 @@ fn standalone_oracle_source(
 }
 
 /// A generated claim whose oracle is named and rendered after every claim is checked.
-struct PendingOracle<'o> {
-    /// Its position in the claim list.
-    claim: usize,
-    identity: String,
-    /// Whether the node confirmed its operation, which alone gets a standalone oracle source.
-    confirmed: bool,
-    operation: &'o ExactScalarOperation,
-}
-
 /// The readable operation family of `operation`, such as `integer_add`, for generated names.
 fn operation_name(operation: &ExactScalarOperation) -> Result<String, OracleGenerationError> {
     let identity = operation_identity(operation)?;
