@@ -933,7 +933,7 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(super::BoundsIdentity::from(&input.input().bounds)).unwrap(),
-            serde_json::to_value(&input.input().bounds).unwrap()
+            serde_json::to_value(input.input().bounds).unwrap()
         );
         let edge = crate::kani::census::ProofDependencyEdge {
             proof_id: "dependency".to_owned(),
