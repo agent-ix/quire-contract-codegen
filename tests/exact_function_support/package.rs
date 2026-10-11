@@ -633,9 +633,10 @@ pub fn ext_corpus_package() -> PackageBuilder {
     builder
 }
 
-/// Minimal admitted corpus for the AC-11 classifier boundary. The full
-/// function-generation corpus includes unrelated fixtures that exceed the
-/// V2 reader's bounded byte budget when combined with additional calls.
+/// Minimal admitted corpus for the AC-11 defensive classifier boundary. The
+/// requested Model/State roots intentionally do not match the source-bound
+/// function on their call items; source-bound Model/State application remains
+/// planned until the reader admits a suitable representation.
 pub fn ac11_classifier_package() -> PackageBuilder {
     let mut builder = source_bound_call_package();
     source_item_call(

@@ -1757,20 +1757,23 @@ fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
-/// Trace: FR-021-AC-11, TC-031. The admitted model/state nodes are requested
-/// as declaration roots with ordinary scalar signatures. Their unsupported
-/// lowering records map to distinct typed blockers before signature
-/// classification; the V2 fixture does not encode them as parameter types.
+/// Trace: FR-021-AC-11, TC-031. This defensive classifier case intentionally
+/// pairs Model/State request roots with items whose checked source binding is
+/// `SOURCE_FUNCTION`; the mismatch means it does not cover applied calls to
+/// those roots. It verifies the distinct lowering-record blockers while a
+/// separate valid source-bound call remains positively generated.
 #[test]
 fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     let package = admit(ac11_classifier_package());
     let functions = vec![
         function_model_root("model_fn"),
         function_state_root("state_fn"),
+        source_function(&format!("n{}", key(SOURCE_FUNCTION)), SOURCE_FUNCTION),
     ];
     let items = vec![
         item(ITEM_CALL_MODEL, "model_fn"),
         item(ITEM_CALL_STATE, "state_fn"),
+        source_call(),
     ];
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
@@ -1792,6 +1795,10 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
         }
     ));
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
+    assert!(matches!(
+        disposition_for(&oracles, SOURCE_CALL),
+        ClaimDisposition::Generated(_)
+    ));
 }
 
 /// Trace: FR-021-AC-12, TC-031. A declared function whose own body fails to
@@ -3253,8 +3260,8 @@ pub(super) fn main_oracles() -> FixtureOracles {
     )
 }
 
-/// The generator's current output for the nested-call chain corpus (deeper
-/// than `MAX_CALL_DEPTH`), which `exact_function_agreement` executes for AC-7.
+/// Intended AC-7 output for the nested-call chain. The current source-bound V2
+/// fixture exceeds the reader byte budget before this oracle can be produced.
 pub(super) fn chain_oracles() -> FixtureOracles {
     let package = admit(ext_corpus_package());
     let mut functions = chain_functions();
@@ -3262,11 +3269,9 @@ pub(super) fn chain_oracles() -> FixtureOracles {
     generate(&package, &functions, &[item(ITEM_CALL_CHAIN, "chain_0")])
 }
 
-/// Trace: FR-021-AC-7, TC-031. The chain corpus is `CHAIN_LENGTH` (> 128)
-/// functions `chain_0 .. chain_139`, each generated body calling the next and
-/// the last calling `add_fn`, and its one item generates -- so the AC-7
-/// execution case in `exact_function_agreement` really does enter a generated
-/// chain deeper than `MAX_CALL_DEPTH`.
+/// Trace: FR-021-AC-7, TC-031. This intended chain regression exceeds
+/// `MAX_CALL_DEPTH`; it remains unverified because the current V2 fixture
+/// exceeds the reader's byte limit before generation.
 #[test]
 fn tc_031_ac7_chain_corpus_generates_a_call_chain_deeper_than_max_call_depth() {
     let chain = chain_functions();

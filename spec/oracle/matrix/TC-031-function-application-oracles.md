@@ -41,11 +41,14 @@ required dependency or target path.
    scheduled (AC-1, AC-12 and AC-27). Retain capability-gated, reference-typed,
    model/relation, state/temporal/protocol and unsupported `Negate` cases and
    assert their distinct existing blockers (AC-6, AC-10, AC-11 and AC-21).
-   For the Model/State AC-11 cases, use admitted family nodes as declaration
-   roots with ordinary scalar parameter/result descriptors. Do not encode
-   Model/State nodes as parameter semantic types: the V2 reader rejects those
-   edges, so this case verifies CG's typed family classification, not reader
-   representability.
+   For the defensive Model/State AC-11 classifier case, pair admitted family
+   nodes as request roots with call items bound to a different checked source
+   function. Assert the generated claim refusals map to distinct blockers,
+   and state this source/item mismatch in the test. Keep a valid source-bound
+   call in the same case as a positive generator oracle. Do not encode Model/State
+   nodes as parameter types or claim this covers applied calls: the source-bound
+   applied-call leg is PLANNED pending a reader-admissible upstream
+   representation.
 3. Generate the main corpus twice and under permuted request order. Compare
    schedule source, claim and location bytes; inspect ordering by call-node id,
    declaring function-node id, argument source ids and final byte-wise name
@@ -166,6 +169,14 @@ required dependency or target path.
     negative controls; keep step 2's malformed source edges and AC-27 typed
     refusals as separate negative controls. This is a public strict-reader
     case, not step 1's lowered-graph seam or step 11's planned owner execution.
+
+## Verification Status
+
+AC-7 is unverified. The source-bound V2 fixture exceeds the default 1 MiB
+reader budget at depth 128 and 129; no admission, lowering or generation was
+attempted for those samples. The byte measurements and the smaller-valid-
+encoding blocker assigned to IR-768 are recorded in [FR-021](../functional/FR-021-function-application-oracles.md#status).
+The AC-7 acceptance criterion and verification steps above remain unchanged.
 
 ## Expected Results
 
