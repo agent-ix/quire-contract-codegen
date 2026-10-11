@@ -24,6 +24,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-017
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-038
+    type: references
   - target: ix://agent-ix/quire-contract-ir/ADR-0056
     type: references
 ---
@@ -561,10 +563,15 @@ records only the work order the ruling allows, because the code still has V1 rea
   CG's lock then holds one `quire-contract-model` and one `quire-contract-ir` (`make deny`).
 - **One typed node-access layer** `core/ir/`: the only code in CG that opens a `CheckedPackageV2` body
   term. It exposes a node view with a typed tag, typed member accessors and typed errors, and
-  carries the operator table (identifier, arity, reachable range) as one enum in place of the three
-  string tables. The four walkers (70 `.get` call sites at this base) migrate onto it, one module per
-  PR, and the count outside `core/ir` goes to zero. If IR exposes a typed decoder, the callers
-  switch to it and `core/ir` is deleted in the same change; no forwarding layer is kept.
+  carries the internal typed operator source of [FR-038](../core/functional/FR-038-typed-operator-catalog.md)
+  for V2 consumers. Its entries distinguish identity, family, operand arity and order, result kind,
+  and applicable rendering data; reachable range is calculated only for the scalar Kani operations
+  that have that calculation. This replaces repeated identity matches without making CG an
+  admission or vocabulary authority. The four walkers (70 `.get` call sites at this base) migrate
+  onto it, one module per PR, and the count outside `core/ir` goes to zero. If IR exposes a typed
+  decoder, the callers
+  switch to it and `core/ir` is deleted in the same change; CG's one source for CG-only rendering
+  decisions remains internal without retaining a forwarding layer for node access.
 - **The version profile in one place** `core/profile.rs`: the emitted oracle crate's manifest
   template (written once, called by the three emitters), whose runtime dependency names the
   runtime source the way CG's own `Cargo.toml` does (git URL and branch), and every contract and
@@ -736,7 +743,8 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
    (L-1, L-2) lands with 2g; it reads `use` lines and also flags `crate::<Item>` with no module
    segment in code outside string literals. It does not read comments, so the doc links are
    rewritten by 2g-0 and not checked by the test.
-3. **Typed node access and the scalar split.** `core/ir` with the operator enum, then
+3. **Typed node access and the scalar split.** `core/ir` with the
+   [FR-038](../core/functional/FR-038-typed-operator-catalog.md) operator source, then
    `state_frame`, `exact_scalar`, `composite_equality` and `exact_function` onto it, one PR each.
    The `exact_scalar` PR starts from the step 2d result, where the complete implementation is in
    `oracle/scalar/mod.rs`. It moves shared checked-node walkers into `core/ir`, moves descriptor
@@ -1304,8 +1312,11 @@ and each interim file carries a header naming the step that deletes it.
   public error-like types), the `unreachable!` arms on RT enums (37 at the audit, converted by #232;
   the remaining arms are tracked by IR-352), release-build truncation in
   `generate_routed`, and test conventions. A layout does not fix them; IR-348 carries the rest.
-  The typed operator enum is in this AD because the audit assigned it to IR-344, though the
-  ticket text does not list it.
+  [FR-038](../core/functional/FR-038-typed-operator-catalog.md) owns the typed operator behavior;
+  this AD assigns its internal location to the typed-node-access step. The V1 bound relation's
+  independent host evaluator remains with `strategy/bound` until the V2 strategy gate below.
+  The hand-built bounded corpus's `checked_method` is removed at step 4g rather than migrated
+  into this enduring source; its proof controls are stated there.
 
 ### Decisions taken from the planner
 
