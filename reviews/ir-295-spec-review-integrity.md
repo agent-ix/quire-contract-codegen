@@ -25,3 +25,18 @@ Reviewed AC atomicity, falsifiability, typed-form boundaries, and the test proce
 ## Failure-domain check
 
 The new ingress is described as typed, in-process data and does not add a callback, external lookup, or graph operation. No additional failure-domain omission was identified beyond the undefined typed-form capability boundary in FND-002.
+
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | The newly defined Kani-supported set covers only V2 `state_clause` precondition, postcondition and invariant forms, leaving the ticket's complete-V1 IR-269 proof forms without a settlement rule. | spec/routed/functional/FR-019-capability-settlement.md:311; IR-295 acceptance |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | `256d7bf1c61863839f13a0f8cf15c20e98c03bd3`; after_excerpt: `For the V2 clause negotiation path, the Kani-supported typed IR tag/form is state/state_clause with operation.member.clause equal to precondition, postcondition or invariant (FR-015-AC-38); its body uses the operators and input domains defined by FR-015-AC-39 through FR-015-AC-42.` |
+| FND-002 | fixed | `256d7bf1c61863839f13a0f8cf15c20e98c03bd3`; after_excerpt: `The Kani-supported typed IR tag/form is state/state_clause with operation.member.clause equal to precondition, postcondition or invariant (FR-015-AC-38); its body uses the operators and input domains defined by FR-015-AC-39 through FR-015-AC-42.` |
+| FND-003 | still-open | This fix round defines only the V2 clause negotiation path; the IR-295 ticket requires form-aware settlement over the complete-V1 admitted proof set. No settlement mapping for the other MVP forms is specified. |
