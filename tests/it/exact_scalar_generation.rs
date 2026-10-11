@@ -1210,21 +1210,41 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     );
 }
 
-/// A package/item pair whose lone node (code 3001) exceeds
-/// `SCALAR_LOWERING_WORK_LIMIT` during lowering. Each reference argument
-/// costs a body term and a successor edge, so 40,000 of them exceed the
-/// 65,536 units scalar lowering allows. Shared by
-/// `tc_024_lowering_work_exhaustion_is_a_typed_refusal` and
-/// `tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively`, each
-/// of which still calls this function -- and so still pays to build and admit
-/// this 40,000-node package -- independently; only the fixture-construction
-/// code is shared here, not the runtime cost of paying for it twice.
-fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
-    let arguments = (0..40_000)
-        .map(|_| reference(&key(V_INTEGER)))
-        .collect::<Vec<_>>();
-    let mut builder = corpus_package();
-    builder.application_bounded(
+/// The scalar nodes shared by the admitted work-exhaustion fixture and its
+/// reader-negative aggregate-operand control.
+fn minimal_integer_builder() -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
+    builder.code(
+        T_INTEGER,
+        "scalar_type",
+        "integer",
+        &key(T_INTEGER),
+        json!({"term": "aggregate", "members": []}),
+    );
+    let bound_key = builder.bound(&INT);
+    builder.code(
+        V_INTEGER,
+        "value",
+        "literal",
+        &bound_key,
+        literal("integer", "3"),
+    );
+    builder
+}
+
+/// A binary Integer application whose first referenced value holds a wide
+/// aggregate body. The reader can type both arguments as Integer, and lowering
+/// visits the aggregate's terms and successor edges through that reference.
+fn work_exhausted_builder(references: usize) -> PackageBuilder {
+    let body = json!({
+        "term": "aggregate",
+        "members": (0..references)
+            .map(|_| reference(&key(V_INTEGER)))
+            .collect::<Vec<_>>(),
+    });
+    let mut builder = minimal_integer_builder();
+    builder.code(3003, "value", "literal", &key(T_INTEGER), body);
+    builder.application_code_with(
         3001,
         "expression",
         "binary",
@@ -1233,24 +1253,77 @@ fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
             "binary",
             op("quire.op.integer.add"),
             &key(T_INTEGER),
-            // `quire.op.integer.add` takes exactly 2 operands, so the
-            // 40,000 stress references live nested inside an `aggregate`
-            // wrapper as the second operand rather than as 40,000 direct
-            // operands: IR-216's operand-arity check
-            // (`check_operands`/`entry.rest`) refuses any node whose
-            // `body.arguments.len()` disagrees with its catalogued
-            // identity's own operand count, but IR's *lowering* successor-
-            // edge walk (`CheckedPackageV2::lower`, exercised below, wholly
-            // separate from admission-time operation validation) still
-            // recurses into a nested term tree regardless of catalog
-            // arity, so the stress case is preserved.
+            vec![reference(&key(3003)), reference(&key(V_INTEGER))],
+        ),
+        &[key(3003), key(V_INTEGER)],
+    );
+    builder
+}
+
+/// Trace: FR-014-AC-15, TC-024. The stress shape reaches the reader before
+/// the lowering work ceiling is applied.
+#[test]
+fn tc_024_work_exhaustion_shape_is_reader_admitted_at_small_size() {
+    let (result, _, _) = work_exhausted_builder(2).read_resolved();
+    assert!(
+        matches!(result, CheckedPackageV2ReadResult::Admitted(_)),
+        "small work-exhaustion shape was refused: {result:?}"
+    );
+}
+
+/// Trace: FR-037-AC-1, TC-052. A binary integer operator cannot take an
+/// aggregate directly in an operand slot.
+#[test]
+fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
+    let mut builder = minimal_integer_builder();
+    builder.application_code_with(
+        3004,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &key(T_INTEGER),
             vec![
                 reference(&key(V_INTEGER)),
-                json!({"term": "aggregate", "members": arguments}),
+                json!({
+                    "term": "aggregate",
+                    "members": [reference(&key(V_INTEGER)), reference(&key(V_INTEGER))],
+                }),
             ],
         ),
-        &[INT],
+        &[key(V_INTEGER)],
     );
+    let (result, wire, ids) = builder.read_resolved();
+    let node_id = ids.resolve(&code_id(3004));
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("aggregate operand node");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("aggregate operand unexpectedly admitted: {result:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/body/arguments/1"))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
+}
+
+/// A package/item pair whose lone application (code 3001) exceeds
+/// `SCALAR_LOWERING_WORK_LIMIT` during lowering. Each reference term costs a
+/// body term and a successor edge, so 40,000 of them exceed the 65,536 units
+/// scalar lowering allows. Both stress tests construct the same minimal shape.
+fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
+    let builder = work_exhausted_builder(40_000);
     let limits = quire_contract_model::CheckedPackageReadLimits {
         bytes: 16 * 1024 * 1024,
         ..quire_contract_model::CheckedPackageReadLimits::bounded()
