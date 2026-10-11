@@ -80,6 +80,22 @@ generation-time `KaniOutcome`; FR-017 supplies the verdict from a run.
 FR-015-AC-95 states that planned retirement boundary. The other criteria
 below own live interim behavior and do not mark that retirement implemented.
 
+Planned (IR-268): FR-015-AC-96 to FR-015-AC-102 add symbolic collection and
+reference-graph obligations to the V2 Kani item path. The finite-input
+`CollectionQuery`, `GraphRequest` and corpus of AC-86 to AC-94 are concrete
+lowerings, not proofs over all model-admitted values. Their caller ceilings
+remain resource limits for those interim operations and cannot stand in for
+model domains. Contract IR's admitted V2 model-field accessor exposes a
+collection member's typed inclusive cardinality and element type; V2 lowering
+exposes reachable bound nodes and a typed `RequiresBound` result. The admitted
+V2 interfaces do not yet expose a typed finite model-object population and
+per-reference-field edge multiplicity sufficient to bound every symbolic graph
+input. Graph proof generation is therefore conditional on that Contract IR
+input; absent it, the graph item is `unsupported` with no harness. This is an
+upstream interface gap, not permission to parse a package body or substitute a
+caller expansion ceiling. The V1-draft wording of IR-268 is interpreted through
+the current admitted `quire.checked-package/v2` boundary.
+
 ## Inputs
 
 - The FR-014 oracle crate and claim map for the contract's expressions.
@@ -124,6 +140,15 @@ below own live interim behavior and do not mark that retirement implemented.
   descriptor. The descriptor selects the operator and the operand types and never a bound; every
   bound comes from the IR `bounded_domain` nodes the closure reaches. Each operand is a parameter
   or a literal. The request also carries the refinement case cap of FR-028.
+- A symbolic collection or graph item: a claim and selected model declaration
+  in one admitted `CheckedPackageV2`, a customer subject and the request's
+  explicit unwind and resource ceilings. A collection item names one model
+  field and query; its cardinality and element domain come from the field's
+  typed `CheckedMemberType` and reachable V2 bounds. A graph item names the
+  start and target object types and one reference field; it needs typed,
+  declaration-derived finite object-population and edge-multiplicity domains
+  from Contract IR. Concrete values and caller `max_items` or
+  `max_expansions` are not domain inputs to either item.
 
 ## Outputs
 
@@ -664,6 +689,13 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-93 | Until AD-004 step 4g retires the hand-built bounded-corpus path, a profile/input mismatch, family-lowering refusal, proof-graph serialization refusal or duplicate case identity returns its typed refusal with the selected profile revision, emits no artifact and claims no new case identity. | Test (TC-023) |
 | FR-015-AC-94 | While the bounded-corpus emitter remains, equal case inputs produce equal artifact paths and contents regardless of emission order, and reordering the same finite graph's objects or references does not change them; changing a request field, selected profile, finite input, ceilings or normalized dependency census changes the case identity and artifact paths. | Test (TC-023) |
 | FR-015-AC-95 | Once AD-004 step 4g replaces the hand-built bounded-corpus path, neither successful nor refused corpus generation returns a `KaniOutcome`; a successful case returns its artifacts, and only an FR-017 backend run can produce a proof verdict. PLANNED (AD-004 step 4g; QSL-353 prerequisite). | Test (TC-023) |
+| FR-015-AC-96 | A collection claim over a selected model field whose typed collection member has inclusive cardinality `[minimum, maximum]` and whose element domain is finite generates a harness with symbolic length and symbolic elements; its assumptions admit both cardinality endpoints, both element endpoints and every value between them, preserve the collection's declared order and uniqueness rules, and use no caller-supplied `max_items` as a semantic bound. PLANNED (IR-268). | Test |
+| FR-015-AC-97 | A collection field with no authored finite maximum, an element with no finite representable domain, or a V2 `RequiresBound` lowering record settles `requires_bound` naming the field or unbounded type and emits no harness; a collection form or query whose semantics this generator cannot encode settles `unsupported` naming that capability and emits no harness. Neither disposition substitutes a finite ceiling. PLANNED (IR-268). | Test |
+| FR-015-AC-98 | A graph claim generates a harness only when admitted typed Contract IR inputs identify finite model-object populations for its start and target types and a finite edge multiplicity for its selected reference field; every symbolic object and edge is bounded inclusively by those declarations, including zero and maximum where admitted, and reachability follows only that field. Missing or non-finite population or multiplicity settles `requires_bound` when the typed input identifies an unbounded domain, otherwise `unsupported` naming the unavailable graph-domain capability; no harness or substituted caller `max_expansions` is emitted. PLANNED (IR-268; typed graph-domain input absent from current Contract IR). | Test |
+| FR-015-AC-99 | The generated collection and graph harnesses assert the claim over their symbolic model-admitted inputs, end with the FR-015-AC-7 cover after their assertions, and never replace symbolic inputs with the current finite-input corpus's concrete `Vec<i128>` or object IDs. A healthy QSL-emitted admitted V2 case of each supported family yields an installed-Kani `Verified` result with its cover satisfied; a seeded claim or subject mutant yields `Falsified` with a concrete in-domain playback. A generation-time Boolean or `KaniOutcome::Proved` is not proof evidence. PLANNED (IR-268). | Test |
+| FR-015-AC-100 | For either family, changing an authored cardinality, element bound, object population, edge multiplicity, claim, customer subject or unwind changes the harness identity; equal admitted inputs regenerate byte-identically. The identity records every symbolic domain and the solver and complete ordered option vector, and FR-017 run evidence records the actual Kani, Rust and solver versions, unwind and every option used by the installed backend. PLANNED (IR-268). | Test |
+| FR-015-AC-101 | A request whose symbolic collection or graph domain exceeds the generator's representational or resource ceiling settles `unsupported` with a typed reason naming the failing domain or ceiling and no harness; it never tightens the model domain to make a proof tractable. A missing or malformed selected declaration likewise refuses with its typed reason and no harness. PLANNED (IR-268). | Test |
+| FR-015-AC-102 | The symbolic collection and graph items are settled through the FR-015 V2 obligation path, one disposition per requested item; supported items alone emit harnesses. The finite-input lowerers and hand-built corpus of AC-86 to AC-95 neither supply these items' bounds nor classify their proof verdicts. PLANNED (IR-268). | Test |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 

@@ -12,10 +12,38 @@ relationships:
 
 ## Description
 
-Verify that complete-V1 contracts produce one bounded harness per obligation
-kind and refuse non-finite obligations.
+Verify that bounded contracts produce one harness per obligation kind and
+refuse non-finite obligations. IR-268 adds planned V2 symbolic collection and
+graph controls; the present finite-input corpus is not proof evidence for them.
 
 ## Test Procedure
+
+For IR-268, emit a collection claim and a reference-graph claim through QSL,
+admit each as `CheckedPackageV2`, and resolve its selected model declaration
+through Contract IR's typed interfaces. For the collection, use a field with
+nonzero inclusive cardinality and finite element endpoints; inspect the
+generated `kani::any()` draws and assumptions, then check assignments at both
+cardinality and element endpoints. For the graph, use a finite model-object
+population and bounded multiplicity for the selected reference field; inspect
+draws and assumptions at zero and the declared maxima and verify that a
+nonselected field cannot establish reachability. Neither case passes a concrete
+input vector or a caller semantic ceiling. Refuse unbounded cardinality,
+unbounded element type, unbounded object population, unbounded edge
+multiplicity, absent typed graph-domain inputs, unsupported collection form,
+malformed selected declaration and an over-ceiling model domain. Assert the
+typed disposition names the failing capability or domain and exposes no
+harness. Use a mixed request to check one disposition per item.
+
+Run each emitted healthy harness with the installed backend and assert
+`Verified` and a satisfied final cover. Seed a collection query/subject defect
+and a graph reachability/subject defect, run each and require `Falsified` plus
+an in-domain concrete playback. Change one model bound, the claim, subject
+and unwind separately to check identity changes; repeat equal inputs for byte
+identity. Compare identity bounds and complete ordered options with the emitted
+source and FR-017 run evidence, including actual Kani, Rust and solver versions.
+The finite-input corpus's Boolean and generation-time outcome do not satisfy
+these controls. These tests are planned until the symbolic generation exists;
+the graph success case also awaits Contract IR's typed graph-domain input.
 
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract
