@@ -56,6 +56,7 @@ mod exact_scalar_generation;
 mod harness_generation;
 mod kani_argument_order;
 mod kani_batching;
+mod kani_gate;
 mod kani_generation;
 mod kani_obligations;
 mod kani_obligations_state_clause_replay;

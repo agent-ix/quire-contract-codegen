@@ -23,6 +23,8 @@ help:
 	@echo "  make test             - cargo test"
 	@echo "  make build            - Release build"
 	@echo "  make kani             - Run the Kani obligation lane serially"
+	@echo "  make kani-scope       - Show whether changed paths require the real-Kani lane"
+	@echo "  make kani-gate        - Run and verify the full real-Kani lane"
 	@echo "  make tools            - Install the host tools the tests drive (llvm-tools, cargo-llvm-cov, Kani)"
 	@echo "  make msrv             - Check the crate with Rust $(MSRV)"
 	@echo "  make spec             - Quire-validate the specification"
@@ -79,11 +81,19 @@ tools:
 	$(CARGO) install --locked kani-verifier
 	$(CARGO) kani setup
 
-.PHONY: kani
+KANI_LOCK ?= /tmp/agent-e-heavy-build.lock
+KANI_FILTERS := kani_obligations skeleton_spine kani_witness_join bounded_kani_corpus kani_generation kani_batching
+KANI_TEST := $(CARGO) +$(MSRV) test $(LOCKED) -j 4 --test it --target-dir target-codex-backends -- --ignored --test-threads=1 $(KANI_FILTERS)
+
+.PHONY: kani kani-scope kani-gate
 kani:
-	flock /tmp/agent-e-heavy-build.lock $(CARGO) +$(MSRV) test $(LOCKED) -j 4 \
-		--test it --target-dir target-codex-backends \
-		-- --ignored --test-threads=1 kani_obligations skeleton_spine kani_witness_join bounded_kani_corpus kani_generation kani_batching
+	flock $(KANI_LOCK) $(KANI_TEST)
+
+kani-scope:
+	$(BASH) scripts/kani_scope.sh
+
+kani-gate:
+	$(BASH) scripts/kani_gate.sh $(KANI_LOCK) -- $(KANI_TEST)
 
 .PHONY: build
 build:
