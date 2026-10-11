@@ -31,6 +31,26 @@ finite bound available.
 Settle the two-candidate item again under the reverse registration order and
 compare the disposition, the cause and the order of the named candidates.
 
+Use the public negotiation API with typed IR forms and one Kani descriptor.
+Compare (a) an admitted bounded form with a bounded-only advertisement,
+(b) a form outside Kani's capability with the same candidate, (c) an empty
+candidate set, (d) two candidates with no named backend, and (e) an admitted
+form whose sole candidate does not advertise the required mode. The first
+settles `supported`; (b) settles `unsupported`, warned, with
+`unsupported_projection`/`unsupported-requested-capability` naming the typed
+form and Kani before generation; (c) remains the empty-candidate refusal;
+(d) remains `invalid_capability`/`ambiguous-backend`; and (e) follows the
+advertised-mode and extent rules. Change only display/debug formatting for the
+same typed form and verify the disposition and cause do not change. Verify
+candidate consistency and manifest validation still precede the Kani form
+check, and that no rejected form emits or invokes generation.
+
+For an admitted unbounded form on bounded-only Kani, set
+`finite_bound_available=true` and verify `requires-bound` without a bound
+substitution or artifact. Then supply a finite bound in a new bounded request
+and verify `supported` retains the exact bound and domain identity supplied by
+the caller; settlement itself emits no artifact or Kani outcome.
+
 Submit one envelope whose `capability_vocabulary` is absent and one whose value
 is another identity, and inspect which kinds were read.
 

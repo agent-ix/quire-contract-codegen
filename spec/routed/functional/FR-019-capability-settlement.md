@@ -54,7 +54,9 @@ nothing says so.
   PV-4 wording update.
 - Per request item: its one required FR-290 capability kind, its extent and
   that extent's `bounded` or `unbounded` classification, the backend the caller
-  names when it names one, and its `candidates`. For a bounded extent the arm
+  names when it names one, its typed IR tag/form, and its `candidates`. The
+  typed IR tag/form is the form lowered from the admitted checked item; it is
+  an in-process negotiation input, not a new FR-331 wire member. For a bounded extent the arm
   reads `extent.bounds[].kind`, the domain kind of each substituted `ProofBound`
   (QSpec FR-331; QSL-654 owns the producer); for an unbounded extent it reads
   `extent.domains[].kind` and `finite_bound_available`.
@@ -69,6 +71,9 @@ nothing says so.
 - A typed cause for every disposition that is not `supported`, drawn from the
   FR-290 vocabulary and naming the offending backend or candidates where that
   vocabulary requires it.
+- A Kani arm that does not discharge an admitted IR form uses
+  `unsupported_projection`/`unsupported-requested-capability` and names the
+  typed form and Kani candidate.
 - No artifact for an item settled `unsupported`, `requires-bound` or
   `invalid-request`.
 
@@ -106,6 +111,15 @@ For an unsupported IR profile entry, IR FR-029 owns the absence of an artifact,
   candidate set, its order or a disposition.
 - If an item has exactly one candidate, then that candidate's arm shall settle
   it under the advertised-mode rules.
+- After the existing request and candidate checks select exactly one Kani
+  candidate, the Kani arm shall inspect the item's typed IR tag/form before
+  returning `supported` or allowing generation. A form outside Kani's
+  capability shall settle `unsupported`, warned, with
+  `unsupported_projection`/`unsupported-requested-capability`, naming the
+  typed form and Kani candidate; it shall emit no artifact and reach no
+  generator. A form Kani admits shall continue through the existing extent
+  and advertised-mode rules. The form decision shall use the typed IR tag and
+  form, never display or debug text.
 - CG shall expose `BackendKind::from_descriptor(&BackendDescriptor) ->
   Option<BackendKind>` as its public descriptor-to-kind conversion. It shall
   return `Some(Kani)` for a linked descriptor whose identity is the built-in
@@ -291,6 +305,8 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-14 | The process-provider arm's return type is `Disposition`, which has no terminal-value, verification-result or artifact member, so settling returns none of them. A change that returns one does not compile against that type. | Analysis |
 | FR-019-AC-15 | PLANNED (IR-633). CG's `BackendDescriptor` has a typed `ProviderOrigin` projecting exactly QSL layer R's `Linked` and `Process` meanings (QSL FR-288, ADR-029 PV-1); layer R owns that vocabulary. The driver projects each descriptor from `Registry::descriptors()` once into CG's descriptor, copying `id` and advertised pairs unchanged and mapping `origin()` exhaustively, `Linked` to `Linked` and `Process` to `Process`, with no wildcard or origin inference from identity, manifest or provider bytes or a side map. Two registry descriptors identical except for origin produce CG descriptors identical except for origin; a linked Kani descriptor remains `Linked`. The CG dependency graph adds no direct `qsl-route` edge and the FR-331 wire gains no origin field. | Test (TC-030) |
 | FR-019-AC-24 | PLANNED (IR-338). Given QSL FR-335's `value-validity` claim rooted at an unbounded `s: Set<Int[0,9999]>`, an empty candidate registry settles `unsupported` with a warning naming `value-validity` and emits no artifact or Kani outcome; one linked Kani candidate advertising (`value-validity`, `bounded`) with `finite_bound_available=true` settles the unbounded item `requires-bound` without substituting a bound or emitting an artifact; a separately requested bounded `ProofBound::Cardinality{maximum: 8}` item with that same sole candidate settles `supported` under its own request index, while the unbounded item remains `requires-bound`; and an unboundable added root with `finite_bound_available=false` against that candidate settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`. The bounded disposition alone claims no Kani execution outcome. | Test |
+
+| FR-019-AC-25 | At the single Kani candidate arm, an admitted bounded typed IR form continues through the advertised-mode rules; a typed IR form outside Kani's capability settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability` naming that form and Kani, before any generation, and never by inspecting display/debug text. This form refusal remains distinct from empty candidates (`unsupported-requested-capability` naming the missing capability) and ambiguous candidates (`invalid_capability`/`ambiguous-backend`). For an admitted unbounded form on bounded-only Kani, `finite_bound_available=true` settles `requires-bound` with no substituted bound or artifact; when the caller makes a new bounded request, its exact supplied bound/domain identity is preserved and the bounded disposition is `supported`. | Test (TC-030) |
 
 ## Dependencies
 
