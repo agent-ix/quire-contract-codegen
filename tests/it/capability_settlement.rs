@@ -301,7 +301,7 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
 /// Request-index correlation lets a caller recover each immutable request's exact bounds.
 /// This asserts correlation only; it does not claim detached result serialization or settle
 /// FR-019 AC-32's result-side preservation interpretation.
-/// Trace: FR-019-AC-32
+/// Trace: FR-019-AC-2, FR-019-AC-32
 #[test]
 fn kani_bounded_settlements_correlate_each_request_bound_by_index() {
     let make_bound = |seed: u8, kind: DomainKind, path: Vec<u32>, maximum: i64| {
@@ -1105,15 +1105,31 @@ fn kani_source_call_preflight_binds_callee_and_ordered_arguments() {
     );
 
     request.kani_form = form(other_function, vec![argument_a.clone(), argument_b.clone()]);
-    assert!(matches!(
-        settle_one(kani_manifest.clone(), request.clone()).disposition,
+    let wrong_callee = settle_one(kani_manifest.clone(), request.clone());
+    match wrong_callee.disposition {
         Disposition::InvalidRequest {
-            cause: Cause::KaniFormInvalid {
-                refusal: InvalidObligationItem::UnknownNode,
-                ..
-            }
+            cause:
+                Cause::KaniFormInvalid {
+                    form,
+                    refusal: InvalidObligationItem::UnknownNode,
+                    ..
+                },
+        } => {
+            assert_eq!(
+                form.form,
+                quire_contract_codegen::KaniFormName::V2FunctionApplication
+            );
+            assert_eq!(
+                form.family,
+                quire_contract_codegen::KaniFormFamily::FunctionApplication
+            );
+            assert_eq!(
+                serde_json::to_value(form).unwrap()["form"],
+                "v2_function_application"
+            );
         }
-    ));
+        other => panic!("wrong callee should be a source-bound V2 refusal: {other:?}"),
+    }
 
     request.kani_form = form(function, vec![argument_b, argument_a]);
     assert!(matches!(

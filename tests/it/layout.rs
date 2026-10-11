@@ -468,7 +468,7 @@ fn resolve(path: &[String], modules: &BTreeSet<Vec<String>>) -> Option<Vec<Strin
 /// L-1: the top of `src/` is the eight directories and `lib.rs`, and the modules the map names
 /// are where the map puts them.
 ///
-/// Trace: AD-004 L-1
+/// Architecture evidence: AD-004 L-1
 #[test]
 fn l_1_src_holds_the_layout_directories_and_every_mapped_module_in_its_place() {
     let mut expected: BTreeSet<String> =
@@ -504,7 +504,7 @@ fn l_1_src_holds_the_layout_directories_and_every_mapped_module_in_its_place() {
 /// L-2, the first clause: no `crate::` path names a root item. Every path starts at a directory
 /// of the layout.
 ///
-/// Trace: AD-004 L-2
+/// Architecture evidence: AD-004 L-2
 #[test]
 fn l_2_no_file_imports_an_item_through_the_crate_root() {
     let bare: Vec<String> = edges(&source_files())
@@ -518,7 +518,7 @@ fn l_2_no_file_imports_an_item_through_the_crate_root() {
 /// L-2, the second clause: every import points at a directory its own directory may reach, and
 /// inside `kani/` only at an earlier name.
 ///
-/// Trace: AD-004 L-2
+/// Architecture evidence: AD-004 L-2
 #[test]
 fn l_2_every_import_follows_the_dependency_direction() {
     let files = source_files();
@@ -558,7 +558,7 @@ fn l_2_every_import_follows_the_dependency_direction() {
 /// import (AD-004: the arrows are not transitive), and the second clause reads only the
 /// importer's own paths, so it could not see it.
 ///
-/// Trace: AD-004 L-2
+/// Architecture evidence: AD-004 L-2
 #[test]
 fn l_2_no_file_but_the_crate_root_re_exports_an_item() {
     let reexports: Vec<String> = source_files()
@@ -682,7 +682,7 @@ fn generate_rank(name: &str) -> Option<u8> {
 
 /// L-2, the third clause: the module graph has no cycle.
 ///
-/// Trace: AD-004 L-2
+/// Architecture evidence: AD-004 L-2
 #[test]
 fn l_2_the_module_graph_is_acyclic() {
     let files = source_files();
@@ -754,7 +754,7 @@ fn find_cycle(
 
 /// The scan reads code, not comments or literals, and expands a use tree to its full paths.
 ///
-/// Trace: AD-004 L-2
+/// Architecture evidence: AD-004 L-2
 #[test]
 fn l_2_the_scan_reads_code_paths_and_ignores_comments_and_literals() {
     let source = "\

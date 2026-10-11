@@ -373,6 +373,8 @@ pub enum KaniFormName {
     V1CompositeEquality,
     /// V1 function application.
     V1FunctionApplication,
+    /// V2 function application.
+    V2FunctionApplication,
     /// Bounded collection operation.
     BoundedCollection,
     /// Bounded graph operation.
@@ -403,6 +405,7 @@ impl KaniFormName {
             Self::V2StateFrame => "v2_state_frame",
             Self::V1CompositeEquality => "v1_composite_equality",
             Self::V1FunctionApplication => "v1_function_application",
+            Self::V2FunctionApplication => "v2_function_application",
             Self::BoundedCollection => "bounded_collection",
             Self::BoundedGraph => "bounded_graph",
             Self::OutsideSet => "outside_set",
@@ -678,7 +681,7 @@ impl KaniForm {
                 ..
             } => KaniFormIdentity {
                 family: KaniFormFamily::FunctionApplication,
-                form: KaniFormName::V1FunctionApplication,
+                form: KaniFormName::V2FunctionApplication,
                 operation_identity: package
                     .graph()
                     .nodes
