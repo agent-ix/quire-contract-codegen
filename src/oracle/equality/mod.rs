@@ -704,12 +704,12 @@ pub fn generate_composite_equality_oracles(
     let map_text =
         String::from_utf8(map_bytes).map_err(|_| OracleGenerationError::ClaimMapSerialization)?;
     let mut artifacts = Vec::with_capacity(source_artifacts.len() + 2);
-    artifacts.push(artifact(
+    artifacts.push(Artifact::new(
         "Cargo.toml",
         oracle_crate_manifest(COMPOSITE_EQUALITY_CRATE_NAME),
     ));
     artifacts.extend(source_artifacts);
-    artifacts.push(artifact("claim-map.json", map_text));
+    artifacts.push(Artifact::new("claim-map.json", map_text));
     if artifacts.len() > MAX_ARTIFACTS {
         return Err(OracleGenerationError::ArtifactCountExceeded {
             count: artifacts.len(),
@@ -1780,13 +1780,13 @@ impl SourceBuilder {
         }
         append_source(&mut source, &self.functions, limit)?;
         let mut total = source.len();
-        let mut artifacts = vec![artifact("src/lib.rs", source)];
+        let mut artifacts = vec![Artifact::new("src/lib.rs", source)];
         for (path, contents) in &self.modules {
             total = total.saturating_add(contents.len());
             if total > limit {
                 return Err(source_too_large(limit));
             }
-            artifacts.push(artifact(path, contents.clone()));
+            artifacts.push(Artifact::new(path, contents.clone()));
         }
         Ok(artifacts)
     }
@@ -2021,10 +2021,6 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
         TextProfile::BinaryUtf8 => Ok("rt::TextProfile::BinaryUtf8"),
         _ => Err(OracleGenerationError::unknown_variant("TextProfile")),
     }
-}
-
-fn artifact(path: &str, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }
 
 #[cfg(test)]

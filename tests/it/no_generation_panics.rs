@@ -18,7 +18,7 @@ use quire_contract_model::CheckedNodeId;
 use crate::common::panic_scan::{non_test_code_outside_literals, panic_tokens_in};
 use crate::kani_obligations::scalar_package;
 
-/// The file holding the one dated exception (NFR-005 Scope, IR-344).
+/// The corpus file formerly holding the dated exception (NFR-005 Scope, IR-746).
 const CORPUS: &str = "src/kani/generate/corpus/bounded_kani_corpus.rs";
 
 /// The seven files that hold a measured site, plus the files FR-014-AC-39, FR-018-AC-19 and
@@ -256,10 +256,9 @@ fn bare() { abort() }
 }
 
 /// Trace: NFR-005-AC-1, TC-042. No file under `src/` holds a panic token in its non-test,
-/// literal-free code, except the one `expect` of `CaseIdentity::digest` that the dated IR-344
-/// exception allows; the scan read every file that holds a measured site.
+/// literal-free code; the scan read every file that holds a measured site.
 #[test]
-fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
+fn tc_042_ac1_src_holds_no_panic_token() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
     rust_files(&root.join("src"), &mut files);
@@ -267,7 +266,6 @@ fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
     let mut scanned = BTreeSet::new();
     let mut exempt = BTreeSet::new();
     let mut offences = Vec::new();
-    let mut digest_expects = None;
     for file in &files {
         let relative = file
             .strip_prefix(&root)
@@ -280,20 +278,13 @@ fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
         }
         let source = fs::read_to_string(file).expect("read a source file");
         let code = non_test_code_outside_literals(&source);
-        let checked = if relative == CORPUS {
-            let body = digest_body(&code).expect("`fn digest` of `impl CaseIdentity<'_>` exists");
-            let inside = &code[body.clone()];
-            assert_eq!(
-                panic_tokens_in(inside),
-                vec!["expect".to_owned()],
-                "the dated exception is one `expect` and nothing else in `digest`"
+        if relative == CORPUS {
+            assert!(
+                digest_body(&code).is_some(),
+                "`fn digest` of `impl CaseIdentity<'_>` exists"
             );
-            digest_expects = Some(inside.matches("expect").count());
-            format!("{}{}", &code[..body.start], &code[body.end..])
-        } else {
-            code
-        };
-        let tokens = panic_tokens_in(&checked);
+        }
+        let tokens = panic_tokens_in(&code);
         if !tokens.is_empty() {
             offences.push(format!("{relative}: {tokens:?}"));
         }
@@ -315,11 +306,39 @@ fn tc_042_ac1_src_holds_no_panic_token_outside_the_dated_digest_exception() {
         "the scan read {} files, fewer than {MIN_FILES}",
         scanned.len()
     );
-    assert_eq!(digest_expects, Some(1), "exactly one `expect` in `digest`");
     assert!(
         offences.is_empty(),
         "panic tokens on a generation or analysis path: {offences:#?}"
     );
+}
+
+/// Trace: TC-023. This guards the canonical encoding boundary described by AD-004 L-9: only the
+/// core boundary may call the canonical byte encoder or digest. It checks removed serializer and
+/// artifact-wrapper definitions without banning
+/// legitimate `FixedShape` or `Encode` type use elsewhere in the crate.
+#[test]
+fn tc_023_canonical_encoding_has_one_source_boundary() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    rust_files(&root.join("src"), &mut files);
+    let mut core_seen = false;
+    for file in files {
+        let relative = file.strip_prefix(&root).unwrap().to_string_lossy();
+        let source = fs::read_to_string(&file).unwrap();
+        let code = non_test_code_outside_literals(&source);
+        assert!(!code.contains("fn deterministic_json"), "{relative}");
+        assert!(!code.contains("fn artifact("), "{relative}");
+        if relative == "src/core/canonical.rs" {
+            core_seen = true;
+            assert!(code.contains("quire_canonical::to_vec("));
+            assert!(code.contains("quire_canonical::sha256("));
+        } else {
+            for call in ["quire_canonical::to_vec(", "quire_canonical::sha256("] {
+                assert!(!code.contains(call), "{relative} calls {call}");
+            }
+        }
+    }
+    assert!(core_seen, "the canonical boundary was not scanned");
 }
 
 /// Trace: NFR-005-AC-8, TC-042. The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,

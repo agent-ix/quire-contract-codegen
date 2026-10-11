@@ -57,7 +57,7 @@ use quire_contract_model::{
 };
 
 use crate::{
-    core::artifact::MAX_GENERATED_SOURCE_BYTES,
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     core::naming::unique_names,
@@ -75,7 +75,7 @@ use crate::{
         MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
     kani::generate::precondition::render_precondition,
-    kani::generate::record::{artifact, harness_path, record},
+    kani::generate::record::{harness_path, record},
     kani::generate::scalar::{
         derive_domain, lower_scalar_claim, render_scalar, scalar_stem, unsatisfiable,
         LoweredScalarClaim, ScalarLoweringRefusal,
@@ -1034,7 +1034,7 @@ fn render(
             error: error.to_string(),
         });
     }
-    let rust = artifact(
+    let rust = Artifact::new(
         format!("src/generated/{}.rs", lowered.symbols.module),
         source,
     );

@@ -43,9 +43,8 @@ pub(super) fn record<T: Serialize>(
     })
     .map_err(|_| UnsupportedObligation::RenderFailed)?;
     json.push('\n');
-    Ok(artifact(format!("kani-obligations/{module}.json"), json))
-}
-
-pub(super) fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
+    Ok(Artifact::new(
+        format!("kani-obligations/{module}.json"),
+        json,
+    ))
 }

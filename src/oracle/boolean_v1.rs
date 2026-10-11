@@ -2,18 +2,17 @@
 
 use std::collections::BTreeMap;
 
+use crate::{
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    core::canonical::artifact_json,
+    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},
+    core::naming::{observation_name, oracle_symbol, reference_identifier},
+    core::source_map::{SourceProbe, SourceRegion},
+};
 use quire_contract_model::{
     BooleanOperator, ClauseId, ComparisonOperator, DefinednessObligationKind, DependencyIdentity,
     DependencyKind, Expression, ExpressionKind, IntegerType, NumericOperator, OverflowPolicy,
     RequirementRef, SourceSpan, StateObservation, TypedExpression, ValueType,
-};
-use serde::Serialize;
-
-use crate::{
-    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
-    core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},
-    core::naming::{observation_name, oracle_symbol, reference_identifier},
-    core::source_map::{SourceProbe, SourceRegion},
 };
 
 /// One validated clause supplied to the oracle lowering core.
@@ -121,20 +120,6 @@ pub(crate) struct DependencyParameter {
     pub(crate) identifier: String,
     pub(crate) value_type: RustValueType,
     pub(crate) source: SourceSpan,
-}
-
-enum SerializationError {
-    Json(serde_json::Error),
-    Utf8(std::string::FromUtf8Error),
-}
-
-impl std::fmt::Display for SerializationError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Json(error) => write!(formatter, "{error}"),
-            Self::Utf8(error) => write!(formatter, "{error}"),
-        }
-    }
 }
 
 struct SourceBuilder {
@@ -396,8 +381,8 @@ fn generate_boolean_oracle_inner(
     let mut regions = vec![clause_region, evaluation];
     regions.extend(consequents);
 
-    let rust = artifact(source_path, source.source);
-    let source_map_contents = deterministic_json(&regions).map_err(|error| {
+    let rust = Artifact::new(source_path, source.source);
+    let source_map_contents = artifact_json(&regions).map_err(|error| {
         single_diagnostic(
             request,
             GenerationErrorCode::SerializationFailed,
@@ -405,7 +390,7 @@ fn generate_boolean_oracle_inner(
             error.to_string(),
         )
     })?;
-    let source_map = artifact(
+    let source_map = Artifact::new(
         format!("source-maps/{symbol_text}.json"),
         source_map_contents,
     );
@@ -1399,16 +1384,6 @@ fn dependency_key(dependency: &DependencyIdentity) -> String {
 
 fn reference_key(name: &str, observation: Option<StateObservation>) -> String {
     format!("{}:{name}:{}", name.len(), observation_name(observation))
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
-}
-
-fn deterministic_json(value: &impl Serialize) -> Result<String, SerializationError> {
-    let mut bytes = serde_json::to_vec(value).map_err(SerializationError::Json)?;
-    bytes.push(b'\n');
-    String::from_utf8(bytes).map_err(SerializationError::Utf8)
 }
 
 fn line_count(value: &str) -> u32 {

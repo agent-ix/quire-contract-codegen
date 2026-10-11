@@ -545,6 +545,16 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
 
     let graph: ProofDependencyGraph =
         serde_json::from_str(&first.proof_graph.contents).expect("graph should deserialize");
+    // Canonical keys differ from the former struct-order JSON.
+    assert!(
+        first.proof_graph.contents.find("\"dependencies\"").unwrap()
+            < first
+                .proof_graph
+                .contents
+                .find("\"schemaVersion\"")
+                .unwrap()
+    );
+    assert!(first.proof_graph.contents.ends_with("}\n"));
     assert_eq!(graph.readiness, ProofReadiness::Ready);
     assert_eq!(graph.dependencies.len(), 1);
     assert!(graph

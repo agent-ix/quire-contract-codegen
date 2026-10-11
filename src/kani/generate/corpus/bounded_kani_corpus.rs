@@ -8,22 +8,27 @@
 
 use std::{collections::BTreeSet, fmt::Write as _};
 
-use qsl_replay::ByteDigest;
+use quire_canonical::FixedShape;
 use quire_contract_ir::kani::{
     DispatchIndex, FiniteInput, FiniteObject, FiniteReference, KaniOutcome, KaniOutcomeError,
-    KaniOutcomeKind, KaniProfile, PopulationCompleteness, ProfileSelection, ResourceBounds,
-    ValidatedFiniteInput,
+    KaniOutcomeKind, KaniProfile, ProfileSelection, ValidatedFiniteInput,
 };
 use quire_contract_model::{std001_code, Std001Code};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::artifact::Artifact,
+    core::{
+        artifact::Artifact,
+        canonical::{
+            artifact_json, content_digest, owner_input_value, preimage_shape_changed,
+            preimage_value, DigestError,
+        },
+    },
     kani::census::{
         dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,
         ProofDependencyRequest, ProofReadiness,
     },
-    kani::generate::census_validation::{deterministic_json, validate_dependencies},
+    kani::generate::census_validation::validate_dependencies,
     kani::generate::lower::{
         bounded_collections::{prepare_bounded_collection_query, CollectionQuery, QueryKind},
         definedness_arithmetic::{
@@ -148,6 +153,8 @@ pub struct CorpusProofDependencyGraph {
     pub dependencies: Vec<ProofDependencyEdge>,
 }
 
+impl crate::core::canonical::ArtifactJsonRecord for CorpusProofDependencyGraph {}
+
 /// Registry of the corpus case identities emitted into one output tree.
 ///
 /// A case's identity is the SHA-256 of its canonical request content: the
@@ -182,22 +189,22 @@ struct CaseIdentity<'a> {
     ceilings: crate::kani::identity::ProofCeilings,
     construct: &'static str,
     profile: &'a ProfileSelection,
-    input: InputIdentity<'a>,
+    input: serde_json::Value,
     request: RequestIdentity<'a>,
     dependencies: &'a [ProofDependencyEdge],
 }
 
 /// Every field of a [`BoundedCorpusRequest`], including those the rendered oracle does not read.
-#[derive(Serialize)]
+#[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 enum RequestIdentity<'a> {
     Arithmetic {
         source_id: &'a str,
         operator: &'static str,
-        left: i128,
-        right: i128,
-        minimum: i128,
-        maximum: i128,
+        left: String,
+        right: String,
+        minimum: String,
+        maximum: String,
     },
     Graph {
         source_id: &'a str,
@@ -208,17 +215,17 @@ enum RequestIdentity<'a> {
     },
     Collection {
         source_id: &'a str,
-        values: &'a [i128],
+        values: Vec<String>,
         max_items: usize,
         kind: QueryKindIdentity,
     },
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 enum QueryKindIdentity {
     ForAllNonNegative,
-    ExistsEqual(i128),
+    ExistsEqual(String),
 }
 
 impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
@@ -238,10 +245,10 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                 Self::Arithmetic {
                     source_id,
                     operator: checked_method(*operator),
-                    left: *left,
-                    right: *right,
-                    minimum: *minimum,
-                    maximum: *maximum,
+                    left: left.to_string(),
+                    right: right.to_string(),
+                    minimum: minimum.to_string(),
+                    maximum: maximum.to_string(),
                 }
             }
             BoundedCorpusRequest::Graph(request) => {
@@ -269,12 +276,12 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                 } = request;
                 Self::Collection {
                     source_id,
-                    values,
+                    values: values.iter().map(ToString::to_string).collect(),
                     max_items: *max_items,
                     kind: match kind {
                         QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
                         QueryKind::ExistsEqual(expected) => {
-                            QueryKindIdentity::ExistsEqual(*expected)
+                            QueryKindIdentity::ExistsEqual(expected.to_string())
                         }
                     },
                 }
@@ -283,78 +290,82 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
     }
 }
 
-/// A [`FiniteInput`] with its population order removed: the rendered oracle sorts the reference
-/// edges it reads, so the same graph offered in another order is the same case.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct InputIdentity<'a> {
-    model_id: &'a str,
-    source_id: &'a str,
-    profile: &'a ProfileSelection,
-    completeness: &'a PopulationCompleteness,
-    bounds: &'a ResourceBounds,
-    input_bytes: usize,
-    /// `(identity, type_id, snapshot_id)`, sorted.
-    objects: Vec<(&'a str, &'a str, &'a str)>,
-    /// `(source_id, field_id, target_id)`, sorted.
-    references: Vec<(&'a str, &'a str, &'a str)>,
-}
+/// Starts from the owning finite-input serializer. The case-name contract retains three
+/// camelCase key names and normalizes the two collections whose offered order does not affect
+/// the rendered graph. All values come from the original input serializer or its typed members.
+fn normalized_input_value(input: &FiniteInput) -> Result<serde_json::Value, DigestError> {
+    let mut value = owner_input_value(input)?;
+    let root = value
+        .as_object_mut()
+        .ok_or_else(|| preimage_shape_changed("finite input is not an object"))?;
 
-impl<'a> From<&'a FiniteInput> for InputIdentity<'a> {
-    fn from(input: &'a FiniteInput) -> Self {
-        let FiniteInput {
-            model_id,
-            source_id,
-            profile,
-            completeness,
-            bounds,
-            input_bytes,
-            objects,
-            references,
-        } = input;
-        let mut objects: Vec<_> = objects
-            .iter()
-            .map(|object| {
-                let FiniteObject {
-                    identity,
-                    type_id,
-                    snapshot_id,
-                } = object;
-                (identity.as_str(), type_id.as_str(), snapshot_id.as_str())
-            })
-            .collect();
-        objects.sort_unstable();
-        let mut references: Vec<_> = references
-            .iter()
-            .map(|reference| {
-                let FiniteReference {
-                    source_id,
-                    field_id,
-                    target_id,
-                } = reference;
-                (source_id.as_str(), field_id.as_str(), target_id.as_str())
-            })
-            .collect();
-        references.sort_unstable();
-        Self {
-            model_id,
-            source_id,
-            profile,
-            completeness,
-            bounds,
-            input_bytes: *input_bytes,
-            objects,
-            references,
+    // The case-name preimage predates the owning input wire names for these three fields.
+    // Retain its committed camelCase keys while taking each value from the owner serializer.
+    for (source, identity) in [
+        ("input_bytes", "inputBytes"),
+        ("model_id", "modelId"),
+        ("source_id", "sourceId"),
+    ] {
+        if root.contains_key(identity) {
+            return Err(preimage_shape_changed(
+                "finite input has a conflicting case-identity key",
+            ));
         }
+        let field = root
+            .remove(source)
+            .ok_or_else(|| preimage_shape_changed("finite input identity field is absent"))?;
+        root.insert(identity.to_owned(), field);
     }
+
+    let objects_slot = root
+        .get_mut("objects")
+        .filter(|slot| slot.is_array())
+        .ok_or_else(|| {
+            preimage_shape_changed("finite input objects field is absent or not an array")
+        })?;
+    let mut objects: Vec<_> = input
+        .objects
+        .iter()
+        .map(|object| {
+            let FiniteObject {
+                identity,
+                type_id,
+                snapshot_id,
+            } = object;
+            (identity.as_str(), type_id.as_str(), snapshot_id.as_str())
+        })
+        .collect();
+    objects.sort_unstable();
+    *objects_slot = preimage_value(&objects)?;
+
+    let references_slot = root
+        .get_mut("references")
+        .filter(|slot| slot.is_array())
+        .ok_or_else(|| {
+            preimage_shape_changed("finite input references field is absent or not an array")
+        })?;
+    let mut references: Vec<_> = input
+        .references
+        .iter()
+        .map(|reference| {
+            let FiniteReference {
+                source_id,
+                field_id,
+                target_id,
+            } = reference;
+            (source_id.as_str(), field_id.as_str(), target_id.as_str())
+        })
+        .collect();
+    references.sort_unstable();
+    *references_slot = preimage_value(&references)?;
+    Ok(value)
 }
 
 impl CaseIdentity<'_> {
-    /// Lowercase hex SHA-256 over this content's deterministic JSON bytes.
-    fn digest(&self) -> String {
-        let bytes = deterministic_json(self)
-            .expect("a corpus case identity is plain finite data with no fallible conversion");
-        format!("{:x}", ByteDigest::of(bytes.as_bytes()))
+    /// Lowercase hex SHA-256 over this content's RFC 8785 bytes, without a newline.
+    fn digest(&self) -> Result<String, DigestError> {
+        let digest = content_digest(&preimage_value(self)?)?;
+        Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
     }
 }
 
@@ -574,15 +585,29 @@ pub fn generate_bounded_kani_corpus_case(
     }
     let normalized_dependencies = normalize_dependencies(dependencies);
     // Computed before lowering consumes the request; recorded only after lowering succeeds.
+    let input_identity = normalized_input_value(input.input()).map_err(|_| {
+        CorpusRefusal::InvalidInput.raise(
+            std001_code!("kani_corpus_identity_unencodable"),
+            request_source_id.clone(),
+            revision.clone(),
+        )
+    })?;
     let identity = CaseIdentity {
         ceilings,
         construct: family.construct(),
         profile: profile.selection(),
-        input: InputIdentity::from(input.input()),
+        input: input_identity,
         request: RequestIdentity::from(&request),
         dependencies: &normalized_dependencies,
     }
-    .digest();
+    .digest()
+    .map_err(|_| {
+        CorpusRefusal::InvalidInput.raise(
+            std001_code!("kani_corpus_identity_unencodable"),
+            request_source_id.clone(),
+            revision.clone(),
+        )
+    })?;
     let (value, oracle_body) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
@@ -759,7 +784,8 @@ fn render_artifacts(
         readiness: dependency_readiness(dependencies),
         dependencies: dependencies.to_vec(),
     };
-    let proof_graph_contents = deterministic_json(&proof_graph_value)?;
+    let proof_graph_contents =
+        artifact_json(&proof_graph_value).map_err(|error| error.to_string())?;
     Ok(BoundedCorpusArtifacts {
         oracle: Artifact::new(format!("corpus/{name}.oracle.rs"), oracle),
         strategy: Artifact::new(format!("corpus/{name}.strategy.rs"), strategy),
@@ -794,6 +820,171 @@ mod tests {
         DispatchIndex,
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
+
+    /// Trace: TC-023. Owner serializers supply each value; the input projection
+    /// retains three established key names and the two intentionally normalized populations.
+    #[test]
+    fn tc_023_canonical_preimage_uses_owner_serializers() {
+        let (profile, _, input) = fixture();
+        let ceilings = crate::kani::test_support::proof_ceilings::proof_ceilings();
+        let normalized = super::normalized_input_value(input.input()).unwrap();
+        let owner = serde_json::to_value(input.input()).unwrap();
+        for (field, value) in owner.as_object().unwrap() {
+            let identity_field = match field.as_str() {
+                "input_bytes" => "inputBytes",
+                "model_id" => "modelId",
+                "source_id" => "sourceId",
+                "objects" | "references" => continue,
+                other => other,
+            };
+            assert_eq!(normalized.get(identity_field), Some(value), "{field}");
+        }
+        assert!(normalized.get("input_bytes").is_none());
+        assert!(normalized.get("model_id").is_none());
+        assert!(normalized.get("source_id").is_none());
+        assert_eq!(
+            normalized["objects"],
+            serde_json::json!([["a", "node", "s"], ["b", "node", "s"]])
+        );
+        assert_eq!(
+            normalized["references"],
+            serde_json::json!([["a", "next", "b"]])
+        );
+        let edge = crate::kani::census::ProofDependencyEdge {
+            proof_id: "dependency".to_owned(),
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Passed,
+            source_site: None,
+        };
+        let dependencies = [edge];
+        let request = arithmetic("source", 1, 1);
+        let identity = super::CaseIdentity {
+            ceilings,
+            construct: "checked-arithmetic",
+            profile: profile.selection(),
+            input: normalized,
+            request: super::RequestIdentity::from(&request),
+            dependencies: &dependencies,
+        };
+        let preimage = crate::core::canonical::preimage_value(&identity).unwrap();
+        assert_eq!(
+            preimage["ceilings"],
+            serde_json::to_value(ceilings).unwrap()
+        );
+        assert_eq!(
+            preimage["profile"],
+            serde_json::to_value(profile.selection()).unwrap()
+        );
+        assert_eq!(
+            preimage["dependencies"],
+            serde_json::to_value(&dependencies).unwrap()
+        );
+    }
+
+    /// Trace: TC-023. The owning input's object maps may exceed the final case-name
+    /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
+    #[test]
+    fn tc_023_compact_case_identity_admits_a_verbose_owner_input() {
+        let fixture = fixture_with(
+            |_| {},
+            |input| {
+                input.objects = (0..18_500)
+                    .map(|index| FiniteObject {
+                        identity: format!("{index:06}"),
+                        type_id: "node".to_owned(),
+                        snapshot_id: "s".to_owned(),
+                    })
+                    .collect();
+                input.references.clear();
+                input.bounds.max_objects = 18_500;
+                input.bounds.max_references = 0;
+                input.bounds.max_input_bytes = 2_000_000;
+                input.input_bytes = 1_055_000;
+            },
+        );
+        let owner = serde_json::to_vec(fixture.2.input()).unwrap();
+        assert!(owner.len() > 1 << 20, "the old preflight would refuse");
+        let normalized = super::normalized_input_value(fixture.2.input()).unwrap();
+        assert!(
+            serde_json::to_vec(&normalized).unwrap().len() < 1 << 20,
+            "the compact identity input fits the final ceiling"
+        );
+
+        let case = emit(
+            &fixture,
+            arithmetic("source", 1, 1),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .expect("the bounded canonical case identity admits");
+        assert!(case_name(&case).starts_with("arithmetic_"));
+    }
+
+    /// Trace: TC-023. This preimage is authored from the fixture fields in RFC 8785
+    /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
+    /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
+    /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
+    /// `source_id` field in snake_case.
+    #[test]
+    fn tc_023_case_name_matches_hand_authored_canonical_preimage() {
+        const PREIMAGE: &str = concat!(
+            r#"{"ceilings":{"memoryBytes":17179869184,"wallClock":{"nanos":0,"secs":600}},"#,
+            r#""construct":"checked-arithmetic","dependencies":[],"input":{"bounds":{"#,
+            r#""max_input_bytes":2,"max_objects":2,"max_references":1},"completeness":"complete","#,
+            r#""inputBytes":1,"modelId":"model","objects":[["a","node","s"],["b","node","s"]],"#,
+            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
+            r#""references":[["a","next","b"]],"sourceId":"source"},"#,
+            r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
+            r#""request":{"arithmetic":{"left":"1","maximum":"2","minimum":"0","#,
+            r#""operator":"checked_add","right":"1","source_id":"source"}}}"#,
+        );
+        const DIGEST: &str = "4afb9c72a943cbd2db73a206e083012480ee4218adb534e96cbc13c44cc7a525";
+        assert_eq!(
+            format!("{:x}", qsl_replay::ByteDigest::of(PREIMAGE.as_bytes())),
+            DIGEST,
+            "the hand-authored preimage must retain its fixed digest"
+        );
+        let case = emit(
+            &fixture(),
+            arithmetic("source", 1, 1),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .expect("the fixture is an admitted arithmetic case");
+        assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));
+    }
+
+    /// Trace: TC-023. The caller supplies the dependency census, so it can offer a
+    /// graph larger than one artifact. The counted preflight refuses before building a JSON tree.
+    #[test]
+    fn tc_023_large_dependency_graph_refuses_canonical_projection() {
+        let dependencies = (0..20_000)
+            .map(|index| crate::kani::census::ProofDependencyEdge {
+                proof_id: format!("dep_{index:05}_{}", "x".repeat(1024)),
+                kind: ProofDependencyKind::Required,
+                state: ProofDependencyState::Passed,
+                source_site: None,
+            })
+            .collect();
+        let graph = CorpusProofDependencyGraph {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),
+            proof_id: "corpus_proof".to_owned(),
+            family: "collection".to_owned(),
+            construct: "bounded-collection-query".to_owned(),
+            identity: "collection_case".to_owned(),
+            readiness: ProofReadiness::Ready,
+            dependencies,
+        };
+        let error = crate::core::canonical::artifact_json(&graph)
+            .expect_err("the projection exceeds one artifact");
+        assert!(matches!(
+            error,
+            crate::core::canonical::ArtifactJsonError::Projection(ref source)
+                if source.is_io()
+                    && source.to_string().contains("exceeds the artifact ceiling")
+        ));
+    }
 
     /// Trace: FR-028-AC-1.
     #[test]
@@ -1483,11 +1674,52 @@ mod tests {
         })
     }
 
+    /// Trace: TC-023, NFR-005-AC-1. The canonical preimage keeps both adjacent wide i128
+    /// values exactly by spelling them as decimal strings, so the identity never rounds them.
+    #[test]
+    fn tc_023_wide_request_values_are_exact_canonical_strings() {
+        let first_request = arithmetic("wide", (1_i128 << 53) + 1, 0);
+        let second_request = arithmetic("wide", (1_i128 << 53) + 2, 0);
+        let first = super::RequestIdentity::from(&first_request);
+        let second = super::RequestIdentity::from(&second_request);
+        let first_bytes = crate::core::canonical::content_bytes(&first).expect("string preimage");
+        let second_bytes = crate::core::canonical::content_bytes(&second).expect("string preimage");
+        assert_ne!(first_bytes, second_bytes);
+        assert!(first_bytes
+            .windows(b"9007199254740993".len())
+            .any(|part| part == b"9007199254740993"));
+        assert!(second_bytes
+            .windows(b"9007199254740994".len())
+            .any(|part| part == b"9007199254740994"));
+    }
+
+    /// Trace: TC-023, NFR-005-AC-1. An over-bound canonical preimage returns the typed input
+    /// refusal before lowering or claiming a registry identity; a valid retry still admits.
+    #[test]
+    fn tc_023_unencodable_case_identity_refuses_without_claiming() {
+        let fixture = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let source_id = "x".repeat(1 << 20);
+        let refusal = refusal_outcome(
+            emit(&fixture, collection(3, &source_id), &[], &mut emitted)
+                .expect_err("oversized preimage must refuse"),
+        );
+        assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(
+            refusal.code,
+            std001_code!("kani_corpus_identity_unencodable")
+        );
+        assert!(emitted.0.is_empty());
+        emit(&fixture, collection(3, "source"), &[], &mut emitted)
+            .expect("a later valid case still admits");
+        assert_eq!(emitted.0.len(), 1);
+    }
+
     /// A case's name, paths and `#[kani::proof]` symbol come from its request content, so the
     /// same request yields the same ones in any emission order and in any run, and the symbol
     /// carries the name its artifact paths carry.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_case_identity_is_independent_of_emission_order_and_run() {
         let fixture = fixture();
@@ -1523,7 +1755,7 @@ mod tests {
     /// reads (`max_items`), the source id, or the declared census -- get distinct names, paths
     /// and proof symbols, so no case overwrites another.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_distinct_requests_get_distinct_names_paths_and_proof_symbols() {
         let fixture = fixture();
@@ -1637,7 +1869,7 @@ mod tests {
         })
     }
 
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_arithmetic_request_field_changes_the_identity() {
         use NumericOperator::{Add, Subtract};
@@ -1655,7 +1887,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_graph_request_field_changes_the_identity() {
         assert_each_variation_changes_identity(
@@ -1671,7 +1903,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_collection_request_field_changes_the_identity() {
         let query = |source_id: &str, values: Vec<i128>, max_items, kind| {
@@ -1714,7 +1946,7 @@ mod tests {
     /// graph oracle is built from the input's references, and the input also fixes the bounds
     /// the case was admitted under.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_input_and_profile_field_changes_the_identity() {
         let request = || checked("s", NumericOperator::Add, [1, 1, 0, 2]);
@@ -1795,7 +2027,7 @@ mod tests {
     /// The same graph offered with its objects and references in another order is the same case
     /// (so a second emission is refused), and a genuinely different graph is a different one.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_identity_is_canonical_over_the_input_population_order() {
         let node = |identity: &str| FiniteObject {

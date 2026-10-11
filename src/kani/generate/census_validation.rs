@@ -1,7 +1,7 @@
-//! INTERIM: census validation, the V1 bundle's error type it returns, and `deterministic_json`.
+//! INTERIM: census validation and the V1 bundle's error type it returns.
 //! The bounded-Kani corpus calls them. This file survives the deletion of `v1_bundle.rs` at
 //! step 4f; step 4g, or the V2 census input, deletes `validate_dependencies` and the error
-//! type, and step 1a deletes `deterministic_json` (AD-004).
+//! type (AD-004).
 
 use std::collections::BTreeSet;
 
@@ -181,13 +181,4 @@ pub(super) fn single_diagnostic(
         source_span: None,
         message: message.to_owned(),
     }]
-}
-
-// `?Sized` so an unsized `[T]` slice (e.g. `&[ProofDependencyEdge]`) can be passed directly, with
-// no intermediate owned `Vec` allocation at the call site, alongside every already-`Sized` caller
-// (ir#80 review finding F10).
-pub(crate) fn deterministic_json(value: &(impl Serialize + ?Sized)) -> Result<String, String> {
-    let mut bytes = serde_json::to_vec(value).map_err(|error| error.to_string())?;
-    bytes.push(b'\n');
-    String::from_utf8(bytes).map_err(|error| error.to_string())
 }
