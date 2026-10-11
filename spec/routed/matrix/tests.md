@@ -24,6 +24,7 @@ type: TestMatrix
 | FR-026 | FR-026-AC-5 | Analysis | 🚧 Planned |
 | FR-019 | FR-019-AC-14 | Analysis | 🚧 Planned |
 | FR-019 | FR-019-AC-24 | TC-030 | 🚧 Planned; generic extent rows do not verify QSL FR-335's concrete collection claim or composed driver outcome |
+| FR-019 | FR-019-AC-25 through FR-019-AC-32 | TC-030 | 🚧 Planned; TC-030 specifies typed-form, candidate, mode, display-text and bound-identity controls |
 | FR-026 | FR-026-AC-1, FR-026-AC-4 | TC-037 | 🚧 Planned |
 
 FR-019-AC-9 is `✅ Covered` by analysis, not by a test. The dispatch is an exhaustive `match` over
@@ -48,7 +49,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10, FR-019-AC-24 | 🚧 Planned; generic tests have no criterion-level tags, and QSL FR-335 collection composition is pending in quire-integration |
+| TC-030 | Verify capability settlement at one negotiation point | Integration | P0 | FR-019-AC-1, FR-019-AC-2, FR-019-AC-3, FR-019-AC-4, FR-019-AC-7, FR-019-AC-8, FR-019-AC-10, FR-019-AC-24, FR-019-AC-25, FR-019-AC-26, FR-019-AC-27, FR-019-AC-28, FR-019-AC-29, FR-019-AC-30, FR-019-AC-31, FR-019-AC-32 | 🚧 Planned; generic tests have no criterion-level tags, and QSL FR-335 collection composition is pending in quire-integration |
 | TC-033 | Verify routed generation per backend kind without re-negotiation | Integration | P0 | FR-022-AC-2, FR-022-AC-3, FR-022-AC-4, FR-022-AC-5, FR-022-AC-6, FR-022-AC-7, FR-022-AC-8, FR-022-AC-9, FR-022-AC-10, FR-022-AC-11, FR-022-AC-12, FR-022-AC-13, FR-022-AC-14, FR-022-AC-15, FR-022-AC-16, FR-015-AC-15, FR-015-AC-16, FR-015-AC-17, FR-015-AC-18 | ✅ Covered |
 | TC-037 | Verify the backend adapter trait and its closed-enum dispatch | Integration | P0 | FR-026-AC-1, FR-026-AC-4 | 🚧 Planned |
 | TC-046 | Verify process-provider settlement and empty generation | Integration | P0 | FR-019-AC-1 (process arm), FR-019-AC-11, FR-019-AC-12, FR-019-AC-13, FR-019-AC-16, FR-019-AC-17, FR-019-AC-18, FR-019-AC-19, FR-019-AC-20, FR-019-AC-21, FR-019-AC-22, FR-019-AC-23, FR-022-AC-17, FR-022-AC-18, FR-022-AC-19, FR-022-AC-21, FR-022-AC-22 | 🚧 Planned |

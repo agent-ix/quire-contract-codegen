@@ -31,6 +31,35 @@ finite bound available.
 Settle the two-candidate item again under the reverse registration order and
 compare the disposition, the cause and the order of the named candidates.
 
+Use the public negotiation API with typed IR forms and one Kani descriptor.
+For the V2 clause path, use a `state`/`state_clause` node with
+`operation.member.clause` equal to `precondition`, `postcondition` or
+`invariant`, and a body and input domain within FR-015-AC-39 through AC-41.
+Compare it with a typed role or body outside the supported set in FR-019-AC-25
+(including an operator outside FR-015-AC-40 and AC-41, as listed in AC-42).
+With the same sole candidate and bounded extent, the supported form settles
+`supported`; the unsupported form settles `unsupported`, warned, with
+`unsupported_projection`/`unsupported-requested-capability` naming the typed
+form before generation. Verify no rejected form emits an artifact or invokes a
+generator.
+
+Run distinct public API controls for an empty candidate set, multiple
+candidates with no named backend, and a supported form whose sole candidate
+cannot satisfy its extent/mode. The empty set retains its missing-capability
+cause, the multiple candidates retain `invalid_capability`/`ambiguous-backend`,
+and the mode/extent control follows the advertised-mode rules. With one
+candidate, make both the typed form and its extent/mode unsupported and verify
+the form refusal settles after candidate/manifest validation but before the
+mode/extent refusal. Change only display/debug formatting for an unchanged
+typed tag/form and verify its disposition, cause and named form identity do
+not change.
+
+For a supported unbounded form on bounded-only Kani, set
+`finite_bound_available=true` and verify `requires-bound` without a substituted
+bound or artifact. Supply a finite bound in a new bounded request and verify
+`supported` retains its exact proof-bound value, domain kind and domain
+identity. Settlement itself emits no artifact or Kani outcome.
+
 Submit one envelope whose `capability_vocabulary` is absent and one whose value
 is another identity, and inspect which kinds were read.
 
@@ -88,6 +117,15 @@ Every variant of the closed backend kind has a dispatched arm.
 
 No settlement other than `supported` routes a backend, and a manifest repeating an
 identity routes none.
+
+Under FR-019-AC-25 through AC-32, the typed V2 clause forms defined by
+FR-015-AC-38 through AC-42 are admitted or refused deterministically; the
+unsupported-form result names the form and precedes extent/mode settlement
+after candidate validation. Empty, ambiguous and mode/extent cases retain their
+own outcomes. Display/debug formatting does not affect form settlement. An
+unbounded `requires-bound` item receives no substituted bound, while a new
+bounded request retains the exact caller-supplied proof-bound value and domain
+identity and settles `supported`.
 
 Under FR-019-AC-15, the driver preserves the QSL registry origin as a typed
 CG value without altering identity or advertised pairs; the CG crate boundary
