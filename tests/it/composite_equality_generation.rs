@@ -1925,7 +1925,7 @@ fn tc_029_ac19_the_equality_generator_source_holds_no_panic_token() {
     let code = non_test_code(&source);
     // The scan must have removed the test module and nothing before it: the last generator
     // function sits just above the module, and the module's own tests are gone.
-    assert!(code.contains("fn artifact(") && code.contains("fn render_value_type("));
+    assert!(code.contains("fn profile_path(") && code.contains("fn render_value_type("));
     assert!(!code.contains("mod tests") && !code.contains("fn tc_029_"));
     assert_eq!(
         panic_tokens_in(&code),

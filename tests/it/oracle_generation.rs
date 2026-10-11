@@ -556,8 +556,8 @@ fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let clause_key = first.source_map.contents.find("\"clauseId\"").unwrap();
     let role_key = first.source_map.contents.find("\"role\"").unwrap();
     assert!(clause_key < role_key);
-    assert!(first.source_map.contents.ends_with("}\n"));
-    assert!(!first.source_map.contents.ends_with("}\n\n"));
+    assert!(first.source_map.contents.ends_with("]\n"));
+    assert!(!first.source_map.contents.ends_with("]\n\n"));
     let source_map_value: serde_json::Value =
         serde_json::from_str(&first.source_map.contents).unwrap();
     let source_map_schema: serde_json::Value = serde_json::from_str(include_str!(
