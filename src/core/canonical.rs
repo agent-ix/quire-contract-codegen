@@ -1,7 +1,7 @@
 //! The one place CG calls `quire-canonical`'s RFC 8785 encoder and digest (AD-004, AD-003 E-1).
 //!
-//! A digest preimage is encoded here and nowhere else, never by `serde_json`, whose key order is
-//! struct field order and which does not canonicalise integers above 2^53.
+//! A digest preimage is encoded here and nowhere else. Serde may project an owning record into a
+//! bounded JSON value; only `quire-canonical` orders and hashes its bytes.
 
 use std::{fmt, io};
 
@@ -15,13 +15,28 @@ const PREIMAGE_LIMITS: Limits = Limits::new(1 << 20);
 // Reserve one byte for the required trailing newline in the artifact itself.
 const ARTIFACT_LIMITS: Limits = Limits::new((MAX_ARTIFACT_BYTES - 1) as u64);
 
-/// Why a value has no canonical bytes or digest: the encoder refused it.
+/// Why a value has no canonical bytes or digest.
 #[derive(Debug)]
-pub struct DigestError(quire_canonical::Error);
+pub struct DigestError(DigestErrorKind);
+
+#[derive(Debug)]
+enum DigestErrorKind {
+    Projection(serde_json::Error),
+    Shape(&'static str),
+    Encode(quire_canonical::Error),
+}
 
 impl fmt::Display for DigestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the value is not RFC 8785 encodable: {}", self.0)
+        match &self.0 {
+            DigestErrorKind::Projection(error) => {
+                write!(f, "JSON preimage projection failed: {error}")
+            }
+            DigestErrorKind::Shape(message) => write!(f, "JSON preimage shape changed: {message}"),
+            DigestErrorKind::Encode(error) => {
+                write!(f, "the value is not RFC 8785 encodable: {error}")
+            }
+        }
     }
 }
 
@@ -37,7 +52,7 @@ impl std::error::Error for DigestError {}
 pub(crate) fn content_digest<T: Encode + ?Sized>(preimage: &T) -> Result<[u8; 32], DigestError> {
     quire_canonical::sha256(preimage, PREIMAGE_LIMITS)
         .map(|digest| *digest.as_bytes())
-        .map_err(DigestError)
+        .map_err(|error| DigestError(DigestErrorKind::Encode(error)))
 }
 
 /// The RFC 8785 canonical bytes of `value`: the bytes [`content_digest`] hashes, for a document
@@ -47,7 +62,33 @@ pub(crate) fn content_digest<T: Encode + ?Sized>(preimage: &T) -> Result<[u8; 32
 ///
 /// [`DigestError`] when `value` has no RFC 8785 encoding within the ceilings.
 pub(crate) fn content_bytes<T: Encode + ?Sized>(value: &T) -> Result<Vec<u8>, DigestError> {
-    quire_canonical::to_vec(value, PREIMAGE_LIMITS).map_err(DigestError)
+    quire_canonical::to_vec(value, PREIMAGE_LIMITS)
+        .map_err(|error| DigestError(DigestErrorKind::Encode(error)))
+}
+
+/// Projects an owning serializer into a JSON value under the digest-preimage ceiling. The
+/// counted first pass refuses oversized input before `to_value` allocates its tree. The returned
+/// value must still pass through `content_digest` or `content_bytes`; serde does not emit the
+/// canonical digest bytes.
+///
+/// # Errors
+///
+/// [`DigestError`] when the owning record cannot be projected within the ceiling.
+pub(crate) fn preimage_value<T: Serialize + ?Sized>(
+    value: &T,
+) -> Result<serde_json::Value, DigestError> {
+    counted_projection(
+        value,
+        1 << 20,
+        "canonical preimage exceeds the byte ceiling",
+    )
+    .map_err(|error| DigestError(DigestErrorKind::Projection(error)))?;
+    serde_json::to_value(value).map_err(|error| DigestError(DigestErrorKind::Projection(error)))
+}
+
+/// Refuses a change to the owning serializer's required identity shape.
+pub(crate) fn preimage_shape_changed(message: &'static str) -> DigestError {
+    DigestError(DigestErrorKind::Shape(message))
 }
 
 /// A typed generated JSON artifact could not be encoded within the artifact ceiling.
@@ -70,14 +111,13 @@ pub(crate) trait ArtifactJsonRecord: Serialize {}
 /// runs before `to_value`, so an oversized record never materializes an unbounded JSON tree.
 struct ProjectionCounter {
     remaining: usize,
+    error: &'static str,
 }
 
 impl io::Write for ProjectionCounter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if bytes.len() > self.remaining {
-            return Err(io::Error::other(
-                "generated JSON projection exceeds the artifact ceiling",
-            ));
+            return Err(io::Error::other(self.error));
         }
         self.remaining -= bytes.len();
         Ok(bytes.len())
@@ -86,6 +126,20 @@ impl io::Write for ProjectionCounter {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+fn counted_projection<T: Serialize + ?Sized>(
+    value: &T,
+    limit: usize,
+    message: &'static str,
+) -> Result<(), serde_json::Error> {
+    serde_json::to_writer(
+        ProjectionCounter {
+            remaining: limit,
+            error: message,
+        },
+        value,
+    )
 }
 
 impl fmt::Display for ArtifactJsonError {
@@ -111,11 +165,10 @@ impl std::error::Error for ArtifactJsonError {}
 pub(crate) fn artifact_json<T: ArtifactJsonRecord + ?Sized>(
     value: &T,
 ) -> Result<String, ArtifactJsonError> {
-    serde_json::to_writer(
-        ProjectionCounter {
-            remaining: MAX_ARTIFACT_BYTES - 1,
-        },
+    counted_projection(
         value,
+        MAX_ARTIFACT_BYTES - 1,
+        "generated JSON projection exceeds the artifact ceiling",
     )
     .map_err(ArtifactJsonError::Projection)?;
     let tree = serde_json::to_value(value).map_err(ArtifactJsonError::Projection)?;

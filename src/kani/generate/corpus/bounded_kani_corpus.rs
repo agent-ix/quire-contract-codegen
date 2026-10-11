@@ -11,8 +11,7 @@ use std::{collections::BTreeSet, fmt::Write as _};
 use quire_canonical::FixedShape;
 use quire_contract_ir::kani::{
     DispatchIndex, FiniteInput, FiniteObject, FiniteReference, KaniOutcome, KaniOutcomeError,
-    KaniOutcomeKind, KaniProfile, PopulationCompleteness, ProfileSelection, ResourceBounds,
-    ValidatedFiniteInput,
+    KaniOutcomeKind, KaniProfile, ProfileSelection, ValidatedFiniteInput,
 };
 use quire_contract_model::{std001_code, Std001Code};
 use serde::{Deserialize, Serialize};
@@ -20,11 +19,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     core::{
         artifact::Artifact,
-        canonical::{artifact_json, content_digest, DigestError},
+        canonical::{
+            artifact_json, content_digest, preimage_shape_changed, preimage_value, DigestError,
+        },
     },
     kani::census::{
         dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,
-        ProofDependencyRequest, ProofDependencyState, ProofReadiness,
+        ProofDependencyRequest, ProofReadiness,
     },
     kani::generate::census_validation::validate_dependencies,
     kani::generate::lower::{
@@ -181,118 +182,15 @@ impl EmittedCorpusIdentities {
 }
 
 /// The canonical content one corpus case is identified by.
-#[derive(Serialize, FixedShape)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CaseIdentity<'a> {
-    ceilings: CeilingsIdentity,
+    ceilings: crate::kani::identity::ProofCeilings,
     construct: &'static str,
-    profile: ProfileIdentity<'a>,
-    input: InputIdentity<'a>,
+    profile: &'a ProfileSelection,
+    input: serde_json::Value,
     request: RequestIdentity<'a>,
-    dependencies: Vec<DependencyIdentity<'a>>,
-}
-
-/// The same serialized fields as the run ceilings, without a foreign `Duration` in the digest
-/// preimage. Each nested field is explicit so `FixedShape` checks the complete preimage depth.
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-struct CeilingsIdentity {
-    memory_bytes: u64,
-    wall_clock: DurationIdentity,
-}
-
-#[derive(Serialize, FixedShape)]
-struct DurationIdentity {
-    secs: u64,
-    nanos: u32,
-}
-
-impl From<crate::kani::identity::ProofCeilings> for CeilingsIdentity {
-    fn from(ceilings: crate::kani::identity::ProofCeilings) -> Self {
-        Self {
-            memory_bytes: ceilings.memory_bytes.get(),
-            wall_clock: DurationIdentity {
-                secs: ceilings.wall_clock.as_secs(),
-                nanos: ceilings.wall_clock.subsec_nanos(),
-            },
-        }
-    }
-}
-
-#[derive(Serialize, FixedShape)]
-struct ProfileIdentity<'a> {
-    profile: &'a str,
-    revision: &'a str,
-    abi_revision: &'a str,
-}
-
-impl<'a> From<&'a ProfileSelection> for ProfileIdentity<'a> {
-    fn from(selection: &'a ProfileSelection) -> Self {
-        let ProfileSelection {
-            profile,
-            revision,
-            abi_revision,
-        } = selection;
-        Self {
-            profile,
-            revision,
-            abi_revision,
-        }
-    }
-}
-
-#[derive(Serialize, FixedShape)]
-struct BoundsIdentity {
-    max_objects: usize,
-    max_references: usize,
-    max_input_bytes: usize,
-}
-
-impl From<&ResourceBounds> for BoundsIdentity {
-    fn from(bounds: &ResourceBounds) -> Self {
-        let ResourceBounds {
-            max_objects,
-            max_references,
-            max_input_bytes,
-        } = bounds;
-        Self {
-            max_objects: *max_objects,
-            max_references: *max_references,
-            max_input_bytes: *max_input_bytes,
-        }
-    }
-}
-
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-struct DependencyIdentity<'a> {
-    proof_id: &'a str,
-    kind: &'static str,
-    state: &'static str,
-    source_site: Option<&'a str>,
-}
-
-impl<'a> From<&'a ProofDependencyEdge> for DependencyIdentity<'a> {
-    fn from(edge: &'a ProofDependencyEdge) -> Self {
-        let kind = match edge.kind {
-            ProofDependencyKind::Required => "required",
-            ProofDependencyKind::Assumed => "assumed",
-            ProofDependencyKind::Stubbed => "stubbed",
-        };
-        let state = match edge.state {
-            ProofDependencyState::Passed => "passed",
-            ProofDependencyState::Missing => "missing",
-            ProofDependencyState::Failed => "failed",
-            ProofDependencyState::Assumed => "assumed",
-            ProofDependencyState::Stubbed => "stubbed",
-        };
-        Self {
-            proof_id: &edge.proof_id,
-            kind,
-            state,
-            source_site: edge.source_site.as_deref(),
-        }
-    }
+    dependencies: &'a [ProofDependencyEdge],
 }
 
 /// Every field of a [`BoundedCorpusRequest`], including those the rendered oracle does not read.
@@ -391,79 +289,81 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
     }
 }
 
-/// A [`FiniteInput`] with its population order removed: the rendered oracle sorts the reference
-/// edges it reads, so the same graph offered in another order is the same case.
-#[derive(Serialize, FixedShape)]
-#[serde(rename_all = "camelCase")]
-struct InputIdentity<'a> {
-    model_id: &'a str,
-    source_id: &'a str,
-    profile: ProfileIdentity<'a>,
-    completeness: &'static str,
-    bounds: BoundsIdentity,
-    input_bytes: usize,
-    /// `(identity, type_id, snapshot_id)`, sorted.
-    objects: Vec<(&'a str, &'a str, &'a str)>,
-    /// `(source_id, field_id, target_id)`, sorted.
-    references: Vec<(&'a str, &'a str, &'a str)>,
-}
+/// Starts from the owning finite-input serializer. The case-name contract retains three
+/// camelCase key names and normalizes the two collections whose offered order does not affect
+/// the rendered graph. All values come from the original input serializer or its typed members.
+fn normalized_input_value(input: &FiniteInput) -> Result<serde_json::Value, DigestError> {
+    let mut value = preimage_value(input)?;
+    let root = value
+        .as_object_mut()
+        .ok_or_else(|| preimage_shape_changed("finite input is not an object"))?;
 
-impl<'a> From<&'a FiniteInput> for InputIdentity<'a> {
-    fn from(input: &'a FiniteInput) -> Self {
-        let FiniteInput {
-            model_id,
-            source_id,
-            profile,
-            completeness,
-            bounds,
-            input_bytes,
-            objects,
-            references,
-        } = input;
-        let mut objects: Vec<_> = objects
-            .iter()
-            .map(|object| {
-                let FiniteObject {
-                    identity,
-                    type_id,
-                    snapshot_id,
-                } = object;
-                (identity.as_str(), type_id.as_str(), snapshot_id.as_str())
-            })
-            .collect();
-        objects.sort_unstable();
-        let mut references: Vec<_> = references
-            .iter()
-            .map(|reference| {
-                let FiniteReference {
-                    source_id,
-                    field_id,
-                    target_id,
-                } = reference;
-                (source_id.as_str(), field_id.as_str(), target_id.as_str())
-            })
-            .collect();
-        references.sort_unstable();
-        Self {
-            model_id,
-            source_id,
-            profile: ProfileIdentity::from(profile),
-            completeness: match completeness {
-                PopulationCompleteness::Complete => "complete",
-                PopulationCompleteness::Incomplete => "incomplete",
-            },
-            bounds: BoundsIdentity::from(bounds),
-            input_bytes: *input_bytes,
-            objects,
-            references,
+    // The case-name preimage predates the owning input wire names for these three fields.
+    // Retain its committed camelCase keys while taking each value from the owner serializer.
+    for (source, identity) in [
+        ("input_bytes", "inputBytes"),
+        ("model_id", "modelId"),
+        ("source_id", "sourceId"),
+    ] {
+        if root.contains_key(identity) {
+            return Err(preimage_shape_changed(
+                "finite input has a conflicting case-identity key",
+            ));
         }
+        let field = root
+            .remove(source)
+            .ok_or_else(|| preimage_shape_changed("finite input identity field is absent"))?;
+        root.insert(identity.to_owned(), field);
     }
+
+    let objects_slot = root
+        .get_mut("objects")
+        .filter(|slot| slot.is_array())
+        .ok_or_else(|| {
+            preimage_shape_changed("finite input objects field is absent or not an array")
+        })?;
+    let mut objects: Vec<_> = input
+        .objects
+        .iter()
+        .map(|object| {
+            let FiniteObject {
+                identity,
+                type_id,
+                snapshot_id,
+            } = object;
+            (identity.as_str(), type_id.as_str(), snapshot_id.as_str())
+        })
+        .collect();
+    objects.sort_unstable();
+    *objects_slot = preimage_value(&objects)?;
+
+    let references_slot = root
+        .get_mut("references")
+        .filter(|slot| slot.is_array())
+        .ok_or_else(|| {
+            preimage_shape_changed("finite input references field is absent or not an array")
+        })?;
+    let mut references: Vec<_> = input
+        .references
+        .iter()
+        .map(|reference| {
+            let FiniteReference {
+                source_id,
+                field_id,
+                target_id,
+            } = reference;
+            (source_id.as_str(), field_id.as_str(), target_id.as_str())
+        })
+        .collect();
+    references.sort_unstable();
+    *references_slot = preimage_value(&references)?;
+    Ok(value)
 }
 
 impl CaseIdentity<'_> {
     /// Lowercase hex SHA-256 over this content's RFC 8785 bytes, without a newline.
     fn digest(&self) -> Result<String, DigestError> {
-        let digest = content_digest(self)?;
+        let digest = content_digest(&preimage_value(self)?)?;
         Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
     }
 }
@@ -684,16 +584,20 @@ pub fn generate_bounded_kani_corpus_case(
     }
     let normalized_dependencies = normalize_dependencies(dependencies);
     // Computed before lowering consumes the request; recorded only after lowering succeeds.
+    let input_identity = normalized_input_value(input.input()).map_err(|_| {
+        CorpusRefusal::InvalidInput.raise(
+            std001_code!("kani_corpus_identity_unencodable"),
+            request_source_id.clone(),
+            revision.clone(),
+        )
+    })?;
     let identity = CaseIdentity {
-        ceilings: CeilingsIdentity::from(ceilings),
+        ceilings,
         construct: family.construct(),
-        profile: ProfileIdentity::from(profile.selection()),
-        input: InputIdentity::from(input.input()),
+        profile: profile.selection(),
+        input: input_identity,
         request: RequestIdentity::from(&request),
-        dependencies: normalized_dependencies
-            .iter()
-            .map(DependencyIdentity::from)
-            .collect(),
+        dependencies: &normalized_dependencies,
     }
     .digest()
     .map_err(|_| {
@@ -916,24 +820,34 @@ mod tests {
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
 
-    /// Trace: AD-004 L-9, TC-023. The fixed-shape preimage projections keep the foreign
-    /// records' field spellings and enum values; only the intentional wide-integer strings
-    /// differ from the former corpus identity representation.
+    /// Trace: AD-004 L-9, TC-023. Owner serializers supply each value; the input projection
+    /// retains three established key names and the two intentionally normalized populations.
     #[test]
-    fn tc_023_canonical_preimage_projections_keep_source_fields() {
+    fn tc_023_canonical_preimage_uses_owner_serializers() {
         let (profile, _, input) = fixture();
         let ceilings = crate::kani::test_support::proof_ceilings::proof_ceilings();
+        let normalized = super::normalized_input_value(input.input()).unwrap();
+        let owner = serde_json::to_value(input.input()).unwrap();
+        for (field, value) in owner.as_object().unwrap() {
+            let identity_field = match field.as_str() {
+                "input_bytes" => "inputBytes",
+                "model_id" => "modelId",
+                "source_id" => "sourceId",
+                "objects" | "references" => continue,
+                other => other,
+            };
+            assert_eq!(normalized.get(identity_field), Some(value), "{field}");
+        }
+        assert!(normalized.get("input_bytes").is_none());
+        assert!(normalized.get("model_id").is_none());
+        assert!(normalized.get("source_id").is_none());
         assert_eq!(
-            serde_json::to_value(super::CeilingsIdentity::from(ceilings)).unwrap(),
-            serde_json::to_value(ceilings).unwrap()
+            normalized["objects"],
+            serde_json::json!([["a", "node", "s"], ["b", "node", "s"]])
         );
         assert_eq!(
-            serde_json::to_value(super::ProfileIdentity::from(profile.selection())).unwrap(),
-            serde_json::to_value(profile.selection()).unwrap()
-        );
-        assert_eq!(
-            serde_json::to_value(super::BoundsIdentity::from(&input.input().bounds)).unwrap(),
-            serde_json::to_value(input.input().bounds).unwrap()
+            normalized["references"],
+            serde_json::json!([["a", "next", "b"]])
         );
         let edge = crate::kani::census::ProofDependencyEdge {
             proof_id: "dependency".to_owned(),
@@ -941,9 +855,28 @@ mod tests {
             state: ProofDependencyState::Passed,
             source_site: None,
         };
+        let dependencies = [edge];
+        let request = arithmetic("source", 1, 1);
+        let identity = super::CaseIdentity {
+            ceilings,
+            construct: "checked-arithmetic",
+            profile: profile.selection(),
+            input: normalized,
+            request: super::RequestIdentity::from(&request),
+            dependencies: &dependencies,
+        };
+        let preimage = crate::core::canonical::preimage_value(&identity).unwrap();
         assert_eq!(
-            serde_json::to_value(super::DependencyIdentity::from(&edge)).unwrap(),
-            serde_json::to_value(edge).unwrap()
+            preimage["ceilings"],
+            serde_json::to_value(ceilings).unwrap()
+        );
+        assert_eq!(
+            preimage["profile"],
+            serde_json::to_value(profile.selection()).unwrap()
+        );
+        assert_eq!(
+            preimage["dependencies"],
+            serde_json::to_value(&dependencies).unwrap()
         );
     }
 
