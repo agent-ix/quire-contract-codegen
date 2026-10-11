@@ -15,6 +15,11 @@ type: TestMatrix
 | FR-005 | FR-005-AC-3 | Inspection | 🚧 Planned |
 | FR-005 | FR-005-AC-4 | TC-007 | 🚧 Planned |
 | FR-005 | FR-005-AC-5 | TC-002 | 🚧 Planned |
+| FR-037 | FR-037-AC-1 | TC-052 | 🚧 Planned |
+| FR-037 | FR-037-AC-2 | TC-052 | 🚧 Planned |
+| FR-037 | FR-037-AC-3 | TC-052 | 🚧 Planned |
+| FR-037 | FR-037-AC-4 | TC-052 | 🚧 Planned |
+| FR-037 | FR-037-AC-5 | TC-052 | 🚧 Planned |
 
 ## Non-Functional Requirement Coverage
 
@@ -50,3 +55,4 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-003 | Reject unsupported inputs explicitly | Integration | P0 | NFR-002-AC-3 | 🚧 Planned |
 | TC-007 | Verify cross-backend semantic parity | Integration | P0 | FR-005-AC-4 | 🚧 Planned |
 | TC-042 | Verify no panic on a generation or analysis path | Unit | P0 | NFR-005-AC-1, NFR-005-AC-2, NFR-005-AC-3, NFR-005-AC-4, NFR-005-AC-5, NFR-005-AC-6, NFR-005-AC-7, NFR-005-AC-8 | ✅ Covered; NFR-005-AC-1 scans the canonical `CaseIdentity::digest` with no exception |
+| TC-052 | Verify checked-package fixture identity ownership | Integration | P0 | FR-037-AC-1, FR-037-AC-2, FR-037-AC-3, FR-037-AC-4, FR-037-AC-5 | 🚧 Planned |

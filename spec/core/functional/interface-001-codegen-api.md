@@ -14,6 +14,11 @@ input:
   contract_package: public IR BoundPackage from the public IR derived executable projection decoder; no private wire or codegen input schema
   configuration: backend selection, customer bindings, output profile
 operations:
+  - name: source_obligation_census
+    status: planned; complete producer/consumer implementation gated on IR-759 reviewed neutral correspondence
+    inputs: [SourceCensusRequest borrowing the selected admitted checked package, complete owner semantic-obligation inventory, criterion and production-symbol inventories, and reviewed neutral authored correspondence]
+    output: SourceObligationCensus | SourceCensusRefusal
+    semantics: export separate complete obligation/entity inventories and one candidate row per distinct authored criterion-obligation-selected-source-declared-domain tuple before negotiation, generation or execution; preserve unmapped obligation/criterion/source-symbol gaps without fabricating a candidate and production gaps on complete candidate keys; no attempt, artifact or result input; missing/incomplete authority or foreign/dangling relation refuses a complete census; FR-036 and AD-005 own the planned contract
   - name: generate_bound_oracles
     inputs: [public BoundPackage reference]
     output: BoundOracleGeneration | BoundGenerationError
@@ -107,7 +112,7 @@ operations:
   - name: negotiate_kani_obligations
     inputs: [KaniObligationRequest]
     output: KaniObligationOutcome | KaniObligationError
-    semantics: settles every item in request order and, only when no item is invalid, emits one harness per supported item; an invalid item returns no harness bytes (FR-015); planned: an item is also a V2 clause claim over a precondition, postcondition or invariant node of an admitted CheckedPackageV2, with an optional declared census (FR-015-AC-38 to FR-015-AC-49); an item is also a StateFrame item (IR-461; FR-015-AC-60 and FR-015-AC-68 stay planned: the comparison against generate_state_frame_role is not testable from tests/it (crate-private) and no V2 package builder exists under src/; byte identity holds by construction; the tests compare against the public entry for a clause whose roles both succeed; one state_clause postcondition node, a contract or frame role, the state struct path and fields and the item's own subject path), recorded with the existing ObligationDisposition and reasons plus StateFrameRefused, InvalidStatePath, InvalidStateField, InvalidStateUnwind and MixedStatePackages, by one total mapping from StateFrameRefusal, the two roles settling independently, and its harnesses returned in the state_frame_harnesses field of KaniObligationOutcome::Emitted (FR-015-AC-59 to FR-015-AC-68)
+    semantics: settles every item in request order and, only when no item is invalid, emits one harness per supported item; an invalid item returns no harness bytes (FR-015); planned: an item is also a V2 clause claim over a precondition, postcondition or invariant node of an admitted CheckedPackageV2, with an optional declared census (FR-015-AC-38 to FR-015-AC-49); an item is also a StateFrame item (IR-461; FR-015-AC-60 and FR-015-AC-68 stay planned: the comparison against generate_state_frame_role is not testable from tests/it (crate-private) and no V2 package builder exists under src/; byte identity holds by construction; the tests compare against the public entry for a clause whose roles both succeed; one state_clause postcondition node, a contract or frame role, the state struct path and fields and the item's own subject path), recorded with the existing ObligationDisposition and reasons plus StateFrameRefused, InvalidStatePath, InvalidStateField, InvalidStateUnwind and MixedStatePackages, by one total mapping from StateFrameRefusal, the two roles settling independently, and its harnesses returned in the state_frame_harnesses field of KaniObligationOutcome::Emitted (FR-015-AC-59 to FR-015-AC-68); planned IR-268 collection and graph items take cardinality, integer and Boolean element, and reference-field multiplicity domains from admitted V2 model declarations and typed IR bounds; graph reachability requires a positive-length path even when start equals target, and finite model-object population still needs a typed Contract IR input; absent or unbounded domains settle by typed disposition with no harness, and FR-017 execution supplies proof verdicts (FR-015-AC-96 to FR-015-AC-102)
   - name: generate_state_frame_obligations
     inputs: [StateFrameRequest]
     output: StateFrameObligations | StateFrameRefusal
@@ -381,7 +386,24 @@ compatibility:
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: crate AGPL-3.0-or-later; emitted Rust carries the MIT OR Apache-2.0 SPDX identity required by NFR-002
   publication: disabled through the human v0.1 source-release decision
+source_obligation_producer_slice:
+  status: planned (IR-747 specification, IR-740 implementation); complete conformance gated on IR-759
+  authority: borrowed owner types; IR-759 exact neutral correspondence type/placement pending upstream review, never a CG copied schema or invented API
+  census_types: SourceCensusRequest, SourceObligationCensus, SourceCensusRefusal, MissingMapping (planned public CG types)
+  population: separate complete selected obligation and criterion/module/function inventories, explicit distinct authored candidate tuples and symbol projection links, typed obligation/criterion/source-symbol and candidate-production mapping gaps
+  missing_mapping_reasons: absent criterion/source correspondence or zero-mapping entity remains an inventory/gap record without a fabricated candidate; absent production correspondence or authored no-function retains an existing complete-key candidate with its production gap
+  census_refusals: missing authoritative input, incomplete authoritative inventory, foreign selected inventory relation, dangling relation endpoint; retain offending input/relation, no complete census
+  identity: owning criterion, semantic obligation, source identity at the selected source state and declared domain form each complete candidate key (IR FR-045/AD-008); shared obligation does not collapse distinct tuples; symbol projection links do not mint duplicate tuples; method, subject, profile, artifact, run and attempt belong only to producer facts
+  capability_type: SourceCapabilityFact (candidate association, producer, stage, capability, actual disposition and typed reason; unsupported requires no artifact, attempt run or outcome)
+  pre_execution_type: SourcePreExecutionRefusal (complete candidate/attempt association, producer, stage, original typed cause; absent executed run/outcome stays absent; a generated artifact may be retained without inventing a run)
+  execution_type: SourceExecutionFact (complete candidate association, attempt identity, actual typed artifact identity, actual typed run identity, method, actual source/profile, proof subject, declared domain and effective bounds, assumptions, terminal state/reason, claim-bound load-bearing check, production reachability, production/shadow subject and separately executed refinement scope/samples/assumptions)
+  execution_identity_states: actual producer-owned typed artifact/run identities or explicit typed missing-identity reasons, separately from attempt identity; wrong or mismatched identities preserved as received for IR joining, never inferred from a path/subject/transcript or repaired by CG
+  observation_states: explicit observed value or typed missing reason; zero is a measured value only when supplied; unfamiliar producer state retains its received identity as unclassified
+  result_records: preserve duplicates and actual wrong/missing/mismatched artifact/run/source/profile/subject/domain associations for IR evaluation; no inferred positive check/reachability/refinement and no inventory or candidate-tuple mutation
+  ownership: CG exports facts; IR FR-045/AD-008 decide eligibility, evidence joins, credit and projections; this export has no qualified-proof flag or accounting totals
+  consumer: borrow CG types in an adapter above CG and IR over the reviewed IR-owned neutral input port; IR root acquires no CG dependency and the cycle-free model acquires no QSL/CG/IR-root dependency
 open_design_gates:
+  source_obligation_correspondence: IR-759 must deliver the reviewed typed selected criterion-to-semantic-occurrence-to-production-symbol correspondence; exact type and port placement remain upstream-owned; IR-740 cannot claim complete implementation until it exists
   native_campaign_transport: the runtime exposes CampaignSnapshot and an optional snapshot-json decoder; this codegen package does not yet consume that feature, and structural decoding cannot authenticate native execution; no Display parsing, fake verdict replay, or private counter lookalike may substitute
   serialized_package_cli: the public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```
@@ -392,6 +414,7 @@ The interface's features in declaration order: every operation the contract abov
 
 | Feature | Kind |
 |---|---|
+| source_obligation_census | operation |
 | generate_bound_oracles | operation |
 | generate_bundle | operation |
 | generate_tristate_harness | operation |
@@ -437,6 +460,13 @@ The interface's features in declaration order: every operation the contract abov
 | cli_generate | operation |
 
 ## Open items
+
+- `source_obligation_census` and its separate producer-fact vocabulary are Planned
+  under [FR-036](../../evidence/functional/FR-036-source-obligation-census.md).
+  [AD-005](../../assurance/AD-005-source-obligation-producer.md) records current
+  authoritative inputs and IR-759's missing neutral correspondence. Complete
+  producer/consumer conformance is Gated on that upstream contract; no direct
+  IR-to-CG dependency or replacement upstream schema is declared.
 
 - `generate_bundle`, `analyze_coverage` and `cli_generate` are declared `status: planned`. Criteria
   for their semantics belong with the requirement that implements them, once one exists.
