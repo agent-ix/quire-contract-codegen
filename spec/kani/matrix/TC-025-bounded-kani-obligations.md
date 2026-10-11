@@ -20,16 +20,20 @@ graph controls; the present finite-input corpus is not proof evidence for them.
 
 For IR-268, emit a collection claim and a reference-graph claim through QSL,
 admit each as `CheckedPackageV2`, and resolve its selected model declaration
-through Contract IR's typed interfaces. For the collection, use a field with
-nonzero inclusive cardinality and finite element endpoints; inspect the
-generated `kani::any()` draws and assumptions, then check assignments at both
-cardinality and element endpoints. For the graph, use a finite model-object
-population and bounded multiplicity for the selected reference field; inspect
-draws and assumptions at zero and the declared maxima and verify that a
-nonselected field cannot establish reachability. Neither case passes a concrete
+through Contract IR's typed interfaces. For collections, use an `IntRange`
+element field with nonzero inclusive cardinality and a `Boolean` element field;
+inspect the generated `kani::any()` draws and assumptions, then check both
+cardinality endpoints, both integer endpoints and both Boolean values
+independently. For the graph, use a finite model-object population and the
+typed `Reference`, `Option` and bounded `Collection` multiplicities of the
+selected reference field; inspect draws and assumptions at each admitted
+minimum and maximum and verify that a nonselected field cannot establish
+reachability. With `start = target`, compare an isolated object with a
+self-loop on the selected optional reference field: only the self-loop is
+reachable, without expanding its target. Neither case passes a concrete
 input vector or a caller semantic ceiling. Refuse unbounded cardinality,
 unbounded element type, unbounded object population, unbounded edge
-multiplicity, absent typed graph-domain inputs, unsupported collection form,
+multiplicity, absent typed model-object population, unsupported collection form,
 malformed selected declaration and an over-ceiling model domain. Assert the
 typed disposition names the failing capability or domain and exposes no
 harness. Use a mixed request to check one disposition per item.
@@ -43,7 +47,8 @@ identity. Compare identity bounds and complete ordered options with the emitted
 source and FR-017 run evidence, including actual Kani, Rust and solver versions.
 The finite-input corpus's Boolean and generation-time outcome do not satisfy
 these controls. These tests are planned until the symbolic generation exists;
-the graph success case also awaits Contract IR's typed graph-domain input.
+the graph success case also awaits Contract IR's typed finite model-object
+population input; typed reference-field multiplicity is already available.
 
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract
