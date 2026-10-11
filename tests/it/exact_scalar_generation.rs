@@ -1875,7 +1875,7 @@ fn two_parameter_disposition(
     let (package, ids) = two_parameter_admitted();
     let node_id = ids.resolve(&code_id(code));
     let oracles = generate(
-        &package,
+        package,
         &[ExactScalarItem {
             node_id: node_id.clone(),
             operation,
@@ -2117,7 +2117,7 @@ fn qsl_disposition(
     let (package, ids) = qsl_admitted();
     let node_id = ids.resolve(&code_id(code));
     let oracles = generate(
-        &package,
+        package,
         &[ExactScalarItem {
             node_id: node_id.clone(),
             operation,
@@ -2149,7 +2149,7 @@ fn qsl_checked_bounds(
         node_id: ids.resolve(&code_id(code)),
         operation,
     };
-    let oracles = generate(&package, &[item]);
+    let oracles = generate(package, &[item]);
     match dispositions(&oracles).get(ids.resolve(&code_id(code)).digest.as_ref()) {
         Some(ClaimDisposition::Generated(generated)) => {
             (generated.checked_bounds.clone(), ids.clone())
@@ -2169,13 +2169,13 @@ fn bound_ids(bounds: &[Bound], ids: &FixtureIds) -> Vec<quire_contract_model::Ch
 fn assert_qsl_refused(code: u32, operation: ExactScalarOperation, expected: ExactScalarRefusal) {
     let (package, ids) = qsl_admitted();
     match qsl_disposition(code, operation) {
-        ClaimDisposition::Refused { refusal } => assert_refusal_with_ids(&refusal, &expected, &ids),
+        ClaimDisposition::Refused { refusal } => assert_refusal_with_ids(&refusal, &expected, ids),
         other => panic!("node {code} is not refused: {other:?}"),
     }
-    let Err(derived) = derive_one_resolved(&package, &ids, code) else {
+    let Err(derived) = derive_one_resolved(package, ids, code) else {
         panic!("node {code}: derivation unexpectedly succeeded");
     };
-    assert_refusal_with_ids(&derived, &expected, &ids);
+    assert_refusal_with_ids(&derived, &expected, ids);
 }
 
 fn requires_integer_bound() -> ExactScalarRefusal {
@@ -2206,7 +2206,7 @@ fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
     );
     let (package, ids) = qsl_admitted();
     assert_eq!(
-        derive_one_resolved(&package, &ids, QSL_INC)
+        derive_one_resolved(package, ids, QSL_INC)
             .expect("derives")
             .operation,
         add_over(0, 10)
@@ -2244,7 +2244,7 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
         ),
     ] {
         assert_eq!(
-            derive_one_resolved(&package, &ids, code)
+            derive_one_resolved(package, ids, code)
                 .expect("derives")
                 .operation,
             operation,
@@ -2260,7 +2260,7 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
                 bound: id(&Bound::Integer(10, 29).key()),
                 form: BoundForm::IntegerRange,
             },
-            &ids,
+            ids,
         ),
         other => panic!("not refused: {other:?}"),
     }
@@ -2357,7 +2357,7 @@ fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
             quire_contract_model::CheckedPackageReadLimits::bounded().work,
         ),
         Err(StructuralCandidateError::InvalidClosedShape { position: rejected, node_id })
-            if rejected as usize == position && node_id == invalid
+            if rejected == position && node_id == invalid
     ));
     let CheckedPackageV2ReadResult::Refused(refusal) = result else {
         panic!("wrong-base narrowing unexpectedly admitted");
