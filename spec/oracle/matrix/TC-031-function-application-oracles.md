@@ -12,9 +12,10 @@ relationships:
 
 ## Description
 
-Verify that function-application oracles generated from an admitted CheckedPackage V2 lower every
-declared function's body, admit the assembled package, apply the requested function through the
-runtime's FR-273 call surface with agreeing outcomes and charges, refuse every non-generated item
+Verify that function-application oracles generated from an admitted CheckedPackage V2 classify
+checked `Call` body roots once, lower Scalar and CompositeEquality roots, admit the assembled
+package, apply the requested function through the runtime's FR-273 call surface with agreeing
+outcomes and charges, refuse every non-generated item
 with its own typed reason, are byte-deterministic, and carry a static location map that round-trips
 to the request's own expression trees without executing anything. It also verifies that no
 generated code depends on `Evaluation.location`/`.losses` becoming non-empty, since Contract
@@ -31,6 +32,10 @@ as its own byte-ceiling or work refusal (FR-021-AC-23), and that two different u
 names on one call node are two `UnknownFunction` entries, and two members of a duplicate-node pair
 are two `DuplicateDeclaringNode` entries, in byte order of the function name when they are equal
 on the earlier key fields and in declaring-node-id order otherwise (FR-021-AC-24).
+
+It verifies that a reader-admitted 129-function, two-argument chain with 128 internal calls
+generates under the unchanged byte ceiling, while mismatched checked `Call` roots retain typed,
+isolated refusals (FR-021-AC-12, FR-021-AC-25).
 
 The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
 
@@ -133,20 +138,20 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
    assertion against `Evaluation.location` or `Evaluation.losses`; confirm none exists, and that
    both fields are simply discarded by the emitted oracle function's return path, since the
    runtime never populates either one regardless of what the applied body computed.
-11. Lowering byte-ceiling failure (FR-021-AC-23, IR-547). Build a package whose two lowered
-    contract packages of the call (bodies, and requested `call` nodes) are both longer than its
-    checked package and whose body and call-node lowerings give different `consumed` under one
-    ceiling (read each alone to confirm). Read it under a byte ceiling that admits the checked
-    package and is one byte below the shorter of the two lowered packages' canonical lengths:
-    every function is absent from `checked_package()` and `location-map.json`, and every item is
-    refused `LoweringByteLimitExceeded` with `limit` equal to that ceiling and the call-node
-    lowering's `consumed` (Contract IR FR-038-AC-95), none `LoweringWorkExhausted`; this asserts the
-    call-node-first order. In the `#[cfg(test)]` module the code change adds to the function
-    module, hand `lowered_binary_body` hand-built records: `work` gives `LoweringWorkExhausted`,
-    `bytes` gives `LoweringByteLimitExceeded` with the record's `limit` and `consumed`, and each of
-    `depth`, `nodes`, `edges`, `occurrences` and `diagnostics` gives `LoweringLimitUnrecognised`
-    with that snake_case `limit_kind`, with no panic and never `LoweringWorkExhausted`. Per-function
-    isolation stays with FR-021-AC-12's `tc_031_ac12_*` tests.
+11. Lowering byte-ceiling failure (FR-021-AC-23, IR-547). Build an admitted package with a Scalar
+    or CompositeEquality body root and a requested call node whose separate Contract IR lowerings
+    both fail for bytes under one retained ceiling, with different `consumed` values. Measure each
+    actual lowering alone; through the whole generator call, assert the item's
+    `LoweringByteLimitExceeded { limit, consumed }` takes the call-node record's values, never the
+    body's values and never `LoweringWorkExhausted`. In a second case, let the call-node lowering
+    succeed and the Scalar or CompositeEquality body lowering fail; assert the item takes the
+    body's `limit` and `consumed` and unrelated function items are unchanged. Hand
+    `lowered_binary_body` hand-built `Failed` records in the function module's `#[cfg(test)]`
+    tests: `work` gives `LoweringWorkExhausted`, `bytes` gives `LoweringByteLimitExceeded` with
+    the record's `limit` and `consumed`, and each of `depth`, `nodes`, `edges`, `occurrences` and
+    `diagnostics` gives `LoweringLimitUnrecognised` with that snake_case `limit_kind`, with no
+    panic. Keep FR-021-AC-12's `tc_031_ac12_*` isolation tests. A checked `Call` body root is
+    classified from the admitted graph and has no synthetic body-lowering `Failed` record.
 12. Unknown function names, and duplicate-node pair members, on one call node (FR-021-AC-24,
     IR-545). For cases (i) to (v), over one declared `add_fn`, request on one `call` node with
     equal arguments: (i) `zz_unknown` once; (ii) `zz_unknown` and
@@ -177,10 +182,32 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     `tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name` and
     `tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names`.
 
+13. Checked-source `Call` chain (FR-021-AC-12, FR-021-AC-25, IR-768). Construct and read an
+    authentic acyclic 129-function checked package with two parameters per function and 128
+    internal `Call` links; measure and assert that the source is below the unchanged 1,048,576-byte
+    ceiling (approximately 800,067 bytes). Generate an oracle for the first function under the
+    same reader and lowering byte ceiling. Assert all 129 functions and all 128 internal
+    `Frame::call` sites are emitted, with no `LoweringByteLimitExceeded`; inspect the classified
+    roots or instrument the lowering seam to establish that each distinct checked `Call` root is
+    classified once and no transitive callee closure is submitted to Contract IR lowering. Match
+    each root's exact `quire.op.function.call` identity, unique callee reference and ordered
+    caller-parameter references against the declaration; check arity, operand and result types
+    against the target signature. Check generated bytes and claim-map order under reversed request
+    order, and execute the chain to
+    confirm the existing `MAX_CALL_DEPTH` refusal at its first out-of-bound call. Separately use
+    reader-admitted controls for request-to-source mismatches, and classifier-unit controls for
+    malformed shapes the strict reader itself rejects: a declared `Call` body pointing to a wrong
+    tag or form, wrong operation identity, another declared callee, reordered parameter references,
+    wrong arity, or mismatched operand or result type; also omit or refuse its callee. Assert the
+    corresponding `NotExpression`, `FormMismatch`, `BodyMismatch`, `SignatureMismatch` or
+    `UnknownCallee` refusal for each affected function, propagation to its callers, unchanged
+    duplicate-declaration and capability refusal precedence, and generation of an unrelated
+    function's item.
+
 ## Expected Results
 
-Every admitted function's body lowers and every admitted package generates oracles for its `call`
-items; a refused item is absent from the source with its own typed reason and its siblings are
+Every admitted function's body classifies or lowers and every admitted package generates oracles
+for its `call` items; a refused item is absent from the source with its own typed reason and its siblings are
 unchanged; the reference-typed, capability-gated, unlowerable, and family-excluded functions are
 each refused with their own distinct typed blocker rather than one collapsed reason; bytes are
 identical across runs and orderings; the native `CheckedPackage::call` leg agrees on outcome,
