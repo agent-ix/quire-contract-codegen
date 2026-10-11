@@ -121,12 +121,16 @@ required dependency or target path.
 13. Direct unsupported roots (FR-021-AC-33). Admit formula, fairness and case
     roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
     for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
-    Request each root first as an item's call-node id, then as a declared
-    function's body root with an item naming that function, alongside an
-    unrelated healthy function and call item. Compare the refused claim's
-    call-node id with the request, and its cause id/tag with the relevant IR
-    function-profile lowering record; for a lowered case root assert the root
-    id and `expression` tag. Assert one `ExactFunctionRefusal::Unsupported`
+    Request each root first as an item's call-node id. For the separate body
+    leg, use that root as a declared function's body and supply a distinct,
+    IR-admitted `expression`/`call` item naming the function. Verify that the
+    call item lowers successfully and has no duplicate, capability or earlier
+    item refusal, so item classification reaches the declaration's Stage 1
+    body result. Include an unrelated healthy function and call item. Compare
+    the refused claim's call-node id with the request, and its cause id/tag
+    with the relevant IR function-profile lowering record for the direct
+    item or body root; for a lowered case root assert the root id and
+    `expression` tag. Assert one `ExactFunctionRefusal::Unsupported`
     claim per affected item, no schedule root, symbol or location entry, no
     panic or omitted claim, and unchanged healthy claim, schedule source and
     location map. Request a temporal clause whose closure reaches formula or
