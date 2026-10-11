@@ -244,11 +244,28 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
     `InvalidTypeResolutionWorkLimit` before lowering or any item charge.
     Supply `u64::MAX - 1` to a counter seam at its last admissible unit and
     assert the first denied `consumed` is `u64::MAX`, without wraparound.
+21. Direct unsupported roots (FR-018-AC-32). Admit formula, fairness and case
+    roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
+    for formula/case shapes and Contract IR FR-038-AC-107 for fairness. Request
+    each with a supported equality sibling. Compare the requested claim id
+    with the IR equality-profile lowering record: if it is `Unsupported`,
+    compare the refusal's first unsupported reachable id and tag with that
+    record; if a case root lowers, assert the root id and `expression` tag.
+    Assert one `CompositeEqualityRefusal::Unsupported` claim, no generated
+    symbol, no panic and no omitted claim. Compare the sibling's claim and
+    source bytes with a run without the refused request. As a separate
+    control, request a temporal clause whose closure reaches a formula or
+    fairness node and assert its existing QSL-121 blocker.
 
 ## Expected Results
 
 The source scans find zero panic sites, and the render function returns a typed
 error for a quantity or reference type rather than panicking.
+
+Direct formula, fairness and case requests have one typed unsupported claim
+apiece, with request identity distinct from IR's causative node when they
+differ. No refused item contributes source, and the healthy sibling is
+unchanged; the temporal-clause control remains blocked on QSL-121.
 
 Every admitted shape and schedule is generated; every refused item is absent
 from the source and carries its own typed reason; bytes are identical across
