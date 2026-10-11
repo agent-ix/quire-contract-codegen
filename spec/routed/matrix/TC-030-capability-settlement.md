@@ -35,17 +35,22 @@ Use the public negotiation API with typed IR forms and one Kani descriptor.
 For every FR-019-AC-25 row, construct requests for each named family and
 obligation role: Boolean, integer, rational, decimal, IEEE float, text, enum,
 quantity, record/tuple equality, function application, precondition,
-postcondition, invariant, frame, state before/after, bounded collection and
-bounded graph. Include the exact operation identities, type/domain bounds and
-typed claim references required by FR-015; do not replace them with display
-strings. Exercise every supported scalar operation in its family and the
+postcondition and invariant clauses, plus frame obligations represented by
+typed V2 `StateFrame` items with `contract` or `frame` roles; also cover state
+before/after, bounded collections and bounded graphs. Include the exact
+operation identities, type/domain bounds and typed claim references required by
+FR-015; do not replace them with display strings. Exercise every supported scalar operation in its family and the
 boundary between a valid finite domain and a missing or non-representable
 bound. For composite equality, vary record and tuple shape, optional members,
 and recursive or over-budget shapes. For functions, exercise supported and
-refused result outcomes. For clauses, cover each kind, dependency role and
-Boolean/integer expression form. For state and frame items, cover before and
-after reads, granted and forbidden fields, and each typed role. For collections
-and graphs, cover bounded and unbounded roots and every admitted finite shape.
+refused result outcomes. For V1 `BoundClause` items, cover its
+precondition, postcondition and invariant roles, dependency roles and
+Boolean/integer expression forms. V1
+`ClauseKind` has no `Frame` variant; `Assertion`, `Case` and `Information`
+clauses are not V1 obligation items. Cover frame obligations through typed V2
+`StateFrame` items. For state and frame items, cover before and after reads,
+granted and forbidden fields, and each typed role. For collections and graphs,
+cover bounded and unbounded roots and every admitted finite shape.
 
 Run every typed form selected by an Implemented subpath against a bounded Kani
 candidate advertising the required mode and verify `supported`. For each
@@ -180,7 +185,16 @@ Passing generic mode-table controls alone does not complete this collection case
 
 ## FR-019-AC-25 implementation status
 
-The status register describes typed subpaths against the complete normative set in FR-019-AC-25. A Planned subpath is disjoint from every Implemented subpath; its selector and one current refusal cause are explicit. A subset marked Implemented does not reduce AC-25's scope.
+The V1 `BoundClause` path derives the obligation role from `ClauseKind`:
+`Precondition`, `Postcondition` and `Invariant` map to obligation roles;
+`Assertion`, `Case` and `Information` map to `ClauseKindNotObligation`. V1
+`ClauseKind` has no `Frame` variant, so there is no V1 `BoundClause` frame
+selector. Frame obligations in this test use typed V2 `StateFrame` items and
+their `contract` or `frame` roles. The status register describes typed
+subpaths against the complete normative set in FR-019-AC-25. A Planned
+subpath is disjoint from every Implemented subpath; its selector and one
+current refusal cause are explicit. A subset marked Implemented does not
+reduce AC-25's scope.
 
 | Typed form subpath selector | STATUS | Implemented subset or planned owner | Exact current refusal cause for this subpath |
 |---|---|---|---|
@@ -200,7 +214,6 @@ The status register describes typed subpaths against the complete normative set 
 | Integer scalar function application with FR-015-AC-37's operation/result contract | Implemented | FR-015-AC-37. | — |
 | Function claim with IR-confirmed generated operation identity outside the four `ScalarOperation` identities above | Planned (IR-269) | Remaining function families. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | V1 `BoundClause` with one or more expression definedness obligations, regardless of operand type | Planned (IR-269) | Definedness-bearing V1 clause forms. | `DefinednessNotEncoded { obligations }` (`lower_clause` checks this first and reports the exact obligation count). |
-| V1 frame obligation passed to the clause renderer as `ObligationKind::Frame` | Planned (IR-269) | V1 frame clauses. | `FrameNotClauseRendered` (`negotiate::render`). |
 | V2 `state`/`state_clause` claim sent through the scalar-claim path and refused by exact-scalar lowering as unsupported node family | Planned (IR-489) | V2 contract clause claim. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
 | V2 `StateFrame` contract role for a `postcondition` whose Boolean condition is a negation of a supported pre/post integer comparison | Planned (IR-269) | Negated state-clause comparison form; FR-015-AC-63 names this refusal shape. | `StateFrameRefused { ConditionNotSupported }` (`generate_state_frame_role`, FR-015-AC-63). |
 | V2 `StateFrame` frame role for a `postcondition` whose frame grants every state field | Planned (IR-269) | All-fields-granted frame form; FR-015-AC-63 and AC-68 name this refusal shape. | `StateFrameRefused { NothingForbidden }` (`generate_state_frame_role`, FR-015-AC-63 and AC-68). |
