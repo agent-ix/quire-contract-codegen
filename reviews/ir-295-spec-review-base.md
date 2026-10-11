@@ -29,3 +29,4 @@ The computed matrix for this SHA lists FR-019-AC-24 as the last criterion and do
 | FND | outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | still-open | The AC-25 through AC-32 rows remain separated from the criterion table by a blank line. `quire matrix` at 256d7bf lists FR-019-AC-24 as the last criterion and omits AC-25 through AC-32, so the added Test Matrix entries cannot be computed or traced. |
+| FND-001 | fixed | `972b78cf4f93bba89e866274eecf0c7b9ff76810`; after_excerpt: `The Kani-supported form set is exactly the source-backed forms in FR-015: (a) a frozen V1 `BoundClause` of kind precondition, postcondition or invariant with a Boolean root formed from Boolean literals/connectives, Boolean equality/inequality, or bounded-integer comparisons over Boolean and bounded-integer dependencies, provided lowering and ABI validation succeeds (FR-015-AC-14, AC-20, AC-21; FR-031 excludes integer arithmetic);` |
