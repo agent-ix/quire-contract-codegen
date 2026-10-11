@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use quire_contract_model::{CheckedNodeId, ContractPackageV1};
+use quire_contract_model::ClauseKind;
 use serde::Serialize;
 
 use crate::core::contract_package::{
@@ -249,6 +250,418 @@ pub enum Candidates {
     UnknownBackend(String),
 }
 
+/// A typed identity for a Kani lowering form.
+///
+/// This is CG's in-process projection of the admitted IR form. It is not a
+/// wire member and its identity is never reconstructed from `Debug` or
+/// display output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum KaniForm {
+    /// A clause copied from a bound V1 package. Its private fields and validated
+    /// expression come from Contract IR admission.
+    V1BoundClause {
+        /// The admitted typed clause.
+        clause: Box<quire_contract_model::BoundClause>,
+    },
+    /// A V2 integer scalar claim whose exact operation identity came from IR.
+    V2IntegerScalarClaim {
+        /// The operation's exact catalog identity.
+        operation_identity: String,
+        /// Whether IR confirmed the operation catalog entry.
+        provenance: KaniOperationProvenance,
+        /// The obligation role, when the graph node is a contract role.
+        role: Option<KaniObligationRole>,
+    },
+    /// A V2 state-clause/frame role handled by the state-frame path.
+    V2StateFrame {
+        /// The checked clause role read from the IR node.
+        clause: ClauseKind,
+        /// The requested state/frame obligation role.
+        role: KaniObligationRole,
+    },
+    /// A V1 composite-equality form in the normative set.
+    V1CompositeEquality {
+        /// Record or tuple operands.
+        shape: KaniCompositeShape,
+        /// Equality operator identity.
+        operator: KaniEqualityOperator,
+    },
+    /// A V1 function-application form in the normative set.
+    V1FunctionApplication {
+        /// The exact function operation identity from IR.
+        operation_identity: String,
+    },
+    /// A bounded collection form in the normative set.
+    BoundedCollection {
+        /// The typed collection operation.
+        operation: KaniCollectionOperation,
+    },
+    /// A bounded graph form in the normative set.
+    BoundedGraph {
+        /// The typed graph operation.
+        operation: KaniGraphOperation,
+    },
+    /// A typed form outside the normative V1/V2 Kani set.
+    OutsideSet {
+        /// The source IR tag.
+        tag: String,
+        /// The source IR form, copied from its typed IR field.
+        form: String,
+    },
+    /// An in-set form rejected by an FR-015 typed validation or lowering rule.
+    Malformed {
+        /// The in-set form's stable typed identity.
+        identity: Box<KaniFormIdentity>,
+        /// The exact FR-015 refusal produced by its typed validation path.
+        refusal: crate::kani::generate::outcome::UnsupportedObligation,
+    },
+}
+
+/// Stable identity fields used when a Kani form is refused.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct KaniFormIdentity {
+    /// The finite family vocabulary from FR-019 AC-25.
+    pub family: KaniFormFamily,
+    /// The typed form within that family.
+    pub form: KaniFormName,
+    /// The exact operation identity, where the form has one.
+    pub operation_identity: Option<String>,
+    /// The obligation role, where the form has one.
+    pub role: Option<KaniObligationRole>,
+}
+
+/// The complete V1 family vocabulary named by FR-019 AC-25.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniFormFamily {
+    /// Boolean scalar claims.
+    Boolean,
+    /// Integer scalar claims.
+    Integer,
+    /// Rational scalar claims.
+    Rational,
+    /// Decimal scalar claims.
+    Decimal,
+    /// IEEE floating-point scalar claims.
+    IeeeFloat,
+    /// Text scalar claims.
+    Text,
+    /// Enumeration scalar claims.
+    Enum,
+    /// Quantity scalar claims.
+    Quantity,
+    /// Record or tuple composite equality.
+    CompositeEquality,
+    /// Function application.
+    FunctionApplication,
+    /// Precondition, postcondition, invariant or frame clauses.
+    Clause,
+    /// State before/after and frame obligations.
+    StateFrame,
+    /// Bounded collection forms.
+    BoundedCollection,
+    /// Bounded graph forms.
+    BoundedGraph,
+    /// A typed IR form outside the normative V1/V2 set.
+    OutsideSet,
+}
+
+/// Form names used in stable Kani form identities.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniFormName {
+    /// Admitted V1 bound clause.
+    V1BoundClause,
+    /// V2 exact scalar claim.
+    V2ScalarClaim,
+    /// V2 state-clause contract/frame role.
+    V2StateFrame,
+    /// V1 composite equality.
+    V1CompositeEquality,
+    /// V1 function application.
+    V1FunctionApplication,
+    /// Bounded collection operation.
+    BoundedCollection,
+    /// Bounded graph operation.
+    BoundedGraph,
+    /// An IR form outside the normative set.
+    OutsideSet,
+}
+
+/// Obligation role carried by a typed Kani form.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniObligationRole {
+    /// A precondition obligation.
+    Precondition,
+    /// A postcondition obligation.
+    Postcondition,
+    /// An invariant obligation.
+    Invariant,
+    /// A frame-effect obligation.
+    Frame,
+}
+
+/// Whether the operation identity was confirmed by admitted IR.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniOperationProvenance {
+    /// The admitted IR operation catalog confirmed this identity.
+    IrConfirmed,
+    /// The operation was declared by the caller but not confirmed by IR.
+    CallerDeclared,
+}
+
+/// Shape of a record/tuple equality form.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniCompositeShape {
+    /// Record operands.
+    Record,
+    /// Tuple operands.
+    Tuple,
+}
+
+/// Equality operator identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniEqualityOperator {
+    /// Equality.
+    Equal,
+    /// Inequality.
+    NotEqual,
+}
+
+/// Collection operation identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniCollectionOperation {
+    /// Universal non-negativity query.
+    ForAllNonNegative,
+    /// Existence of a value equal to the requested value.
+    ExistsEqual,
+}
+
+/// Graph operation identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniGraphOperation {
+    /// Reachability along the selected reference field.
+    Reachability,
+}
+
+impl KaniFormName {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::V1BoundClause => "v1_bound_clause",
+            Self::V2ScalarClaim => "v2_scalar_claim",
+            Self::V2StateFrame => "v2_state_frame",
+            Self::V1CompositeEquality => "v1_composite_equality",
+            Self::V1FunctionApplication => "v1_function_application",
+            Self::BoundedCollection => "bounded_collection",
+            Self::BoundedGraph => "bounded_graph",
+            Self::OutsideSet => "outside_set",
+        }
+    }
+}
+
+impl KaniCompositeShape {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Record => "record",
+            Self::Tuple => "tuple",
+        }
+    }
+}
+
+impl KaniEqualityOperator {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Equal => "equal",
+            Self::NotEqual => "not_equal",
+        }
+    }
+}
+
+impl KaniCollectionOperation {
+    const fn identity(self) -> &'static str {
+        match self {
+            Self::ForAllNonNegative => "for_all_non_negative",
+            Self::ExistsEqual => "exists_equal",
+        }
+    }
+}
+
+impl KaniGraphOperation {
+    const fn identity(self) -> &'static str {
+        match self {
+            Self::Reachability => "reachability",
+        }
+    }
+}
+
+impl KaniForm {
+    fn identity(&self) -> KaniFormIdentity {
+        match self {
+            Self::V1BoundClause { clause } => KaniFormIdentity {
+                family: KaniFormFamily::Clause,
+                form: KaniFormName::V1BoundClause,
+                operation_identity: Some("v1.bound_clause".to_owned()),
+                role: match clause.kind() {
+                    ClauseKind::Precondition => Some(KaniObligationRole::Precondition),
+                    ClauseKind::Postcondition => Some(KaniObligationRole::Postcondition),
+                    ClauseKind::Invariant => Some(KaniObligationRole::Invariant),
+                    ClauseKind::Assertion | ClauseKind::Case | ClauseKind::Information => None,
+                },
+            },
+            Self::V2IntegerScalarClaim {
+                operation_identity,
+                role,
+                ..
+            } => KaniFormIdentity {
+                family: KaniFormFamily::Integer,
+                form: KaniFormName::V2ScalarClaim,
+                operation_identity: Some(operation_identity.clone()),
+                role: *role,
+            },
+            Self::V2StateFrame { clause, role } => KaniFormIdentity {
+                family: KaniFormFamily::StateFrame,
+                form: KaniFormName::V2StateFrame,
+                operation_identity: Some(
+                    match clause {
+                        ClauseKind::Precondition => "precondition",
+                        ClauseKind::Postcondition => "postcondition",
+                        ClauseKind::Invariant => "invariant",
+                        ClauseKind::Assertion => "assertion",
+                        ClauseKind::Case => "case",
+                        ClauseKind::Information => "information",
+                    }
+                    .to_owned(),
+                ),
+                role: Some(*role),
+            },
+            Self::V1CompositeEquality { shape, operator } => KaniFormIdentity {
+                family: KaniFormFamily::CompositeEquality,
+                form: KaniFormName::V1CompositeEquality,
+                operation_identity: Some(format!("{}.{}", shape.label(), operator.label())),
+                role: None,
+            },
+            Self::V1FunctionApplication { operation_identity } => KaniFormIdentity {
+                family: KaniFormFamily::FunctionApplication,
+                form: KaniFormName::V1FunctionApplication,
+                operation_identity: Some(operation_identity.clone()),
+                role: None,
+            },
+            Self::BoundedCollection { operation } => KaniFormIdentity {
+                family: KaniFormFamily::BoundedCollection,
+                form: KaniFormName::BoundedCollection,
+                operation_identity: Some(operation.identity().to_owned()),
+                role: None,
+            },
+            Self::BoundedGraph { operation } => KaniFormIdentity {
+                family: KaniFormFamily::BoundedGraph,
+                form: KaniFormName::BoundedGraph,
+                operation_identity: Some(operation.identity().to_owned()),
+                role: None,
+            },
+            Self::OutsideSet { .. } => KaniFormIdentity {
+                family: KaniFormFamily::OutsideSet,
+                form: KaniFormName::OutsideSet,
+                operation_identity: None,
+                role: None,
+            },
+            Self::Malformed { identity, .. } => identity.as_ref().clone(),
+        }
+    }
+
+    fn preflight(&self, backend: &BackendDescriptor) -> Result<(), Cause> {
+        let identity = self.identity();
+        match self {
+            Self::V1BoundClause { clause } => {
+                let refusal = match clause.kind() {
+                    ClauseKind::Precondition | ClauseKind::Postcondition | ClauseKind::Invariant => {
+                        crate::kani::generate::clause::classify_bound_clause(clause).err()
+                    }
+                    kind => Some(
+                        crate::kani::generate::outcome::UnsupportedObligation::ClauseKindNotObligation {
+                            kind,
+                        },
+                    ),
+                };
+                match refusal {
+                    Some(refusal) => Err(Cause::KaniFormRefused {
+                        form: identity,
+                        refusal,
+                        backend: backend.identity.clone(),
+                    }),
+                    None => Ok(()),
+                }
+            }
+            Self::V2IntegerScalarClaim {
+                operation_identity,
+                provenance: KaniOperationProvenance::CallerDeclared,
+                ..
+            } => Err(Cause::KaniFormRefused {
+                form: identity,
+                refusal:
+                    crate::kani::generate::outcome::UnsupportedObligation::CallerDeclaredOperation {
+                        operation_identity: operation_identity.clone(),
+                        blocked_on:
+                            crate::oracle::claim::UpstreamBlocker::OperationIdentityNotConsumed,
+                        derived_domains: Vec::new(),
+                    },
+                backend: backend.identity.clone(),
+            }),
+            Self::V2IntegerScalarClaim {
+                operation_identity,
+                provenance: KaniOperationProvenance::IrConfirmed,
+                ..
+            } if [
+                "quire.op.integer.add",
+                "quire.op.integer.sub",
+                "quire.op.integer.mul",
+                "quire.op.integer.negate",
+            ]
+            .contains(&operation_identity.as_str()) =>
+            {
+                Ok(())
+            }
+            Self::V2IntegerScalarClaim {
+                operation_identity, ..
+            } => Err(Cause::KaniFormRefused {
+                form: identity,
+                refusal:
+                    crate::kani::generate::outcome::UnsupportedObligation::OperationNotRendered {
+                        operation_identity: operation_identity.clone(),
+                        derived_domains: Vec::new(),
+                    },
+                backend: backend.identity.clone(),
+            }),
+            Self::V2StateFrame {
+                clause: ClauseKind::Postcondition,
+                role: KaniObligationRole::Postcondition | KaniObligationRole::Frame,
+            } => Ok(()),
+            Self::V2StateFrame { .. } => Err(Cause::UnsupportedKaniForm {
+                form: identity,
+                backend: backend.identity.clone(),
+            }),
+            Self::V1CompositeEquality { .. }
+            | Self::V1FunctionApplication { .. }
+            | Self::BoundedCollection { .. }
+            | Self::BoundedGraph { .. }
+            | Self::OutsideSet { .. } => Err(Cause::UnsupportedKaniForm {
+                form: identity,
+                backend: backend.identity.clone(),
+            }),
+            Self::Malformed { refusal, .. } => Err(Cause::KaniFormRefused {
+                form: identity,
+                refusal: refusal.clone(),
+                backend: backend.identity.clone(),
+            }),
+        }
+    }
+}
+
 /// One request item.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RequestItem {
@@ -260,6 +673,8 @@ pub struct RequestItem {
     pub named_backend: Option<String>,
     /// The candidates the registry computed for this item.
     pub candidates: Candidates,
+    /// The required typed IR form supplied to Kani settlement.
+    pub kani_form: KaniForm,
 }
 
 /// The FR-331 backend provider envelope, as far as settlement reads it.
@@ -350,6 +765,24 @@ pub enum Cause {
         /// The candidate that cannot discharge it.
         backend: String,
     },
+    /// A Kani form is outside the renderer's current typed capability set.
+    #[serde(rename = "unsupported-requested-capability")]
+    UnsupportedKaniForm {
+        /// The form's stable typed identity.
+        form: KaniFormIdentity,
+        /// The sole Kani candidate.
+        backend: String,
+    },
+    /// An in-set Kani form was refused by its FR-015 typed validation/lowering path.
+    #[serde(rename = "unsupported-requested-capability")]
+    KaniFormRefused {
+        /// The in-set form's stable typed identity.
+        form: KaniFormIdentity,
+        /// The exact typed FR-015 refusal.
+        refusal: crate::kani::generate::outcome::UnsupportedObligation,
+        /// The sole Kani candidate.
+        backend: String,
+    },
     /// An unbounded extent against a bounded-only advertisement, with no finite
     /// bound available.
     UnboundedExtent {
@@ -373,6 +806,8 @@ impl Cause {
             | Self::AmbiguousBackend { .. } => "invalid_capability",
             Self::UnsupportedRequestedCapability { .. }
             | Self::UnsupportedDomain { .. }
+            | Self::UnsupportedKaniForm { .. }
+            | Self::KaniFormRefused { .. }
             | Self::UnboundedExtent { .. } => "unsupported_projection",
         }
     }
@@ -455,6 +890,18 @@ impl ItemSettlement {
                     "{backend} does not advertise domain {} for {}",
                     domain.to_wire(),
                     kind.label()
+                )),
+                Cause::UnsupportedKaniForm { form, backend } => Some(format!(
+                    "{backend} does not support Kani form {}",
+                    form.form.label()
+                )),
+                Cause::KaniFormRefused {
+                    form,
+                    refusal,
+                    backend,
+                } => Some(format!(
+                    "{backend} refused Kani form {}: {refusal:?}",
+                    form.form.label()
                 )),
                 // Exhaustive on purpose. A catch-all here would give the next
                 // cause a warning that names neither the kind nor the backend
@@ -704,7 +1151,7 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
                 backend: item.named_backend.clone(),
             },
         },
-        [single] => negotiate_single_candidate(manifest, single, kind, extent),
+        [single] => negotiate_single_candidate(manifest, single, kind, extent, &item.kani_form),
         many if item.named_backend.is_none() => Disposition::InvalidRequest {
             cause: Cause::AmbiguousBackend {
                 candidates: many.to_vec(),
@@ -784,6 +1231,7 @@ fn negotiate_single_candidate(
     candidate: &Candidate,
     kind: CapabilityKind,
     extent: &ExtentClassification,
+    kani_form: &KaniForm,
 ) -> Disposition {
     let Some(backend) = descriptor(manifest, candidate) else {
         return Disposition::InvalidRequest {
@@ -799,7 +1247,7 @@ fn negotiate_single_candidate(
             },
         };
     };
-    negotiate_arm(routed, backend, kind, extent)
+    negotiate_arm(routed, backend, kind, extent, kani_form)
 }
 
 /// Dispatch one arm per backend kind.
@@ -811,9 +1259,10 @@ fn negotiate_arm(
     backend: &BackendDescriptor,
     kind: CapabilityKind,
     extent: &ExtentClassification,
+    kani_form: &KaniForm,
 ) -> Disposition {
     match routed {
-        BackendKind::Kani => negotiate_kani(backend, kind, extent),
+        BackendKind::Kani => negotiate_kani(backend, kind, extent, kani_form),
         BackendKind::Process(_) => negotiate_process(backend, kind, extent),
     }
 }
@@ -828,7 +1277,11 @@ fn negotiate_kani(
     backend: &BackendDescriptor,
     kind: CapabilityKind,
     extent: &ExtentClassification,
+    kani_form: &KaniForm,
 ) -> Disposition {
+    if let Err(cause) = kani_form.preflight(backend) {
+        return Disposition::Unsupported { cause };
+    }
     let modes = backend.modes_for(kind);
     match extent.extent {
         Mode::Bounded => Disposition::Supported {

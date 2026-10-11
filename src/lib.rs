@@ -152,6 +152,10 @@ pub use routed::capability::{
     ContractItemSettlement, ContractNegotiationError, Disposition, EnvelopeRefusal,
     ExtentClassification, ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem,
     RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
+    KaniCollectionOperation,
+    KaniCompositeShape, KaniEqualityOperator, KaniForm, KaniFormFamily, KaniFormIdentity,
+    KaniFormName, KaniGraphOperation, KaniObligationRole, KaniOperationProvenance, Mode,
+    
 };
 pub use routed::generate::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,

@@ -6,8 +6,9 @@ use qsl_replay::{DomainKey, DomainKind, FiniteBound, Integer, ProofBound, WireNo
 use quire_contract_codegen::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind,
-    BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
+    ExtentDomain, ItemSettlement, KaniForm, KaniOperationProvenance, Mode, ProviderOrigin,
+    RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
+    CAPABILITY_VOCABULARY,
 };
 use std::{collections::BTreeSet, fs, os::unix::fs::PermissionsExt, process::Command};
 
@@ -62,11 +63,78 @@ fn settle_one(manifest: Vec<BackendDescriptor>, item: RequestItem) -> ItemSettle
 }
 
 fn item(kind: RequestedKind, candidates: Candidates) -> RequestItem {
+    let package = crate::kani_obligations::bound_package(1_000);
+    let clause = package
+        .clauses()
+        .iter()
+        .find(|clause| {
+            matches!(
+                clause.kind(),
+                quire_contract_model::ClauseKind::Precondition
+                    | quire_contract_model::ClauseKind::Postcondition
+                    | quire_contract_model::ClauseKind::Invariant
+            )
+        })
+        .expect("fixture package has an admitted clause")
+        .clone();
     RequestItem {
         kind,
         extent: bounded(),
         named_backend: None,
         candidates,
+        kani_form: KaniForm::V1BoundClause {
+            clause: Box::new(clause),
+        },
+    }
+}
+
+fn oversized_bound_clause() -> quire_contract_model::BoundClause {
+    use serde_json::{json, Value};
+
+    let source = json!({"document":"large-settlement-expression", "revision":1});
+    let span = json!({
+        "start":{"source":source,"line":1,"column":1,"byte_offset":0},
+        "end":{"source":source,"line":1,"column":2,"byte_offset":1}
+    });
+    let owner = json!({"package":"test/large-settlement", "requirement":"FR-019", "revision":1});
+    let anchor = json!({"kind":"pre", "operation":"check"});
+    let long_name = "x".repeat(256);
+    let identity = json!({"node":"reference", "identity":{
+        "requirement":owner, "kind":"input", "observation":"current", "path":[long_name]
+    }});
+    let mut level = (0..4096)
+        .map(|_| json!({"node":"value_reference", "name":long_name, "observation":"current", "source":span}))
+        .collect::<Vec<Value>>();
+    while level.len() > 1 {
+        level = level
+            .chunks_exact(2)
+            .map(|pair| json!({"node":"boolean", "operator":"short_circuit_and", "left":pair[0], "right":pair[1], "source":span}))
+            .collect();
+    }
+    let projection = json!({
+        "format":quire_contract_model::EXECUTABLE_PROJECTION_FORMAT,
+        "package":{"id":"test/large-settlement", "schema_version":{"major":1,"minor":1},
+            "source":source, "requirements":[{"id":"FR-019","revision":1,"source":span,"clauses":[{
+                "id":"large-check", "kind":"precondition", "anchor":anchor, "source":span,
+                "body":identity
+            }]}]},
+        "bindings":[{"clause":{"requirement":owner,"clause":"large-check"}, "expression":{
+            "owner":owner,"types":[],"values":[{"name":long_name,"kind":"input","value_type":{"kind":"boolean"},"source":span}],
+            "functions":[],"expression":level.pop().unwrap(),"expected_type":{"kind":"boolean"},
+            "execution_point":anchor,"clause_root":true
+        }}]
+    });
+    quire_contract_model::BoundPackage::from_json_bytes(&serde_json::to_vec(&projection).unwrap())
+        .expect("large, balanced typed expression remains within IR node/depth bounds")
+        .clauses()[0]
+        .clone()
+}
+
+fn integer_scalar(operation_identity: &str) -> KaniForm {
+    KaniForm::V2IntegerScalarClaim {
+        operation_identity: operation_identity.to_owned(),
+        provenance: KaniOperationProvenance::IrConfirmed,
+        role: None,
     }
 }
 
@@ -727,6 +795,207 @@ fn tc_030_the_advertised_mode_table_settles_each_row() {
             "advertised {advertised:?} against extent {extent:?}"
         );
     }
+}
+
+/// The Kani arm checks typed form support before extent and advertised mode.
+///
+/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-27, FR-019-AC-29, FR-019-AC-31.
+#[test]
+fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
+    let candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity())]);
+    let backend = BackendKind::Kani.identity().to_owned();
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        candidates,
+    );
+    request.kani_form = integer_scalar("quire.op.integer.add");
+    assert_eq!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request.clone(),
+        )
+        .disposition,
+        Disposition::Supported {
+            backend: backend.clone()
+        },
+        "a current integer add form stays supported"
+    );
+
+    request.extent = unbounded(true);
+    assert_eq!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request.clone(),
+        )
+        .disposition,
+        Disposition::RequiresBound {
+            backend: backend.clone()
+        },
+        "an admitted unbounded form follows the finite-bound path"
+    );
+
+    request.kani_form = integer_scalar("quire.op.integer.div");
+    let refused = settle_one(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)])],
+        request,
+    );
+    assert_eq!(
+        refused.disposition,
+        Disposition::Unsupported {
+            cause: Cause::KaniFormRefused {
+                form: refused_form_identity("quire.op.integer.div"),
+                refusal: UnsupportedObligation::OperationNotRendered {
+                    operation_identity: "quire.op.integer.div".to_owned(),
+                    derived_domains: Vec::new(),
+                },
+                backend,
+            }
+        },
+        "a form the scalar generator does not render cannot settle supported"
+    );
+}
+
+/// The classifier measures the same rendered source lines as generation and refuses before
+/// Supported when an admitted typed expression would exceed the generated-source ceiling.
+#[test]
+fn kani_form_preflight_refuses_admitted_expression_over_source_limit() {
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::OperationContract),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    request.kani_form = KaniForm::V1BoundClause {
+        clause: Box::new(oversized_bound_clause()),
+    };
+    let settled = settle_one(
+        vec![kani(vec![(
+            CapabilityKind::OperationContract,
+            Mode::Bounded,
+        )])],
+        request,
+    );
+    assert!(
+        matches!(
+            settled.disposition,
+            Disposition::Unsupported {
+                cause: Cause::KaniFormRefused {
+                    refusal: UnsupportedObligation::ClauseLowering {
+                        generation_code:
+                            quire_contract_codegen::GenerationErrorCode::ResourceLimitExceeded
+                    },
+                    ..
+                }
+            }
+        ),
+        "large admitted expression unexpectedly settled as {:?}",
+        settled.disposition
+    );
+}
+
+fn refused_form_identity(operation_identity: &str) -> quire_contract_codegen::KaniFormIdentity {
+    quire_contract_codegen::KaniFormIdentity {
+        family: quire_contract_codegen::KaniFormFamily::Integer,
+        form: quire_contract_codegen::KaniFormName::V2ScalarClaim,
+        operation_identity: Some(operation_identity.to_owned()),
+        role: None,
+    }
+}
+
+/// Form refusal follows candidate validation and precedes mode settlement.
+///
+/// Trace: FR-019-AC-27, FR-019-AC-28, FR-019-AC-29.
+#[test]
+fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
+    let outside = KaniForm::OutsideSet {
+        tag: "expression".to_owned(),
+        form: "future_operator".to_owned(),
+    };
+    let mut one = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    one.kani_form = outside.clone();
+    one.extent = unbounded(false);
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            one.clone(),
+        )
+        .disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedKaniForm { .. }
+        }
+    ));
+
+    one.candidates = Candidates::Set(Vec::new());
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            one.clone(),
+        )
+        .disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedRequestedCapability { .. }
+        }
+    ));
+
+    let process_candidate = BackendDescriptor {
+        identity: "kani-nightly".to_owned(),
+        advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
+        origin: ProviderOrigin::Process,
+        domains: None,
+        bounds: Default::default(),
+    };
+    one.candidates = Candidates::Set(vec![
+        candidate(BackendKind::Kani.identity()),
+        candidate("kani-nightly"),
+    ]);
+    assert!(matches!(
+        settle_one(
+            vec![
+                kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]),
+                process_candidate,
+            ],
+            one.clone(),
+        )
+        .disposition,
+        Disposition::InvalidRequest {
+            cause: Cause::AmbiguousBackend { .. }
+        }
+    ));
+
+    one.candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity())]);
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)])],
+            one,
+        )
+        .disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedKaniForm { .. }
+        }
+    ));
+}
+
+/// Human-facing labels do not participate in typed Kani form identity.
+///
+/// Trace: FR-019-AC-30.
+#[test]
+fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
+    let form = integer_scalar("quire.op.integer.add");
+    let renderings = [("integer addition", "operator Add"), ("plus", "Add")];
+    let dispositions = renderings.map(|(_display, _debug)| {
+        let mut request = item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+        );
+        request.kani_form = form.clone();
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request,
+        )
+        .disposition
+    });
+    assert_eq!(dispositions[0], dispositions[1]);
 }
 
 /// An envelope whose capability vocabulary is absent or another identity is
