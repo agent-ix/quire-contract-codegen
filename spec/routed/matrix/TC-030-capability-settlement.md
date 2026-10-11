@@ -151,8 +151,11 @@ bounded case that settles `supported` under the required advertisement. For
 each Planned typed selector, the result is `unsupported` with exactly the
 single cause in that selector's status-register row; no family-level result
 substitutes for checking the exact selector, and no Planned selector settles
-`supported` until its renderer is implemented. The typed out-of-set controls
-refuse before generation. V2 clause forms
+`supported` until its renderer is implemented. In particular, the negated
+StateFrame contract selector returns `ConditionNotSupported`, while the
+all-fields-granted StateFrame frame selector returns `NothingForbidden`; each
+is wrapped in `StateFrameRefused` and neither changes the other role's result.
+The typed out-of-set controls refuse before generation. V2 clause forms
 defined by FR-015-AC-38 through AC-42 are separately admitted or refused
 deterministically. A form refusal names the typed form and precedes extent/mode
 settlement after candidate validation. Empty, ambiguous and mode/extent cases
@@ -182,7 +185,7 @@ The status register describes typed subpaths against the complete normative set 
 | Typed form subpath selector | STATUS | Implemented subset or planned owner | Exact current refusal cause for this subpath |
 |---|---|---|---|
 | V1 `BoundClause`, Boolean clause root, Boolean/bounded-integer dependencies, supported connectives/comparisons | Implemented | FR-015-AC-14, AC-20 and AC-21. | — |
-| V1 `BoundClause`, precondition/postcondition/invariant, Boolean root with a rational, decimal, IEEE-float, text, enum or quantity dependency | Planned (IR-269) | Remaining V1 scalar clause domains. | `ClauseLowering { generation_code: UnsupportedDependency }` (`lower_clause` maps `typed_dependency_parameters`' diagnostic). |
+| V1 `BoundClause`, precondition/postcondition/invariant, Boolean root with a rational, decimal, IEEE-float, text, enum or quantity dependency, and zero definedness obligations | Planned (IR-269) | Remaining V1 scalar clause domains that reach Boolean oracle lowering. | `ClauseLowering { generation_code: UnsupportedDependency }` (`lower_clause` maps `typed_dependency_parameters`' diagnostic after the zero-obligations check). |
 | V2 `expression` claim, `OperationProvenance::IrConfirmed`, identity `quire.op.integer.add`, `.sub`, `.mul` or `.negate`, valid `i64` bounds | Implemented | `scalar::lower_scalar_claim`. | — |
 | Boolean scalar `expression` claim, IR-confirmed generated claim, operation identity other than the four implemented integer identities above | Planned (IR-269) | Remaining typed Boolean scalar operations. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | Integer scalar `expression` claim, IR-confirmed generated claim, operation identity other than the four implemented integer identities above | Planned (IR-269) | Remaining typed integer operations. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
@@ -196,9 +199,10 @@ The status register describes typed subpaths against the complete normative set 
 | Record/tuple equality claim whose derivation returns `ExactScalarRefusal::NoDerivableClaim` | Planned (IR-264, IR-241) | Refusal subpath for composite equality. | `NoDerivableClaim` (`classify_claim`). |
 | Integer scalar function application with FR-015-AC-37's operation/result contract | Implemented | FR-015-AC-37. | — |
 | Function claim with IR-confirmed generated operation identity outside the four `ScalarOperation` identities above | Planned (IR-269) | Remaining function families. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
-| V1 `BoundClause` with one or more expression definedness obligations | Planned (IR-269) | Definedness-bearing V1 clause forms. | `DefinednessNotEncoded { obligations }` (`lower_clause`, before oracle generation). |
+| V1 `BoundClause` with one or more expression definedness obligations, regardless of operand type | Planned (IR-269) | Definedness-bearing V1 clause forms. | `DefinednessNotEncoded { obligations }` (`lower_clause` checks this first and reports the exact obligation count). |
 | V1 frame obligation passed to the clause renderer as `ObligationKind::Frame` | Planned (IR-269) | V1 frame clauses. | `FrameNotClauseRendered` (`negotiate::render`). |
 | V2 `state`/`state_clause` claim sent through the scalar-claim path and refused by exact-scalar lowering as unsupported node family | Planned (IR-489) | V2 contract clause claim. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
 | V2 `StateFrame` contract role for a `postcondition` whose Boolean condition is a negation of a supported pre/post integer comparison | Planned (IR-269) | Negated state-clause comparison form; FR-015-AC-63 names this refusal shape. | `StateFrameRefused { ConditionNotSupported }` (`generate_state_frame_role`, FR-015-AC-63). |
+| V2 `StateFrame` frame role for a `postcondition` whose frame grants every state field | Planned (IR-269) | All-fields-granted frame form; FR-015-AC-63 and AC-68 name this refusal shape. | `StateFrameRefused { NothingForbidden }` (`generate_state_frame_role`, FR-015-AC-63 and AC-68). |
 | Collection/graph claim whose IR-confirmed generated operation identity has no `ScalarOperation` renderer | Planned (IR-269) | Bounded collection and graph operations outside the integer renderer. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | Collection/graph claim node refused by exact-scalar lowering as an unsupported node family | Planned (IR-269) | No-finite-encoding subpath for collection/graph nodes. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
