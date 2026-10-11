@@ -305,11 +305,7 @@ fn contract_harness(
         &shape.scope,
         &domains,
         &unranged,
-        StateFrameProperty::Postcondition {
-            field: condition.field.clone(),
-            comparison: condition.comparison,
-            left_is_pre: condition.left == Side::Pre,
-        },
+        condition.property(),
         &format!("post_{}", short(&request.clause.digest)),
     )
 }
@@ -533,7 +529,27 @@ struct Condition {
     left: Side,
 }
 
+impl Condition {
+    fn property(&self) -> StateFrameProperty {
+        StateFrameProperty::Postcondition {
+            field: self.field.clone(),
+            comparison: self.comparison,
+            left_is_pre: self.left == Side::Pre,
+        }
+    }
+}
+
 impl ClauseShape {
+    /// The selected clause's postcondition, decoded by the same reader as generation.
+    pub(crate) fn postcondition_property(
+        &self,
+        graph: &Graph<'_>,
+        clause: &CheckedNodeId,
+    ) -> Result<StateFrameProperty, StateFrameRefusal> {
+        self.condition(graph, clause)
+            .map(|condition| condition.property())
+    }
+
     /// The `name` and `level` of each parameter the clause binds after `self` (FR-341: `result`
     /// when the operation has one, then its parameters in declared order), read from each
     /// parameter node's body. The state-clause replay classifies them; the generator owns the

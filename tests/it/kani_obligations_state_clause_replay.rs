@@ -21,7 +21,7 @@ use qsl_replay::{
 use quire_contract_codegen::{
     DocumentLabel, KaniRunOutcome, OperationDeclaration, StateClauseHarnessMember,
     StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
-    StateClauseReplayInputs, StateObjectAddress,
+    StateClauseReplayInputs, StateComparison, StateFrameProperty, StateObjectAddress,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -128,6 +128,44 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         ),
         Err(StateClauseReplayError::NotPostconditionHarness)
     ));
+    for (field, comparison, left_is_pre, check) in [
+        (
+            "audit",
+            StateComparison::Ge,
+            false,
+            "operation `deposit`: postcondition `post.audit >= pre.audit` failed",
+        ),
+        (
+            "balance",
+            StateComparison::Le,
+            false,
+            "operation `deposit`: postcondition `post.balance <= pre.balance` failed",
+        ),
+        (
+            "balance",
+            StateComparison::Ge,
+            true,
+            "operation `deposit`: postcondition `pre.balance >= post.balance` failed",
+        ),
+    ] {
+        let mut tampered = harness.clone();
+        tampered.property = StateFrameProperty::Postcondition {
+            field: field.to_owned(),
+            comparison,
+            left_is_pre,
+        };
+        assert!(matches!(
+            empty().decode_falsification(
+                &tampered,
+                &KaniRunOutcome::Falsified {
+                    counterexample: playback_text(&tampered, check, &[5, 7]),
+                },
+            ),
+            Err(StateClauseReplayError::HarnessMismatch {
+                member: StateClauseHarnessMember::Property
+            })
+        ));
+    }
     let mut wrong_scope = harness.clone();
     wrong_scope.scope.operation = "withdraw".to_owned();
     assert!(matches!(

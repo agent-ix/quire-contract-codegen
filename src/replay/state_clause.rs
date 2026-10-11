@@ -228,6 +228,8 @@ pub enum StateClauseHarnessMember {
     Frame,
     /// The ordered state field names.
     StateFields,
+    /// The selected clause's postcondition predicate.
+    Property,
 }
 
 impl fmt::Display for StateClauseHarnessMember {
@@ -239,6 +241,7 @@ impl fmt::Display for StateClauseHarnessMember {
             Self::Anchor => "anchor",
             Self::Frame => "frame",
             Self::StateFields => "state fields",
+            Self::Property => "property",
         })
     }
 }
@@ -464,10 +467,10 @@ impl StateClauseReplayInputs<'_> {
         else {
             return Err(StateClauseReplayError::NotPostconditionHarness);
         };
-        let shape =
-            ClauseShape::read(&Graph::of(self.package), self.clause_node).map_err(|refusal| {
-                StateClauseReplayError::Document(DocumentError::Clause { refusal })
-            })?;
+        let graph = Graph::of(self.package);
+        let shape = ClauseShape::read(&graph, self.clause_node).map_err(|refusal| {
+            StateClauseReplayError::Document(DocumentError::Clause { refusal })
+        })?;
         for (member, same) in [
             (
                 StateClauseHarnessMember::Clause,
@@ -497,6 +500,16 @@ impl StateClauseReplayInputs<'_> {
             if !same {
                 return Err(StateClauseReplayError::HarnessMismatch { member });
             }
+        }
+        let selected_property = shape
+            .postcondition_property(&graph, self.clause_node)
+            .map_err(|refusal| {
+                StateClauseReplayError::Document(DocumentError::Clause { refusal })
+            })?;
+        if harness.property != selected_property {
+            return Err(StateClauseReplayError::HarnessMismatch {
+                member: StateClauseHarnessMember::Property,
+            });
         }
         let bindings = harness
             .state_fields
