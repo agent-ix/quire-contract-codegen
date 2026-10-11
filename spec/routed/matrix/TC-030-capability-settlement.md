@@ -146,11 +146,13 @@ Every variant of the closed backend kind has a dispatched arm.
 No settlement other than `supported` routes a backend, and a manifest repeating an
 identity routes none.
 
-Under FR-019-AC-25 through AC-33, every implemented complete-V1 family and
-role has a valid bounded case that settles `supported` under the required
-advertisement; each Planned family settles `unsupported` with the exact cause
-in the status register and never `supported` until implemented. The typed
-out-of-set controls refuse before generation. V2 clause forms
+Under FR-019-AC-25 through AC-33, every Implemented typed subpath has a valid
+bounded case that settles `supported` under the required advertisement. For
+each Planned typed selector, the result is `unsupported` with exactly the
+single cause in that selector's status-register row; no family-level result
+substitutes for checking the exact selector, and no Planned selector settles
+`supported` until its renderer is implemented. The typed out-of-set controls
+refuse before generation. V2 clause forms
 defined by FR-015-AC-38 through AC-42 are separately admitted or refused
 deterministically. A form refusal names the typed form and precedes extent/mode
 settlement after candidate validation. Empty, ambiguous and mode/extent cases
@@ -197,6 +199,6 @@ The status register describes typed subpaths against the complete normative set 
 | V1 `BoundClause` with one or more expression definedness obligations | Planned (IR-269) | Definedness-bearing V1 clause forms. | `DefinednessNotEncoded { obligations }` (`lower_clause`, before oracle generation). |
 | V1 frame obligation passed to the clause renderer as `ObligationKind::Frame` | Planned (IR-269) | V1 frame clauses. | `FrameNotClauseRendered` (`negotiate::render`). |
 | V2 `state`/`state_clause` claim sent through the scalar-claim path and refused by exact-scalar lowering as unsupported node family | Planned (IR-489) | V2 contract clause claim. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
-| V2 `StateFrame` role request outside the implemented postcondition condition/frame shapes | Planned (IR-269) | Remaining state-before/after and frame role forms. | `StateFrameRefused { refusal }` (`classify_state_frame` preserves `generate_state_frame_role`'s typed refusal). |
+| V2 `StateFrame` contract role for a `postcondition` whose Boolean condition is a negation of a supported pre/post integer comparison | Planned (IR-269) | Negated state-clause comparison form; FR-015-AC-63 names this refusal shape. | `StateFrameRefused { ConditionNotSupported }` (`generate_state_frame_role`, FR-015-AC-63). |
 | Collection/graph claim whose IR-confirmed generated operation identity has no `ScalarOperation` renderer | Planned (IR-269) | Bounded collection and graph operations outside the integer renderer. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
 | Collection/graph claim node refused by exact-scalar lowering as an unsupported node family | Planned (IR-269) | No-finite-encoding subpath for collection/graph nodes. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
