@@ -920,7 +920,7 @@ mod tests {
         assert!(case_name(&case).starts_with("arithmetic_"));
     }
 
-    /// Trace: FR-015-AC-94, TC-023. This preimage is authored from the fixture fields in RFC 8785
+    /// Trace: TC-023. This preimage is authored from the fixture fields in RFC 8785
     /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
     /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
     /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
