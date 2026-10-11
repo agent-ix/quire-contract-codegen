@@ -295,7 +295,7 @@ Migration order, not moved.
 | `kani_obligations` (harness and identity records, `ObligationKind`, `ObligationBinding`) | kani | `kani/identity.rs` | split (step 2b) |
 | `kani_obligations` (the rest) | kani | `kani/generate/{negotiate,outcome,record,clause,scalar,precondition,contract}.rs` | split (step 2f), item by item as the step 2f item map says; it adds `outcome.rs`, `record.rs` and `clause.rs` to the four files this row first named, because the items the families share need a home below all of them |
 | `state_frame` | kani | `kani/generate/frame.rs`; `StateFrameHarness`, `StateFrameProperty` to `kani/identity.rs` | moved whole at step 2f, unsplit; one entry with `negotiate` at step 4d |
-| `bounded_kani_corpus` | kani | `kani/generate/corpus/bounded_kani_corpus.rs` | moved whole at step 2f, old file name kept, no split; its package lowerer retired after QSL-353 (step 4g) |
+| `bounded_kani_corpus` | kani | `kani/generate/corpus/bounded_kani_corpus.rs` | moved whole at step 2f, old file name kept, no split; its package lowerer retires at step 4g only after the admitted V2 arithmetic, symbolic collection and symbolic graph cases meet FR-015-AC-95 to FR-015-AC-102, including the typed graph population prerequisite and shared renderer. QSL-353 supplies emission-to-admission coverage, not that replacement. |
 | `bounded_kani_profile`, `bounded_collections`, `definedness_arithmetic`, `finite_reference_graphs` | kani | `kani/generate/lower/{bounded_kani_profile,bounded_collections,definedness_arithmetic,finite_reference_graphs}.rs` | moved whole at step 2f, old file names kept; CG owns the three semantic-family lowerings and their request/result types. Its corpus consumes them directly and retains IR-owned profile, dispatch, validated finite input and typed outcome interfaces. IR-347 removes the former IR exports after the CG consumer move |
 | `kani_execution` | kani | `kani/run/{tool,harness,launch,report_file,execute}.rs`, `kani/classify.rs` | split (step 2f): classification to `classify.rs`, everything that launches or reads a file to `run/` |
 | `kani_transcript` | kani | `kani/output/report.rs`, `kani/output/playback.rs` | split (step 2f): `counterexample_playback` and its four `PLAYBACK_*` constants to `playback.rs`, the typed report parse to `report.rs`. PR 210 (merged) put the report parse here |
@@ -430,7 +430,7 @@ What happens to the other generators:
 | `generate_kani_bundle` | Deleted at step 4f, after step 4e, the QSL-owned move of the QI exemplars and the control passing on the V2 contract arm (4c). Its public entry leaves `interface-001`. FR-003's optional stubbing was dropped by the IR-311 ruling. |
 | `kani_obligations` scalar, precondition, contract renderers | Become family lowerers; the template text moves into `render.rs`. Until 4c the precondition and contract families keep their V1 input. |
 | `state_frame` renderers | Become the frame lowerer. |
-| `bounded_kani_corpus` renderer | Keeps its own template until QSL-353 lands (an interim exception to L-3; its cover is FR-015-AC-55, IR-464); then its hand-built package lowerer is retired and its cases render through `render.rs` (step 4g). Before step 4g, the hand-built path returns a generated-case `KaniOutcome` classification under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
+| `bounded_kani_corpus` renderer | Keeps its own template until step 4g (an interim exception to L-3; its cover is FR-015-AC-55, IR-464). QSL-353 supplies emission-to-admission evidence but does not itself supply a symbolic corpus. Step 4g waits for the V2 arithmetic, collection and graph cases and the typed model-derived symbolic domains of FR-015-AC-96 to AC-102, then retires the hand-built lowerer and renders admitted cases through `HarnessSpec` and `render.rs`. Before step 4g, the hand-built path returns a generated-case `KaniOutcome` classification under FR-015-AC-91, never a run verdict. After step 4g, corpus generation returns no `KaniOutcome`: a verdict comes only from a run (FR-015-AC-95). |
 
 **Requirement (regression test the one generator must keep passing).** QSL's real-Kani arithmetic
 control, recorded as QSL-342 QI #10, passes at every step of the migration, on the path that
@@ -785,14 +785,20 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      passes on the V2 contract arm (4c), and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
-   - 4g: the corpus. Until QSL-353 lands the corpus stays as it is, with its own template: it has
+   - 4g: the corpus. Until its V2 replacement serves all three families, the corpus stays as it is,
+     with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
      to L-3 and, until it renders through `HarnessSpec`, outside L-4; FR-015-AC-58's inspection
-     covers its text meanwhile. When QSL-353 lands, the hand-built package
-     lowerer is retired, the rows are backed from QSL-emitted packages built through the facade,
-     and a corpus case with symbolic input is rendered through `render.rs` under the cover rule;
-     a case with no symbolic input is not rendered as a proof. L-3 lands after 4f and 4g. The Kani family lowerings
+     covers its text meanwhile. QSL-353 establishes emission-to-admission coverage but does not
+     provide the symbolic corpus. After the V2 arithmetic, collection and graph cases are backed
+     from QSL-emitted packages admitted through Contract IR, and the collection and graph cases
+     satisfy FR-015-AC-96 to AC-102, the hand-built package lowerer retires. The graph path first
+     needs Contract IR's typed finite model-object population input; a caller expansion ceiling
+     cannot replace it. The admitted symbolic cases render through `HarnessSpec` and `render.rs`
+     under the cover rule; a case with no symbolic input does not render a proof. Generation
+     returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
+     L-3 lands after 4f and 4g. The Kani family lowerings
      are implemented in CG by IR-347; IR removal follows this consumer change.
 5. **One output reader and the terminal map.** The playback scanning already sits in
    `kani/output/playback.rs` (step 2f moved it verbatim); this step changes the interface:
@@ -1310,7 +1316,7 @@ what it could against the code; the checks are stated.
 | Topic | Decision | Source |
 | --- | --- | --- |
 | Publication subsystem | Yes. FR-005 with TC-001, TC-002 and TC-007 moves to `publication`; no FR-005 exception. The move is migration step 7, and the spec.md registry note becomes obsolete when it lands. | IR planner, IR-344 |
-| Corpus | CG's hand-built package lowerer is retired once QSL-353 (QSL's emission-to-admission corpus) lands, and the corpus rows are backed from QSL-emitted packages (IR-453). No requirement row is removed; until QSL-353 lands the rows and the corpus stay as they are. CG obtains those packages by calling QSL's facade on source, never from QSL test fixtures or copied package files. | IR planner, IR-344, IR-453, QSL-353 |
+| Corpus (step 4g readiness clarified) | The original QSL-353 trigger supplies emission-to-admission coverage, a prerequisite but not the V2 symbolic replacement. CG's hand-built package lowerer retires only when the three family rows are backed from QSL-emitted, IR-admitted packages through the one V2 generator, the collection and graph obligations meet FR-015-AC-96 to FR-015-AC-102, and the shared renderer and real-run verdict boundary of step 4g hold. The graph path remains conditional on Contract IR's typed finite model-object population input. CG obtains packages through QSL's facade on source, never from copied fixtures or package files. | Original decision: IR planner, IR-344, IR-453, QSL-353; readiness clarification: FR-015-AC-95 to FR-015-AC-102 |
 | Proof-dependency graph | `ProofDependencyGraph`, the V1 bundle's output type, retires at step 4f with `generate_kani_bundle`. Checked: FR-015's Inputs and Behavior name an optional declared proof-dependency census per obligation, folded into the harness identity, and FR-015-AC-22 and AC-25 are the criteria TC-005 traces. They stay verbatim as requirements on the V2 request input, and are backed by a V2 census input (step 4d), not by keeping the V1 graph type. The census request and readiness types are not the graph: they move to `kani/census.rs` (step 2b) and survive 4f, because the V2 census input needs them and the corpus imports them until 4g. Rule: if the V2 side does not back the requirements by 4f, their matrix rows go to planned or unbacked; nothing is deleted and no criterion is rewritten. | IR planner, IR-344 |
 | `RUNTIME_REVISION` | Deleted, not spelled once. Checked: the constant is read by the three emitters' manifest templates (a `rev = "..."` on the runtime dependency) and by tests (failure messages and `manifest.contains`). Nothing else decides on it: no code compares it with the runtime CG itself builds against, and CG's own `Cargo.toml` names the runtime by branch with the lockfile recording the commit. The emitted manifest needs a runtime source, not a pin, so the template names it the way `Cargo.toml` does. The cost is that an emitted crate follows the runtime branch as CG does. I did not build an emitted crate to confirm. | IR planner, IR-344; QSL concurs; repository CLAUDE.md |
 | PR 210 | Lands before the directory moves, only after this AD is approved, and with a local `make kani` transcript from its head. A precondition of migration step 2. | IR planner, IR-344 |
