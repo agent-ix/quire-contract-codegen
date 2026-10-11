@@ -35,3 +35,14 @@ Ticket: IR-306. This base pass examined the four-file spec diff at 235a416299edd
 ## Verdict
 
 FAIL
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 40c997f |
+| FND-002 | fixed | 40c997f |
+
+## Current verdict
+
+PASS: every recorded finding is fixed at aaa52898210f8a132120c185ad935e0e89f2cb2c.
