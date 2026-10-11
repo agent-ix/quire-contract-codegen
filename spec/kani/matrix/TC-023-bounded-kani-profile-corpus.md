@@ -17,8 +17,10 @@ FR-015-AC-95. Before AD-004 step 4g, the hand-built path's generated
 `KaniOutcome`. Only FR-017's installed-backend run provides proof evidence.
 The corpus retains no
 counterexample packet, so native replay remains planned and unbacked. Current
-source tests carry `TC-023` trace tags, but none binds FR-015-AC-82 through
-FR-015-AC-95 yet; the computed matrix reports those criteria untagged.
+source tests carry `TC-023` trace tags. The computed matrix tags FR-015-AC-94
+with seven corpus unit tests; FR-015-AC-82 through FR-015-AC-93 and
+FR-015-AC-95 remain untagged. A trace tag alone does not establish proof
+evidence for the planned replacement.
 
 ## Test Procedure
 
