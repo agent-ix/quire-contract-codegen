@@ -53,3 +53,12 @@ The following criteria were examined; an omitted finding means the criterion rai
 - Evidence: no run evidence in Quoin store for the examined criteria.
 - Semantic review: skipped; no opt-in was supplied.
 - Reverse gap and stub scan of changed code found no additional defect.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 62d24f831b1e9c55995a35be1ff8377d6a43ba25 |
+| FND-002 | fixed | 62d24f831b1e9c55995a35be1ff8377d6a43ba25 |
+
+All recorded findings were rechecked against the fix commit; no finding remains open.

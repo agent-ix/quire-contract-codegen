@@ -51,3 +51,13 @@ The following criteria were examined; an omitted finding means the criterion rai
 - Rust review covered all six changed files, including Kani regression paths.
 - Targeted process tests: 4 passed, 1 unrelated ignored; `make fmt-check` passed.
 - Terra Kani receipt on this exact head: 27/27 passed; independently executing Kani was outside this review.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 62d24f831b1e9c55995a35be1ff8377d6a43ba25 |
+| FND-002 | fixed | 62d24f831b1e9c55995a35be1ff8377d6a43ba25 |
+| FND-003 | fixed | 62d24f831b1e9c55995a35be1ff8377d6a43ba25 |
+
+All recorded findings were rechecked against the fix commit; no finding remains open.
