@@ -31,9 +31,16 @@ finite input; compare their selected family, profile, case identity and oracle
 truth value. Vary one case input at a time, reorder graph objects and edges,
 repeat emission through one registry, and submit invalid dependency censuses.
 Run the installed backend for FR-015-AC-57's healthy and falsifying cases.
-After AD-004 step 4g, check that neither successful nor refused corpus
-generation returns a `KaniOutcome`, then classify a successful case's run under FR-017
-(FR-015-AC-95; planned).
+At AD-004 step 4g, first verify that authentic QSL-emitted packages admit through
+Contract IR and that the one V2 generator serves arithmetic, collection and
+graph cases; collection and graph must meet FR-015-AC-96 to AC-102 with
+model-derived symbolic bounds. Check that the shared renderer places the cover
+after the assertions and that a case without symbolic input emits no proof
+harness. Then check that neither successful nor refused generation returns a
+`KaniOutcome`, and classify healthy and seeded-mutant cases only from installed
+FR-017 backend runs (FR-015-AC-95; planned). An absent typed graph population
+input leaves this replacement incomplete rather than substituting a caller
+expansion ceiling.
 Inspect the resolved Cargo graph for a reverse Contract IR-to-codegen dependency.
 
 Planned replay procedure: once a corpus case retains a real QSL source and
@@ -48,8 +55,9 @@ request refusal. Each successful lowering returns the exact family result and
 each adverse case its original typed non-Boolean refusal, with no partial
 artifact or proof claim. One admitted corpus case has all four artifacts and
 one generated case classification until AD-004 step 4g retires that path;
-after step 4g, the artifacts have no generation-time `KaniOutcome` or proof
-verdict. A refused case has no artifacts and claims no identity. Native replay
+after step 4g, the symbolic V2 cases render through the shared path and the
+artifacts have no generation-time `KaniOutcome` or proof verdict. A refused
+case has no artifacts and claims no identity. Native replay
 remains unbacked. The dependency graph keeps Contract
 IR below codegen. Every
 finite-graph case expands identities in sorted depth-first order: a branch explored before the
