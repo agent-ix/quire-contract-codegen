@@ -31,3 +31,16 @@ Reviewed TC-030 against FR-019-AC-25/26/27/33 and FR-015 source semantics. The u
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-019-AC-25 still places “frame clauses” in the complete V1 proof set, while this TC says V1 `ClauseKind` has no `Frame` variant and routes frame obligations to V2 `StateFrame`. That leaves the normative family wording inconsistent with the test’s now-reachable selectors; either AC-25 must identify the intended typed V2 form for frame clauses or TC-030 must identify a real V1 selector. | FR-019-AC-25; TC-030 |
+
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 6ce1981 |
+
+FND-001 after_excerpt:
+
+```text
+precondition, postcondition and invariant `BoundClause` roles; and bounded collection and graph forms. V1 `ClauseKind` has no frame variant. State before/after and frame obligations are typed V2 `StateFrame` items with the `contract` or `frame` role, included where FR-015 defines their typed lowering.
+```
