@@ -819,6 +819,10 @@ pub fn generate_exact_scalar_oracles(
 
 fn scalar_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.exact-scalar/v1".into(),
+        },
         supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
         require_bounds: true,
         work_limit: SCALAR_LOWERING_WORK_LIMIT,

@@ -1,14 +1,15 @@
-//! Test-fixture key repair driven only by the checked reader's typed expected key.
+//! Test-fixture key repair driven by Contract IR's public candidate API and reader refusals.
 //!
 //! A package builder retains its readable source IDs. This module repairs a copy of its wire,
 //! so building another fixture cannot change IDs observed by a parallel test. The reader remains
-//! the sole authority for structural and application key derivation.
+//! the final authority for admission.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageRefusalCause,
-    CheckedPackageV2, CheckedPackageV2ReadResult,
+    derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft, CheckedNodeId,
+    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageRefusalCause, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -29,6 +30,93 @@ pub struct ResolvedWire {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct FixtureIds(BTreeMap<String, String>);
 
+fn structural_candidates(
+    raw: &Value,
+    limits: CheckedPackageReadLimits,
+) -> Option<(FixtureIds, BTreeMap<String, String>)> {
+    let raw_nodes: Vec<CheckedSemanticNodeV2> =
+        serde_json::from_value(raw["semantic_graph"]["nodes"].clone()).ok()?;
+    let mut ids = FixtureIds::default();
+    for node in &raw_nodes {
+        if node.node_tag.as_ref() == "scalar_type"
+            && matches!(node.semantic_form.as_ref(), "boolean" | "integer")
+        {
+            let candidate =
+                derive_structural_candidates(std::slice::from_ref(node), limits.bytes, limits.work)
+                    .ok()?;
+            if let Some(scalar) = candidate.nodes().first() {
+                if &node.node_id != scalar.candidate_node_id() {
+                    ids.insert(&node.node_id, scalar.candidate_node_id());
+                }
+            }
+        }
+    }
+    let mut graph = raw["semantic_graph"]["nodes"].clone();
+    substitute(&mut graph, &ids);
+    let nodes: Vec<CheckedSemanticNodeV2> = serde_json::from_value(graph).ok()?;
+    // Malformed negative fixtures have no structural candidates. Let the
+    // reader report their exact refusal after the other fixture keys settle.
+    let candidates = derive_structural_candidates(&nodes, limits.bytes, limits.work).ok()?;
+    for candidate in candidates.nodes() {
+        let old =
+            &nodes[usize::try_from(candidate.position()).expect("fixture node position")].node_id;
+        let expected = candidate.candidate_node_id();
+        if old != expected {
+            ids.insert(old, expected);
+        }
+    }
+    let groups = candidates
+        .groups()
+        .iter()
+        .map(|group| {
+            (
+                group.retained_label().to_owned(),
+                group.candidate_label().to_owned(),
+            )
+        })
+        .collect();
+    Some((ids, groups))
+}
+
+/// Settle application candidates, including references to other applications, after
+/// structural references are repaired.
+fn application_candidates(raw: &Value, ids: &mut FixtureIds, limits: CheckedPackageReadLimits) {
+    let node_count = raw["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture graph nodes")
+        .len();
+    // An application can reference another application. Re-derive against the
+    // newly substituted graph until those dependencies settle, using only the
+    // public pre-read candidate API. The bounded reader loop remains the final
+    // authority for malformed and semantically refused fixtures.
+    for _ in 0..node_count {
+        let mut graph = raw["semantic_graph"]["nodes"].clone();
+        substitute(&mut graph, ids);
+        let Ok(nodes) = serde_json::from_value::<Vec<CheckedSemanticNodeV2>>(graph) else {
+            return;
+        };
+        let mut changed = false;
+        for node in &nodes {
+            let raw_body = serde_json::to_value(&node.body).expect("fixture body serializes");
+            if raw_body["term"] != "application" {
+                continue;
+            }
+            let Ok(candidate) =
+                derive_application_node_id(ApplicationNodeDraft::new(node), None, limits.bytes)
+            else {
+                continue;
+            };
+            if &node.node_id != candidate.candidate_node_id() {
+                ids.insert(&node.node_id, candidate.candidate_node_id());
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
 impl FixtureIds {
     /// Resolves an already-constructed test item against this one package.
     pub fn resolve(&self, node: &CheckedNodeId) -> CheckedNodeId {
@@ -36,6 +124,11 @@ impl FixtureIds {
             domain: node.domain.clone(),
             digest: self.digest(&node.digest).into_boxed_str(),
         }
+    }
+
+    /// Resolve typed node references in a test-authored expected value.
+    pub fn resolve_value(&self, value: &mut Value) {
+        substitute(value, self);
     }
 
     fn digest(&self, source: &str) -> String {
@@ -67,7 +160,7 @@ impl FixtureIds {
 }
 
 /// Rebuilds projection and package identity after a node-ID substitution.
-fn refresh_identity(wire: &mut Value) {
+pub(super) fn refresh_identity(wire: &mut Value) {
     let projection = wire["semantic_graph"]["nodes"]
         .as_array()
         .expect("fixture graph nodes")
@@ -83,6 +176,19 @@ fn refresh_identity(wire: &mut Value) {
     wire["identity_preimage"]["identity_projection"] = Value::Array(projection);
     let preimage = serde_json::to_vec(&wire["identity_preimage"]).expect("fixture preimage");
     wire["package_id"]["digest"] = json!(format!("{:x}", Sha256::digest(preimage)));
+}
+
+/// Install a public pre-read candidate into every typed reference in a fixture wire.
+pub(super) fn install_candidate(
+    wire: &mut Value,
+    provisional: &CheckedNodeId,
+    candidate: &CheckedNodeId,
+) {
+    let mut ids = FixtureIds::default();
+    ids.insert(provisional, candidate);
+    substitute(wire, &ids);
+    reorder_application_dependencies(wire);
+    refresh_identity(wire);
 }
 
 /// Replaces only typed node references. An unrelated literal or declaration string can equal a
@@ -322,13 +428,24 @@ pub fn resolve_wire(
         .checked_mul(2)
         .expect("fixture node-count cap")
         .max(1);
-    let mut ids = FixtureIds::default();
+    let (mut ids, groups) = structural_candidates(raw, limits).unwrap_or_default();
+    application_candidates(raw, &mut ids, limits);
     let mut seen = BTreeSet::new();
     let mut bytes_charged = 0u64;
     let mut work_charged = 0u64;
-    for _ in 0..attempts {
+    for attempt in 0..attempts {
         let mut wire = raw.clone();
         substitute(&mut wire, &ids);
+        for node in wire["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture graph nodes")
+        {
+            if let Some(label) = node["recursion_group"].as_str() {
+                if let Some(candidate) = groups.get(label) {
+                    node["recursion_group"] = json!(candidate);
+                }
+            }
+        }
         if !ids.0.is_empty() {
             reorder_application_dependencies(&mut wire);
             repair_application_candidates(&mut wire, limits.bytes, &mut ids);
@@ -345,7 +462,8 @@ pub fn resolve_wire(
             .expect("fixture work counter");
         assert!(
             bytes_charged <= MAX_CUMULATIVE_BYTES && work_charged <= MAX_READER_WORK,
-            "fixture key repair exceeded its byte/work cap"
+            "fixture key repair exceeded its byte/work cap after {attempt} attempts, {bytes_charged} bytes, {work_charged} work, {} substitutions",
+            ids.0.len()
         );
         assert!(
             seen.insert(bytes.clone()),

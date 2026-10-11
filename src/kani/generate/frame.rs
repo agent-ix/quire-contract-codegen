@@ -380,6 +380,10 @@ fn short(digest: &str) -> &str {
 
 fn lower_clause(request: &StateFrameRequest<'_>) -> Result<(), StateFrameRefusal> {
     let profile = CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.state-frame/v1".into(),
+        },
         supported_tags: BTreeSet::from(STATE_FRAME_LOWERING_TAGS),
         require_bounds: true,
         work_limit: LOWERING_WORK_LIMIT,

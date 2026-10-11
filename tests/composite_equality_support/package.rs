@@ -8,8 +8,9 @@
 //! `quire_contract_codegen::composite_equality` documents: `record` and
 //! `tuple` as an `aggregate` of `binding`/`reference` terms, `option` as a
 //! one-member `aggregate` of a `reference`, `sequence`/`set`/`bag`/
-//! `ordered_set` as an element `reference` then a `collection_bounds`
-//! `reference`, and `collection_bounds` as two canonical decimal `integer`
+//! `ordered_set` as one element `reference`, with collection bounds carried by
+//! a separate `bounded_domain` node. `collection_bounds` uses two canonical
+//! decimal `integer`
 //! literals.
 
 #![allow(dead_code)] // Each test binary uses a different subset.
@@ -211,7 +212,8 @@ fn family_of(code: u32) -> &'static str {
         R_POINT | R_FLOAT | R_DUP | R_SELF | R_PAIR_OF_POINTS | R_WITH_REF | R_TREE_CYCLE => {
             "structural"
         }
-        SEQ_R_FLOAT | SEQ_INT | TUP_PAIR | OPT_INT | OPT_SELF | SEQ_TREE_CYCLE => "structural",
+        SEQ_R_FLOAT | SEQ_INT | CB_SMALL | CB_INT | TUP_PAIR | OPT_INT | OPT_SELF
+        | SEQ_TREE_CYCLE => "structural",
         REF_TYPE => "reference",
         other => panic!("no operand family registered for corpus type code {other}"),
     }
@@ -480,6 +482,20 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    fn omit_code(&mut self, code: u32) {
+        let digest = code_id(code).digest;
+        let nodes = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes");
+        let before = nodes.len();
+        nodes.retain(|node| node["node_id"]["digest"].as_str() != Some(digest.as_ref()));
+        assert_eq!(nodes.len() + 1, before, "one node for code {code}");
+        let map = self.value["source_map"].as_array_mut().expect("source map");
+        let before = map.len();
+        map.retain(|entry| entry["node_id"]["digest"].as_str() != Some(digest.as_ref()));
+        assert_eq!(map.len() + 1, before, "one source entry for code {code}");
+    }
+
     /// Extend an authoritative checked-package document in memory for a
     /// reader-to-oracle test; the source document remains in its own repo.
     pub fn from_wire(value: Value) -> Self {
@@ -537,7 +553,9 @@ impl PackageBuilder {
         recursion_group: Option<&str>,
     ) -> &mut Self {
         // The schema's `BodyBindingRules` fix a parameter's occurrence role.
-        let role = if (tag, form) == ("value", "parameter") {
+        let role = if digest == key(T_INTEGER) && (tag, form) == ("scalar_type", "integer") {
+            "generated"
+        } else if (tag, form) == ("value", "parameter") {
             "expression"
         } else {
             "declaration"
@@ -559,7 +577,10 @@ impl PackageBuilder {
         if let Some(group) = recursion_group {
             node["recursion_group"] = json!(group);
         }
-        if let Some(declaration) = declaration_for(tag, form, label) {
+        if let Some(declaration) = (role != "generated")
+            .then(|| declaration_for(tag, form, label))
+            .flatten()
+        {
             node["declaration"] = declaration;
             // This declaration's region below names the selected source. The checked reader
             // requires its SourceOwner to name that same source; application bodies are keyed
@@ -657,9 +678,8 @@ impl PackageBuilder {
 
     /// Adds `count` Boolean equalities, node `BYTE_CHAIN_BASE + k` comparing node
     /// `BYTE_CHAIN_BASE + k - 1` with itself (the first compares a literal with itself). Each node
-    /// reaches every node before it, so a lowered node lists its whole chain in `dependencies`:
-    /// the lowered contract package of a call requesting the chain grows quadratically in `count`
-    /// while the checked package grows linearly (FR-018-AC-20).
+    /// reaches every node before it, so a lowered record lists its whole chain in
+    /// `dependencies`. ContractPackage V1 represents the graph nodes once.
     pub fn boolean_equality_chain(&mut self, count: u32) -> &mut Self {
         self.boolean_equality_chain_from(BYTE_CHAIN_BASE, count, "true")
     }
@@ -754,6 +774,11 @@ impl PackageBuilder {
     /// The wire document with its identity projection and package id refreshed.
     pub fn wire(&self) -> Value {
         self.resolved_wire(CheckedPackageReadLimits::bounded()).wire
+    }
+
+    /// The authored wire before fixture IDs are repaired, for direct reader negatives.
+    pub fn raw_wire(&self) -> Value {
+        self.value.clone()
     }
 
     /// This fixture's wire and the map from its readable IDs to admitted IDs.
@@ -851,6 +876,13 @@ fn evidence() -> CheckedPackageEvidence {
     evidence
 }
 
+/// Read a deliberate mutation under its refreshed package identity.
+pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
+    rekey::refresh_identity(&mut wire);
+    let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
+    CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
+}
+
 // ---------------------------------------------------------------------------
 // The composite/structural corpus (codes in `codes.rs`)
 // ---------------------------------------------------------------------------
@@ -867,6 +899,14 @@ pub fn direct_reference_package() -> PackageBuilder {
         "binary",
         binary_body(REF_TYPE, REF_TYPE),
     );
+    builder
+}
+
+/// A reader-admitted sequence with no separate collection bound, for CG's
+/// missing-bound refusal at the type-resolution boundary.
+pub fn unbounded_sequence_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    builder.omit_code(CB_INT);
     builder
 }
 
@@ -902,7 +942,7 @@ pub fn tuple_members_package(extras: &[u32], members: &[u32]) -> PackageBuilder 
                 BD_INTEGER_WRONG_FORM,
                 "bounded_domain",
                 "text_bounds",
-                T_INTEGER_BOUNDED,
+                T_INTEGER,
                 text_members(true),
             ),
             BD_BOOLEAN => builder.code(
@@ -1027,8 +1067,12 @@ pub fn application_operand_package() -> PackageBuilder {
 }
 
 /// A package carrying the full composite/structural equality corpus.
-pub fn corpus_package() -> PackageBuilder {
+fn corpus_package_with_nested_ieee() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
+
+    // The bounded Integer type is the integer_range node itself; its base is
+    // the reader's one canonical anonymous Integer scalar node.
+    register_code(T_INTEGER_BOUNDED, key(BD_INTEGER));
 
     builder.select_definition(text_profile_definition());
     for type_code in PARAMETER_TYPES {
@@ -1083,17 +1127,10 @@ pub fn corpus_package() -> PackageBuilder {
             ]),
         )
         .code(
-            T_INTEGER_BOUNDED,
-            "scalar_type",
-            "integer",
-            T_INTEGER_BOUNDED,
-            aggregate(vec![]),
-        )
-        .code(
             BD_INTEGER,
             "bounded_domain",
             "integer_range",
-            T_INTEGER_BOUNDED,
+            T_INTEGER,
             aggregate(vec![
                 bound_member("min", integer_literal(-100)),
                 bound_member("max", integer_literal(100)),
@@ -1216,7 +1253,7 @@ pub fn corpus_package() -> PackageBuilder {
             CB_SMALL,
             "bounded_domain",
             "collection_bounds",
-            T_BOOLEAN,
+            SEQ_R_FLOAT,
             aggregate(vec![
                 bound_member("min", integer_literal(0)),
                 bound_member("max", integer_literal(8)),
@@ -1226,8 +1263,8 @@ pub fn corpus_package() -> PackageBuilder {
             SEQ_R_FLOAT,
             "composite_type",
             "sequence",
-            T_BOOLEAN,
-            aggregate(vec![reference(R_FLOAT), reference(CB_SMALL)]),
+            SEQ_R_FLOAT,
+            aggregate(vec![reference(R_FLOAT)]),
         )
         .code(
             TUP_PAIR,
@@ -1243,7 +1280,7 @@ pub fn corpus_package() -> PackageBuilder {
             OPT_INT,
             "composite_type",
             "option",
-            T_BOOLEAN,
+            OPT_INT,
             aggregate(vec![reference(T_INTEGER)]),
         )
         .code(
@@ -1264,8 +1301,8 @@ pub fn corpus_package() -> PackageBuilder {
             REF_TYPE,
             "composite_type",
             "reference",
-            T_BOOLEAN,
-            aggregate(vec![]),
+            REF_TYPE,
+            aggregate(vec![reference(R_POINT)]),
         )
         .code_in_group(
             R_SELF,
@@ -1282,7 +1319,7 @@ pub fn corpus_package() -> PackageBuilder {
             OPT_SELF,
             "composite_type",
             "option",
-            T_BOOLEAN,
+            OPT_SELF,
             aggregate(vec![reference(R_SELF)]),
             "self-cycle",
         )
@@ -1297,8 +1334,18 @@ pub fn corpus_package() -> PackageBuilder {
             SEQ_INT,
             "composite_type",
             "sequence",
-            T_BOOLEAN,
-            aggregate(vec![reference(T_INTEGER), reference(CB_SMALL)]),
+            SEQ_INT,
+            aggregate(vec![reference(T_INTEGER)]),
+        )
+        .code(
+            CB_INT,
+            "bounded_domain",
+            "collection_bounds",
+            SEQ_INT,
+            aggregate(vec![
+                bound_member("min", integer_literal(0)),
+                bound_member("max", integer_literal(8)),
+            ]),
         );
 
     builder
@@ -1437,6 +1484,46 @@ pub fn corpus_package() -> PackageBuilder {
     builder
 }
 
+pub fn corpus_package() -> PackageBuilder {
+    let mut builder = corpus_package_with_nested_ieee();
+    builder.omit_code(E_NESTED_IEEE);
+    builder
+}
+
+/// A compact admitted Boolean equality for per-request lowering accounting.
+pub fn byte_ceiling_package() -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
+    builder
+        .code(
+            T_BOOLEAN,
+            "scalar_type",
+            "boolean",
+            T_BOOLEAN,
+            aggregate(vec![]),
+        )
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(vec![]),
+        )
+        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(vec![]))
+        .code(
+            parameter_code(T_BOOLEAN),
+            "value",
+            "parameter",
+            T_BOOLEAN,
+            parameter_body("boolean"),
+        )
+        .application_code(BYTE_CHAIN_BASE, "binary", binary_body(T_BOOLEAN, T_BOOLEAN));
+    builder
+}
+
+pub fn nested_ieee_package() -> PackageBuilder {
+    corpus_package_with_nested_ieee()
+}
+
 // ---------------------------------------------------------------------------
 // Item builders
 // ---------------------------------------------------------------------------
@@ -1479,16 +1566,16 @@ pub fn recursive_items_package_from_wire(
     };
     let list = named_record("List");
     let tree = named_record("Tree");
+    let integer = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("QSpec graph nodes")
+        .iter()
+        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+        .and_then(|node| node["node_id"]["digest"].as_str())
+        .expect("QSpec integer scalar type")
+        .to_owned();
     let mut builder = PackageBuilder::from_wire(wire);
-    builder
-        .code(
-            T_INTEGER,
-            "scalar_type",
-            "integer",
-            T_INTEGER,
-            aggregate(Vec::new()),
-        )
-        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(Vec::new()));
+    builder.code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(Vec::new()));
     builder.code(
         T_QSPEC_BOOLEAN,
         "scalar_type",
@@ -1504,7 +1591,18 @@ pub fn recursive_items_package_from_wire(
             "value",
             "parameter",
             type_digest,
-            parameter_body(name),
+            aggregate(vec![
+                bound_member("name", literal("text", name)),
+                bound_member(
+                    "level",
+                    json!({
+                        "term": "literal",
+                        "type": node_ref(&integer),
+                        "value_kind": "integer",
+                        "value": "0",
+                    }),
+                ),
+            ]),
         );
         builder.application_node(
             code,
@@ -1575,7 +1673,7 @@ pub fn recursive_tree_package() -> PackageBuilder {
             SEQ_TREE_CYCLE,
             "composite_type",
             "sequence",
-            T_BOOLEAN,
+            SEQ_TREE_CYCLE,
             aggregate(vec![reference(R_TREE_CYCLE)]),
             "tree-cycle",
         )

@@ -750,6 +750,10 @@ fn recorded_descriptor(item: &CompositeEqualityItem) -> RecordedDescriptor {
 
 fn lowering_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.composite-equality/v1".into(),
+        },
         supported_tags: BTreeSet::from([
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,

@@ -998,7 +998,7 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
         .iter()
         .map(|item| generous.ids.resolve(&item.call_node_id))
         .collect::<Vec<_>>();
-    let profile = measuring_profile(false);
+    let profile = measuring_profile(false, "quire.codegen.exact-function/v1");
     let body_length = lowered_package_length(&generous, &body_nodes, &profile);
     let call_length = lowered_package_length(&generous, &call_nodes, &profile);
     let ceiling = body_length.min(call_length) - 1;

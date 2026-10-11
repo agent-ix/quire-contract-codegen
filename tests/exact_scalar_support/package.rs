@@ -26,8 +26,8 @@ use quire_contract_codegen::{
     IntegerOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
@@ -324,11 +324,8 @@ pub fn law(role: &str, definition: Value) -> Value {
     json!({"role": role, "definition": definition})
 }
 
-/// An `operation.mode` member: `{"kind", "value"}`. `value` is never
-/// checked against the catalog's closed `modes` vocabulary by IR (only
-/// `kind` is, and by a type-pin lookup this module's types never carry --
-/// see `check_mode_type` in Contract IR's
-/// `checked_package/v2/operations.rs`), so any readable string works.
+/// An `operation.mode` member: `{"kind", "value"}`. The result type must pin
+/// this value to pass Contract IR's `check_mode_type` validation.
 pub fn mode_kv(kind: &str, value: &str) -> Value {
     json!({"kind": kind, "value": value})
 }
@@ -434,6 +431,31 @@ pub struct PackageBuilder {
     dedicated_operands: BTreeSet<String>,
 }
 
+fn admitted_fixture_ids() -> &'static Mutex<BTreeMap<String, FixtureIds>> {
+    static IDS: OnceLock<Mutex<BTreeMap<String, FixtureIds>>> = OnceLock::new();
+    IDS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// The resolver captured when this exact fixture package was admitted.
+pub fn fixture_ids_for(package: &CheckedPackageV2) -> FixtureIds {
+    admitted_fixture_ids()
+        .lock()
+        .expect("fixture IDs lock")
+        .get(package.package_id().digest.as_ref())
+        .cloned()
+        .expect("fixture package was admitted by PackageBuilder")
+}
+
+/// Resolve claim-map IDs against the fixture package named in that map.
+pub fn fixture_ids_for_digest(digest: &str) -> FixtureIds {
+    admitted_fixture_ids()
+        .lock()
+        .expect("fixture IDs lock")
+        .get(digest)
+        .cloned()
+        .expect("fixture package ID is registered")
+}
+
 include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
@@ -504,6 +526,7 @@ impl PackageBuilder {
             .collect::<Vec<_>>();
         // The schema's `BodyBindingRules` fix the occurrence role of these forms.
         let role = match (tag, form) {
+            ("scalar_type", "integer") if digest == key(T_INTEGER) => "generated",
             ("value", "parameter") => "expression",
             ("state", "frame") => "generated",
             ("state", "operation_anchor") => "anchor",
@@ -524,7 +547,10 @@ impl PackageBuilder {
             "occurrences": [{"role": role, "ordinal": 0}],
             "body": body,
         });
-        if let Some(declaration) = declaration_for(tag, form, label) {
+        if let Some(declaration) = (role != "generated")
+            .then(|| declaration_for(tag, form, label))
+            .flatten()
+        {
             node["declaration"] = declaration;
             // These hand-built declarations belong to the selected `example` source.
             // Application bodies derive their identity from their operation instead;
@@ -667,7 +693,11 @@ impl PackageBuilder {
     /// keyed by `(form, bound_keys)` so expressions sharing the identical
     /// bound set still safely share one anchor, exactly as before.
     pub fn dedicated_operand(&mut self, form: &str, bound_keys: &[String]) -> String {
-        self.dedicated_operand_impl(form, bound_keys, None)
+        self.dedicated_operand_impl(form, bound_keys, None, None)
+    }
+
+    fn dedicated_typed_operand(&mut self, form: &str, bound_keys: &[String], ty: &str) -> String {
+        self.dedicated_operand_impl(form, bound_keys, None, Some(ty))
     }
 
     /// As [`Self::dedicated_operand`], but salted with `tag` so a caller that
@@ -685,7 +715,7 @@ impl PackageBuilder {
         bound_keys: &[String],
         tag: &str,
     ) -> String {
-        self.dedicated_operand_impl(form, bound_keys, Some(tag))
+        self.dedicated_operand_impl(form, bound_keys, Some(tag), None)
     }
 
     /// Shared implementation of [`Self::dedicated_operand`] and
@@ -699,12 +729,15 @@ impl PackageBuilder {
         form: &str,
         bound_keys: &[String],
         tag: Option<&str>,
+        ty_override: Option<&str>,
     ) -> String {
         let mut sorted_keys = bound_keys.to_vec();
         sorted_keys.sort();
-        let preimage = match tag {
-            Some(tag) => json!(["dedicated-operand", form, sorted_keys, tag]),
-            None => json!(["dedicated-operand", form, sorted_keys]),
+        let preimage = match (tag, ty_override) {
+            (Some(tag), None) => json!(["dedicated-operand", form, sorted_keys, tag]),
+            (None, Some(ty)) => json!(["dedicated-operand", form, sorted_keys, ty]),
+            (None, None) => json!(["dedicated-operand", form, sorted_keys]),
+            (Some(_), Some(_)) => panic!("a dedicated operand has one selector"),
         };
         let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("dedicated operand key"));
         if self.dedicated_operands.insert(digest.clone()) {
@@ -717,7 +750,10 @@ impl PackageBuilder {
                 "text" => ("text", "a", key(T_TEXT)),
                 other => panic!("dedicated_operand: no literal form known for {other}"),
             };
-            self.node(&digest, "value", "literal", &ty, literal(kind, value));
+            let ty = ty_override.unwrap_or(&ty);
+            let mut body = literal(kind, value);
+            body["type"] = node_ref(ty);
+            self.node(&digest, "value", "literal", ty, body);
         }
         digest
     }
@@ -752,112 +788,6 @@ impl PackageBuilder {
             );
         }
         digest
-    }
-
-    /// A per-`bound` scalar type node, isolated the same way
-    /// [`Self::dedicated_operand`] isolates a shared literal, for a node
-    /// whose body has *no* `reference` term at all to anchor on --
-    /// `TextAdmission`'s six corpus codes, whose one argument must stay a
-    /// fixed literal so IR's operand-family check never resolves it (see
-    /// the corpus loop's own comment). `application_bounded`'s fallback
-    /// anchor (`value_for_type(semantic_type)`) is a shared value node nothing
-    /// in such a body ever references, so a bound attached there is
-    /// unreachable from the application node's own closure; anchoring
-    /// instead on `T_TEXT` itself would make it reachable, but `T_TEXT` is
-    /// one shared node; every `TextAdmission` code needs a *different*
-    /// `text_bounds` value, and attaching all six to the one shared type
-    /// would make every one of them reachable from every code -- the same
-    /// `AmbiguousBound` collision `dedicated_operand` exists to prevent.
-    ///
-    /// The bound itself, not just the type, must be dedicated: IR's
-    /// `require_bounds` walk only accepts a `bounded_domain` node whose own
-    /// `semantic_type` field equals the exact unbounded type node it is
-    /// judging (`lower.rs`'s `domain.semantic_type == node.node_id`), so
-    /// [`Self::bound`] -- which always points a `Bound::Text`'s node at the
-    /// shared `T_TEXT` via [`Bound::bounded_type`] -- cannot satisfy a
-    /// dedicated type; this builds the `bounded_domain` node directly,
-    /// pointed at the dedicated type instead.
-    ///
-    /// This returns a fresh nominal `scalar_type` node (shaped exactly like
-    /// `T_TEXT`'s own: self-typed, an empty `aggregate` body) with `bound`
-    /// wired as its only dependency. Nothing else ever references it, so
-    /// pass it as the application node's own `semantic_type` (with `bounds:
-    /// &[]`, since the bound is already wired here) and it is the only
-    /// `text_bounds` node reachable from that one code.
-    pub fn dedicated_text_admission_type(&mut self, bound: &Bound) -> String {
-        let Bound::Text(min, max, profile) = bound else {
-            panic!("dedicated_text_admission_type: only Bound::Text is supported, got {bound:?}");
-        };
-        let type_digest = sha256_hex(
-            &serde_json::to_vec(&json!(["dedicated-text-admission-type", bound.key()]))
-                .expect("dedicated text admission type key"),
-        );
-        if self.dedicated_operands.insert(type_digest.clone()) {
-            self.node(
-                &type_digest,
-                "scalar_type",
-                "text",
-                &type_digest,
-                aggregate(),
-            );
-            let foreign = bound
-                .foreign()
-                .iter()
-                .map(|foreign| self.bound(foreign))
-                .collect::<Vec<_>>();
-            // `bound.key()` itself, not a further-derived digest: the
-            // generation test's own `declared` list (`exact_scalar_
-            // generation.rs`) checks `generated.checked_bounds` against
-            // `id(&bound.key())`, so the *node* IR actually reaches must
-            // carry that same id. No collision risk: each `TEXT_ADMISSIONS`
-            // profile is distinct content, and nothing else in this corpus
-            // separately registers a node at this content's own key.
-            let bound_digest = bound.key();
-            // Not `bound.body()`: its own `text`-kind member (the profile)
-            // is built by the shared `literal()` helper, whose `literal.type`
-            // always names the shared `T_TEXT` -- reachable regardless of
-            // this bound's own `semantic_type` (`Bound::bounded_type`'s own
-            // doc), which would put `T_TEXT` right back in this code's
-            // closure with no bound of its own to satisfy it. This mirrors
-            // `Bound::Text`'s own body shape, with that one member's type
-            // pointed at the dedicated type instead.
-            let body = json!({
-                "term": "aggregate",
-                "members": [
-                    member("min", integer_literal(min)),
-                    member("max", integer_literal(max)),
-                    member(
-                        "text_profile",
-                        json!({
-                            "term": "literal",
-                            "type": node_ref(&type_digest),
-                            "value_kind": "text",
-                            "value": profile,
-                        }),
-                    ),
-                ],
-            });
-            self.node_with(
-                &bound_digest,
-                "bounded_domain",
-                bound.form(),
-                &type_digest,
-                body,
-                &foreign,
-            );
-            self.add_dependency(&type_digest, &bound_digest);
-            // The dedicated type depends on its own bound, and the bound's
-            // `semantic_type` points straight back at the dedicated type (so
-            // `Bounds::equal`, src/oracle/scalar/mod.rs, finds it) -- a genuine
-            // two-node cycle IR's own recursion check (`validate_recursion`,
-            // `checked_package/v2/mod.rs`) refuses unless every member of
-            // the cycle shares one explicit, non-empty `recursion_group`.
-            // `type_digest` is already unique per (isolated) dedicated type,
-            // so reusing it as the group id needs nothing further.
-            self.set_recursion_group(&type_digest, &type_digest);
-            self.set_recursion_group(&bound_digest, &type_digest);
-        }
-        type_digest
     }
 
     /// An application-bodied node that needs `bounds` reachable.
@@ -923,8 +853,7 @@ impl PackageBuilder {
             .collect::<Vec<_>>();
         let dependencies = reference_targets(&body);
         // Only computed when there is a bound to anchor: a caller passing no
-        // `bounds` (e.g. `TextAdmission`'s dedicated-type path below, which
-        // wires its one bound directly onto a per-code type instead) may
+        // `bounds` (e.g. the isolated TextAdmission reader negative) may
         // legitimately have neither a `reference` target nor a `semantic_type`
         // `value_for_type` recognizes, and must not panic over an anchor
         // nothing here will use.
@@ -1014,19 +943,19 @@ impl PackageBuilder {
         self
     }
 
-    /// Sets a node's `recursion_group` (a plain wire string, not a node
-    /// reference). Only [`Self::dedicated_text_admission_type`] needs this:
-    /// every other node this builder creates is acyclic.
-    fn set_recursion_group(&mut self, digest: &str, group: &str) -> &mut Self {
+    /// Remove one deliberately invalid node while retaining its isolated inputs.
+    fn omit_code(&mut self, code: u32) {
+        let digest = code_id(code).digest;
         let nodes = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("nodes");
-        let node = nodes
-            .iter_mut()
-            .find(|node| node["node_id"]["digest"].as_str() == Some(digest))
-            .unwrap_or_else(|| panic!("no node registered with digest {digest}"));
-        node["recursion_group"] = json!(group);
-        self
+        let before = nodes.len();
+        nodes.retain(|node| node["node_id"]["digest"].as_str() != Some(digest.as_ref()));
+        assert_eq!(nodes.len() + 1, before, "one fixture node for code {code}");
+        let map = self.value["source_map"].as_array_mut().expect("source map");
+        let before = map.len();
+        map.retain(|entry| entry["node_id"]["digest"].as_str() != Some(digest.as_ref()));
+        assert_eq!(map.len() + 1, before, "one source entry for code {code}");
     }
 
     /// Add `bound` once, returning its key. Any requires-bound kind foreign
@@ -1074,7 +1003,13 @@ impl PackageBuilder {
     ) -> (CheckedPackageV2, FixtureIds) {
         let rekey::ResolvedWire { outcome, ids, .. } = self.resolved_wire(limits);
         match outcome {
-            CheckedPackageV2ReadResult::Admitted(package) => (*package, ids),
+            CheckedPackageV2ReadResult::Admitted(package) => {
+                admitted_fixture_ids()
+                    .lock()
+                    .expect("fixture IDs lock")
+                    .insert(package.package_id().digest.to_string(), ids.clone());
+                (*package, ids)
+            }
             other => panic!("expected V2 admission, got {other:?}"),
         }
     }
@@ -1108,6 +1043,40 @@ fn evidence() -> CheckedPackageEvidence {
     let bytes = serde_json::to_vec(&document).expect("model document");
     evidence.insert_domain_package_document(sha256_hex(&bytes), bytes);
     evidence
+}
+
+/// Read a deliberate mutation of an already admitted wire under its refreshed package identity.
+pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
+    rekey::refresh_identity(&mut wire);
+    let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
+    CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
+}
+
+/// Re-key a mutated valid-shape wire before asserting its semantic reader refusal.
+pub fn read_application_mutated_wire(
+    mut wire: Value,
+    provisional: &CheckedNodeId,
+) -> (CheckedPackageV2ReadResult, CheckedNodeId) {
+    let nodes: Vec<CheckedSemanticNodeV2> =
+        serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("draft nodes");
+    let draft = nodes
+        .iter()
+        .find(|node| &node.node_id == provisional)
+        .expect("draft application");
+    let candidate = derive_application_node_id(
+        ApplicationNodeDraft::new(draft),
+        None,
+        CheckedPackageReadLimits::bounded().bytes,
+    )
+    .expect("application candidate")
+    .candidate_node_id()
+    .clone();
+    rekey::install_candidate(&mut wire, provisional, &candidate);
+    let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
+    (
+        CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence()),
+        candidate,
+    )
 }
 
 // ---- bounds ------------------------------------------------------------------
@@ -1193,7 +1162,11 @@ impl Bound {
     }
 
     pub fn bounded_type(&self) -> String {
-        result_type(self.bounded_form())
+        match self {
+            Self::Decimal(_, _, _, _, rounding) => decimal_type_for_rounding(rounding),
+            Self::Rounding(form, rounding) => float_type_for_rounding(form, rounding),
+            _ => result_type(self.bounded_form()),
+        }
     }
 
     /// Contract IR (FR-038-AC-17) requires `literal.type`, so every
@@ -1327,6 +1300,10 @@ pub const T_BOOLEAN: u32 = 1;
 pub const T_INTEGER: u32 = 2;
 pub const T_RATIONAL: u32 = 3;
 pub const T_DECIMAL: u32 = 4;
+pub const T_DECIMAL_ZERO: u32 = 8;
+pub const T_DECIMAL_AWAY: u32 = 9;
+pub const T_FLOAT64_ZERO: u32 = 10;
+pub const T_FLOAT64_POSITIVE: u32 = 11;
 pub const T_FLOAT32: u32 = 5;
 pub const T_FLOAT64: u32 = 6;
 pub const T_TEXT: u32 = 7;
@@ -1414,18 +1391,8 @@ pub const BOUNDED_OPERAND: u32 = 2034;
 /// the `reference` arm of `check_operand`, not the `literal` arm
 /// `WRONG_OPERAND` exercises.
 pub const WRONG_OPERAND_REFERENCE: u32 = 2032;
-/// A decimal add whose own catalogued `operation.mode` rounding
-/// (`"toward-zero"`) disagrees with its own IR `decimal_range` bound's
-/// rounding (`"nearest-even"`): `corpus_operation`'s mode value and the
-/// node's IR bound aggregate are independently settable (the former comes
-/// from whatever `DecimalType` a fixture's `operation` carries, the latter
-/// from its own separate `Bound::Decimal`), but every entry in `corpus()`
-/// happens to give them the same value. Against any of those, a descriptor
-/// whose rounding matches the IR bound necessarily also matches
-/// `operation.mode`, so `operation_confirmed`'s mode-comparison branch is
-/// never exercised on a genuine disagreement. This node exists so a
-/// descriptor can match the bound (passing `check_item`) while still
-/// disagreeing with `operation.mode` (IR-226).
+/// A deliberate mode/type mismatch, retained for the direct reader-negative
+/// test. Contract IR refuses it before codegen can inspect a descriptor.
 pub const MODE_MISMATCH: u32 = 2033;
 pub const MISSING: u32 = 9999;
 
@@ -1982,6 +1949,25 @@ fn result_type(form: &str) -> String {
     }
 }
 
+fn decimal_type_for_rounding(rounding: &str) -> String {
+    key(match rounding {
+        "nearest-even" => T_DECIMAL,
+        "toward-zero" => T_DECIMAL_ZERO,
+        "nearest-away" => T_DECIMAL_AWAY,
+        other => panic!("no decimal fixture type for rounding {other}"),
+    })
+}
+
+fn float_type_for_rounding(form: &str, rounding: &str) -> String {
+    key(match (form, rounding) {
+        ("float32", "nearest-even") => T_FLOAT32,
+        ("float64", "nearest-even") => T_FLOAT64,
+        ("float64", "toward-zero") => T_FLOAT64_ZERO,
+        ("float64", "toward-positive") => T_FLOAT64_POSITIVE,
+        _ => panic!("no {form} fixture type for rounding {rounding}"),
+    })
+}
+
 /// `code` is folded into the second operand so callers that register
 /// several distinct expression nodes sharing this body's shape
 /// (operator/operation/result_type) still get distinct digests.
@@ -2349,13 +2335,9 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     // dedicated the same way via [`PackageBuilder::dedicated_unit_operand`]
     // whenever `bound_keys` is non-empty, rather than kept on the shared
     // `V_QUANTITY` node.
-    // `TextAdmission` never uses `bound_keys` below -- its one argument is
-    // always overridden to a fixed literal further down, and its own
-    // bound is registered by `dedicated_text_admission_type` instead
-    // (`application_bounded`'s doc explains why: a plain `builder.bound`
-    // call here would register the *same* `Bound::key()` digest with the
-    // shared `T_TEXT` as its `semantic_type`, a second, colliding node at
-    // the same node id `dedicated_text_admission_type` also builds).
+    // Text admission is an isolated reader negative for operator eligibility.
+    // Its bounds play no part before that refusal and would add unrelated
+    // structural constraints to the fixture.
     let bound_keys: Vec<String> = if matches!(expression.operation, Op::TextAdmission { .. }) {
         Vec::new()
     } else {
@@ -2364,6 +2346,20 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
             .iter()
             .map(|bound| builder.bound(bound))
             .collect()
+    };
+    let pinned_type = match &expression.operation {
+        Op::DecimalArithmetic { target, .. } => {
+            Some(decimal_type_for_rounding(target.rounding().as_str()))
+        }
+        Op::IeeeArithmetic { rounding, .. } => Some(float_type_for_rounding(
+            expression.result,
+            rounding.as_str(),
+        )),
+        Op::IeeeWidthConversion { rounding, .. } => Some(float_type_for_rounding(
+            expression.result,
+            rounding.as_str(),
+        )),
+        _ => None,
     };
     let mut unit_anchor: Option<String> = None;
     let mut arguments = expression
@@ -2393,6 +2389,12 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
                 // salt `CLAIM`/`CLAIM_ALT` would be reachable from all of
                 // them too, not just from `LITERAL_OPERAND`.
                 builder.dedicated_operand_tagged(form, &bound_keys, "literal-operand-claim-anchor")
+            } else if *form == expression.result && pinned_type.is_some() {
+                builder.dedicated_typed_operand(
+                    form,
+                    &bound_keys,
+                    pinned_type.as_deref().expect("pinned type"),
+                )
             } else {
                 builder.dedicated_operand(form, &bound_keys)
             };
@@ -2418,12 +2420,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     // (see `corpus_operation`'s `TextAdmission` arm), so Contract IR refuses
     // these nodes at admission: they are built only for `refused_corpus_package`.
     // The operand is a literal.
-    let text_admission_type = if matches!(expression.operation, Op::TextAdmission { .. }) {
-        Some(builder.dedicated_text_admission_type(&expression.bounds[0]))
-    } else {
-        None
-    };
-    if let Some(type_key) = &text_admission_type {
+    if matches!(expression.operation, Op::TextAdmission { .. }) {
         // `corpus_operation`'s `TextAdmission` arm ignores which
         // `TextProfile` this expression names (see its own comment),
         // so every `TEXT_ADMISSIONS` code would otherwise get the
@@ -2434,37 +2431,18 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         // distinct node without touching what's actually exercised
         // (the literal's family/value, not its exact text).
         //
-        // The literal's own `type` must be *this* code's dedicated type,
-        // not the shared `T_TEXT` the `literal()` helper always names:
-        // IR's lowering reaches a `literal.type` regardless of the join
-        // (`application_bounded`'s doc, and `V_QUANTITY`'s own comment
-        // above), so a plain `literal("text", ..)` here would still put
-        // `T_TEXT` in this code's closure and `require_bounds` would ask
-        // for a `T_TEXT`-typed bound this dedicated corpus item never
-        // registers.
-        arguments = vec![json!({
-            "term": "literal",
-            "type": node_ref(type_key),
-            "value_kind": "text",
-            "value": format!("a{}", expression.code),
-        })];
+        let Some(Bound::Text(_, _, profile)) = expression.bounds.first() else {
+            panic!("text-admission negative has its declared text profile");
+        };
+        arguments = vec![literal("text", &format!("a{}-{profile}", expression.code))];
     }
     let (catalog_operator, operation) = corpus_operation(&expression);
-    // `TextAdmission` gets a dedicated `semantic_type` (see
-    // `dedicated_text_admission_type`'s own doc) instead of the shared
-    // `result_type(expression.result)` (== `T_TEXT`): its one argument is
-    // a fixed literal, so `application_bounded` has no `reference` target
-    // to anchor the expression's own `text_bounds` bound on, and `T_TEXT`
-    // is one node shared by every text-typed corpus expression -- six
-    // different bounds attached there would each be reachable from every
-    // one of them. The bound is wired onto the dedicated type directly,
-    // so `bounds` passed to `application_bounded` is empty here.
-    let (node_semantic_type, node_bounds): (String, &[Bound]) =
-        if let Some(type_key) = text_admission_type {
-            (type_key, &[])
-        } else {
-            (result_type(expression.result), &expression.bounds[..])
-        };
+    let node_semantic_type = pinned_type.unwrap_or_else(|| result_type(expression.result));
+    let node_bounds: &[Bound] = if matches!(expression.operation, Op::TextAdmission { .. }) {
+        &[]
+    } else {
+        &expression.bounds
+    };
     // `unit_anchor` (set above only when this expression's "unit" operand
     // was dedicated) is passed explicitly rather than left for
     // `application_bounded` to infer: `quantity.pow`'s body references
@@ -2485,7 +2463,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
 }
 
 /// The complete package: types, values, the corpus, and refused nodes.
-pub fn corpus_package() -> PackageBuilder {
+fn corpus_package_with_expression_operand() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
     for (code, form) in [
         (T_BOOLEAN, "boolean"),
@@ -2496,7 +2474,36 @@ pub fn corpus_package() -> PackageBuilder {
         (T_FLOAT64, "float64"),
         (T_TEXT, "text"),
     ] {
-        builder.code(code, "scalar_type", form, &key(code), aggregate());
+        let body = if matches!(form, "decimal" | "float32" | "float64") {
+            json!({"term": "aggregate", "members": [member("rounding", literal("text", "nearest-even"))]})
+        } else {
+            aggregate()
+        };
+        builder.code(code, "scalar_type", form, &key(code), body);
+    }
+    for (code, rounding) in [
+        (T_DECIMAL_ZERO, "toward-zero"),
+        (T_DECIMAL_AWAY, "nearest-away"),
+    ] {
+        builder.code(
+            code,
+            "scalar_type",
+            "decimal",
+            &key(code),
+            json!({"term": "aggregate", "members": [member("rounding", literal("text", rounding))]}),
+        );
+    }
+    for (code, form, rounding) in [
+        (T_FLOAT64_ZERO, "float64", "toward-zero"),
+        (T_FLOAT64_POSITIVE, "float64", "toward-positive"),
+    ] {
+        builder.code(
+            code,
+            "scalar_type",
+            form,
+            &key(code),
+            json!({"term": "aggregate", "members": [member("rounding", literal("text", rounding))]}),
+        );
     }
     for (code, ty, kind, value) in [
         (V_INTEGER, key(T_INTEGER), "integer", "3"),
@@ -2572,7 +2579,6 @@ pub fn corpus_package() -> PackageBuilder {
         (UNBOUNDED, Vec::new()),
         (MATHEMATICAL, vec![INT]),
         (AMBIGUOUS, vec![INT, INT5]),
-        (UNREADABLE, vec![unreadable_bound()]),
         (WRONG_BOUND_FORM, vec![wrong_form_bound()]),
         (DOMAIN_MISMATCH, vec![INT5]),
     ] {
@@ -2739,35 +2745,6 @@ pub fn corpus_package() -> PackageBuilder {
         ),
         &[INT],
     );
-    let mode_mismatch_anchor = {
-        let dec_key = builder.bound(&DEC);
-        builder.dedicated_operand("decimal", &[dec_key])
-    };
-    builder.application_bounded(
-        MODE_MISMATCH,
-        "expression",
-        "binary",
-        &key(T_DECIMAL),
-        application(
-            "binary",
-            op_full(
-                "quire.op.decimal.add",
-                vec![],
-                Some(mode_kv("rounding", "toward-zero")),
-                None,
-            ),
-            &key(T_DECIMAL),
-            vec![
-                reference(&mode_mismatch_anchor),
-                reference(&mode_mismatch_anchor),
-            ],
-        ),
-        // Deliberately the node 1051 bound (`DEC`, rounding
-        // "nearest-even"), not "toward-zero": a descriptor matching this
-        // bound passes `check_item`, then disagrees with the
-        // "toward-zero" `operation.mode` set above.
-        &[DEC],
-    );
     let boolean = key(T_BOOLEAN);
     let clause_profile = artifact_ref("quire.temporal.event-position.false-extension/v1");
     builder.select_profile("temporal_profile", clause_profile.clone());
@@ -2813,7 +2790,13 @@ pub fn corpus_package() -> PackageBuilder {
             ),
         )
         .code(MODEL, "model", "model_import", &boolean, aggregate())
-        .code(RELATION, "relation", "relationship", &boolean, aggregate())
+        .code(
+            RELATION,
+            "relation",
+            "relationship",
+            &key(RELATION),
+            aggregate(),
+        )
         .code(STATE, "state", "snapshot", &boolean, aggregate())
         // IR admits a `temporal_clause` only as a `temporal`-operator application over a
         // declared `parameter` with one `temporal_profile` law and a `temporal` formula argument
@@ -3098,6 +3081,77 @@ pub fn corpus_package() -> PackageBuilder {
     builder
 }
 
+pub fn corpus_package() -> PackageBuilder {
+    let mut builder = corpus_package_with_expression_operand();
+    builder.omit_code(EXPRESSION_OPERAND);
+    builder.omit_code(WRONG_OPERAND);
+    builder.omit_code(LITERAL_QUANTITY);
+    builder
+}
+
+/// A reader-negative integer application with an aggregate operand.
+pub fn expression_operand_package() -> PackageBuilder {
+    corpus_package_with_expression_operand()
+}
+
+/// A reader-negative scalar literal whose declared type disagrees with its value kind.
+pub fn wrong_operand_package() -> PackageBuilder {
+    let mut builder = corpus_package_with_expression_operand();
+    builder.omit_code(EXPRESSION_OPERAND);
+    builder
+}
+
+/// A reader-negative quantity literal paired with a quantity operator.
+pub fn literal_quantity_package() -> PackageBuilder {
+    let mut builder = corpus_package_with_expression_operand();
+    builder.omit_code(EXPRESSION_OPERAND);
+    builder.omit_code(WRONG_OPERAND);
+    builder
+}
+
+/// The noncanonical integer endpoint is a reader refusal fixture, outside the admitted corpus.
+pub fn unreadable_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let bound = unreadable_bound();
+    let bound_key = builder.bound(&bound);
+    let operand = builder.dedicated_operand("integer", &[bound_key]);
+    builder.application_bounded(
+        UNREADABLE,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        integer_pair_for_operand(UNREADABLE, &operand),
+        &[bound],
+    );
+    builder
+}
+
+/// A reader-negative operation whose rounding disagrees with its decimal type.
+pub fn mode_mismatch_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let decimal_bound = builder.bound(&DEC);
+    let operand = builder.dedicated_operand("decimal", &[decimal_bound]);
+    builder.application_bounded(
+        MODE_MISMATCH,
+        "expression",
+        "binary",
+        &key(T_DECIMAL),
+        application(
+            "binary",
+            op_full(
+                "quire.op.decimal.add",
+                vec![],
+                Some(mode_kv("rounding", "toward-zero")),
+                None,
+            ),
+            &key(T_DECIMAL),
+            vec![reference(&operand), reference(&operand)],
+        ),
+        &[DEC],
+    );
+    builder
+}
+
 /// The QSL parameter `x: Int[0, 9]` of [`bounded_increment_package`].
 pub const V_PARAM_X: u32 = 111;
 /// `x + 1` over `Int[0, 9]`, with `x` typed by a `bounded_domain` and `[0, 9]` the one
@@ -3133,48 +3187,39 @@ pub fn bounded_increment_package() -> PackageBuilder {
     builder
 }
 
-/// The first code of the integer-addition chain [`integer_add_chain`] adds.
-pub const CHAIN_BASE: u32 = 20_000;
-
-/// Adds `count` integer additions, node `CHAIN_BASE + k` adding node `CHAIN_BASE + k - 1`'s result
-/// to a bounded literal (the first adds the literal to itself). Each node reaches every node
-/// before it, so a lowered node lists its whole chain in `dependencies`: the lowered contract
-/// package of a call requesting the chain grows quadratically in `count` while the checked
-/// package grows linearly (FR-014-AC-40).
-pub fn integer_add_chain(builder: &mut PackageBuilder, count: u32) -> &mut PackageBuilder {
+/// A compact admitted integer addition for per-request byte accounting.
+pub fn byte_ceiling_package() -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
     let integer_type = key(T_INTEGER);
-    let anchor = {
-        let bound = builder.bound(&INT);
-        builder.dedicated_operand_tagged("integer", &[bound], "byte-ceiling-chain")
-    };
-    let add = |left: &str| {
+    builder.code(
+        T_INTEGER,
+        "scalar_type",
+        "integer",
+        &integer_type,
+        aggregate(),
+    );
+    let bound = Bound::Integer(0, 9);
+    let bound_key = builder.bound(&bound);
+    builder.code(
+        V_PARAM_X,
+        "value",
+        "literal",
+        &bound_key,
+        literal("integer", "3"),
+    );
+    builder.application_bounded(
+        BOUNDED_INCREMENT,
+        "expression",
+        "binary",
+        &integer_type,
         application(
             "binary",
             op("quire.op.integer.add"),
             &integer_type,
-            vec![reference(left), reference(&anchor)],
-        )
-    };
-    builder.application_bounded_anchored(
-        CHAIN_BASE,
-        "expression",
-        "binary",
-        &integer_type,
-        add(&anchor),
-        &[INT],
-        Some(&anchor),
+            vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
+        ),
+        &[bound],
     );
-    for offset in 1..count {
-        let previous = code_id(CHAIN_BASE + offset - 1).digest.to_string();
-        builder.application_code_with(
-            CHAIN_BASE + offset,
-            "expression",
-            "binary",
-            &integer_type,
-            add(&previous),
-            &[previous.clone(), anchor.clone()],
-        );
-    }
     builder
 }
 
@@ -3589,11 +3634,6 @@ pub fn qsl_shaped_package() -> PackageBuilder {
             vec![(QSL_WRONG_FORM_NARROW, wrong_form_bound())],
         ),
         (
-            QSL_WRONG_BASE_NARROWED,
-            sum(QSL_PARAM_X, QSL_PARAM_W),
-            vec![(QSL_WRONG_BASE_NARROW, wrong_base_bound())],
-        ),
-        (
             QSL_PLUS_HUNDRED,
             sum(QSL_PARAM_X, QSL_LITERAL_HUNDRED),
             vec![(QSL_PLUS_HUNDRED_NARROW, Bound::Integer(0, 10))],
@@ -3635,6 +3675,55 @@ pub fn qsl_shaped_package() -> PackageBuilder {
             vec![reference(&shared), reference(&key(QSL_PARAM_X))],
         ),
         &[],
+    );
+    builder
+}
+
+/// Keep the malformed Integer-range-over-Rational narrowing outside the admitted corpus.
+/// The base wire is resolved first, so its deliberate invalid shape is the first reader refusal.
+pub fn qsl_wrong_base_package() -> PackageBuilder {
+    let rekey::ResolvedWire { wire, ids, outcome } =
+        qsl_shaped_package().resolved_wire(CheckedPackageReadLimits::bounded());
+    assert!(matches!(outcome, CheckedPackageV2ReadResult::Admitted(_)));
+    let mut builder = PackageBuilder {
+        value: wire,
+        bounds: BTreeSet::new(),
+        dedicated_operands: BTreeSet::new(),
+    };
+    let integer = ids.resolve(&code_id(T_INTEGER)).digest.to_string();
+    let rational = ids.resolve(&code_id(T_RATIONAL)).digest.to_string();
+    let operand_x = ids.resolve(&code_id(QSL_PARAM_X)).digest.to_string();
+    let operand_w = ids.resolve(&code_id(QSL_PARAM_W)).digest.to_string();
+    builder.application_bounded(
+        QSL_WRONG_BASE_NARROWED,
+        "expression",
+        "binary",
+        &integer,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer,
+            vec![reference(&operand_x), reference(&operand_w)],
+        ),
+        &[],
+    );
+    let bound = wrong_base_bound();
+    let bound_digest = bound.key();
+    let mut body = bound.body();
+    ids.resolve_value(&mut body);
+    let foreign = vec![ids.resolve(&id(&INT.key())).digest.to_string()];
+    builder.node_with(
+        &bound_digest,
+        "bounded_domain",
+        bound.form(),
+        &rational,
+        body,
+        &foreign,
+    );
+    builder.narrow(
+        QSL_WRONG_BASE_NARROW,
+        code_id(QSL_WRONG_BASE_NARROWED).digest.as_ref(),
+        &bound_digest,
     );
     builder
 }
@@ -3790,16 +3879,13 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         PROTOCOL,
         CALLS_FUNCTION,
         WRONG_BODY,
-        WRONG_OPERAND,
         MISSING,
         V_BOOLEAN,
         DUPLICATED,
         DUPLICATED,
         UNBOUNDED,
         AMBIGUOUS,
-        UNREADABLE,
         WRONG_BOUND_FORM,
-        EXPRESSION_OPERAND,
         UNTYPED_OPERAND,
     ]
     .into_iter()
@@ -3845,12 +3931,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         QUANTITY_EXACT,
         ExactScalarOperation::QuantityConversion {
             target: QuantityTarget::Exact,
-        },
-    ));
-    items.push(item(
-        LITERAL_QUANTITY,
-        ExactScalarOperation::QuantityArithmetic {
-            operator: QuantityOperator::Add,
         },
     ));
     items.push(item(

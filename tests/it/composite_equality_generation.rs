@@ -26,14 +26,16 @@ use quire_contract_codegen::{
     UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
-    CheckedNodeTag, CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
-    CheckedPackageV2ReadResult, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    derive_structural_candidates, CheckedNodeTag, CheckedPackageRefusalCause,
+    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    CompleteLoweringProfileV2, CompleteLoweringRecordV2, StructuralCandidateError,
 };
 use quire_contract_runtime::exact::{
     CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
     FieldDeclaration, IeeeWidth, NodeKey, ObjectTypeDeclaration, Presence, TypeEnvironment,
     ValueType,
 };
+use serde_json::json;
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
 // fixture codes that this file and `composite_equality_agreement.rs` each pick independently,
@@ -44,6 +46,81 @@ use quire_contract_runtime::exact::{
 mod package;
 
 use package::*;
+
+/// Trace: FR-037-AC-1, TC-052. Structural equality reaching IEEE is reader-ineligible.
+#[test]
+fn tc_052_nested_ieee_equality_is_refused_by_reader() {
+    let (result, wire, ids) = nested_ieee_package().read_resolved();
+    let node_id = ids.resolve(&code_id(E_NESTED_IEEE));
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("nested IEEE equality");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("nested IEEE equality unexpectedly admitted: {result:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!(
+            "/semantic_graph/nodes/{position}/body/operation/leaves"
+        ))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
+}
+
+/// Trace: FR-037-AC-1, TC-052. A sequence body has one element reference.
+#[test]
+fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
+    let (_, mut wire, ids) = corpus_package().read_resolved();
+    let node_id = ids.resolve(&code_id(SEQ_R_FLOAT));
+    let bound = ids.resolve(&code_id(CB_SMALL));
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("nodes");
+    let position = nodes
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("sequence");
+    nodes[position]["body"]["members"]
+        .as_array_mut()
+        .expect("members")
+        .push(json!({
+            "term": "reference",
+            "target": {"domain": bound.domain, "digest": bound.digest},
+        }));
+    let draft: Vec<CheckedSemanticNodeV2> =
+        serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("draft nodes");
+    assert!(matches!(
+        derive_structural_candidates(
+            &draft,
+            quire_contract_model::CheckedPackageReadLimits::bounded().bytes,
+            quire_contract_model::CheckedPackageReadLimits::bounded().work,
+        ),
+        Err(StructuralCandidateError::InvalidClosedShape { position: refused, node_id: invalid })
+            if refused == position && invalid == node_id
+    ));
+    let result = read_mutated_wire(wire);
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("two-reference sequence unexpectedly admitted: {result:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::StaleNodeKey)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
+}
 
 struct TemporaryDirectory(PathBuf);
 
@@ -280,6 +357,8 @@ fn assert_recursive_item_generation(
     let oracles = generate(&package, &items);
     let list_claim = generated(only_claim(&oracles, E_QSPEC_LIST));
     let tree_claim = generated(only_claim(&oracles, E_QSPEC_TREE));
+    let list = package.ids.resolve(&list);
+    let tree = package.ids.resolve(&tree);
     assert_eq!(list_claim.declaration_keys, vec![list.clone()]);
     assert_eq!(tree_claim.declaration_keys, vec![tree.clone()]);
     let lib = contents(&oracles, "src/lib.rs");
@@ -367,16 +446,23 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     use crate::common::byte_ceiling::{
         limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
     };
-    const CHAIN: u32 = 150;
+    const REQUESTS: u32 = 40;
 
-    let mut builder = corpus_package();
-    builder.boolean_equality_chain(CHAIN);
-    let items = (0..CHAIN)
+    let builder = byte_ceiling_package();
+    // One admitted node under distinct descriptors keeps the checked wire
+    // small while each requested feature adds its own lowering accounting.
+    // The first descriptor is valid, so the exact-length control generates.
+    let items = (0..REQUESTS)
         .map(|offset| {
+            let left = if offset == 0 {
+                typed(T_BOOLEAN)
+            } else {
+                EqualityOperandDescriptor::typed(id(&key(30_000 + offset)))
+            };
             item(
-                BYTE_CHAIN_BASE + offset,
+                BYTE_CHAIN_BASE,
                 EqualityOperatorKind::Equal,
-                typed(T_BOOLEAN),
+                left,
                 typed(T_BOOLEAN),
             )
         })
@@ -392,10 +478,12 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
 
     let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
     let measured = admit_with(&builder, limits_under(LARGEST_CEILING));
-    let requested = (0..CHAIN)
-        .map(|offset| measured.key(BYTE_CHAIN_BASE + offset))
-        .collect::<Vec<_>>();
-    let lowered_length = lowered_package_length(&measured, &requested, &measuring_profile(false));
+    let requested = vec![measured.key(BYTE_CHAIN_BASE); items.len()];
+    let lowered_length = lowered_package_length(
+        &measured,
+        &requested,
+        &measuring_profile(false, "quire.codegen.composite-equality/v1"),
+    );
     let ceiling = lowered_length - 1;
     assert!(
         ceiling >= checked_length,
@@ -403,11 +491,19 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
          ({checked_length} bytes), so a ceiling one byte below it admits the checked package"
     );
     // At the lowered package's own length no record fails for bytes: the ceiling is exact.
-    assert!(generate_under(lowered_length)
+    let exact = generate_under(lowered_length);
+    assert!(exact
         .claim_map
         .items
         .iter()
         .all(|claim| byte_refusal(claim).is_none()));
+    assert!(exact.claim_map.items.iter().any(|claim| {
+        matches!(
+            &claim.result,
+            ClaimDisposition::Generated(generated)
+                if generated.descriptor.left_source_type == measured.key(T_BOOLEAN)
+        )
+    }));
 
     let oracles = generate_under(ceiling);
     assert_eq!(oracles.claim_map.items.len(), items.len());
@@ -592,6 +688,29 @@ fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
     // here exercises `EqualitySchedule::Quantity`.
 }
 
+/// Trace: FR-018-AC-4, FR-018-AC-16, TC-029. Sequence cardinality comes from
+/// the admitted bound index, and its absence is a typed refusal.
+#[test]
+fn tc_029_a_sequence_without_a_separate_collection_bound_is_refused() {
+    let package = admit(unbounded_sequence_package());
+    let oracles = generate(
+        &package,
+        &[item(
+            E_COLLECTION,
+            EqualityOperatorKind::Equal,
+            typed(SEQ_INT),
+            typed(SEQ_INT),
+        )],
+    );
+    assert_eq!(
+        refused(only_claim(&oracles, E_COLLECTION)),
+        &CompositeEqualityRefusal::MissingBound {
+            bounded_type: oracles.key(SEQ_INT),
+            expected_form: "collection_bounds",
+        }
+    );
+}
+
 /// Trace: FR-018-AC-5, TC-029.
 #[test]
 fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
@@ -694,26 +813,13 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
 #[test]
 fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     let package = admit(corpus_package());
-    let requested = item(
-        E_NESTED_IEEE,
-        EqualityOperatorKind::Equal,
-        typed(SEQ_R_FLOAT),
-        typed(SEQ_R_FLOAT),
-    );
-    let oracles = generate(&package, std::slice::from_ref(&requested));
-    assert!(matches!(
-        refused(only_claim(&oracles, E_NESTED_IEEE)),
-        CompositeEqualityRefusal::IllTyped {
-            cause: IllTypedCauseKind::OperatorIneligible
-        }
-    ));
-
     // Reconstruct SEQ_R_FLOAT (a sequence of R_FLOAT { f: Float64 }) exactly
-    // as the runtime environment sees it, and confirm the refusal above
+    // as the runtime environment sees it, and confirm the reader refusal
+    // asserted by `tc_052_nested_ieee_equality_is_refused_by_reader`
     // agrees with an independent, direct `contains_ieee` call over that
     // reconstructed type at both its depths (the record field, and the
     // sequence wrapping it) rather than merely riding on the same code path.
-    let float_record_key = NodeKey::from_hex(&oracles.runtime_key(R_FLOAT)).unwrap();
+    let float_record_key = NodeKey::from_hex(package.key(R_FLOAT).digest.as_ref()).unwrap();
     let environment = TypeEnvironment::new(
         vec![CompositeDeclaration::new(
             float_record_key,
@@ -1327,6 +1433,10 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     // content (`LOWERED_NODE_PREIMAGE`), so it, `claims` and `source_map`
     // must agree regardless of which permissive profile computed them.
     let profile = CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.composite-equality/v1".into(),
+        },
         supported_tags: CheckedNodeTag::ALL.iter().copied().collect::<BTreeSet<_>>(),
         require_bounds: false,
         work_limit: 10_000,
@@ -1456,7 +1566,14 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
         through_scalars.contains("rt::ValueType::Decimal(")
             && through_scalars.contains("rt::ValueType::Rational(")
     );
-    assert_eq!(through_domains, through_scalars);
+    for reconstruction in [
+        "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
+        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, rt::RoundingMode::NearestEven)?)",
+        "rt::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
+    ] {
+        assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
+        assert!(through_domains.contains(reconstruction), "domain member: {reconstruction}");
+    }
 }
 
 /// Trace: FR-018-AC-16, TC-029. A `bounded_domain` member reads its own bound and never a sibling
@@ -1491,40 +1608,82 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
     }
 }
 
-/// Trace: FR-018-AC-16, FR-018-AC-6, TC-029. A tuple member typed by a `float_rounding`
-/// `bounded_domain` over a float scalar, as QSL emits a float type, reads as that float, so the
-/// equality is refused by `check_equality` as operator-ineligible, not as an unsupported bound.
+/// Trace: FR-018-AC-16, FR-018-AC-6, TC-029. A tuple containing IEEE is
+/// refused by the checked reader before equality generation.
 #[test]
 fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
-    assert!(matches!(
-        tuple_refusal(&[BD_FLOAT_ROUNDING], &[BD_FLOAT_ROUNDING, BD_TEXT]).0,
-        CompositeEqualityRefusal::IllTyped {
-            cause: IllTypedCauseKind::OperatorIneligible
-        }
-    ));
+    let (result, wire, ids) =
+        tuple_members_package(&[BD_FLOAT_ROUNDING], &[BD_FLOAT_ROUNDING, BD_TEXT]).read_resolved();
+    let node_id = ids.resolve(&code_id(E_TUPLE));
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .position(|node| node["node_id"]["digest"].as_str() == Some(node_id.digest.as_ref()))
+        .expect("tuple equality");
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("IEEE tuple unexpectedly admitted: {result:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::IllTyped);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperatorIneligible)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!(
+            "/semantic_graph/nodes/{position}/body/operation/leaves"
+        ))
+    );
+    assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-018-AC-16, TC-029. A `bounded_domain` over a boolean scalar (which reads no bound
-/// form), or over a base that is not a `scalar_type` (QSL's enum declaration, a record) is
-/// refused as unsupported, naming the bound node.
+/// Trace: FR-018-AC-16, TC-029. The original bounded-domain negatives over
+/// Boolean, an enum, and a record are rejected by the checked reader.
 #[test]
 fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
-    for (extra_nodes, bound) in [
-        (vec![BD_BOOLEAN], BD_BOOLEAN),
-        (vec![BD_ENUM], BD_ENUM),
-        (vec![BD_OVER_COMPOSITE], BD_OVER_COMPOSITE),
-    ] {
-        let (refusal, ids) = tuple_refusal(&extra_nodes, &[bound, BD_TEXT]);
-        match refusal {
-            CompositeEqualityRefusal::Unsupported {
-                unsupported_node_id,
-                node_tag,
-            } => {
-                assert_eq!(unsupported_node_id, ids.resolve(&code_id(bound)));
-                assert_eq!(node_tag, "bounded_domain");
-            }
-            other => panic!("bound {bound}: expected Unsupported, got {other:?}"),
-        }
+    for bound in [BD_BOOLEAN, BD_ENUM, BD_OVER_COMPOSITE] {
+        let (_, mut wire, ids) = corpus_package().read_resolved();
+        let authored = tuple_members_package(&[bound], &[bound, BD_TEXT]).raw_wire();
+        let mut bad = authored["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("authored nodes")
+            .iter()
+            .find(|node| node["node_id"]["digest"] == key(bound))
+            .expect("authored bad bound")
+            .clone();
+        ids.resolve_value(&mut bad);
+        let nodes = wire["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes");
+        let position = nodes.len();
+        nodes.push(bad);
+        let node_id = code_id(bound);
+        let draft: Vec<CheckedSemanticNodeV2> =
+            serde_json::from_value(wire["semantic_graph"]["nodes"].clone()).expect("draft nodes");
+        assert!(matches!(
+            derive_structural_candidates(
+                &draft,
+                quire_contract_model::CheckedPackageReadLimits::bounded().bytes,
+                quire_contract_model::CheckedPackageReadLimits::bounded().work,
+            ),
+            Err(StructuralCandidateError::InvalidClosedShape { position: refused, node_id: invalid })
+                if refused == position && invalid == node_id
+        ));
+        let result = read_mutated_wire(wire);
+        let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+            panic!("bound {bound} unexpectedly admitted: {result:?}");
+        };
+        assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+        assert_eq!(
+            refusal.cause,
+            Some(CheckedPackageRefusalCause::StaleNodeKey)
+        );
+        assert_eq!(
+            refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+            Some(format!("/semantic_graph/nodes/{position}/node_id"))
+        );
+        assert_eq!(refusal.locus, Some(node_id));
     }
 }
 

@@ -2,10 +2,9 @@
 //!
 //! Contract IR fails every requested record for `bytes` when the canonical length of the lowered
 //! contract package of a call exceeds the ceiling the checked package was read under. A package
-//! read under such a ceiling must still be admitted, so the fixtures need a lowered package that
-//! is longer than the checked package: a chain of nodes each reaching the one before lists its
-//! whole closure in its `dependencies`, which grows quadratically while the checked package
-//! grows linearly.
+//! read under such a ceiling must still be admitted, so each fixture measures both lengths and
+//! uses a request set whose per-request accounting makes the lowered package longer. Contract IR
+//! V1 represents each reached graph node only once even when a record has a large closure.
 
 use std::collections::BTreeSet;
 
@@ -30,8 +29,12 @@ pub fn limits_under(bytes: u64) -> CheckedPackageReadLimits {
 /// expressions over values and scalar types, which every generator's own profile lowers alike,
 /// so the length measured here is the length of the call the generator itself makes; the
 /// fixtures then assert the ceiling one byte below it refuses and the length itself does not.
-pub fn measuring_profile(require_bounds: bool) -> CompleteLoweringProfileV2 {
+pub fn measuring_profile(require_bounds: bool, identity: &str) -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: identity.into(),
+        },
         supported_tags: BTreeSet::from([
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,
