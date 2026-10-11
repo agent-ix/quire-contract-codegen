@@ -67,6 +67,7 @@ input decision to expression and contract claims.
 | Bound numeric and state strategies | FR-008 to FR-013, NFR-004 | TC-017 to TC-022 |
 | Complete-V1 oracles | FR-014 scalar, FR-018 composite equality, FR-021 function application | TC-024, TC-029, TC-031 |
 | Checked-package fixture identity ownership | [FR-037](core/functional/FR-037-fixture-identity.md) application and nominal fixture identities | [TC-052](core/matrix/TC-052-fixture-identity.md) planned consumer regression |
+| Typed V2 operator selection | [FR-038](core/functional/FR-038-typed-operator-catalog.md) internal CG catalog over IR-admitted identities | Criterion-tagged V2 oracle and Kani consumer tests planned |
 | Caller Text admission | [FR-035](oracle/functional/FR-035-caller-text-admission.md) proposed generated admission oracle and bounded proof; [FR-017](kani/functional/FR-017-kani-execution-evidence.md) planned caller-harness execution evidence | [TC-050](oracle/matrix/TC-050-caller-text-admission.md) planned runtime and real-Kani checks |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification |
