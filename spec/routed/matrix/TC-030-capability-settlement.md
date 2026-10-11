@@ -47,15 +47,21 @@ Boolean/integer expression form. For state and frame items, cover before and
 after reads, granted and forbidden fields, and each typed role. For collections
 and graphs, cover bounded and unbounded roots and every admitted finite shape.
 
-Run each valid in-set form against a bounded Kani candidate advertising the
-required mode and verify `supported`. Against a bounded-only candidate, run an
-unbounded form with and without a finite bound and verify `requires-bound` or
-the typed unbounded refusal as AC-31 specifies. Run typed forms outside the
-complete V1/V2 set and malformed in-set forms as separate controls; the former
-settles `unsupported`, warned, with
-`unsupported_projection`/`unsupported-requested-capability` naming its typed
-form before generation, while the latter keeps its FR-015 validation cause.
-Verify no refused form emits an artifact or invokes a generator.
+Run every typed form selected by an Implemented subpath against a bounded Kani
+candidate advertising the required mode and verify `supported`. For each
+Planned subpath below, construct the exact tag/form/operation/role selector in
+its row, confirm it does not match an Implemented subpath, and use a valid
+bounded request. Verify AC-33: settlement is `unsupported`, carries only that
+row's exact typed source refusal, and emits no artifact. Never accept
+`supported` for a Planned subpath. Against a bounded-only candidate, run an
+implemented unbounded form with and without a finite bound and verify
+`requires-bound` or the typed unbounded refusal as AC-31 specifies. Run typed
+forms outside the complete
+V1/V2 set and malformed in-set forms as separate controls; the former settles
+`unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability`
+naming its typed form before generation, while the latter keeps its FR-015
+validation cause. Verify no refused form emits an artifact or invokes a
+generator.
 
 Exercise the V2 clause path separately: use `state`/`state_clause` nodes with
 `operation.member.clause` equal to `precondition`, `postcondition` or
@@ -140,9 +146,16 @@ Every variant of the closed backend kind has a dispatched arm.
 No settlement other than `supported` routes a backend, and a manifest repeating an
 identity routes none.
 
-Under FR-019-AC-25 through AC-32, every complete-V1 family and role has a
-valid bounded case that settles `supported` under the required advertisement,
-and the typed out-of-set controls refuse before generation. V2 clause forms
+Under FR-019-AC-25 through AC-33, every Implemented typed subpath has a valid
+bounded case that settles `supported` under the required advertisement. For
+each Planned typed selector, the result is `unsupported` with exactly the
+single cause in that selector's status-register row; no family-level result
+substitutes for checking the exact selector, and no Planned selector settles
+`supported` until its renderer is implemented. In particular, the negated
+StateFrame contract selector returns `ConditionNotSupported`, while the
+all-fields-granted StateFrame frame selector returns `NothingForbidden`; each
+is wrapped in `StateFrameRefused` and neither changes the other role's result.
+The typed out-of-set controls refuse before generation. V2 clause forms
 defined by FR-015-AC-38 through AC-42 are separately admitted or refused
 deterministically. A form refusal names the typed form and precedes extent/mode
 settlement after candidate validation. Empty, ambiguous and mode/extent cases
@@ -167,25 +180,29 @@ Passing generic mode-table controls alone does not complete this collection case
 
 ## FR-019-AC-25 implementation status
 
-The status register describes implementation state against the complete normative set in FR-019-AC-25. A subset marked implemented does not reduce the criterion's scope.
+The status register describes typed subpaths against the complete normative set in FR-019-AC-25. A Planned subpath is disjoint from every Implemented subpath; its selector and one current refusal cause are explicit. A subset marked Implemented does not reduce AC-25's scope.
 
-| Form family | STATUS | Implemented subset or planned owner |
-|---|---|---|
-| Boolean scalar | Implemented (subset) | V1 Boolean clause expressions. |
-| Boolean scalar | Planned | Remaining typed Boolean scalar forms; IR-269. |
-| Integer scalar | Implemented (subset) | V1 bounded-integer clauses and V2 confirmed add/subtract/multiply/negate. |
-| Integer scalar | Planned | Remaining integer operation forms; IR-269. |
-| Rational scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
-| Decimal scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
-| IEEE-float scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
-| Text scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
-| Enum scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
-| Quantity scalar | Planned | IR-269; current scalar Kani renderer returns typed `OperationNotRendered` where no renderer exists. |
-| Record and tuple composite equality | Planned | IR-264 and IR-241; FR-015-AC-69 through AC-76 define bounded-shadow work. |
-| Function application | Implemented (subset) | Integer scalar function application under FR-015-AC-37. |
-| Function application | Planned | Remaining function families; IR-269. |
-| Precondition, postcondition and invariant clauses | Implemented (subset) | Frozen V1 `BoundClause` Boolean/bounded-integer subset. |
-| Precondition, postcondition and invariant clauses | Planned | Complete V1 family coverage and V2 clause claims; IR-269 and IR-489. |
-| Frame clauses, state before/after and frame obligations | Implemented (subset) | Restricted V2 postcondition state/frame roles under FR-015-AC-26 through AC-29 and AC-66 through AC-68. |
-| Frame clauses, state before/after and frame obligations | Planned | Complete V1 and remaining state/frame forms; IR-269. |
-| Bounded collections and graphs | Planned | IR-269; FR-019-AC-24 is negotiation-only and does not claim generation support. |
+| Typed form subpath selector | STATUS | Implemented subset or planned owner | Exact current refusal cause for this subpath |
+|---|---|---|---|
+| V1 `BoundClause`, Boolean clause root, Boolean/bounded-integer dependencies, supported connectives/comparisons | Implemented | FR-015-AC-14, AC-20 and AC-21. | — |
+| V1 `BoundClause`, precondition/postcondition/invariant, Boolean root with a rational, decimal, IEEE-float, text, enum or quantity dependency, and zero definedness obligations | Planned (IR-269) | Remaining V1 scalar clause domains that reach Boolean oracle lowering. | `ClauseLowering { generation_code: UnsupportedDependency }` (`lower_clause` maps `typed_dependency_parameters`' diagnostic after the zero-obligations check). |
+| V2 `expression` claim, `OperationProvenance::IrConfirmed`, identity `quire.op.integer.add`, `.sub`, `.mul` or `.negate`, valid `i64` bounds | Implemented | `scalar::lower_scalar_claim`. | — |
+| Boolean scalar `expression` claim, IR-confirmed generated claim, operation identity other than the four implemented integer identities above | Planned (IR-269) | Remaining typed Boolean scalar operations. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Integer scalar `expression` claim, IR-confirmed generated claim, operation identity other than the four implemented integer identities above | Planned (IR-269) | Remaining typed integer operations. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Rational scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Rational scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Decimal scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Decimal scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| IEEE-float scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | IEEE-float scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Text scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Text scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Enum scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Enum scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Quantity scalar `expression` claim, IR-confirmed generated claim | Planned (IR-269) | Quantity scalar operation forms. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Record/tuple equality claim with a derivable IR-confirmed operation and bounded shadow shape | Planned (IR-264, IR-241) | FR-015-AC-69 through AC-76. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer` for the non-integer renderer). |
+| Record/tuple equality claim whose derivation returns `ExactScalarRefusal::NoDerivableClaim` | Planned (IR-264, IR-241) | Refusal subpath for composite equality. | `NoDerivableClaim` (`classify_claim`). |
+| Integer scalar function application with FR-015-AC-37's operation/result contract | Implemented | FR-015-AC-37. | — |
+| Function claim with IR-confirmed generated operation identity outside the four `ScalarOperation` identities above | Planned (IR-269) | Remaining function families. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| V1 `BoundClause` with one or more expression definedness obligations, regardless of operand type | Planned (IR-269) | Definedness-bearing V1 clause forms. | `DefinednessNotEncoded { obligations }` (`lower_clause` checks this first and reports the exact obligation count). |
+| V1 frame obligation passed to the clause renderer as `ObligationKind::Frame` | Planned (IR-269) | V1 frame clauses. | `FrameNotClauseRendered` (`negotiate::render`). |
+| V2 `state`/`state_clause` claim sent through the scalar-claim path and refused by exact-scalar lowering as unsupported node family | Planned (IR-489) | V2 contract clause claim. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
+| V2 `StateFrame` contract role for a `postcondition` whose Boolean condition is a negation of a supported pre/post integer comparison | Planned (IR-269) | Negated state-clause comparison form; FR-015-AC-63 names this refusal shape. | `StateFrameRefused { ConditionNotSupported }` (`generate_state_frame_role`, FR-015-AC-63). |
+| V2 `StateFrame` frame role for a `postcondition` whose frame grants every state field | Planned (IR-269) | All-fields-granted frame form; FR-015-AC-63 and AC-68 name this refusal shape. | `StateFrameRefused { NothingForbidden }` (`generate_state_frame_role`, FR-015-AC-63 and AC-68). |
+| Collection/graph claim whose IR-confirmed generated operation identity has no `ScalarOperation` renderer | Planned (IR-269) | Bounded collection and graph operations outside the integer renderer. | `OperationNotRendered` (`classify_claim` maps `ScalarLoweringRefusal::NoRenderer`). |
+| Collection/graph claim node refused by exact-scalar lowering as an unsupported node family | Planned (IR-269) | No-finite-encoding subpath for collection/graph nodes. | `NoFiniteEncoding` (`classify_claim` maps `ExactScalarRefusal::Unsupported`). |
