@@ -4,10 +4,10 @@
 use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
 use crate::{
-    core::artifact::MAX_GENERATED_SOURCE_BYTES,
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     kani::abi::{adapter_options, i64_literal, readable_component, KaniSolver},
     kani::generate::outcome::{DerivedDomain, KaniObligationRequest, UnsupportedObligation},
-    kani::generate::record::{artifact, harness_path, record},
+    kani::generate::record::{harness_path, record},
     kani::identity::{
         KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
     },
@@ -470,7 +470,7 @@ mod {module} {{\n\
             error: error.to_string(),
         });
     }
-    let rust = artifact(
+    let rust = Artifact::new(
         format!("src/generated/{}.rs", lowered.module_symbol),
         source,
     );

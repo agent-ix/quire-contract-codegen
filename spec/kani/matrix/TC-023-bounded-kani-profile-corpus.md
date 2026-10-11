@@ -56,9 +56,16 @@ finite-graph case expands identities in sorted depth-first order: a branch explo
 target branch consumes its expansion budget, while a target on an edge of the current identity
 is found without expanding the target. The generated graph oracle uses the same order and bound.
 Every generated `#[kani::proof]` symbol carries its corpus case's name: the family label
-plus the SHA-256 of the case's canonical content (construct, every request field, the finite
+plus the SHA-256 of the case's canonical content (run ceilings, construct, every request field, the finite
 input with its objects and references in sorted order, the profile selection and the
-normalized dependency census), the same name its artifact paths carry. The same request
+normalized dependency census), the same name its artifact paths carry. The preimage
+uses RFC 8785 canonical bytes without a trailing newline for the digest, bounded to 1 MiB;
+signed `i128` request values are decimal strings in that preimage so no finite value is rounded.
+The proof graph is RFC 8785 canonical JSON followed by one newline, bounded to 16 MiB including
+the newline; an oversized graph refuses before its JSON tree is materialized. An unencodable
+preimage (including one over the 1 MiB ceiling) refuses as `InvalidInput`
+`kani_corpus_identity_unencodable` before lowering or claiming a registry identity, and an unencodable graph refuses as `Refused`
+`kani_corpus_serialization_failed` without artifacts or a registry claim. The same request
 names the same artifacts in any emission order and any run, and the same graph offered in
 another object or reference order names the same ones. Varying any single one of those
 fields names different artifacts. A request emitted twice through one registry is refused

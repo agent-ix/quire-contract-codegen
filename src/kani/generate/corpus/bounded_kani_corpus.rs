@@ -8,7 +8,7 @@
 
 use std::{collections::BTreeSet, fmt::Write as _};
 
-use qsl_replay::ByteDigest;
+use quire_canonical::FixedShape;
 use quire_contract_ir::kani::{
     DispatchIndex, FiniteInput, FiniteObject, FiniteReference, KaniOutcome, KaniOutcomeError,
     KaniOutcomeKind, KaniProfile, PopulationCompleteness, ProfileSelection, ResourceBounds,
@@ -18,12 +18,15 @@ use quire_contract_model::{std001_code, Std001Code};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::artifact::Artifact,
+    core::{
+        artifact::Artifact,
+        canonical::{artifact_json, content_digest, DigestError},
+    },
     kani::census::{
         dependency_readiness, normalize_dependencies, ProofDependencyEdge, ProofDependencyKind,
-        ProofDependencyRequest, ProofReadiness,
+        ProofDependencyRequest, ProofDependencyState, ProofReadiness,
     },
-    kani::generate::census_validation::{deterministic_json, validate_dependencies},
+    kani::generate::census_validation::validate_dependencies,
     kani::generate::lower::{
         bounded_collections::{prepare_bounded_collection_query, CollectionQuery, QueryKind},
         definedness_arithmetic::{
@@ -148,6 +151,8 @@ pub struct CorpusProofDependencyGraph {
     pub dependencies: Vec<ProofDependencyEdge>,
 }
 
+impl crate::core::canonical::ArtifactJsonRecord for CorpusProofDependencyGraph {}
+
 /// Registry of the corpus case identities emitted into one output tree.
 ///
 /// A case's identity is the SHA-256 of its canonical request content: the
@@ -176,28 +181,131 @@ impl EmittedCorpusIdentities {
 }
 
 /// The canonical content one corpus case is identified by.
-#[derive(Serialize)]
+#[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 struct CaseIdentity<'a> {
-    ceilings: crate::kani::identity::ProofCeilings,
+    ceilings: CeilingsIdentity,
     construct: &'static str,
-    profile: &'a ProfileSelection,
+    profile: ProfileIdentity<'a>,
     input: InputIdentity<'a>,
     request: RequestIdentity<'a>,
-    dependencies: &'a [ProofDependencyEdge],
+    dependencies: Vec<DependencyIdentity<'a>>,
+}
+
+/// The same serialized fields as the run ceilings, without a foreign `Duration` in the digest
+/// preimage. Each nested field is explicit so `FixedShape` checks the complete preimage depth.
+#[derive(Serialize, FixedShape)]
+#[serde(rename_all = "camelCase")]
+struct CeilingsIdentity {
+    memory_bytes: u64,
+    wall_clock: DurationIdentity,
+}
+
+#[derive(Serialize, FixedShape)]
+struct DurationIdentity {
+    secs: u64,
+    nanos: u32,
+}
+
+impl From<crate::kani::identity::ProofCeilings> for CeilingsIdentity {
+    fn from(ceilings: crate::kani::identity::ProofCeilings) -> Self {
+        Self {
+            memory_bytes: ceilings.memory_bytes.get(),
+            wall_clock: DurationIdentity {
+                secs: ceilings.wall_clock.as_secs(),
+                nanos: ceilings.wall_clock.subsec_nanos(),
+            },
+        }
+    }
+}
+
+#[derive(Serialize, FixedShape)]
+struct ProfileIdentity<'a> {
+    profile: &'a str,
+    revision: &'a str,
+    abi_revision: &'a str,
+}
+
+impl<'a> From<&'a ProfileSelection> for ProfileIdentity<'a> {
+    fn from(selection: &'a ProfileSelection) -> Self {
+        let ProfileSelection {
+            profile,
+            revision,
+            abi_revision,
+        } = selection;
+        Self {
+            profile,
+            revision,
+            abi_revision,
+        }
+    }
+}
+
+#[derive(Serialize, FixedShape)]
+struct BoundsIdentity {
+    max_objects: usize,
+    max_references: usize,
+    max_input_bytes: usize,
+}
+
+impl From<&ResourceBounds> for BoundsIdentity {
+    fn from(bounds: &ResourceBounds) -> Self {
+        let ResourceBounds {
+            max_objects,
+            max_references,
+            max_input_bytes,
+        } = bounds;
+        Self {
+            max_objects: *max_objects,
+            max_references: *max_references,
+            max_input_bytes: *max_input_bytes,
+        }
+    }
+}
+
+#[derive(Serialize, FixedShape)]
+#[serde(rename_all = "camelCase")]
+struct DependencyIdentity<'a> {
+    proof_id: &'a str,
+    kind: &'static str,
+    state: &'static str,
+    source_site: Option<&'a str>,
+}
+
+impl<'a> From<&'a ProofDependencyEdge> for DependencyIdentity<'a> {
+    fn from(edge: &'a ProofDependencyEdge) -> Self {
+        let kind = match edge.kind {
+            ProofDependencyKind::Required => "required",
+            ProofDependencyKind::Assumed => "assumed",
+            ProofDependencyKind::Stubbed => "stubbed",
+        };
+        let state = match edge.state {
+            ProofDependencyState::Passed => "passed",
+            ProofDependencyState::Missing => "missing",
+            ProofDependencyState::Failed => "failed",
+            ProofDependencyState::Assumed => "assumed",
+            ProofDependencyState::Stubbed => "stubbed",
+        };
+        Self {
+            proof_id: &edge.proof_id,
+            kind,
+            state,
+            source_site: edge.source_site.as_deref(),
+        }
+    }
 }
 
 /// Every field of a [`BoundedCorpusRequest`], including those the rendered oracle does not read.
-#[derive(Serialize)]
+#[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 enum RequestIdentity<'a> {
     Arithmetic {
         source_id: &'a str,
         operator: &'static str,
-        left: i128,
-        right: i128,
-        minimum: i128,
-        maximum: i128,
+        left: String,
+        right: String,
+        minimum: String,
+        maximum: String,
     },
     Graph {
         source_id: &'a str,
@@ -208,17 +316,17 @@ enum RequestIdentity<'a> {
     },
     Collection {
         source_id: &'a str,
-        values: &'a [i128],
+        values: Vec<String>,
         max_items: usize,
         kind: QueryKindIdentity,
     },
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 enum QueryKindIdentity {
     ForAllNonNegative,
-    ExistsEqual(i128),
+    ExistsEqual(String),
 }
 
 impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
@@ -238,10 +346,10 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                 Self::Arithmetic {
                     source_id,
                     operator: checked_method(*operator),
-                    left: *left,
-                    right: *right,
-                    minimum: *minimum,
-                    maximum: *maximum,
+                    left: left.to_string(),
+                    right: right.to_string(),
+                    minimum: minimum.to_string(),
+                    maximum: maximum.to_string(),
                 }
             }
             BoundedCorpusRequest::Graph(request) => {
@@ -269,12 +377,12 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
                 } = request;
                 Self::Collection {
                     source_id,
-                    values,
+                    values: values.iter().map(ToString::to_string).collect(),
                     max_items: *max_items,
                     kind: match kind {
                         QueryKind::ForAllNonNegative => QueryKindIdentity::ForAllNonNegative,
                         QueryKind::ExistsEqual(expected) => {
-                            QueryKindIdentity::ExistsEqual(*expected)
+                            QueryKindIdentity::ExistsEqual(expected.to_string())
                         }
                     },
                 }
@@ -285,14 +393,14 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
 
 /// A [`FiniteInput`] with its population order removed: the rendered oracle sorts the reference
 /// edges it reads, so the same graph offered in another order is the same case.
-#[derive(Serialize)]
+#[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 struct InputIdentity<'a> {
     model_id: &'a str,
     source_id: &'a str,
-    profile: &'a ProfileSelection,
-    completeness: &'a PopulationCompleteness,
-    bounds: &'a ResourceBounds,
+    profile: ProfileIdentity<'a>,
+    completeness: &'static str,
+    bounds: BoundsIdentity,
     input_bytes: usize,
     /// `(identity, type_id, snapshot_id)`, sorted.
     objects: Vec<(&'a str, &'a str, &'a str)>,
@@ -339,9 +447,12 @@ impl<'a> From<&'a FiniteInput> for InputIdentity<'a> {
         Self {
             model_id,
             source_id,
-            profile,
-            completeness,
-            bounds,
+            profile: ProfileIdentity::from(profile),
+            completeness: match completeness {
+                PopulationCompleteness::Complete => "complete",
+                PopulationCompleteness::Incomplete => "incomplete",
+            },
+            bounds: BoundsIdentity::from(bounds),
             input_bytes: *input_bytes,
             objects,
             references,
@@ -350,11 +461,10 @@ impl<'a> From<&'a FiniteInput> for InputIdentity<'a> {
 }
 
 impl CaseIdentity<'_> {
-    /// Lowercase hex SHA-256 over this content's deterministic JSON bytes.
-    fn digest(&self) -> String {
-        let bytes = deterministic_json(self)
-            .expect("a corpus case identity is plain finite data with no fallible conversion");
-        format!("{:x}", ByteDigest::of(bytes.as_bytes()))
+    /// Lowercase hex SHA-256 over this content's RFC 8785 bytes, without a newline.
+    fn digest(&self) -> Result<String, DigestError> {
+        let digest = content_digest(self)?;
+        Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
     }
 }
 
@@ -575,14 +685,24 @@ pub fn generate_bounded_kani_corpus_case(
     let normalized_dependencies = normalize_dependencies(dependencies);
     // Computed before lowering consumes the request; recorded only after lowering succeeds.
     let identity = CaseIdentity {
-        ceilings,
+        ceilings: CeilingsIdentity::from(ceilings),
         construct: family.construct(),
-        profile: profile.selection(),
+        profile: ProfileIdentity::from(profile.selection()),
         input: InputIdentity::from(input.input()),
         request: RequestIdentity::from(&request),
-        dependencies: &normalized_dependencies,
+        dependencies: normalized_dependencies
+            .iter()
+            .map(DependencyIdentity::from)
+            .collect(),
     }
-    .digest();
+    .digest()
+    .map_err(|_| {
+        CorpusRefusal::InvalidInput.raise(
+            std001_code!("kani_corpus_identity_unencodable"),
+            request_source_id.clone(),
+            revision.clone(),
+        )
+    })?;
     let (value, oracle_body) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
@@ -759,7 +879,8 @@ fn render_artifacts(
         readiness: dependency_readiness(dependencies),
         dependencies: dependencies.to_vec(),
     };
-    let proof_graph_contents = deterministic_json(&proof_graph_value)?;
+    let proof_graph_contents =
+        artifact_json(&proof_graph_value).map_err(|error| error.to_string())?;
     Ok(BoundedCorpusArtifacts {
         oracle: Artifact::new(format!("corpus/{name}.oracle.rs"), oracle),
         strategy: Artifact::new(format!("corpus/{name}.strategy.rs"), strategy),
@@ -794,6 +915,69 @@ mod tests {
         DispatchIndex,
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
+
+    /// Trace: AD-004 L-9, TC-023. The fixed-shape preimage projections keep the foreign
+    /// records' field spellings and enum values; only the intentional wide-integer strings
+    /// differ from the former corpus identity representation.
+    #[test]
+    fn tc_023_canonical_preimage_projections_keep_source_fields() {
+        let (profile, _, input) = fixture();
+        let ceilings = crate::kani::test_support::proof_ceilings::proof_ceilings();
+        assert_eq!(
+            serde_json::to_value(super::CeilingsIdentity::from(ceilings)).unwrap(),
+            serde_json::to_value(ceilings).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(super::ProfileIdentity::from(profile.selection())).unwrap(),
+            serde_json::to_value(profile.selection()).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(super::BoundsIdentity::from(&input.input().bounds)).unwrap(),
+            serde_json::to_value(&input.input().bounds).unwrap()
+        );
+        let edge = crate::kani::census::ProofDependencyEdge {
+            proof_id: "dependency".to_owned(),
+            kind: ProofDependencyKind::Required,
+            state: ProofDependencyState::Passed,
+            source_site: None,
+        };
+        assert_eq!(
+            serde_json::to_value(super::DependencyIdentity::from(&edge)).unwrap(),
+            serde_json::to_value(edge).unwrap()
+        );
+    }
+
+    /// Trace: AD-004 L-9, TC-023. The caller supplies the dependency census, so it can offer a
+    /// graph larger than one artifact. The counted preflight refuses before building a JSON tree.
+    #[test]
+    fn tc_023_large_dependency_graph_refuses_canonical_projection() {
+        let dependencies = (0..20_000)
+            .map(|index| crate::kani::census::ProofDependencyEdge {
+                proof_id: format!("dep_{index:05}_{}", "x".repeat(1024)),
+                kind: ProofDependencyKind::Required,
+                state: ProofDependencyState::Passed,
+                source_site: None,
+            })
+            .collect();
+        let graph = CorpusProofDependencyGraph {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            schema_version: CORPUS_PROOF_GRAPH_SCHEMA.to_owned(),
+            proof_id: "corpus_proof".to_owned(),
+            family: "collection".to_owned(),
+            construct: "bounded-collection-query".to_owned(),
+            identity: "collection_case".to_owned(),
+            readiness: ProofReadiness::Ready,
+            dependencies,
+        };
+        let error = crate::core::canonical::artifact_json(&graph)
+            .expect_err("the projection exceeds one artifact");
+        assert!(matches!(
+            error,
+            crate::core::canonical::ArtifactJsonError::Projection(ref source)
+                if source.is_io()
+                    && source.to_string().contains("exceeds the artifact ceiling")
+        ));
+    }
 
     /// Trace: FR-028-AC-1.
     #[test]
@@ -1481,6 +1665,47 @@ mod tests {
             max_items,
             kind: QueryKind::ExistsEqual(7),
         })
+    }
+
+    /// Trace: TC-023, NFR-005-AC-1. The canonical preimage keeps both adjacent wide i128
+    /// values exactly by spelling them as decimal strings, so the identity never rounds them.
+    #[test]
+    fn tc_023_wide_request_values_are_exact_canonical_strings() {
+        let first_request = arithmetic("wide", (1_i128 << 53) + 1, 0);
+        let second_request = arithmetic("wide", (1_i128 << 53) + 2, 0);
+        let first = super::RequestIdentity::from(&first_request);
+        let second = super::RequestIdentity::from(&second_request);
+        let first_bytes = crate::core::canonical::content_bytes(&first).expect("string preimage");
+        let second_bytes = crate::core::canonical::content_bytes(&second).expect("string preimage");
+        assert_ne!(first_bytes, second_bytes);
+        assert!(first_bytes
+            .windows(b"9007199254740993".len())
+            .any(|part| part == b"9007199254740993"));
+        assert!(second_bytes
+            .windows(b"9007199254740994".len())
+            .any(|part| part == b"9007199254740994"));
+    }
+
+    /// Trace: TC-023, NFR-005-AC-1. An over-bound canonical preimage returns the typed input
+    /// refusal before lowering or claiming a registry identity; a valid retry still admits.
+    #[test]
+    fn tc_023_unencodable_case_identity_refuses_without_claiming() {
+        let fixture = fixture();
+        let mut emitted = EmittedCorpusIdentities::new();
+        let source_id = "x".repeat(1 << 20);
+        let refusal = refusal_outcome(
+            emit(&fixture, collection(3, &source_id), &[], &mut emitted)
+                .expect_err("oversized preimage must refuse"),
+        );
+        assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
+        assert_eq!(
+            refusal.code,
+            std001_code!("kani_corpus_identity_unencodable")
+        );
+        assert!(emitted.0.is_empty());
+        emit(&fixture, collection(3, "source"), &[], &mut emitted)
+            .expect("a later valid case still admits");
+        assert_eq!(emitted.0.len(), 1);
     }
 
     /// A case's name, paths and `#[kani::proof]` symbol come from its request content, so the

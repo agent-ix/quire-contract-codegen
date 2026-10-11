@@ -281,7 +281,7 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
         )
     })?;
     Ok(GeneratedArtifactBundle {
-        rust: artifact(format!("src/generated/{function}.rs"), source),
+        rust: Artifact::new(format!("src/generated/{function}.rs"), source),
     })
 }
 
@@ -436,7 +436,7 @@ pub fn {function}() -> proptest::strategy::BoxedStrategy<{case_type}> {{\n\
         )
     })?;
     Ok(GeneratedArtifactBundle {
-        rust: artifact(format!("src/generated/{function}.rs"), source),
+        rust: Artifact::new(format!("src/generated/{function}.rs"), source),
     })
 }
 
@@ -819,8 +819,4 @@ fn diagnostic_with_generation(
         path: path.to_owned(),
         message: message.to_owned(),
     }
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }

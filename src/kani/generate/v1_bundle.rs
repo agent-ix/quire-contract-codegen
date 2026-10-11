@@ -21,8 +21,8 @@ use crate::{
         ProofDependencyKind, ProofDependencyRequest, ProofReadiness,
     },
     kani::generate::census_validation::{
-        deterministic_json, single_diagnostic, validate_dependencies, validate_path,
-        validate_plain_identity, KaniDiagnostic, KaniErrorCode,
+        single_diagnostic, validate_dependencies, validate_path, validate_plain_identity,
+        KaniDiagnostic, KaniErrorCode,
     },
     kani::generate::outcome::MAX_OBLIGATION_UNWIND,
     oracle::boolean_v1::{
@@ -104,6 +104,8 @@ pub struct ProofDependencyGraph {
     /// Sorted complete dependency census.
     pub dependencies: Vec<ProofDependencyEdge>,
 }
+
+impl crate::core::canonical::ArtifactJsonRecord for ProofDependencyGraph {}
 
 /// All-or-nothing Kani source and proof graph.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -259,7 +261,7 @@ pub fn generate_kani_bundle(
             &error.to_string(),
         )
     })?;
-    let rust = artifact(format!("src/generated/{symbol}.rs"), source);
+    let rust = Artifact::new(format!("src/generated/{symbol}.rs"), source);
     let graph_value = ProofDependencyGraph {
         ceilings: request.ceilings,
         schema_version: "quire.kani-proof-graph/v2".to_owned(),
@@ -274,14 +276,14 @@ pub fn generate_kani_bundle(
         source_artifact_path: rust.path.clone(),
         dependencies: normalized_dependencies,
     };
-    let graph_contents = deterministic_json(&graph_value).map_err(|message| {
+    let graph_contents = crate::core::canonical::artifact_json(&graph_value).map_err(|error| {
         single_diagnostic(
             KaniErrorCode::SerializationFailed,
             "generated.proof_graph",
-            &message,
+            &error.to_string(),
         )
     })?;
-    let proof_graph = artifact(format!("proof-graphs/{symbol}.json"), graph_contents);
+    let proof_graph = Artifact::new(format!("proof-graphs/{symbol}.json"), graph_contents);
     Ok(KaniArtifactBundle { rust, proof_graph })
 }
 
@@ -675,10 +677,6 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
         bounded_readable_component(requirement),
         bounded_readable_component(proof_id)
     )
-}
-
-fn artifact(path: String, contents: String) -> Artifact {
-    Artifact::new(path, contents)
 }
 
 #[cfg(test)]

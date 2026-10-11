@@ -59,7 +59,7 @@ then by how identity is asserted.
 | 1 | Checked package, `package_id` (`quire.package.semantic/v2`) | QSpec wire, QSL emits, IR re-derives on read | digest over the package's identity preimage |
 | 2 | Finite profile and input (`ProfileSelection`, `ValidatedFiniteInput`, `KaniOutcome` for refusals) | IR | profile revision selected with the ABI and module revisions |
 | 3 | Obligation: harness, bound domains, ceilings, oracle symbols (`KaniObligationIdentity`, `ScalarObligationIdentity`, and for frame harnesses `StateFrameIdentity`, `state_frame.rs`) | CG | JSON record persisted beside the harness; no digest is computed from it (gap E-1) |
-| 4 | Corpus case: `CaseIdentity` over construct, profile, input, request, dependencies | CG | lowercase SHA-256 over its deterministic JSON, which also names the artifact paths; collisions refused by `EmittedCorpusIdentities` (`bounded_kani_corpus.rs`, `kani_corpus_identity_collision`) |
+| 4 | Corpus case: `CaseIdentity` over ceilings, construct, profile, input, request, dependencies | CG | lowercase SHA-256 over its RFC 8785 canonical JSON without a trailing newline, which also names the artifact paths; unencodable preimages refuse as `kani_corpus_identity_unencodable` and collisions refuse as `kani_corpus_identity_collision` (`bounded_kani_corpus.rs`) |
 | 5 | Launch: argument vector, ceilings, launcher, harness-in-crate check (`execute_kani_obligation`, `kani_launch_command`, `launch_evidence`) | CG | harness source must appear byte for byte in the crate before launch (`kani_execution.rs`, FR-017 step 1) |
 | 6 | Run classification: `classify_kani_run` over the typed transcript to `KaniRunOutcome` | CG | one parser module, `kani_transcript.rs`; Kani's wording read nowhere else |
 | 7 | Terminal value: (`KaniRunOutcome` or `KaniOutcome`, replay settlement) to `qsl_replay::TerminalValue`. The input is the pair, not the Kani outcome alone. For a counterexample the second member is the E9 replay result, as ADR-013 C-09 states it (QSL-354, merged): (1) settled, with parity settled inside `replay`: a reproduced replay gives `Refuted`, and a disagreement (or a replay that completes no value) gives `Inconclusive(InconclusiveCause::ReplayParity)` (code `replay_parity`), carrying the replay's `DisagreementCause`. (2) A non-fault `ReplayRefusal` (identity mismatch, decode refusal, stale dependency, limit reached) gives `Inconclusive(InconclusiveCause::ReplayRefused)` (code `replay_refused`) carrying the refusal's catalog code: only QSL's closed set of `ReplayRefusal` codes, never a CG code. (3) A fault gives `TerminalValue::Failed`, so a defect stays loud. A refuted Kani outcome never becomes `Refuted` without a reproduced replay. A fault is a fault wherever it sits in the chain, not only as the variant `ReplayRefusal::Fault`: QSL also reports `ReplayRefusal::Admission(AdmissionFailure::Fault(_))` (catalog code `runtime_invariant`, `execute.rs`) and `CallSiteRefusal::Fault` (`call_site.rs`), which reaches CG directly and wrapped in `ReplayPackageError::CallSite`, `FrameReplayError::CallSite` and `StateClauseReplayError::CallSite`, and a `ReplayRefusal` fault (either form) wrapped in `SpineReplayError::Refused`, `FrameReplayError::Refused` or `StateClauseReplayError::Refused`; the map classifies by walking the whole error, not by its top variant. CG's own failures before any replay runs also need a value (below). Merged QSL text agrees: ADR-011 T-13 and ADR-013 O-16, O-24 and C-09 say the driver runs the Kani obligation and the replay, passes both to CG's map, and writes each item's FR-331 terminal record. The two inconclusive causes `replay_parity` and `replay_refused` are named in the merged C-09 text; the `TerminalValue::Inconclusive` variant that carries them is merged in QSL `main` (02530e7). CG provides the map and its typed inputs; the driver builds the terminal record (ADR-011 T-13; quire-driver PR 11) | CG (map), QSL (type) | one total `match` each over the pair, no wildcard arm (FR-030-AC-7; the FR-029 map is built as `run_terminal_value` and the FR-030 map as `ir_outcome_terminal_value`, each over the pair (outcome, replay settlement), `Refuted` only with a reproduced replay, IR-465 and IR-358; the fault readings are asserted over every wrapper by tests built from QSL's constructible `InternalFault` (FR-029-AC-10, FR-030-AC-10); a post-state value outside its range is planned to read as the ordinary violated terminal once QSL-634 lands (FR-029-AC-18), and is `Inconclusive(ReplayRefused)` until then) |
@@ -470,9 +470,9 @@ crate CG's lock selects.
   fields, which the playback decode needs (FR-024-AC-23). The other
   two must gain the missing members before one function can compute the O-09 value.
   Recommendation below.
-- Encoder gap (closed for the obligation identity: `core::canonical` is the one caller of
-  `quire-canonical` and the function path's identity uses it; the rest of this entry records what
-  was measured when the gap was open): CG had no obligation-identity digest code and no
+- Encoder gap (closed for the obligation and corpus case identities: `core::canonical` is the one
+  caller of `quire-canonical`; the rest of this entry records what was measured when the gap was
+  open): CG had no obligation-identity digest code and no
   `quire_canonical` use. The content digest of a corpus case is `serde_json::to_vec` plus a
   newline in `deterministic_json` (`kani.rs:1045-1046`; a second copy at `oracle.rs:1111-1112`),
   then `ByteDigest::of` from the `qsl-replay` API (`bounded_kani_corpus.rs:340-342`). CG also
@@ -480,7 +480,10 @@ crate CG's lock selects.
   `src/replay/function.rs`); that hashes given bytes and canonicalises nothing.
   `serde_json` is not RFC 8785: key order is struct field order, and integers above 2^53, floats
   and negative zero are not canonicalised. `sha2` is a dev-dependency only. The obligation
-  identity must not copy this. Target, ruled by QSL (as relayed): CG's one canonical-encoding
+  identity must not copy this. IR-746 moves the corpus case preimage to a typed `FixedShape`
+  projection of every member (wide request integers as decimal strings), and generated source-map
+  and proof-graph JSON artifacts to the same canonical byte encoder with one trailing newline.
+  Target, ruled by QSL (as relayed): CG's one canonical-encoding
   place (`core::canonical`, CG layout AD step 1a) depends on `quire-canonical` directly (its own
   repository, `agent-ix/quire-canonical`, spelled `branch = "main"`; `to_vec(v, Limits)` and
   `sha256`, RFC 8785), with no `qsl-replay` re-export. The O-09 preimage is encoded there, never
