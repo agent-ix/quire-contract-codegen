@@ -963,7 +963,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
     inputs.playback.clear();
     inputs
         .decode_falsification(&generated.postcondition.identity, &outcome)
-        .expect("real playback decodes");
+        .unwrap_or_else(|error| panic!("real playback decodes: {error:?}\n{counterexample}"));
     let [(balance_name, balance), (audit_name, audit)] = inputs.playback.as_slice() else {
         panic!("the two declared state fields decode");
     };
