@@ -14,7 +14,7 @@ use quire_contract_codegen::{
     ExactFunctionRefusal, FunctionScheduleDeclaration, FunctionScheduleDisposition,
     FunctionScheduleItem, FunctionScheduleLimits, FunctionScheduleOperand as ScheduleOperand,
     FunctionScheduleParameter, FunctionScheduleRefusal as ScheduleRefusal,
-    FunctionScheduledOperation, GeneratedExactFunctionClaim,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
 use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;
@@ -1256,7 +1256,7 @@ use package::*;
 
 /// The main FR-021 corpus: one Scalar, one CompositeEquality and one Call
 /// function (TC-031 step 1(a)); one function each refused for a `reference`
-/// operand (AC-10), a model node (AC-11), a state node (AC-11), an
+/// operand (AC-10), a model root (AC-11), a state root (AC-11), an
 /// undischargeable capability (AC-6), and a dangling nested call (AC-12);
 /// and one function wholly unrelated to any of the refused ones, to prove
 /// isolation (AC-12).
@@ -1266,8 +1266,8 @@ fn main_functions() -> Vec<quire_contract_codegen::ExactFunctionDeclaration> {
         function_eq("eq_fn"),
         function_call_nested("call_fn", "add_fn"),
         function_ref_param("ref_fn"),
-        function_model_param("model_fn"),
-        function_state_param("state_fn"),
+        function_model_root("model_fn"),
+        function_state_root("state_fn"),
         function_capability("capability_fn"),
         function_dangling_call("dangling_fn"),
         function_unrelated("unrelated_fn"),
@@ -1757,15 +1757,16 @@ fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
-/// Trace: FR-021-AC-11, TC-031. Model and state parameter types excluded by
-/// the fixed FR-330 profile retain their distinct checked keys in typed
-/// UnknownTypeNode refusals, with no generated function oracle.
+/// Trace: FR-021-AC-11, TC-031. The admitted model/state nodes are requested
+/// as declaration roots with ordinary scalar signatures. Their unsupported
+/// lowering records map to distinct typed blockers before signature
+/// classification; the V2 fixture does not encode them as parameter types.
 #[test]
-fn tc_031_ac11_model_and_state_outside_package_keep_distinct_type_keys() {
-    let package = admit(ext_corpus_package());
+fn tc_031_ac11_model_and_state_are_distinct_blockers() {
+    let package = admit(ac11_classifier_package());
     let functions = vec![
-        function_model_param("model_fn"),
-        function_state_param("state_fn"),
+        function_model_root("model_fn"),
+        function_state_root("state_fn"),
     ];
     let items = vec![
         item(ITEM_CALL_MODEL, "model_fn"),
@@ -1775,14 +1776,20 @@ fn tc_031_ac11_model_and_state_outside_package_keep_distinct_type_keys() {
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_MODEL),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
-        } if *type_node_id == oracles.key(M_BARE)
+            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                issue: UpstreamBlocker::QuireSpecLanguage120,
+                ..
+            }
+        }
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_STATE),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
-        } if *type_node_id == oracles.key(S_BARE)
+            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                issue: UpstreamBlocker::QuireSpecLanguage121,
+                ..
+            }
+        }
     ));
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }

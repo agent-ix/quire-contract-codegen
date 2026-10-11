@@ -41,6 +41,11 @@ required dependency or target path.
    scheduled (AC-1, AC-12 and AC-27). Retain capability-gated, reference-typed,
    model/relation, state/temporal/protocol and unsupported `Negate` cases and
    assert their distinct existing blockers (AC-6, AC-10, AC-11 and AC-21).
+   For the Model/State AC-11 cases, use admitted family nodes as declaration
+   roots with ordinary scalar parameter/result descriptors. Do not encode
+   Model/State nodes as parameter semantic types: the V2 reader rejects those
+   edges, so this case verifies CG's typed family classification, not reader
+   representability.
 3. Generate the main corpus twice and under permuted request order. Compare
    schedule source, claim and location bytes; inspect ordering by call-node id,
    declaring function-node id, argument source ids and final byte-wise name

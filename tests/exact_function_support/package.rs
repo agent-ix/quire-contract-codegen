@@ -134,11 +134,9 @@ pub const FN_DANGLING_CALL: u32 = 503;
 /// `f_ref(a)`: one parameter typed `REF_TYPE` (a `reference` composite) --
 /// AC-10.
 pub const FN_REF_PARAM: u32 = 504;
-/// `f_model(a)`: one parameter typed `M_BARE` (`model` family) -- AC-11's
-/// `QuireSpecLanguage120` half.
+/// Valid scalar-signature call target used by the model-root classifier case.
 pub const FN_MODEL_PARAM: u32 = 505;
-/// `f_state(a)`: one parameter typed `S_BARE` (`state` family) -- AC-11's
-/// `QuireSpecLanguage121` half.
+/// Valid scalar-signature call target used by the state-root classifier case.
 pub const FN_STATE_PARAM: u32 = 506;
 /// `f_capability(a, b)`: `Scalar { Add }` with a non-empty
 /// `capability_requirements` -- AC-6.
@@ -411,8 +409,8 @@ pub fn ext_corpus_package() -> PackageBuilder {
     );
     for (code, name, parameter_type) in [
         (FN_REF_PARAM, "ref_fn", REF_TYPE),
-        (FN_MODEL_PARAM, "model_fn", M_BARE),
-        (FN_STATE_PARAM, "state_fn", S_BARE),
+        (FN_MODEL_PARAM, "model_fn", T_INTEGER),
+        (FN_STATE_PARAM, "state_fn", T_INTEGER),
     ] {
         source_function_node(
             &mut builder,
@@ -635,6 +633,28 @@ pub fn ext_corpus_package() -> PackageBuilder {
     builder
 }
 
+/// Minimal admitted corpus for the AC-11 classifier boundary. The full
+/// function-generation corpus includes unrelated fixtures that exceed the
+/// V2 reader's bounded byte budget when combined with additional calls.
+pub fn ac11_classifier_package() -> PackageBuilder {
+    let mut builder = source_bound_call_package();
+    source_item_call(
+        &mut builder,
+        ITEM_CALL_MODEL,
+        SOURCE_FUNCTION,
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+    );
+    source_item_call(
+        &mut builder,
+        ITEM_CALL_STATE,
+        SOURCE_FUNCTION,
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+    );
+    builder
+}
+
 /// One admitted FR-021 function declaration and local call. The call's
 /// first argument is the declaration reference; its remaining references are
 /// ordered exactly as the two declared parameters.
@@ -812,11 +832,11 @@ pub fn function_ref_param(name: &str) -> ExactFunctionDeclaration {
     }
 }
 
-pub fn function_model_param(name: &str) -> ExactFunctionDeclaration {
+pub fn function_model_root(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
-        node_id: code_id(FN_MODEL_PARAM),
+        node_id: code_id(M_BARE),
         name: name.to_owned(),
-        parameters: vec![parameter("a", M_BARE), parameter("b", T_INTEGER)],
+        parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -825,11 +845,11 @@ pub fn function_model_param(name: &str) -> ExactFunctionDeclaration {
     }
 }
 
-pub fn function_state_param(name: &str) -> ExactFunctionDeclaration {
+pub fn function_state_root(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
-        node_id: code_id(FN_STATE_PARAM),
+        node_id: code_id(S_BARE),
         name: name.to_owned(),
-        parameters: vec![parameter("a", S_BARE), parameter("b", T_INTEGER)],
+        parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
