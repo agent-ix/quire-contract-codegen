@@ -35,3 +35,8 @@ The requirement traces to StR-001 and IR FR-046; the new criteria lack rows in t
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-037 and TC-052 appear in the registry but have no rows in the core coverage matrix or matrix index; add FR-037-AC-1 through AC-5 to TM-001 with TC-052 and register FR-037 in TM-008. | spec/core/functional/FR-037-fixture-identity.md:53 |
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 236b39049b8bbb42277157ef8618691d202e6ccc; TM-001 now covers FR-037-AC-1 through AC-5 with TC-052, and TM-008 registers FR-037. |
