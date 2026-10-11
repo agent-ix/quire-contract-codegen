@@ -127,14 +127,14 @@ pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
 };
 pub use routed::capability::{
-    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
-    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY,
+    negotiate_backend_provider, BackendDescriptor, BackendId, BackendKind, BackendProviderEnvelope,
+    Candidate, Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal,
+    ExtentClassification, ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem,
+    RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 pub use routed::generate::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,
-    RoutedGenerationError, RoutedGenerationItem, RoutedItemOutput,
+    RoutedGenerationError, RoutedGenerationItem, RoutedItemConstructionError, RoutedItemOutput,
 };
 pub use strategy::harness::{
     generate_tristate_harness, HarnessDiagnostic, HarnessErrorCode, HarnessRequest,

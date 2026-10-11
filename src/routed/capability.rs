@@ -11,9 +11,17 @@
 //! computes it under FR-290's candidate-set rule; this module is the consumer
 //! on the far side of the FR-331 envelope.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use serde::Serialize;
+
+fn serialize_domain_kind<S: serde::Serializer>(
+    kind: &DomainKind,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(kind.to_wire())
+}
 
 /// The FR-331 envelope's contract version, the only one this module reads.
 pub const BACKEND_PROVIDER_CONTRACT: &str = "quire.backend-provider/v1";
@@ -151,7 +159,7 @@ pub enum Mode {
 ///
 /// `quire-spec-language#222` owns the representation, the classification and
 /// the finite-bound predicate; this module reads all three and computes none.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtentClassification {
     /// The classification itself.
     pub extent: Mode,
@@ -160,6 +168,19 @@ pub struct ExtentClassification {
     /// It separates `requires-bound` from `unsupported` and is read from #222,
     /// never inferred from the extent.
     pub finite_bound_available: bool,
+    /// Kinds of the item's unbounded domains, supplied by QSL.
+    pub domains: Vec<ExtentDomain>,
+    /// Substituted proof bounds, including each explicit kind and numeric bound.
+    pub bounds: Vec<ProofBound>,
+}
+
+/// One unbounded domain and its explicit QSL kind.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExtentDomain {
+    /// Domain identity from the request.
+    pub domain: DomainKey,
+    /// Its declared domain kind.
+    pub kind: DomainKind,
 }
 
 /// The registry-owned provider origin projected into CG's in-process descriptor.
@@ -183,6 +204,10 @@ pub struct BackendDescriptor {
     pub advertised: Vec<(CapabilityKind, Mode)>,
     /// Origin supplied by the QSL registry, never derived from identity.
     pub origin: ProviderOrigin,
+    /// Domain kinds admitted for finite proof bounds by the manifest.
+    pub domains: Option<BTreeSet<DomainKind>>,
+    /// Manifest run-limit defaults; negotiation retains but never compares these values.
+    pub bounds: BTreeMap<String, u64>,
 }
 
 impl BackendDescriptor {
@@ -309,6 +334,17 @@ pub enum Cause {
         /// The backend the request named, when it named one.
         backend: Option<String>,
     },
+    /// A process descriptor cannot discharge one explicit domain kind.
+    #[serde(rename = "unsupported-requested-capability")]
+    UnsupportedDomain {
+        /// The capability kind requested.
+        kind: CapabilityKind,
+        /// The uncovered domain kind.
+        #[serde(serialize_with = "serialize_domain_kind")]
+        domain: DomainKind,
+        /// The candidate that cannot discharge it.
+        backend: String,
+    },
     /// An unbounded extent against a bounded-only advertisement, with no finite
     /// bound available.
     UnboundedExtent {
@@ -330,9 +366,9 @@ impl Cause {
             | Self::UnknownBackend { .. }
             | Self::InconsistentCandidates { .. }
             | Self::AmbiguousBackend { .. } => "invalid_capability",
-            Self::UnsupportedRequestedCapability { .. } | Self::UnboundedExtent { .. } => {
-                "unsupported_projection"
-            }
+            Self::UnsupportedRequestedCapability { .. }
+            | Self::UnsupportedDomain { .. }
+            | Self::UnboundedExtent { .. } => "unsupported_projection",
         }
     }
 }
@@ -406,6 +442,15 @@ impl ItemSettlement {
                     "{backend} advertises {} bounded only and no finite bound is available",
                     kind.label()
                 )),
+                Cause::UnsupportedDomain {
+                    kind,
+                    domain,
+                    backend,
+                } => Some(format!(
+                    "{backend} does not advertise domain {} for {}",
+                    domain.to_wire(),
+                    kind.label()
+                )),
                 // Exhaustive on purpose. A catch-all here would give the next
                 // cause a warning that names neither the kind nor the backend
                 // FR-290 requires it to name, with nothing failing to say so.
@@ -432,35 +477,43 @@ impl ItemSettlement {
 /// compile error at the dispatch, which is the whole point of the kind
 /// being closed: an open set of hand-written negotiate functions gives the same
 /// behaviour at run time and none of the enforcement.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BackendKind {
     /// The Kani backend descriptor, implemented here and in `quire-contract-ir`.
     Kani,
+    /// One process provider, identified by its exact registry identity.
+    Process(BackendId),
 }
 
+/// A CG-owned backend identity, independent of QSL's Rust identity type.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
+pub struct BackendId(pub String);
+
 impl BackendKind {
-    /// Every variant, for the census the settlement gate reads.
+    /// The finite built-in kinds; process identities come from descriptors.
     pub const ALL: [Self; 1] = [Self::Kani];
 
-    /// This kind's position in [`Self::ALL`], kept honest the same way
-    /// [`CapabilityKind::index`] is.
+    /// Category sort key: built-in Kani precedes process identities.
     #[must_use]
-    pub const fn index(self) -> usize {
+    pub const fn index(&self) -> usize {
         match self {
             Self::Kani => 0,
+            Self::Process(_) => 1,
         }
     }
 
     /// The backend identity this kind registers under.
     #[must_use]
-    pub const fn identity(self) -> &'static str {
+    pub fn identity(&self) -> &str {
         match self {
             Self::Kani => "kani",
+            Self::Process(id) => &id.0,
         }
     }
 
-    /// The kind a registered backend identity names, when one has an arm here.
+    /// The built-in kind a linked identity names, if any.
     ///
     /// A registered backend with no arm answers `None` and settles
     /// `invalid-request`/`unknown-backend`, which is FR-290's first candidate
@@ -471,6 +524,15 @@ impl BackendKind {
         Self::ALL
             .into_iter()
             .find(|kind| kind.identity() == identity)
+    }
+
+    /// Classify a descriptor by its registry origin before reading its identity.
+    #[must_use]
+    pub fn from_descriptor(descriptor: &BackendDescriptor) -> Option<Self> {
+        match descriptor.origin {
+            ProviderOrigin::Linked => Self::from_identity(&descriptor.identity),
+            ProviderOrigin::Process => Some(Self::Process(BackendId(descriptor.identity.clone()))),
+        }
     }
 }
 
@@ -527,7 +589,7 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
         }
         RequestedKind::Known(kind) => *kind,
     };
-    let Some(extent) = item.extent else {
+    let Some(extent) = item.extent.as_ref() else {
         return Disposition::InvalidRequest {
             cause: Cause::AbsentExtent,
         };
@@ -542,7 +604,7 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
         }
         Candidates::Set(candidates) => candidates.as_slice(),
     };
-    if let Some(backend) = unroutable_named_backend(item.named_backend.as_deref()) {
+    if let Some(backend) = unroutable_named_backend(manifest, item.named_backend.as_deref()) {
         return Disposition::InvalidRequest {
             cause: Cause::UnknownBackend { backend },
         };
@@ -591,9 +653,15 @@ fn negotiate_item(manifest: &[BackendDescriptor], item: &RequestItem) -> Disposi
 /// backend anywhere in a multi-candidate set would settle before the ambiguity
 /// the caller actually has to resolve. A candidate that reaches routing with no
 /// arm is still refused with this cause, at the single-candidate arm.
-fn unroutable_named_backend(named: Option<&str>) -> Option<String> {
+fn unroutable_named_backend(manifest: &[BackendDescriptor], named: Option<&str>) -> Option<String> {
     named
-        .filter(|named| BackendKind::from_identity(named).is_none())
+        .filter(|named| {
+            manifest
+                .iter()
+                .find(|backend| backend.identity == *named)
+                .and_then(BackendKind::from_descriptor)
+                .is_none()
+        })
         .map(str::to_owned)
 }
 
@@ -635,7 +703,7 @@ fn negotiate_single_candidate(
     manifest: &[BackendDescriptor],
     candidate: &Candidate,
     kind: CapabilityKind,
-    extent: ExtentClassification,
+    extent: &ExtentClassification,
 ) -> Disposition {
     let Some(backend) = descriptor(manifest, candidate) else {
         return Disposition::InvalidRequest {
@@ -644,7 +712,7 @@ fn negotiate_single_candidate(
             },
         };
     };
-    let Some(routed) = BackendKind::from_identity(&backend.identity) else {
+    let Some(routed) = BackendKind::from_descriptor(backend) else {
         return Disposition::InvalidRequest {
             cause: Cause::UnknownBackend {
                 backend: backend.identity.clone(),
@@ -662,10 +730,11 @@ fn negotiate_arm(
     routed: BackendKind,
     backend: &BackendDescriptor,
     kind: CapabilityKind,
-    extent: ExtentClassification,
+    extent: &ExtentClassification,
 ) -> Disposition {
     match routed {
         BackendKind::Kani => negotiate_kani(backend, kind, extent),
+        BackendKind::Process(_) => negotiate_process(backend, kind, extent),
     }
 }
 
@@ -678,12 +747,72 @@ fn negotiate_arm(
 fn negotiate_kani(
     backend: &BackendDescriptor,
     kind: CapabilityKind,
-    extent: ExtentClassification,
+    extent: &ExtentClassification,
 ) -> Disposition {
     let modes = backend.modes_for(kind);
     match extent.extent {
         Mode::Bounded => Disposition::Supported {
             backend: backend.identity.clone(),
+        },
+        Mode::Unbounded if modes.contains(&Mode::Unbounded) => Disposition::Supported {
+            backend: backend.identity.clone(),
+        },
+        Mode::Unbounded if extent.finite_bound_available => Disposition::RequiresBound {
+            backend: backend.identity.clone(),
+        },
+        Mode::Unbounded => Disposition::Unsupported {
+            cause: Cause::UnboundedExtent {
+                kind,
+                backend: backend.identity.clone(),
+            },
+        },
+    }
+}
+
+/// Settle a process provider solely from its manifest and the item's extent.
+fn negotiate_process(
+    backend: &BackendDescriptor,
+    kind: CapabilityKind,
+    extent: &ExtentClassification,
+) -> Disposition {
+    let modes = backend.modes_for(kind);
+    let advertised_domains = backend.domains.as_ref();
+    let unsupported_domain = match extent.extent {
+        Mode::Bounded => extent
+            .bounds
+            .iter()
+            .filter_map(ProofBound::kind)
+            .find(|domain| {
+                !advertised_domains.is_some_and(|advertised| advertised.contains(domain))
+            }),
+        Mode::Unbounded if modes.contains(&Mode::Unbounded) => None,
+        Mode::Unbounded => extent
+            .domains
+            .iter()
+            .map(|domain| domain.kind)
+            .find(|domain| {
+                domain.finite_kind().is_some()
+                    && !advertised_domains.is_some_and(|advertised| advertised.contains(domain))
+            }),
+    };
+    if let Some(domain) = unsupported_domain {
+        return Disposition::Unsupported {
+            cause: Cause::UnsupportedDomain {
+                kind,
+                domain,
+                backend: backend.identity.clone(),
+            },
+        };
+    }
+    match extent.extent {
+        Mode::Bounded if modes.contains(&Mode::Bounded) => Disposition::Supported {
+            backend: backend.identity.clone(),
+        },
+        Mode::Bounded => Disposition::Unsupported {
+            cause: Cause::UnsupportedRequestedCapability {
+                kind,
+                backend: Some(backend.identity.clone()),
+            },
         },
         Mode::Unbounded if modes.contains(&Mode::Unbounded) => Disposition::Supported {
             backend: backend.identity.clone(),

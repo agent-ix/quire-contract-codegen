@@ -2,18 +2,22 @@
 //!
 //! Each test walks one row of FR-290's ordered rules.
 
+use qsl_replay::{DomainKey, DomainKind, FiniteBound, Integer, ProofBound, WireNodeId};
 use quire_contract_codegen::{
     negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
     Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY,
+    ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind,
+    BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
+use std::collections::BTreeSet;
 
 fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     BackendDescriptor {
         identity: BackendKind::Kani.identity().to_owned(),
         advertised,
         origin: ProviderOrigin::Linked,
+        domains: None,
+        bounds: Default::default(),
     }
 }
 
@@ -27,6 +31,8 @@ fn bounded() -> Option<ExtentClassification> {
     Some(ExtentClassification {
         extent: Mode::Bounded,
         finite_bound_available: true,
+        domains: Vec::new(),
+        bounds: Vec::new(),
     })
 }
 
@@ -34,6 +40,8 @@ fn unbounded(finite_bound_available: bool) -> Option<ExtentClassification> {
     Some(ExtentClassification {
         extent: Mode::Unbounded,
         finite_bound_available,
+        domains: Vec::new(),
+        bounds: Vec::new(),
     })
 }
 
@@ -60,6 +68,194 @@ fn item(kind: RequestedKind, candidates: Candidates) -> RequestItem {
         named_backend: None,
         candidates,
     }
+}
+
+fn process(id: &str, modes: &[Mode], domains: &[DomainKind]) -> BackendDescriptor {
+    BackendDescriptor {
+        identity: id.to_owned(),
+        advertised: modes
+            .iter()
+            .map(|mode| (CapabilityKind::ValueValidity, *mode))
+            .collect(),
+        origin: ProviderOrigin::Process,
+        domains: Some(domains.iter().copied().collect::<BTreeSet<_>>()),
+        bounds: Default::default(),
+    }
+}
+
+fn proof_bound(kind: DomainKind, maximum: i64) -> ProofBound {
+    let bound = match kind {
+        DomainKind::Integer => {
+            FiniteBound::integer_range(Integer::from(0_i64), Integer::from(maximum)).unwrap()
+        }
+        DomainKind::Collection | DomainKind::Population => {
+            FiniteBound::cardinality(u64::try_from(maximum).unwrap())
+        }
+        _ => panic!("fixture uses integer and cardinality kinds"),
+    };
+    ProofBound::new(
+        DomainKey::Node {
+            node: WireNodeId::from_digest([1; 32]),
+            path: Vec::new(),
+        },
+        Some(kind),
+        bound,
+    )
+    .unwrap()
+}
+
+fn extent_domain(kind: DomainKind) -> ExtentDomain {
+    ExtentDomain {
+        domain: DomainKey::Node {
+            node: WireNodeId::from_digest([1; 32]),
+            path: Vec::new(),
+        },
+        kind,
+    }
+}
+
+/// Trace: FR-019-AC-11, FR-019-AC-12, FR-019-AC-16, FR-019-AC-20, TC-046.
+#[test]
+fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
+    let backend = process("kani", &[Mode::Bounded], &[DomainKind::Integer]);
+    assert_eq!(
+        BackendKind::from_descriptor(&backend),
+        Some(BackendKind::Process(quire_contract_codegen::BackendId(
+            "kani".to_owned()
+        )))
+    );
+    assert!(
+        !BackendKind::ALL.contains(&BackendKind::Process(quire_contract_codegen::BackendId(
+            "kani".to_owned()
+        )))
+    );
+    assert_eq!(BackendKind::Kani.index(), 0);
+    assert_eq!(
+        BackendKind::Process(quire_contract_codegen::BackendId("kani".to_owned())).index(),
+        1
+    );
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
+    );
+    request.named_backend = Some("kani".to_owned());
+    request.extent.as_mut().unwrap().bounds = vec![proof_bound(DomainKind::Integer, 8)];
+    let supported = settle_one(vec![backend.clone()], request.clone()).disposition;
+    assert_eq!(
+        supported,
+        Disposition::Supported {
+            backend: "kani".to_owned()
+        }
+    );
+    request.extent.as_mut().unwrap().bounds = vec![proof_bound(DomainKind::Integer, 1000)];
+    let mut changed_defaults = backend.clone();
+    changed_defaults
+        .bounds
+        .insert("model_check.max_depth".to_owned(), 1);
+    assert_eq!(
+        settle_one(vec![changed_defaults], request.clone()).disposition,
+        supported
+    );
+    request.extent.as_mut().unwrap().bounds = vec![proof_bound(DomainKind::Population, 8)];
+    let unsupported = settle_one(vec![backend], request.clone());
+    assert_eq!(
+        unsupported.disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedDomain {
+                kind: CapabilityKind::ValueValidity,
+                domain: DomainKind::Population,
+                backend: "kani".to_owned()
+            }
+        }
+    );
+    assert!(unsupported.warning().unwrap().contains("population"));
+    let wire = serde_json::to_value(&unsupported.disposition).unwrap();
+    assert_eq!(wire["cause"]["cause"], "unsupported-requested-capability");
+    assert_eq!(wire["cause"]["domain"], "population");
+    let unbounded_only = process("solver", &[Mode::Unbounded], &[]);
+    request.named_backend = Some("solver".to_owned());
+    request.candidates = Candidates::Set(vec![candidate("solver")]);
+    assert_eq!(
+        settle_one(vec![unbounded_only], request).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedDomain {
+                kind: CapabilityKind::ValueValidity,
+                domain: DomainKind::Population,
+                backend: "solver".to_owned(),
+            }
+        }
+    );
+}
+
+/// Trace: FR-019-AC-17, FR-019-AC-21, FR-019-AC-22, FR-019-AC-23, TC-046.
+#[test]
+fn process_unbounded_settlement_checks_only_boundable_domains() {
+    let backend = process("solver", &[Mode::Bounded], &[DomainKind::Collection]);
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("solver")]),
+    );
+    request.extent = unbounded(true);
+    request.extent.as_mut().unwrap().domains = vec![
+        extent_domain(DomainKind::Collection),
+        extent_domain(DomainKind::Quantity),
+    ];
+    assert_eq!(
+        settle_one(vec![backend.clone()], request.clone()).disposition,
+        Disposition::RequiresBound {
+            backend: "solver".to_owned()
+        }
+    );
+    request.extent.as_mut().unwrap().finite_bound_available = false;
+    assert_eq!(
+        settle_one(vec![backend.clone()], request.clone()).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnboundedExtent {
+                kind: CapabilityKind::ValueValidity,
+                backend: "solver".to_owned()
+            }
+        }
+    );
+    request
+        .extent
+        .as_mut()
+        .unwrap()
+        .domains
+        .push(extent_domain(DomainKind::Integer));
+    assert_eq!(
+        settle_one(vec![backend], request.clone()).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedDomain {
+                kind: CapabilityKind::ValueValidity,
+                domain: DomainKind::Integer,
+                backend: "solver".to_owned()
+            }
+        }
+    );
+    let unbounded_backend = process("solver", &[Mode::Unbounded], &[]);
+    assert_eq!(
+        settle_one(vec![unbounded_backend], request).disposition,
+        Disposition::Supported {
+            backend: "solver".to_owned()
+        }
+    );
+}
+
+/// Trace: FR-019-AC-13, FR-019-AC-18, TC-046.
+#[test]
+fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
+    let identity = "/this/process/provider/does/not/exist";
+    let descriptor = process(identity, &[Mode::Bounded], &[DomainKind::Integer]);
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(identity)]),
+    );
+    assert_eq!(
+        settle_one(vec![descriptor], request).disposition,
+        Disposition::Supported {
+            backend: identity.to_owned()
+        }
+    );
 }
 
 /// Every variant of the closed backend kind reaches a dispatched arm, and each
@@ -187,7 +383,9 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
     let registered_without_arm = BackendDescriptor {
         identity: "cvc5".to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
-        origin: ProviderOrigin::Process,
+        origin: ProviderOrigin::Linked,
+        domains: None,
+        bounds: Default::default(),
     };
     let unarmed = settle_one(
         vec![registered_without_arm],
@@ -304,6 +502,8 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
         identity: "kani-nightly".to_owned(),
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
         origin: ProviderOrigin::Process,
+        domains: None,
+        bounds: Default::default(),
     };
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
     // Candidate order is bytewise by identity, and is a property of the set
@@ -394,7 +594,7 @@ fn tc_030_the_advertised_mode_table_settles_each_row() {
         let settlement = settle_one(
             vec![kani(vec![(kind, advertised)])],
             RequestItem {
-                extent,
+                extent: extent.clone(),
                 ..item(RequestedKind::Known(kind), Candidates::Set(only.clone()))
             },
         );

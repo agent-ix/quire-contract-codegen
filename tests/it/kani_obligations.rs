@@ -27,15 +27,14 @@ use package::{
 };
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, generate_exact_scalar_oracles, generate_routed,
-    negotiate_kani_obligations, BackendKind, Candidate, ClaimDisposition, ClaimMap,
-    ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarRefusal,
-    GenerationContexts, IntegerOperator, InvalidObligationItem, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
-    KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, KindOutput,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    negotiate_kani_obligations, Candidate, ClaimDisposition, ClaimMap, ExactScalarClaim,
+    ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, GenerationContexts, IntegerOperator,
+    InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniGenerationContext,
+    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
+    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarObligationHarness,
+    KaniSolver, KaniTool, KaniToolError, KindOutput, ObligationDisposition, ObligationItem,
+    ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
+    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
     BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
@@ -2059,14 +2058,21 @@ fn routed_scalar_increment() -> (
     let node_id = package::code_id(package::BOUNDED_INCREMENT);
     let generation = generate_routed(
         &package,
-        &[RoutedGenerationItem {
-            request_index: 0,
+        &[RoutedGenerationItem::from_descriptor(
+            0,
             node_id,
-            backend: Candidate {
+            Candidate {
                 identity: "kani".to_owned(),
             },
-            kind: BackendKind::Kani,
-        }],
+            &quire_contract_codegen::BackendDescriptor {
+                identity: "kani".to_owned(),
+                advertised: Vec::new(),
+                origin: quire_contract_codegen::ProviderOrigin::Linked,
+                domains: None,
+                bounds: Default::default(),
+            },
+        )
+        .expect("linked Kani descriptor")],
         &GenerationContexts {
             kani: Some(KaniGenerationContext {
                 ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
@@ -2087,8 +2093,13 @@ fn routed_scalar_increment() -> (
     let [item] = generation.items.as_slice() else {
         panic!("one routed item, got {:?}", generation.items);
     };
-    let KindOutput::Kani { harness, .. } = &item.output;
-    (harness.clone().expect("the item is supported"), manifest)
+    let KindOutput::Kani { harness, .. } = &item.output else {
+        panic!("expected Kani output");
+    };
+    (
+        harness.as_deref().cloned().expect("the item is supported"),
+        manifest,
+    )
 }
 
 /// Writes the crate the way the driver does: the returned `Cargo.toml` and `library` as
