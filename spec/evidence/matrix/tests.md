@@ -14,7 +14,7 @@ type: TestMatrix
 | FR-004 | FR-004-AC-9 | TC-006 | 🚧 Planned |
 | FR-004 | FR-004-AC-10, FR-004-AC-11 | TC-006 | 🚧 Planned; native run/source-map binding, LLVM producer identity and consuming obligation are not implemented |
 | FR-004 | FR-004-AC-12 through FR-004-AC-15 | TC-006 | 🚧 Planned; QSL `/2` strict reader and CG authenticated producer/artifact binding are not implemented |
-| [FR-036](../functional/FR-036-source-obligation-census.md) | FR-036-AC-1 through FR-036-AC-7 | [TC-051](TC-051-source-obligation-census.md) | 🚧 Planned; complete typed producer/consumer controls Gated on IR-759 reviewed neutral correspondence; IR-740 owns implementation |
+| [FR-036](../functional/FR-036-source-obligation-census.md) | FR-036-AC-1 through FR-036-AC-7 | [TC-051](TC-051-source-obligation-census.md) | 🚧 Planned; separate inventories/complete candidate tuples and typed artifact/run controls Gated on IR-759 reviewed neutral correspondence; IR-740 owns implementation |
 
 ## Test Case Summary
 

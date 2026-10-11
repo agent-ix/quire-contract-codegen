@@ -70,7 +70,7 @@ input decision to expression and contract claims.
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification |
 | Real-Kani lane gating | NFR-006 | TC-045 |
-| Typed source-obligation census and separate producer facts | [FR-036](evidence/functional/FR-036-source-obligation-census.md) | [TC-051](evidence/matrix/TC-051-source-obligation-census.md) planned; Gated on IR-759 |
+| Typed obligation inventories, criterion-keyed candidate tuples and separate producer facts | [FR-036](evidence/functional/FR-036-source-obligation-census.md) | [TC-051](evidence/matrix/TC-051-source-obligation-census.md) planned; Gated on IR-759 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | Terminal-value maps (kani) | FR-029 and FR-030 terminal-value maps | TC-040, TC-041 |
 | Counterexample replay | FR-016 witness decode and native replay, FR-024 submission in QSL's counterexample envelope, [FR-032](replay/functional/FR-032-routed-scalar-replay-binding.md) planned scalar binding and proposition preservation, [FR-033](replay/functional/FR-033-composite-parity-replay-binding.md) planned composite equality parity | TC-026, TC-035, [TC-047](replay/matrix/TC-047-routed-scalar-replay-binding.md) and [TC-048](replay/matrix/TC-048-composite-parity-replay-binding.md) planned/gated |

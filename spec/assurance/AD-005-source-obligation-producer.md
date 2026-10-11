@@ -73,23 +73,39 @@ producer; IR-737 consumes the resulting facts through the IR-owned accounting po
 The planned `source_obligation_census` operation accepts only selected authoritative
 package, semantic-obligation, criterion, production-symbol and correspondence inputs.
 No negotiation, artifact or result parameter influences population membership.
-It returns every obligation with source occurrence and declared domain, its mappings
-or typed missing reasons, and every selected entity including zero-mapping entities.
-A missing mapping is a valid gap. Missing/incomplete inventories and foreign or
-dangling relations refuse the complete export rather than silently omit rows.
+It returns separate complete obligation/entity inventories, complete-key candidate
+rows and explicit entity/production mapping-gap records. Re-reading
+`ix://agent-ix/quire-contract-ir/FR-045` Behavior and
+`ix://agent-ix/quire-contract-ir/AD-008` Claim and population establishes the key:
+owning criterion × semantic obligation × selected source identity × declared domain.
+Every distinct authored complete tuple is one candidate; several criteria linked to
+one obligation remain separate candidates. Different source identities or declared
+domains also remain separate. This is enumeration of authored tuples, not an inferred
+Cartesian product, and module/function projection links do not add a duplicate tuple.
+
+An obligation lacking criterion/source correspondence stays in the complete obligation
+inventory with a typed gap, without a sentinel or invented criterion-keyed candidate.
+A criterion or source symbol with no mapped obligation likewise remains its own
+inventory/gap record. An existing complete candidate key survives absent production
+correspondence or authored no-function with its typed production gap. Missing/incomplete
+inventories and foreign or dangling relations refuse the complete export rather than
+silently omit rows.
 
 The separate producer records have these responsibilities:
 
 | Proposed CG type | Facts retained | Qualification owner |
 | --- | --- | --- |
-| `SourceCapabilityFact` | Candidate association, producer/stage, requested capability, actual disposition and typed reason; no run/artifact required for unsupported | IR |
-| `SourcePreExecutionRefusal` | Candidate/attempt association, producer/stage and original typed refusal cause; explicitly no executed backend outcome | IR |
-| `SourceExecutionFact` | Candidate/attempt association; method, actual source/profile, subject, declared/effective domain and bounds, assumptions, terminal state and reason; check binding, production reachability and subject/refinement observations with explicit absence | IR |
+| `SourceCapabilityFact` | Complete candidate association, producer/stage, requested capability, actual disposition and typed reason; no invented run/artifact for unsupported | IR |
+| `SourcePreExecutionRefusal` | Complete candidate/attempt association, producer/stage and original typed refusal cause; absent executed run/outcome stays absent; an existing generated artifact may be retained without asserting a run | IR |
+| `SourceExecutionFact` | Complete candidate association and attempt identity; actual typed artifact and run identities retained separately with explicit missing-identity reasons; method, actual source/profile, subject, declared/effective domain and bounds, assumptions, terminal state and reason; check binding, production reachability and subject/refinement observations with explicit absence | IR |
 
 Candidate membership is independent of method, subject, profile or attempt. Reported
 attempt associations are retained as reported even when they mismatch the selected
-census. Duplicate results stay separate records, so IR can reject credit without
-losing the source candidate. There is no CG qualified-proof field or accounting total.
+census. AD-008 Evidence and projections explicitly joins artifact and run identity;
+neither is reconstructed from an attempt identity, harness path or subject. Wrong,
+missing and mismatched artifact/run identities remain inspectable for IR joining.
+Duplicate results stay separate records, so IR can reject credit without losing the
+source candidate. There is no CG qualified-proof field or accounting total.
 
 A load-bearing observation names the candidate and the check/property about its
 asserted production behavior. A production reachability observation names the exact

@@ -18,7 +18,7 @@ operations:
     status: planned; complete producer/consumer implementation gated on IR-759 reviewed neutral correspondence
     inputs: [SourceCensusRequest borrowing the selected admitted checked package, complete owner semantic-obligation inventory, criterion and production-symbol inventories, and reviewed neutral authored correspondence]
     output: SourceObligationCensus | SourceCensusRefusal
-    semantics: enumerate every selected source obligation and retain all selected criterion/module/function entities plus explicit many-to-many mappings or MissingMapping reasons before negotiation, generation or execution; no attempt, artifact or result input; missing/incomplete authority or foreign/dangling relation refuses a complete census; FR-036 and AD-005 own the planned contract
+    semantics: export separate complete obligation/entity inventories and one candidate row per distinct authored criterion-obligation-selected-source-declared-domain tuple before negotiation, generation or execution; preserve unmapped obligation/criterion/source-symbol gaps without fabricating a candidate and production gaps on complete candidate keys; no attempt, artifact or result input; missing/incomplete authority or foreign/dangling relation refuses a complete census; FR-036 and AD-005 own the planned contract
   - name: generate_bound_oracles
     inputs: [public BoundPackage reference]
     output: BoundOracleGeneration | BoundGenerationError
@@ -390,15 +390,16 @@ source_obligation_producer_slice:
   status: planned (IR-747 specification, IR-740 implementation); complete conformance gated on IR-759
   authority: borrowed owner types; IR-759 exact neutral correspondence type/placement pending upstream review, never a CG copied schema or invented API
   census_types: SourceCensusRequest, SourceObligationCensus, SourceCensusRefusal, MissingMapping (planned public CG types)
-  population: selected source identities, complete semantic-obligation occurrence identities and declared domains, original criterion/module/function inventories including zero-mapping entities, many-to-many authored relations or typed missing reasons
-  missing_mapping_reasons: absent criterion correspondence, absent production correspondence, explicitly authored absence of a production function; valid gaps retain candidates
+  population: separate complete selected obligation and criterion/module/function inventories, explicit distinct authored candidate tuples and symbol projection links, typed obligation/criterion/source-symbol and candidate-production mapping gaps
+  missing_mapping_reasons: absent criterion/source correspondence or zero-mapping entity remains an inventory/gap record without a fabricated candidate; absent production correspondence or authored no-function retains an existing complete-key candidate with its production gap
   census_refusals: missing authoritative input, incomplete authoritative inventory, foreign selected inventory relation, dangling relation endpoint; retain offending input/relation, no complete census
-  identity: source-semantic identity and declared domain from the reviewed owner input; method, subject, profile and attempt belong only to producer facts
+  identity: owning criterion, semantic obligation, source identity at the selected source state and declared domain form each complete candidate key (IR FR-045/AD-008); shared obligation does not collapse distinct tuples; symbol projection links do not mint duplicate tuples; method, subject, profile, artifact, run and attempt belong only to producer facts
   capability_type: SourceCapabilityFact (candidate association, producer, stage, capability, actual disposition and typed reason; unsupported requires no artifact, attempt run or outcome)
-  pre_execution_type: SourcePreExecutionRefusal (candidate/attempt association, producer, stage, original typed cause; no invented executed outcome)
-  execution_type: SourceExecutionFact (candidate/attempt association, method, actual source/profile, proof subject, declared domain and effective bounds, assumptions, terminal state/reason, claim-bound load-bearing check, production reachability, production/shadow subject and separately executed refinement scope/samples/assumptions)
+  pre_execution_type: SourcePreExecutionRefusal (complete candidate/attempt association, producer, stage, original typed cause; absent executed run/outcome stays absent; a generated artifact may be retained without inventing a run)
+  execution_type: SourceExecutionFact (complete candidate association, attempt identity, actual typed artifact identity, actual typed run identity, method, actual source/profile, proof subject, declared domain and effective bounds, assumptions, terminal state/reason, claim-bound load-bearing check, production reachability, production/shadow subject and separately executed refinement scope/samples/assumptions)
+  execution_identity_states: actual producer-owned typed artifact/run identities or explicit typed missing-identity reasons, separately from attempt identity; wrong or mismatched identities preserved as received for IR joining, never inferred from a path/subject/transcript or repaired by CG
   observation_states: explicit observed value or typed missing reason; zero is a measured value only when supplied; unfamiliar producer state retains its received identity as unclassified
-  result_records: preserve duplicates and actual mismatched source/profile/subject/domain associations for IR evaluation; no inferred positive check/reachability/refinement and no candidate mutation
+  result_records: preserve duplicates and actual wrong/missing/mismatched artifact/run/source/profile/subject/domain associations for IR evaluation; no inferred positive check/reachability/refinement and no inventory or candidate-tuple mutation
   ownership: CG exports facts; IR FR-045/AD-008 decide eligibility, evidence joins, credit and projections; this export has no qualified-proof flag or accounting totals
   consumer: borrow CG types in an adapter above CG and IR over the reviewed IR-owned neutral input port; IR root acquires no CG dependency and the cycle-free model acquires no QSL/CG/IR-root dependency
 open_design_gates:

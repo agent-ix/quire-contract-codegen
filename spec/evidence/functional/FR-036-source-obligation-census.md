@@ -22,10 +22,9 @@ relationships:
 
 ## Description
 
-When a source-obligation census is requested, Codegen shall export every candidate
-from the selected authoritative semantic-obligation inventory before capability
-negotiation, generation or execution, retaining its authored criterion and
-production-symbol mappings or an explicit typed missing-mapping reason.
+When a source-obligation census is requested, Codegen shall export the complete
+selected obligation inventory, all explicitly mapped criterion-obligation-source-domain
+candidate tuples and unmapped-entity gaps before negotiation, generation or execution.
 
 ## Inputs
 
@@ -45,9 +44,12 @@ identifies the usable current inputs and the missing correspondence.
 
 ## Outputs
 
-A `SourceObligationCensus` containing the selected inventory identities, every
-candidate, the original criterion/module/function entities including those with no
-mapped obligation, and explicit many-to-many mappings or missing reasons.
+A `SourceObligationCensus` containing separate complete obligation and entity
+inventories, candidate rows keyed by owning criterion × semantic obligation ×
+selected source identity × declared domain, and typed mapping-gap records.
+Production module/function links project those candidate tuples; an obligation
+inventory entry is not itself a candidate row. Unmapped obligations, criteria and
+source symbols remain explicit inventory/gap records without a fabricated candidate.
 Separate `SourceCapabilityFact`, `SourcePreExecutionRefusal` and
 `SourceExecutionFact` records describe attempts without changing the census.
 [interface-001](../../core/functional/interface-001-codegen-api.md) declares the
@@ -62,11 +64,22 @@ selected source identity and declared domain independently of attempt identity.
 The census boundary shall retain all criterion and production entities from the
 selected inventories, including entities with no mapped obligation.
 
-When the reviewed correspondence supplies several links, the census boundary shall
-retain every criterion-to-obligation and obligation-to-module/function link.
-When a mapping is absent, the census boundary shall retain the candidate with a
-`MissingMapping` reason distinguishing absent criterion correspondence, absent
-production correspondence and an explicitly authored absence of a production function.
+The census boundary shall key each candidate by the complete tuple of owning
+criterion, semantic obligation, source identity at the selected source state and
+declared domain, as IR FR-045 Behavior and AD-008 Claim and population require.
+When the reviewed correspondence supplies several mapped tuples, the census boundary shall
+emit one distinct candidate per distinct complete tuple rather than one row
+per obligation or an inferred Cartesian product of the inventories.
+When candidate tuples share an obligation, the census boundary shall preserve their
+distinct criterion/source/domain keys and every authored module/function projection
+link. Multiple symbol projection links for the same tuple do not mint another key.
+When no complete tuple is authored for an obligation, criterion or source symbol,
+the census boundary shall retain that entity in its own inventory and a typed
+`MissingMapping` gap without inventing a criterion, source identity or candidate.
+When a candidate has no production correspondence or an authored absence of a
+production function, the census boundary shall retain its complete key and the
+corresponding typed production gap. Missing criterion correspondence remains an
+obligation gap rather than a candidate with a sentinel or absent criterion key.
 If an input relation names a foreign selected inventory or a nonexistent endpoint,
 then the census boundary shall return a typed `SourceCensusRefusal` with the offending
 relation and no complete census. If the authoritative inventory or required typed
@@ -77,8 +90,16 @@ The capability exporter shall retain a decision's producer, stage, candidate,
 capability and actual disposition/reason without inventing an artifact or run.
 The refusal exporter shall retain the original producer, stage and typed cause when
 generation or run admission refuses before backend execution.
-The execution exporter shall retain the actual method, attempt identity, source/profile identity, proof
-subject, declared domain, effective bounds, assumptions, terminal outcome and reason.
+The execution exporter shall retain actual typed artifact identity and run identity
+separately from attempt identity, together with method, source/profile identity,
+proof subject, declared domain, effective bounds, assumptions, terminal outcome
+and reason, as AD-008 Evidence and projections requires.
+When an executed producer record lacks artifact or run identity, the execution
+exporter shall retain an explicit typed missing-identity reason rather than fabricate
+an identity from an attempt, subject path or transcript.
+The capability and pre-execution exporters shall preserve absent artifact/run
+identities when none exists rather than invent an executed identity; a pre-run
+refusal may retain an actual generated artifact without asserting that it ran.
 When an optional producer observation is absent, the exporter shall record explicit
 absence rather than a measured zero, unsupported decision or inferred success.
 When a producer state is unfamiliar, the exporter shall retain its received identity
@@ -97,7 +118,8 @@ execution exporter shall record its absence rather than infer refinement from a
 planned obligation or successful shadow proof.
 
 The producer boundary shall preserve each actual result record, including duplicate
-attempt records and records with mismatched source/profile/subject/domain associations,
+attempt records and records with wrong or mismatched artifact/run and
+source/profile/subject/domain associations,
 for the IR accounting boundary to assess. Codegen exports facts; IR FR-045 owns
 eligibility, evidence joins, qualified credit and requirement/module/function/obligation
 projections. Codegen emits no eligibility decision, qualified-proof flag, numerator,
@@ -115,13 +137,13 @@ version or pin catalog.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-036-AC-1 | A genuine typed fixture with two criteria, three semantic obligations and two production functions in one module exports all three obligations, all selected entities, explicit many-to-many links and distinct missing-criterion/missing-production/authored-no-function reasons; an entity with zero mapped obligations remains present. Removing one authoritative obligation and its relations changes the candidate census without editing an auxiliary catalog. | Test |
-| FR-036-AC-2 | For the unchanged source fixture, omitting an execution result, reporting unsupported negotiation or a pre-run refusal, retrying a run and changing method/profile/subject leave every candidate key, declared domain and source mapping unchanged; enumeration succeeds before any producer is invoked. | Test |
+| FR-036-AC-1 | A genuine typed fixture with criteria C1/C2, obligations O1/O2/O3, source identities S1/S2, domain D and two production functions in one module exports three obligation inventory entries and exactly four candidate keys for authored tuples (C1,O1,S1,D), (C2,O1,S1,D), (C1,O2,S1,D), (C1,O2,S2,D). O3 has no authored criterion correspondence: it remains an inventory/gap record with no candidate. Missing production correspondence and authored no-function remain distinct gaps on complete candidate keys; a zero-mapping source symbol remains an inventory/gap record. Removing only C2's relation leaves C2 as a zero-mapping criterion gap and removes only its candidate; adding another symbol projection to an existing tuple does not add a candidate. | Test |
+| FR-036-AC-2 | For the unchanged AC-1 fixture, omitting a result, reporting unsupported or pre-run refusal, retrying and changing method/profile/subject/artifact/run leave the complete obligation inventory, all four criterion-obligation-source-domain keys and mapping-gap records unchanged; enumeration precedes producer invocation. Removing O1 and its authored relations from the authoritative source removes its inventory entry and exactly the two O1 candidate tuples without editing an auxiliary catalog. | Test |
 | FR-036-AC-3 | Capability facts preserve unsupported capability and reason without artifact/run/outcome; pre-run refusal facts preserve producer/stage/cause separately from actual execution outcomes. An absent decision or observation and an unfamiliar producer state remain distinct, and missing, counterexample, invalid/incomplete, unavailable, timeout, exhaustion, cancellation and inconclusive evidence states survive export. | Test |
-| FR-036-AC-4 | A matching executed production fact retains its exact source/profile/subject/domain/bounds and explicitly bound load-bearing check plus production reachability observation. Zero-check, check-location-only, tag-only, LLVM-only and incidental-reachability controls retain their actual weaker or missing facts and never acquire the positive observation by export. | Test |
+| FR-036-AC-4 | A matching executed production fact retains its actual typed artifact and run identities separately from attempt identity, exact source/profile/subject/domain/bounds and explicitly bound load-bearing check plus production reachability. Wrong, missing and mismatched artifact/run identity controls preserve the received typed identity or explicit missing reason for IR joining, without inventing or repairing identities. Zero-check, check-location-only, tag-only, LLVM-only and incidental-reachability controls never acquire positive observations by export. | Test |
 | FR-036-AC-5 | Shadow-only evidence, a narrower effective bound and separately executed sampled native refinement retain distinct subject/scope/assumption observations. Missing refinement stays missing; adding a refinement observation does not change the census or create an unqualified-production-proof flag. | Test |
-| FR-036-AC-6 | A downstream consumer above CG and IR borrows the public census/fact types over the reviewed neutral correspondence contract without source/transcript/name parsing or a copied schema. Duplicate and source/profile/subject/domain-mismatched result controls survive as separate inspectable records without changing census rows; repeated identical inputs produce identical ordering. | Test |
-| FR-036-AC-7 | Missing/incomplete authoritative inputs, a relation targeting a foreign selection and a dangling relation endpoint produce distinct typed census refusals with their offending input/relation and no complete census. A valid absent mapping remains a candidate gap instead of that global refusal. | Test |
+| FR-036-AC-6 | A downstream consumer above CG and IR borrows the public census/fact types over the reviewed neutral correspondence contract without source/transcript/name parsing or a copied schema. Duplicate and artifact/run/source/profile/subject/domain-mismatched result controls survive as separate inspectable records without changing inventories or candidate tuples; repeated identical inputs produce identical ordering. | Test |
+| FR-036-AC-7 | Missing/incomplete authoritative inputs, a relation targeting a foreign selection and a dangling relation endpoint produce distinct typed census refusals with their offending input/relation and no complete census. A valid absent correspondence remains an explicit obligation/criterion/source-symbol gap, or a production gap on an existing complete candidate key, instead of that global refusal. | Test |
 
 ## Dependencies
 
