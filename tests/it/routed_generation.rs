@@ -5,11 +5,12 @@
 
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, generate_routed,
-    negotiate_kani_obligations, BackendKind, Candidate, ClaimDerivationRefusal, ClaimDisposition,
-    ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniGenerationContext,
-    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, KaniScalarObligationHarness,
-    KindOutput, ObligationDisposition, ObligationItem, ObligationRecord, RoutedGeneration,
-    RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
+    negotiate_kani_obligations, BackendDescriptor, BackendKind, Candidate, ClaimDerivationRefusal,
+    ClaimDisposition, ExactScalarRefusal, GenerationContexts, InvalidObligationItem,
+    KaniGenerationContext, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
+    KaniScalarObligationHarness, KindOutput, ObligationDisposition, ObligationItem,
+    ObligationRecord, ProviderOrigin, RoutedGeneration, RoutedGenerationError,
+    RoutedGenerationItem, UnsupportedObligation,
 };
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
@@ -68,12 +69,131 @@ fn kani_backend() -> Candidate {
 }
 
 fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem {
-    RoutedGenerationItem {
+    RoutedGenerationItem::from_descriptor(
         request_index,
-        node_id: node_id.clone(),
-        backend: kani_backend(),
-        kind: BackendKind::Kani,
-    }
+        node_id.clone(),
+        kani_backend(),
+        &BackendDescriptor {
+            identity: "kani".to_owned(),
+            advertised: Vec::new(),
+            origin: ProviderOrigin::Linked,
+            domains: None,
+            bounds: Default::default(),
+        },
+    )
+    .expect("linked Kani descriptor")
+}
+
+fn process_route(
+    request_index: usize,
+    node_id: &CheckedNodeId,
+    identity: &str,
+) -> RoutedGenerationItem {
+    let descriptor = BackendDescriptor {
+        identity: identity.to_owned(),
+        advertised: Vec::new(),
+        origin: ProviderOrigin::Process,
+        domains: None,
+        bounds: Default::default(),
+    };
+    RoutedGenerationItem::from_descriptor(
+        request_index,
+        node_id.clone(),
+        Candidate {
+            identity: identity.to_owned(),
+        },
+        &descriptor,
+    )
+    .expect("matching process descriptor")
+}
+
+/// Trace: FR-022-AC-17, FR-022-AC-19, FR-022-AC-21, TC-046.
+#[test]
+fn process_items_generate_empty_outputs_in_request_order() {
+    let fixture = fixture();
+    let process_only = [process_route(8, &fixture.rendered[0], "second")];
+    let empty_context = generate_routed(
+        &fixture.package,
+        &process_only,
+        &GenerationContexts::default(),
+    )
+    .unwrap();
+    assert_eq!(empty_context.items[0].output, KindOutput::Process);
+    assert!(empty_context.claim_map.is_none());
+    assert!(empty_context.oracle_artifacts.is_none());
+    let routed = vec![
+        process_route(8, &fixture.rendered[0], "second"),
+        route(3, &fixture.rendered[0]),
+        process_route(1, &fixture.rendered[0], "kani"),
+    ];
+    let contexts = kani_context("crate::subject", 1);
+    let output = generate_routed(&fixture.package, &routed, &contexts).unwrap();
+    assert_eq!(
+        output
+            .items
+            .iter()
+            .map(|item| item.request_index)
+            .collect::<Vec<_>>(),
+        [1, 3, 8]
+    );
+    assert_eq!(output.items[0].output, KindOutput::Process);
+    assert_eq!(output.items[0].backend.identity, "kani");
+    assert_eq!(output.items[2].output, KindOutput::Process);
+    let mut reversed = routed;
+    reversed.reverse();
+    assert_eq!(
+        generate_routed(&fixture.package, &reversed, &contexts).unwrap(),
+        output
+    );
+}
+
+/// Trace: FR-022-AC-22, TC-046.
+#[test]
+fn routed_item_constructor_refuses_mismatched_and_unknown_linked_descriptors() {
+    let fixture = fixture();
+    let descriptor = BackendDescriptor {
+        identity: "solver".to_owned(),
+        advertised: Vec::new(),
+        origin: ProviderOrigin::Process,
+        domains: None,
+        bounds: Default::default(),
+    };
+    let mismatch = RoutedGenerationItem::from_descriptor(
+        0,
+        fixture.rendered[0].clone(),
+        kani_backend(),
+        &descriptor,
+    );
+    assert_eq!(
+        mismatch,
+        Err(
+            quire_contract_codegen::RoutedItemConstructionError::DescriptorBackendMismatch {
+                backend: kani_backend(),
+                descriptor: "solver".to_owned(),
+            }
+        )
+    );
+    let unknown = RoutedGenerationItem::from_descriptor(
+        0,
+        fixture.rendered[0].clone(),
+        Candidate {
+            identity: "solver".to_owned(),
+        },
+        &BackendDescriptor {
+            origin: ProviderOrigin::Linked,
+            ..descriptor
+        },
+    );
+    assert_eq!(
+        unknown,
+        Err(
+            quire_contract_codegen::RoutedItemConstructionError::UnknownLinkedBackend {
+                backend: Candidate {
+                    identity: "solver".to_owned()
+                },
+            }
+        )
+    );
 }
 
 fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
@@ -151,7 +271,8 @@ fn fr015(
 
 fn kani_parts(output: &KindOutput) -> (&ObligationRecord, Option<&KaniScalarObligationHarness>) {
     match output {
-        KindOutput::Kani { record, harness } => (record, harness.as_ref()),
+        KindOutput::Kani { record, harness } => (record, harness.as_deref()),
+        KindOutput::Process => panic!("expected Kani output"),
     }
 }
 
@@ -241,50 +362,6 @@ fn tc_033_the_entry_point_takes_no_settlement_input() {
         &[RoutedGenerationItem],
         &GenerationContexts<'a>,
     ) -> Result<RoutedGeneration, RoutedGenerationError> = generate_routed;
-}
-
-/// A backend whose identity converts to no kind refuses the whole call, and the refusal names the
-/// lowest offending index even when duplicates are also present.
-///
-/// Trace: FR-022-AC-4, TC-033
-#[test]
-fn tc_033_a_routed_kind_the_backend_does_not_have_refuses_the_call() {
-    let fixture = fixture();
-    let contexts = kani_context("crate::subject", 1);
-    let foreign = |index: usize| RoutedGenerationItem {
-        request_index: index,
-        node_id: fixture.rendered[0].clone(),
-        backend: Candidate {
-            identity: "not-a-backend".to_owned(),
-        },
-        kind: BackendKind::Kani,
-    };
-    let expected = |index: usize| RoutedGenerationError::BackendKindDisagrees {
-        request_index: index,
-        backend: foreign(index).backend,
-        routed: BackendKind::Kani,
-        converted: None,
-    };
-    let routed = [route(1, &fixture.rendered[1]), foreign(5)];
-    assert_eq!(
-        generate_routed(&fixture.package, &routed, &contexts),
-        Err(expected(5))
-    );
-    // Checked before duplicates and missing context, lowest index first.
-    let routed = [
-        route(3, &fixture.rendered[1]),
-        route(3, &fixture.rendered[2]),
-        foreign(9),
-        foreign(6),
-    ];
-    assert_eq!(
-        generate_routed(
-            &fixture.package,
-            &routed,
-            &GenerationContexts { kani: None }
-        ),
-        Err(expected(6))
-    );
 }
 
 /// Duplicate request indexes and a missing kind context each refuse the whole call.

@@ -15,7 +15,7 @@
 //! `src/lib.rs`. That generator numbers its records by position; this module maps every position
 //! back to the driver's request index and pairs each harness with its record by `harness_symbol`.
 
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
 
@@ -33,7 +33,7 @@ use crate::{
         derive_exact_scalar_items, generate_exact_scalar_oracles, ExactScalarClaim,
         ExactScalarOracles,
     },
-    routed::capability::{BackendKind, Candidate},
+    routed::capability::{BackendDescriptor, BackendKind, Candidate},
 };
 
 /// One item the driver routed to a backend.
@@ -47,9 +47,54 @@ pub struct RoutedGenerationItem {
     /// The IR node the item checks.
     pub node_id: CheckedNodeId,
     /// The routed backend, as the FR-331 wire pair.
-    pub backend: Candidate,
+    backend: Candidate,
     /// The routed backend's kind.
-    pub kind: BackendKind,
+    kind: BackendKind,
+}
+
+/// A routed item cannot be constructed from a contradictory descriptor.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RoutedItemConstructionError {
+    /// The routed candidate and descriptor name different backend identities.
+    DescriptorBackendMismatch {
+        /// The routed candidate.
+        backend: Candidate,
+        /// The descriptor's backend identity.
+        descriptor: String,
+    },
+    /// A linked descriptor has no CG built-in kind.
+    UnknownLinkedBackend {
+        /// The unknown linked candidate.
+        backend: Candidate,
+    },
+}
+
+impl RoutedGenerationItem {
+    /// Build a routed item from the descriptor the driver projected for negotiation.
+    pub fn from_descriptor(
+        request_index: usize,
+        node_id: CheckedNodeId,
+        backend: Candidate,
+        descriptor: &BackendDescriptor,
+    ) -> Result<Self, RoutedItemConstructionError> {
+        if backend.identity != descriptor.identity {
+            return Err(RoutedItemConstructionError::DescriptorBackendMismatch {
+                backend,
+                descriptor: descriptor.identity.clone(),
+            });
+        }
+        let kind = BackendKind::from_descriptor(descriptor).ok_or_else(|| {
+            RoutedItemConstructionError::UnknownLinkedBackend {
+                backend: backend.clone(),
+            }
+        })?;
+        Ok(Self {
+            request_index,
+            node_id,
+            backend,
+            kind,
+        })
+    }
 }
 
 /// The Kani generation context. Its fields have FR-015's meanings.
@@ -63,10 +108,9 @@ pub struct KaniGenerationContext<'a> {
     pub unwind: u32,
 }
 
-/// One optional generation context per [`BackendKind`] variant.
+/// The optional Kani generation context; process generation needs none.
 ///
-/// A kind added without an arm in the generation dispatch and in `has` does not compile; its
-/// context field is added beside those arms.
+/// A kind added without an arm in the generation dispatch and in `has` does not compile.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GenerationContexts<'a> {
     /// The Kani context.
@@ -75,9 +119,10 @@ pub struct GenerationContexts<'a> {
 
 impl GenerationContexts<'_> {
     /// Whether the context for `kind` is supplied.
-    const fn has(&self, kind: BackendKind) -> bool {
+    const fn has(&self, kind: &BackendKind) -> bool {
         match kind {
             BackendKind::Kani => self.kani.is_some(),
+            BackendKind::Process(_) => true,
         }
     }
 }
@@ -88,10 +133,12 @@ pub enum KindOutput {
     /// The Kani arm's record and, when the item lowered, its harness.
     Kani {
         /// FR-015's record, with every index the driver's request index.
-        record: ObligationRecord,
+        record: Box<ObligationRecord>,
         /// The item's harness, when one was emitted.
-        harness: Option<KaniScalarObligationHarness>,
+        harness: Option<Box<KaniScalarObligationHarness>>,
     },
+    /// Process execution and its terminal record belong to the driver's plugin host.
+    Process,
 }
 
 /// The output for one routed item.
@@ -110,7 +157,7 @@ pub struct RoutedItemOutput {
 pub struct RoutedGeneration {
     /// One entry per routed item, in ascending request index.
     pub items: Vec<RoutedItemOutput>,
-    /// The kinds whose arm rejected its whole group, in [`BackendKind::ALL`] order.
+    /// The kinds whose arm rejected its whole group, in built-in order.
     pub rejected: Vec<BackendKind>,
     /// The FR-014 claim map the Kani arm derived for its group, ascending by node id: the
     /// generated claims of the derivable nodes and a `NoDerivableClaim` claim for each other.
@@ -134,7 +181,7 @@ pub enum RoutedGenerationError {
         backend: Candidate,
         /// The routed kind.
         routed: BackendKind,
-        /// The kind [`BackendKind::from_identity`] returns, or `None` when it has none.
+        /// The kind implied by the routed identity, or `None` for an unknown linked identity.
         converted: Option<BackendKind>,
     },
     /// Two routed items share one request index.
@@ -229,7 +276,11 @@ pub fn generate_routed(
     let mut rejected = Vec::new();
     let mut claim_map = None;
     let mut oracle_artifacts = None;
-    for kind in BackendKind::ALL {
+    let kinds = ordered
+        .iter()
+        .map(|item| item.kind.clone())
+        .collect::<BTreeSet<_>>();
+    for kind in kinds {
         let group = ordered
             .iter()
             .copied()
@@ -238,7 +289,7 @@ pub fn generate_routed(
         if group.is_empty() {
             continue;
         }
-        let arm = match kind {
+        let arm = match &kind {
             BackendKind::Kani => {
                 let (arm, kani_claim_map, kani_artifacts) =
                     generate_kani(package, &group, contexts)?;
@@ -246,6 +297,17 @@ pub fn generate_routed(
                 oracle_artifacts = Some(kani_artifacts);
                 arm
             }
+            BackendKind::Process(_) => ArmOutput {
+                outputs: group
+                    .iter()
+                    .map(|item| RoutedItemOutput {
+                        request_index: item.request_index,
+                        backend: item.backend.clone(),
+                        output: KindOutput::Process,
+                    })
+                    .collect(),
+                rejected: false,
+            },
         };
         if arm.rejected {
             rejected.push(kind);
@@ -267,12 +329,17 @@ fn refuse_inconsistent_routing(
     contexts: &GenerationContexts<'_>,
 ) -> Result<(), RoutedGenerationError> {
     for item in ordered {
-        let converted = BackendKind::from_identity(&item.backend.identity);
-        if converted != Some(item.kind) {
+        let converted = match &item.kind {
+            BackendKind::Kani => BackendKind::from_identity(&item.backend.identity),
+            BackendKind::Process(_) => Some(BackendKind::Process(
+                crate::routed::capability::BackendId(item.backend.identity.clone()),
+            )),
+        };
+        if converted.as_ref() != Some(&item.kind) {
             return Err(RoutedGenerationError::BackendKindDisagrees {
                 request_index: item.request_index,
                 backend: item.backend.clone(),
-                routed: item.kind,
+                routed: item.kind.clone(),
                 converted,
             });
         }
@@ -285,8 +352,10 @@ fn refuse_inconsistent_routing(
             request_index: pair[0].request_index,
         });
     }
-    if let Some(item) = ordered.iter().find(|item| !contexts.has(item.kind)) {
-        return Err(RoutedGenerationError::MissingKindContext { kind: item.kind });
+    if let Some(item) = ordered.iter().find(|item| !contexts.has(&item.kind)) {
+        return Err(RoutedGenerationError::MissingKindContext {
+            kind: item.kind.clone(),
+        });
     }
     Ok(())
 }
@@ -358,7 +427,10 @@ fn route_records(
             Ok(RoutedItemOutput {
                 request_index: item.request_index,
                 backend: item.backend.clone(),
-                output: KindOutput::Kani { record, harness },
+                output: KindOutput::Kani {
+                    record: Box::new(record),
+                    harness: harness.map(Box::new),
+                },
             })
         })
         .collect()
@@ -496,6 +568,37 @@ mod tests {
         }
     }
 
+    /// Trace: FR-022-AC-4, FR-022-AC-18, TC-046.
+    #[test]
+    fn mismatched_private_kinds_refuse_before_generation() {
+        let mut kani = item(1);
+        kani.backend.identity = "unregistered".to_owned();
+        assert_eq!(
+            super::refuse_inconsistent_routing(&[&kani], &super::GenerationContexts::default()),
+            Err(RoutedGenerationError::BackendKindDisagrees {
+                request_index: 1,
+                backend: kani.backend.clone(),
+                routed: BackendKind::Kani,
+                converted: None,
+            })
+        );
+        let mut process = item(2);
+        process.backend.identity = "first".to_owned();
+        process.kind =
+            BackendKind::Process(crate::routed::capability::BackendId("second".to_owned()));
+        assert_eq!(
+            super::refuse_inconsistent_routing(&[&process], &super::GenerationContexts::default()),
+            Err(RoutedGenerationError::BackendKindDisagrees {
+                request_index: 2,
+                backend: process.backend.clone(),
+                routed: process.kind.clone(),
+                converted: Some(BackendKind::Process(crate::routed::capability::BackendId(
+                    "first".to_owned()
+                ))),
+            })
+        );
+    }
+
     /// Trace: NFR-005-AC-5, TC-042.
     #[test]
     fn tc_042_ac5_a_record_count_other_than_the_item_count_is_a_typed_refusal() {
@@ -608,6 +711,7 @@ mod tests {
                     } => Some(*first_index),
                     _ => None,
                 },
+                super::KindOutput::Process => panic!("Kani records have Kani output"),
             })
             .collect::<Vec<_>>();
         assert_eq!(positions, vec![None, Some(10), Some(11)]);
