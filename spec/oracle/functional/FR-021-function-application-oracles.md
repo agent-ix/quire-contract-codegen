@@ -196,6 +196,16 @@ QSL application API.
   Distinct unknown names and duplicate-node pair members on one call node
   retain the separate dispositions and exact precedence AC-22 and AC-24
   specify. Reordering the request shall not change source or claim bytes.
+- When a directly requested call-node id, or a declared function body's root,
+  names an admitted `temporal`/`formula`, `temporal`/`fairness` or
+  `expression`/`case` node, the generator shall refuse the affected item as
+  `ExactFunctionRefusal::Unsupported`, retaining the requested call-node id
+  in its claim and the first unsupported reachable node and tag in the
+  refusal. A lowered `case` root shall name itself and `expression` as that
+  cause. A directly requested temporal clause shall keep its existing
+  quire-spec-language#121 blocker even when its closure reaches a formula or
+  fairness node first. The refusal shall create no schedule root, oracle
+  symbol or location record for the affected item.
 - The schedule crate shall contain no `unwrap`, `expect`, panicking index,
   `unreachable!`, `panic!`, `todo!` or `unimplemented!`, no literal charge
   amount and no literal `Outcome`/`Value` standing in for an owner result.
@@ -227,7 +237,7 @@ QSL application API.
 | FR-021-AC-8 | The schedule marks only linked-package admission as applicable and never marks a kernel-mode package applicable. Concrete mode admission is checked through the QSL-owned API when available. PLANNED (QSL-358/IR-349 for concrete admission). | Inspection (TC-031) |
 | FR-021-AC-9 | The schedule preserves a `function.call` charge point and an incomplete stop before body work; the eventual oracle returns the QSL-owned incomplete outcome at a denied charge without applying it. PLANNED (QSL-358/IR-349 for execution). | Test (TC-031) |
 | FR-021-AC-10 | A declared parameter or result type reaching a `reference` composite form is refused as blocked on quire-spec-language#120, with no schedule root or concrete code for that function. The eventual oracle admits no meter charge for it. PLANNED (QSL-358/IR-349 for runtime charge assertion). | Test (TC-031) |
-| FR-021-AC-11 | Model and relation nodes are refused as blocked on quire-spec-language#120, and state, temporal and protocol nodes as blocked on quire-spec-language#121, each blocker distinct and neither reported as scheduled. | Test (TC-031) |
+| FR-021-AC-11 | Model and relation nodes are refused as blocked on quire-spec-language#120, and state, temporal nodes other than directly requested `formula` and `fairness` roots, and protocol nodes as blocked on quire-spec-language#121, each blocker distinct and neither reported as scheduled. A requested temporal clause keeps that blocker even if its first unsupported reachable node is a formula or fairness child. | Test (TC-031) |
 | FR-021-AC-12 | A declared function whose own body fails to lower — an unlowerable node, a form none of this generator's classifiers admits, or a nested `call` naming a function absent from the request — refuses every item bound to that function with a typed reason, without changing an unrelated package's items. | Test (TC-031) |
 | FR-021-AC-13 | Schedule source and claim-map bytes are identical across runs and request permutations; entries order by call-node id, declaring function-node id, then source argument-node ids, with the name tie-break AC-24 specifies. | Test (TC-031) |
 | FR-021-AC-14 | The schedule crate declares `publish = false`, compiles without a Contract Runtime `exact` dependency, contains no charge amount or literal outcome/value standing in for owner execution, and stays within caller-selected source bytes and publication artifact limits. Concrete QSL-owner-path emission is PLANNED (QSL-358/IR-349). | Test (TC-031) |
@@ -249,6 +259,7 @@ QSL application API.
 | FR-021-AC-30 | A requested generation work limit of `u64::MAX` returns `InvalidGenerationWorkLimit` before lowering or charging; at `u64::MAX - 1` the first denied count is representable in the `u64` refusal and never wraps or panics. PLANNED (IR-511). | Test (TC-031) |
 | FR-021-AC-31 | Once QSL-358/IR-349 establishes the callable owner API, the 100,000-node generated oracle compiles and runs on a 512 KiB stack under raised caller work and source-byte limits, agreeing with an independently constructed shallow equivalent in outcome and admitted charges; no fixed depth refusal occurs. This is a distinct PLANNED execution gate, not evidence from the schedule-only crate. | Test (TC-031) |
 | FR-021-AC-32 | Neither the schedule crate nor eventual concrete oracle requires `quire_contract_runtime::exact`, an alias, wrapper or compatibility layer; owner-path emission waits for QSL-358/IR-349 and preserves AC-2 through AC-5, AC-8, AC-9, AC-14 and AC-16 through AC-20 against the QSL-owned API. PLANNED (QSL-358/IR-349 for concrete oracle). | Inspection (TC-031) |
+| FR-021-AC-33 | With an IR-admitted `temporal`/`formula`, `temporal`/`fairness` or `expression`/`case` node used directly as an item's call-node id, the claim-map entry retains that id and is `Refused { refusal: ExactFunctionRefusal::Unsupported }`; with one used as a declared function's body root, each item naming that function retains its own call-node id and the same typed body refusal. For an IR `Unsupported` lowering record the refusal's `unsupported_node_id` and `node_tag` match its first unsupported reachable node and tag, which can differ from either request root; for a lowered `case` root they name that root and `"expression"`. No affected item is scheduled, given an oracle symbol or location entry, omitted, or panicked, and an unrelated healthy function/item's claim, schedule source and location map are byte-identical to a run without it. AC-11's temporal-clause blocker and existing duplicate/capability/lowering precedence remain unchanged. | Test (TC-031) |
 
 ### Mutations these criteria detect
 
@@ -289,6 +300,7 @@ written.
 | FR-021-AC-30 | Accept `u64::MAX` and increment a `u64` at the first denied charge; the refusal wraps or panics. |
 | FR-021-AC-31 | Count schedule-source compilation as execution evidence; an owner-path codegen or stack failure remains undetected. |
 | FR-021-AC-32 | Keep the deleted Contract Runtime `exact` port reachable through a re-export, wrapper or compatibility layer. |
+| FR-021-AC-33 | Classify a directly requested formula or fairness root as the clause's QSL-121 blocker, classify a lowered `case` body or call item as `FormMismatch`, or omit the affected call item's claim while its healthy sibling is scheduled. |
 
 ## Dependencies
 

@@ -118,6 +118,20 @@ required dependency or target path.
     `quire_contract_runtime::exact` dependency, alias, wrapper or compatibility
     surface. Assert none is required. The owner-path leg remains PLANNED until
     QSL-358/IR-349 defines the API (AC-32).
+13. Direct unsupported roots (FR-021-AC-33). Admit formula, fairness and case
+    roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
+    for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
+    Request each root first as an item's call-node id, then as a declared
+    function's body root with an item naming that function, alongside an
+    unrelated healthy function and call item. Compare the refused claim's
+    call-node id with the request, and its cause id/tag with the relevant IR
+    function-profile lowering record; for a lowered case root assert the root
+    id and `expression` tag. Assert one `ExactFunctionRefusal::Unsupported`
+    claim per affected item, no schedule root, symbol or location entry, no
+    panic or omitted claim, and unchanged healthy claim, schedule source and
+    location map. Request a temporal clause whose closure reaches formula or
+    fairness as a separate QSL-121 blocker control. Preserve the existing
+    duplicate, capability and lowering precedence cases.
 
 ## Expected Results
 
@@ -128,3 +142,9 @@ depth refusal. The first denied work or byte charge refuses before action or
 partial publication. Existing duplicate, unknown-name, lowering and blocker
 precedence remains testable. Concrete QSL-owner-path compilation and execution
 is a separate planned gate; no Contract Runtime `exact` path is required.
+
+Direct formula, fairness and case requests have one typed unsupported claim
+per affected call item, retaining the call request's identity separately from
+the causative node. They add no schedule or location and do not alter the
+healthy function's bytes; the temporal-clause control keeps its QSL-121
+blocker.

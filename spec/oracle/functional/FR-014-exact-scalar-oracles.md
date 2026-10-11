@@ -270,6 +270,17 @@ otherwise.
   it as blocked on quire-contract-runtime#34; model and relation families as
   blocked on quire-spec-language#120; composite, collection, state, temporal
   and protocol families as unsupported.
+- When an admitted `temporal`/`formula`, `temporal`/`fairness` or
+  `expression`/`case` node is requested directly, the scalar generator shall
+  retain that requested node id in one claim-map entry and refuse the item as
+  `ExactScalarRefusal::Unsupported` without emitting its oracle. The refusal
+  retains the first unsupported reachable node and tag returned by IR
+  lowering; that cause can differ from the requested root. If a `case` root
+  lowers despite its reachable types, the scalar generator shall refuse that
+  root as unsupported with the root id and `expression` tag, rather than
+  treating its `case` form as a scalar body mismatch. Derivation and routed
+  Kani shall keep their existing typed underivable or unsupported outcomes
+  for the same requested node.
 - If a node id appears more than once in the request, then the generator shall
   refuse every copy.
 - The generator shall order output by node id so
@@ -389,6 +400,7 @@ otherwise.
 | FR-014-AC-40 | A package whose lowering returns `failed` for the `bytes` limit (Contract IR FR-038-AC-95) is refused per item as `ExactScalarRefusal::LoweringByteLimitExceeded { limit, consumed }` with `limit` and `consumed` equal to the record's, never as `LoweringWorkExhausted`, and contributes no generated function. Through a whole call of `generate_exact_scalar_oracles` whose input is read under a byte ceiling that admits the checked package and is one byte below the canonical length of the lowered contract package of that call (the package `lower` returns for the call's requested nodes, not the checked package, which the fixture makes shorter), every requested item is refused so, each with `limit` equal to that ceiling and the same `consumed`, and no function is generated. A `Failed { limit_kind: Bytes }` record built by hand and given to the scalar `Failed` arm in the module's own `#[cfg(test)]` seam is refused so with the record's `limit` and `consumed` field for field (the per-node case of Contract IR FR-038-AC-95, which CG's public API cannot reach because a node preimage is shorter than any document it can read; the arm maps one record to one refusal, so it asserts no sibling isolation, which FR-014-AC-1 covers). | Test (TC-024) |
 | FR-014-AC-41 | A `failed` record whose `limit_kind` is `work` is still refused as `LoweringWorkExhausted` with the record's `limit` and `consumed` (FR-014-AC-15 unchanged), and one whose `limit_kind` is neither `work` nor `bytes` (each of `nodes`, `edges`, `occurrences` and `diagnostics`) is refused as `ExactScalarRefusal::LoweringLimitUnrecognised` with `limit_kind` equal to that snake_case name and the record's `limit` and `consumed`, without a panic and without a `LoweringWorkExhausted` or `LoweringByteLimitExceeded`. Each of the two is asserted on hand-built `Failed` records given to the scalar `Failed` arm itself in the module's `#[cfg(test)]` seam, so a mapping of an unrecognised kind to `LoweringWorkExhausted` in this module fails it. | Test (TC-024) |
 | FR-014-AC-42 | No `limit_kind` of a `failed` record is read in `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` or `src/oracle/function/mod.rs` but through the one shared classifier, `classify_lowering_failure` of the shared `oracle` module: the non-test code of each of the three files, as FR-014-AC-39 defines it (comments and every `#[cfg(test)]` item removed wherever the item sits, taken with `non_test_code` and `comments_stripped` of `tests/common/panic_scan.rs`), names no `CheckedPackageLimit` and accesses no `.limit_kind`, has exactly one `Failed` arm, which binds nothing (`Failed { .. }`) and calls `classify_lowering_failure`, and names `limit_kind` only as the field of its own `LoweringLimitUnrecognised` refusal and in the conversion into it. | Test (TC-024) |
+| FR-014-AC-44 | For each IR-admitted direct request naming a `temporal`/`formula`, `temporal`/`fairness` or `expression`/`case` node, the scalar claim map has exactly one entry with that requested node id and `ExactScalarRefusal::Unsupported`. For an IR `Unsupported` lowering record, the refusal's `unsupported_node_id` and `node_tag` equal that record's first unsupported reachable node and tag, even if that node is not the request root; for a lowered `case` root they name the root and `expression`. A lowered `case` is refused as `Unsupported`, not `FormMismatch`. Each refused item has no generated function or symbol, does not panic or disappear, and leaves a supported sibling's claim and source byte-identical to a run without the refused request. Derivation and routed Kani retain one typed unsupported or underivable outcome for each request without a harness. | Test (TC-024) |
 
 ## Dependencies
 

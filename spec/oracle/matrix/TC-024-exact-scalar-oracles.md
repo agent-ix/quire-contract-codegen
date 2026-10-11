@@ -93,6 +93,19 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
 20. Generate and derive `x + 2` narrowed to `Int[0, 11]` and also an operand of
     the unnarrowed `(x + 2) + x`, and `x + 1` consumed only by its narrowing
     (FR-014-AC-34).
+21. Direct unsupported roots (FR-014-AC-44). Admit packages through Contract
+    IR's public V2 reader with `temporal`/`formula`, `temporal`/`fairness` and
+    `expression`/`case` roots, using QSpec FR-370 and FR-440 for formula and
+    case shapes and Contract IR FR-038-AC-107 for fairness. Request each root
+    with a supported scalar sibling. Compare each root's scalar-profile
+    lowering record with its generated claim: the claim keeps the requested
+    id, while `Unsupported` carries that record's first unsupported reachable
+    id and tag. Also exercise a lowered `case` root at the shape-checking
+    seam: its cause is the root and `expression`, never `FormMismatch`. Repeat
+    without the refused root and compare the sibling's claim and source bytes.
+    Derive the roots and route them through Kani; inspect their typed
+    underivable or unsupported claim and absence of a harness, with no panic
+    or missing claim.
 
 ## Expected Results
 
@@ -109,6 +122,13 @@ three executions agree on every vector; the generated crate compiles with
 derives to its declared descriptor and generates `ir_confirmed`, and every
 node with no derivable descriptor is refused with its typed
 `ClaimDerivationRefusal`.
+
+Each direct temporal formula, temporal fairness and case request has one
+refused claim with its requested id, the causative unsupported id and tag
+when IR lowering supplies them, and no oracle symbol. A lowered case root is
+refused as unsupported at scalar shape checking. Derivation and routed Kani
+retain typed outcomes without a harness; the supported sibling's claim and
+source are unchanged.
 
 The six attempted text-admission conversion nodes remain refused by Contract
 IR. Their refusal is evidence of the checked-package boundary, not evidence
