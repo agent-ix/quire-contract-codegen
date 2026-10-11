@@ -96,6 +96,18 @@ the FR-015 generator returns for the same items.
     symbol `x_proof`, and then two with distinct symbols. Unique name assignment
     makes the duplicate unreachable from `generate_routed` itself, so this step
     runs on the pairing function (`index_harnesses`).
+19. **Nested bounded operands (FR-014-AC-45, FR-015-AC-103).** Route the outer
+    applications of QSL-emitted `(x + 1) + 1` over `x: Int[0, 9]` into
+    `Int[0, 20]`, `x * -1` over `x: Int[1, 9]` into `Int[-9, -1]`, and
+    `-(x + 1)` over `x: Int[0, 9]` into `Int[-10, -1]`, with no caller claim
+    map. Read the per-position harness ranges, result assertion, claim
+    provenance and inferred source identities. Then route outer applications
+    with a plain-Integer parameter nested under add and negate; an inferred
+    result outside `i64`; and nested operands provoking
+    `OperandRangeLimitExceeded`, `OperandUnsupported`, `OperandTypeMismatch`
+    and `InvalidBody` beside one of the supported items (FR-014-AC-46,
+    FR-015-AC-104). Exercise malformed shapes at the inference seam when
+    Contract IR admission rejects them first.
 
 ## Expected Results
 
@@ -162,3 +174,15 @@ the FR-015 generator returns for the same items.
 18. `index_harnesses` returns `Err(DuplicateHarness)` naming `b_module::x_proof`
     for the second of two harnesses sharing the symbol `x_proof`, and indexes two
     harnesses with distinct symbols.
+19. The three outer items are `Supported` with `ir_confirmed` claims and
+    harness ranges `[1, 10]`, `[1, 1]`; `[1, 9]`, `[-1, -1]`; and
+    `[1, 10]`, respectively. Each inferred range records the inner application
+    id in its harness identity, and each harness asserts its declared outer
+    result bound. A nested plain-Integer parameter is `requires_bound` naming
+    Integer with no harness. An inferred range with either endpoint outside
+    `i64` is `unsupported` as `domain_not_representable_in_i64`, with both
+    exact endpoints. Each `OperandRangeLimitExceeded`, `OperandUnsupported`,
+    `OperandTypeMismatch` and `InvalidBody` refusal settles `unsupported` with
+    `oracle_refused` carrying the exact FR-014 variant and its node, position
+    or limit fields, and no harness. The supported item's claim and harness
+    are unchanged.

@@ -93,6 +93,24 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
 20. Generate and derive `x + 2` narrowed to `Int[0, 11]` and also an operand of
     the unnarrowed `(x + 2) + x`, and `x + 1` consumed only by its narrowing
     (FR-014-AC-34).
+20a. From admitted QSL-shaped nodes, derive and generate the outer operations
+    `(x + 1) + 1` and `-(x + 1)` for `x: Int[0, 9]`, and `x * -1` for
+    `x: Int[1, 9]`. Use the QSL emitter's reference to a plain-Integer inner
+    application, its negate application over a literal `1`, and the outer
+    narrowing conversions. Inspect each operation's `ir_confirmed` provenance,
+    checked outer result bound, and per-position inferred operand interval
+    (FR-014-AC-45). Also infer `-0` and negate of the canonical positive
+    literal `9223372036854775808` as operands; inspect the exact singleton
+    before Kani's `i64` check.
+20b. Add a plain-Integer parameter under an inner add and under a negate;
+    directly reference a raw inner add that is also consumed by a separate
+    narrow whose bound is narrower than the inner add's independently inferred
+    interval; request that inner add alone as well. Supply a wrong-kind and a
+    noncanonical literal, a missing reference, a cycle, an unsupported
+    application identity, and paths one beyond each of the 64-level,
+    4,096-node and 4,096-bit limits beside a supported sibling. Exercise
+    malformed shapes at the inference seam when Contract IR admission rejects
+    them first. Check the exact refusal and sibling isolation (FR-014-AC-46).
 21. Direct unsupported roots (FR-014-AC-44). Admit packages through Contract
     IR's public V2 reader with `temporal`/`formula`, `temporal`/`fairness` and
     `expression`/`case` roots, using QSpec FR-370 and FR-440 for formula and
@@ -162,6 +180,25 @@ For the bounded-parameter and QSL-shaped steps:
   generation and derivation.
 - Step 20: `x + 2` is `AmbiguousBound` naming Integer in generation and
   derivation; `x + 1` generates.
+- Step 20a: the outer operations derive and generate `ir_confirmed`. Their
+  inferred operand intervals by position are `[1, 10]`, `[1, 1]`;
+  `[1, 10]`; and `[1, 9]`, `[-1, -1]`, respectively. No inferred interval is
+  entered as a checked bound node, and each outer descriptor is checked
+  against only its outer result bound. The edge singletons are `[0, 0]` and
+  `[-9223372036854775808, -9223372036854775808]` without overflow or
+  endpoint truncation.
+- Step 20b: each plain-Integer parameter is `RequiresBound` naming Integer.
+  The raw inner add's operand interval follows its independently bounded
+  leaves, even though the separate narrow has a smaller bound; requesting
+  that mixed-consumer inner node alone is `AmbiguousBound` as in step 20.
+  A wrong-kind literal is `OperandTypeMismatch` naming outer argument position
+  and literal kind; an unsupported nested operation is `OperandUnsupported`
+  naming outer argument position and operation identity. Malformed literal or
+  reference, missing node, or cycle refuses at IR admission or lowering, or
+  yields `InvalidBody` naming the offending node at the inference seam. The
+  three ceiling crossings are `OperandRangeLimitExceeded` naming node, kind,
+  limit and consumed amount. None emits an oracle, and the supported sibling
+  is byte-identical to its separate request.
 
 Integer arithmetic, rational arithmetic and ordering (including decimal
 ordering) have an operator in the QSL value authority
