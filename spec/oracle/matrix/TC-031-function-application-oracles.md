@@ -202,7 +202,10 @@ The authority-agreement leg (FR-021-AC-18) is 🚧 Planned.
     corresponding `NotExpression`, `FormMismatch`, `BodyMismatch`, `SignatureMismatch` or
     `UnknownCallee` refusal for each affected function, propagation to its callers, unchanged
     duplicate-declaration and capability refusal precedence, and generation of an unrelated
-    function's item.
+    function's item. In one combined-defect control, give a classifiable checked `Call` root a
+    reference to a declared function while its descriptor names an absent or refused callee:
+    assert `UnknownCallee` rather than `BodyMismatch`. With the descriptor changed to a unique
+    surviving callee other than the checked reference, assert `BodyMismatch` instead.
 
 ## Expected Results
 
