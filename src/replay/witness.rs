@@ -127,9 +127,11 @@ pub fn decode_falsification(
 }
 
 /// A decoded playback: the values, and the check text the playback's own assertion block names.
-pub(crate) struct DecodedPlayback {
+pub(crate) struct DecodedPlayback<'a> {
     /// The text of the assertion Kani reports as failed.
     pub(crate) check_text: String,
+    /// The selected check clause as printed, including format arguments when present.
+    pub(crate) check_clause: &'a str,
     /// The decoded values, named by their bindings, in binding order.
     pub(crate) values: Vec<(String, WitnessValue)>,
 }
@@ -140,12 +142,12 @@ pub(crate) struct DecodedPlayback {
 /// # Errors
 ///
 /// The [`DecodeFailure`] [`decode_falsification`] names.
-pub(crate) fn decode_playback(
+pub(crate) fn decode_playback<'a>(
     harness_symbol: &str,
     module_symbol: &str,
     arguments: &[ObligationBinding],
-    transcript: &str,
-) -> Result<DecodedPlayback, DecodeFailure> {
+    transcript: &'a str,
+) -> Result<DecodedPlayback<'a>, DecodeFailure> {
     let schema = argument_types(arguments).map_err(|error| match error {
         WitnessSchemaError::NonArgumentBinding { identifier } => DecodeFailure::new(
             "cg_witness_schema_non_argument_binding",
@@ -177,6 +179,7 @@ pub(crate) fn decode_playback(
     }
     Ok(DecodedPlayback {
         check_text: playback.check_text.to_owned(),
+        check_clause: playback.check_clause,
         values: decode_values(&playback, &schema)?,
     })
 }

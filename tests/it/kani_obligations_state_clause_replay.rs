@@ -60,6 +60,46 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     let harness = &generated.postcondition.identity;
     let check = "operation `deposit`: postcondition `post.balance >= pre.balance` failed";
     let good = playback_text(harness, check, &[5, 7]);
+    // Kani prints the generated `assert!(predicate, "{}", message)` arguments inside
+    // outer quotes, across two lines of the check clause.
+    let kani_check = format!("\"{{}}\",\n{check:?}");
+    let kani_playback = playback_text(harness, &kani_check, &[5, 7]);
+    let mut kani_inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
+    kani_inputs.playback.clear();
+    kani_inputs
+        .decode_falsification(
+            harness,
+            &KaniRunOutcome::Falsified {
+                counterexample: kani_playback.clone(),
+            },
+        )
+        .expect("Kani's two-line generated assertion decodes");
+    assert_eq!(
+        kani_inputs.playback,
+        vec![("balance".to_owned(), 5), ("audit".to_owned(), 7)]
+    );
+    for spoof in [
+        kani_playback.replace("post.balance >= pre.balance", "post.audit >= pre.audit"),
+        kani_playback.replace("\"{}\",\n", "\"{}\", 9,\n"),
+        kani_playback.replace("failed\"\"\n", "failed\"\" extra\n"),
+        kani_playback.replace("\"{}\",\n", "\"{0}\",\n"),
+    ] {
+        assert_ne!(
+            spoof, kani_playback,
+            "the spoof must change the captured form"
+        );
+        let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
+        inputs.playback.clear();
+        assert!(matches!(
+            inputs.decode_falsification(
+                harness,
+                &KaniRunOutcome::Falsified {
+                    counterexample: spoof,
+                },
+            ),
+            Err(StateClauseReplayError::AssertionMismatch)
+        ));
+    }
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
     inputs.playback.clear();
     inputs
