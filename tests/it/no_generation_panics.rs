@@ -312,8 +312,9 @@ fn tc_042_ac1_src_holds_no_panic_token() {
     );
 }
 
-/// Trace: AD-004 L-9, TC-023. Only the core boundary may call the canonical byte encoder or
-/// digest. This checks removed serializer and artifact-wrapper definitions without banning
+/// Trace: TC-023. This guards the canonical encoding boundary described by AD-004 L-9: only the
+/// core boundary may call the canonical byte encoder or digest. It checks removed serializer and
+/// artifact-wrapper definitions without banning
 /// legitimate `FixedShape` or `Encode` type use elsewhere in the crate.
 #[test]
 fn tc_023_canonical_encoding_has_one_source_boundary() {

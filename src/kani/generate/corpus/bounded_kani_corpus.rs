@@ -821,7 +821,7 @@ mod tests {
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
 
-    /// Trace: AD-004 L-9, TC-023. Owner serializers supply each value; the input projection
+    /// Trace: TC-023. Owner serializers supply each value; the input projection
     /// retains three established key names and the two intentionally normalized populations.
     #[test]
     fn tc_023_canonical_preimage_uses_owner_serializers() {
@@ -881,7 +881,7 @@ mod tests {
         );
     }
 
-    /// Trace: AD-004 L-9, TC-023. The owning input's object maps may exceed the final case-name
+    /// Trace: TC-023. The owning input's object maps may exceed the final case-name
     /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
     #[test]
     fn tc_023_compact_case_identity_admits_a_verbose_owner_input() {
@@ -920,7 +920,7 @@ mod tests {
         assert!(case_name(&case).starts_with("arithmetic_"));
     }
 
-    /// Trace: AD-004 L-9, TC-023. This preimage is authored from the fixture fields in RFC 8785
+    /// Trace: FR-015-AC-94, TC-023. This preimage is authored from the fixture fields in RFC 8785
     /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
     /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
     /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
@@ -954,7 +954,7 @@ mod tests {
         assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));
     }
 
-    /// Trace: AD-004 L-9, TC-023. The caller supplies the dependency census, so it can offer a
+    /// Trace: TC-023. The caller supplies the dependency census, so it can offer a
     /// graph larger than one artifact. The counted preflight refuses before building a JSON tree.
     #[test]
     fn tc_023_large_dependency_graph_refuses_canonical_projection() {
@@ -1719,7 +1719,7 @@ mod tests {
     /// same request yields the same ones in any emission order and in any run, and the symbol
     /// carries the name its artifact paths carry.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_case_identity_is_independent_of_emission_order_and_run() {
         let fixture = fixture();
@@ -1755,7 +1755,7 @@ mod tests {
     /// reads (`max_items`), the source id, or the declared census -- get distinct names, paths
     /// and proof symbols, so no case overwrites another.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_distinct_requests_get_distinct_names_paths_and_proof_symbols() {
         let fixture = fixture();
@@ -1869,7 +1869,7 @@ mod tests {
         })
     }
 
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_arithmetic_request_field_changes_the_identity() {
         use NumericOperator::{Add, Subtract};
@@ -1887,7 +1887,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_graph_request_field_changes_the_identity() {
         assert_each_variation_changes_identity(
@@ -1903,7 +1903,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_collection_request_field_changes_the_identity() {
         let query = |source_id: &str, values: Vec<i128>, max_items, kind| {
@@ -1946,7 +1946,7 @@ mod tests {
     /// graph oracle is built from the input's references, and the input also fixes the bounds
     /// the case was admitted under.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_every_input_and_profile_field_changes_the_identity() {
         let request = || checked("s", NumericOperator::Add, [1, 1, 0, 2]);
@@ -2027,7 +2027,7 @@ mod tests {
     /// The same graph offered with its objects and references in another order is the same case
     /// (so a second emission is refused), and a genuinely different graph is a different one.
     ///
-    /// Trace: TC-023.
+    /// Trace: FR-015-AC-94, TC-023.
     #[test]
     fn tc_023_identity_is_canonical_over_the_input_population_order() {
         let node = |identity: &str| FiniteObject {

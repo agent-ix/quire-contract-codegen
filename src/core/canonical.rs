@@ -223,7 +223,7 @@ mod tests {
 
     impl super::ArtifactJsonRecord for Unsorted<'_> {}
 
-    /// Trace: AD-004 L-9, TC-023. The emitted file has canonical key order and one newline;
+    /// Trace: TC-023. The emitted file has canonical key order and one newline;
     /// an ordinary serde_json serializer would preserve this struct's opposite field order.
     #[test]
     fn generated_json_uses_canonical_bytes() {
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(text, "{\"alpha\":1,\"zeta\":\"z\"}\n");
     }
 
-    /// Trace: AD-004 L-9, TC-023. A typed artifact above its byte ceiling refuses rather than
+    /// Trace: TC-023. A typed artifact above its byte ceiling refuses rather than
     /// returning a truncated or partially encoded JSON file.
     #[test]
     fn generated_json_refuses_an_over_bound_record() {
