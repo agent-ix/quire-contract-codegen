@@ -9,7 +9,7 @@ use quire_contract_codegen::{
     ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem, RequestedKind,
     BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fs, os::unix::fs::PermissionsExt, process::Command};
 
 fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
     BackendDescriptor {
@@ -114,7 +114,7 @@ fn extent_domain(kind: DomainKind) -> ExtentDomain {
     }
 }
 
-/// Trace: FR-019-AC-11, FR-019-AC-12, FR-019-AC-16, FR-019-AC-20, TC-046.
+/// Trace: FR-019-AC-11, FR-019-AC-12, FR-019-AC-20, TC-046.
 #[test]
 fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
     let backend = process("kani", &[Mode::Bounded], &[DomainKind::Integer]);
@@ -187,7 +187,7 @@ fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
     );
 }
 
-/// Trace: FR-019-AC-17, FR-019-AC-21, FR-019-AC-22, FR-019-AC-23, TC-046.
+/// Trace: FR-019-AC-16, FR-019-AC-17, FR-019-AC-21, FR-019-AC-22, TC-046.
 #[test]
 fn process_unbounded_settlement_checks_only_boundable_domains() {
     let backend = process("solver", &[Mode::Bounded], &[DomainKind::Collection]);
@@ -241,6 +241,75 @@ fn process_unbounded_settlement_checks_only_boundable_domains() {
     );
 }
 
+/// Trace: FR-019-AC-19, TC-046.
+#[test]
+fn process_bounded_coverage_reads_explicit_kind_with_fixed_domain_key() {
+    let backend = process("solver", &[Mode::Bounded], &[DomainKind::Collection]);
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("solver")]),
+    );
+    let covered = proof_bound(DomainKind::Collection, 8);
+    let uncovered = proof_bound(DomainKind::Population, 8);
+    assert_eq!(covered.domain(), uncovered.domain());
+    assert_eq!(covered.bound(), uncovered.bound());
+    request.extent.as_mut().unwrap().bounds = vec![covered];
+    assert_eq!(
+        settle_one(vec![backend.clone()], request.clone()).disposition,
+        Disposition::Supported {
+            backend: "solver".to_owned()
+        }
+    );
+    request.extent.as_mut().unwrap().bounds = vec![uncovered];
+    assert_eq!(
+        settle_one(vec![backend], request).disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedDomain {
+                kind: CapabilityKind::ValueValidity,
+                domain: DomainKind::Population,
+                backend: "solver".to_owned()
+            }
+        }
+    );
+}
+
+/// Trace: FR-019-AC-23, TC-046.
+#[test]
+fn process_bounded_maximum_does_not_change_domain_coverage() {
+    let backend = process("solver", &[Mode::Bounded], &[DomainKind::Integer]);
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("solver")]),
+    );
+    for (kind, expected) in [
+        (
+            DomainKind::Integer,
+            Disposition::Supported {
+                backend: "solver".to_owned(),
+            },
+        ),
+        (
+            DomainKind::Population,
+            Disposition::Unsupported {
+                cause: Cause::UnsupportedDomain {
+                    kind: CapabilityKind::ValueValidity,
+                    domain: DomainKind::Population,
+                    backend: "solver".to_owned(),
+                },
+            },
+        ),
+    ] {
+        for maximum in [8, 1000] {
+            request.extent.as_mut().unwrap().bounds = vec![proof_bound(kind, maximum)];
+            assert_eq!(
+                settle_one(vec![backend.clone()], request.clone()).disposition,
+                expected,
+                "{kind:?} maximum {maximum} must not affect coverage"
+            );
+        }
+    }
+}
+
 /// Trace: FR-019-AC-13, FR-019-AC-18, TC-046.
 #[test]
 fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
@@ -256,12 +325,52 @@ fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
             backend: identity.to_owned()
         }
     );
+
+    let scratch = std::env::temp_dir().join(format!(
+        "quire-codegen-process-settlement-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&scratch).unwrap();
+    let executable = scratch.join("record-start");
+    let record = scratch.join("started");
+    fs::write(
+        &executable,
+        format!("#!/bin/sh\ntouch '{}'\n", record.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+    let identity = executable.to_str().unwrap();
+    let descriptor = process(identity, &[Mode::Bounded], &[DomainKind::Integer]);
+    let request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(identity)]),
+    );
+    assert_eq!(
+        settle_one(vec![descriptor], request).disposition,
+        Disposition::Supported {
+            backend: identity.to_owned()
+        }
+    );
+    assert!(
+        !record.exists(),
+        "settlement must not start the process provider"
+    );
+    assert!(Command::new(&executable).status().unwrap().success());
+    assert!(
+        record.exists(),
+        "the executable must record an actual start"
+    );
+    fs::remove_dir_all(scratch).unwrap();
 }
 
 /// Every variant of the closed backend kind reaches a dispatched arm, and each
 /// one settles rather than falling through.
 ///
-/// Trace: TC-030
+/// Trace: FR-019-AC-1, TC-030
 /// Provenance: codegen#86
 #[test]
 fn tc_030_every_backend_kind_has_a_dispatched_arm() {
@@ -287,6 +396,21 @@ fn tc_030_every_backend_kind_has_a_dispatched_arm() {
             backend.identity()
         );
     }
+    let identity = "process-arm";
+    let settlement = settle_one(
+        vec![process(identity, &[Mode::Bounded], &[])],
+        item(
+            RequestedKind::Known(CapabilityKind::ValueValidity),
+            Candidates::Set(vec![candidate(identity)]),
+        ),
+    );
+    assert_eq!(
+        settlement.disposition,
+        Disposition::Supported {
+            backend: identity.to_owned(),
+        },
+        "Process(id) has no arm that settles"
+    );
 }
 
 /// An absent kind and an unknown label settle before the candidate table is
