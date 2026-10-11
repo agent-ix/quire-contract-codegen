@@ -1075,7 +1075,16 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
             "{} names no generated function",
             generated.symbol
         );
-        assert_eq!(generated.ir_id, node.ir_id);
+        assert_eq!(generated.node_id, claim.node_id);
+        assert_eq!(generated.package_id, *package.package_id());
+        assert_eq!(
+            generated.contract_package_identity,
+            *lowered.package.wire().expect("lowered package").identity()
+        );
+        assert!(serde_json::to_value(generated)
+            .expect("generated claim")
+            .get("ir_id")
+            .is_none());
         assert_eq!(generated.semantic_form, expression.form);
         assert_eq!(generated.semantic_type, node.semantic_type);
         assert_eq!(generated.claims, node.claims);

@@ -1427,8 +1427,10 @@ pub struct LocationMapEntry {
 pub struct GeneratedExactFunctionClaim {
     /// Generated oracle function name.
     pub oracle_symbol: String,
-    /// Contract IR identity of the lowered `call` expression node.
-    pub ir_id: CheckedSemanticId,
+    /// Identity of the one Contract IR package that admitted this claim.
+    pub contract_package_identity: CheckedSemanticId,
+    /// Exact requested node key.
+    pub node_id: CheckedNodeId,
     /// Package id.
     pub package_id: CheckedSemanticId,
     /// Semantic type key of the `call` expression node.
@@ -1437,6 +1439,10 @@ pub struct GeneratedExactFunctionClaim {
     pub source_map: Vec<CheckedSourceMapEntry>,
     /// Reachable claim keys.
     pub claims: Vec<CheckedNodeId>,
+    /// Reachable bounded-domain keys.
+    pub bounds: Vec<CheckedNodeId>,
+    /// Every reached key except the root.
+    pub dependencies: Vec<CheckedNodeId>,
     /// The applied function's name.
     pub function: String,
     /// The applied function's `Origin::Body { function, index }`, equal to
@@ -2129,6 +2135,7 @@ pub fn generate_exact_function_oracles(
                 &function_index,
                 &package_refusal,
                 lowering.package.source_package_id(),
+                call_lowering.package.wire().map(|wire| wire.identity()),
                 item,
                 record,
             ) {
@@ -2313,10 +2320,16 @@ fn item_disposition(
     function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
     package_id: &CheckedSemanticId,
+    contract_package_identity: Option<&CheckedSemanticId>,
     item: &ExactFunctionItem,
     record: &CompleteLoweringRecordV2,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
     let node = lowered_binary_body(record)?;
+    let contract_package_identity =
+        contract_package_identity.ok_or_else(|| ExactFunctionRefusal::PackageRefused {
+            function_index: None,
+            cause: "Contract IR returned a lowered record without a package".to_owned(),
+        })?;
     if &*node.node.semantic_form != "call" {
         return Err(ExactFunctionRefusal::FormMismatch {
             found: node.node.semantic_form.to_string(),
@@ -2361,11 +2374,14 @@ fn item_disposition(
         stem,
         GeneratedExactFunctionClaim {
             oracle_symbol: String::new(),
-            ir_id: node.ir_id.clone(),
+            contract_package_identity: contract_package_identity.clone(),
+            node_id: item.call_node_id.clone(),
             package_id: package_id.clone(),
             semantic_type: node.semantic_type.clone(),
             source_map: node.source_map.clone(),
             claims: node.claims.clone(),
+            bounds: node.bounds.clone(),
+            dependencies: node.dependencies.clone(),
             function: declaration.name.clone(),
             function_origin: RecordedOrigin::Body {
                 function: declaration.name.clone(),
@@ -2613,6 +2629,48 @@ mod tests {
             decode_schedule_operand(&malformed, &owner, &types),
             Err(schedule::ScheduleRefusal::MalformedTerm(_))
         ));
+    }
+
+    #[test]
+    fn generated_function_claim_serializes_package_identity_and_requested_key() {
+        let identity: CheckedSemanticId = serde_json::from_value(serde_json::json!({
+            "domain": "quire.contract-ir.semantic/v1",
+            "algorithm": "sha256",
+            "digest": "a".repeat(64),
+        }))
+        .expect("package identity");
+        let node_id: CheckedNodeId = serde_json::from_value(serde_json::json!({
+            "domain": "quire.checked-semantic-node/v1",
+            "digest": "b".repeat(64),
+        }))
+        .expect("requested key");
+        let generated = GeneratedExactFunctionClaim {
+            oracle_symbol: "oracle_f".to_owned(),
+            contract_package_identity: identity.clone(),
+            node_id: node_id.clone(),
+            package_id: identity.clone(),
+            semantic_type: node_id.clone(),
+            source_map: Vec::new(),
+            claims: Vec::new(),
+            bounds: Vec::new(),
+            dependencies: Vec::new(),
+            function: "f".to_owned(),
+            function_origin: RecordedOrigin::Body {
+                function: "f".to_owned(),
+                index: 0,
+            },
+            declaration_keys: Vec::new(),
+        };
+        let value = serde_json::to_value(generated).expect("claim serializes");
+        assert_eq!(
+            value["contract_package_identity"],
+            serde_json::json!(identity)
+        );
+        assert_eq!(value["node_id"], serde_json::json!(node_id));
+        assert!(value.get("ir_id").is_none());
+        for key in ["claims", "bounds", "dependencies"] {
+            assert_eq!(value[key], serde_json::json!([]), "{key}");
+        }
     }
 
     /// A `failed` record is refused by its limit kind through the one shared classifier: `work`

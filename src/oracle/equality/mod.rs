@@ -491,8 +491,10 @@ pub struct GeneratedCompositeEqualityClaim {
     pub environment_symbol: String,
     /// Generated oracle function name.
     pub oracle_symbol: String,
-    /// Contract IR identity of the lowered expression node.
-    pub ir_id: CheckedSemanticId,
+    /// Identity of the one Contract IR package that admitted this claim.
+    pub contract_package_identity: CheckedSemanticId,
+    /// Exact requested node key.
+    pub node_id: CheckedNodeId,
     /// Package id.
     pub package_id: CheckedSemanticId,
     /// Semantic type key of the expression node.
@@ -501,6 +503,10 @@ pub struct GeneratedCompositeEqualityClaim {
     pub source_map: Vec<CheckedSourceMapEntry>,
     /// Reachable claim keys.
     pub claims: Vec<CheckedNodeId>,
+    /// Reachable bounded-domain keys.
+    pub bounds: Vec<CheckedNodeId>,
+    /// Every reached key except the root.
+    pub dependencies: Vec<CheckedNodeId>,
     /// The descriptor the request supplied: operator and both operands'
     /// source and conversion-target node ids, read from the request, never
     /// from the generated source.
@@ -654,11 +660,19 @@ pub fn generate_composite_equality_oracles(
                         ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
                             environment_symbol: String::new(),
                             oracle_symbol: String::new(),
-                            ir_id: generated.node.ir_id.clone(),
+                            contract_package_identity: lowering
+                                .package
+                                .wire()
+                                .ok_or(OracleGenerationError::ContractPackageUnavailable)?
+                                .identity()
+                                .clone(),
+                            node_id: item.node_id.clone(),
                             package_id: lowering.package.source_package_id().clone(),
                             semantic_type: generated.node.semantic_type.clone(),
                             source_map: generated.node.source_map.clone(),
                             claims: generated.node.claims.clone(),
+                            bounds: generated.node.bounds.clone(),
+                            dependencies: generated.node.dependencies.clone(),
                             descriptor: recorded_descriptor(item),
                             declaration_keys: generated.declaration_keys.clone(),
                             declaration_runtime_keys: generated
@@ -3305,11 +3319,14 @@ fn deep_matches_shallow() {{
             result: ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
                 environment_symbol: String::new(),
                 oracle_symbol: String::new(),
-                ir_id: semantic_id('a'),
+                contract_package_identity: semantic_id('a'),
+                node_id: node_id(node),
                 package_id: semantic_id('b'),
                 semantic_type: node_id('c'),
                 source_map: Vec::new(),
                 claims: Vec::new(),
+                bounds: Vec::new(),
+                dependencies: Vec::new(),
                 descriptor: RecordedDescriptor {
                     operator: EqualityOperatorKind::Equal,
                     left_source_type: node_id('d'),
@@ -3322,6 +3339,24 @@ fn deep_matches_shallow() {{
                 schedule: RecordedSchedule::Plan,
             })),
         }
+    }
+
+    #[test]
+    fn generated_claim_serializes_package_and_requested_id_without_node_ir_id() {
+        let claim = generated_claim('8');
+        let ClaimDisposition::Generated(generated) = &claim.result else {
+            panic!("fixture must generate");
+        };
+        let value = serde_json::to_value(generated).expect("generated claim serializes");
+        assert_eq!(
+            value["contract_package_identity"],
+            serde_json::json!(semantic_id('a'))
+        );
+        assert_eq!(value["node_id"], serde_json::json!(claim.node_id));
+        assert_eq!(value["package_id"], serde_json::json!(semantic_id('b')));
+        assert_eq!(value["bounds"], serde_json::json!([]));
+        assert_eq!(value["dependencies"], serde_json::json!([]));
+        assert!(value.get("ir_id").is_none());
     }
 
     fn rendered_item() -> RenderedItem {

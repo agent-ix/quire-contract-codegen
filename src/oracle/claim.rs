@@ -72,6 +72,8 @@ pub struct ClaimMap<C> {
 /// result in doubt, not just the one that surfaced it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
+    /// A lowered record has no admitted Contract IR package value.
+    ContractPackageUnavailable,
     /// Generated source exceeds the effective caller-selected byte ceiling.
     SourceTooLarge {
         /// First source size that exceeds the selected ceiling.

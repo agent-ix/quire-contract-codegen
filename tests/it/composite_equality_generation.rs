@@ -1464,15 +1464,14 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
         ]
     );
 
-    // FR-018-AC-13 also names node id, IR id, package id, source map, claims
+    // FR-018-AC-13 also names node id, package id, source map, claims
     // and the selected schedule. Recompute each independently — never by
     // reading it back off the generated claim-map — using the same public
     // `CheckedPackageV2::lower` the generator calls, but with a
     // self-constructed, maximally permissive profile (`CheckedNodeTag::ALL`)
     // so this recomputation shares no private profile constant with the
-    // generator. `ir_id` is a pure digest over the lowered closure's own
-    // content (`LOWERED_NODE_PREIMAGE`), so it, `claims` and `source_map`
-    // must agree regardless of which permissive profile computed them.
+    // generator. `claims` and `source_map` must agree regardless of which
+    // permissive profile computed them.
     let profile = CompleteLoweringProfileV2 {
         reference: quire_contract_model::LoweringProfileRef {
             authority: "agent-ix".into(),
@@ -1504,10 +1503,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     );
     match &single_lowering.records[..] {
         [CompleteLoweringRecordV2::Lowered { node }] => {
-            assert_eq!(
-                single.ir_id, node.ir_id,
-                "ir_id must equal the independently lowered node's"
-            );
+            assert_eq!(single.node_id, oracles.key(E_RECORD));
             assert_eq!(
                 single.claims, node.claims,
                 "claims must equal the independently lowered node's"
@@ -1523,10 +1519,7 @@ fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     let nested_lowering = package.lower(&[package.key(E_PAIR_OF_POINTS)], &profile);
     match &nested_lowering.records[..] {
         [CompleteLoweringRecordV2::Lowered { node }] => {
-            assert_eq!(
-                nested.ir_id, node.ir_id,
-                "ir_id must equal the independently lowered node's"
-            );
+            assert_eq!(nested.node_id, oracles.key(E_PAIR_OF_POINTS));
             assert_eq!(
                 nested.claims, node.claims,
                 "claims must equal the independently lowered node's"

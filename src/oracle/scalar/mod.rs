@@ -560,8 +560,12 @@ pub enum ExactScalarRefusal {
 pub struct GeneratedScalarClaim {
     /// Generated function name.
     pub symbol: String,
-    /// Contract IR identity of the lowered node.
-    pub ir_id: CheckedSemanticId,
+    /// Identity of the one Contract IR package that admitted this claim.
+    pub contract_package_identity: CheckedSemanticId,
+    /// Exact requested node key.
+    pub node_id: CheckedNodeId,
+    /// Identity of the originating checked package.
+    pub package_id: CheckedSemanticId,
     /// Expression form.
     pub semantic_form: String,
     /// Semantic type key.
@@ -704,7 +708,14 @@ pub fn generate_exact_scalar_oracles(
                                 },
                                 ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
                                     symbol: String::new(),
-                                    ir_id: node.ir_id.clone(),
+                                    contract_package_identity: lowering
+                                        .package
+                                        .wire()
+                                        .ok_or(OracleGenerationError::ContractPackageUnavailable)?
+                                        .identity()
+                                        .clone(),
+                                    node_id: node_id.clone(),
+                                    package_id: lowering.package.source_package_id().clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
                                     semantic_type: node.semantic_type.clone(),
                                     source_map: node.source_map.clone(),
@@ -3387,6 +3398,38 @@ mod tests {
             "digest": digit.to_string().repeat(64),
         }))
         .expect("node id")
+    }
+
+    #[test]
+    fn generated_scalar_claim_serializes_package_identity_and_requested_key() {
+        let identity: CheckedSemanticId = serde_json::from_value(serde_json::json!({
+            "domain": "quire.contract-ir.semantic/v1",
+            "algorithm": "sha256",
+            "digest": "a".repeat(64),
+        }))
+        .expect("package identity");
+        let generated = GeneratedScalarClaim {
+            symbol: "oracle_integer_add".to_owned(),
+            contract_package_identity: identity.clone(),
+            node_id: node_id('b'),
+            package_id: identity,
+            semantic_form: "binary".to_owned(),
+            semantic_type: node_id('c'),
+            source_map: Vec::new(),
+            claims: Vec::new(),
+            bounds: Vec::new(),
+            checked_bounds: Vec::new(),
+            dependencies: Vec::new(),
+            oracle_source: String::new(),
+        };
+        let value = serde_json::to_value(generated).expect("claim serializes");
+        assert_eq!(value["node_id"], serde_json::json!(node_id('b')));
+        assert!(value.get("contract_package_identity").is_some());
+        assert!(value.get("package_id").is_some());
+        assert!(value.get("ir_id").is_none());
+        for key in ["claims", "bounds", "dependencies", "checked_bounds"] {
+            assert_eq!(value[key], serde_json::json!([]), "{key}");
+        }
     }
 
     /// Admission re-validates every body before lowering, so an admitted package
