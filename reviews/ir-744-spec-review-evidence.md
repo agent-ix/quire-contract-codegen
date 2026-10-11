@@ -41,3 +41,23 @@ Exact TC-053 step 5 at the reviewed head:
    vary a retained original graph value outside the admitted package and
    verify the same admitted package gives the same decision for that item.
 ```
+
+## Dispositions
+
+| FND | Outcome | SHA/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 7e72bb63ef58eb127f96f96cbb835f2c6e0c0673 |
+
+The revised FR-039-AC-1 requires each operation variant to come from its own genuine QSL source graph and IR-lowered, reader-admitted FR-330 package. TC-053 step 5 requires a generated-byte difference that encodes the represented operation while any retained legacy checked-graph argument stays fixed. Accounting variation is a separate control. The changed lines introduce no new defect.
+
+Exact after excerpt from TC-053 step 5 (lines 47-53):
+
+```text
+   context. If the production API still takes a legacy original
+   `CheckedPackageV2` argument, hold that argument at the first source graph
+   for both calls. Assert that the generated oracle or harness bytes differ and
+   encode the operation represented by each supplied package, despite that
+   fixed legacy argument. If the production API takes only the admitted package,
+   assert that its signature and call path contain no original-graph lookup or
+   fallback, and make the same generated-byte comparison. Separately, lower a
+```
