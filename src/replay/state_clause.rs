@@ -29,7 +29,7 @@ use qsl_replay::{
     EmptyQualifiedName, FiniteBound, Integer, MalformedTranscript, OperationName, ProofBound,
     ProofBoundRefusal, QualifiedName, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
     StateClauseCounterexample, StateClauseReplayResult, WireNodeId, WitnessEnvelope, WitnessPacket,
-    WitnessRefusal, WitnessSettlement,
+    WitnessRefusal, WitnessSettlement, WitnessValue,
 };
 use quire_canonical::{Encode, FixedShape};
 use quire_contract_model::{CheckedModelFieldsError, CheckedNodeId, CheckedPackageV2};
@@ -38,13 +38,20 @@ use serde::{Deserialize, Serialize};
 use crate::{
     core::canonical::{content_bytes, content_digest, DigestError},
     kani::{
+        abi::{KaniBindingRole, KaniPrimitiveType},
+        classify::KaniRunOutcome,
         generate::{
-            frame::{field_range, ClauseShape, Graph},
+            frame::{field_range, postcondition_check_text, ClauseShape, Graph},
             outcome::{BoundNotResolvedCause, StateFrameRefusal},
         },
+        identity::{ObligationBinding, StateFrameIdentity, StateFrameProperty},
+        output::playback::DecodeFailure,
         terminal::ReplaySettlement,
     },
-    replay::function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
+    replay::{
+        function::{render_witness, DependencyLockError, ProvidedDocument, ReplayInputs},
+        witness::decode_playback,
+    },
 };
 
 /// The state object's address in the snapshots: the population that holds it, its key in that
@@ -206,9 +213,56 @@ impl fmt::Display for DocumentError {
 
 impl std::error::Error for DocumentError {}
 
+/// The persisted harness member that differs from the selected state-clause replay.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StateClauseHarnessMember {
+    /// The source clause node.
+    Clause,
+    /// The operation name.
+    Operation,
+    /// The framed object node.
+    Object,
+    /// The operation anchor node.
+    Anchor,
+    /// The frame node.
+    Frame,
+    /// The ordered state field names.
+    StateFields,
+}
+
+impl fmt::Display for StateClauseHarnessMember {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Clause => "clause",
+            Self::Operation => "operation",
+            Self::Object => "object",
+            Self::Anchor => "anchor",
+            Self::Frame => "frame",
+            Self::StateFields => "state fields",
+        })
+    }
+}
+
 /// Why a state-clause replay produced no result.
 #[derive(Debug)]
 pub enum StateClauseReplayError {
+    /// The proving run did not falsify an assertion with concrete playback.
+    NotFalsified,
+    /// The supplied harness is not an operation-contract postcondition harness.
+    NotPostconditionHarness,
+    /// The harness and the selected replay inputs name different obligations or field order.
+    HarnessMismatch {
+        /// The member that differs.
+        member: StateClauseHarnessMember,
+    },
+    /// The input already carries playback values; the Kani adapter requires an empty slot.
+    PlaybackAlreadySupplied,
+    /// The shared decoder refused the Kani playback.
+    Decode(DecodeFailure),
+    /// The selected assertion does not name this harness's postcondition.
+    AssertionMismatch,
+    /// QSL selected a clause node other than the one the harness was generated from.
+    ClauseSelectionMismatch,
     /// The lock's dependency selections are not admitted.
     Dependencies(DependencyLockError),
     /// QSL could not compile the unit or find the clause in it.
@@ -265,6 +319,15 @@ pub enum StateClauseReplayError {
 impl fmt::Display for StateClauseReplayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NotFalsified => f.write_str("the Kani run was not falsified"),
+            Self::NotPostconditionHarness => f.write_str("the harness is not a postcondition"),
+            Self::HarnessMismatch { member } => write!(f, "the harness's {member} differs"),
+            Self::PlaybackAlreadySupplied => f.write_str("playback values were already supplied"),
+            Self::Decode(cause) => write!(f, "the Kani playback did not decode: {}", cause.code),
+            Self::AssertionMismatch => f.write_str("the Kani assertion differs from the harness"),
+            Self::ClauseSelectionMismatch => {
+                f.write_str("the selected clause differs from the harness clause")
+            }
             Self::Dependencies(cause) => cause.fmt(f),
             Self::CallSite(refusal) => write!(f, "the clause was not located: {refusal}"),
             Self::Name(cause) => write!(f, "the operation's name is not admitted: {cause}"),
@@ -314,6 +377,13 @@ impl std::error::Error for StateClauseReplayError {}
 impl<'a> From<&'a StateClauseReplayError> for ReplaySettlement<'a> {
     fn from(error: &'a StateClauseReplayError) -> Self {
         match error {
+            StateClauseReplayError::NotFalsified
+            | StateClauseReplayError::NotPostconditionHarness
+            | StateClauseReplayError::HarnessMismatch { .. }
+            | StateClauseReplayError::PlaybackAlreadySupplied
+            | StateClauseReplayError::Decode(_)
+            | StateClauseReplayError::AssertionMismatch
+            | StateClauseReplayError::ClauseSelectionMismatch => Self::CgDefect,
             StateClauseReplayError::Dependencies(cause) => cause.into(),
             StateClauseReplayError::CallSite(refusal) => refusal.as_ref().into(),
             StateClauseReplayError::Name(_)
@@ -366,6 +436,118 @@ pub struct StateClauseReplay {
     replay_limits: qsl_replay::ReplayLimits,
 }
 
+impl StateClauseReplayInputs<'_> {
+    /// Decodes the falsified operation-contract harness's playback into this input's symbolic pre
+    /// state. `playback` must be empty; the caller obtains the
+    /// native post state independently and then passes this input to [`StateClauseReplay::new`].
+    ///
+    /// # Errors
+    ///
+    /// [`StateClauseReplayError`] when the run, harness, assertion or decoded state is not the
+    /// selected postcondition.
+    pub fn decode_falsification(
+        &mut self,
+        harness: &StateFrameIdentity,
+        outcome: &KaniRunOutcome,
+    ) -> Result<(), StateClauseReplayError> {
+        let KaniRunOutcome::Falsified { counterexample } = outcome else {
+            return Err(StateClauseReplayError::NotFalsified);
+        };
+        if !self.playback.is_empty() {
+            return Err(StateClauseReplayError::PlaybackAlreadySupplied);
+        }
+        let StateFrameProperty::Postcondition {
+            field,
+            comparison,
+            left_is_pre,
+        } = &harness.property
+        else {
+            return Err(StateClauseReplayError::NotPostconditionHarness);
+        };
+        let shape =
+            ClauseShape::read(&Graph::of(self.package), self.clause_node).map_err(|refusal| {
+                StateClauseReplayError::Document(DocumentError::Clause { refusal })
+            })?;
+        for (member, same) in [
+            (
+                StateClauseHarnessMember::Clause,
+                &harness.clause == self.clause_node,
+            ),
+            (
+                StateClauseHarnessMember::Operation,
+                harness.scope.operation == self.operation.operation.as_str(),
+            ),
+            (
+                StateClauseHarnessMember::Object,
+                harness.scope.object == shape.scope.object,
+            ),
+            (
+                StateClauseHarnessMember::Anchor,
+                harness.scope.anchor == shape.scope.anchor,
+            ),
+            (
+                StateClauseHarnessMember::Frame,
+                harness.scope.frame == shape.scope.frame,
+            ),
+            (
+                StateClauseHarnessMember::StateFields,
+                harness.state_fields == self.state_fields,
+            ),
+        ] {
+            if !same {
+                return Err(StateClauseReplayError::HarnessMismatch { member });
+            }
+        }
+        let bindings = harness
+            .state_fields
+            .iter()
+            .map(|field| ObligationBinding {
+                identifier: field.clone(),
+                role: KaniBindingRole::Argument,
+                primitive_type: KaniPrimitiveType::I64,
+                integer_bounds: None,
+                dependencies: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let decoded = decode_playback(
+            harness.harness_symbol.as_str(),
+            harness.module_symbol.as_str(),
+            &bindings,
+            counterexample,
+        )
+        .map_err(StateClauseReplayError::Decode)?;
+        let expected =
+            postcondition_check_text(&harness.scope.operation, field, *comparison, *left_is_pre);
+        if decoded.check_text != expected
+            && decoded.check_text != format!("assertion failed: {expected}")
+        {
+            return Err(StateClauseReplayError::AssertionMismatch);
+        }
+        self.playback = decoded
+            .values
+            .into_iter()
+            .map(|(name, value)| {
+                let WitnessValue::Integer(integer) = value else {
+                    return Err(StateClauseReplayError::Decode(DecodeFailure::new(
+                        "kani_witness_unsupported_value",
+                        harness.harness_symbol.as_str(),
+                        &name,
+                    )));
+                };
+                let integer = i64::try_from(integer).map_err(|_| {
+                    StateClauseReplayError::Decode(DecodeFailure::new(
+                        "kani_witness_i64_overflow",
+                        harness.harness_symbol.as_str(),
+                        &name,
+                    ))
+                })?;
+                Ok((name, integer))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(())
+    }
+}
+
 impl StateClauseReplay {
     /// The caller's reader bound used to admit this request and envelope.
     pub fn replay_limits(&self) -> qsl_replay::ReplayLimits {
@@ -411,6 +593,9 @@ impl StateClauseReplay {
         .map_err(StateClauseReplayError::CallSite)?;
         let package_id = located.package_id;
         let site = located.site;
+        if WireNodeId::from_hex(&clause_node.digest) != Some(site.node) {
+            return Err(StateClauseReplayError::ClauseSelectionMismatch);
+        }
 
         let graph = Graph::of(package);
         let shape = ClauseShape::read(&graph, clause_node).map_err(|refusal| {

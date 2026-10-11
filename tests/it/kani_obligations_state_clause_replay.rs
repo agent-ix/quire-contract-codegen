@@ -19,21 +19,162 @@ use qsl_replay::{
     WitnessEnvelope, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    DocumentLabel, OperationDeclaration, StateClauseModelFieldsCause, StateClauseReplay,
-    StateClauseReplayError, StateClauseReplayInputs, StateObjectAddress,
+    DocumentLabel, KaniRunOutcome, OperationDeclaration, StateClauseHarnessMember,
+    StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
+    StateClauseReplayInputs, StateObjectAddress,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::kani_obligations_state_frame::{
-    emitted_fixture, falsified, model, native_twin::Twin, playback_state, prove, subject, Declares,
-    Fixture,
+    emitted_fixture, falsified, model,
+    native_twin::{playback_text, Twin},
+    prove, subject, Declares, Fixture,
 };
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
 const BALANCE: &str = "BalanceNeverDrops";
 /// The second postcondition clause on `deposit`: `audit` never drops.
 const AUDIT: &str = "AuditNeverDrops";
+
+/// The production adapter types the persisted draw order, accepts only the matching failed
+/// assertion, and leaves model-domain admission to the existing replay builder.
+///
+/// Trace: FR-016-AC-8, FR-024-AC-13, FR-024-AC-15, FR-024-AC-17, TC-035
+#[test]
+fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package(BALANCE);
+    let generated = quire_contract_codegen::generate_state_frame_obligations(
+        &quire_contract_codegen::StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            package: &package,
+            clause: &clause,
+            state_path: "crate::subject::Account",
+            state_fields: &["balance", "audit"],
+            subject_path: "crate::subject::deposit_debiting_within_range",
+            unwind: 4,
+        },
+    )
+    .expect("postcondition harness generates");
+    let harness = &generated.postcondition.identity;
+    let check = "operation `deposit`: postcondition `post.balance >= pre.balance` failed";
+    let good = playback_text(harness, check, &[5, 7]);
+    let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
+    inputs.playback.clear();
+    inputs
+        .decode_falsification(
+            harness,
+            &KaniRunOutcome::Falsified {
+                counterexample: good.clone(),
+            },
+        )
+        .expect("matching playback decodes");
+    assert_eq!(
+        inputs.playback,
+        vec![("balance".to_owned(), 5), ("audit".to_owned(), 7)]
+    );
+    let mut selected_other_clause = inputs.clone();
+    selected_other_clause.clause = ClauseName(Identifier::new(AUDIT).expect("clause name"));
+    assert!(matches!(
+        StateClauseReplay::new(selected_other_clause),
+        Err(StateClauseReplayError::ClauseSelectionMismatch)
+    ));
+    StateClauseReplay::new(inputs).expect("decoded state reaches replay builder");
+
+    let empty = || {
+        let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
+        inputs.playback.clear();
+        inputs
+    };
+    let wrong = good.replace(&harness.harness_path().to_string(), "other::check");
+    let cover = good.replace("`assertion`", "`cover`");
+    let width = good.replace("vec![5, 0, 0, 0, 0, 0, 0, 0]", "vec![5, 0]");
+    let comment = good.replace("// 5", "// 9");
+    for (text, code) in [
+        (wrong, "cg_witness_harness_identity_mismatch"),
+        (cover, "kani_witness_cover_refused"),
+        (
+            playback_text(harness, check, &[5]),
+            "kani_witness_arity_mismatch",
+        ),
+        (
+            playback_text(harness, check, &[5, 7, 9]),
+            "kani_witness_arity_mismatch",
+        ),
+        (width, "kani_witness_width_mismatch"),
+        (comment, "kani_witness_comment_mismatch"),
+    ] {
+        let error = empty()
+            .decode_falsification(
+                harness,
+                &KaniRunOutcome::Falsified {
+                    counterexample: text,
+                },
+            )
+            .expect_err("invalid playback refuses");
+        assert!(matches!(error, StateClauseReplayError::Decode(cause) if cause.code == code));
+    }
+    assert!(matches!(
+        empty().decode_falsification(harness, &KaniRunOutcome::Verified),
+        Err(StateClauseReplayError::NotFalsified)
+    ));
+    assert!(matches!(
+        empty().decode_falsification(
+            &generated.frame.identity,
+            &KaniRunOutcome::Falsified {
+                counterexample: good.clone(),
+            }
+        ),
+        Err(StateClauseReplayError::NotPostconditionHarness)
+    ));
+    let mut wrong_scope = harness.clone();
+    wrong_scope.scope.operation = "withdraw".to_owned();
+    assert!(matches!(
+        empty().decode_falsification(
+            &wrong_scope,
+            &KaniRunOutcome::Falsified {
+                counterexample: good.clone(),
+            },
+        ),
+        Err(StateClauseReplayError::HarnessMismatch {
+            member: StateClauseHarnessMember::Operation
+        })
+    ));
+    assert!(matches!(
+        empty().decode_falsification(
+            harness,
+            &KaniRunOutcome::Falsified {
+                counterexample: playback_text(harness, "unrelated assertion", &[5, 7]),
+            }
+        ),
+        Err(StateClauseReplayError::AssertionMismatch)
+    ));
+    let mut repeated = harness.clone();
+    repeated.state_fields = vec!["balance".to_owned(), "balance".to_owned()];
+    let mut repeated_inputs = empty();
+    repeated_inputs.state_fields = repeated.state_fields.clone();
+    assert!(matches!(
+        repeated_inputs.decode_falsification(&repeated, &KaniRunOutcome::Falsified {
+            counterexample: playback_text(&repeated, check, &[5, 7]),
+        }),
+        Err(StateClauseReplayError::Decode(cause))
+            if cause.code == "cg_witness_schema_duplicate_binding"
+    ));
+    let mut outside = empty();
+    outside
+        .decode_falsification(
+            harness,
+            &KaniRunOutcome::Falsified {
+                counterexample: playback_text(harness, check, &[-1, 7]),
+            },
+        )
+        .expect("i64 decodes before domain admission");
+    assert!(matches!(
+        StateClauseReplay::new(outside),
+        Err(StateClauseReplayError::OutOfDomain { field }) if field == "balance"
+    ));
+}
 
 /// QSL's emitted checked package has an empty model body, yet replay takes the caller's field
 /// order and both inclusive ranges from the admitted model declaration's accessor.
@@ -215,9 +356,10 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
 /// Trace: FR-024-AC-12, TC-035
 #[test]
 fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
-    let (twin, fixture) = (Twin::new(), healthy());
+    let twin = Twin::new();
     let mut nodes = Vec::new();
     for clause in [BALANCE, AUDIT] {
+        let fixture = emitted_fixture(&twin, clause);
         let replay = built(&twin, &fixture, clause, RESPECTING.0, RESPECTING.1);
         let site = twin.clause_site(clause).expect("the clause is declared");
         let payload = replay.packet.family_payload.as_ref().expect("a payload");
@@ -237,6 +379,7 @@ fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
     }
     assert_ne!(nodes[0], nodes[1], "each clause has its own node");
 
+    let fixture = healthy();
     let mut missing = inputs(&twin, &fixture, RESPECTING.0, RESPECTING.1);
     missing.clause = ClauseName(Identifier::new("NoSuchClause").expect("identifier"));
     let refusal = StateClauseReplay::new(missing)
@@ -773,25 +916,36 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         },
     )
     .expect("emitted package generates");
+    let outcome = prove(&generated.postcondition);
     let counterexample = falsified(
-        prove(&generated.postcondition),
+        outcome.clone(),
         "postcondition `post.balance >= pre.balance` failed",
     );
-    let (balance, audit) = playback_state(&counterexample);
+    let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
+    inputs.playback.clear();
+    inputs
+        .decode_falsification(&generated.postcondition.identity, &outcome)
+        .expect("real playback decodes");
+    let [(balance_name, balance), (audit_name, audit)] = inputs.playback.as_slice() else {
+        panic!("the two declared state fields decode");
+    };
+    assert_eq!(
+        (balance_name.as_str(), audit_name.as_str()),
+        ("balance", "audit")
+    );
+    let (balance, audit) = (*balance, *audit);
     let mut account = subject::Account { balance, audit };
     subject::deposit_debiting_within_range(&mut account);
     assert_ne!(
         account.balance, balance,
         "the native run reproduces the debit"
     );
-    let replay = StateClauseReplay::new(twin.state_clause_inputs(
-        &package,
-        &clause,
-        BALANCE,
-        (balance, audit),
-        (account.balance, account.audit),
-    ))
-    .expect("emitted package replays");
+    inputs.post_state = vec![
+        ("balance".to_owned(), account.balance),
+        ("audit".to_owned(), account.audit),
+    ];
+    let replay = StateClauseReplay::new(inputs.clone()).expect("emitted package replays");
+    assert_eq!(replay.packet.obligation_identity, Some([1; 32]));
     assert!(matches!(
         replay.packet.source,
         Some(ReplaySource::Witness(_))
@@ -803,4 +957,41 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         WitnessSettlement::ReproducedWithEvaluatedWitness
     );
     assert_eq!(arm.category(), Category::Violation);
+
+    let mut respecting = subject::Account { balance, audit };
+    subject::deposit(&mut respecting);
+    inputs.post_state = vec![
+        ("balance".to_owned(), respecting.balance),
+        ("audit".to_owned(), respecting.audit),
+    ];
+    let respecting = StateClauseReplay::new(inputs).expect("respecting replay builds");
+    let result = respecting.replay().expect("respecting replay settles");
+    let arm = witness_arm(&result);
+    assert_eq!(arm.settlement(), WitnessSettlement::Inconclusive);
+    assert!(matches!(
+        arm.disagreement(),
+        Some(DisagreementCause::Verdicts { .. })
+    ));
+
+    let mut wrong_harness = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
+    wrong_harness.playback.clear();
+    let wrong = KaniRunOutcome::Falsified {
+        counterexample: counterexample.replace(
+            &generated.postcondition.identity.harness_path().to_string(),
+            "wrong::harness",
+        ),
+    };
+    assert!(matches!(
+        wrong_harness.decode_falsification(&generated.postcondition.identity, &wrong),
+        Err(StateClauseReplayError::Decode(_))
+    ));
+    let mut malformed = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
+    malformed.playback.clear();
+    let malformed_run = KaniRunOutcome::Falsified {
+        counterexample: counterexample.replacen("vec![", "vec![not-a-byte, ", 2),
+    };
+    assert!(matches!(
+        malformed.decode_falsification(&generated.postcondition.identity, &malformed_run),
+        Err(StateClauseReplayError::Decode(_))
+    ));
 }

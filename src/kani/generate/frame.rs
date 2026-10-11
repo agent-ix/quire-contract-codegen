@@ -1065,6 +1065,24 @@ struct Postcondition<'a> {
     left_is_pre: bool,
 }
 
+/// The assertion named by an operation-contract harness and its Kani playback.
+pub(crate) fn postcondition_check_text(
+    operation: &str,
+    field: &str,
+    comparison: StateComparison,
+    left_is_pre: bool,
+) -> String {
+    let (left, right) = if left_is_pre {
+        ("pre", "post")
+    } else {
+        ("post", "pre")
+    };
+    format!(
+        "operation `{operation}`: postcondition `{left}.{field} {} {right}.{field}` failed",
+        comparison.rust()
+    )
+}
+
 /// The operation-contract harness body.
 ///
 /// It ends with its one non-vacuity cover, after the assertion (FR-015-AC-7, IR-451). Kani prints
@@ -1092,9 +1110,11 @@ fn postcondition_body(
         ("post", "pre")
     };
     let operator = comparison.rust();
-    let message = assertion_message(&format!(
-        "operation `{}`: postcondition `{left}.{field} {operator} {right}.{field}` failed",
-        scope.operation
+    let message = assertion_message(&postcondition_check_text(
+        &scope.operation,
+        field,
+        comparison,
+        left_is_pre,
     ));
     format!(
         "#[cfg(kani)]\nmod {module} {{\n    use super::*;\n\n    #[kani::proof]\n    fn {HARNESS}() {{\n{state}        let mut post = pre.clone();\n        {subject}(&mut post);\n        assert!(\n            {left}.{field} {operator} {right}.{field},\n            \"{{}}\",\n            {message}\n        );\n        kani::cover!(true, \"state bounds hold and the operation returns\");\n    }}\n}}\n",
