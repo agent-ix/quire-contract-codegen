@@ -68,8 +68,12 @@ and which failure states stay distinct.
 
 ### Generation view
 
-One input model enters the generator: an admitted `quire.checked-package/v2` package, read through
-Contract IR's `CheckedPackageV2` (ADR-001). Every generator reads it.
+The admitted `quire.checked-package/v2` remains the source of native meaning
+for Contract IR lowering (ADR-001). The planned production CG decision boundary
+is its one admitted FR-330 `ContractPackage` projection, under
+[FR-039](../core/functional/FR-039-contract-package-consumption.md). Its typed
+accounting and semantic graph supply production negotiation and generation;
+the checked graph remains upstream of that boundary.
 
 The routed path runs in four steps:
 
@@ -180,7 +184,7 @@ success fallback, and no requirement converts one into another.
 
 | Seam | What crosses | Type owner | CG side |
 |---|---|---|---|
-| IR → CG | `CheckedPackageV2`, lowered claims and `bounded_domain` bounds | Contract IR | Reads them and never re-derives a bound from a caller descriptor. |
+| IR → CG | One admitted FR-330 `ContractPackage`, with typed accounting, source map, selected dependencies and represented bounds | Contract IR | Production CG consumes its admitted graph and never re-derives a bound from a caller descriptor ([FR-039](../core/functional/FR-039-contract-package-consumption.md), planned). |
 | CG → RT | Generated calls into `quire_contract_runtime::exact`: kernel scalar operations, `check_equality`, `PackageDeclarations::check`, `CheckedPackage::call`, `Meter`, `Outcome` | Contract Runtime | Emits calls and charges nothing itself. |
 | QSL → CG | The FR-331 envelope, its `candidates`, and the registered descriptor's typed `ProviderOrigin` | QSpec owns the envelope and candidate wire; QSL `route` computes candidates and its registry holds origin | The driver projects one QSL registry descriptor to CG's own descriptor, copying identity, advertised pairs and `origin()` without changing meaning. FR-019 reads that value; FR-022 generates for what was routed. No direct CG dependency on `qsl-route` and no origin member is added to FR-331 wire. |
 | CG → QSL | `Witness`, `ReplaySource`, the counterexample envelope `WitnessEnvelope`, `ObligationIdentity`, the replay request, `replay` and `replay_frame` | QSL `qsl-replay` | Builds them and calls the facade. Target: no copy of these types in CG or in Contract IR; see Current state. |
@@ -202,8 +206,11 @@ success fallback, and no requirement converts one into another.
 - CG replays only through `qsl_replay::replay`, the layer-6 facade (QSL ADR-013 TK-01), and frame
   counterexamples only through `qsl_replay::replay_frame` (QSL FR-116). No replay path takes a
   caller-supplied executor (QSL ADR-011 FB-07).
-- `CheckedPackageV2` is the one input model. FR-015 is the one Kani generator, and FR-014 the one
-  oracle generator for every family it covers (ADR-001).
+- Contract IR's admitted `CheckedPackageV2` is the one source input model;
+  [FR-039](../core/functional/FR-039-contract-package-consumption.md) makes its
+  one admitted FR-330 projection the production CG decision input. FR-015 is
+  the one Kani generator, and FR-014 the one oracle generator for every family
+  it covers (ADR-001).
 - The Kani transcript parser belongs to CG's backend adapter. Kani's printed wording is read in
   exactly one module, and a backend's native counterexample reaches QSL only as QSL's
   backend-witness transcript.
