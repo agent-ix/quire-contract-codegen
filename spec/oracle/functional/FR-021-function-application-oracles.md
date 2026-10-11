@@ -345,10 +345,11 @@ attempted for these depth samples. The default reader byte limit is 1,048,576.
 | 128 chain functions (`MAX_CALL_DEPTH`) | 1,355,522 | No |
 | 129 chain functions (`MAX_CALL_DEPTH + 1`) | 1,365,888 | No |
 
-The required 100,000-node graph remains the AC-7 acceptance target. The current
-source-bound encoding cannot represent even a 129-node chain within the V2
-reader's byte budget; IR-768 owns the smaller-valid-encoding investigation.
-These measurements do not establish AC-7 admission or generation.
+The required 100,000-node graph remains the AC-7 acceptance target. The
+measured 128- and 129-function chain fixtures exceed the V2 reader's byte
+budget. This result is limited to those serialized fixtures; whether a smaller
+valid encoding fits remains unresolved under IR-768. These measurements do not
+establish AC-7 admission or generation.
 
 The target-neutral graph analysis, flat schedule, compact location map and
 caller limits are planned in IR-511. The current implementation and existing
