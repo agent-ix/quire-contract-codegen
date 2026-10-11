@@ -950,6 +950,8 @@ mod tests {
     /// Trace: AD-004 L-9, TC-023. This preimage is authored from the fixture fields in RFC 8785
     /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
     /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
+    /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
+    /// `source_id` field in snake_case.
     #[test]
     fn tc_023_case_name_matches_hand_authored_canonical_preimage() {
         const PREIMAGE: &str = concat!(
@@ -961,9 +963,9 @@ mod tests {
             r#""references":[["a","next","b"]],"sourceId":"source"},"#,
             r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
             r#""request":{"arithmetic":{"left":"1","maximum":"2","minimum":"0","#,
-            r#""operator":"checked_add","right":"1","sourceId":"source"}}}"#,
+            r#""operator":"checked_add","right":"1","source_id":"source"}}}"#,
         );
-        const DIGEST: &str = "1018f1df0ac4ccf591a06fbcb2e7e7f0e7255331b3f9117aa4f3b1003fd8afb4";
+        const DIGEST: &str = "4afb9c72a943cbd2db73a206e083012480ee4218adb534e96cbc13c44cc7a525";
         assert_eq!(
             format!("{:x}", qsl_replay::ByteDigest::of(PREIMAGE.as_bytes())),
             DIGEST,
