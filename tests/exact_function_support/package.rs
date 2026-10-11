@@ -221,6 +221,21 @@ fn reference_code(code: u32) -> serde_json::Value {
     serde_json::json!({"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": key(code)}})
 }
 
+fn application(
+    operator: &str,
+    operation: serde_json::Value,
+    result_type: u32,
+    arguments: Vec<serde_json::Value>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "term": "application",
+        "operator": operator,
+        "operation": operation,
+        "result_type": {"domain": NODE_DOMAIN, "digest": key(result_type)},
+        "arguments": arguments,
+    })
+}
+
 fn integer_add_body(arguments: Vec<serde_json::Value>) -> serde_json::Value {
     application(
         "binary",
@@ -260,7 +275,7 @@ fn source_parameter(builder: &mut PackageBuilder, code: u32, name: &str, type_co
     );
 }
 
-fn source_function(
+fn source_function_node(
     builder: &mut PackageBuilder,
     code: u32,
     name: &str,
@@ -360,7 +375,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
                 .collect(),
         )
     };
-    source_function(
+    source_function_node(
         &mut builder,
         FN_ADD,
         "add_fn",
@@ -369,7 +384,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         add_body(FN_ADD),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_EQ,
         "eq_fn",
@@ -378,7 +393,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         binary_body(T_INTEGER, T_INTEGER),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_CALL_NESTED,
         "call_fn",
@@ -399,7 +414,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         (FN_MODEL_PARAM, "model_fn", M_BARE),
         (FN_STATE_PARAM, "state_fn", S_BARE),
     ] {
-        source_function(
+        source_function_node(
             &mut builder,
             code,
             name,
@@ -412,7 +427,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
             ]),
         );
     }
-    source_function(
+    source_function_node(
         &mut builder,
         FN_CAPABILITY,
         "capability_fn",
@@ -421,7 +436,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         add_body(FN_CAPABILITY),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_UNRELATED,
         "unrelated_fn",
@@ -430,7 +445,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         add_body(FN_UNRELATED),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_DANGLING_TARGET,
         "not_declared_anywhere",
@@ -439,7 +454,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         integer_add_body(vec![literal("integer", "2"), literal("integer", "3")]),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_DANGLING_CALL,
         "dangling_fn",
@@ -455,7 +470,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
             T_INTEGER,
         ),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_FORM_MISMATCH_NODE,
         "bad_fn",
@@ -471,7 +486,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
             T_INTEGER,
         ),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_ONE_PARAM_ADD,
         "one_param_add",
@@ -480,7 +495,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         integer_add_body(vec![literal("integer", "4"), literal("integer", "5")]),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_BOOLEAN_RESULT_ADD,
         "boolean_result_add",
@@ -489,7 +504,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
         "binary",
         integer_add_body(vec![literal("integer", "6"), literal("integer", "7")]),
     );
-    source_function(
+    source_function_node(
         &mut builder,
         FN_NEGATE,
         "negate_fn",
@@ -600,7 +615,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
             function_parameter_code(code, 0),
             function_parameter_code(code, 1),
         ];
-        source_function(
+        source_function_node(
             &mut builder,
             code,
             &format!("chain_{index}"),
