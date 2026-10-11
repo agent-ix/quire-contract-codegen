@@ -14,6 +14,11 @@ input:
   contract_package: public IR BoundPackage from the public IR derived executable projection decoder; no private wire or codegen input schema
   configuration: backend selection, customer bindings, output profile
 operations:
+  - name: source_obligation_census
+    status: planned; complete producer/consumer implementation gated on IR-759 reviewed neutral correspondence
+    inputs: [SourceCensusRequest borrowing the selected admitted checked package, complete owner semantic-obligation inventory, criterion and production-symbol inventories, and reviewed neutral authored correspondence]
+    output: SourceObligationCensus | SourceCensusRefusal
+    semantics: enumerate every selected source obligation and retain all selected criterion/module/function entities plus explicit many-to-many mappings or MissingMapping reasons before negotiation, generation or execution; no attempt, artifact or result input; missing/incomplete authority or foreign/dangling relation refuses a complete census; FR-036 and AD-005 own the planned contract
   - name: generate_bound_oracles
     inputs: [public BoundPackage reference]
     output: BoundOracleGeneration | BoundGenerationError
@@ -381,7 +386,23 @@ compatibility:
   generated_runtime_dependency: quire-contract-runtime, proptest, plus declared customer types only
   licensing: crate AGPL-3.0-or-later; emitted Rust carries the MIT OR Apache-2.0 SPDX identity required by NFR-002
   publication: disabled through the human v0.1 source-release decision
+source_obligation_producer_slice:
+  status: planned (IR-747 specification, IR-740 implementation); complete conformance gated on IR-759
+  authority: borrowed owner types; IR-759 exact neutral correspondence type/placement pending upstream review, never a CG copied schema or invented API
+  census_types: SourceCensusRequest, SourceObligationCensus, SourceCensusRefusal, MissingMapping (planned public CG types)
+  population: selected source identities, complete semantic-obligation occurrence identities and declared domains, original criterion/module/function inventories including zero-mapping entities, many-to-many authored relations or typed missing reasons
+  missing_mapping_reasons: absent criterion correspondence, absent production correspondence, explicitly authored absence of a production function; valid gaps retain candidates
+  census_refusals: missing authoritative input, incomplete authoritative inventory, foreign selected inventory relation, dangling relation endpoint; retain offending input/relation, no complete census
+  identity: source-semantic identity and declared domain from the reviewed owner input; method, subject, profile and attempt belong only to producer facts
+  capability_type: SourceCapabilityFact (candidate association, producer, stage, capability, actual disposition and typed reason; unsupported requires no artifact, attempt run or outcome)
+  pre_execution_type: SourcePreExecutionRefusal (candidate/attempt association, producer, stage, original typed cause; no invented executed outcome)
+  execution_type: SourceExecutionFact (candidate/attempt association, method, actual source/profile, proof subject, declared domain and effective bounds, assumptions, terminal state/reason, claim-bound load-bearing check, production reachability, production/shadow subject and separately executed refinement scope/samples/assumptions)
+  observation_states: explicit observed value or typed missing reason; zero is a measured value only when supplied; unfamiliar producer state retains its received identity as unclassified
+  result_records: preserve duplicates and actual mismatched source/profile/subject/domain associations for IR evaluation; no inferred positive check/reachability/refinement and no candidate mutation
+  ownership: CG exports facts; IR FR-045/AD-008 decide eligibility, evidence joins, credit and projections; this export has no qualified-proof flag or accounting totals
+  consumer: borrow CG types in an adapter above CG and IR over the reviewed IR-owned neutral input port; IR root acquires no CG dependency and the cycle-free model acquires no QSL/CG/IR-root dependency
 open_design_gates:
+  source_obligation_correspondence: IR-759 must deliver the reviewed typed selected criterion-to-semantic-occurrence-to-production-symbol correspondence; exact type and port placement remain upstream-owned; IR-740 cannot claim complete implementation until it exists
   native_campaign_transport: the runtime exposes CampaignSnapshot and an optional snapshot-json decoder; this codegen package does not yet consume that feature, and structural decoding cannot authenticate native execution; no Display parsing, fake verdict replay, or private counter lookalike may substitute
   serialized_package_cli: the public IR derived-projection decoder now supplies BoundPackage; cli_generate remains unimplemented, and normal projection production remains the authoritative frontend/model lane rather than a codegen-owned authored sidecar
 ```
@@ -392,6 +413,7 @@ The interface's features in declaration order: every operation the contract abov
 
 | Feature | Kind |
 |---|---|
+| source_obligation_census | operation |
 | generate_bound_oracles | operation |
 | generate_bundle | operation |
 | generate_tristate_harness | operation |
@@ -437,6 +459,13 @@ The interface's features in declaration order: every operation the contract abov
 | cli_generate | operation |
 
 ## Open items
+
+- `source_obligation_census` and its separate producer-fact vocabulary are Planned
+  under [FR-036](../../evidence/functional/FR-036-source-obligation-census.md).
+  [AD-005](../../assurance/AD-005-source-obligation-producer.md) records current
+  authoritative inputs and IR-759's missing neutral correspondence. Complete
+  producer/consumer conformance is Gated on that upstream contract; no direct
+  IR-to-CG dependency or replacement upstream schema is declared.
 
 - `generate_bundle`, `analyze_coverage` and `cli_generate` are declared `status: planned`. Criteria
   for their semantics belong with the requirement that implements them, once one exists.
