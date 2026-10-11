@@ -27,6 +27,13 @@ backend's one generator
 and every item it lowers is a claim over an admitted `quire.checked-package/v2`
 package.
 
+For production requests after the FR-330 consumer transition,
+[FR-039](../../core/functional/FR-039-contract-package-consumption.md) requires
+this generator to read represented meaning and typed per-item accounting from
+the one admitted ContractPackage. References below to `CheckedPackageV2` name
+the current direct input and upstream native authority; they do not permit
+production to decide the same item again from that original graph.
+
 Planned (IR-489): the contract families (precondition, postcondition, invariant) take
 their input from a V2 clause claim, defined under Inputs and by FR-015-AC-38 to
 FR-015-AC-49, together with a V2 census input. FR-015-AC-22 and FR-015-AC-25 state

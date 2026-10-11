@@ -461,6 +461,14 @@ The interface's features in declaration order: every operation the contract abov
 
 ## Open items
 
+- Production negotiation, routed generation, oracle and Kani consumers are
+  planned to take the one admitted FR-330 `ContractPackage` under
+  [FR-039](./FR-039-contract-package-consumption.md). The operation entries
+  above describe current public signatures where they still take
+  `CheckedPackageV2` or `BoundPackage`; those signatures do not define a
+  second production semantic authority after this transition. Contract IR's
+  strict reader owns wire admission and selected dependency validation.
+
 - `source_obligation_census` and its separate producer-fact vocabulary are Planned
   under [FR-036](../../evidence/functional/FR-036-source-obligation-census.md).
   [AD-005](../../assurance/AD-005-source-obligation-producer.md) records current

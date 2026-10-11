@@ -30,6 +30,13 @@ settlement names a backend, and generation returns the backend kind's output.
 The linked Kani arm may produce an artifact; the process-provider arm produces
 none (QSL ADR-029 PV-4).
 
+For the planned production FR-330 boundary,
+[FR-039](../../core/functional/FR-039-contract-package-consumption.md) makes
+the one admitted `ContractPackage` authoritative for this arm's item meaning,
+accounting and source correspondence. CG shall replace the `CheckedPackageV2`
+signature below on that production path; it does not authorize a second
+graph-based decision or fallback.
+
 ### What "without re-negotiating" means
 
 The router's results are inputs and are taken as given:
