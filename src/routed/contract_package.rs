@@ -175,7 +175,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-039-AC-2, FR-039-AC-5, TC-053.
+    /// Controls exact positions and source occurrences for FR-039-AC-2.
     #[test]
     fn admitted_qsl_positions_keep_repeated_keys_and_absent_sibling_sources() {
         let source = admitted_source(SOURCE);
@@ -242,7 +242,7 @@ mod tests {
         ));
     }
 
-    /// Trace: FR-039-AC-1, TC-053.
+    /// Controls the independently admitted operation input for FR-039-AC-1.
     #[test]
     fn independently_admitted_qsl_operations_reach_distinct_package_nodes() {
         let not_equal = SOURCE.replace("a = a", "a != a");
