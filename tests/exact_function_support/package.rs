@@ -127,7 +127,7 @@ pub const FN_CALL_NESTED: u32 = 502;
 /// kind: its real `semantic_form` is `"call"`, so a `Scalar`-declared body
 /// against it is a `FormMismatch` -- AC-12's "a form none of this
 /// generator's classifiers admits" without a dedicated malformed node.
-pub const FN_FORM_MISMATCH_NODE: u32 = FN_CALL_NESTED;
+pub const FN_FORM_MISMATCH_NODE: u32 = 513;
 /// `f_dangling(a, b)`: `Call { callee: "not_declared" }` -- AC-12's dangling
 /// nested-call case.
 pub const FN_DANGLING_CALL: u32 = 503;
@@ -147,6 +147,10 @@ pub const FN_CAPABILITY: u32 = 507;
 /// function -- AC-12's "without changing an unrelated ... function's
 /// items" isolation control.
 pub const FN_UNRELATED: u32 = 508;
+pub const FN_ONE_PARAM_ADD: u32 = 509;
+pub const FN_BOOLEAN_RESULT_ADD: u32 = 510;
+pub const FN_NEGATE: u32 = 511;
+pub const FN_DANGLING_TARGET: u32 = 512;
 
 /// One `call` expression node per requested item.
 pub const ITEM_CALL_ADD: u32 = 520;
@@ -155,6 +159,15 @@ pub const ITEM_CALL_NESTED: u32 = 522;
 pub const ITEM_CALL_UNRELATED: u32 = 523;
 /// Names a function absent from every request's own declarations.
 pub const ITEM_CALL_UNKNOWN_FUNCTION: u32 = 524;
+pub const ITEM_CALL_REF: u32 = 525;
+pub const ITEM_CALL_MODEL: u32 = 526;
+pub const ITEM_CALL_STATE: u32 = 527;
+pub const ITEM_CALL_CAPABILITY: u32 = 528;
+pub const ITEM_CALL_DANGLING: u32 = 529;
+pub const ITEM_CALL_BAD_FORM: u32 = 530;
+pub const ITEM_CALL_ONE_PARAM: u32 = 531;
+pub const ITEM_CALL_BOOLEAN_RESULT: u32 = 532;
+pub const ITEM_CALL_NEGATE: u32 = 533;
 
 /// Base code for the >128-deep nested-call chain (AC-7). `CHAIN_LENGTH`
 /// functions `chain_0.. calling chain_(i+1)..`, the last calling [`FN_ADD`].
@@ -188,10 +201,140 @@ fn source_reference(code: u32) -> serde_json::Value {
 /// `result_type` disambiguator from a dedicated, freshly registered
 /// `scalar_type` placeholder pool, so no two of this module's own
 /// `application_code` calls can ever share a preimage.
-const DISAMBIGUATOR_BASE: u32 = 2000;
+const FUNCTION_PARAMETER_BASE: u32 = 50_000;
+const FUNCTION_BODY_BASE: u32 = 70_000;
+const ITEM_ARGUMENT_BASE: u32 = 100_000;
 
-fn disambiguated_body(index: u32) -> serde_json::Value {
-    binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + index)
+pub fn function_parameter_code(function_code: u32, index: usize) -> u32 {
+    FUNCTION_PARAMETER_BASE + function_code * 2 + u32::try_from(index).expect("parameter index")
+}
+
+fn function_body_code(function_code: u32) -> u32 {
+    FUNCTION_BODY_BASE + function_code
+}
+
+pub fn item_argument_code(item_code: u32, index: usize) -> u32 {
+    ITEM_ARGUMENT_BASE + item_code * 2 + u32::try_from(index).expect("argument index")
+}
+
+fn reference_code(code: u32) -> serde_json::Value {
+    serde_json::json!({"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": key(code)}})
+}
+
+fn integer_add_body(arguments: Vec<serde_json::Value>) -> serde_json::Value {
+    application(
+        "binary",
+        serde_json::json!({
+            "identity": "quire.op.integer.add", "laws": [], "mode": null,
+            "member": null, "leaves": []
+        }),
+        T_INTEGER,
+        arguments,
+    )
+}
+
+fn call_body(function_code: u32, argument_codes: &[u32], result_type: u32) -> serde_json::Value {
+    application(
+        "call",
+        serde_json::json!({
+            "identity": "quire.op.function.call", "laws": [], "mode": null,
+            "member": null, "leaves": []
+        }),
+        result_type,
+        std::iter::once(reference_code(function_code))
+            .chain(argument_codes.iter().copied().map(reference_code))
+            .collect(),
+    )
+}
+
+fn source_parameter(builder: &mut PackageBuilder, code: u32, name: &str, type_code: u32) {
+    builder.code(
+        code,
+        "value",
+        "parameter",
+        type_code,
+        aggregate(vec![
+            bound_member("name", literal("text", name)),
+            bound_member("level", integer_literal(0)),
+        ]),
+    );
+}
+
+fn source_function(
+    builder: &mut PackageBuilder,
+    code: u32,
+    name: &str,
+    parameter_types: &[u32],
+    result_type: u32,
+    body_form: &str,
+    body: serde_json::Value,
+) {
+    let parameter_codes = parameter_types
+        .iter()
+        .enumerate()
+        .map(|(index, type_code)| {
+            let code = function_parameter_code(code, index);
+            source_parameter(
+                builder,
+                code,
+                if index == 0 { "a" } else { "b" },
+                *type_code,
+            );
+            code
+        })
+        .collect::<Vec<_>>();
+    let body_code = function_body_code(code);
+    builder.application_node(body_code, body_form, &key(result_type), body);
+    let declaration_body = aggregate(vec![
+        bound_member(
+            "parameters",
+            aggregate(
+                parameter_codes
+                    .iter()
+                    .copied()
+                    .map(reference_code)
+                    .collect(),
+            ),
+        ),
+        bound_member("body", reference_code(body_code)),
+    ]);
+    builder.code_named(
+        code,
+        name,
+        "function",
+        "pure_function",
+        result_type,
+        declaration_body,
+    );
+}
+
+fn source_item_call(
+    builder: &mut PackageBuilder,
+    item_code: u32,
+    function_code: u32,
+    argument_types: &[u32],
+    result_type: u32,
+) {
+    let argument_codes = argument_types
+        .iter()
+        .enumerate()
+        .map(|(index, type_code)| {
+            let code = item_argument_code(item_code, index);
+            source_parameter(
+                builder,
+                code,
+                &format!("call_{item_code}_arg_{index}"),
+                *type_code,
+            );
+            code
+        })
+        .collect::<Vec<_>>();
+    builder.application_node(
+        item_code,
+        "call",
+        &key(result_type),
+        call_body(function_code, &argument_codes, result_type),
+    );
 }
 
 /// The full FR-021 corpus: the composite-equality base package plus every
@@ -210,32 +353,270 @@ pub fn ext_corpus_package() -> PackageBuilder {
         );
     }
 
-    let mut next = 0u32;
-    let mut body = || {
-        let value = disambiguated_body(next);
-        next += 1;
-        value
+    let add_body = |code: u32| {
+        integer_add_body(
+            (0..2)
+                .map(|index| reference_code(function_parameter_code(code, index)))
+                .collect(),
+        )
     };
-
-    builder
-        .application_code(FN_ADD, "binary", body())
-        .application_code(FN_EQ, "binary", body())
-        .application_code(FN_CALL_NESTED, "call", body())
-        .application_code(FN_DANGLING_CALL, "call", body())
-        .application_code(FN_REF_PARAM, "binary", body())
-        .application_code(FN_MODEL_PARAM, "binary", body())
-        .application_code(FN_STATE_PARAM, "binary", body())
-        .application_code(FN_CAPABILITY, "binary", body())
-        .application_code(FN_UNRELATED, "binary", body())
-        .application_code(ITEM_CALL_ADD, "call", body())
-        .application_code(ITEM_CALL_EQ, "call", body())
-        .application_code(ITEM_CALL_NESTED, "call", body())
-        .application_code(ITEM_CALL_UNRELATED, "call", body())
-        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body());
-    for i in 0..CHAIN_LENGTH {
-        builder.application_code(CHAIN_BASE + i, "call", body());
+    source_function(
+        &mut builder,
+        FN_ADD,
+        "add_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "binary",
+        add_body(FN_ADD),
+    );
+    source_function(
+        &mut builder,
+        FN_EQ,
+        "eq_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_BOOLEAN,
+        "binary",
+        binary_body(T_INTEGER, T_INTEGER),
+    );
+    source_function(
+        &mut builder,
+        FN_CALL_NESTED,
+        "call_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "call",
+        call_body(
+            FN_ADD,
+            &[
+                function_parameter_code(FN_CALL_NESTED, 0),
+                function_parameter_code(FN_CALL_NESTED, 1),
+            ],
+            T_INTEGER,
+        ),
+    );
+    for (code, name, parameter_type) in [
+        (FN_REF_PARAM, "ref_fn", REF_TYPE),
+        (FN_MODEL_PARAM, "model_fn", M_BARE),
+        (FN_STATE_PARAM, "state_fn", S_BARE),
+    ] {
+        source_function(
+            &mut builder,
+            code,
+            name,
+            &[parameter_type, T_INTEGER],
+            T_INTEGER,
+            "binary",
+            integer_add_body(vec![
+                literal("integer", "1"),
+                literal("integer", &code.to_string()),
+            ]),
+        );
     }
-    builder.application_code(ITEM_CALL_CHAIN, "call", body());
+    source_function(
+        &mut builder,
+        FN_CAPABILITY,
+        "capability_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "binary",
+        add_body(FN_CAPABILITY),
+    );
+    source_function(
+        &mut builder,
+        FN_UNRELATED,
+        "unrelated_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "binary",
+        add_body(FN_UNRELATED),
+    );
+    source_function(
+        &mut builder,
+        FN_DANGLING_TARGET,
+        "not_declared_anywhere",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "binary",
+        integer_add_body(vec![literal("integer", "2"), literal("integer", "3")]),
+    );
+    source_function(
+        &mut builder,
+        FN_DANGLING_CALL,
+        "dangling_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "call",
+        call_body(
+            FN_DANGLING_TARGET,
+            &[
+                function_parameter_code(FN_DANGLING_CALL, 0),
+                function_parameter_code(FN_DANGLING_CALL, 1),
+            ],
+            T_INTEGER,
+        ),
+    );
+    source_function(
+        &mut builder,
+        FN_FORM_MISMATCH_NODE,
+        "bad_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "call",
+        call_body(
+            FN_ADD,
+            &[
+                function_parameter_code(FN_FORM_MISMATCH_NODE, 0),
+                function_parameter_code(FN_FORM_MISMATCH_NODE, 1),
+            ],
+            T_INTEGER,
+        ),
+    );
+    source_function(
+        &mut builder,
+        FN_ONE_PARAM_ADD,
+        "one_param_add",
+        &[T_INTEGER],
+        T_INTEGER,
+        "binary",
+        integer_add_body(vec![literal("integer", "4"), literal("integer", "5")]),
+    );
+    source_function(
+        &mut builder,
+        FN_BOOLEAN_RESULT_ADD,
+        "boolean_result_add",
+        &[T_INTEGER, T_INTEGER],
+        T_BOOLEAN,
+        "binary",
+        integer_add_body(vec![literal("integer", "6"), literal("integer", "7")]),
+    );
+    source_function(
+        &mut builder,
+        FN_NEGATE,
+        "negate_fn",
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+        "unary",
+        application(
+            "unary",
+            serde_json::json!({"identity": "quire.op.integer.neg", "laws": [], "mode": null, "member": null, "leaves": []}),
+            T_INTEGER,
+            vec![reference_code(function_parameter_code(FN_NEGATE, 0))],
+        ),
+    );
+
+    let fixed_calls = [
+        (ITEM_CALL_ADD, FN_ADD, vec![T_INTEGER, T_INTEGER], T_INTEGER),
+        (ITEM_CALL_EQ, FN_EQ, vec![T_INTEGER, T_INTEGER], T_BOOLEAN),
+        (
+            ITEM_CALL_NESTED,
+            FN_CALL_NESTED,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_UNRELATED,
+            FN_UNRELATED,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_UNKNOWN_FUNCTION,
+            FN_ADD,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_REF,
+            FN_REF_PARAM,
+            vec![REF_TYPE, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_MODEL,
+            FN_MODEL_PARAM,
+            vec![M_BARE, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_STATE,
+            FN_STATE_PARAM,
+            vec![S_BARE, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_CAPABILITY,
+            FN_CAPABILITY,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_DANGLING,
+            FN_DANGLING_CALL,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_BAD_FORM,
+            FN_FORM_MISMATCH_NODE,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_ONE_PARAM,
+            FN_ONE_PARAM_ADD,
+            vec![T_INTEGER],
+            T_INTEGER,
+        ),
+        (
+            ITEM_CALL_BOOLEAN_RESULT,
+            FN_BOOLEAN_RESULT_ADD,
+            vec![T_INTEGER, T_INTEGER],
+            T_BOOLEAN,
+        ),
+        (
+            ITEM_CALL_NEGATE,
+            FN_NEGATE,
+            vec![T_INTEGER, T_INTEGER],
+            T_INTEGER,
+        ),
+    ];
+    for (call_code, function_code, argument_types, result_type) in fixed_calls {
+        source_item_call(
+            &mut builder,
+            call_code,
+            function_code,
+            &argument_types,
+            result_type,
+        );
+    }
+    for index in 0..CHAIN_LENGTH {
+        let code = CHAIN_BASE + index;
+        let callee = if index + 1 == CHAIN_LENGTH {
+            FN_ADD
+        } else {
+            code + 1
+        };
+        let args = [
+            function_parameter_code(code, 0),
+            function_parameter_code(code, 1),
+        ];
+        source_function(
+            &mut builder,
+            code,
+            &format!("chain_{index}"),
+            &[T_INTEGER, T_INTEGER],
+            T_INTEGER,
+            "call",
+            call_body(callee, &args, T_INTEGER),
+        );
+    }
+    source_item_call(
+        &mut builder,
+        ITEM_CALL_CHAIN,
+        CHAIN_BASE,
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+    );
     builder
 }
 
@@ -407,7 +788,7 @@ pub fn function_ref_param(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
         node_id: code_id(FN_REF_PARAM),
         name: name.to_owned(),
-        parameters: vec![parameter("a", REF_TYPE)],
+        parameters: vec![parameter("a", REF_TYPE), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -420,7 +801,7 @@ pub fn function_model_param(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
         node_id: code_id(FN_MODEL_PARAM),
         name: name.to_owned(),
-        parameters: vec![parameter("a", M_BARE)],
+        parameters: vec![parameter("a", M_BARE), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -433,7 +814,7 @@ pub fn function_state_param(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
         node_id: code_id(FN_STATE_PARAM),
         name: name.to_owned(),
-        parameters: vec![parameter("a", S_BARE)],
+        parameters: vec![parameter("a", S_BARE), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -496,10 +877,28 @@ pub fn chain_functions() -> Vec<ExactFunctionDeclaration> {
 // ---------------------------------------------------------------------------
 
 pub fn item(call_code: u32, function: &str) -> ExactFunctionItem {
+    let argument_codes = match call_code {
+        ITEM_CALL_ONE_PARAM => vec![item_argument_code(call_code, 0)],
+        ITEM_CALL_ADD
+        | ITEM_CALL_EQ
+        | ITEM_CALL_NESTED
+        | ITEM_CALL_UNRELATED
+        | ITEM_CALL_UNKNOWN_FUNCTION
+        | ITEM_CALL_CAPABILITY
+        | ITEM_CALL_DANGLING
+        | ITEM_CALL_BAD_FORM
+        | ITEM_CALL_BOOLEAN_RESULT
+        | ITEM_CALL_NEGATE
+        | ITEM_CALL_CHAIN => vec![
+            item_argument_code(call_code, 0),
+            item_argument_code(call_code, 1),
+        ],
+        _ => vec![T_INTEGER, T_INTEGER],
+    };
     ExactFunctionItem {
         call_node_id: code_id(call_code),
         function: function.to_owned(),
-        argument_node_ids: vec![code_id(T_INTEGER), code_id(T_INTEGER)],
+        argument_node_ids: argument_codes.into_iter().map(code_id).collect(),
     }
 }
 
