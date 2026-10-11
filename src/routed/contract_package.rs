@@ -4,8 +4,8 @@
 //! FR-039: position-preserving access to Contract IR's admitted FR-330 package.
 
 use quire_contract_model::{
-    CheckedNodeId, CheckedSemanticNodeV2, CheckedSourceMapEntry, ContractFeatureRecordV1,
-    ContractPackageV1,
+    CheckedNodeId, CheckedSourceMapEntry, ContractFeatureRecordV1, ContractPackageV1,
+    ContractReachedClosureV1, ContractRootViewError, ContractRootViewV1,
 };
 
 /// A mismatch between the driver's request and one admitted package.
@@ -21,10 +21,11 @@ pub(crate) enum PackageRequestError {
     },
     /// A requested position is outside the admitted accounting.
     Position { request_index: usize },
-    /// A lowered record's root is absent from the admitted graph.
-    MissingRoot {
+    /// The admitted traversal could not reproduce a lowered item's closure.
+    ReachedClosure {
         request_index: usize,
         node_id: CheckedNodeId,
+        cause: ContractRootViewError,
     },
 }
 
@@ -32,7 +33,7 @@ pub(crate) enum PackageRequestError {
 pub(crate) enum PackageItem<'a> {
     /// The root is represented in the package's semantic graph.
     Lowered {
-        node: &'a CheckedSemanticNodeV2,
+        closure: ContractReachedClosureV1<'a>,
         occurrences: &'a [CheckedSourceMapEntry],
     },
     /// The original typed accounting record remains the cause of refusal.
@@ -85,17 +86,24 @@ impl<'a> PackageItems<'a> {
             .as_slice();
         match record {
             ContractFeatureRecordV1::Lowered { node_id } => {
-                let node = wire
-                    .semantic_graph
-                    .nodes
-                    .binary_search_by(|node| node.node_id.cmp(node_id))
-                    .ok()
-                    .and_then(|index| wire.semantic_graph.nodes.get(index))
-                    .ok_or_else(|| PackageRequestError::MissingRoot {
+                let view = self.package.reached_closure(node_id).map_err(|cause| {
+                    PackageRequestError::ReachedClosure {
                         request_index,
                         node_id: node_id.clone(),
-                    })?;
-                Ok(PackageItem::Lowered { node, occurrences })
+                        cause,
+                    }
+                })?;
+                let ContractRootViewV1::Lowered(closure) = view else {
+                    return Err(PackageRequestError::ReachedClosure {
+                        request_index,
+                        node_id: node_id.clone(),
+                        cause: ContractRootViewError::Inconsistent,
+                    });
+                };
+                Ok(PackageItem::Lowered {
+                    closure,
+                    occurrences,
+                })
             }
             ContractFeatureRecordV1::Unsupported { .. }
             | ContractFeatureRecordV1::RequiresBound { .. }
@@ -210,8 +218,19 @@ mod tests {
         let items = PackageItems::new(&admitted, &requested).expect("positions and keys match");
         for index in [0, 2] {
             match items.at(index).expect("lowered position") {
-                PackageItem::Lowered { node, occurrences } => {
-                    assert_eq!(node.node_id, function);
+                PackageItem::Lowered {
+                    closure,
+                    occurrences,
+                } => {
+                    assert_eq!(closure.root.node_id, function);
+                    assert!(closure
+                        .nodes
+                        .iter()
+                        .any(|entry| entry.node.node_id == function));
+                    assert!(
+                        closure.nodes.len() > 1,
+                        "the admitted function reaches its typed body nodes"
+                    );
                     assert!(
                         !occurrences.is_empty(),
                         "QSL function has a source occurrence"
@@ -275,9 +294,11 @@ mod tests {
             };
             let items = PackageItems::new(&admitted, &[expression]).expect("exact request");
             match items.at(0).expect("first position") {
-                PackageItem::Lowered { node, .. } => {
+                PackageItem::Lowered { closure, .. } => {
                     assert_eq!(
-                        node.body
+                        closure
+                            .root
+                            .body
                             .pointer("/operation/identity")
                             .and_then(serde_json::Value::as_str),
                         Some(operation)
