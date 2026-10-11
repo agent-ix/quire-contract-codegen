@@ -98,7 +98,12 @@ required dependency or target path.
    output under permutation.
 10. Retain the `Failed`-record seam for work, bytes and unrecognised lowering
     limit kinds; assert the mapping of FR-021-AC-23, body/call-node priority,
-    per-function isolation and no panic. Scan generator and schedule source
+    per-function isolation and no panic. In the whole-generator byte-ceiling
+    fixture, submit Scalar/Equality body roots and requested call-item nodes
+    to Contract IR separately; assert actual `Failed` record values and the
+    call-node failure's `consumed` taking priority. A checked `Call` body root
+    is classified from its admitted graph, not submitted as a body-lowering
+    request. Scan generator and schedule source
     for the panic tokens AC-19 and AC-21 forbid, and assert `Negate` has no
     schedule root. The schedule and claim/location maps shall not read or
     depend on dynamic invocation location or losses (AC-16, AC-19 to AC-21).
@@ -136,6 +141,26 @@ required dependency or target path.
     location map. Request a temporal clause whose closure reaches formula or
     fairness as a separate QSL-121 blocker control. Preserve the existing
     duplicate, capability and lowering precedence cases.
+14. Public admitted chain (FR-021-AC-34; PLANNED IR-768). Build one authentic
+    `CheckedPackageV2` with 129 distinct function declarations, each with two
+    bound Integer parameters. Give 128 functions separate admitted `expression`/
+    `call` body roots whose callee references form one acyclic chain; the last
+    function has an admitted Scalar body. Make every call's two value arguments
+    reference the caller's ordered parameter ids, and use one admitted call
+    item naming the chain head. Read the source through Contract IR's strict
+    public reader and assert its canonical size is below 1,048,576 bytes.
+    Invoke the public function generator from that checked package with the
+    default 1,048,576-byte reader/lowering and generated-source limits; raise
+    only the caller generation-work limit to the independently counted units.
+    Assert 129 scheduled functions, 128 ordered two-argument call instructions
+    in the flat SSA schedule, one `Scheduled` item claim naming its root slot,
+    a compilable schedule crate under the default source limit, and no
+    `LoweringByteLimitExceeded` or `SourceTooLarge`. Permute request order
+    with a second healthy item and compare source, claims and location bytes.
+    Keep step 10's actual Scalar/Equality and call-item lowering failures as
+    negative controls; keep step 2's malformed source edges and AC-27 typed
+    refusals as separate negative controls. This is a public strict-reader
+    case, not step 1's lowered-graph seam or step 11's planned owner execution.
 
 ## Expected Results
 
