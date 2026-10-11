@@ -186,8 +186,9 @@ pub use replay::function::{
 };
 pub use replay::obligation::ObligationIdentityError;
 pub use replay::state_clause::{
-    DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseModelFieldsCause,
-    StateClauseReplay, StateClauseReplayError, StateClauseReplayInputs, StateObjectAddress,
+    DocumentError, DocumentLabel, ModelError, OperationDeclaration, StateClauseHarnessMember,
+    StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
+    StateClauseReplayInputs, StateObjectAddress,
 };
 pub use replay::witness::decode_falsification;
 pub use strategy::campaign::{

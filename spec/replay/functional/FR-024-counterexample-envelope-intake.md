@@ -436,10 +436,11 @@ FR-024-AC-11 to FR-024-AC-30:
   exact out-of-range observation, never clamped, and settle the replay reproduced or violated
   naming the field, the range and the observed value, which CG maps to its ordinary violated
   terminal (FR-029-AC-18, planned). Until QSL-634 lands CG keeps today's behaviour.
-- Unbuilt, with no owner yet: nothing in `src` decodes a state-clause harness's Kani playback into
-  the named `i64` values `StateClauseReplayInputs::playback` takes. FR-016's decoder works from
-  obligation bindings, which the state harness has not. The tests read the playback with a
-  test-only helper (`playback_state`), so a Kani run cannot yet drive this path from `src` alone.
+- The state-clause adapter in `src/replay/state_clause.rs` decodes a falsified postcondition
+  harness's Kani playback into the named `i64` pre-state values that
+  `StateClauseReplayInputs::playback` takes. It derives the ordered bindings from the harness's
+  state fields and checks the selected clause and generated assertion before replay. The real-Kani
+  test drives this production path.
 - The frame path's own hand-built invocation document and encoder remain in
   `tests/state_frame_support/native_twin.rs`; its `result` member is now `null`, as the twin's
   operations declare no result.

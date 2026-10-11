@@ -96,6 +96,8 @@ impl DecodeFailure {
 pub(crate) struct Playback<'a> {
     pub(crate) harness: &'a str,
     pub(crate) check_text: &'a str,
+    /// The selected check clause after its kind, including Kani's outer quotes.
+    pub(crate) check_clause: &'a str,
     /// Kani's decoded-value comment and the untyped bytes, one per `kani::any()` call.
     pub(crate) entries: Vec<(&'a str, Vec<u8>)>,
 }
@@ -213,6 +215,7 @@ pub(crate) fn read_block<'a>(
     Ok(Playback {
         harness,
         check_text,
+        check_clause: after_kind,
         entries,
     })
 }
