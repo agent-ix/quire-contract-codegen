@@ -1,0 +1,30 @@
+---
+id: SR-8353
+title: "IR-744 dependency review of PR 363"
+type: SpecReview
+analysis: dependency
+scope: "agent-ix/quire-contract-codegen@5dbcc6daebe7705e330a0e9dfb0e8e8105d9f755; spec/core/functional/FR-039-contract-package-consumption.md; spec/core/matrix/TC-053-contract-package-consumption.md"
+review_set: subset
+---
+# SR-8353: IR-744 dependency review
+
+## Summary
+
+Reviewed the six FR-039 acceptance criteria against the PR diff and QSpec FR-330/FR-322 plus Contract IR FR-035. No defects found for this analysis lens. Ticket: IR-744.
+
+## Examined criteria
+
+| ID | Role | Excerpt |
+| --- | --- | --- |
+| FR-039-AC-1 | examined | A genuine QSL-admitted request lowered by IR produces one FR-330 package; CG's production settlement and generated clause and pure-function outputs use that admitted package's typed graph and accounting for each exact request index and node ID. Changing an admitted package's represented operation or accounting result changes CG's decision or output, even with the original checked graph held fixed. |
+| FR-039-AC-2 | examined | A mixed request with a representable clause or function and an independent `unsupported`, `requires_bound` or `invalid_input` sibling retains one typed decision per position, including duplicate requested IDs, and emits only the representable sibling's artifact. Every refusal retains its accounting payload and available source occurrences; an absent ID has no fabricated region. |
+| FR-039-AC-3 | examined | A selected dependency function reference resolves only through the reader-validated selected package identity and target key. A missing, wrong-identity or stale selected dependency refuses before CG; an identically keyed local node or extra unselected dependency cannot redirect generation. |
+| FR-039-AC-4 | examined | Protocol-tagged nodes and their admitted local keyed references remain in the one semantic graph and receive an exact generation or typed unsupported result. A backend does not infer a protocol-target binding that FR-330 does not encode. |
+| FR-039-AC-5 | examined | A malformed or noncanonical FR-330 wire, wrong version, invalid accounting/source map, stale semantic identity or incomplete reader result reaches no CG consumer and emits no artifact. CG preserves the reader's typed refusal or limit result and performs no second parse or checked-graph fallback. |
+| FR-039-AC-6 | examined | An item whose admitted package accounting is `failed`, `invalid_body` or `body_incomplete`, or whose `lowered` form is unrepresentable by the selected backend, emits no artifact and retains a distinct typed cause; the package byte-ceiling case emits no artifact for any sibling. |
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | low | No findings (placeholder) | - |
