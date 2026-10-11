@@ -20,7 +20,8 @@ use crate::{
     core::{
         artifact::Artifact,
         canonical::{
-            artifact_json, content_digest, preimage_shape_changed, preimage_value, DigestError,
+            artifact_json, content_digest, owner_input_value, preimage_shape_changed,
+            preimage_value, DigestError,
         },
     },
     kani::census::{
@@ -293,7 +294,7 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
 /// camelCase key names and normalizes the two collections whose offered order does not affect
 /// the rendered graph. All values come from the original input serializer or its typed members.
 fn normalized_input_value(input: &FiniteInput) -> Result<serde_json::Value, DigestError> {
-    let mut value = preimage_value(input)?;
+    let mut value = owner_input_value(input)?;
     let root = value
         .as_object_mut()
         .ok_or_else(|| preimage_shape_changed("finite input is not an object"))?;
@@ -878,6 +879,45 @@ mod tests {
             preimage["dependencies"],
             serde_json::to_value(&dependencies).unwrap()
         );
+    }
+
+    /// Trace: AD-004 L-9, TC-023. The owning input's object maps may exceed the final case-name
+    /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
+    #[test]
+    fn tc_023_compact_case_identity_admits_a_verbose_owner_input() {
+        let fixture = fixture_with(
+            |_| {},
+            |input| {
+                input.objects = (0..18_500)
+                    .map(|index| FiniteObject {
+                        identity: format!("{index:06}"),
+                        type_id: "node".to_owned(),
+                        snapshot_id: "s".to_owned(),
+                    })
+                    .collect();
+                input.references.clear();
+                input.bounds.max_objects = 18_500;
+                input.bounds.max_references = 0;
+                input.bounds.max_input_bytes = 2_000_000;
+                input.input_bytes = 1_055_000;
+            },
+        );
+        let owner = serde_json::to_vec(fixture.2.input()).unwrap();
+        assert!(owner.len() > 1 << 20, "the old preflight would refuse");
+        let normalized = super::normalized_input_value(fixture.2.input()).unwrap();
+        assert!(
+            serde_json::to_vec(&normalized).unwrap().len() < 1 << 20,
+            "the compact identity input fits the final ceiling"
+        );
+
+        let case = emit(
+            &fixture,
+            arithmetic("source", 1, 1),
+            &[],
+            &mut EmittedCorpusIdentities::new(),
+        )
+        .expect("the bounded canonical case identity admits");
+        assert!(case_name(&case).starts_with("arithmetic_"));
     }
 
     /// Trace: AD-004 L-9, TC-023. This preimage is authored from the fixture fields in RFC 8785

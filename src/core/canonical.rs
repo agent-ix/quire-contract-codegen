@@ -11,7 +11,14 @@ use serde::Serialize;
 use crate::core::artifact::MAX_ARTIFACT_BYTES;
 
 /// The canonical byte ceiling of one digest preimage.
-const PREIMAGE_LIMITS: Limits = Limits::new(1 << 20);
+const PREIMAGE_BYTES: usize = 1 << 20;
+const PREIMAGE_LIMITS: Limits = Limits::new(PREIMAGE_BYTES as u64);
+// FiniteInput's owning serializer writes each object/reference as a three-field map. The corpus
+// identity replaces those maps with three-string tuples before hashing. Each map is 35 bytes
+// longer than its tuple, and validated fields are nonempty: a map is less than four times its
+// tuple's bytes. A final preimage within 1 MiB therefore has an owning input projection within
+// 4 MiB. Keep this intermediate allocation bounded without refusing a valid compact identity.
+const OWNER_INPUT_PROJECTION_BYTES: usize = 4 * PREIMAGE_BYTES;
 // Reserve one byte for the required trailing newline in the artifact itself.
 const ARTIFACT_LIMITS: Limits = Limits::new((MAX_ARTIFACT_BYTES - 1) as u64);
 
@@ -77,12 +84,36 @@ pub(crate) fn content_bytes<T: Encode + ?Sized>(value: &T) -> Result<Vec<u8>, Di
 pub(crate) fn preimage_value<T: Serialize + ?Sized>(
     value: &T,
 ) -> Result<serde_json::Value, DigestError> {
-    counted_projection(
+    projected_value(
         value,
-        1 << 20,
+        PREIMAGE_BYTES,
         "canonical preimage exceeds the byte ceiling",
     )
-    .map_err(|error| DigestError(DigestErrorKind::Projection(error)))?;
+}
+
+/// Projects the owning `FiniteInput` before its object/reference maps become compact tuples.
+/// The final normalized preimage is still checked against [`PREIMAGE_LIMITS`].
+///
+/// # Errors
+///
+/// [`DigestError`] when the owning record exceeds its derived intermediate ceiling.
+pub(crate) fn owner_input_value<T: Serialize + ?Sized>(
+    value: &T,
+) -> Result<serde_json::Value, DigestError> {
+    projected_value(
+        value,
+        OWNER_INPUT_PROJECTION_BYTES,
+        "finite input projection exceeds the byte ceiling",
+    )
+}
+
+fn projected_value<T: Serialize + ?Sized>(
+    value: &T,
+    byte_limit: usize,
+    error: &'static str,
+) -> Result<serde_json::Value, DigestError> {
+    counted_projection(value, byte_limit, error)
+        .map_err(|error| DigestError(DigestErrorKind::Projection(error)))?;
     serde_json::to_value(value).map_err(|error| DigestError(DigestErrorKind::Projection(error)))
 }
 
