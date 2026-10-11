@@ -321,6 +321,18 @@ pub struct KaniFormIdentity {
     pub operation_identity: Option<String>,
     /// The obligation role, where the form has one.
     pub role: Option<KaniObligationRole>,
+    /// The selected contract or frame harness role for a V2 state clause.
+    pub state_frame_role: Option<KaniStateFrameRole>,
+}
+
+/// The selected harness role for a V2 state clause.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KaniStateFrameRole {
+    /// The operation-contract harness.
+    Contract,
+    /// The frame-effect harness.
+    Frame,
 }
 
 /// The complete V1 family vocabulary named by FR-019 AC-25.
@@ -615,6 +627,7 @@ impl KaniForm {
                     ClauseKind::Invariant => Some(KaniObligationRole::Invariant),
                     ClauseKind::Assertion | ClauseKind::Case | ClauseKind::Information => None,
                 },
+                state_frame_role: None,
             },
             Self::V2ScalarClaim { package, node_id } => {
                 let operation_identity = package
@@ -647,8 +660,9 @@ impl KaniForm {
                         identity_family
                     },
                     form: KaniFormName::V2ScalarClaim,
-                    operation_identity: state_clause_role.map(str::to_owned).or(operation_identity),
+                    operation_identity,
                     role: state_clause_role.and_then(obligation_role),
+                    state_frame_role: None,
                 }
             }
             Self::V2StateFrame {
@@ -664,15 +678,15 @@ impl KaniForm {
                     .nodes
                     .iter()
                     .find(|node| &node.node_id == clause)
-                    .and_then(|node| {
-                        node.body
-                            .get("operation")?
-                            .get("member")?
-                            .get("clause")?
-                            .as_str()
-                    })
+                    .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
                     .map(str::to_owned),
                 role: Some(*role),
+                state_frame_role: Some(match role {
+                    KaniObligationRole::Frame => KaniStateFrameRole::Frame,
+                    KaniObligationRole::Precondition
+                    | KaniObligationRole::Postcondition
+                    | KaniObligationRole::Invariant => KaniStateFrameRole::Contract,
+                }),
             },
             Self::V2FunctionApplication {
                 package,
@@ -690,6 +704,7 @@ impl KaniForm {
                     .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
                     .map(str::to_owned),
                 role: None,
+                state_frame_role: None,
             },
             Self::OutsideSet { package, node_id } => KaniFormIdentity {
                 family: KaniFormFamily::OutsideSet,
@@ -701,6 +716,7 @@ impl KaniForm {
                     .find(|node| &node.node_id == node_id)
                     .map(|node| node.semantic_form.to_string()),
                 role: None,
+                state_frame_role: None,
             },
         }
     }

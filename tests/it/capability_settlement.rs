@@ -1451,6 +1451,78 @@ fn kani_state_frame_planned_selectors_keep_the_exact_fr015_refusal() {
     ));
 }
 
+/// State-frame refusals retain the checked operation identity and selected harness role.
+/// Trace: FR-019-AC-25, FR-019-AC-27, FR-019-AC-30, FR-019-AC-33.
+#[test]
+fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
+    use quire_contract_codegen::{KaniObligationRole, KaniStateFrameRole, StateFrameRefusal};
+
+    let backend = BackendKind::Kani.identity().to_owned();
+    let candidates = Candidates::Set(vec![candidate(&backend)]);
+    for (fixture, obligation_role, expected_frame_role) in [
+        (
+            crate::kani_obligations_state_frame::ir295_selector_fixture(true, false),
+            KaniObligationRole::Postcondition,
+            KaniStateFrameRole::Contract,
+        ),
+        (
+            crate::kani_obligations_state_frame::ir295_selector_fixture(false, true),
+            KaniObligationRole::Frame,
+            KaniStateFrameRole::Frame,
+        ),
+    ] {
+        let expected_operation = fixture
+            .package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == fixture.clause)
+            .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+            .expect("checked state clause has an operation identity")
+            .to_owned();
+        let settlement = settle_one(
+            vec![kani(vec![(
+                CapabilityKind::OperationContract,
+                Mode::Bounded,
+            )])],
+            RequestItem {
+                kind: RequestedKind::Known(CapabilityKind::OperationContract),
+                extent: bounded(),
+                named_backend: None,
+                candidates: candidates.clone(),
+                kani_form: v2_state_frame_form(fixture, obligation_role),
+            },
+        );
+        let Disposition::Unsupported {
+            cause:
+                Cause::KaniStateFrameRefused {
+                    form,
+                    refusal: actual_refusal,
+                    ..
+                },
+            ..
+        } = settlement.disposition
+        else {
+            panic!("state-frame selector did not retain its typed refusal: {settlement:?}");
+        };
+        match expected_frame_role {
+            KaniStateFrameRole::Contract => assert!(matches!(
+                actual_refusal,
+                StateFrameRefusal::ConditionNotSupported { .. }
+            )),
+            KaniStateFrameRole::Frame => assert!(matches!(
+                actual_refusal,
+                StateFrameRefusal::NothingForbidden { .. }
+            )),
+        }
+        assert_eq!(
+            form.operation_identity.as_deref(),
+            Some(expected_operation.as_str())
+        );
+        assert_eq!(form.state_frame_role, Some(expected_frame_role));
+    }
+}
+
 /// Every claim-map form from the admitted scalar corpus has the same typed outcome at the
 /// public settlement seam as the Kani obligation classifier, including each exact refusal.
 ///
@@ -1686,6 +1758,15 @@ fn kani_scalar_path_refuses_nonderivable_and_state_nodes_exactly() {
     ));
 
     let state = crate::kani_obligations_state_frame::ir295_healthy_fixture();
+    let expected_operation = state
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == state.clause)
+        .and_then(|node| node.body.get("operation")?.get("identity")?.as_str())
+        .expect("checked state clause has an operation identity")
+        .to_owned();
     let state_settlement = settle_one(
         vec![kani(vec![(
             CapabilityKind::OperationContract,
@@ -1702,15 +1783,24 @@ fn kani_scalar_path_refuses_nonderivable_and_state_nodes_exactly() {
             },
         },
     );
+    let Disposition::Unsupported {
+        cause: Cause::KaniFormRefused { form, refusal, .. },
+    } = state_settlement.disposition
+    else {
+        panic!("state clause did not retain its scalar-path refusal: {state_settlement:?}");
+    };
     assert!(matches!(
-        state_settlement.disposition,
-        Disposition::Unsupported {
-            cause: Cause::KaniFormRefused {
-                refusal: UnsupportedObligation::NoFiniteEncoding { .. },
-                ..
-            }
-        }
+        refusal,
+        UnsupportedObligation::NoFiniteEncoding { .. }
     ));
+    assert_eq!(
+        form.operation_identity.as_deref(),
+        Some(expected_operation.as_str())
+    );
+    assert_eq!(
+        form.role,
+        Some(quire_contract_codegen::KaniObligationRole::Postcondition)
+    );
 }
 
 fn refused_form_identity(operation_identity: &str) -> quire_contract_codegen::KaniFormIdentity {
@@ -1719,6 +1809,7 @@ fn refused_form_identity(operation_identity: &str) -> quire_contract_codegen::Ka
         form: quire_contract_codegen::KaniFormName::V2ScalarClaim,
         operation_identity: Some(operation_identity.to_owned()),
         role: None,
+        state_frame_role: None,
     }
 }
 
