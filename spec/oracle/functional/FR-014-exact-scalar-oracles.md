@@ -130,6 +130,52 @@ exactly the names of its form, once each:
 A bare literal member, a missing or duplicate name and an unlisted name are each
 an unreadable bound.
 
+For an integer operand that references an `expression` application with a plain
+`Integer` result, the generator may establish a finite operand interval
+independently of a result-domain node. It walks only `quire.op.integer.add`,
+`sub`, `mul` and `negate` application arguments. A parameter is a leaf only
+when its own type is an `integer_range` `bounded_domain`; an inline canonical
+integer literal or a reference to a `value` node with a canonical integer
+literal body is a singleton leaf. An eligible application is evaluated
+recursively. The interval conservatively contains every mathematical result
+for the referenced application; addition and subtraction use endpoint sums and
+differences, multiplication uses the minimum and maximum of all four endpoint
+products, and negate maps `[a, b]` to `[-b, -a]`. Shared or correlated leaves
+may make the interval wider than the set of reachable results (for example,
+`x - x` over `[0, 9]` has inferred interval `[-9, 9]`). QSL's negate application
+over the literal `1` therefore has interval `[-1, -1]`. Negation is exact
+before any `i64` conversion: `-0` yields `[0, 0]` and a canonical positive
+literal `9223372036854775808` yields the singleton
+`[-9223372036854775808, -9223372036854775808]`, which fits `i64` after
+negation. An inferred interval
+is recorded by operand position with its source node id and endpoints, not as
+a fictitious `bounded_domain` or checked bound id.
+
+The walk shall visit at most 4,096 distinct application/value nodes, descend
+at most 64 application levels, and keep every input and calculated endpoint
+at most 4,096 bits in magnitude (`0` has bit width zero; a negative
+endpoint's bit width is that of its absolute value). Exceeding a limit is the typed
+`OperandRangeLimitExceeded` refusal naming the operand node, limit kind,
+ceiling and consumed amount. The limit kinds are `depth`, `nodes` and
+`endpoint_bits`; `consumed` is the first count or bit width over the ceiling.
+The walk never truncates an interval. A plain `Integer` parameter at any
+depth is `RequiresBound` naming its type; a wrong-kind literal is
+`OperandTypeMismatch` naming the outer argument position and literal kind;
+an unsupported nested operation is `OperandUnsupported` naming the outer
+argument position and nested operation identity. A malformed literal or
+reference, a missing node, or a cycle keeps the typed IR admission or
+lowering refusal before inference; an inference seam presented with one of
+these malformed shapes returns `InvalidBody` naming its first offending
+node. No conversion
+that consumes the referenced application supplies this operand interval. A
+conversion's result may instead be ranged by its own `bounded_domain` when
+that conversion itself is the operand; a direct reference to the raw
+application is ranged only from independently bounded leaves. The
+`AmbiguousBound` rule for an application consumed by both a narrowing
+conversion and another node remains in force when that application itself is
+requested. Inference does not replace the requested outer node's result bound
+or relax its descriptor comparison.
+
 ### Deriving the descriptor from the node
 
 `derive_exact_scalar_items` builds each item's descriptor from the package
@@ -263,6 +309,16 @@ otherwise.
 - Where a `reference` operand's target is typed by a `bounded_domain` node, the
   generator shall classify the operand by that domain's own `semantic_type`, its
   base scalar type; QSL emits a bounded domain directly over its scalar base.
+- Where an integer operand references an eligible plain-Integer application,
+  the generator shall compute its inclusive interval from independently
+  bounded leaves by the conservative endpoint rules above and record that interval
+  by operand position for FR-015. It shall neither borrow a consuming
+  narrowing conversion's domain for a direct reference to the application nor
+  classify a plain-Integer parameter as a bounded application.
+- If interval inference reaches an unbounded parameter, an unsupported or
+  cyclic application, a missing referenced node, a wrong-kind or noncanonical
+  literal, or an inference resource ceiling, then the generator shall refuse
+  with the typed reason assigned above and emit no oracle for the item.
 - If an operand is neither a literal nor a reference, or a literal stands where
   a quantity is required, then the generator shall refuse the item with a typed
   reason.
@@ -382,7 +438,7 @@ otherwise.
 | FR-014-AC-22 | A node whose result is typed by a scalar type and whose two or more reachable bounds of the form are not exactly one outside the operands' own bounds is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
 | FR-014-AC-23 | An operand, or the result, typed by a `bounded_domain` of a form other than the descriptor's is refused as `MissingBound`. | Test (TC-024) |
 | FR-014-AC-24 | An operand's own bound need not lie inside the result bound: `a + wide` over `[0, 9]` and `[0, 50]` with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]` and `[100, 200]` with a `[100, 1800]` result each generate, derive the same descriptor, and record each operand's own bound. | Test (TC-024) |
-| FR-014-AC-25 | A `reference` operand typed by a plain scalar type is refused as `RequiresBound` naming its type, in generation and in derivation, where another operand owns a bound or the result is typed by one (`x + y`, `y + y`, and `x + y` over a scalar-typed result); a literal operand is never refused as `RequiresBound`. | Test (TC-024) |
+| FR-014-AC-25 | A `reference` operand to a plain scalar parameter or a non-literal `value` node is refused as `RequiresBound` naming its type, in generation and in derivation, where another operand owns a bound or the result is typed by one (`x + y`, `y + y`, and `x + y` over a scalar-typed result); a literal operand is never refused as `RequiresBound`. An eligible application reference follows FR-014-AC-45 instead. | Test (TC-024) |
 | FR-014-AC-26 | A `reference` operand whose target is a `value` node with a literal body is a literal operand: `x + 1` over `x: Int[0, 9]` narrowed to `Int[0, 10]`, with the literal as a reference to its own plain-Integer-typed `value` node, generates with checked bounds `[0, 10]` then `[0, 9]` and derives the descriptor over `[0, 10]`. | Test (TC-024) |
 | FR-014-AC-27 | A node whose result is typed by a scalar type and that only narrowing conversions (`quire.op.numeric.narrow`, exactly one argument referencing the node) consume takes the bound they narrow it to as its result bound: `x + y` over `Int[0, 9]` and `Int[10, 20]` narrowed to `Int[10, 29]` generates with checked bounds `[10, 29]`, `[0, 9]`, `[10, 20]` and derives the descriptor over `[10, 29]`, a descriptor over `[0, 9]` is `BoundMismatch` against `[10, 29]`, and `-z` over `Int[0, 9]` narrowed to `Int[-9, 0]` checks `[-9, 0]` then `[0, 9]`. | Test (TC-024) |
 | FR-014-AC-28 | The referenced node's body, not its form or type, makes an operand a literal: `x + n`, where `n` is a plain-Integer-typed `value` node of form `literal` whose body is not a literal, is refused as `RequiresBound` naming Integer, in generation and in derivation. | Test (TC-024) |
@@ -401,6 +457,8 @@ otherwise.
 | FR-014-AC-41 | A `failed` record whose `limit_kind` is `work` is still refused as `LoweringWorkExhausted` with the record's `limit` and `consumed` (FR-014-AC-15 unchanged), and one whose `limit_kind` is neither `work` nor `bytes` (each of `nodes`, `edges`, `occurrences` and `diagnostics`) is refused as `ExactScalarRefusal::LoweringLimitUnrecognised` with `limit_kind` equal to that snake_case name and the record's `limit` and `consumed`, without a panic and without a `LoweringWorkExhausted` or `LoweringByteLimitExceeded`. Each of the two is asserted on hand-built `Failed` records given to the scalar `Failed` arm itself in the module's `#[cfg(test)]` seam, so a mapping of an unrecognised kind to `LoweringWorkExhausted` in this module fails it. | Test (TC-024) |
 | FR-014-AC-42 | No `limit_kind` of a `failed` record is read in `src/oracle/scalar/mod.rs`, `src/oracle/equality/mod.rs` or `src/oracle/function/mod.rs` but through the one shared classifier, `classify_lowering_failure` of the shared `oracle` module: the non-test code of each of the three files, as FR-014-AC-39 defines it (comments and every `#[cfg(test)]` item removed wherever the item sits, taken with `non_test_code` and `comments_stripped` of `tests/common/panic_scan.rs`), names no `CheckedPackageLimit` and accesses no `.limit_kind`, has exactly one `Failed` arm, which binds nothing (`Failed { .. }`) and calls `classify_lowering_failure`, and names `limit_kind` only as the field of its own `LoweringLimitUnrecognised` refusal and in the conversion into it. | Test (TC-024) |
 | FR-014-AC-44 | For each IR-admitted direct request naming a `temporal`/`formula`, `temporal`/`fairness` or `expression`/`case` node, the scalar claim map has exactly one entry with that requested node id and `ExactScalarRefusal::Unsupported`. For an IR `Unsupported` lowering record, the refusal's `unsupported_node_id` and `node_tag` equal that record's first unsupported reachable node and tag, even if that node is not the request root; for a lowered `case` root they name the root and `expression`. A lowered `case` is refused as `Unsupported`, not `FormMismatch`. Each refused item has no generated function or symbol, does not panic or disappear, and leaves a supported sibling's claim and source byte-identical to a run without the refused request. Derivation and routed Kani retain one typed unsupported or underivable outcome for each request without a harness. | Test (TC-024) |
+| FR-014-AC-45 | For a QSL-shaped outer integer operation narrowed to an `integer_range`, a direct reference to a plain-Integer inner application over independently bounded operands supplies a conservative inclusive operand interval: `(x + 1) + 1` for `x: Int[0, 9]` supplies `[1, 10]` for its inner operand, and `-(x + 1)` supplies `[1, 10]` to the outer negate; `x * -1` for `x: Int[1, 9]` supplies `[-1, -1]` from a negate application over the canonical literal `1`. Each outer node derives and generates an `ir_confirmed` oracle, records the inferred range by argument position without inventing a checked bound id, and retains the outer result bound's descriptor check. | Test (TC-024) |
+| FR-014-AC-46 | An inferred interval uses only the four named integer operations and canonical literal or `integer_range`-typed leaves. A direct reference to a raw application consumed by a separate narrowing conversion never takes that conversion's domain as its operand interval; where the raw application has another consumer, requesting that application itself still yields FR-014-AC-34's `AmbiguousBound`. A plain-Integer parameter at any depth remains `RequiresBound` naming Integer. A missing, cyclic or unsupported application, wrong-kind or noncanonical literal, and an inference depth, work or endpoint-bit ceiling each refuse with a typed cause and no generated oracle, without changing a supported sibling. | Test (TC-024) |
 
 ## Dependencies
 

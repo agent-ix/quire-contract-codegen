@@ -239,6 +239,17 @@ the current admitted `quire.checked-package/v2` boundary.
 - Where an operand of a V2 scalar claim is a literal, inline or a reference to a
   `value` node whose body is a literal, the generator shall constrain that
   symbolic argument to exactly the literal's own value.
+- Where FR-014 establishes an inferred integer operand interval for a
+  referenced application, the generator shall take that conservative interval for
+  the corresponding symbolic argument and record its source node and endpoints
+  in the harness identity. It shall apply the same `i64` representability
+  check as it applies to an IR operand bound or literal; it shall not substitute
+  the outer result bound, a consuming narrowing conversion's bound, or the
+  whole `i64` range for the inferred interval. An FR-014 inference refusal
+  remains a refused claim with no harness. `RequiresBound` maps to routed
+  `requires_bound` with its `unbounded_type`; `OperandRangeLimitExceeded`,
+  `OperandUnsupported`, `OperandTypeMismatch` and `InvalidBody` map to routed
+  `unsupported` with `oracle_refused` carrying the exact FR-014 refusal.
 - If a literal operand's value does not fit `i64`, then the generator shall
   refuse the item as `domain_not_representable_in_i64` naming the value as both
   endpoints and emit no harness.
@@ -612,7 +623,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-8 | A postcondition or invariant harness emits every package precondition sharing its anchor operation as a `requires` on its generated contract and records each in its identity's embedded oracles; it embeds no other obligation's oracle; and an obligation whose sibling precondition is not a supported item of the same request is refused with a typed reason naming that precondition and no harness. | Test (TC-025) |
 | FR-015-AC-9 | Every harness identity records solver `cadical` and the complete ordered option vector — function contracts, concrete playback, the exact fully qualified harness, `--exact`, the explicit unwind, the explicit solver, `--output-format regular`, and `--concrete-playback print` — and no option enabling stubbing is emitted. | Test (TC-025) |
 | FR-015-AC-10 | Regeneration from equal inputs is byte-identical, and changing the unwind bound or the customer subject changes the harness identity. | Test (TC-025) |
-| FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain` (a literal operand's, to its own value: FR-015-AC-16), and a bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
+| FR-015-AC-11 | Every symbolic argument carries an inclusive assumption equal to its IR `bounded_domain` or a literal operand's own value (FR-015-AC-16); for a V2 scalar claim, an operand with the FR-014 inferred application interval uses that interval (FR-015-AC-103). A bounded-integer post-state result is required to lie in the same domain; no generated source carries a `#[kani::unwind]`. | Test (TC-025) |
 | FR-015-AC-12 | A request naming no items, more than 256 items, an unparsable subject path, or an unwind bound outside `1..=1024` is refused whole, with no item accounted and no harness exposed. | Test (TC-025) |
 | FR-015-AC-13 | An otherwise-supported obligation whose generated harness source exceeds the bounded-resource ceiling is refused with a distinct resource-limit reason naming the generated size, and one that fits the ceiling but fails to parse as Rust is refused with a distinct syntax reason naming the parse error; neither is reported as the internal-invariant render-assembly fallback. | Test (TC-025) |
 | FR-015-AC-14 | A scalar-claim item whose graph node carries a tag/form pair this generator does not model as a contract role is refused with a typed reason naming that tag and form, and no harness is emitted; a claim naming a node id absent from the graph entirely is refused rather than accounted as supported with no contract role recorded. | Test (TC-025) |
@@ -704,6 +715,8 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-100 | For either family, changing an authored cardinality, element bound, object population, edge multiplicity, claim, customer subject or unwind changes the harness identity; equal admitted inputs regenerate byte-identically. The identity records every symbolic domain and the solver and complete ordered option vector, and FR-017 run evidence records the actual Kani, Rust and solver versions, unwind and every option used by the installed backend. PLANNED (IR-268). | Test |
 | FR-015-AC-101 | A request whose symbolic collection or graph domain exceeds the generator's representational or resource ceiling settles `unsupported` with a typed reason naming the failing domain or ceiling and no harness; it never tightens the model domain to make a proof tractable. A missing or malformed selected declaration likewise refuses with its typed reason and no harness. PLANNED (IR-268). | Test |
 | FR-015-AC-102 | The symbolic collection and graph items are settled through the FR-015 V2 obligation path, one disposition per requested item; supported items alone emit harnesses. The finite-input lowerers and hand-built corpus of AC-86 to AC-95 neither supply these items' bounds nor classify their proof verdicts. PLANNED (IR-268). | Test |
+| FR-015-AC-103 | Through `generate_routed`, `(x + 1) + 1` over `x: Int[0, 9]` into `Int[0, 20]`, `x * -1` over `x: Int[1, 9]` into `Int[-9, -1]`, and `-(x + 1)` over `x: Int[0, 9]` into `Int[-10, -1]` each settle `Supported` with an IR-confirmed outer oracle and a harness. Their respective argument ranges are `[1, 10]` and `[1, 1]`, `[1, 9]` and `[-1, -1]`, and `[1, 10]`; the result assertions use only the outer declared result bounds. Each inferred range carries its source application id in the harness identity. | Test (TC-033) |
+| FR-015-AC-104 | A plain-Integer parameter as any nested leaf keeps `requires_bound` with the Integer `unbounded_type` and no harness; a direct reference to a raw application never borrows a separate narrowing conversion's domain, and an inferred endpoint outside `i64` settles `unsupported` as `domain_not_representable_in_i64` naming both exact endpoints. `OperandRangeLimitExceeded`, `OperandUnsupported`, `OperandTypeMismatch` and `InvalidBody` settle `unsupported` with `oracle_refused` carrying the exact scalar refusal, including its node, position or limit fields, and no harness. Refused items leave a supported sibling's harness and claim unchanged. | Test (TC-033) |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 
