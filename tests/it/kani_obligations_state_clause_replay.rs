@@ -59,35 +59,19 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     .expect("postcondition harness generates");
     let harness = &generated.postcondition.identity;
     let check = "operation `deposit`: postcondition `post.balance >= pre.balance` failed";
-    let good = playback_text(harness, check, &[5, 7]);
     // Kani prints the generated `assert!(predicate, "{}", message)` arguments inside
     // outer quotes, across two lines of the check clause.
     let kani_check = format!("\"{{}}\",\n{check:?}");
-    let kani_playback = playback_text(harness, &kani_check, &[5, 7]);
-    let mut kani_inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
-    kani_inputs.playback.clear();
-    kani_inputs
-        .decode_falsification(
-            harness,
-            &KaniRunOutcome::Falsified {
-                counterexample: kani_playback.clone(),
-            },
-        )
-        .expect("Kani's two-line generated assertion decodes");
-    assert_eq!(
-        kani_inputs.playback,
-        vec![("balance".to_owned(), 5), ("audit".to_owned(), 7)]
-    );
+    let good = playback_text(harness, &kani_check, &[5, 7]);
     for spoof in [
-        kani_playback.replace("post.balance >= pre.balance", "post.audit >= pre.audit"),
-        kani_playback.replace("\"{}\",\n", "\"{}\", 9,\n"),
-        kani_playback.replace("failed\"\"\n", "failed\"\" extra\n"),
-        kani_playback.replace("\"{}\",\n", "\"{0}\",\n"),
+        good.replace("post.balance >= pre.balance", "post.audit >= pre.audit"),
+        good.replace("\"{}\",\n", "\"{}\", 9,\n"),
+        good.replace("failed\"\"\n", "failed\"\" extra\n"),
+        good.replace("\"{}\",\n", "\"{0}\",\n"),
+        playback_text(harness, check, &[5, 7]),
+        playback_text(harness, &format!("assertion failed: {check}"), &[5, 7]),
     ] {
-        assert_ne!(
-            spoof, kani_playback,
-            "the spoof must change the captured form"
-        );
+        assert_ne!(spoof, good, "the spoof must change the captured form");
         let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (4, 7));
         inputs.playback.clear();
         assert!(matches!(
@@ -135,11 +119,11 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         (wrong, "cg_witness_harness_identity_mismatch"),
         (cover, "kani_witness_cover_refused"),
         (
-            playback_text(harness, check, &[5]),
+            playback_text(harness, &kani_check, &[5]),
             "kani_witness_arity_mismatch",
         ),
         (
-            playback_text(harness, check, &[5, 7, 9]),
+            playback_text(harness, &kani_check, &[5, 7, 9]),
             "kani_witness_arity_mismatch",
         ),
         (width, "kani_witness_width_mismatch"),
@@ -198,7 +182,11 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
             empty().decode_falsification(
                 &tampered,
                 &KaniRunOutcome::Falsified {
-                    counterexample: playback_text(&tampered, check, &[5, 7]),
+                    counterexample: playback_text(
+                        &tampered,
+                        &format!("\"{{}}\",\n{check:?}"),
+                        &[5, 7]
+                    ),
                 },
             ),
             Err(StateClauseReplayError::HarnessMismatch {
@@ -234,7 +222,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     repeated_inputs.state_fields = repeated.state_fields.clone();
     assert!(matches!(
         repeated_inputs.decode_falsification(&repeated, &KaniRunOutcome::Falsified {
-            counterexample: playback_text(&repeated, check, &[5, 7]),
+            counterexample: playback_text(&repeated, &kani_check, &[5, 7]),
         }),
         Err(StateClauseReplayError::Decode(cause))
             if cause.code == "cg_witness_schema_duplicate_binding"
@@ -244,7 +232,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
         .decode_falsification(
             harness,
             &KaniRunOutcome::Falsified {
-                counterexample: playback_text(harness, check, &[-1, 7]),
+                counterexample: playback_text(harness, &kani_check, &[-1, 7]),
             },
         )
         .expect("i64 decodes before domain admission");

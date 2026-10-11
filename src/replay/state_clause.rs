@@ -538,10 +538,7 @@ impl StateClauseReplayInputs<'_> {
             .check_clause
             .strip_prefix(&generated_clause)
             .is_some_and(|rest| rest.starts_with('\n'));
-        if decoded.check_text != expected
-            && decoded.check_text != format!("assertion failed: {expected}")
-            && !generated_check
-        {
+        if !generated_check {
             return Err(StateClauseReplayError::AssertionMismatch);
         }
         self.playback = decoded
