@@ -125,11 +125,11 @@ mod tests {
         profile v = \"quire.value.complete/v1\";\n\
         function f using v(a: Int[0, 9]): Boolean pure { a = a }\n";
 
-    fn admitted_source() -> CheckedPackageV2 {
+    fn admitted_source(source: &str) -> CheckedPackageV2 {
         let compiled = compile_package(
             SourceIdentity::new("test", "package-items.native", "git", "fixture"),
             "package-items.native",
-            SOURCE.as_bytes(),
+            source.as_bytes(),
             [],
             &DependencyInput::default(),
             StageLimits::default(),
@@ -178,7 +178,7 @@ mod tests {
     /// Trace: FR-039-AC-2, FR-039-AC-5, TC-053.
     #[test]
     fn admitted_qsl_positions_keep_repeated_keys_and_absent_sibling_sources() {
-        let source = admitted_source();
+        let source = admitted_source(SOURCE);
         let function = source
             .graph()
             .nodes
@@ -240,5 +240,56 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// Trace: FR-039-AC-1, TC-053.
+    #[test]
+    fn independently_admitted_qsl_operations_reach_distinct_package_nodes() {
+        let not_equal = SOURCE.replace("a = a", "a != a");
+        let variants = [
+            (SOURCE, "quire.op.integer.eq"),
+            (&not_equal, "quire.op.integer.ne"),
+        ];
+        let mut identities = Vec::new();
+        for (source_text, operation) in variants {
+            let source = admitted_source(source_text);
+            let expression = source
+                .graph()
+                .nodes
+                .iter()
+                .find(|node| {
+                    node.node_tag.as_ref() == "expression"
+                        && node.semantic_form.as_ref() == "binary"
+                })
+                .expect("QSL comparison expression")
+                .node_id
+                .clone();
+            let lowered = source.lower(std::slice::from_ref(&expression), &profile());
+            let admitted = match ContractPackageWireV1::read(
+                lowered.package.canonical_bytes().expect("FR-330 bytes"),
+                CheckedPackageReadLimits::bounded(),
+                &ContractDependencies::new(),
+            ) {
+                ContractPackageReadResult::Admitted(package) => package,
+                other => panic!("IR must admit its own FR-330 output: {other:?}"),
+            };
+            let items = PackageItems::new(&admitted, &[expression]).expect("exact request");
+            match items.at(0).expect("first position") {
+                PackageItem::Lowered { node, .. } => {
+                    assert_eq!(
+                        node.body
+                            .pointer("/operation/identity")
+                            .and_then(serde_json::Value::as_str),
+                        Some(operation)
+                    );
+                }
+                PackageItem::Refused { record, .. } => panic!("comparison must lower: {record:?}"),
+            }
+            identities.push(admitted.identity().clone());
+        }
+        assert_ne!(
+            identities[0], identities[1],
+            "changed admitted operation changes package identity"
+        );
     }
 }
