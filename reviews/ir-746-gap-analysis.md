@@ -39,6 +39,6 @@ Plan completion: not assessed. `quire matrix --scope . --strict --format json` r
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
-| FND-001 | fixed | 75c46eddec8aef7ae1f5bd2c534cc5b91e6077dc |
+| FND-001 | fixed | b259f3eaaf72cfda87739eeb2f8e787026593cca |
 
-After excerpt (`src/kani/generate/corpus/bounded_kani_corpus.rs:952-978`): `const DIGEST: &str = "1018f1df0ac4ccf591a06fbcb2e7e7f0e7255331b3f9117aa4f3b1003fd8afb4";` and `assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));`. This binds the emitted name to an independently fixed RFC 8785 preimage.
+After correction (`src/kani/generate/corpus/bounded_kani_corpus.rs:950-981`, `b259f3eaaf72cfda87739eeb2f8e787026593cca`): the hand-authored canonical preimage uses the declared `source_id` field in the arithmetic struct variant, because enum-level `rename_all = "camelCase"` changes the variant name only. The 635-byte literal independently hashes to fixed SHA-256 `4afb9c72a943cbd2db73a206e083012480ee4218adb534e96cbc13c44cc7a525`; the generated name is asserted against `arithmetic_<digest>`. The initial 634-byte `sourceId` literal failed its focused test; the corrected test selected one and passed at this SHA, 2026-10-11 04:11:03–04:11:07 UTC (`/tmp/ir746-focused-corrected.meta`). The FND-001 oracle gap is closed.

@@ -39,6 +39,6 @@ The source scan in `tests/it/no_generation_panics.rs` bans a new `fn determinist
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |
-| FND-001 | fixed | 75c46eddec8aef7ae1f5bd2c534cc5b91e6077dc |
+| FND-001 | fixed | b259f3eaaf72cfda87739eeb2f8e787026593cca |
 
-After excerpt (`src/kani/generate/corpus/bounded_kani_corpus.rs:952-978`): `const DIGEST: &str = "1018f1df0ac4ccf591a06fbcb2e7e7f0e7255331b3f9117aa4f3b1003fd8afb4";` and `assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));`. The 634-byte hand-authored preimage independently hashes to that digest; an old struct-field-order hash differs.
+After correction (`src/kani/generate/corpus/bounded_kani_corpus.rs:950-981`, `b259f3eaaf72cfda87739eeb2f8e787026593cca`): the 635-byte hand-authored RFC 8785 preimage keeps the arithmetic struct-variant field as `source_id` (Serde's enum-level `rename_all = "camelCase"` renames the `arithmetic` variant, not its fields). Its independently computed SHA-256 is `4afb9c72a943cbd2db73a206e083012480ee4218adb534e96cbc13c44cc7a525`; the test fixes that digest and asserts the generated name equals `arithmetic_<digest>`. The first 634-byte literal used `sourceId` and failed its generated-name assertion. The corrected focused test selected one and passed at this SHA, 2026-10-11 04:11:03–04:11:07 UTC (`/tmp/ir746-focused-corrected.meta`); an old struct-field-order hash differs.
