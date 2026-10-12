@@ -440,6 +440,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
         package: &admitted,
         claim_map: &claim_map,
         node_id: &node,
+        claim_index: claim_index(&claim_map, &node),
     }];
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -596,6 +597,17 @@ pub(crate) fn admitted_scalar_claims(
     }
 }
 
+fn claim_index(
+    claim_map: &ClaimMap<ExactScalarClaim>,
+    node_id: &quire_contract_model::CheckedNodeId,
+) -> usize {
+    claim_map
+        .items
+        .iter()
+        .position(|claim| &claim.node_id == node_id)
+        .expect("test claim map contains selected node")
+}
+
 fn scalar_records(
     package: &CheckedPackageV2,
     claim_map: &ClaimMap<ExactScalarClaim>,
@@ -613,6 +625,7 @@ fn scalar_records(
             package: &admitted,
             claim_map,
             node_id,
+            claim_index: claim_index(claim_map, node_id),
         })
         .collect::<Vec<_>>();
     let (records, harnesses) =
@@ -877,6 +890,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
         package: &admitted,
         claim_map: &claim_map,
         node_id: &node_1001,
+        claim_index: claim_index(&claim_map, &node_1001),
     }];
     let (records, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -915,6 +929,7 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
         package: &admitted,
         claim_map: &claim_map,
         node_id: &node_1001,
+        claim_index: claim_index(&claim_map, &node_1001),
     }];
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -1024,6 +1039,7 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
             package: &admitted,
             claim_map: &claim_map,
             node_id: &claim.node_id,
+            claim_index: claim_index(&claim_map, &claim.node_id),
         })
         .collect::<Vec<_>>();
     let (_, harnesses) =
@@ -1195,6 +1211,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         package: &admitted,
         claim_map: &claim_map,
         node_id: &node_id,
+        claim_index: claim_index(&claim_map, &node_id),
     }];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     let KaniObligationOutcome::Emitted {
@@ -1320,6 +1337,7 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
         package: &admitted,
         claim_map: &claim_map,
         node_id: &missing_node_id,
+        claim_index: claim_index(&claim_map, &missing_node_id),
     }];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     let KaniObligationOutcome::Rejected { records } = &outcome else {
@@ -1595,6 +1613,7 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
             package: &admitted,
             claim_map: &claim_map,
             node_id: &claim.node_id,
+            claim_index: claim_index(&claim_map, &claim.node_id),
         })
         .collect::<Vec<_>>();
     let (records, scalar_harnesses) =
@@ -1673,6 +1692,7 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
         package: &admitted,
         claim_map: &oracles.claim_map,
         node_id: &mismatched,
+        claim_index: claim_index(&oracles.claim_map, &mismatched),
     }];
     let (records, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -1737,11 +1757,14 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             package: &admitted,
             claim_map: &claim_map,
             node_id: &missing,
+            // Deliberately outside the map: this item tests UnknownNode.
+            claim_index: claim_map.items.len(),
         },
         ObligationItem::ScalarClaim {
             package: &admitted,
             claim_map: &claim_map,
             node_id: &unbounded,
+            claim_index: claim_index(&claim_map, &unbounded),
         },
     ];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::withdraw")).unwrap();
@@ -1802,6 +1825,8 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         package: &admitted,
         claim_map: &foreign_map,
         node_id: &node,
+        // PackageMismatch takes precedence over claim selection.
+        claim_index: 0,
     }];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     assert_eq!(

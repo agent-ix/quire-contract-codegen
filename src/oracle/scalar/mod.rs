@@ -621,7 +621,7 @@ pub struct GeneratedScalarClaim {
     pub oracle_source: String,
 }
 
-/// One claim-map entry per distinct requested node.
+/// One claim-map entry per selected requested occurrence.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ExactScalarClaim {
     /// Requested node.
@@ -638,7 +638,8 @@ pub struct ExactScalarOracles {
     /// `Cargo.toml`, `src/lib.rs` and `claim-map.json`, in that order.
     pub artifacts: Vec<Artifact>,
     /// Typed claim map, identical to `claim-map.json`. Items ascend by node
-    /// id: digest domain, then digest. `blocked` lists the upstream gaps every
+    /// id: digest domain, then digest; selected occurrence breaks equal-node ties.
+    /// `blocked` lists the upstream gaps every
     /// entry is subject to. A `Generated` disposition means one oracle
     /// function was emitted. The blockers this generator records are
     /// `QuireSpecLanguage120`, `QuireContractRuntime34` and
@@ -860,11 +861,13 @@ pub enum ContractScalarError {
 /// This arm handles scalar operations with no result-bound parameter. Bound-
 /// parameterized families retain a typed refusal until their derivation reads
 /// the admitted closure's typed bounds.
+/// The returned claim indexes align with `positions` and identify each selected
+/// occurrence after the claim map's stable sort.
 pub(crate) fn generate_contract_scalar_oracles(
     package: &ContractPackageV1,
     requested: &[ContractRequestPosition],
     positions: &[usize],
-) -> Result<ExactScalarOracles, ContractScalarError> {
+) -> Result<(ExactScalarOracles, Vec<usize>), ContractScalarError> {
     let items = PackageItems::new(package, requested).map_err(ContractScalarError::Request)?;
     let graph: Graph<'_> = package
         .wire()
@@ -1054,13 +1057,26 @@ pub(crate) fn generate_contract_scalar_oracles(
     }
     // FR-014's claim-map order is node order. The selected pair breaks ties
     // over one expression node without consulting driver request indexes.
-    let mut keyed_claims = claims.into_iter().zip(selected_keys).collect::<Vec<_>>();
-    keyed_claims.sort_by(|(left, left_key), (right, right_key)| {
+    let mut keyed_claims = claims
+        .into_iter()
+        .zip(selected_keys)
+        .enumerate()
+        .map(|(position, (claim, key))| (position, claim, key))
+        .collect::<Vec<_>>();
+    keyed_claims.sort_by(|(_, left, left_key), (_, right, right_key)| {
         left.node_id
             .cmp(&right.node_id)
             .then(left_key.cmp(right_key))
     });
-    let claims = keyed_claims.into_iter().map(|(claim, _)| claim).collect();
+    let mut claim_indexes = vec![0; positions.len()];
+    let claims = keyed_claims
+        .into_iter()
+        .enumerate()
+        .map(|(claim_index, (position, claim, _))| {
+            claim_indexes[position] = claim_index;
+            claim
+        })
+        .collect();
     let claim_map = ClaimMap {
         package_id: package.wire().package.source.package_id.clone(),
         blocked: Vec::new(),
@@ -1081,14 +1097,17 @@ pub(crate) fn generate_contract_scalar_oracles(
     map_bytes.push(b'\n');
     let map_text = String::from_utf8(map_bytes)
         .map_err(|_| ContractScalarError::Oracle(OracleGenerationError::ClaimMapSerialization))?;
-    Ok(ExactScalarOracles {
-        artifacts: vec![
-            Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
-            Artifact::new("src/lib.rs", lib),
-            Artifact::new("claim-map.json", map_text),
-        ],
-        claim_map,
-    })
+    Ok((
+        ExactScalarOracles {
+            artifacts: vec![
+                Artifact::new("Cargo.toml", oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME)),
+                Artifact::new("src/lib.rs", lib),
+                Artifact::new("claim-map.json", map_text),
+            ],
+            claim_map,
+        },
+        claim_indexes,
+    ))
 }
 
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]

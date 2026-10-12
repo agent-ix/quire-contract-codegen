@@ -575,7 +575,7 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => package,
             other => panic!("IR must admit ordering: {other:?}"),
         };
-        let omitted = generate_contract_scalar_oracles(
+        let (omitted, _) = generate_contract_scalar_oracles(
             &admitted,
             &drivers(std::slice::from_ref(&expression)),
             &[0],
@@ -591,7 +591,7 @@ mod tests {
             node_id: expression.clone(),
             result_selection: own_result(&checked, &expression, None),
         }];
-        let generated = generate_contract_scalar_oracles(&admitted, &selected, &[0])
+        let (generated, _) = generate_contract_scalar_oracles(&admitted, &selected, &[0])
             .expect("selected scalar generation");
         assert!(matches!(
             &generated.claim_map.items[0].result,
@@ -718,7 +718,7 @@ mod tests {
                 node_id: second_conversion.clone(),
             },
         ];
-        let result = generate_contract_scalar_oracles(&admitted, &positions, &[0, 1])
+        let (result, _) = generate_contract_scalar_oracles(&admitted, &positions, &[0, 1])
             .expect("two selected scalar items");
         for (item, expected) in result
             .claim_map
@@ -734,6 +734,75 @@ mod tests {
             };
             assert_eq!(claim.checked_bounds.first(), Some(expected));
         }
+        let descriptor = BackendDescriptor {
+            identity: "kani".to_owned(),
+            advertised: Vec::new(),
+            origin: ProviderOrigin::Linked,
+            domains: None,
+            bounds: Default::default(),
+        };
+        let routes = (0..2)
+            .map(|request_index| {
+                RoutedGenerationItem::from_descriptor(
+                    request_index,
+                    add.clone(),
+                    Candidate {
+                        identity: "kani".to_owned(),
+                    },
+                    &descriptor,
+                )
+                .expect("linked Kani route")
+            })
+            .collect::<Vec<_>>();
+        let routed = generate_routed(
+            &admitted,
+            &positions,
+            &routes,
+            &GenerationContexts {
+                kani: Some(KaniGenerationContext {
+                    ceilings: crate::kani::identity::ProofCeilings {
+                        memory_bytes: std::num::NonZeroU64::new(64 * 1024 * 1024)
+                            .expect("nonzero ceiling"),
+                        wall_clock: std::time::Duration::from_secs(10),
+                    },
+                    subject_path: "crate::subject",
+                    unwind: 1,
+                }),
+            },
+        )
+        .expect("both selected scalar contexts route");
+        assert!(
+            routed.rejected.is_empty(),
+            "distinct selections are independent: {:?}",
+            routed.items
+        );
+        assert_eq!(routed.items.len(), 2);
+        let mut harness_paths = Vec::new();
+        for (item, maximum) in routed.items.iter().zip([10, 20]) {
+            let KindOutput::Kani { record, harness } = &item.output else {
+                panic!("selected scalar routes to Kani");
+            };
+            assert!(
+                matches!(
+                    record.disposition,
+                    crate::kani::generate::outcome::ObligationDisposition::Supported { .. }
+                ),
+                "each selected occurrence has its own supported disposition: {record:?}"
+            );
+            let harness = harness
+                .as_ref()
+                .expect("each selected occurrence has a harness");
+            assert!(
+                harness
+                    .rust
+                    .contents
+                    .contains(&format!("exact <= i128::from({maximum}_i64)")),
+                "each proof uses its own selected result bound: {}",
+                harness.rust.contents
+            );
+            harness_paths.push(&harness.rust.path);
+        }
+        assert_ne!(harness_paths[0], harness_paths[1]);
         let mut forged = positions.clone();
         if let ContractRequestPosition::DriverItem {
             result_selection, ..
@@ -744,7 +813,7 @@ mod tests {
                 conversion: Some(occurrence(&checked, first_conversion)),
             };
         }
-        let refusal = generate_contract_scalar_oracles(&admitted, &forged, &[1])
+        let (refusal, _) = generate_contract_scalar_oracles(&admitted, &forged, &[1])
             .expect("cross-context choice is a per-item refusal");
         assert!(matches!(
             &refusal.claim_map.items[0].result,
@@ -777,8 +846,9 @@ mod tests {
             positions[0].clone(),
             positions[1].clone(),
         ];
-        let duplicate = generate_contract_scalar_oracles(&repeated, &repeated_positions, &[0, 1])
-            .expect("duplicate pair receives typed refusals");
+        let (duplicate, _) =
+            generate_contract_scalar_oracles(&repeated, &repeated_positions, &[0, 1])
+                .expect("duplicate pair receives typed refusals");
         assert!(duplicate.claim_map.items.iter().all(|item| matches!(
             &item.result,
             ClaimDisposition::Refused {
@@ -841,7 +911,7 @@ mod tests {
                 node_id: conversion,
             },
         ];
-        let generated =
+        let (generated, _) =
             crate::oracle::scalar::generate_contract_scalar_oracles(&admitted, &positions, &[0])
                 .expect("admitted bounded operation generates");
         let claim = &generated.claim_map.items[0];
@@ -899,7 +969,7 @@ mod tests {
         let occurrences = admitted.wire().source_map.requested_items[0]
             .occurrences
             .clone();
-        let generated = crate::oracle::scalar::generate_contract_scalar_oracles(
+        let (generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
             &admitted,
             &drivers(std::slice::from_ref(&expression)),
             &[0],
@@ -1219,7 +1289,7 @@ mod tests {
             node_id: unbounded.clone(),
             result_selection: own_result(&checked, &unbounded, None),
         };
-        let scalar = generate_contract_scalar_oracles(&admitted, &positions, &[3])
+        let (scalar, _) = generate_contract_scalar_oracles(&admitted, &positions, &[3])
             .expect("scalar settlement");
         assert!(
             matches!(
@@ -1473,7 +1543,7 @@ mod tests {
             .map(|reference| (reference.package, reference.node))
             .collect::<Vec<_>>();
 
-        let generated = crate::oracle::scalar::generate_contract_scalar_oracles(
+        let (generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
             &admitted,
             &drivers(std::slice::from_ref(&call)),
             &[0],
@@ -1503,7 +1573,7 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => package,
             other => panic!("unselected evidence must not replace selected targets: {other:?}"),
         };
-        let extra_generated = crate::oracle::scalar::generate_contract_scalar_oracles(
+        let (extra_generated, _) = crate::oracle::scalar::generate_contract_scalar_oracles(
             &extra,
             &drivers(std::slice::from_ref(&call)),
             &[0],

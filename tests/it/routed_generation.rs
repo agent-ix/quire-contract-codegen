@@ -438,6 +438,11 @@ fn fr015(
             package: &admitted,
             claim_map,
             node_id,
+            claim_index: claim_map
+                .items
+                .iter()
+                .position(|claim| &claim.node_id == *node_id)
+                .expect("selected claim"),
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {

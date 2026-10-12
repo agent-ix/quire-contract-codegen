@@ -204,6 +204,7 @@ enum ItemIdentity {
     Node {
         package: String,
         node: CheckedNodeId,
+        claim_index: usize,
     },
     /// One role of one state clause. `DuplicateItem` spans this arm and one role only.
     StateFrame {
@@ -286,7 +287,8 @@ fn classify<'a>(
             package,
             claim_map,
             node_id,
-        } => classify_node(package, claim_map, node_id),
+            claim_index,
+        } => classify_node(package, claim_map, node_id, claim_index),
         ObligationItem::StateFrame {
             package,
             clause,
@@ -344,7 +346,7 @@ fn classify_state_frame<'a>(
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 enum NameKey {
     Clause(String, u64, String),
-    Node(CheckedNodeId),
+    Node(CheckedNodeId, usize),
 }
 
 fn clause_key(clause: &ClauseRef) -> NameKey {
@@ -406,13 +408,18 @@ fn assign_names(states: &mut [ItemState<'_>]) {
                     clause_key(lowered.clause.identity()),
                 ),
             )),
-            Outcome::LoweredScalar(lowered) => Some((
-                index,
-                (
-                    scalar_stem(&lowered.operation_identity),
-                    NameKey::Node(lowered.node_id.clone()),
-                ),
-            )),
+            Outcome::LoweredScalar(lowered) => {
+                let Some(ItemIdentity::Node { claim_index, .. }) = &state.identity else {
+                    return None;
+                };
+                Some((
+                    index,
+                    (
+                        scalar_stem(&lowered.operation_identity),
+                        NameKey::Node(lowered.node_id.clone(), *claim_index),
+                    ),
+                ))
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -529,6 +536,7 @@ fn classify_node<'a>(
     package: &ContractPackageV1,
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
+    claim_index: usize,
 ) -> ItemState<'a> {
     let graph_node = package
         .wire()
@@ -554,14 +562,15 @@ fn classify_node<'a>(
     let identity = Some(ItemIdentity::Node {
         package: package.identity().digest.to_string(),
         node: node_id.clone(),
+        claim_index,
     });
     let outcome = if claim_map.package_id != package.wire().package.source.package_id {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)
     } else {
         match claim_map
             .items
-            .iter()
-            .find(|claim| &claim.node_id == node_id)
+            .get(claim_index)
+            .filter(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
             Some(claim) => classify_claim(package, claim),

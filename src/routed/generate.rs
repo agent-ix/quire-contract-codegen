@@ -423,10 +423,13 @@ fn generate_kani(
             kind: BackendKind::Kani,
         });
     };
-    let ExactScalarOracles {
-        claim_map,
-        artifacts,
-    } = generate_contract_scalar_oracles(
+    let (
+        ExactScalarOracles {
+            claim_map,
+            artifacts,
+        },
+        claim_indexes,
+    ) = generate_contract_scalar_oracles(
         package,
         positions,
         &group
@@ -437,10 +440,12 @@ fn generate_kani(
     .map_err(RoutedGenerationError::ContractScalar)?;
     let items = group
         .iter()
-        .map(|item| ObligationItem::ScalarClaim {
+        .zip(claim_indexes)
+        .map(|(item, claim_index)| ObligationItem::ScalarClaim {
             package,
             claim_map: &claim_map,
             node_id: &item.node_id,
+            claim_index,
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
