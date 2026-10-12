@@ -1282,7 +1282,7 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
         "an Add descriptor over a catalogued mul node must not be marked IrConfirmed"
     );
     let mismatched_source = contents(&mismatched, "src/lib.rs");
-    let mismatched_body = function_body(&mismatched_source, &symbol(&mismatched, 1004));
+    let mismatched_body = function_body(mismatched_source, &symbol(&mismatched, 1004));
     assert!(mismatched_body.contains("rt::IntegerArithmetic::Add("));
     assert!(!mismatched_body.contains("rt::IntegerArithmetic::Multiply("));
 
@@ -1305,7 +1305,7 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
         OperationProvenance::IrConfirmed
     );
     let matched_source = contents(&matched, "src/lib.rs");
-    let matched_body = function_body(&matched_source, &symbol(&matched, 1004));
+    let matched_body = function_body(matched_source, &symbol(&matched, 1004));
     assert!(matched_body.contains("rt::IntegerArithmetic::Multiply("));
     assert!(!matched_body.contains("rt::IntegerArithmetic::Add("));
 }
@@ -1329,14 +1329,14 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
         }],
     );
     let subtraction_source = contents(&subtraction, "src/lib.rs");
-    let subtraction_body = function_body(&subtraction_source, &symbol(&subtraction, 1003));
+    let subtraction_body = function_body(subtraction_source, &symbol(&subtraction, 1003));
     assert!(subtraction_body.contains("Subtract(left, right)"));
     assert!(!subtraction_body.contains("Subtract(right, left)"));
 
     let ordering = derive_one(&package, 1041).expect("integer less-than descriptor");
     let ordering_oracles = generate(&package, &[ordering]);
     let ordering_source = contents(&ordering_oracles, "src/lib.rs");
-    let ordering_body = function_body(&ordering_source, &symbol(&ordering_oracles, 1041));
+    let ordering_body = function_body(ordering_source, &symbol(&ordering_oracles, 1041));
     assert!(ordering_body.contains(
         "rt::order_numbers(rt::OrderingOperator::Less, rt::OrderedOperands::Integers(left, right), meter)"
     ));
