@@ -59,5 +59,6 @@ The tagged `tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refus
 | FND-001 | fixed | e44aba8aa331ade926397a1ec1de86992c0fa949 |
 | FND-002 | fixed | e44aba8aa331ade926397a1ec1de86992c0fa949 |
 | FND-003 | still-open | Direct formula and case call-node tests now exist, but no admitted temporal_fairness package or corresponding AC-33 test is present. IR-774 owns establishing authentic fairness reader admission; the fairness subcase remains open. |
+| FND-003 | still-open | 4b3be14fb9764da90be80b9c9b596ffb5edf8754: the implementation now classifies direct formula/fairness roots as Unsupported and preserves PackageAccounting for other FR-330 refusals. No admitted temporal_fairness package or direct AC-33 fairness test exists; IR-774 owns the authentic reader admission prerequisite. |
 
 The Quire matrix tags FR-018-AC-32 to the new equality test and FR-021-AC-33 to the declared-body plus direct formula and case tests. The direct-root fairness case is still uncovered.
