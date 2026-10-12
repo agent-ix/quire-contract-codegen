@@ -2478,7 +2478,7 @@ fn tc_031_ac32_direct_control_case_is_unsupported() {
         .expect("admitted case root");
     let id = case.node_id.clone();
     let lowered = package.lower(
-        &[id.clone()],
+        std::slice::from_ref(&id),
         &CompleteLoweringProfileV2 {
             reference: LoweringProfileRef {
                 authority: "agent-ix".into(),

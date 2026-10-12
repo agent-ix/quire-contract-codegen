@@ -1988,7 +1988,7 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         &contract,
         &requests,
         &[position(&body_id)],
-        &[function.clone()],
+        std::slice::from_ref(&function),
         &[position(&requested_id), position(&healthy_call_id)],
         &[direct_item, healthy_item.clone()],
     )
