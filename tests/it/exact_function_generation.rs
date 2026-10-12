@@ -11,8 +11,9 @@ use crate::scratch_crate::runtime_dependency;
 use quire_contract_codegen::{
     generate_exact_function_oracles, generate_function_schedules, CallPointKind, ClaimDisposition,
     ExactFunctionItem, ExactFunctionRefusal, FunctionScheduleDeclaration,
-    FunctionScheduleDisposition, FunctionScheduleItem, FunctionScheduleParameter,
-    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
+    FunctionScheduleDisposition, FunctionScheduleItem, FunctionScheduleOperand as ScheduleOperand,
+    FunctionScheduleParameter, FunctionScheduledOperation, GeneratedExactFunctionClaim,
+    UpstreamBlocker,
 };
 use quire_contract_model::CheckedPackageV2;
 use std::ops::Deref;
@@ -380,10 +381,10 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
             function: format!("chain_{terminal}"),
         },
     ];
-    // Projection charges 3 node entries + 2 child edges. Schedule traversal then charges another
-    // 3 node entries + 2 child edges + 3 instructions + 3 locations, plus the call binding.
-    let required_call_work = 3 + 2 + 3 + 2 + 3 + 3 + 1;
-    let required_scalar_work = 3 + 2 + 3 + 2 + 3 + 3;
+    // One source traversal charges 3 node entries + 2 child edges + 3 instructions + 3 locations;
+    // a call also charges its declaration binding once.
+    let required_call_work = 3 + 2 + 3 + 3 + 1;
+    let required_scalar_work = 3 + 2 + 3 + 3;
     let work_limit = required_call_work.max(required_scalar_work);
     let generated = generate_function_schedules(&checked, &declarations, &items, work_limit)
         .expect("caller-raised work limit admits the complete flat schedule");
@@ -447,7 +448,10 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         instruction
             .operands
             .iter()
-            .map(|slot| slot.0)
+            .map(|operand| match operand {
+                ScheduleOperand::Slot(slot) => slot.0,
+                ScheduleOperand::Literal { .. } => panic!("chain arguments are references"),
+            })
             .collect::<Vec<_>>()
             == vec![0, 1]
     }));
@@ -463,7 +467,10 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         let argument_parameters = call
             .operands
             .iter()
-            .filter_map(|slot| function.schedule.instructions.get(slot.0 as usize))
+            .filter_map(|operand| match operand {
+                ScheduleOperand::Slot(slot) => function.schedule.instructions.get(slot.0 as usize),
+                ScheduleOperand::Literal { .. } => None,
+            })
             .map(|instruction| instruction.operation.clone())
             .collect::<Vec<_>>();
         assert_eq!(
@@ -506,15 +513,15 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     assert_eq!(
         one_less.functions.len(),
         1,
-        "the terminal scalar still fits 16 units"
+        "the terminal scalar still fits 11 units"
     );
     assert_eq!(one_less.refused_functions.len(), 128);
     assert!(one_less.refused_functions.iter().all(|function| {
         matches!(
             function.refusal,
             quire_contract_codegen::FunctionScheduleRefusal::WorkExhausted {
-                limit: 16,
-                consumed: 17
+                limit: 11,
+                consumed: 12
             }
         )
     }));
@@ -546,6 +553,59 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         )
         .unwrap(),
     );
+
+    let mut reordered_names = declarations.clone();
+    let (lower_index, higher_index) =
+        if declarations[0].function_node_id < declarations[1].function_node_id {
+            (0, 1)
+        } else {
+            (1, 0)
+        };
+    reordered_names[lower_index].name = "z_decl".to_owned();
+    reordered_names[higher_index].name = "a_decl".to_owned();
+    let claim_order = generate_function_schedules(
+        &checked,
+        &reordered_names,
+        &[
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "z_decl".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "a_decl".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "zz_unknown".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "aa_unknown".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "zz_unknown".to_owned(),
+            },
+        ],
+        work_limit,
+    )
+    .expect("claim ordering and duplicate handling are independent of request order");
+    assert_eq!(
+        claim_order
+            .claims
+            .iter()
+            .map(|claim| claim.function.as_str())
+            .collect::<Vec<_>>(),
+        vec!["aa_unknown", "zz_unknown", "z_decl", "a_decl"]
+    );
+    assert!(matches!(
+        &claim_order.claims[1].result,
+        FunctionScheduleDisposition::Refused {
+            refusal: quire_contract_codegen::FunctionScheduleRefusal::DuplicateRequest { .. },
+            ..
+        }
+    ));
 
     let directory = std::env::temp_dir().join(format!("ir496-schedule-{}", std::process::id()));
     let _ = fs::remove_dir_all(&directory);

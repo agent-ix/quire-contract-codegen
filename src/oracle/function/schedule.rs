@@ -15,6 +15,10 @@ pub struct SsaSlot(
     pub u32,
 );
 
+/// Stable control-flow block identifier in the target-neutral execution plan.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct BlockId(pub u32);
+
 /// Stable occurrence assigned when a body node is entered.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Occurrence(
@@ -40,10 +44,14 @@ pub enum Operation {
     Subtract,
     /// Integer multiplication.
     Multiply,
-    /// Equality over Boolean or Integer operands.
-    Equal,
-    /// Inequality over Boolean or Integer operands.
-    NotEqual,
+    /// Equality over Integer operands.
+    IntegerEqual,
+    /// Inequality over Integer operands.
+    IntegerNotEqual,
+    /// Equality over Boolean operands.
+    BooleanEqual,
+    /// Inequality over Boolean operands.
+    BooleanNotEqual,
 }
 
 impl Operation {
@@ -52,10 +60,18 @@ impl Operation {
             "quire.op.integer.add" => Ok(Self::Add),
             "quire.op.integer.sub" => Ok(Self::Subtract),
             "quire.op.integer.mul" => Ok(Self::Multiply),
-            "quire.op.integer.eq" | "quire.op.boolean.eq" => Ok(Self::Equal),
-            "quire.op.integer.ne" | "quire.op.boolean.ne" => Ok(Self::NotEqual),
+            "quire.op.integer.eq" => Ok(Self::IntegerEqual),
+            "quire.op.integer.ne" => Ok(Self::IntegerNotEqual),
+            "quire.op.boolean.eq" => Ok(Self::BooleanEqual),
+            "quire.op.boolean.ne" => Ok(Self::BooleanNotEqual),
             _ => Err(ScheduleRefusal::UnsupportedOperation(node.clone())),
         }
+    }
+}
+
+impl From<CheckedNodeId> for GraphOperand {
+    fn from(node: CheckedNodeId) -> Self {
+        Self::Node(node)
     }
 }
 
@@ -65,12 +81,22 @@ pub(crate) enum NodeKind {
     Parameter,
     Binary {
         operation_identity: String,
-        left: CheckedNodeId,
-        right: CheckedNodeId,
+        left: GraphOperand,
+        right: GraphOperand,
     },
     Call {
         callee: CheckedNodeId,
-        arguments: Vec<CheckedNodeId>,
+        arguments: Vec<GraphOperand>,
+    },
+}
+
+/// A reference or inline scalar literal in an admitted V2 application.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) enum GraphOperand {
+    Node(CheckedNodeId),
+    Literal {
+        value_kind: ValueKind,
+        value: String,
     },
 }
 
@@ -98,11 +124,25 @@ pub struct Instruction {
     /// Typed scheduled operation.
     pub operation: ScheduledOperation,
     /// Earlier SSA slots in source operand order.
-    pub operands: Vec<SsaSlot>,
+    pub operands: Vec<Operand>,
     /// V2 source node identity.
     pub node: CheckedNodeId,
     /// Stable operation occurrence ordinal.
     pub occurrence: Occurrence,
+}
+
+/// An SSA input or an inline admitted scalar literal.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum Operand {
+    /// Previously emitted SSA value.
+    Slot(SsaSlot),
+    /// Boolean or Integer literal retained from the V2 source term.
+    Literal {
+        /// Literal's admitted scalar type.
+        value_kind: ValueKind,
+        /// Canonical source value text.
+        value: String,
+    },
 }
 
 /// Operations retained in the target-neutral table.
@@ -141,6 +181,58 @@ pub struct Schedule {
     pub instructions: Vec<Instruction>,
     /// Constant-size parent-linked source locations.
     pub locations: Vec<LocationRecord>,
+    /// Ordered charge gates and explicit refusal branches for eventual execution.
+    pub control_flow: Vec<ControlBlock>,
+    /// First block entered by an executor.
+    pub entry: BlockId,
+}
+
+/// One block in the target-neutral charge and execution graph.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ControlBlock {
+    /// Stable block identifier.
+    pub id: BlockId,
+    /// Action performed when this block is entered.
+    pub action: ControlAction,
+    /// Explicit outgoing branch edges.
+    pub edges: Vec<ControlEdge>,
+}
+
+/// Action represented by one control-flow block.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ControlAction {
+    /// Charge before executing the named instruction.
+    Charge {
+        /// Instruction whose operation is being charged.
+        instruction: SsaSlot,
+    },
+    /// Execute the named instruction after its charge was admitted.
+    Execute {
+        /// Instruction to execute.
+        instruction: SsaSlot,
+    },
+    /// Stop after a denied charge.
+    Stop,
+}
+
+/// Condition controlling an edge leaving a charge or execution block.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub enum EdgeCondition {
+    /// The preceding charge was admitted.
+    ChargeAdmitted,
+    /// The preceding charge was denied.
+    ChargeDenied,
+    /// Unconditional continuation after execution.
+    Always,
+}
+
+/// Explicit target of a control-flow branch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct ControlEdge {
+    /// Branch condition.
+    pub condition: EdgeCondition,
+    /// Destination block.
+    pub target: BlockId,
 }
 
 /// Typed refusal before any schedule is published.
@@ -212,12 +304,19 @@ pub enum ScheduleRefusal {
     },
     /// A V2 body does not match the flat function schedule grammar.
     MalformedTerm(CheckedNodeId),
-    /// An inline V2 literal is outside this bounded parameter/reference schedule slice.
+    /// An inline V2 literal is outside the supported Boolean/Integer scalar subset.
     UnsupportedLiteral(CheckedNodeId),
     /// An item names no function binding in the request.
     UnknownFunction(String),
     /// More than one declaration uses the requested function name.
     AmbiguousFunctionName(String),
+    /// The same call-node/function request was supplied more than once.
+    DuplicateRequest {
+        /// Requested call node identity.
+        call_node_id: CheckedNodeId,
+        /// Requested function name.
+        function: String,
+    },
     /// The call item's exact callee differs from the requested binding.
     WrongCallBinding {
         /// Requested bound declaration node.
@@ -263,7 +362,7 @@ enum Event {
     Continue {
         node: CheckedNodeId,
         occurrence: Occurrence,
-        edges: Vec<CheckedNodeId>,
+        edges: Vec<GraphOperand>,
         next: usize,
         child_ordinal_base: u32,
     },
@@ -449,18 +548,20 @@ pub(crate) fn build_schedule_with_work(
                         next: next + 1,
                         child_ordinal_base,
                     });
-                    stack.push(Event::Enter {
-                        node: child,
-                        parent: Some(Parent {
-                            occurrence,
-                            child_ordinal: child_ordinal_base
-                                .checked_add(
-                                    u32::try_from(next)
-                                        .map_err(|_| ScheduleRefusal::CounterOverflow)?,
-                                )
-                                .ok_or(ScheduleRefusal::CounterOverflow)?,
-                        }),
-                    });
+                    if let GraphOperand::Node(child) = child {
+                        stack.push(Event::Enter {
+                            node: child,
+                            parent: Some(Parent {
+                                occurrence,
+                                child_ordinal: child_ordinal_base
+                                    .checked_add(
+                                        u32::try_from(next)
+                                            .map_err(|_| ScheduleRefusal::CounterOverflow)?,
+                                    )
+                                    .ok_or(ScheduleRefusal::CounterOverflow)?,
+                            }),
+                        });
+                    }
                 }
             }
             Event::Finish {
@@ -487,16 +588,21 @@ pub(crate) fn build_schedule_with_work(
                         (ScheduledOperation::Parameter(index), Vec::new())
                     }
                     NodeKind::Binary { left, right, .. } => {
-                        let left_slot = slot_for(left, &slots)?;
-                        let right_slot = slot_for(right, &slots)?;
+                        let left_operand = schedule_operand(left, &slots)?;
+                        let right_operand = schedule_operand(right, &slots)?;
                         let operation = operations
                             .get(&node)
                             .copied()
                             .ok_or_else(|| ScheduleRefusal::UnsupportedOperation(node.clone()))?;
-                        validate_binary(operation, graph_node, nodes.get(left), nodes.get(right))?;
+                        validate_binary(
+                            operation,
+                            graph_node,
+                            operand_kind(left, nodes)?,
+                            operand_kind(right, nodes)?,
+                        )?;
                         (
                             ScheduledOperation::Binary(operation),
-                            vec![left_slot, right_slot],
+                            vec![left_operand, right_operand],
                         )
                     }
                     NodeKind::Call { callee, arguments } => {
@@ -505,13 +611,15 @@ pub(crate) fn build_schedule_with_work(
                             .ok_or_else(|| ScheduleRefusal::UnknownCallee(callee.clone()))?;
                         let mut slots_for_args = Vec::with_capacity(arguments.len());
                         for (index, argument) in arguments.iter().enumerate() {
-                            let argument_node = nodes
-                                .get(argument)
-                                .ok_or_else(|| ScheduleRefusal::MissingNode(argument.clone()))?;
-                            if argument_node.value_kind != binding.parameter_kinds[index] {
-                                return Err(ScheduleRefusal::WrongType(argument.clone()));
+                            let kind = operand_kind(argument, nodes)?;
+                            if kind != binding.parameter_kinds[index] {
+                                let id = match argument {
+                                    GraphOperand::Node(id) => id.clone(),
+                                    GraphOperand::Literal { .. } => node.clone(),
+                                };
+                                return Err(ScheduleRefusal::WrongType(id));
                             }
-                            slots_for_args.push(slot_for(argument, &slots)?);
+                            slots_for_args.push(schedule_operand(argument, &slots)?);
                         }
                         if graph_node.value_kind != binding.result_kind {
                             return Err(ScheduleRefusal::WrongType(node.clone()));
@@ -550,10 +658,94 @@ pub(crate) fn build_schedule_with_work(
         }
     }
 
+    let (entry, control_flow) = build_control_flow(&instructions)?;
     Ok(Schedule {
         instructions,
         locations,
+        control_flow,
+        entry,
     })
+}
+
+fn build_control_flow(
+    instructions: &[Instruction],
+) -> Result<(BlockId, Vec<ControlBlock>), ScheduleRefusal> {
+    let stop = BlockId(
+        u32::try_from(
+            instructions
+                .len()
+                .checked_mul(2)
+                .ok_or(ScheduleRefusal::CounterOverflow)?,
+        )
+        .map_err(|_| ScheduleRefusal::CounterOverflow)?,
+    );
+    let mut blocks = Vec::with_capacity(instructions.len().saturating_mul(2).saturating_add(1));
+    for (index, instruction) in instructions.iter().enumerate() {
+        let charge = BlockId(
+            u32::try_from(
+                index
+                    .checked_mul(2)
+                    .ok_or(ScheduleRefusal::CounterOverflow)?,
+            )
+            .map_err(|_| ScheduleRefusal::CounterOverflow)?,
+        );
+        let execute = BlockId(
+            charge
+                .0
+                .checked_add(1)
+                .ok_or(ScheduleRefusal::CounterOverflow)?,
+        );
+        let next = if index + 1 < instructions.len() {
+            Some(BlockId(
+                execute
+                    .0
+                    .checked_add(1)
+                    .ok_or(ScheduleRefusal::CounterOverflow)?,
+            ))
+        } else {
+            None
+        };
+        blocks.push(ControlBlock {
+            id: charge,
+            action: ControlAction::Charge {
+                instruction: instruction.output,
+            },
+            edges: vec![
+                ControlEdge {
+                    condition: EdgeCondition::ChargeAdmitted,
+                    target: execute,
+                },
+                ControlEdge {
+                    condition: EdgeCondition::ChargeDenied,
+                    target: stop,
+                },
+            ],
+        });
+        blocks.push(ControlBlock {
+            id: execute,
+            action: ControlAction::Execute {
+                instruction: instruction.output,
+            },
+            edges: next
+                .map(|target| ControlEdge {
+                    condition: EdgeCondition::Always,
+                    target,
+                })
+                .into_iter()
+                .collect(),
+        });
+    }
+    blocks.push(ControlBlock {
+        id: stop,
+        action: ControlAction::Stop,
+        edges: Vec::new(),
+    });
+    let entry = if instructions.is_empty() {
+        stop
+    } else {
+        BlockId(0)
+    };
+    Ok((entry, blocks))
 }
 
 fn slot_for(
@@ -566,25 +758,60 @@ fn slot_for(
         .ok_or_else(|| ScheduleRefusal::MissingNode(node.clone()))
 }
 
+fn schedule_operand(
+    operand: &GraphOperand,
+    slots: &BTreeMap<CheckedNodeId, SsaSlot>,
+) -> Result<Operand, ScheduleRefusal> {
+    match operand {
+        GraphOperand::Node(node) => slot_for(node, slots).map(Operand::Slot),
+        GraphOperand::Literal { value_kind, value } => Ok(Operand::Literal {
+            value_kind: *value_kind,
+            value: value.clone(),
+        }),
+    }
+}
+
+fn operand_kind(
+    operand: &GraphOperand,
+    nodes: &BTreeMap<CheckedNodeId, GraphNode>,
+) -> Result<ValueKind, ScheduleRefusal> {
+    match operand {
+        GraphOperand::Node(node) => nodes
+            .get(node)
+            .map(|graph_node| graph_node.value_kind)
+            .ok_or_else(|| ScheduleRefusal::MissingNode(node.clone())),
+        GraphOperand::Literal { value_kind, .. } => Ok(*value_kind),
+    }
+}
+
 fn validate_binary(
     operation: Operation,
     output: &GraphNode,
-    left: Option<&GraphNode>,
-    right: Option<&GraphNode>,
+    left: ValueKind,
+    right: ValueKind,
 ) -> Result<(), ScheduleRefusal> {
-    let left = left.ok_or_else(|| ScheduleRefusal::WrongType(output.id.clone()))?;
-    let right = right.ok_or_else(|| ScheduleRefusal::WrongType(output.id.clone()))?;
     match operation {
         Operation::Add | Operation::Subtract | Operation::Multiply => {
             if output.value_kind != ValueKind::Integer
-                || left.value_kind != ValueKind::Integer
-                || right.value_kind != ValueKind::Integer
+                || left != ValueKind::Integer
+                || right != ValueKind::Integer
             {
                 return Err(ScheduleRefusal::WrongType(output.id.clone()));
             }
         }
-        Operation::Equal | Operation::NotEqual => {
-            if output.value_kind != ValueKind::Boolean || left.value_kind != right.value_kind {
+        Operation::IntegerEqual | Operation::IntegerNotEqual => {
+            if output.value_kind != ValueKind::Boolean
+                || left != ValueKind::Integer
+                || right != ValueKind::Integer
+            {
+                return Err(ScheduleRefusal::WrongType(output.id.clone()));
+            }
+        }
+        Operation::BooleanEqual | Operation::BooleanNotEqual => {
+            if output.value_kind != ValueKind::Boolean
+                || left != ValueKind::Boolean
+                || right != ValueKind::Boolean
+            {
                 return Err(ScheduleRefusal::WrongType(output.id.clone()));
             }
         }
@@ -624,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    /// Trace: FR-021-AC-25, FR-021-AC-27, TC-031.
+    /// Trace: FR-021-AC-25, FR-021-AC-26, FR-021-AC-27, TC-031.
     fn ac25_nested_add_schedule_is_postorder_and_budget_refusal_publishes_nothing() {
         let root = id(3);
         let left = id(2);
@@ -637,8 +864,8 @@ mod tests {
                 ValueKind::Integer,
                 NodeKind::Binary {
                     operation_identity: "quire.op.integer.add".to_owned(),
-                    left: id(1),
-                    right: id(5),
+                    left: id(1).into(),
+                    right: id(5).into(),
                 },
             ),
         );
@@ -649,8 +876,8 @@ mod tests {
                 ValueKind::Integer,
                 NodeKind::Binary {
                     operation_identity: "quire.op.integer.mul".to_owned(),
-                    left: left.clone(),
-                    right: id(1),
+                    left: left.clone().into(),
+                    right: id(1).into(),
                 },
             ),
         );
@@ -664,19 +891,187 @@ mod tests {
         let exact = build_schedule(&root, &nodes, &parameters, &current, &BTreeMap::new(), 19)
             .expect("the exact charge budget admits the complete schedule");
         assert_eq!(exact.instructions.len(), 5);
+        assert_eq!(
+            exact.instructions[2].operation,
+            ScheduledOperation::Binary(Operation::Add)
+        );
+        assert_eq!(
+            exact.instructions[3].operation,
+            ScheduledOperation::Parameter(0),
+            "the right operand is reached only after the left operation completes"
+        );
+        assert_eq!(
+            exact.instructions[4].operation,
+            ScheduledOperation::Binary(Operation::Multiply),
+            "the parent operation follows both operands"
+        );
         assert!(exact.instructions.iter().all(|instruction| {
-            instruction
-                .operands
-                .iter()
-                .all(|operand| operand.0 < instruction.output.0)
+            instruction.operands.iter().all(|operand| match operand {
+                Operand::Slot(slot) => slot.0 < instruction.output.0,
+                Operand::Literal { .. } => true,
+            })
         }));
         assert_eq!(exact.locations.len(), 5);
+        let stop = exact
+            .control_flow
+            .iter()
+            .find(|block| block.action == ControlAction::Stop)
+            .expect("denied charges terminate in an explicit stop block")
+            .id;
+        for (index, instruction) in exact.instructions.iter().enumerate() {
+            let charge = &exact.control_flow[index * 2];
+            let execute = &exact.control_flow[index * 2 + 1];
+            assert_eq!(
+                charge.action,
+                ControlAction::Charge {
+                    instruction: instruction.output
+                }
+            );
+            assert_eq!(charge.edges[1].condition, EdgeCondition::ChargeDenied);
+            assert_eq!(charge.edges[1].target, stop);
+            assert_eq!(charge.edges[0].condition, EdgeCondition::ChargeAdmitted);
+            assert_eq!(charge.edges[0].target, execute.id);
+            assert_eq!(
+                execute.action,
+                ControlAction::Execute {
+                    instruction: instruction.output
+                }
+            );
+            if let Some(next) = exact.instructions.get(index + 1) {
+                assert_eq!(
+                    execute.edges[0].target,
+                    exact.control_flow[(index + 1) * 2].id
+                );
+                assert_eq!(
+                    exact.control_flow[(index + 1) * 2].action,
+                    ControlAction::Charge {
+                        instruction: next.output
+                    }
+                );
+            }
+        }
+        assert_eq!(
+            exact.control_flow[5].edges[0].target,
+            exact.control_flow[6].id
+        );
+        assert_eq!(
+            exact.control_flow[5].action,
+            ControlAction::Execute {
+                instruction: exact.instructions[2].output
+            }
+        );
+        assert_eq!(
+            exact.control_flow[6].action,
+            ControlAction::Charge {
+                instruction: exact.instructions[3].output
+            },
+            "right operand charge follows left completion"
+        );
+        assert_eq!(
+            exact.control_flow[8].action,
+            ControlAction::Charge {
+                instruction: exact.instructions[4].output
+            },
+            "parent charge follows right completion"
+        );
         assert!(matches!(
             build_schedule(&root, &nodes, &parameters, &current, &BTreeMap::new(), 18),
             Err(ScheduleRefusal::WorkExhausted {
                 limit: 18,
                 consumed: 19
             })
+        ));
+    }
+
+    #[test]
+    /// Trace: FR-021-AC-25, FR-021-AC-27, TC-031.
+    fn ac27_integer_literal_is_an_ordered_inline_schedule_operand() {
+        let root = id(3);
+        let parameter = id(1);
+        let graph = BTreeMap::from([
+            (
+                parameter.clone(),
+                node(1, ValueKind::Integer, NodeKind::Parameter),
+            ),
+            (
+                root.clone(),
+                node(
+                    3,
+                    ValueKind::Integer,
+                    NodeKind::Binary {
+                        operation_identity: "quire.op.integer.add".to_owned(),
+                        left: GraphOperand::Literal {
+                            value_kind: ValueKind::Integer,
+                            value: "5".to_owned(),
+                        },
+                        right: parameter.clone().into(),
+                    },
+                ),
+            ),
+        ]);
+        let schedule = build_schedule(
+            &root,
+            &graph,
+            &BTreeMap::from([(parameter, 0)]),
+            &binding(90, vec![ValueKind::Integer], ValueKind::Integer),
+            &BTreeMap::new(),
+            8,
+        )
+        .expect("literal and reference operands are both retained");
+        assert_eq!(
+            schedule.instructions.last().unwrap().operands,
+            vec![
+                Operand::Literal {
+                    value_kind: ValueKind::Integer,
+                    value: "5".to_owned(),
+                },
+                Operand::Slot(SsaSlot(0)),
+            ]
+        );
+    }
+
+    #[test]
+    /// Trace: FR-021-AC-27, TC-031.
+    fn equality_operation_identity_preserves_its_scalar_domain() {
+        assert_eq!(
+            Operation::from_identity("quire.op.integer.eq", &id(3)).unwrap(),
+            Operation::IntegerEqual
+        );
+        assert_eq!(
+            Operation::from_identity("quire.op.boolean.eq", &id(3)).unwrap(),
+            Operation::BooleanEqual
+        );
+        let root = id(3);
+        let graph = BTreeMap::from([
+            (id(1), node(1, ValueKind::Boolean, NodeKind::Parameter)),
+            (id(2), node(2, ValueKind::Boolean, NodeKind::Parameter)),
+            (
+                root.clone(),
+                node(
+                    3,
+                    ValueKind::Boolean,
+                    NodeKind::Binary {
+                        operation_identity: "quire.op.integer.eq".to_owned(),
+                        left: id(1).into(),
+                        right: id(2).into(),
+                    },
+                ),
+            ),
+        ]);
+        assert!(matches!(
+            build_schedule(
+                &root,
+                &graph,
+                &BTreeMap::from([(id(1), 0), (id(2), 1)]),
+                &binding(
+                    90,
+                    vec![ValueKind::Boolean, ValueKind::Boolean],
+                    ValueKind::Boolean
+                ),
+                &BTreeMap::new(),
+                20
+            ),
+            Err(ScheduleRefusal::WrongType(node_id)) if node_id == root
         ));
     }
 
@@ -698,7 +1093,7 @@ mod tests {
                     ValueKind::Integer,
                     NodeKind::Call {
                         callee: callee.clone(),
-                        arguments: vec![arg.clone()],
+                        arguments: vec![arg.clone().into()],
                     },
                 ),
             ),
@@ -738,8 +1133,8 @@ mod tests {
                 ValueKind::Integer,
                 NodeKind::Binary {
                     operation_identity: "quire.op.integer.div".to_owned(),
-                    left: id(1),
-                    right: id(2),
+                    left: id(1).into(),
+                    right: id(2).into(),
                 },
             ),
         )]);
@@ -766,8 +1161,8 @@ mod tests {
                     ValueKind::Integer,
                     NodeKind::Binary {
                         operation_identity: "quire.op.integer.add".to_owned(),
-                        left: id(1),
-                        right: id(2),
+                        left: id(1).into(),
+                        right: id(2).into(),
                     },
                 ),
             ),
@@ -817,8 +1212,8 @@ mod tests {
                 ValueKind::Integer,
                 NodeKind::Binary {
                     operation_identity: "quire.op.integer.add".to_owned(),
-                    left: root.clone(),
-                    right: root.clone(),
+                    left: root.clone().into(),
+                    right: root.clone().into(),
                 },
             ),
         )]);
@@ -859,8 +1254,8 @@ mod tests {
                     ValueKind::Integer,
                     NodeKind::Binary {
                         operation_identity: "quire.op.integer.add".to_owned(),
-                        left: id(3),
-                        right: id(4),
+                        left: id(3).into(),
+                        right: id(4).into(),
                     },
                 ),
             ),
@@ -871,8 +1266,8 @@ mod tests {
                     ValueKind::Integer,
                     NodeKind::Binary {
                         operation_identity: "quire.op.integer.add".to_owned(),
-                        left: id(1),
-                        right: id(1),
+                        left: id(1).into(),
+                        right: id(1).into(),
                     },
                 ),
             ),

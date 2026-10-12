@@ -86,8 +86,11 @@ pub use oracle::function::{
 };
 
 pub use oracle::function::schedule::{
-    Instruction as FunctionScheduleInstruction, LocationRecord as FunctionScheduleLocation,
-    Occurrence as FunctionScheduleOccurrence, Operation as FunctionScheduleOperation,
+    BlockId as FunctionScheduleBlockId, ControlAction as FunctionScheduleControlAction,
+    ControlBlock as FunctionScheduleControlBlock, ControlEdge as FunctionScheduleControlEdge,
+    EdgeCondition as FunctionScheduleEdgeCondition, Instruction as FunctionScheduleInstruction,
+    LocationRecord as FunctionScheduleLocation, Occurrence as FunctionScheduleOccurrence,
+    Operand as FunctionScheduleOperand, Operation as FunctionScheduleOperation,
     Schedule as FunctionBodySchedule, ScheduleRefusal as FunctionScheduleRefusal,
     ScheduledOperation as FunctionScheduledOperation, SsaSlot as FunctionScheduleSlot,
     ValueKind as FunctionScheduleValueKind,
