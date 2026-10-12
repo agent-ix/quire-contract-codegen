@@ -54,7 +54,7 @@ use crate::core::contract_package::{
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-use crate::oracle::{classify_lowering_failure, LoweringFailure};
+use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
     BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageV2,
     CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteContractNodeV2,
@@ -680,7 +680,7 @@ pub fn generate_exact_scalar_oracles(
     let mut pending: Vec<PendingOracle<'_>> = Vec::new();
     for ((node_id, operations), record) in requests.into_iter().zip(&lowering.records) {
         let operation_claim = match operations.as_slice() {
-            [operation] => match check_item(&graph, record, operation) {
+            [operation] => match check_item(&graph, node_id, record, operation) {
                 Ok((node, checked_bounds)) => {
                     // This node was lowered from an admitted package, so IR-216's
                     // `validate_operations` already confirmed `body.operation.identity`
@@ -1302,9 +1302,34 @@ impl From<ExactScalarRefusal> for ItemCheckError {
 
 fn check_item<'r>(
     graph: &Graph<'_>,
+    requested_node_id: &CheckedNodeId,
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
 ) -> Result<CheckedItem<'r>, ItemCheckError> {
+    if let Some(node) = graph.get(requested_node_id).copied() {
+        if let Some(node_tag) = direct_unsupported_form(node) {
+            return Err(ExactScalarRefusal::Unsupported {
+                unsupported_node_id: requested_node_id.clone(),
+                node_tag,
+            }
+            .into());
+        }
+    }
+    if let CompleteLoweringRecordV2::Unsupported {
+        unsupported_node_id,
+        ..
+    } = record
+    {
+        if let Some(node) = graph.get(unsupported_node_id).copied() {
+            if let Some(node_tag) = direct_unsupported_form(node) {
+                return Err(ExactScalarRefusal::Unsupported {
+                    unsupported_node_id: unsupported_node_id.clone(),
+                    node_tag,
+                }
+                .into());
+            }
+        }
+    }
     let node = lowered(record)?;
     if node.node_tag != CheckedNodeTag::Expression {
         return Err(ExactScalarRefusal::NotExpression {

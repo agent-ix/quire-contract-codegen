@@ -140,7 +140,7 @@ use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
-use crate::oracle::{classify_lowering_failure, LoweringFailure};
+use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
     CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
@@ -1616,6 +1616,18 @@ fn admitted_binary_body<'a>(
             record,
             occurrences,
         } => {
+            if let ContractFeatureRecordV1::Unsupported {
+                unsupported_node_id,
+                node_tag,
+                ..
+            } = record
+            {
+                return Err(ExactFunctionRefusal::Unsupported {
+                    unsupported_node_id: unsupported_node_id.clone(),
+                    node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+                        .map_or("unknown", CheckedNodeTag::as_wire),
+                });
+            }
             return Err(ExactFunctionRefusal::PackageAccounting {
                 record: Box::new(record.clone()),
                 occurrences: occurrences.to_vec(),
@@ -1634,6 +1646,12 @@ fn admitted_binary_body<'a>(
                 .iter()
                 .map(|reference| (reference.package.clone(), reference.node.clone()))
                 .collect(),
+        });
+    }
+    if let Some(node_tag) = direct_unsupported_form(closure.root) {
+        return Err(ExactFunctionRefusal::Unsupported {
+            unsupported_node_id: closure.root.node_id.clone(),
+            node_tag,
         });
     }
     let tag = CheckedNodeTag::from_wire(&closure.root.node_tag);
@@ -2154,6 +2172,17 @@ pub fn generate_exact_function_oracles(
         } else if duplicate {
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::DuplicateRequest,
+            }
+        } else if let Some(node_tag) = graph
+            .get(&item.call_node_id)
+            .copied()
+            .and_then(direct_unsupported_form)
+        {
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::Unsupported {
+                    unsupported_node_id: item.call_node_id.clone(),
+                    node_tag,
+                },
             }
         } else {
             let admitted = accounting

@@ -18,7 +18,28 @@ pub(crate) mod scalar;
 // Shared typed identities for admitted V2 operator consumers.
 pub mod operator_catalog;
 
-use quire_contract_model::{CheckedPackageLimit, CompleteLoweringRecordV2};
+use quire_contract_model::{
+    CheckedNodeTag, CheckedPackageLimit, CheckedSemanticNodeV2, CompleteLoweringRecordV2,
+};
+
+/// A directly lowered case root is unsupported as an expression, rather than a mismatched
+/// scalar/equality/function form. Temporal roots are refused by the lowering record, whose
+/// unsupported identity and tag remain authoritative.
+pub(crate) fn direct_unsupported_form(node: &CheckedSemanticNodeV2) -> Option<&'static str> {
+    match CheckedNodeTag::from_wire(&node.node_tag) {
+        Some(CheckedNodeTag::Expression)
+            if &*node.semantic_form == "case"
+                || node
+                    .body
+                    .get("operator")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("case") =>
+        {
+            Some("expression")
+        }
+        _ => None,
+    }
+}
 
 /// How one `failed` lowering record is refused (FR-014-AC-40 to FR-014-AC-42).
 ///

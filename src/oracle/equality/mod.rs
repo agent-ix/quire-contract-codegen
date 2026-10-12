@@ -73,6 +73,7 @@ use crate::core::contract_package::{
 use crate::core::naming::unique_names;
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
+use crate::oracle::direct_unsupported_form;
 use crate::oracle::scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
@@ -691,6 +692,17 @@ pub fn generate_composite_equality_oracles(
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
+        } else if let Some(node_tag) = graph
+            .get(&item.node_id)
+            .copied()
+            .and_then(direct_unsupported_form)
+        {
+            ClaimDisposition::Refused {
+                refusal: CompositeEqualityRefusal::Unsupported {
+                    unsupported_node_id: item.node_id.clone(),
+                    node_tag,
+                },
+            }
         } else {
             let admitted = accounting
                 .at(request_index, &item.node_id)
@@ -700,9 +712,20 @@ pub fn generate_composite_equality_oracles(
                     record,
                     occurrences,
                 } => ClaimDisposition::Refused {
-                    refusal: CompositeEqualityRefusal::PackageAccounting {
-                        record: Box::new(record.clone()),
-                        occurrences: occurrences.to_vec(),
+                    refusal: match record {
+                        ContractFeatureRecordV1::Unsupported {
+                            unsupported_node_id,
+                            node_tag,
+                            ..
+                        } => CompositeEqualityRefusal::Unsupported {
+                            unsupported_node_id: unsupported_node_id.clone(),
+                            node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
+                                .map_or("unknown", CheckedNodeTag::as_wire),
+                        },
+                        _ => CompositeEqualityRefusal::PackageAccounting {
+                            record: Box::new(record.clone()),
+                            occurrences: occurrences.to_vec(),
+                        },
                     },
                 },
                 PackageItem::Lowered { closure, .. } if !closure.selected_references.is_empty() => {
@@ -914,6 +937,13 @@ fn check_item(
     item: &CompositeEqualityItem,
     type_resolution_work_units: u64,
 ) -> Result<CheckedItem, ItemCheckError> {
+    if let Some(node_tag) = direct_unsupported_form(node) {
+        return Err(CompositeEqualityRefusal::Unsupported {
+            unsupported_node_id: node.node_id.clone(),
+            node_tag,
+        }
+        .into());
+    }
     let tag = CheckedNodeTag::from_wire(&node.node_tag);
     if tag != Some(CheckedNodeTag::Expression) {
         if let Some(CheckedNodeTag::Protocol) = tag {

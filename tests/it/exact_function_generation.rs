@@ -1826,6 +1826,44 @@ fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
     ));
 }
 
+/// Trace: FR-021-AC-33, TC-031 step 13. A distinct call request retains its identity while the
+/// function's separately declared temporal formula body supplies the refusal cause.
+#[test]
+fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
+    let package = admit(ext_corpus_package());
+    let body_id = package.ids.resolve(&code_id(T_BARE_FORMULA));
+    let call_id = package.ids.resolve(&code_id(ITEM_CALL_ADD));
+    let mut temporal_body = function_add("temporal_body");
+    temporal_body.node_id = body_id.clone();
+    let functions = vec![temporal_body, function_unrelated("unrelated_fn")];
+    let items = vec![
+        item(ITEM_CALL_ADD, "temporal_body"),
+        item(ITEM_CALL_UNRELATED, "unrelated_fn"),
+    ];
+    let oracles = generate(&package, &functions, &items);
+
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_ADD),
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag: "temporal" }
+        } if *unsupported_node_id == body_id
+    ));
+    assert_eq!(
+        oracles
+            .claim_map
+            .items
+            .iter()
+            .find(|claim| claim.node_id == call_id)
+            .unwrap()
+            .node_id,
+        call_id
+    );
+    assert!(matches!(
+        disposition_for(&oracles, ITEM_CALL_UNRELATED),
+        ClaimDisposition::Generated(_)
+    ));
+}
+
 /// Trace: FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
 /// node id requested twice under one binding refuses every copy.
 #[test]
