@@ -29,3 +29,9 @@ Compared the PR's changed fixture behavior and tests with IR-764's acceptance an
 - Plan completion: not assessed
 - The new TC-052 refusal tests mutate a noncanonical bound or sequence shape. Those tests preserve useful malformed-shape controls but do not submit an otherwise valid package with an incorrect application ID or a changed application body under its old ID. The shared `resolve_wire` helper repairs stale keys before returning; its reader call cannot serve as the negative oracle.
 - Reverse-gap/stub review of changed files found no additional new gap. Semantic intent was checked for IR-764 acceptance as requested in this PR review; no repository-wide semantic pass was run.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5601cee5cacbd1bab5a2bd321856876bd3111671 — `tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire` changes the key on an admitted wire and asserts `StaleNodeKey` with the prior admitted ID; `tc_052_reader_refuses_application_body_mutation_under_prior_key` changes the literal without rekeying and asserts the reader's expected ID equals an independently derived public candidate. Both call `read_mutated_wire`, which only refreshes the package identity before its direct `CheckedPackageV2::read`. |
