@@ -146,6 +146,659 @@ use quire_contract_runtime::exact as rt;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
+// Target-neutral iterative SSA scheduling, introduced independently of the historical adapter.
+mod schedule;
+pub use schedule::{
+    Instruction as FunctionScheduleInstruction, LocationRecord as FunctionScheduleLocation,
+    Occurrence as FunctionScheduleOccurrence, Operation as FunctionScheduleOperation,
+    Schedule as FunctionBodySchedule, ScheduleRefusal as FunctionScheduleRefusal,
+    ScheduledOperation as FunctionScheduledOperation, SsaSlot as FunctionScheduleSlot,
+    ValueKind as FunctionScheduleValueKind,
+};
+
+/// A function parameter's admitted V2 value node and declared type node.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FunctionScheduleParameter {
+    /// V2 `value` node with semantic form `parameter`.
+    pub value_node_id: CheckedNodeId,
+    /// V2 scalar type node declared for this parameter.
+    pub type_node_id: CheckedNodeId,
+}
+
+/// Caller-supplied binding for one admitted V2 function declaration.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FunctionScheduleDeclaration {
+    /// Exact V2 `function` declaration node identity.
+    pub function_node_id: CheckedNodeId,
+    /// Admitted V2 `expression` node that is the function's body root.
+    pub body_node_id: CheckedNodeId,
+    /// Function name used by requested items.
+    pub name: String,
+    /// Parameter bindings in declaration order.
+    pub parameters: Vec<FunctionScheduleParameter>,
+    /// V2 scalar result type node.
+    pub result_type_node_id: CheckedNodeId,
+}
+
+/// A requested call item whose checked source node is retained in its claim.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FunctionScheduleItem {
+    /// Admitted V2 call node identity.
+    pub call_node_id: CheckedNodeId,
+    /// Name of the function binding selected by the caller.
+    pub function: String,
+}
+
+/// One item's schedule disposition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum FunctionScheduleDisposition {
+    /// The item binds to this function's body root slot.
+    Scheduled {
+        /// Exact V2 function declaration identity.
+        function_node_id: CheckedNodeId,
+        /// Root instruction slot in the target-neutral function body schedule.
+        root: FunctionScheduleSlot,
+    },
+    /// The item could not be scheduled.
+    Refused {
+        /// Exact function declaration, if one was resolved.
+        function_node_id: Option<CheckedNodeId>,
+        /// Typed graph or binding cause.
+        refusal: FunctionScheduleRefusal,
+    },
+}
+
+/// Claim preserving one requested call node and its function schedule disposition.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FunctionScheduleClaim {
+    /// Requested call node identity.
+    pub call_node_id: CheckedNodeId,
+    /// Requested function name.
+    pub function: String,
+    /// Scheduled root or typed refusal.
+    pub result: FunctionScheduleDisposition,
+}
+
+/// One function's target-neutral instruction and location tables.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ScheduledFunctionBody {
+    /// Exact V2 function declaration identity.
+    pub function_node_id: CheckedNodeId,
+    /// Caller-supplied function name.
+    pub name: String,
+    /// Flat SSA schedule and compact parent-linked locations.
+    pub schedule: FunctionBodySchedule,
+}
+
+/// One function whose body was refused before a schedule was produced.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct RefusedFunctionBody {
+    /// Exact V2 function declaration identity.
+    pub function_node_id: CheckedNodeId,
+    /// Caller-supplied function name.
+    pub name: String,
+    /// Typed refusal from graph projection or schedule analysis.
+    pub refusal: FunctionScheduleRefusal,
+}
+
+/// Complete function schedule result for one admitted package and request set.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FunctionScheduleGeneration {
+    /// Function bodies sorted by declaration node identity.
+    pub functions: Vec<ScheduledFunctionBody>,
+    /// Function bodies that failed independently of healthy siblings.
+    pub refused_functions: Vec<RefusedFunctionBody>,
+    /// One ordered disposition per requested call item.
+    pub claims: Vec<FunctionScheduleClaim>,
+    /// Compilable crate source embedding the complete deterministic schedule tables.
+    pub source: String,
+}
+
+/// Builds target-neutral flat body schedules from one admitted V2 graph.
+///
+/// Every declaration and item is resolved against the package's retained node identities. The
+/// work ceiling applies independently to each function body.
+pub fn generate_function_schedules(
+    package: &CheckedPackageV2,
+    declarations: &[FunctionScheduleDeclaration],
+    items: &[FunctionScheduleItem],
+    work_limit: u64,
+) -> Result<FunctionScheduleGeneration, FunctionScheduleRefusal> {
+    // Reject the unrepresentable setting before package indexing or graph projection begins.
+    let _ = schedule::WorkCounter::new(work_limit)?;
+    let source_nodes: BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2> = package
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| (node.node_id.clone(), node))
+        .collect();
+    let mut type_kinds = BTreeMap::new();
+    for node in &package.graph().nodes {
+        if node.node_tag.as_ref() == "scalar_type" {
+            let kind = match node.semantic_form.as_ref() {
+                "boolean" => Some(schedule::ValueKind::Boolean),
+                "integer" => Some(schedule::ValueKind::Integer),
+                _ => None,
+            };
+            if let Some(kind) = kind {
+                type_kinds.insert(node.node_id.clone(), kind);
+            }
+        }
+    }
+
+    // Scalar/Equality roots retain the checked Contract IR lowering gate. Call roots are
+    // projected directly from the admitted graph so their transitive suffixes are not flattened
+    // into one oversized lowering request (FR-021-AC-34).
+    let mut scalar_roots = declarations
+        .iter()
+        .filter_map(|declaration| {
+            source_nodes
+                .get(&declaration.body_node_id)
+                .filter(|node| {
+                    node.body
+                        .get("operator")
+                        .and_then(serde_json::Value::as_str)
+                        == Some("binary")
+                })
+                .map(|_| declaration.body_node_id.clone())
+        })
+        .collect::<Vec<_>>();
+    scalar_roots.sort();
+    scalar_roots.dedup();
+    let lowering_failures = if scalar_roots.is_empty() {
+        BTreeMap::new()
+    } else {
+        let lowered_scalars = package.lower(&scalar_roots, &lowering_profile());
+        scalar_roots
+            .iter()
+            .zip(&lowered_scalars.records)
+            .filter_map(|(node_id, record)| {
+                schedule_lowering_failure(record).map(|refusal| (node_id.clone(), refusal))
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+
+    // Requested call items have their own lowering batch. This intentionally does not include
+    // function Call body roots, whose suffixes are projected per function above.
+    let mut call_nodes = items
+        .iter()
+        .map(|item| item.call_node_id.clone())
+        .collect::<Vec<_>>();
+    call_nodes.sort();
+    call_nodes.dedup();
+    let call_lowering_failures = if call_nodes.is_empty() {
+        BTreeMap::new()
+    } else {
+        let lowered_calls = package.lower(&call_nodes, &lowering_profile());
+        call_nodes
+            .iter()
+            .zip(&lowered_calls.records)
+            .filter_map(|(node_id, record)| {
+                schedule_lowering_failure(record).map(|refusal| (node_id.clone(), refusal))
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+
+    let mut bindings = BTreeMap::new();
+    let mut ordered_declarations: Vec<&FunctionScheduleDeclaration> = declarations.iter().collect();
+    ordered_declarations.sort_by(|left, right| left.function_node_id.cmp(&right.function_node_id));
+    for declaration in &ordered_declarations {
+        let function_node = source_nodes
+            .get(&declaration.function_node_id)
+            .ok_or_else(|| {
+                FunctionScheduleRefusal::MissingNode(declaration.function_node_id.clone())
+            })?;
+        if function_node.node_tag.as_ref() != "function" {
+            return Err(FunctionScheduleRefusal::MalformedTerm(
+                declaration.function_node_id.clone(),
+            ));
+        }
+        if decode_reference(&function_node.body, &declaration.function_node_id)?
+            != declaration.body_node_id
+        {
+            return Err(FunctionScheduleRefusal::WrongBodyBinding {
+                function: declaration.function_node_id.clone(),
+                expected: declaration.body_node_id.clone(),
+            });
+        }
+        let parameter_kinds = declaration
+            .parameters
+            .iter()
+            .map(|parameter| {
+                type_kinds
+                    .get(&parameter.type_node_id)
+                    .copied()
+                    .ok_or_else(|| {
+                        FunctionScheduleRefusal::MissingNode(parameter.type_node_id.clone())
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let result_kind = type_kinds
+            .get(&declaration.result_type_node_id)
+            .copied()
+            .ok_or_else(|| {
+                FunctionScheduleRefusal::MissingNode(declaration.result_type_node_id.clone())
+            })?;
+        let binding = schedule::FunctionBinding {
+            declaration: declaration.function_node_id.clone(),
+            parameter_kinds,
+            result_kind,
+        };
+        bindings.insert(declaration.function_node_id.clone(), binding);
+    }
+
+    let mut function_bodies = Vec::with_capacity(ordered_declarations.len());
+    let mut refused_functions = Vec::new();
+    let mut schedules_by_node = BTreeMap::new();
+    let mut declarations_by_name: BTreeMap<&str, Vec<CheckedNodeId>> = BTreeMap::new();
+    for declaration in ordered_declarations {
+        declarations_by_name
+            .entry(declaration.name.as_str())
+            .or_default()
+            .push(declaration.function_node_id.clone());
+        let binding = bindings.get(&declaration.function_node_id).ok_or_else(|| {
+            FunctionScheduleRefusal::MissingNode(declaration.function_node_id.clone())
+        })?;
+        let parameters = declaration
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(index, parameter)| {
+                u32::try_from(index)
+                    .map(|index| (parameter.value_node_id.clone(), index))
+                    .map_err(|_| FunctionScheduleRefusal::CounterOverflow)
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+        let mut work = schedule::WorkCounter::new(work_limit)?;
+        let result = if let Some(refusal) = lowering_failures.get(&declaration.body_node_id) {
+            Err(refusal.clone())
+        } else {
+            project_body_graph(
+                &source_nodes,
+                &type_kinds,
+                &declaration.body_node_id,
+                &mut work,
+            )
+            .and_then(|projected| {
+                let schedule = schedule::build_schedule_with_work(
+                    &declaration.body_node_id,
+                    &projected,
+                    &parameters,
+                    binding,
+                    &bindings,
+                    &mut work,
+                )?;
+                let root = schedule
+                    .instructions
+                    .last()
+                    .map(|instruction| instruction.output)
+                    .ok_or_else(|| {
+                        FunctionScheduleRefusal::MissingNode(declaration.body_node_id.clone())
+                    })?;
+                Ok((schedule, root))
+            })
+        };
+        match result {
+            Ok((schedule, root)) => {
+                schedules_by_node.insert(declaration.function_node_id.clone(), Ok(root));
+                function_bodies.push(ScheduledFunctionBody {
+                    function_node_id: declaration.function_node_id.clone(),
+                    name: declaration.name.clone(),
+                    schedule,
+                });
+            }
+            Err(refusal) => {
+                schedules_by_node
+                    .insert(declaration.function_node_id.clone(), Err(refusal.clone()));
+                refused_functions.push(RefusedFunctionBody {
+                    function_node_id: declaration.function_node_id.clone(),
+                    name: declaration.name.clone(),
+                    refusal,
+                });
+            }
+        }
+    }
+
+    let mut claims = Vec::with_capacity(items.len());
+    for item in items {
+        let matching = declarations_by_name.get(item.function.as_str());
+        let result = match matching.map(Vec::as_slice) {
+            Some([function_node_id]) => {
+                if let Some(refusal) = call_lowering_failures.get(&item.call_node_id) {
+                    claims.push(FunctionScheduleClaim {
+                        call_node_id: item.call_node_id.clone(),
+                        function: item.function.clone(),
+                        result: FunctionScheduleDisposition::Refused {
+                            function_node_id: Some(function_node_id.clone()),
+                            refusal: refusal.clone(),
+                        },
+                    });
+                    continue;
+                }
+                let binding = bindings.get(function_node_id);
+                let item_check = binding.map_or_else(
+                    || {
+                        Err(FunctionScheduleRefusal::MissingNode(
+                            function_node_id.clone(),
+                        ))
+                    },
+                    |binding| validate_schedule_item(&source_nodes, &type_kinds, item, binding),
+                );
+                match item_check {
+                    Err(refusal) => FunctionScheduleDisposition::Refused {
+                        function_node_id: Some(function_node_id.clone()),
+                        refusal,
+                    },
+                    Ok(()) => match schedules_by_node.get(function_node_id) {
+                        Some(Ok(root)) => FunctionScheduleDisposition::Scheduled {
+                            function_node_id: function_node_id.clone(),
+                            root: *root,
+                        },
+                        Some(Err(refusal)) => FunctionScheduleDisposition::Refused {
+                            function_node_id: Some(function_node_id.clone()),
+                            refusal: refusal.clone(),
+                        },
+                        None => FunctionScheduleDisposition::Refused {
+                            function_node_id: Some(function_node_id.clone()),
+                            refusal: FunctionScheduleRefusal::MissingNode(function_node_id.clone()),
+                        },
+                    },
+                }
+            }
+            Some([]) | None => FunctionScheduleDisposition::Refused {
+                function_node_id: None,
+                refusal: FunctionScheduleRefusal::UnknownFunction(item.function.clone()),
+            },
+            Some(nodes) => FunctionScheduleDisposition::Refused {
+                function_node_id: nodes.first().cloned(),
+                refusal: FunctionScheduleRefusal::AmbiguousFunctionName(item.function.clone()),
+            },
+        };
+        claims.push(FunctionScheduleClaim {
+            call_node_id: item.call_node_id.clone(),
+            function: item.function.clone(),
+            result,
+        });
+    }
+    claims.sort_by(|left, right| {
+        left.call_node_id
+            .cmp(&right.call_node_id)
+            .then_with(|| left.function.as_bytes().cmp(right.function.as_bytes()))
+    });
+
+    let mut generation = FunctionScheduleGeneration {
+        functions: function_bodies,
+        refused_functions,
+        claims,
+        source: String::new(),
+    };
+    let schedule_json = serde_json::to_string(&(
+        &generation.functions,
+        &generation.refused_functions,
+        &generation.claims,
+    ))
+    .map_err(|_| FunctionScheduleRefusal::SerializationFailure)?;
+    generation.source = format!(
+        "/// Deterministic target-neutral function schedule.\npub const FUNCTION_SCHEDULE_JSON: &str = {schedule_json:?};\n"
+    );
+    if generation.source.len() > MAX_GENERATED_SOURCE_BYTES {
+        return Err(FunctionScheduleRefusal::SourceTooLarge {
+            bytes: generation.source.len(),
+            limit: MAX_GENERATED_SOURCE_BYTES,
+        });
+    }
+    Ok(generation)
+}
+
+fn project_body_graph(
+    source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
+    type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
+    root: &CheckedNodeId,
+    work: &mut schedule::WorkCounter,
+) -> Result<BTreeMap<CheckedNodeId, schedule::GraphNode>, FunctionScheduleRefusal> {
+    let mut projected = BTreeMap::new();
+    let mut pending = vec![root.clone()];
+    while let Some(node_id) = pending.pop() {
+        work.charge()?;
+        if projected.contains_key(&node_id) {
+            continue;
+        }
+        let source = source_nodes
+            .get(&node_id)
+            .ok_or_else(|| FunctionScheduleRefusal::MissingNode(node_id.clone()))?;
+        let (value_kind, kind, children) = project_function_node(source, type_kinds)?
+            .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(node_id.clone()))?;
+        for child in children {
+            work.charge()?;
+            pending.push(child);
+        }
+        projected.insert(
+            node_id.clone(),
+            schedule::GraphNode {
+                id: node_id,
+                value_kind,
+                kind,
+            },
+        );
+    }
+    Ok(projected)
+}
+
+fn project_function_node(
+    source: &CheckedSemanticNodeV2,
+    type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
+) -> Result<
+    Option<(schedule::ValueKind, schedule::NodeKind, Vec<CheckedNodeId>)>,
+    FunctionScheduleRefusal,
+> {
+    if source.node_tag.as_ref() == "value" && source.semantic_form.as_ref() == "parameter" {
+        let kind = type_kinds
+            .get(&source.semantic_type)
+            .copied()
+            .ok_or_else(|| FunctionScheduleRefusal::MissingNode(source.semantic_type.clone()))?;
+        return Ok(Some((kind, schedule::NodeKind::Parameter, Vec::new())));
+    }
+    if !matches!(source.node_tag.as_ref(), "function" | "expression") {
+        return Ok(None);
+    }
+
+    let body = &source.body;
+    if body.get("term").and_then(serde_json::Value::as_str) != Some("application") {
+        return Err(FunctionScheduleRefusal::MalformedTerm(
+            source.node_id.clone(),
+        ));
+    }
+    let result_type = decode_node_id(body.get("result_type"), &source.node_id)?;
+    let value_kind = type_kinds
+        .get(&result_type)
+        .copied()
+        .ok_or_else(|| FunctionScheduleRefusal::MissingNode(result_type.clone()))?;
+    let operation_identity = body
+        .get("operation")
+        .and_then(|operation| operation.get("identity"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
+    let arguments = body
+        .get("arguments")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
+    let operator = body
+        .get("operator")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
+
+    if operator == "call" {
+        if operation_identity != "quire.op.function.call" {
+            return Err(FunctionScheduleRefusal::UnsupportedOperation(
+                source.node_id.clone(),
+            ));
+        }
+        let callee = arguments
+            .first()
+            .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(source.node_id.clone()))?;
+        let callee = decode_reference(callee, &source.node_id)?;
+        let value_arguments = arguments[1..]
+            .iter()
+            .map(|argument| decode_reference(argument, &source.node_id))
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(Some((
+            value_kind,
+            schedule::NodeKind::Call {
+                callee,
+                arguments: value_arguments.clone(),
+            },
+            value_arguments,
+        )));
+    }
+
+    if operator != "binary" || arguments.len() != 2 {
+        return Err(FunctionScheduleRefusal::MalformedTerm(
+            source.node_id.clone(),
+        ));
+    }
+    let left = decode_reference(&arguments[0], &source.node_id)?;
+    let right = decode_reference(&arguments[1], &source.node_id)?;
+    let children = vec![left.clone(), right.clone()];
+    Ok(Some((
+        value_kind,
+        schedule::NodeKind::Binary {
+            operation_identity: operation_identity.to_owned(),
+            left,
+            right,
+        },
+        children,
+    )))
+}
+
+fn decode_reference(
+    term: &serde_json::Value,
+    owner: &CheckedNodeId,
+) -> Result<CheckedNodeId, FunctionScheduleRefusal> {
+    match term.get("term").and_then(serde_json::Value::as_str) {
+        Some("reference") => decode_node_id(term.get("target"), owner),
+        Some("literal") => Err(FunctionScheduleRefusal::UnsupportedLiteral(owner.clone())),
+        _ => Err(FunctionScheduleRefusal::MalformedTerm(owner.clone())),
+    }
+}
+
+fn decode_node_id(
+    value: Option<&serde_json::Value>,
+    owner: &CheckedNodeId,
+) -> Result<CheckedNodeId, FunctionScheduleRefusal> {
+    value
+        .cloned()
+        .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(owner.clone()))
+        .and_then(|value| {
+            serde_json::from_value(value)
+                .map_err(|_| FunctionScheduleRefusal::MalformedTerm(owner.clone()))
+        })
+}
+
+fn validate_schedule_item(
+    source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
+    type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
+    item: &FunctionScheduleItem,
+    binding: &schedule::FunctionBinding,
+) -> Result<(), FunctionScheduleRefusal> {
+    let source = source_nodes
+        .get(&item.call_node_id)
+        .ok_or_else(|| FunctionScheduleRefusal::MissingNode(item.call_node_id.clone()))?;
+    if source.node_tag.as_ref() != "expression"
+        || source.body.get("term").and_then(serde_json::Value::as_str) != Some("application")
+        || source
+            .body
+            .get("operator")
+            .and_then(serde_json::Value::as_str)
+            != Some("call")
+        || source
+            .body
+            .get("operation")
+            .and_then(|operation| operation.get("identity"))
+            .and_then(serde_json::Value::as_str)
+            != Some("quire.op.function.call")
+    {
+        return Err(FunctionScheduleRefusal::MalformedTerm(
+            item.call_node_id.clone(),
+        ));
+    }
+    let arguments = source
+        .body
+        .get("arguments")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(item.call_node_id.clone()))?;
+    let callee_term = arguments
+        .first()
+        .ok_or_else(|| FunctionScheduleRefusal::MalformedTerm(item.call_node_id.clone()))?;
+    let found_callee = decode_reference(callee_term, &item.call_node_id)?;
+    if found_callee != binding.declaration {
+        return Err(FunctionScheduleRefusal::WrongCallBinding {
+            expected: binding.declaration.clone(),
+            found: found_callee,
+        });
+    }
+    let found = arguments.len().saturating_sub(1);
+    if found != binding.parameter_kinds.len() {
+        return Err(FunctionScheduleRefusal::WrongArity {
+            function: binding.declaration.clone(),
+            expected: binding.parameter_kinds.len(),
+            found,
+        });
+    }
+    for (index, term) in arguments.iter().skip(1).enumerate() {
+        let value_kind =
+            schedule_term_value_kind(term, source_nodes, type_kinds, &item.call_node_id)?;
+        if value_kind != binding.parameter_kinds[index] {
+            let node_id = term
+                .get("target")
+                .cloned()
+                .and_then(|target| serde_json::from_value(target).ok())
+                .unwrap_or_else(|| item.call_node_id.clone());
+            return Err(FunctionScheduleRefusal::WrongType(node_id));
+        }
+    }
+    let result_type = decode_node_id(source.body.get("result_type"), &item.call_node_id)?;
+    if type_kinds.get(&result_type).copied() != Some(binding.result_kind) {
+        return Err(FunctionScheduleRefusal::WrongType(
+            item.call_node_id.clone(),
+        ));
+    }
+    Ok(())
+}
+
+fn schedule_term_value_kind(
+    term: &serde_json::Value,
+    source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
+    type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
+    owner: &CheckedNodeId,
+) -> Result<schedule::ValueKind, FunctionScheduleRefusal> {
+    let type_node_id = match term.get("term").and_then(serde_json::Value::as_str) {
+        Some("reference") => {
+            let target = decode_reference(term, owner)?;
+            let source = source_nodes
+                .get(&target)
+                .ok_or_else(|| FunctionScheduleRefusal::MissingNode(target.clone()))?;
+            if source.node_tag.as_ref() == "function" {
+                decode_node_id(source.body.get("result_type"), &target)?
+            } else if source.node_tag.as_ref() == "expression"
+                && source.body.get("term").and_then(serde_json::Value::as_str)
+                    == Some("application")
+            {
+                decode_node_id(source.body.get("result_type"), &target)?
+            } else {
+                source.semantic_type.clone()
+            }
+        }
+        Some("literal") => {
+            return Err(FunctionScheduleRefusal::UnsupportedLiteral(owner.clone()));
+        }
+        _ => return Err(FunctionScheduleRefusal::MalformedTerm(owner.clone())),
+    };
+    type_kinds
+        .get(&type_node_id)
+        .copied()
+        .ok_or(FunctionScheduleRefusal::MissingNode(type_node_id))
+}
+
 /// Work budget for lowering one requested function body or call node.
 pub const EXACT_FUNCTION_LOWERING_WORK_LIMIT: u64 = 65_536;
 
@@ -617,6 +1270,26 @@ fn lowering_profile() -> CompleteLoweringProfileV2 {
         require_bounds: false,
         work_limit: EXACT_FUNCTION_LOWERING_WORK_LIMIT,
     }
+}
+
+fn schedule_lowering_failure(record: &CompleteLoweringRecordV2) -> Option<FunctionScheduleRefusal> {
+    classify_lowering_failure(record).map(|failure| match failure {
+        LoweringFailure::WorkExhausted { limit, consumed } => {
+            FunctionScheduleRefusal::LoweringWorkExhausted { limit, consumed }
+        }
+        LoweringFailure::ByteLimitExceeded { limit, consumed } => {
+            FunctionScheduleRefusal::LoweringByteLimitExceeded { limit, consumed }
+        }
+        LoweringFailure::LimitUnrecognised {
+            limit_kind,
+            limit,
+            consumed,
+        } => FunctionScheduleRefusal::LoweringLimitUnrecognised {
+            limit_kind,
+            limit,
+            consumed,
+        },
+    })
 }
 
 /// Resolve a V2 type node id to this generator's supported operand kind, or
@@ -1591,6 +2264,28 @@ mod tests {
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use quire_contract_model::CheckedPackageLimit;
 
+    /// Trace: FR-021-AC-27, TC-031.
+    #[test]
+    fn ac27_inline_literal_is_a_typed_bounded_slice_refusal() {
+        let owner = CheckedNodeId {
+            domain: "quire.checked-semantic-node/v1".into(),
+            digest: "1".repeat(64).into(),
+        };
+        let literal = serde_json::json!({
+            "term": "literal",
+            "type": {
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": "2".repeat(64),
+            },
+            "value_kind": "integer",
+            "value": "7",
+        });
+        assert_eq!(
+            decode_reference(&literal, &owner),
+            Err(FunctionScheduleRefusal::UnsupportedLiteral(owner))
+        );
+    }
+
     /// A `failed` record is refused by its limit kind through the one shared classifier: `work`
     /// as `LoweringWorkExhausted`, `bytes` as `LoweringByteLimitExceeded` with the record's own
     /// `limit` and `consumed`, and every other kind as `LoweringLimitUnrecognised` under its
@@ -1621,6 +2316,39 @@ mod tests {
                     limit_kind: name,
                     limit: 7,
                     consumed: 9
+                }),
+                "{name}"
+            );
+        }
+    }
+
+    /// The public flat scheduler preserves Contract IR's per-record limit details for its
+    /// separate call-item batch as well as the function-body batch.
+    ///
+    /// Trace: FR-021-AC-23, TC-031.
+    #[test]
+    fn schedule_call_item_lowering_failure_keeps_its_own_limit_details() {
+        assert_eq!(
+            schedule_lowering_failure(&failed_record(CheckedPackageLimit::Work, 23, 24)),
+            Some(FunctionScheduleRefusal::LoweringWorkExhausted {
+                limit: 23,
+                consumed: 24,
+            })
+        );
+        assert_eq!(
+            schedule_lowering_failure(&failed_record(CheckedPackageLimit::Bytes, 31, 32)),
+            Some(FunctionScheduleRefusal::LoweringByteLimitExceeded {
+                limit: 31,
+                consumed: 32,
+            })
+        );
+        for (kind, name) in unrecognised_kinds() {
+            assert_eq!(
+                schedule_lowering_failure(&failed_record(kind, 41, 42)),
+                Some(FunctionScheduleRefusal::LoweringLimitUnrecognised {
+                    limit_kind: name,
+                    limit: 41,
+                    consumed: 42,
                 }),
                 "{name}"
             );

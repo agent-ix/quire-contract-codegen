@@ -76,10 +76,16 @@ pub use oracle::equality::{
 };
 
 pub use oracle::function::{
-    generate_exact_function_oracles, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
-    ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles, ExactFunctionRefusal,
-    FunctionParameter, GeneratedExactFunctionClaim, LocationMapEntry, RecordedLocation,
-    RecordedOrigin, EXACT_FUNCTION_CRATE_NAME, EXACT_FUNCTION_LOWERING_WORK_LIMIT,
+    generate_exact_function_oracles, generate_function_schedules, CallPointKind, ExactFunctionBody,
+    ExactFunctionClaim, ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles,
+    ExactFunctionRefusal, FunctionBodySchedule, FunctionParameter, FunctionScheduleClaim,
+    FunctionScheduleDeclaration, FunctionScheduleDisposition, FunctionScheduleGeneration,
+    FunctionScheduleInstruction, FunctionScheduleItem, FunctionScheduleLocation,
+    FunctionScheduleOccurrence, FunctionScheduleOperation, FunctionScheduleParameter,
+    FunctionScheduleRefusal, FunctionScheduleSlot, FunctionScheduleValueKind,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim, LocationMapEntry, RecordedLocation,
+    RecordedOrigin, RefusedFunctionBody, ScheduledFunctionBody, EXACT_FUNCTION_CRATE_NAME,
+    EXACT_FUNCTION_LOWERING_WORK_LIMIT,
 };
 
 pub use evidence::bound_coverage::{

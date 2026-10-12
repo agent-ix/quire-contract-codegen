@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 const MAX_CUMULATIVE_BYTES: u64 = 1_024 * 1_048_576;
 const MAX_READER_WORK: u64 = 256_000_000;
 const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
+const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
 
 /// The final wire, the reader outcome at that wire, and its fixture-local ID substitutions.
 pub struct ResolvedWire {
@@ -87,10 +88,14 @@ fn refresh_identity(wire: &mut Value) {
 /// Replaces only typed node references. An unrelated literal or declaration string can equal a
 /// node digest byte for byte, but it is still semantic data and must not change with the key.
 fn substitute(value: &mut Value, ids: &FixtureIds) {
+    substitute_mapping(value, &ids.0);
+}
+
+fn substitute_mapping(value: &mut Value, ids: &BTreeMap<String, String>) {
     match value {
         Value::Array(items) => {
             for item in items {
-                substitute(item, ids);
+                substitute_mapping(item, ids);
             }
         }
         Value::Object(object) => {
@@ -99,16 +104,166 @@ fn substitute(value: &mut Value, ids: &FixtureIds) {
                     .get("digest")
                     .and_then(Value::as_str)
                     .expect("typed fixture node reference has a digest");
-                let resolved = ids.digest(digest);
+                let mut resolved = digest;
+                let mut visited = BTreeSet::new();
+                while let Some(next) = ids.get(resolved) {
+                    assert!(visited.insert(resolved), "fixture key substitution cycle");
+                    resolved = next.as_str();
+                }
                 object["digest"] = json!(resolved);
                 return;
             }
             for member in object.values_mut() {
-                substitute(member, ids);
+                substitute_mapping(member, ids);
             }
         }
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
+}
+
+/// Re-derives every application key from the currently substituted wire and propagates all
+/// changed candidates through references until the application subgraph reaches a fixed point.
+/// Non-application IDs may change on a later reader attempt; the caller repeats this pass after
+/// applying those accumulated reader-authorized substitutions.
+fn repair_application_candidates(wire: &mut Value, byte_limit: u64, ids: &mut FixtureIds) -> usize {
+    let mut candidate_ids = BTreeMap::new();
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture graph nodes")
+        .len();
+    for round in 0..nodes.saturating_mul(2).max(1) {
+        let updates = application_key_updates(wire, byte_limit);
+        if updates.is_empty() {
+            return round;
+        }
+        for (old, new) in updates {
+            if old != new {
+                ids.insert(
+                    &CheckedNodeId {
+                        domain: NODE_DOMAIN.into(),
+                        digest: old.clone().into_boxed_str(),
+                    },
+                    &CheckedNodeId {
+                        domain: NODE_DOMAIN.into(),
+                        digest: new.clone().into_boxed_str(),
+                    },
+                );
+                if let Some(previous) = candidate_ids.insert(old.clone(), new.clone()) {
+                    assert_eq!(previous, new, "application key candidate changed in place");
+                }
+            }
+        }
+        substitute_mapping(wire, &candidate_ids);
+        reorder_application_dependencies(wire);
+    }
+    panic!("application-key candidate repair did not reach a fixed point")
+}
+
+fn application_key_updates(wire: &Value, byte_limit: u64) -> Vec<(String, String)> {
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture graph nodes");
+    let mut groups: BTreeMap<&str, Vec<CheckedNodeId>> = BTreeMap::new();
+    for node in nodes {
+        if let Some(label) = node.get("recursion_group").and_then(Value::as_str) {
+            groups
+                .entry(label)
+                .or_default()
+                .push(serde_json::from_value(node["node_id"].clone()).expect("group node id"));
+        }
+    }
+
+    let mut updates = Vec::new();
+    for node in nodes {
+        if node["body"].get("term").and_then(Value::as_str) != Some("application") {
+            continue;
+        }
+        let group = node
+            .get("recursion_group")
+            .and_then(Value::as_str)
+            .and_then(|label| groups.get(label));
+        let old = node["node_id"]["digest"]
+            .as_str()
+            .expect("application node digest")
+            .to_owned();
+        let preimage = application_preimage(node, group.map(Vec::as_slice).unwrap_or(&[]));
+        let new = quire_canonical::sha256(&preimage, quire_canonical::Limits::new(byte_limit))
+            .expect("application preimage is within fixture reader byte limit")
+            .to_string();
+        if old != new {
+            updates.push((old, new));
+        }
+    }
+    updates
+}
+
+fn application_preimage(node: &Value, group: &[CheckedNodeId]) -> Value {
+    let recursion = node
+        .get("recursion_group")
+        .and_then(Value::as_str)
+        .and_then(|_| {
+            let node_id: CheckedNodeId =
+                serde_json::from_value(node["node_id"].clone()).expect("application node id");
+            group
+                .iter()
+                .position(|member| member == &node_id)
+                .map(|ordinal| json!({"size": group.len(), "ordinal": ordinal}))
+        });
+    json!({
+        "version": APPLICATION_NODE_VERSION,
+        "node_tag": node["node_tag"],
+        "semantic_form": node["semantic_form"],
+        "semantic_type": node["semantic_type"],
+        "declaration": node.get("declaration").cloned().unwrap_or(Value::Null),
+        "recursion": recursion,
+        "body": group_references(&node["body"], group),
+    })
+}
+
+fn group_references(body: &Value, group: &[CheckedNodeId]) -> Value {
+    fn rewrite(term: &mut Value, group: &[CheckedNodeId]) {
+        match term.get("term").and_then(Value::as_str) {
+            Some("reference") => {
+                let target = term
+                    .get("target")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value::<CheckedNodeId>(value).ok());
+                if let Some(ordinal) = target
+                    .as_ref()
+                    .and_then(|target| group.iter().position(|member| member == target))
+                {
+                    *term = json!({"term": "group_reference", "ordinal": ordinal});
+                }
+            }
+            Some("application") => {
+                if let Some(arguments) = term.get_mut("arguments").and_then(Value::as_array_mut) {
+                    for argument in arguments {
+                        rewrite(argument, group);
+                    }
+                }
+            }
+            Some("aggregate") => {
+                if let Some(members) = term.get_mut("members").and_then(Value::as_array_mut) {
+                    for member in members {
+                        rewrite(member, group);
+                    }
+                }
+            }
+            Some("binding") => {
+                if let Some(value) = term.get_mut("value") {
+                    rewrite(value, group);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if group.is_empty() {
+        return body.clone();
+    }
+    let mut rewritten = body.clone();
+    rewrite(&mut rewritten, group);
+    rewritten
 }
 
 /// Application dependencies are in key order. A substituted key can cross another key in
@@ -176,6 +331,8 @@ pub fn resolve_wire(
         substitute(&mut wire, &ids);
         if !ids.0.is_empty() {
             reorder_application_dependencies(&mut wire);
+            repair_application_candidates(&mut wire, limits.bytes, &mut ids);
+            reorder_application_dependencies(&mut wire);
         }
         refresh_identity(&mut wire);
         let bytes = serde_json::to_vec(&wire).expect("fixture wire");
@@ -206,4 +363,92 @@ pub fn resolve_wire(
         return ResolvedWire { wire, outcome, ids };
     }
     panic!("fixture key repair exceeded twice its node count")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Application-key candidates are recomputed after earlier candidates change references.
+    /// The second node therefore needs another pass after the first node's ID is replaced.
+    #[test]
+    fn application_candidates_converge_across_a_reference_chain() {
+        let node_ref = |digest: &str| json!({"domain": NODE_DOMAIN, "digest": digest});
+        let node = |digest: &str, body: Value| {
+            json!({
+                "node_id": node_ref(digest),
+                "node_tag": "expression",
+                "semantic_form": "call",
+                "semantic_type": node_ref(&"a".repeat(64)),
+                "dependencies": [],
+                "body": body,
+            })
+        };
+        let first = node(
+            &"1".repeat(64),
+            json!({"term": "application", "operator": "call", "arguments": []}),
+        );
+        let second = node(
+            &"2".repeat(64),
+            json!({
+                "term": "application",
+                "operator": "call",
+                "arguments": [
+                    {"term": "reference", "target": node_ref(&"1".repeat(64))},
+                    {"term": "reference", "target": node_ref(&"3".repeat(64))},
+                ],
+            }),
+        );
+        let parameter = json!({
+            "node_id": node_ref(&"3".repeat(64)),
+            "node_tag": "value",
+            "semantic_form": "parameter",
+            "semantic_type": node_ref(&"a".repeat(64)),
+            "dependencies": [],
+            "body": {"term": "aggregate", "members": []},
+        });
+        let mut wire = json!({"semantic_graph": {"nodes": [first, second, parameter]}});
+
+        let original_first_id = wire["semantic_graph"]["nodes"][0]["node_id"]["digest"]
+            .as_str()
+            .expect("original first digest")
+            .to_owned();
+        let mut ids = FixtureIds::default();
+        let rounds = repair_application_candidates(&mut wire, 1 << 20, &mut ids);
+        assert!(
+            rounds >= 2,
+            "the dependent key needs a second candidate pass"
+        );
+        let nodes = wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("synthetic nodes");
+        let first_id = nodes[0]["node_id"]["digest"]
+            .as_str()
+            .expect("first digest");
+        assert_eq!(
+            nodes[1]["body"]["arguments"][0]["target"]["digest"].as_str(),
+            Some(first_id)
+        );
+        assert_eq!(ids.digest(&original_first_id), first_id);
+        assert!(application_key_updates(&wire, 1 << 20).is_empty());
+
+        let second_id_before_parameter_substitution = nodes[1]["node_id"]["digest"]
+            .as_str()
+            .expect("second digest")
+            .to_owned();
+        substitute_mapping(
+            &mut wire,
+            &BTreeMap::from([("3".repeat(64), "4".repeat(64))]),
+        );
+        repair_application_candidates(&mut wire, 1 << 20, &mut ids);
+        let nodes = wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("synthetic nodes after substitution");
+        assert_ne!(
+            nodes[1]["node_id"]["digest"].as_str(),
+            Some(second_id_before_parameter_substitution.as_str()),
+            "a later non-application ID substitution refreshes the dependent application key"
+        );
+        assert!(application_key_updates(&wire, 1 << 20).is_empty());
+    }
 }
