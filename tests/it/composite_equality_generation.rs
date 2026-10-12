@@ -618,6 +618,39 @@ fn tc_029_ac3_claim_descriptor_matches_the_request() {
 
 /// Trace: FR-018-AC-4, TC-029.
 #[test]
+fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
+    let package = admit(corpus_package());
+    let sequence = package.ids.resolve(&code_id(SEQ_INT));
+    let bound = package.ids.resolve(&code_id(CB_INT));
+    let graph = &package.checked.graph().nodes;
+    let sequence_node = graph.iter().find(|node| node.node_id == sequence).unwrap();
+    let bound_node = graph.iter().find(|node| node.node_id == bound).unwrap();
+    assert_eq!(sequence_node.semantic_form.as_ref(), "sequence");
+    assert_eq!(
+        sequence_node.body["members"].as_array().unwrap().len(),
+        1,
+        "reader-admitted sequence has one element reference"
+    );
+    assert_eq!(bound_node.semantic_form.as_ref(), "collection_bounds");
+    assert_eq!(bound_node.semantic_type, sequence);
+    let oracles = generate(
+        &package,
+        &[item(
+            E_COLLECTION,
+            EqualityOperatorKind::Equal,
+            typed(SEQ_INT),
+            typed(SEQ_INT),
+        )],
+    );
+    let claim = only_claim(&oracles, E_COLLECTION);
+    assert!(
+        matches!(&claim.result, ClaimDisposition::Generated(_)),
+        "one-reference admitted sequence resolves: {claim:#?}"
+    );
+}
+
+/// Trace: FR-018-AC-4, TC-029.
+#[test]
 fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
     let package = admit(corpus_package());
     let items = vec![
@@ -1205,8 +1238,16 @@ pub(super) fn agreement_names(oracles: &FixtureOracles) -> String {
         quire_contract_codegen::COMPOSITE_EQUALITY_CRATE_NAME,
         &aliases,
         &format!(
-            "pub const ENUM_TYPE_DIGEST: &str = {:?};\n",
-            enum_type_digest()
+            "pub const ENUM_TYPE_DIGEST: &str = {:?};\n\
+             pub const R_POINT_DIGEST: &str = {:?};\n\
+             pub const TUP_PAIR_DIGEST: &str = {:?};\n\
+             pub const R_SELF_DIGEST: &str = {:?};\n\
+             pub const R_PAIR_OF_POINTS_DIGEST: &str = {:?};\n",
+            enum_type_digest(),
+            oracles.runtime_key(R_POINT),
+            oracles.runtime_key(TUP_PAIR),
+            oracles.runtime_key(R_SELF),
+            oracles.runtime_key(R_PAIR_OF_POINTS),
         ),
     )
 }

@@ -1366,16 +1366,42 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
     use crate::common::byte_ceiling::{
         limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
     };
-    const REQUESTS: u32 = 80;
+    use sha2::{Digest, Sha256};
 
-    let builder = byte_ceiling_package();
+    const REQUESTS: u32 = 16;
+    let (builder, source, sites) = source_backed_byte_chain(REQUESTS);
+    let raw = builder.raw_wire();
+    let source_ref = raw["lock"]["sources"]
+        .as_array()
+        .expect("sources")
+        .iter()
+        .find(|item| item["identity"] == "ir764-ac40-source")
+        .expect("authored source is locked");
+    assert_eq!(
+        source_ref["digest"],
+        format!("{:x}", Sha256::digest(source.as_bytes()))
+    );
+    for (code, spans) in &sites {
+        let entries = raw["source_map"]
+            .as_array()
+            .expect("source map")
+            .iter()
+            .filter(|entry| entry["node_id"]["digest"] == code_id(*code).digest.as_ref())
+            .collect::<Vec<_>>();
+        assert_eq!(entries.len(), spans.len());
+        for (ordinal, (entry, (start, end))) in entries.iter().zip(spans).enumerate() {
+            assert_eq!(entry["ordinal"], ordinal);
+            assert_eq!(entry["regions"][0]["source"], *source_ref);
+            assert_eq!(entry["regions"][0]["start"], *start);
+            assert_eq!(entry["regions"][0]["end"], *end);
+            assert_eq!(&source[*start..*end], format!("n{code}"));
+        }
+    }
     let (measured, ids) = builder.admit_with_resolved(limits_under(LARGEST_CEILING));
-    let valid = ids.resolve(&code_id(BOUNDED_INCREMENT));
-    // Missing requests add one feature-accounting/refusal source-map record
-    // apiece without inflating the admitted graph. The one valid request
-    // must generate at the exact lowered length.
-    let requested = std::iter::once(valid.clone())
-        .chain((1..REQUESTS).map(|offset| id(&key(30_000 + offset))))
+    // Every source-backed addition is independently requested; the shared lowering must admit
+    // all of them and make one byte-refusal charge visible to every item.
+    let requested = (0..REQUESTS)
+        .map(|offset| ids.resolve(&code_id(BYTE_CHAIN_BASE + offset)))
         .collect::<Vec<_>>();
     let items = requested
         .iter()
@@ -1410,17 +1436,36 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
     );
     // At the lowered package's own length no record fails for bytes: the ceiling is exact.
     let exact = generate_under(lowered_length);
+    let mut exact_nodes = exact
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| claim.node_id.clone())
+        .collect::<Vec<_>>();
+    exact_nodes.sort();
+    let mut expected_nodes = requested.clone();
+    expected_nodes.sort();
+    assert_eq!(exact_nodes, expected_nodes);
     assert!(exact
         .claim_map
         .items
         .iter()
         .all(|claim| byte_refusal(&claim.result).is_none()));
-    assert!(exact.claim_map.items.iter().any(|claim| {
-        claim.node_id == valid && matches!(claim.result, ClaimDisposition::Generated(_))
-    }));
+    assert!(exact
+        .claim_map
+        .items
+        .iter()
+        .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
 
     let oracles = generate_under(ceiling);
-    assert_eq!(oracles.claim_map.items.len(), items.len());
+    let mut refused_nodes = oracles
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| claim.node_id.clone())
+        .collect::<Vec<_>>();
+    refused_nodes.sort();
+    assert_eq!(refused_nodes, expected_nodes);
     let mut consumed_seen = BTreeSet::new();
     for claim in &oracles.claim_map.items {
         let Some((limit, consumed)) = byte_refusal(&claim.result) else {

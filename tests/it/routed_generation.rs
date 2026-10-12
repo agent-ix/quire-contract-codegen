@@ -24,6 +24,7 @@ const RENDERED: [&str; 3] = [
 
 struct Fixture {
     package: CheckedPackageV2,
+    ids: package::FixtureIds,
     /// Three nodes FR-014 generates and FR-015 renders.
     rendered: Vec<CheckedNodeId>,
     /// A generated node FR-015 refuses as `OperationNotRendered` without invalidating the request.
@@ -31,7 +32,7 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let (package, claim_map, _) = scalar_package();
+    let (package, claim_map, ids) = scalar_package();
     let generated = claim_map
         .items
         .iter()
@@ -57,6 +58,7 @@ fn fixture() -> Fixture {
         .expect("the corpus generates a family Kani does not render");
     Fixture {
         package,
+        ids,
         rendered,
         unrendered,
     }
@@ -603,8 +605,8 @@ fn tc_033_nodes_sharing_a_stem_take_stable_ordinals_in_node_order() {
 /// Trace: FR-014-AC-16, FR-014-AC-17, FR-022-AC-2, FR-022-AC-10, TC-024, TC-033
 #[test]
 fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_harness() {
-    let package = package::bounded_increment_package().admit();
-    let node_id = package::code_id(package::BOUNDED_INCREMENT);
+    let (package, ids) = package::bounded_increment_package().admit_resolved();
+    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
     let generation = generate_routed(
         &package,
         &[route(0, &node_id)],
@@ -765,9 +767,17 @@ fn tc_033_a_plain_typed_reference_operand_is_requires_bound_with_no_harness() {
 
 fn route_qsl_shaped(code: u32) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
     let (package, ids) = package::qsl_shaped_package().admit_resolved();
+    route_qsl_shaped_in(&package, &ids, code)
+}
+
+fn route_qsl_shaped_in(
+    package: &CheckedPackageV2,
+    ids: &package::FixtureIds,
+    code: u32,
+) -> (ObligationRecord, Option<KaniScalarObligationHarness>) {
     let node_id = ids.resolve(&package::code_id(code));
     let generation = generate_routed(
-        &package,
+        package,
         &[route(0, &node_id)],
         &kani_context("crate::subject", 1),
     )
@@ -874,7 +884,9 @@ fn tc_033_qsl_shaped_plain_operands_and_ambiguous_narrowing_have_no_harness() {
 /// Trace: FR-015-AC-17, FR-015-AC-18, FR-014-AC-31, FR-014-AC-34, TC-033
 #[test]
 fn tc_033_qsl_shaped_literal_and_consumer_refusals_have_no_harness() {
-    let (record, harness) = route_qsl_shaped(package::QSL_PLUS_HUNDRED);
+    let (package, ids) = package::qsl_shaped_package().admit_resolved();
+    let routed = |code| route_qsl_shaped_in(&package, &ids, code);
+    let (record, harness) = routed(package::QSL_PLUS_HUNDRED);
     assert_eq!(
         record.disposition,
         ObligationDisposition::Unsupported {
@@ -889,7 +901,7 @@ fn tc_033_qsl_shaped_literal_and_consumer_refusals_have_no_harness() {
     );
     assert!(harness.is_none());
     let huge = "100000000000000000000000".to_owned();
-    let (record, harness) = route_qsl_shaped(package::QSL_PLUS_HUGE);
+    let (record, harness) = routed(package::QSL_PLUS_HUGE);
     assert_eq!(
         record.disposition,
         ObligationDisposition::Unsupported {
@@ -913,12 +925,12 @@ fn tc_033_qsl_shaped_literal_and_consumer_refusals_have_no_harness() {
         (
             package::QSL_SHARED,
             ExactScalarRefusal::AmbiguousBound {
-                bounded_type: package::code_id(package::T_INTEGER),
+                bounded_type: ids.resolve(&package::code_id(package::T_INTEGER)),
                 expected_form: quire_contract_codegen::BoundForm::IntegerRange,
             },
         ),
     ] {
-        let (record, harness) = route_qsl_shaped(code);
+        let (record, harness) = routed(code);
         assert_eq!(
             record.disposition,
             ObligationDisposition::Unsupported {
@@ -933,7 +945,7 @@ fn tc_033_qsl_shaped_literal_and_consumer_refusals_have_no_harness() {
 /// The corpus package with the nodes derivation refuses, and the claims of what it derives.
 struct Derived {
     package: CheckedPackageV2,
-    /// The three rendered nodes and the unrendered one of [`Fixture`].
+    /// The three rendered nodes and one unrendered node, resolved in this package.
     generated: Vec<CheckedNodeId>,
     rem: CheckedNodeId,
     integer_eq: CheckedNodeId,
@@ -941,14 +953,26 @@ struct Derived {
 
 fn derived() -> Derived {
     let fixture = fixture();
-    let package = package::derivation_package().admit();
-    let mut generated = fixture.rendered.clone();
-    generated.push(fixture.unrendered.clone());
+    let (package, ids) = package::derivation_package().admit_resolved();
+    let corpus = package::corpus();
+    let generated = fixture
+        .rendered
+        .iter()
+        .chain(std::iter::once(&fixture.unrendered))
+        .map(|node| {
+            let code = corpus
+                .iter()
+                .find(|expression| fixture.ids.resolve(&package::code_id(expression.code)) == *node)
+                .map(|expression| expression.code)
+                .expect("generated node belongs to the authored scalar corpus");
+            ids.resolve(&package::code_id(code))
+        })
+        .collect();
     Derived {
         package,
         generated,
-        rem: package::code_id(package::DERIVE_REM),
-        integer_eq: package::code_id(package::DERIVE_INTEGER_EQ),
+        rem: ids.resolve(&package::code_id(package::DERIVE_REM)),
+        integer_eq: ids.resolve(&package::code_id(package::DERIVE_INTEGER_EQ)),
     }
 }
 
@@ -1107,7 +1131,8 @@ fn routed_alone(package: &CheckedPackageV2, node: &CheckedNodeId) -> (Obligation
 /// An item derivation cannot build a descriptor for because its node is absent, does not lower or
 /// has a refused bound keeps the FR-015 disposition it had when the caller supplied the claim:
 /// a node absent from the graph is `invalid_request` and rejects the group; the others are
-/// `requires_bound`, `blocked_on_upstream` or `unsatisfiable_bound`, and reject nothing.
+/// `requires_bound`, `blocked_on_upstream` or `unsatisfiable_bound`, and reject nothing. The
+/// noncanonical `UNREADABLE` shape is tested at the reader boundary in TC-052.
 ///
 /// Trace: FR-022-AC-8, FR-015-AC-3, FR-015-AC-5, FR-015-AC-14, TC-033
 #[test]
@@ -1160,12 +1185,6 @@ fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
             issue: quire_contract_codegen::UpstreamBlocker::QuireContractRuntime34,
         }
     );
-    assert!(matches!(
-        unsupported(package::UNREADABLE),
-        UnsupportedObligation::OracleRefused {
-            refusal: ExactScalarRefusal::UnreadableBound { .. }
-        }
-    ));
     assert!(matches!(
         unsupported(UNSATISFIABLE),
         UnsupportedObligation::UnsatisfiableBound { .. }
@@ -1278,8 +1297,8 @@ fn fr014_artifacts(
 /// Trace: FR-022-AC-14, TC-033
 #[test]
 fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_references() {
-    let package = package::bounded_increment_package().admit();
-    let node_id = package::code_id(package::BOUNDED_INCREMENT);
+    let (package, ids) = package::bounded_increment_package().admit_resolved();
+    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
     let generation = generate_routed(
         &package,
         &[route(0, &node_id)],

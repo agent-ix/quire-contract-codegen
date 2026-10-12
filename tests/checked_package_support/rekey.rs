@@ -51,31 +51,43 @@ fn structural_candidates(
             }
         }
     }
-    let mut graph = raw["semantic_graph"]["nodes"].clone();
-    substitute(&mut graph, &ids);
-    let nodes: Vec<CheckedSemanticNodeV2> = serde_json::from_value(graph).ok()?;
-    // Malformed negative fixtures have no structural candidates. Let the
-    // reader report their exact refusal after the other fixture keys settle.
-    let candidates = derive_structural_candidates(&nodes, limits.bytes, limits.work).ok()?;
-    for candidate in candidates.nodes() {
-        let old =
-            &nodes[usize::try_from(candidate.position()).expect("fixture node position")].node_id;
-        let expected = candidate.candidate_node_id();
-        if old != expected {
-            ids.insert(old, expected);
+    // Structural identities can depend on other structural identities: a frame reaches its
+    // object, and that object reaches a bound. Derive each round from the already substituted
+    // graph, installing only public candidates for the IDs in that round. The reader below
+    // remains the final admission authority, including for malformed negative fixtures.
+    for _ in 0..raw_nodes.len() {
+        let mut graph = raw["semantic_graph"]["nodes"].clone();
+        substitute(&mut graph, &ids);
+        reorder_frame_entries(&raw["semantic_graph"]["nodes"], &mut graph);
+        let nodes: Vec<CheckedSemanticNodeV2> = serde_json::from_value(graph).ok()?;
+        // Malformed negative fixtures have no structural candidates. Let the
+        // reader report their exact refusal after the other fixture keys settle.
+        let candidates = derive_structural_candidates(&nodes, limits.bytes, limits.work).ok()?;
+        let mut changed = false;
+        for candidate in candidates.nodes() {
+            let old = &nodes[usize::try_from(candidate.position()).expect("fixture node position")]
+                .node_id;
+            let expected = candidate.candidate_node_id();
+            if old != expected {
+                ids.insert(old, expected);
+                changed = true;
+            }
+        }
+        if !changed {
+            let groups = candidates
+                .groups()
+                .iter()
+                .map(|group| {
+                    (
+                        group.retained_label().to_owned(),
+                        group.candidate_label().to_owned(),
+                    )
+                })
+                .collect();
+            return Some((ids, groups));
         }
     }
-    let groups = candidates
-        .groups()
-        .iter()
-        .map(|group| {
-            (
-                group.retained_label().to_owned(),
-                group.candidate_label().to_owned(),
-            )
-        })
-        .collect();
-    Some((ids, groups))
+    None
 }
 
 /// Settle application candidates, including references to other applications, after
@@ -423,6 +435,67 @@ fn reorder_application_dependencies(wire: &mut Value) {
     }
 }
 
+/// Typed-key substitutions can invert well-formed frame entry order. Sort only an array whose
+/// authored keys were strictly ascending; malformed order remains for the reader to refuse.
+fn reorder_frame_entries(raw_nodes: &Value, resolved_nodes: &mut Value) {
+    fn entry_key(entry: &Value, member: &str) -> Option<(String, String)> {
+        let node = if member == "modifies" {
+            &entry["declaration"]
+        } else {
+            entry
+        };
+        if node["domain"] != NODE_DOMAIN {
+            return None;
+        }
+        let name = if member == "modifies" {
+            match entry["kind"].as_str()? {
+                "relationship" if entry.get("name").is_none() => String::new(),
+                "field" => entry["name"].as_str()?.to_owned(),
+                _ => return None,
+            }
+        } else {
+            String::new()
+        };
+        Some((node["digest"].as_str()?.to_owned(), name))
+    }
+    let (Some(raw_nodes), Some(resolved_nodes)) =
+        (raw_nodes.as_array(), resolved_nodes.as_array_mut())
+    else {
+        return;
+    };
+    for (raw, resolved) in raw_nodes.iter().zip(resolved_nodes) {
+        if raw["node_tag"] != "state"
+            || raw["semantic_form"] != "frame"
+            || raw["body"]["term"] != "frame"
+        {
+            continue;
+        }
+        for member in ["modifies", "creates", "deletes"] {
+            let (Some(authored), Some(current)) = (
+                raw["body"][member].as_array(),
+                resolved["body"][member].as_array_mut(),
+            ) else {
+                continue;
+            };
+            let Some(authored_keys) = authored
+                .iter()
+                .map(|entry| entry_key(entry, member))
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            if !authored_keys.windows(2).all(|pair| pair[0] < pair[1])
+                || !current
+                    .iter()
+                    .all(|entry| entry_key(entry, member).is_some())
+            {
+                continue;
+            }
+            current.sort_by_key(|entry| entry_key(entry, member).expect("checked frame key"));
+        }
+    }
+}
+
 /// Repairs only stale keys for which IR retained an expected key. Every other refusal, including
 /// a stale key with no derivable expected key, is returned unchanged for the caller to assert.
 /// The finite reader is charged at most twice per source node and under cumulative byte/work
@@ -448,6 +521,10 @@ pub fn resolve_wire(
     for attempt in 0..attempts {
         let mut wire = raw.clone();
         substitute(&mut wire, &ids);
+        reorder_frame_entries(
+            &raw["semantic_graph"]["nodes"],
+            &mut wire["semantic_graph"]["nodes"],
+        );
         for node in wire["semantic_graph"]["nodes"]
             .as_array_mut()
             .expect("fixture graph nodes")
@@ -580,6 +657,39 @@ mod tests {
             "a later non-application ID substitution refreshes the dependent application key"
         );
         assert!(application_key_updates(&wire, 1 << 20).is_empty());
+    }
+
+    /// Trace: FR-037-AC-1, TC-052. Rekeying changes digest order, while an authored
+    /// out-of-order frame negative must still reach the reader unchanged.
+    #[test]
+    fn frame_entry_rekey_sorts_only_authored_ordered_arrays() {
+        let node = |entries: Vec<Value>| {
+            json!({"node_tag": "state", "semantic_form": "frame", "body": {
+                "term": "frame", "modifies": entries, "creates": [], "deletes": []
+            }})
+        };
+        let entry = |digest: &str| {
+            json!({
+                "kind": "relationship",
+                "declaration": {"domain": NODE_DOMAIN, "digest": digest}
+            })
+        };
+        let raw = json!([node(vec![entry("01"), entry("02")])]);
+        let mut resolved = raw.clone();
+        resolved[0]["body"]["modifies"] = json!([entry("09"), entry("03")]);
+        reorder_frame_entries(&raw, &mut resolved);
+        assert_eq!(
+            resolved[0]["body"]["modifies"],
+            json!([entry("03"), entry("09")])
+        );
+
+        let raw_negative = json!([node(vec![entry("02"), entry("01")])]);
+        let mut negative = json!([node(vec![entry("09"), entry("03")])]);
+        reorder_frame_entries(&raw_negative, &mut negative);
+        assert_eq!(
+            negative[0]["body"]["modifies"],
+            json!([entry("09"), entry("03")])
+        );
     }
 
     /// Trace: FR-037-AC-1, TC-052. A predecessor-first chain consumes each public

@@ -57,6 +57,11 @@ pub fn lowered_package_length(
     profile: &CompleteLoweringProfileV2,
 ) -> u64 {
     let lowering = package.lower(requested, profile);
+    assert_eq!(
+        lowering.records.len(),
+        requested.len(),
+        "one lowering record per requested node"
+    );
     let lowered_count = lowering
         .records
         .iter()

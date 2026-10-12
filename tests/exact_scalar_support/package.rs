@@ -456,6 +456,18 @@ pub fn fixture_ids_for_digest(digest: &str) -> FixtureIds {
         .expect("fixture package ID is registered")
 }
 
+/// The scalar corpus request with every provisional node ID resolved for this admitted package.
+pub fn golden_items_for(package: &CheckedPackageV2) -> Vec<ExactScalarItem> {
+    let ids = fixture_ids_for(package);
+    golden_items()
+        .into_iter()
+        .map(|mut item| {
+            item.node_id = ids.resolve(&item.node_id);
+            item
+        })
+        .collect()
+}
+
 include!("../checked_package_support/base.rs");
 
 impl Default for PackageBuilder {
@@ -979,6 +991,11 @@ impl PackageBuilder {
             );
         }
         digest
+    }
+
+    /// The fixture's authored wire before ID and package-identity resolution.
+    pub fn raw_wire(&self) -> &Value {
+        &self.value
     }
 
     /// The wire document with its identity projection and package id refreshed.
@@ -3187,8 +3204,17 @@ pub fn bounded_increment_package() -> PackageBuilder {
     builder
 }
 
-/// A compact admitted integer addition for per-request byte accounting.
-pub fn byte_ceiling_package() -> PackageBuilder {
+/// First application code in the FR-014-AC-40 source-backed byte-ceiling chain.
+pub const BYTE_CHAIN_BASE: u32 = 31_000;
+/// The chain's initial bounded literal code.
+pub const BYTE_CHAIN_VALUE: u32 = BYTE_CHAIN_BASE - 1;
+
+/// Build a source-backed chain whose additions use each predecessor twice and whose requests
+/// each have an actual occurrence in the authored source.
+pub fn source_backed_byte_chain(
+    count: u32,
+) -> (PackageBuilder, String, BTreeMap<u32, Vec<(usize, usize)>>) {
+    assert!(count > 0);
     let mut builder = PackageBuilder::default();
     let integer_type = key(T_INTEGER);
     builder.code(
@@ -3198,29 +3224,111 @@ pub fn byte_ceiling_package() -> PackageBuilder {
         &integer_type,
         aggregate(),
     );
-    let bound = Bound::Integer(0, 9);
-    let bound_key = builder.bound(&bound);
+    let bound = builder.bound(&Bound::Integer(0, 9));
     builder.code(
-        V_PARAM_X,
+        BYTE_CHAIN_VALUE,
         "value",
         "literal",
-        &bound_key,
+        &bound,
         literal("integer", "3"),
     );
-    builder.application_bounded(
-        BOUNDED_INCREMENT,
-        "expression",
-        "binary",
-        &integer_type,
-        application(
+
+    let mut source = String::new();
+    let mut sites: BTreeMap<u32, Vec<(usize, usize)>> = BTreeMap::new();
+    let mut token = |source: &mut String, code: u32| {
+        let start = source.len();
+        source.push_str(&format!("n{code}"));
+        sites.entry(code).or_default().push((start, source.len()));
+    };
+    source.push_str("let ");
+    token(&mut source, BYTE_CHAIN_VALUE);
+    source.push_str(" = 3\n");
+    for offset in 0..count {
+        let code = BYTE_CHAIN_BASE + offset;
+        let predecessor = if offset == 0 {
+            BYTE_CHAIN_VALUE
+        } else {
+            code - 1
+        };
+        source.push_str("let ");
+        token(&mut source, code);
+        source.push_str(" = add(");
+        token(&mut source, predecessor);
+        source.push_str(", ");
+        token(&mut source, predecessor);
+        source.push_str(")\nrequest ");
+        token(&mut source, code);
+        source.push('\n');
+        let predecessor_key = code_id(predecessor).digest.to_string();
+        builder.application_code_with(
+            code,
+            "expression",
             "binary",
-            op("quire.op.integer.add"),
             &integer_type,
-            vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
-        ),
-        &[bound],
-    );
-    builder
+            application(
+                "binary",
+                op("quire.op.integer.add"),
+                &integer_type,
+                vec![reference(&predecessor_key), reference(&predecessor_key)],
+            ),
+            &[predecessor_key],
+        );
+    }
+
+    let source_ref = json!({
+        "authority": "agent-ix",
+        "identity": "ir764-ac40-source",
+        "digest_domain": "quire.source.bytes/v1",
+        "digest": format!("{:x}", Sha256::digest(source.as_bytes())),
+    });
+    builder.value["lock"]["sources"]
+        .as_array_mut()
+        .expect("sources")
+        .push(source_ref.clone());
+    let mut entries = Vec::new();
+    let mut replaced = BTreeSet::new();
+    for (code, spans) in &sites {
+        let node_id = code_id(*code);
+        replaced.insert(node_id.digest.to_string());
+        let node = builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes")
+            .iter_mut()
+            .find(|node| node["node_id"]["digest"] == node_id.digest.as_ref())
+            .expect("source-backed node");
+        if *code == BYTE_CHAIN_VALUE {
+            node["owner"] = json!({
+                "kind": "source", "authority": source_ref["authority"],
+                "identity": source_ref["identity"],
+            });
+        }
+        node["occurrences"] = Value::Array(
+            spans
+                .iter()
+                .enumerate()
+                .map(|(ordinal, _)| {
+                    json!({
+                        "role": if ordinal == 0 { "declaration" } else { "expression" },
+                        "ordinal": ordinal,
+                    })
+                })
+                .collect(),
+        );
+        for (ordinal, (start, end)) in spans.iter().enumerate() {
+            entries.push(json!({
+                "node_id": node_id,
+                "role": if ordinal == 0 { "declaration" } else { "expression" },
+                "ordinal": ordinal,
+                "regions": [{"source": source_ref, "start": start, "end": end}],
+            }));
+        }
+    }
+    let map = builder.value["source_map"]
+        .as_array_mut()
+        .expect("source map");
+    map.retain(|entry| !replaced.contains(entry["node_id"]["digest"].as_str().expect("digest")));
+    map.extend(entries);
+    (builder, source, sites)
 }
 
 /// Two parameters typed by distinct integer bounds, `a: Int[0, 9]` and `b: Int[10, 20]`.
