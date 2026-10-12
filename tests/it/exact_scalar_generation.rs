@@ -20,7 +20,8 @@ use quire_contract_codegen::{
     SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_model::{
-    derive_structural_candidates, CheckedPackageRefusalCause, CheckedPackageRefusalCode,
+    derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
+    CheckedPackageReadLimits, CheckedPackageRefusalCause, CheckedPackageRefusalCode,
     CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, StructuralCandidateError,
 };
 use quire_contract_runtime::exact::{
@@ -330,6 +331,97 @@ fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
     );
     assert_eq!(refusal.locus, Some(bound));
     assert_eq!(refusal.expected_node_id(), None);
+}
+
+/// Trace: FR-037-AC-4, TC-052. A valid application body under a different node key
+/// is refused by the reader with the original admitted key as its expected identity.
+#[test]
+fn tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire() {
+    let (admitted, mut wire, ids) = bounded_increment_package().read_resolved();
+    assert!(matches!(admitted, CheckedPackageV2ReadResult::Admitted(_)));
+    let expected = ids.resolve(&code_id(BOUNDED_INCREMENT));
+    let stale = id(&"f".repeat(64));
+    assert_ne!(stale, expected);
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("nodes");
+    let position = nodes
+        .iter()
+        .position(|node| node["node_id"]["digest"] == expected.digest.as_ref())
+        .expect("admitted increment application");
+    assert_eq!(nodes[position]["body"]["term"], "application");
+    assert!(nodes.iter().all(|node| node["node_id"] != json!(stale)));
+    nodes[position]["node_id"] = json!(stale);
+    let source_map = wire["source_map"].as_array_mut().expect("source map");
+    let matching = source_map
+        .iter_mut()
+        .filter(|entry| entry["node_id"] == json!(expected))
+        .collect::<Vec<_>>();
+    assert_eq!(matching.len(), 1);
+    for entry in matching {
+        entry["node_id"] = json!(stale);
+    }
+
+    let result = read_mutated_wire(wire);
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("stale application key unexpectedly admitted: {result:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::StaleNodeKey)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+    );
+    assert_eq!(refusal.locus.as_ref(), Some(&stale));
+    assert_eq!(refusal.expected_node_id(), Some(&expected));
+}
+
+/// Trace: FR-037-AC-4, TC-052. Changing a valid application literal while retaining
+/// its admitted key must be refused before any fixture rekey can conceal the mismatch.
+#[test]
+fn tc_052_reader_refuses_application_body_mutation_under_prior_key() {
+    let (admitted, mut wire, ids) = bounded_increment_package().read_resolved();
+    assert!(matches!(admitted, CheckedPackageV2ReadResult::Admitted(_)));
+    let prior = ids.resolve(&code_id(BOUNDED_INCREMENT));
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("nodes");
+    let position = nodes
+        .iter()
+        .position(|node| node["node_id"]["digest"] == prior.digest.as_ref())
+        .expect("admitted increment application");
+    assert_eq!(nodes[position]["body"]["arguments"][1]["value"], "1");
+    nodes[position]["body"]["arguments"][1]["value"] = json!("2");
+    let draft: CheckedSemanticNodeV2 =
+        serde_json::from_value(nodes[position].clone()).expect("mutated typed application");
+    let expected = derive_application_node_id(
+        ApplicationNodeDraft::new(&draft),
+        None,
+        CheckedPackageReadLimits::bounded().bytes,
+    )
+    .expect("public candidate for valid mutated body")
+    .candidate_node_id()
+    .clone();
+    assert_ne!(expected, prior);
+
+    let result = read_mutated_wire(wire);
+    let CheckedPackageV2ReadResult::Refused(refusal) = result else {
+        panic!("application body mutation unexpectedly admitted: {result:?}");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::StaleNodeKey)
+    );
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str().to_owned()),
+        Some(format!("/semantic_graph/nodes/{position}/node_id"))
+    );
+    assert_eq!(refusal.locus.as_ref(), Some(&prior));
+    assert_eq!(refusal.expected_node_id(), Some(&expected));
 }
 
 /// Trace: FR-037-AC-1, TC-052. A mismatched decimal mode is reader-ineligible.
