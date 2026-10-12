@@ -1021,17 +1021,23 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
         }
     );
     assert_eq!(records[4].kind, Some(ObligationKind::Frame));
-    assert!(ids.resolve(&code_id(FRAMED_OBJECT)) < ids.resolve(&code_id(FRAME)));
-    // The frame is typed by FRAMED_OBJECT. IR names that model first in admitted node-id
-    // order, before the rekeyed frame node, so this item carries the model blocker.
-    assert_eq!(
-        unsupported(&records[4]),
-        &UnsupportedObligation::BlockedOnUpstream {
-            node_id: ids.resolve(&code_id(FRAMED_OBJECT)),
+    let model = ids.resolve(&code_id(FRAMED_OBJECT));
+    let frame = ids.resolve(&code_id(FRAME));
+    // The frame is typed by FRAMED_OBJECT, and IR names the first unsupported member in
+    // admitted node-id order. Both possible first members retain their own typed refusal.
+    let first_refusal = if model < frame {
+        UnsupportedObligation::BlockedOnUpstream {
+            node_id: model,
             node_tag: "model",
             issue: UpstreamBlocker::QuireSpecLanguage120,
         }
-    );
+    } else {
+        UnsupportedObligation::NoFiniteEncoding {
+            node_id: frame.clone(),
+            node_tag: "state",
+        }
+    };
+    assert_eq!(unsupported(&records[4]), &first_refusal);
     assert!(matches!(
         &records[4].subject,
         ObligationSubject::CheckedNode { node_id, source_map } if node_id == &ids.resolve(&code_id(FRAME)) && !source_map.is_empty()
@@ -1100,7 +1106,8 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
     let (package, ids) = builder.admit_resolved();
     let node_id = ids.resolve(&code_id(UNRECOGNIZED_STATE_FORM));
 
-    let oracles = generate_exact_scalar_oracles(&package, &golden_items()).expect("claim map");
+    let oracles = generate_exact_scalar_oracles(&package, &package::golden_items_for(&package))
+        .expect("claim map");
     let (operation, generated) = oracles
         .claim_map
         .items
@@ -1223,7 +1230,8 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
     let package = corpus_package().admit();
     let missing_node_id = id(&key(NODE_ABSENT_FROM_GRAPH));
 
-    let oracles = generate_exact_scalar_oracles(&package, &golden_items()).expect("claim map");
+    let oracles = generate_exact_scalar_oracles(&package, &package::golden_items_for(&package))
+        .expect("claim map");
     let (operation, generated) = oracles
         .claim_map
         .items
@@ -1475,7 +1483,7 @@ fn tc_025_unsatisfiable_bounds_are_refused() {
     assert_eq!(
         unsupported(&records[0]),
         &UnsupportedObligation::UnsatisfiableBound {
-            bound: package::id(&Bound::Integer(5, -5).key()),
+            bound: ids.resolve(&package::id(&Bound::Integer(5, -5).key())),
             form: "integer_range".to_owned(),
             lower: "5".to_owned(),
             upper: "-5".to_owned(),
@@ -1575,8 +1583,8 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
 /// Trace: FR-015-AC-6, TC-025
 #[test]
 fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
-    let package = corpus_package().admit();
-    let mismatched = code_id(1004);
+    let (package, ids) = corpus_package().admit_resolved();
+    let mismatched = ids.resolve(&code_id(1004));
     let oracles = generate_exact_scalar_oracles(
         &package,
         &[ExactScalarItem {
@@ -2054,8 +2062,8 @@ fn routed_scalar_increment() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
 ) {
-    let package = package::bounded_increment_package().admit();
-    let node_id = package::code_id(package::BOUNDED_INCREMENT);
+    let (package, ids) = package::bounded_increment_package().admit_resolved();
+    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
     let generation = generate_routed(
         &package,
         &[RoutedGenerationItem::from_descriptor(

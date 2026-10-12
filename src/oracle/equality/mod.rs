@@ -35,7 +35,7 @@
 //! | `record` | one `binding` per field in declaration order: its `name` is the field name; a direct reference is required, while an `aggregate` with one `binding(optional, reference Option)` is optional |
 //! | `tuple` | one `reference` per position, in declaration order |
 //! | `option` | one `reference` to the payload type node |
-//! | `sequence` | one element `reference` when named by a `collection_bounds` node; an inline bounds form has a second bounds `reference` |
+//! | `sequence` | one element `reference`, with cardinality from a separate `collection_bounds` node |
 //! | `set`, `bag`, `ordered_set` | an element `reference`, then a bounds `reference` |
 //! | `collection_bounds` | named `min` and `max` bindings of canonical decimal `integer` literals |
 //!
@@ -750,6 +750,10 @@ fn recorded_descriptor(item: &CompositeEqualityItem) -> RecordedDescriptor {
 
 fn lowering_profile() -> CompleteLoweringProfileV2 {
     CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.composite-equality/v1".into(),
+        },
         supported_tags: BTreeSet::from([
             CheckedNodeTag::ScalarType,
             CheckedNodeTag::CompositeType,
@@ -2947,6 +2951,9 @@ fn deep_matches_shallow() {{
     #[test]
     fn tc_029_inline_collection_bound_is_charged_before_lookup() {
         let mut nodes = recursive_shape_nodes();
+        // Inline bounds remain meaningful for set/bag forms. A sequence's bound is a separate
+        // typed node, so giving it a second body reference would now be malformed first.
+        nodes[3].semantic_form = "set".into();
         nodes[3].body = json!({"term": "aggregate", "members": [
             {"term": "reference", "target": node_id('f')},
             {"term": "reference", "target": node_id('7')}

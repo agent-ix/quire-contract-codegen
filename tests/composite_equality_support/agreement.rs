@@ -171,11 +171,25 @@ macro_rules! shared_helpers {
         }
 
         pub fn node_key(code: u32) -> NodeKey {
-            NodeKey::from_hex(&super::super::package::key(code)).unwrap()
+            let digest = match code {
+                super::super::package::R_POINT => crate::generated::R_POINT_DIGEST,
+                super::super::package::TUP_PAIR => crate::generated::TUP_PAIR_DIGEST,
+                super::super::package::R_SELF => crate::generated::R_SELF_DIGEST,
+                super::super::package::R_PAIR_OF_POINTS => crate::generated::R_PAIR_OF_POINTS_DIGEST,
+                other => panic!("no admitted agreement type key for code {other}"),
+            };
+            NodeKey::from_hex(digest).unwrap()
         }
 
         pub fn composite_type(code: u32) -> ValueType {
             ValueType::Composite(node_key(code))
+        }
+
+        /// The corpus's admitted Integer range, also used by option and sequence elements.
+        pub fn corpus_integer_type() -> ValueType {
+            ValueType::Int(
+                IntegerInterval::new(Integer::from(-100_i64), Integer::from(100_i64)).unwrap(),
+            )
         }
 
         /// `Rational[num_lo, num_hi; den_lo, den_hi]` -- codegen#83's
@@ -227,10 +241,7 @@ macro_rules! shared_helpers {
                     node_key(super::super::package::TUP_PAIR),
                     "TUP_PAIR",
                     CompositeShape::Tuple(vec![
-                        ValueType::Int(
-                            IntegerInterval::new(Integer::from(-100_i64), Integer::from(100_i64))
-                                .unwrap(),
-                        ),
+                        corpus_integer_type(),
                         ValueType::Text(TextType::new(0, 16, TextProfile::Nfc).unwrap()),
                     ]),
                 )],
@@ -353,17 +364,17 @@ macro_rules! shared_helpers {
         pub fn option_int(value: Option<i64>) -> Value {
             match value {
                 Some(n) => {
-                    OptionValue::present(ValueType::Integer, Value::Integer(Integer::from(n)))
+                    OptionValue::present(corpus_integer_type(), Value::Integer(Integer::from(n)))
                         .unwrap()
                 }
-                None => OptionValue::none(ValueType::Integer),
+                None => OptionValue::none(corpus_integer_type()),
             }
         }
 
         pub fn sequence_type() -> CollectionType {
             CollectionType::new(
                 CollectionKind::Sequence,
-                ValueType::Integer,
+                corpus_integer_type(),
                 CardinalityBound::new(0, 8).unwrap(),
             )
         }

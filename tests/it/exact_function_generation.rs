@@ -998,7 +998,7 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
         .iter()
         .map(|item| generous.ids.resolve(&item.call_node_id))
         .collect::<Vec<_>>();
-    let profile = measuring_profile(false);
+    let profile = measuring_profile(false, "quire.codegen.exact-function/v1");
     let body_length = lowered_package_length(&generous, &body_nodes, &profile);
     let call_length = lowered_package_length(&generous, &call_nodes, &profile);
     let ceiling = body_length.min(call_length) - 1;
@@ -1054,6 +1054,68 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
         .items
         .iter()
         .all(|claim| byte_refusal(claim).is_none()));
+}
+
+/// Trace: FR-021-AC-23, TC-031. Both request sets over the shared chain must
+/// truly lower with their predecessors before their encoded lengths define a byte ceiling.
+#[test]
+fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
+    use crate::common::byte_ceiling::{
+        limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
+    };
+    use quire_contract_model::CompleteLoweringRecordV2;
+
+    use sha2::{Digest, Sha256};
+
+    let builder = byte_ceiling_package_with_shape(16, 15);
+    let (source, sites) = byte_ceiling_source(16, 15);
+    let raw = builder.raw_wire();
+    let source_ref = raw["lock"]["sources"]
+        .as_array()
+        .expect("locked sources")
+        .iter()
+        .find(|source| source["identity"] == "ir764-ac23-source")
+        .expect("authored source is locked");
+    assert_eq!(
+        source_ref["digest"],
+        format!("{:x}", Sha256::digest(source.as_bytes()))
+    );
+    for (code, spans) in &sites {
+        let entries = raw["source_map"]
+            .as_array()
+            .expect("source map")
+            .iter()
+            .filter(|entry| entry["node_id"]["digest"] == code_id(*code).digest.as_ref())
+            .collect::<Vec<_>>();
+        assert_eq!(entries.len(), spans.len());
+        for (ordinal, (entry, (start, end))) in entries.iter().zip(spans).enumerate() {
+            assert_eq!(entry["ordinal"], ordinal);
+            assert_eq!(entry["regions"][0]["source"], *source_ref);
+            assert_eq!(entry["regions"][0]["start"], *start);
+            assert_eq!(entry["regions"][0]["end"], *end);
+            assert_eq!(&source[*start..*end], format!("n{code}"));
+        }
+    }
+    let package = admit_with(&builder, limits_under(LARGEST_CEILING));
+    let profile = measuring_profile(false, "quire.codegen.exact-function/v1");
+    let wire_length = serde_json::to_vec(&builder.wire())
+        .expect("small-chain wire")
+        .len();
+    for count in [16, 15] {
+        let requested = (0..count)
+            .map(|offset| package.key(BYTE_BODY_BASE + offset))
+            .collect::<Vec<_>>();
+        let lowered_length = lowered_package_length(&package, &requested, &profile);
+        assert!(
+            lowered_length > u64::try_from(wire_length).expect("wire length"),
+            "{count} source-backed requests lowered to {lowered_length} bytes from a {wire_length}-byte checked wire"
+        );
+        let lowering = package.lower(&requested, &profile);
+        let Some(CompleteLoweringRecordV2::Lowered { node }) = lowering.records.last() else {
+            panic!("last small-chain request did not lower");
+        };
+        assert!(node.dependencies.contains(&requested[0]));
+    }
 }
 
 /// Trace: FR-021-AC-1, TC-031. Every requested item receives exactly one

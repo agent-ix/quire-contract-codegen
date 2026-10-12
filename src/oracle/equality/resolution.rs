@@ -60,6 +60,7 @@ fn entered(
 
 fn collection_parts(
     graph: &Graph<'_>,
+    bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
     closure: &mut TypeClosure,
     id: &CheckedNodeId,
     node: &CheckedSemanticNodeV2,
@@ -71,7 +72,28 @@ fn collection_parts(
     let members = aggregate_members(&node.body).ok_or_else(malformed)?;
     let (element_term, bound) = match (members, external_bound) {
         ([element], Some(bound)) if &*node.semantic_form == "sequence" => (element, bound),
-        ([element, bound], None) => {
+        ([element], None) if &*node.semantic_form == "sequence" => {
+            let mut matching = bounds_by_type
+                .get(id)
+                .into_iter()
+                .flat_map(|bounds| bounds.iter().copied())
+                .filter(|bound| &*bound.semantic_form == "collection_bounds");
+            let Some(bound) = matching.next() else {
+                return Err(CompositeEqualityRefusal::MissingBound {
+                    bounded_type: id.clone(),
+                    expected_form: "collection_bounds",
+                });
+            };
+            if matching.next().is_some() {
+                return Err(CompositeEqualityRefusal::AmbiguousBound {
+                    bounded_type: id.clone(),
+                    expected_form: "collection_bounds",
+                });
+            }
+            closure.charge()?;
+            (element, bound)
+        }
+        ([element, bound], None) if &*node.semantic_form != "sequence" => {
             closure.charge()?; // charge the followed bound before reading or descending
             let target = read_reference(bound).ok_or_else(malformed)?;
             (element, lookup(graph, &target)?)
@@ -250,7 +272,7 @@ pub(super) fn resolve_type(
                                 .map(|target| lookup(graph, target))
                                 .transpose()?;
                             let (element, kind, cardinality) =
-                                collection_parts(graph, closure, &id, node, bound)?;
+                                collection_parts(graph, bounds_by_type, closure, &id, node, bound)?;
                             frames.push(Frame::FinishCollection {
                                 id,
                                 kind,

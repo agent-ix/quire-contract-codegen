@@ -9,7 +9,12 @@
 
 /// A readable node key: the code, zero-padded to a 64-digit digest.
 pub fn key(code: u32) -> String {
-    format!("{code:0>64}")
+    let node = if code == T_INTEGER_BOUNDED {
+        BD_INTEGER
+    } else {
+        code
+    };
+    format!("{node:0>64}")
 }
 
 pub const T_BOOLEAN: u32 = 1;
@@ -43,6 +48,7 @@ pub const BD_DECIMAL_WIDE: u32 = 19;
 pub const R_POINT: u32 = 20;
 pub const R_FLOAT: u32 = 21;
 pub const CB_SMALL: u32 = 22;
+pub const CB_INT: u32 = 35;
 pub const SEQ_R_FLOAT: u32 = 23;
 pub const TUP_PAIR: u32 = 24;
 pub const OPT_INT: u32 = 25;

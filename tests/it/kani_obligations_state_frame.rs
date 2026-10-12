@@ -37,8 +37,8 @@ use native_twin::{
     playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
 };
 use package::{
-    application, code_id, corpus_package, key, literal, member, op, op_full, parameter_body,
-    reference, Bound, PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER,
+    application, code_id, key, literal, member, op, op_full, parameter_body, reference, Bound,
+    PackageBuilder, FUNCTION, NODE_DOMAIN, T_BOOLEAN, T_INTEGER, T_TEXT,
 };
 use qsl_replay::{
     CallSiteRefusal, Category, DisagreementCause, FrameChange, FrameIdentityMismatch,
@@ -71,7 +71,6 @@ const ANCHOR: u32 = 4005;
 const DEREF: u32 = 4006;
 const OTHER: u32 = 4011;
 const OTHER_OBJECT: u32 = 4012;
-const RELATIONSHIP: u32 = 4013;
 const RESULT: u32 = 4014;
 
 const STATE_FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
@@ -238,15 +237,55 @@ fn pre_read(builder: &mut PackageBuilder, code: u32, read: &str, bound: &str) ->
     code_id(code).digest.to_string()
 }
 
+fn state_frame_base_package() -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
+    for (code, form) in [
+        (T_BOOLEAN, "boolean"),
+        (T_INTEGER, "integer"),
+        (T_TEXT, "text"),
+    ] {
+        let ty = key(code);
+        builder.code(
+            code,
+            "scalar_type",
+            form,
+            &ty,
+            json!({"term": "aggregate", "members": []}),
+        );
+    }
+    let relation = key(package::RELATION);
+    builder.code(
+        package::RELATION,
+        "relation",
+        "relationship",
+        &relation,
+        json!({"term": "aggregate", "members": []}),
+    );
+    let boolean = key(T_BOOLEAN);
+    builder.application_code(
+        FUNCTION,
+        "function",
+        "pure_function",
+        &boolean,
+        application(
+            "unary",
+            op("quire.op.boolean.not"),
+            &boolean,
+            vec![literal("boolean", "true")],
+        ),
+    );
+    builder
+}
+
 fn package_for(shape: &Shape) -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = state_frame_base_package();
     add_shape(&mut builder, shape);
     builder
 }
 
 /// A package holding every shape, each over its own object, frame, anchor and clause.
 fn package_of(shapes: &[&Shape]) -> PackageBuilder {
-    let mut builder = corpus_package();
+    let mut builder = state_frame_base_package();
     for shape in shapes {
         add_shape(&mut builder, shape);
     }
@@ -309,15 +348,9 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         json!({"term": "aggregate", "members": []}),
         &[],
     );
-    let relationship = key(shape.scoped(RELATIONSHIP));
-    builder.node_with(
-        &relationship,
-        "relation",
-        "relationship",
-        &key(T_BOOLEAN),
-        json!({"term": "aggregate", "members": []}),
-        &[key(T_BOOLEAN)],
-    );
+    // Every shape selects the same declared relationship. Reuse its admitted
+    // node, owner and source occurrence instead of minting a second key for that declaration.
+    let relationship = key(package::RELATION);
     let reference_type = key(shape.scoped(REFERENCE));
     builder.node_with(
         &reference_type,
@@ -754,6 +787,85 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
     let fixture = fixture(shape);
     generate_state_frame_obligations(&request(&fixture, fields))
         .expect_err("the request must be refused")
+}
+
+/// Trace: FR-037-AC-1, TC-052. The admitted frame reaches the same rekeyed object and
+/// integer bound as the authored clause, even when the clause uses a second parameter.
+#[test]
+fn tc_025_state_frame_structural_candidates_settle_through_object_and_bound() {
+    let shape = Shape {
+        variant: 12,
+        condition: Condition::BalanceAgainstOther,
+        ..Shape::HEALTHY
+    };
+    let (package, ids) = package_for(&shape).admit_resolved();
+    let object = ids.resolve(&package::id(&key(shape.scoped(OBJECT))));
+    let frame = ids.resolve(&package::id(&key(shape.scoped(FRAME))));
+    let (lower, upper) = model::FIELDS[0].1;
+    let bound = ids.resolve(&package::id(&Bound::Integer(lower, upper).key()));
+    let graph = &package.graph().nodes;
+    let admitted_frame = graph
+        .iter()
+        .find(|node| node.node_id == frame)
+        .expect("frame admitted");
+    let admitted_object = graph
+        .iter()
+        .find(|node| node.node_id == object)
+        .expect("object admitted");
+    assert!(admitted_frame.dependencies.contains(&object));
+    assert!(admitted_object.dependencies.contains(&bound));
+}
+
+/// Trace: FR-015-AC-29, TC-025. Rekeying preserves both grants in each frame even when
+/// their final declaration keys sort in a different order from the authored keys.
+#[test]
+fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
+    for (variant, effect, kind) in [
+        (8, FrameEffect::GrantsRelationship, "relationship"),
+        (9, FrameEffect::GrantsForeignField, "field"),
+    ] {
+        let shape = Shape {
+            variant,
+            frame_effect: effect,
+            ..Shape::HEALTHY
+        };
+        let (package, ids) = package_for(&shape).admit_resolved();
+        let frame = ids.resolve(&package::id(&key(shape.scoped(FRAME))));
+        let node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == frame)
+            .expect("frame admitted");
+        let modifies = node.body["modifies"].as_array().expect("frame grants");
+        assert_eq!(
+            modifies.len(),
+            2,
+            "the ordinary field and added grant remain"
+        );
+        let object = ids.resolve(&package::id(&key(shape.scoped(OBJECT))));
+        let added = if effect == FrameEffect::GrantsRelationship {
+            ids.resolve(&code_id(package::RELATION))
+        } else {
+            ids.resolve(&package::id(&key(shape.scoped(OTHER_OBJECT))))
+        };
+        assert_eq!(
+            modifies
+                .iter()
+                .filter(|entry| entry["kind"] == "field" && entry["declaration"] == json!(object))
+                .count(),
+            1,
+            "the ordinary field grant remains"
+        );
+        assert_eq!(
+            modifies
+                .iter()
+                .filter(|entry| entry["kind"] == kind && entry["declaration"] == json!(added))
+                .count(),
+            1,
+            "the frame keeps its {kind} grant by declaration"
+        );
+    }
 }
 
 // ---- default lane ------------------------------------------------------------
@@ -1277,6 +1389,7 @@ fn arm_shapes() -> Vec<Shape> {
 struct World {
     package: CheckedPackageV2,
     ids: BTreeMap<usize, Ids>,
+    function: CheckedNodeId,
 }
 
 fn world_for(indices: &[usize]) -> World {
@@ -1288,8 +1401,8 @@ fn world_for(indices: &[usize]) -> World {
         .into_iter()
         .map(|index| (index, &shapes[index]))
         .collect::<Vec<_>>();
-    // The corpus package alone nearly fills the default byte ceiling, so even a small selected
-    // group is read under a larger one. Each test selects only the shapes whose clauses it uses.
+    // The selected shape group can exceed the default byte ceiling. Each test selects only the
+    // shapes whose clauses it uses.
     let limits = CheckedPackageReadLimits {
         bytes: 8 << 20,
         ..CheckedPackageReadLimits::bounded()
@@ -1299,6 +1412,7 @@ fn world_for(indices: &[usize]) -> World {
             .admit_with_resolved(limits);
     World {
         package,
+        function: fixture_ids.resolve(&code_id(FUNCTION)),
         ids: selected
             .iter()
             .map(|(index, shape)| (*index, ids(shape).resolved(&fixture_ids)))
@@ -1631,7 +1745,7 @@ fn tc_025_a_state_frame_item_outside_the_encoding_has_a_named_reason() {
     let (records, harnesses) = emitted_state_frame(negotiate(&items));
     let no_finite_encoding = ObligationDisposition::Unsupported {
         reason: UnsupportedObligation::NoFiniteEncoding {
-            node_id: code_id(FUNCTION),
+            node_id: world.function.clone(),
             node_tag: "function",
         },
     };

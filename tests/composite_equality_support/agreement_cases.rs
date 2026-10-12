@@ -121,8 +121,8 @@ fn tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree() {
             direct: |m| direct_equality(
                 &environment,
                 EqualityOperator::Equal,
-                operand_typed(ValueType::option(ValueType::Integer)),
-                operand_typed(ValueType::option(ValueType::Integer)),
+                operand_typed(ValueType::option(corpus_integer_type())),
+                operand_typed(ValueType::option(corpus_integer_type())),
                 &left,
                 &right,
                 m,
