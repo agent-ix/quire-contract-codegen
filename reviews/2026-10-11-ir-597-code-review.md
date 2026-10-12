@@ -48,3 +48,9 @@ No Cargo, Kani, or full repository gates were run. The compile failure in FND-00
 Independent review of `44bd1f895d72d1eaa799c91dfbc5beffff072223` against `b3841c0ca9a08fa3d34b06d2adbbe06e425d2106` found no new code or Rust findings. The catalog relocation, import-cycle removal, and total `FrameSymbol` mapping preserve the recorded FND-001..003 dispositions.
 
 Independent review of `754287f10dd024563af5cdde0bbedfde0f49f83b` against `44bd1f895d72d1eaa799c91dfbc5beffff072223` also found no new findings. The canonical public API is `oracle::operator_catalog::IntegerOperator`; the root-level re-export is removed, owned callers use the canonical path, and no stale root-path references remain. Both reviews used `git diff --check`; neither ran Cargo, Kani, or the matrix.
+
+## Post-Rebase Delta Review
+
+Reviewed exact rebased head `f1024f21b6b1de926da4de98be65cd8cd99824b7` against CG main `fa1ec2edc215f590efaa05e2fc14741d7e4a8726`. The reviewed interaction delta is limited to three files: `src/lib.rs`, `src/oracle/function/mod.rs`, and `tests/it/exact_function_generation.rs`. These changes expose/use the previously reviewed canonical `oracle::operator_catalog::IntegerOperator` path and update the corresponding function-generation tests to that path. The changes do not alter operation selection, generation behavior, or test assertions.
+
+The IR-764 exact-scalar and composite fixture changes are inherited from the rebased base and are not duplicated in the IR-597 diff. The combined source retains the IR-764 fixture behavior and the IR-597 typed catalog consumer behavior. The previously recorded FND-001 through FND-003 dispositions remain applicable; this delta introduces no new code or Rust finding. `git diff --check` passed. No Cargo or Kani command was run by this reviewer; focused checks are handled separately in the shared build lane.

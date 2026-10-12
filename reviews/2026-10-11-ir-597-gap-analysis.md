@@ -40,3 +40,11 @@ Ran the planless repository audit over the specification, source and tests at th
 ## Current-head Delta Review
 
 Independent changed-scope review of `44bd1f895d72d1eaa799c91dfbc5beffff072223` and `754287f10dd024563af5cdde0bbedfde0f49f83b` found no new FR-038 trace gap, reverse gap, source stub, test stub, or unowned behavior. The final production API exposes the typed operator through `oracle::operator_catalog::IntegerOperator`; its behavior remains within FR-038 and the existing FR-014/FR-015 consumers. No new requirement or trace tag changed. The prior repository-wide matrix result (318 untagged, 11 ignored-only) is unchanged; the matrix was not rerun for these path-only deltas.
+
+## Post-Rebase Disposition
+
+Reviewed exact rebased head `f1024f21b6b1de926da4de98be65cd8cd99824b7` against CG main `fa1ec2edc215f590efaa05e2fc14741d7e4a8726`. The current computed Quoin matrix contains 314 untagged criteria and 11 criteria tagged only by ignored tests. This updates the earlier current-head note of 318 untagged criteria: the merged IR-496 work adds trace bindings, reducing the repository-wide untagged count by four. The 11 ignored-only count is unchanged.
+
+Changed-scope review found no new trace gap. FR-038 AC-2, AC-3, AC-4 and AC-6 remain tagged; AC-1 and AC-5 remain declared Inspection criteria without test binders. Relevant FR-014 and FR-021 criteria remain tagged. IR-764's exact-scalar/composite fixture changes are present in the rebased base and are not duplicated by IR-597's delta.
+
+Disposition: FND-001 remains open as a repository-wide matrix gap, with the current count updated to 314; FND-002 remains open at 11 ignored-only criteria. FND-003's earlier untracked-symbol observation was not remeasured in this delta and remains as originally recorded. The original findings table and its finding text are unchanged. No Cargo or Kani command was run as part of this review update.
