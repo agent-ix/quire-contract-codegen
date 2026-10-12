@@ -33,10 +33,10 @@ pub struct FixtureIds(BTreeMap<String, String>);
 fn structural_candidates(
     raw: &Value,
     limits: CheckedPackageReadLimits,
+    mut ids: FixtureIds,
 ) -> Option<(FixtureIds, BTreeMap<String, String>)> {
     let raw_nodes: Vec<CheckedSemanticNodeV2> =
         serde_json::from_value(raw["semantic_graph"]["nodes"].clone()).ok()?;
-    let mut ids = FixtureIds::default();
     for node in &raw_nodes {
         if node.node_tag.as_ref() == "scalar_type"
             && matches!(node.semantic_form.as_ref(), "boolean" | "integer")
@@ -45,8 +45,9 @@ fn structural_candidates(
                 derive_structural_candidates(std::slice::from_ref(node), limits.bytes, limits.work)
                     .ok()?;
             if let Some(scalar) = candidate.nodes().first() {
-                if &node.node_id != scalar.candidate_node_id() {
-                    ids.insert(&node.node_id, scalar.candidate_node_id());
+                let current = ids.resolve(&node.node_id);
+                if &current != scalar.candidate_node_id() {
+                    ids.insert(&current, scalar.candidate_node_id());
                 }
             }
         }
@@ -154,6 +155,35 @@ fn application_candidates(
         }
     }
     node_count
+}
+
+/// Settle interleaved structural and application references with the public candidate APIs.
+fn pre_read_candidates(
+    raw: &Value,
+    limits: CheckedPackageReadLimits,
+) -> (FixtureIds, BTreeMap<String, String>) {
+    let node_count = raw["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture graph nodes")
+        .len();
+    let (mut ids, mut groups) =
+        structural_candidates(raw, limits, FixtureIds::default()).unwrap_or_default();
+    // A structural function can reference an application, and that application can reference
+    // another function. Alternate the two public candidate families against evolving fixture
+    // IDs before asking the reader; otherwise the reader repairs long interleaved chains one
+    // key at a time and can exhaust its unchanged work cap before reaching admission.
+    for _ in 0..node_count {
+        let before = ids.0.len();
+        let _ = application_candidates(raw, &mut ids, limits);
+        if let Some((settled, labels)) = structural_candidates(raw, limits, ids.clone()) {
+            ids = settled;
+            groups = labels;
+        }
+        if ids.0.len() == before {
+            break;
+        }
+    }
+    (ids, groups)
 }
 
 impl FixtureIds {
@@ -373,7 +403,7 @@ pub fn resolve_wire(
         .checked_mul(2)
         .expect("fixture node-count cap")
         .max(1);
-    let (mut ids, groups) = structural_candidates(raw, limits).unwrap_or_default();
+    let (mut ids, groups) = pre_read_candidates(raw, limits);
     let mut seen = BTreeSet::new();
     let mut bytes_charged = 0u64;
     let mut work_charged = 0u64;
@@ -433,6 +463,58 @@ pub fn resolve_wire(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-021-AC-34, TC-031. A function key changes after its body application's
+    /// public candidate changes, and the caller application then consumes that function key.
+    #[test]
+    fn interleaved_function_and_application_candidates_settle_before_reader() {
+        let key = |code: u32| CheckedNodeId {
+            domain: NODE_DOMAIN.into(),
+            digest: format!("{code:064x}").into(),
+        };
+        let reference = |target: &CheckedNodeId| json!({"term": "reference", "target": target});
+        let node = |code: u32, tag: &str, form: &str, body: Value| {
+            json!({
+                "node_id": key(code),
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": tag,
+                "semantic_form": form,
+                "semantic_type": key(9),
+                "dependencies": [],
+                "occurrences": [],
+                "body": body,
+            })
+        };
+        let raw = json!({"semantic_graph": {"nodes": [
+            node(9, "scalar_type", "integer", json!({"term": "aggregate", "members": []})),
+            node(4, "expression", "binary", json!({"term": "application", "arguments": [
+                {"term": "literal", "value_kind": "integer", "value": "1"}
+            ]})),
+            node(3, "function", "pure_function", reference(&key(4))),
+            node(2, "expression", "call", json!({"term": "application", "arguments": [
+                reference(&key(3))
+            ]})),
+            node(1, "function", "pure_function", reference(&key(2))),
+        ]}});
+        let limits = CheckedPackageReadLimits::bounded();
+        let (first, _) = structural_candidates(&raw, limits, FixtureIds::default())
+            .expect("initial public structural candidates");
+        let mut after_app = first.clone();
+        application_candidates(&raw, &mut after_app, limits);
+        let (after_structural, _) = structural_candidates(&raw, limits, after_app.clone())
+            .expect("structural candidates after application substitution");
+        assert!(
+            after_structural.0.len() > after_app.0.len(),
+            "one-shot structural admission misses the function whose body key changed"
+        );
+        let (settled, _) = pre_read_candidates(&raw, limits);
+        assert!(settled.0.len() > after_structural.0.len());
+        let mut stable = settled.clone();
+        application_candidates(&raw, &mut stable, limits);
+        let (stable, _) = structural_candidates(&raw, limits, stable)
+            .expect("stable public structural candidates");
+        assert_eq!(stable, settled);
+    }
 
     /// Trace: FR-037-AC-1, TC-052. A later non-application substitution
     /// refreshes the dependent public application candidate.
