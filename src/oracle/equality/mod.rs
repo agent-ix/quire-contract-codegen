@@ -712,20 +712,9 @@ pub fn generate_composite_equality_oracles(
                     record,
                     occurrences,
                 } => ClaimDisposition::Refused {
-                    refusal: match record {
-                        ContractFeatureRecordV1::Unsupported {
-                            unsupported_node_id,
-                            node_tag,
-                            ..
-                        } => CompositeEqualityRefusal::Unsupported {
-                            unsupported_node_id: unsupported_node_id.clone(),
-                            node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
-                                .map_or("unknown", CheckedNodeTag::as_wire),
-                        },
-                        _ => CompositeEqualityRefusal::PackageAccounting {
-                            record: Box::new(record.clone()),
-                            occurrences: occurrences.to_vec(),
-                        },
+                    refusal: CompositeEqualityRefusal::PackageAccounting {
+                        record: Box::new(record.clone()),
+                        occurrences: occurrences.to_vec(),
                     },
                 },
                 PackageItem::Lowered { closure, .. } if !closure.selected_references.is_empty() => {
