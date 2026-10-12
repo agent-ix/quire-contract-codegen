@@ -502,6 +502,38 @@ impl PackageBuilder {
         Self { value }
     }
 
+    /// Add a model-owned object type using the selected QSpec model namespace.
+    /// The placeholder identity is settled by Contract IR's public structural
+    /// candidate API when this fixture is admitted.
+    pub fn model_owned_object_type(&mut self, code: u32, identity: &str, node: &str) -> &mut Self {
+        let digest = key(code);
+        register_code(code, digest.clone());
+        let source = self.value["lock"]["sources"][0].clone();
+        self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes")
+            .push(json!({
+                "node_id": node_ref(&digest),
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "model",
+                "semantic_form": "object_type",
+                "semantic_type": node_ref(&digest),
+                "dependencies": [],
+                "occurrences": [{"role": "type", "ordinal": 0}],
+                "body": aggregate(vec![]),
+                "owner": {"kind": "model", "identity": identity, "node": node},
+            }));
+        let source_map = self.value["source_map"].as_array_mut().expect("source map");
+        let position = source_map.len();
+        source_map.push(json!({
+            "node_id": node_ref(&digest),
+            "role": "type",
+            "ordinal": 0,
+            "regions": [{"source": source, "start": position, "end": position + 1}],
+        }));
+        self
+    }
+
     pub fn node(
         &mut self,
         digest: &str,
@@ -783,7 +815,7 @@ impl PackageBuilder {
 
     /// This fixture's wire and the map from its readable IDs to admitted IDs.
     fn resolved_wire(&self, limits: CheckedPackageReadLimits) -> rekey::ResolvedWire {
-        rekey::resolve_wire(&self.value, &evidence(), limits)
+        rekey::resolve_wire(&self.value, &evidence_for_wire(&self.value), limits)
     }
 
     /// Admits the package and returns its per-artifact ID resolver.
@@ -870,17 +902,12 @@ impl PackageBuilder {
     }
 }
 
-fn evidence() -> CheckedPackageEvidence {
+fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
     if let Some(qspec_dir) = std::env::var_os("QSPEC_DIR") {
         let root = std::path::PathBuf::from(qspec_dir).join("proposals/checked-package-v2");
-        let fixture: Value = serde_json::from_slice(
-            &std::fs::read(root.join("fixtures/positive-union-nodes.json"))
-                .expect("read published QSpec model-selection metadata"),
-        )
-        .expect("published QSpec fixture JSON");
-        if let Some(selection) = fixture["lock"]["model_selections"]
+        if let Some(selection) = wire["lock"]["model_selections"]
             .as_array()
             .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
         {
@@ -894,11 +921,19 @@ fn evidence() -> CheckedPackageEvidence {
     evidence
 }
 
+fn evidence() -> CheckedPackageEvidence {
+    evidence_for_wire(&base_package())
+}
+
 /// Read a deliberate mutation under its refreshed package identity.
 pub fn read_mutated_wire(mut wire: Value) -> CheckedPackageV2ReadResult {
     rekey::refresh_identity(&mut wire);
     let bytes = serde_json::to_vec(&wire).expect("mutated fixture wire");
-    CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence())
+    CheckedPackageV2::read(
+        &bytes,
+        CheckedPackageReadLimits::bounded(),
+        &evidence_for_wire(&wire),
+    )
 }
 
 // ---------------------------------------------------------------------------
