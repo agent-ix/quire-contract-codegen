@@ -138,13 +138,16 @@ use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Up
 use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, LoweringFailure};
+use crate::routed::contract_package::{
+    ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
+};
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedNodeId, CheckedNodeTag, CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry,
+    ContractFeatureRecordV1, ContractPackageV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 // Target-neutral iterative SSA scheduling, introduced independently of the historical adapter.
 pub mod schedule;
@@ -1211,6 +1214,18 @@ pub struct ExactFunctionItem {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum ExactFunctionRefusal {
+    /// Exact refusal and source occurrences from admitted FR-330 accounting.
+    PackageAccounting {
+        /// Reader-provided disposition.
+        record: ContractFeatureRecordV1,
+        /// Exact source occurrences at the requested position.
+        occurrences: Vec<CheckedSourceMapEntry>,
+    },
+    /// Selected external targets require a separate resolver.
+    SelectedDependencyUnsupported {
+        /// Ordered `(package_id, target_node_id)` pairs from the admitted closure.
+        references: Vec<(CheckedSemanticId, CheckedNodeId)>,
+    },
     /// The item's `(call node id, function, argument node ids)` triple was
     /// requested more than once. The claim map records exactly one
     /// `Refused` entry for that key, not one per copy requested -- every
@@ -1570,24 +1585,66 @@ enum ClassifiedBody<'r> {
     Call(&'r str),
 }
 
-fn lowering_profile() -> CompleteLoweringProfileV2 {
-    CompleteLoweringProfileV2 {
-        reference: quire_contract_model::LoweringProfileRef {
-            authority: "agent-ix".into(),
-            identity: "quire.codegen.exact-function/v1".into(),
-        },
-        supported_tags: BTreeSet::from([
-            CheckedNodeTag::ScalarType,
-            CheckedNodeTag::CompositeType,
-            CheckedNodeTag::BoundedDomain,
-            CheckedNodeTag::Value,
-            CheckedNodeTag::Expression,
-            CheckedNodeTag::Claim,
-            CheckedNodeTag::Correspondence,
-        ]),
-        require_bounds: false,
-        work_limit: EXACT_FUNCTION_LOWERING_WORK_LIMIT,
+fn check_position(
+    requested: &PackageItems<'_>,
+    request_index: usize,
+    node_id: &CheckedNodeId,
+) -> Result<(), OracleGenerationError> {
+    let Some(accounted) = requested.driver_node(request_index) else {
+        return Err(OracleGenerationError::PackageRequest(
+            PackageRequestError::Position { request_index },
+        ));
+    };
+    if accounted != node_id {
+        return Err(OracleGenerationError::PackageRequest(
+            PackageRequestError::Identity {
+                request_index,
+                requested: node_id.clone(),
+                accounted: accounted.clone(),
+            },
+        ));
     }
+    Ok(())
+}
+
+fn admitted_binary_body<'a>(
+    item: PackageItem<'a>,
+) -> Result<(ContractReachedClosureV1<'a>, &'a [CheckedSourceMapEntry]), ExactFunctionRefusal> {
+    let (closure, occurrences) = match item {
+        PackageItem::Refused {
+            record,
+            occurrences,
+        } => {
+            return Err(ExactFunctionRefusal::PackageAccounting {
+                record: record.clone(),
+                occurrences: occurrences.to_vec(),
+            });
+        }
+        PackageItem::Lowered {
+            closure,
+            occurrences,
+            ..
+        } => (closure, occurrences),
+    };
+    if !closure.selected_references.is_empty() {
+        return Err(ExactFunctionRefusal::SelectedDependencyUnsupported {
+            references: closure
+                .selected_references
+                .iter()
+                .map(|reference| (reference.package.clone(), reference.node.clone()))
+                .collect(),
+        });
+    }
+    let tag = CheckedNodeTag::from_wire(&closure.root.node_tag);
+    if tag != Some(CheckedNodeTag::Expression) {
+        return Err(tag.map_or_else(
+            || ExactFunctionRefusal::NotExpression {
+                node_tag: "unknown",
+            },
+            |tag| unsupported_family(&closure.root.node_id, tag),
+        ));
+    }
+    Ok((closure, occurrences))
 }
 
 fn schedule_lowering_failure(
@@ -1660,77 +1717,6 @@ fn resolve_operand_type(
     }
 }
 
-/// Lower a function body node and confirm it is a `binary` expression of the
-/// expected form with two operands.
-fn lowered_binary_body(
-    record: &CompleteLoweringRecordV2,
-) -> Result<&quire_contract_model::CompleteContractNodeV2, ExactFunctionRefusal> {
-    let node = match record {
-        CompleteLoweringRecordV2::Lowered { node } => node.as_ref(),
-        CompleteLoweringRecordV2::Unsupported {
-            unsupported_node_id,
-            node_tag,
-            ..
-        } => return Err(unsupported_family(unsupported_node_id, *node_tag)),
-        CompleteLoweringRecordV2::RequiresBound { unbounded_type, .. } => {
-            return Err(ExactFunctionRefusal::UnsupportedOperandType {
-                type_node_id: unbounded_type.clone(),
-            })
-        }
-        CompleteLoweringRecordV2::InvalidInput { .. } => {
-            return Err(ExactFunctionRefusal::InvalidInput)
-        }
-        CompleteLoweringRecordV2::InvalidBody { body_node_id, .. } => {
-            return Err(ExactFunctionRefusal::UnknownTypeNode {
-                type_node_id: body_node_id.clone(),
-            })
-        }
-        CompleteLoweringRecordV2::BodyIncomplete { body_node_id, .. } => {
-            return Err(ExactFunctionRefusal::UnknownTypeNode {
-                type_node_id: body_node_id.clone(),
-            })
-        }
-        // FR-014-AC-42 keeps this arm from binding the record's fields, so the typed outcome is
-        // read back through the classifier, which returns `None` for a record that is not
-        // `Failed`. This arm only runs for a `Failed` record, so the `InvalidInput` fallback is
-        // unreachable; it exists because the arm cannot hand the classifier a narrower type.
-        CompleteLoweringRecordV2::Failed { .. } => {
-            return Err(classify_lowering_failure(record).map_or(
-                ExactFunctionRefusal::InvalidInput,
-                ExactFunctionRefusal::from,
-            ))
-        }
-    };
-    if node.node_tag != CheckedNodeTag::Expression {
-        return Err(ExactFunctionRefusal::NotExpression {
-            node_tag: node.node_tag.as_wire(),
-        });
-    }
-    Ok(node)
-}
-
-impl From<LoweringFailure> for ExactFunctionRefusal {
-    fn from(failure: LoweringFailure) -> Self {
-        match failure {
-            LoweringFailure::WorkExhausted { limit, consumed } => {
-                Self::LoweringWorkExhausted { limit, consumed }
-            }
-            LoweringFailure::ByteLimitExceeded { limit, consumed } => {
-                Self::LoweringByteLimitExceeded { limit, consumed }
-            }
-            LoweringFailure::LimitUnrecognised {
-                limit_kind,
-                limit,
-                consumed,
-            } => Self::LoweringLimitUnrecognised {
-                limit_kind,
-                limit,
-                consumed,
-            },
-        }
-    }
-}
-
 fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> ExactFunctionRefusal {
     let blocked = |issue| ExactFunctionRefusal::BlockedOnUpstream {
         unsupported_node_id: node_id.clone(),
@@ -1763,7 +1749,7 @@ fn application_arguments(body: &serde_json::Value) -> Option<&Vec<serde_json::Va
 /// return the body with its operator resolved: the one place a scalar operator
 /// is checked, so the rendered body cannot disagree with the refusal.
 fn classify_body_shape<'r>(
-    node: &quire_contract_model::CompleteContractNodeV2,
+    node: &CheckedSemanticNodeV2,
     declaration: &'r ExactFunctionDeclaration,
 ) -> Result<ClassifiedBody<'r>, ExactFunctionRefusal> {
     match &declaration.body {
@@ -1773,33 +1759,33 @@ fn classify_body_shape<'r>(
                     detail: "only binary IntegerOperator::{Add,Subtract,Multiply} are supported",
                 },
             )?;
-            if &*node.node.semantic_form != "binary" {
+            if &*node.semantic_form != "binary" {
                 return Err(ExactFunctionRefusal::FormMismatch {
-                    found: node.node.semantic_form.to_string(),
+                    found: node.semantic_form.to_string(),
                 });
             }
-            let arguments = application_arguments(&node.node.body)
+            let arguments = application_arguments(&node.body)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
             Ok(ClassifiedBody::Scalar(operator))
         }
         ExactFunctionBody::CompositeEquality { operator } => {
-            if &*node.node.semantic_form != "binary" {
+            if &*node.semantic_form != "binary" {
                 return Err(ExactFunctionRefusal::FormMismatch {
-                    found: node.node.semantic_form.to_string(),
+                    found: node.semantic_form.to_string(),
                 });
             }
-            let arguments = application_arguments(&node.node.body)
+            let arguments = application_arguments(&node.body)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
             let _ = arguments;
             Ok(ClassifiedBody::Equality(*operator))
         }
         ExactFunctionBody::Call { callee } => {
-            if &*node.node.semantic_form != "call" {
+            if &*node.semantic_form != "call" {
                 return Err(ExactFunctionRefusal::FormMismatch {
-                    found: node.node.semantic_form.to_string(),
+                    found: node.semantic_form.to_string(),
                 });
             }
             Ok(ClassifiedBody::Call(callee))
@@ -1874,12 +1860,41 @@ fn validate_signature(
 /// `LocationMapSerialization`; every per-item problem is a refusal in the
 /// claim map.
 pub fn generate_exact_function_oracles(
-    package: &CheckedPackageV2,
+    package: &ContractPackageV1,
+    requested: &[ContractRequestPosition],
+    function_positions: &[usize],
     functions: &[ExactFunctionDeclaration],
+    item_positions: &[usize],
     items: &[ExactFunctionItem],
 ) -> Result<ExactFunctionOracles, OracleGenerationError> {
+    let accounting =
+        PackageItems::new(package, requested).map_err(OracleGenerationError::PackageRequest)?;
+    for (positions, count) in [
+        (function_positions, functions.len()),
+        (item_positions, items.len()),
+    ] {
+        if positions.len() != count {
+            return Err(OracleGenerationError::PackageRequest(
+                PackageRequestError::ItemPositions {
+                    items: count,
+                    positions: positions.len(),
+                },
+            ));
+        }
+    }
+    let mut function_position_by_id = BTreeMap::new();
+    for (function, &position) in functions.iter().zip(function_positions) {
+        check_position(&accounting, position, &function.node_id)?;
+        function_position_by_id
+            .entry(&function.node_id)
+            .or_insert(position);
+    }
+    for (item, &position) in items.iter().zip(item_positions) {
+        check_position(&accounting, position, &item.call_node_id)?;
+    }
     let graph: Graph<'_> = package
-        .graph()
+        .wire()
+        .semantic_graph
         .nodes
         .iter()
         .map(|node| (&node.node_id, node))
@@ -1899,12 +1914,6 @@ pub fn generate_exact_function_oracles(
     // actually attempt to classify as resolvable.
     let names = FunctionNames::of(&ordered_functions);
 
-    let requested: Vec<CheckedNodeId> = ordered_functions
-        .iter()
-        .map(|declaration| declaration.node_id.clone())
-        .collect();
-    let lowering = package.lower(&requested, &lowering_profile());
-
     // Stage 1: per-function classification, with a bounded fixed-point pass
     // for `Call` bodies (a nested call's own validity depends on its
     // callee's classification, per AC-12).
@@ -1913,7 +1922,11 @@ pub fn generate_exact_function_oracles(
     // lookup can miss.
     let mut shapes: Vec<Result<Stage1Shape<'_>, ExactFunctionRefusal>> =
         Vec::with_capacity(ordered_functions.len());
-    for (declaration, record) in ordered_functions.iter().zip(&lowering.records) {
+    for declaration in &ordered_functions {
+        let position = function_position_by_id[&declaration.node_id];
+        let admitted = accounting
+            .at(position, &declaration.node_id)
+            .map_err(OracleGenerationError::PackageRequest)?;
         let result = (|| -> Result<Stage1Shape<'_>, ExactFunctionRefusal> {
             if names.shares_node_id(&declaration.node_id) {
                 return Err(ExactFunctionRefusal::DuplicateDeclaringNode {
@@ -1935,8 +1948,8 @@ pub fn generate_exact_function_oracles(
                     capability: capability.clone(),
                 });
             }
-            let node = lowered_binary_body(record)?;
-            let body = classify_body_shape(node, declaration)?;
+            let (closure, _) = admitted_binary_body(admitted)?;
+            let body = classify_body_shape(closure.root, declaration)?;
             let mut parameter_kinds = Vec::with_capacity(declaration.parameters.len());
             for parameter in &declaration.parameters {
                 parameter_kinds.push(resolve_operand_type(&graph, &parameter.type_node_id)?);
@@ -2088,7 +2101,7 @@ pub fn generate_exact_function_oracles(
 
     // Stage 3: per requested item.
     let mut counts: BTreeMap<ItemKey, u32> = BTreeMap::new();
-    let mut by_key: BTreeMap<ItemKey, &ExactFunctionItem> = BTreeMap::new();
+    let mut by_key: BTreeMap<ItemKey, (usize, &ExactFunctionItem)> = BTreeMap::new();
     // Built from `ordered_functions` (sorted by node id), not the
     // caller-supplied `functions` order, so a name shared by more than one
     // declaration always resolves to the same (highest-sorted) node id
@@ -2100,24 +2113,18 @@ pub fn generate_exact_function_oracles(
         .iter()
         .map(|declaration| (declaration.name.as_str(), &declaration.node_id))
         .collect();
-    for item in items {
+    for (item, &position) in items.iter().zip(item_positions) {
         let key = ItemKey::of(item, &function_node_id_by_name, &names);
         *counts.entry(key.clone()).or_insert(0) += 1;
-        by_key.entry(key).or_insert(item);
+        by_key.entry(key).or_insert((position, item));
     }
-
-    let call_requested: Vec<CheckedNodeId> = by_key
-        .values()
-        .map(|item| item.call_node_id.clone())
-        .collect();
-    let call_lowering = package.lower(&call_requested, &lowering_profile());
 
     let mut source = SourceBuilder::default();
     let mut claims = Vec::with_capacity(by_key.len());
     // Generated claims as (claim position, readable stem, key, declaration), rendered once
     // every generated function is named.
     let mut pending = Vec::new();
-    for ((key, item), record) in by_key.into_iter().zip(&call_lowering.records) {
+    for (key, (position, item)) in by_key {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         // An item naming a refused duplicate-node function carries that
         // refusal even when it was also requested more than once (AC-22).
@@ -2128,16 +2135,19 @@ pub fn generate_exact_function_oracles(
                 refusal: ExactFunctionRefusal::DuplicateRequest,
             }
         } else {
+            let admitted = accounting
+                .at(position, &item.call_node_id)
+                .map_err(OracleGenerationError::PackageRequest)?;
             match item_disposition(
                 &names,
                 &resolved,
                 &survivors,
                 &function_index,
                 &package_refusal,
-                lowering.package.source_package_id(),
-                call_lowering.package.wire().map(|wire| wire.identity()),
+                &package.wire().package.source.package_id,
+                package.identity(),
                 item,
-                record,
+                admitted,
             ) {
                 Ok((stem, claim)) => {
                     match survivors
@@ -2179,7 +2189,7 @@ pub fn generate_exact_function_oracles(
     }
 
     let claim_map = ClaimMap {
-        package_id: lowering.package.source_package_id().clone(),
+        package_id: package.wire().package.source.package_id.clone(),
         blocked: Vec::new(),
         items: claims,
     };
@@ -2320,19 +2330,15 @@ fn item_disposition(
     function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
     package_id: &CheckedSemanticId,
-    contract_package_identity: Option<&CheckedSemanticId>,
+    contract_package_identity: &CheckedSemanticId,
     item: &ExactFunctionItem,
-    record: &CompleteLoweringRecordV2,
+    admitted: PackageItem<'_>,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
-    let node = lowered_binary_body(record)?;
-    let contract_package_identity =
-        contract_package_identity.ok_or_else(|| ExactFunctionRefusal::PackageRefused {
-            function_index: None,
-            cause: "Contract IR returned a lowered record without a package".to_owned(),
-        })?;
-    if &*node.node.semantic_form != "call" {
+    let (closure, occurrences) = admitted_binary_body(admitted)?;
+    let node = closure.root;
+    if &*node.semantic_form != "call" {
         return Err(ExactFunctionRefusal::FormMismatch {
-            found: node.node.semantic_form.to_string(),
+            found: node.semantic_form.to_string(),
         });
     }
     // An item naming a function that WAS declared but failed Stage 1
@@ -2378,10 +2384,15 @@ fn item_disposition(
             node_id: item.call_node_id.clone(),
             package_id: package_id.clone(),
             semantic_type: node.semantic_type.clone(),
-            source_map: node.source_map.clone(),
-            claims: node.claims.clone(),
-            bounds: node.bounds.clone(),
-            dependencies: node.dependencies.clone(),
+            source_map: occurrences.to_vec(),
+            claims: closure.claims,
+            bounds: closure.bounds,
+            dependencies: closure
+                .nodes
+                .iter()
+                .filter(|entry| entry.node.node_id != item.call_node_id)
+                .map(|entry| entry.node.node_id.clone())
+                .collect(),
             function: declaration.name.clone(),
             function_origin: RecordedOrigin::Body {
                 function: declaration.name.clone(),
@@ -2591,8 +2602,6 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
-    use quire_contract_model::CheckedPackageLimit;
 
     /// Trace: FR-021-AC-27, TC-031.
     #[test]

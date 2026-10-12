@@ -805,13 +805,6 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             },
         ),
         (
-            MISSING_ROUNDING,
-            ExactScalarRefusal::MissingBound {
-                bounded_type: resolve(T_FLOAT32),
-                expected_form: BoundForm::FloatRounding,
-            },
-        ),
-        (
             AMBIGUOUS,
             ExactScalarRefusal::AmbiguousBound {
                 bounded_type: resolve(T_INTEGER),
@@ -1707,6 +1700,8 @@ fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal
 /// still check for it.
 fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
     match refusal {
+        ExactScalarRefusal::PackageAccounting { .. } => "PackageAccounting",
+        ExactScalarRefusal::SelectedDependencyUnsupported { .. } => "SelectedDependencyUnsupported",
         ExactScalarRefusal::DuplicateRequest => "DuplicateRequest",
         ExactScalarRefusal::InvalidInput => "InvalidInput",
         ExactScalarRefusal::Unsupported { .. } => "Unsupported",
@@ -1742,18 +1737,18 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// the same enum in production code, so a twenty-first variant would already
 /// break that build today whether or not this test exists. What this test
 /// adds is the variant<->fixture pairing: proof that every variant names a
-/// real, driven scenario (or, for the three noted below, a scenario
+/// real, driven scenario (or, for the four noted below, a scenario
 /// deliberately undrivable), not just a name `refusal_variant_name` happens
 /// to mention.
 ///
-/// Seventeen variants are driven through the real admitted-package generation
-/// pipeline -- sixteen share the golden corpus's one `generate` call (see
+/// Sixteen variants are driven through the real admitted-package generation
+/// pipeline -- fifteen share the golden corpus's one `generate` call (see
 /// `tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged`,
 /// which asserts the full typed reason for each of these same codes; this
 /// test only needs the variant, not the reason's payload), and
 /// `LoweringWorkExhausted` needs `work_exhausted_fixture`'s own package.
 ///
-/// Three variants are documented, on both sides of the crate boundary, as
+/// Four variants are documented, on both sides of the crate boundary, as
 /// unreachable through any package this crate's public API can admit, so no
 /// admitted-package fixture for them exists to drive:
 /// `MissingOperationIdentity` (`catalogued_operation_identity`'s own doc:
@@ -1762,7 +1757,10 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// admission) and `InvalidBody`/`BodyIncomplete` (quire-contract-ir's own
 /// `CompleteLoweringRecordV2` doc: "A package the V2 reader admitted never
 /// yields this" / "Like `InvalidBody`, an admitted package never yields
-/// this"). Real production-path coverage of these three already exists, as
+/// this"). `UnreadableBound` is unreachable because Contract IR's strict
+/// reader rejects the noncanonical endpoint before CG sees the package;
+/// `tc_024_unreadable_integer_bound_is_a_strict_reader_refusal` asserts that
+/// public boundary. Real function-path coverage of the other three exists as
 /// unit tests inside the crate that call the real private functions this
 /// integration-test crate cannot reach:
 /// `tc_024_invalid_and_incomplete_bodies_are_typed_refusals` drives
@@ -1771,8 +1769,8 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// drives `MissingOperationIdentity` through the real
 /// `catalogued_operation_identity` (both in `src/oracle/scalar/mod.rs`, both
 /// private to `quire_contract_codegen` and so unreachable from here). The
-/// three assertions below construct each variant directly instead; they only
-/// exercise `refusal_variant_name`'s own match arms for these three variants
+/// four assertions below construct each variant directly instead; they only
+/// exercise `refusal_variant_name`'s own match arms for these four variants
 /// -- they are not evidence that production code produces them, which is the
 /// two unit tests' job.
 #[test]
@@ -1786,7 +1784,7 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
         (COMPOSITE, "Unsupported"),
         (FUNCTION, "BlockedOnUpstream"),
         (UNBOUNDED, "RequiresBound"),
-        (MISSING_ROUNDING, "MissingBound"),
+        (WRONG_BOUND_FORM, "MissingBound"),
         (AMBIGUOUS, "AmbiguousBound"),
         (MATHEMATICAL, "BoundMismatch"),
         (V_BOOLEAN, "NotExpression"),
@@ -1820,6 +1818,12 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
             node_id: code_id(V_BOOLEAN),
         }),
         "MissingOperationIdentity"
+    );
+    assert_eq!(
+        refusal_variant_name(&ExactScalarRefusal::UnreadableBound {
+            bound: id(&unreadable_bound().key()),
+        }),
+        "UnreadableBound"
     );
     // `NoDerivableClaim` is recorded by the routed generation arm and never by
     // `generate_exact_scalar_oracles`; TC-033 drives it through `generate_routed`.
@@ -1859,6 +1863,159 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
             consumed: 2,
         }),
         "LoweringLimitUnrecognised"
+    );
+}
+
+/// An integer-range endpoint spelled `05` is refused by the authoritative
+/// checked-package reader before a CG claim can exist.
+///
+/// Trace: FR-014-AC-10, TC-024.
+#[test]
+fn tc_024_unreadable_integer_bound_is_a_strict_reader_refusal() {
+    let mut builder = PackageBuilder::default();
+    builder.code(
+        T_INTEGER,
+        "scalar_type",
+        "integer",
+        &key(T_INTEGER),
+        json!({"term": "aggregate", "members": []}),
+    );
+    let unreadable = unreadable_bound();
+    builder.bound(&unreadable);
+    let (outcome, _, _) = builder.read_resolved();
+    let CheckedPackageV2ReadResult::Refused(refusal) = outcome else {
+        panic!("noncanonical integer endpoint must not admit");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::StaleNodeKey)
+    );
+    assert_eq!(refusal.locus, Some(id(&unreadable.key())));
+    assert!(refusal.expected_node_id().is_none());
+}
+
+/// A non-exact IEEE rounding mode over bare Float32 is refused by the reader
+/// before CG can classify the missing rounding bound.
+/// Trace: FR-014-AC-10, TC-024.
+#[test]
+fn tc_024_missing_rounding_mode_is_a_strict_reader_refusal() {
+    let (outcome, wire, ids) = missing_rounding_package().read_resolved();
+    let node = ids.resolve(&code_id(MISSING_ROUNDING));
+    let position = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture nodes")
+        .iter()
+        .position(|item| item["node_id"] == serde_json::to_value(&node).expect("node id"))
+        .expect("authored addition");
+    let CheckedPackageV2ReadResult::Refused(refusal) = outcome else {
+        panic!("bare Float32 with non-exact mode must not admit");
+    };
+    assert_eq!(refusal.code, CheckedPackageRefusalCode::InvalidPackage);
+    assert_eq!(
+        refusal.cause,
+        Some(CheckedPackageRefusalCause::OperationModeTypeMismatch)
+    );
+    assert_eq!(refusal.locus, Some(node));
+    let expected_path = format!("/semantic_graph/nodes/{position}/body/operation/mode/value");
+    assert_eq!(
+        refusal.path.as_ref().map(|path| path.as_str()),
+        Some(expected_path.as_str())
+    );
+    assert!(refusal.expected_node_id().is_none());
+}
+
+/// A corpus-style source-owned Integer may coexist with the anonymous Integer
+/// authority that the strict reader requires for integer-range endpoints.
+/// Trace: FR-014-AC-10, TC-024.
+#[test]
+fn tc_024_anonymous_integer_range_generates_one_addition() {
+    const OPERAND: u32 = 39_011;
+    const ADD: u32 = 39_012;
+    let mut builder = PackageBuilder::default();
+    builder.code(
+        T_INTEGER,
+        "scalar_type",
+        "integer",
+        &key(T_INTEGER),
+        json!({"term": "aggregate", "members": []}),
+    );
+    let integer = builder.anonymous_integer_type(39_010);
+    let typed_literal = |value: &str| {
+        json!({
+            "term": "literal",
+            "type": id(&integer),
+            "value_kind": "integer",
+            "value": value,
+        })
+    };
+    builder.code(OPERAND, "value", "literal", &integer, typed_literal("3"));
+    builder.application_bounded(
+        ADD,
+        "expression",
+        "binary",
+        &integer,
+        application(
+            "binary",
+            op("quire.op.integer.add"),
+            &integer,
+            vec![reference(&key(OPERAND)), typed_literal("2")],
+        ),
+        &[Bound::Integer(0, 9)],
+    );
+
+    let (checked, ids) = builder.admit_resolved();
+    let operation = ExactScalarOperation::IntegerArithmetic {
+        operator: IntegerOperator::Add,
+        domain: bounded(0, 9),
+    };
+    let item = ExactScalarItem {
+        node_id: ids.resolve(&code_id(ADD)),
+        operation,
+    };
+    let oracles = generate(&checked, &[item]);
+    assert!(matches!(
+        &oracles.claim_map.items[0].result,
+        ClaimDisposition::Generated(_)
+    ));
+    assert!(contents(&oracles, "src/lib.rs").contains("rt::IntegerArithmetic::Add"));
+}
+
+/// Trace: FR-014-AC-10, TC-024.
+#[test]
+fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
+    let (outcome, _, ids) = corpus_package().read_resolved();
+    let CheckedPackageV2ReadResult::Admitted(package) = outcome else {
+        panic!("corpus must admit before CG generation: {outcome:?}");
+    };
+    let anonymous = ids.resolve(&id(&key(39_000)));
+    let declared = ids.resolve(&id(&key(T_INTEGER)));
+    assert_ne!(anonymous, declared);
+    let int5 = ids.resolve(&id(&INT5.key()));
+    let range = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == int5)
+        .expect("admitted INT5");
+    assert_eq!(range.semantic_type, anonymous);
+
+    let rounded = ids.resolve(&code_id(1053));
+    let result_bound = ids.resolve(&id(&Bound::Decimal(-100, 100, 0, 0, "nearest-away").key()));
+    let conversion = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == rounded)
+        .expect("admitted nearest-away decimal conversion");
+    assert_eq!(conversion.semantic_type, result_bound);
+    assert_eq!(
+        conversion.body["result_type"],
+        serde_json::to_value(&result_bound).expect("bound id serializes")
+    );
+    assert_eq!(
+        conversion.body["operation"]["mode"],
+        json!({"kind": "rounding", "value": "nearest-away"})
     );
 }
 
@@ -2824,10 +2981,6 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     assert!(matches!(
         bound(UNBOUNDED),
         ExactScalarRefusal::RequiresBound { .. }
-    ));
-    assert!(matches!(
-        bound(MISSING_ROUNDING),
-        ExactScalarRefusal::MissingBound { .. }
     ));
     // A node whose closure carries two bounds of one form on its scalar result type, neither the
     // own bound of an operand, is ambiguous, so it derives no domain. A node over two bounded

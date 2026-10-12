@@ -430,6 +430,7 @@ pub struct PackageBuilder {
     value: Value,
     bounds: BTreeSet<String>,
     dedicated_operands: BTreeSet<String>,
+    integer_bound_authority: Option<String>,
 }
 
 fn admitted_fixture_ids() -> &'static Mutex<BTreeMap<String, FixtureIds>> {
@@ -486,6 +487,7 @@ impl Default for PackageBuilder {
             value,
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
+            integer_bound_authority: None,
         }
     }
 }
@@ -606,6 +608,54 @@ impl PackageBuilder {
     ) -> &mut Self {
         register_code(code, key(code));
         self.node(&key(code), tag, form, semantic_type, body)
+    }
+
+    /// Add an anonymous structural Integer authority while retaining its
+    /// source occurrence. The checked reader determines its final node key.
+    pub fn anonymous_integer_type(&mut self, code: u32) -> String {
+        assert!(
+            self.bounds.is_empty() && self.integer_bound_authority.is_none(),
+            "select the Integer bound authority before registering bounds"
+        );
+        let digest = key(code);
+        self.code(code, "scalar_type", "integer", &digest, aggregate());
+        let node = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("nodes")
+            .last_mut()
+            .expect("new Integer node");
+        node.as_object_mut()
+            .expect("Integer node")
+            .remove("declaration");
+        node.as_object_mut().expect("Integer node").remove("owner");
+        node["occurrences"][0]["role"] = json!("generated");
+        self.value["source_map"]
+            .as_array_mut()
+            .expect("source map")
+            .last_mut()
+            .expect("new Integer source entry")["role"] = json!("generated");
+        self.integer_bound_authority = Some(digest.clone());
+        digest
+    }
+
+    fn corpus_type(&self, form: &str) -> String {
+        if form == "integer" {
+            self.integer_bound_authority
+                .clone()
+                .unwrap_or_else(|| result_type(form))
+        } else {
+            result_type(form)
+        }
+    }
+
+    fn corpus_literal(&self, kind: &str, value: &str) -> Value {
+        let mut literal = literal(kind, value);
+        if kind == "integer" {
+            if let Some(authority) = &self.integer_bound_authority {
+                literal["type"] = node_ref(authority);
+            }
+        }
+        literal
     }
 
     /// A node that depends on `bounds`, adding each bound node once.
@@ -755,7 +805,7 @@ impl PackageBuilder {
         let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("dedicated operand key"));
         if self.dedicated_operands.insert(digest.clone()) {
             let (kind, value, ty) = match form {
-                "integer" => ("integer", "3", key(T_INTEGER)),
+                "integer" => ("integer", "3", self.corpus_type("integer")),
                 "rational" => ("rational", "1/2", key(T_RATIONAL)),
                 "decimal" => ("decimal", "1.5", key(T_DECIMAL)),
                 "float32" => ("float32_bits", "0", key(T_FLOAT32)),
@@ -764,7 +814,7 @@ impl PackageBuilder {
                 other => panic!("dedicated_operand: no literal form known for {other}"),
             };
             let ty = ty_override.unwrap_or(&ty);
-            let mut body = literal(kind, value);
+            let mut body = self.corpus_literal(kind, value);
             body["type"] = node_ref(ty);
             self.node(&digest, "value", "literal", ty, body);
         }
@@ -982,12 +1032,31 @@ impl PackageBuilder {
                 .iter()
                 .map(|foreign| self.bound(foreign))
                 .collect::<Vec<_>>();
+            let mut body = bound.body();
+            if let Some(authority) = &self.integer_bound_authority {
+                if let Some(members) = body["members"].as_array_mut() {
+                    for member in members {
+                        if member["value"]["value_kind"] == "integer" {
+                            member["value"]["type"] = node_ref(authority);
+                        }
+                    }
+                }
+            }
+            let bounded_type = if matches!(bound, Bound::Integer(..)) {
+                if let Some(authority) = &self.integer_bound_authority {
+                    authority.clone()
+                } else {
+                    bound.bounded_type()
+                }
+            } else {
+                bound.bounded_type()
+            };
             self.node_with(
                 &digest,
                 "bounded_domain",
                 bound.form(),
-                &bound.bounded_type(),
-                bound.body(),
+                &bounded_type,
+                body,
                 &foreign,
             );
         }
@@ -1381,12 +1450,11 @@ pub const WRONG_ARITY: u32 = 2017;
 pub const UNBOUNDED: u32 = 2021;
 /// An integer addition bounded in the IR, requested as mathematical.
 pub const MATHEMATICAL: u32 = 2022;
-/// A binary32 addition with no rounding bound.
+/// A binary32 addition whose non-exact mode has no pinned result or operand type.
 pub const MISSING_ROUNDING: u32 = 2023;
 /// An integer addition reaching two integer ranges.
 pub const AMBIGUOUS: u32 = 2024;
 /// An integer addition whose range spells a bound non-canonically.
-pub const UNREADABLE: u32 = 2025;
 /// An integer addition whose only integer bound has the text form.
 pub const WRONG_BOUND_FORM: u32 = 2026;
 /// A floor division bounded `[-5, 5]`, requested over `[-1000, 1000]`.
@@ -2420,7 +2488,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         })
         .collect::<Vec<_>>();
     if expression.code == LITERAL_OPERAND {
-        arguments[1] = literal("integer", "3");
+        arguments[1] = builder.corpus_literal("integer", "3");
     }
     // Code 1014 is `division(1014, Truncating, -5, 5, INT5)`: same
     // profile, operands and result as code 1011's
@@ -2432,7 +2500,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     // node id. A literal second operand keeps 1014 a genuine, distinct
     // node without touching the domain-mismatch behavior under test.
     if expression.code == 1014 {
-        arguments[1] = literal("integer", "1014");
+        arguments[1] = builder.corpus_literal("integer", "1014");
     }
     // No catalogued `convert` identity accepts a `text` operand family
     // (see `corpus_operation`'s `TextAdmission` arm), so Contract IR refuses
@@ -2455,7 +2523,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         arguments = vec![literal("text", &format!("a{}-{profile}", expression.code))];
     }
     let (catalog_operator, operation) = corpus_operation(&expression);
-    let node_semantic_type = pinned_type.unwrap_or_else(|| result_type(expression.result));
+    let node_semantic_type = pinned_type.unwrap_or_else(|| builder.corpus_type(expression.result));
     let node_bounds: &[Bound] = if matches!(expression.operation, Op::TextAdmission { .. }) {
         &[]
     } else {
@@ -2478,6 +2546,46 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         node_bounds,
         unit_anchor.as_deref(),
     );
+}
+
+/// A minimal checked wire proving a non-exact Float32 mode over bare Float32
+/// types is refused before CG can classify its missing rounding bound.
+pub fn missing_rounding_package() -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
+    builder.code(
+        T_FLOAT32,
+        "scalar_type",
+        "float32",
+        &key(T_FLOAT32),
+        aggregate(),
+    );
+    builder.code(
+        V_FLOAT32,
+        "value",
+        "literal",
+        &key(T_FLOAT32),
+        literal("float32_bits", "0"),
+    );
+    builder.select_definition(ieee_profile_definition());
+    builder.application_bounded(
+        MISSING_ROUNDING,
+        "expression",
+        "binary",
+        &key(T_FLOAT32),
+        application(
+            "binary",
+            op_full(
+                "quire.op.ieee.float32.add",
+                vec![law("ieee_profile", ieee_profile_definition())],
+                Some(mode_kv("rounding", "nearest-even")),
+                None,
+            ),
+            &key(T_FLOAT32),
+            vec![reference(&key(V_FLOAT32)), literal("float32_bits", "1")],
+        ),
+        &[],
+    );
+    builder
 }
 
 /// The complete package: types, values, the corpus, and refused nodes.
@@ -2523,6 +2631,11 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             json!({"term": "aggregate", "members": [member("rounding", literal("text", rounding))]}),
         );
     }
+    // An integer_range is closed over the model's anonymous structural
+    // Integer authority. Keep the declared T_INTEGER node for the corpus's
+    // source-owned identity controls; bound construction opts into this
+    // separate authority before the first bound is registered.
+    builder.anonymous_integer_type(39_000);
     for (code, ty, kind, value) in [
         (V_INTEGER, key(T_INTEGER), "integer", "3"),
         (V_RATIONAL, key(T_RATIONAL), "rational", "1/2"),
@@ -2616,33 +2729,6 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         );
     }
     builder
-        .application_bounded(
-            MISSING_ROUNDING,
-            "expression",
-            "binary",
-            &key(T_FLOAT32),
-            application(
-                "binary",
-                op_full(
-                    "quire.op.ieee.float32.add",
-                    vec![law("ieee_profile", ieee_profile_definition())],
-                    Some(mode_kv("rounding", "nearest-even")),
-                    None,
-                ),
-                &key(T_FLOAT32),
-                // A second operand distinct from corpus code 1061's own
-                // `ieee(1061, F32_2, ..., Add, Binary32, NearestEven)` --
-                // that corpus expression's `operation` (via
-                // `corpus_operation`'s `IeeeArithmetic` arm) is byte-
-                // identical to this fixture's, so a matching pair of
-                // `reference(V_FLOAT32)` arguments here would give this
-                // node the same digest as code 1061's and IR's
-                // `validate_graph` would refuse the whole package as a
-                // duplicate node id.
-                vec![reference(&key(V_FLOAT32)), literal("float32_bits", "1")],
-            ),
-            &[],
-        )
         .application_bounded(
             QUANTITY_EXACT,
             "expression",
@@ -4023,14 +4109,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         },
     ));
     items.push(item(
-        MISSING_ROUNDING,
-        ExactScalarOperation::IeeeArithmetic {
-            operator: IeeeArithmeticOperator::Add,
-            width: IeeeWidth::Binary32,
-            rounding: RoundingMode::NearestEven,
-        },
-    ));
-    items.push(item(
         DOMAIN_MISMATCH,
         ExactScalarOperation::IntegerDivision {
             profile: DivisionProfile::Floor,
@@ -4067,11 +4145,49 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
 
 #[cfg(test)]
 mod bound_tests {
-    use super::{Bound, DEC, INT, TEXT};
+    use super::{aggregate, key, node_ref, Bound, PackageBuilder, DEC, INT, TEXT, T_INTEGER};
+    use quire_contract_model::CheckedPackageV2ReadResult;
     use serde_json::json;
 
     fn keys(bounds: &[Bound]) -> Vec<String> {
         bounds.iter().map(Bound::key).collect()
+    }
+
+    /// Trace: FR-014-AC-10, TC-024.
+    #[test]
+    fn anonymous_integer_authority_admits_one_integer_range() {
+        let mut builder = PackageBuilder::default();
+        builder.code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            &key(T_INTEGER),
+            aggregate(),
+        );
+        let anonymous = builder.anonymous_integer_type(39_001);
+        let range_source = builder.bound(&Bound::Integer(0, 9));
+
+        let (outcome, _, ids) = builder.read_resolved();
+        let CheckedPackageV2ReadResult::Admitted(package) = outcome else {
+            panic!("one range over anonymous Integer must admit: {outcome:?}");
+        };
+        let anonymous = ids.resolve(&super::id(&anonymous));
+        let source_owned = ids.resolve(&super::id(&key(T_INTEGER)));
+        assert_ne!(anonymous, source_owned);
+        let range = ids.resolve(&super::id(&range_source));
+        let checked_range = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == range)
+            .expect("admitted integer range");
+        assert_eq!(checked_range.semantic_type, anonymous);
+        for member in checked_range.body["members"]
+            .as_array()
+            .expect("admitted bounds")
+        {
+            assert_eq!(member["value"]["type"], node_ref(&anonymous.digest));
+        }
     }
 
     /// Pins `Bound::foreign`'s derivation against the exact per-variant lists this crate

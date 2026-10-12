@@ -6,8 +6,8 @@
 //! [`BackendKind`] with no catch-all. It takes no manifest, candidate set, extent or capability
 //! kind, so it cannot settle, select or route again, and it builds no FR-019 disposition.
 //!
-//! The Kani arm derives each item's FR-014 descriptor from the package with
-//! [`derive_exact_scalar_items`], generates the derived oracles, and calls
+//! The Kani arm derives each item's FR-014 claim from its admitted FR-330
+//! closure, generates the package-backed oracles, and calls
 //! [`negotiate_kani_obligations`] once over the routed Kani items in ascending
 //! request index. The oracle crate FR-014 generated is returned beside the claim map. Each harness
 //! embeds its own oracle's source, which uses `quire_contract_runtime`, so the driver writes the
@@ -17,7 +17,7 @@
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
-use quire_contract_model::{CheckedNodeId, CheckedPackageV2};
+use quire_contract_model::{CheckedNodeId, ContractPackageV1};
 
 use crate::{
     core::artifact::Artifact,
@@ -28,12 +28,15 @@ use crate::{
         ObligationDisposition, ObligationItem, ObligationRecord,
     },
     kani::identity::KaniScalarObligationHarness,
-    oracle::claim::{ClaimMap, OracleGenerationError},
+    oracle::claim::ClaimMap,
     oracle::scalar::{
-        derive_exact_scalar_items, generate_exact_scalar_oracles, ExactScalarClaim,
-        ExactScalarOracles,
+        generate_contract_scalar_oracles, ContractScalarError, ExactScalarClaim, ExactScalarOracles,
     },
     routed::capability::{BackendDescriptor, BackendKind, Candidate},
+    routed::contract_package::{
+        AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems,
+        PackageRequestError,
+    },
 };
 
 /// One item the driver routed to a backend.
@@ -130,6 +133,8 @@ impl GenerationContexts<'_> {
 /// A backend kind's output for one routed item.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum KindOutput {
+    /// The admitted package refused this position before backend generation.
+    PackageRefused,
     /// The Kani arm's record and, when the item lowered, its harness.
     Kani {
         /// FR-015's record, with every index the driver's request index.
@@ -148,6 +153,8 @@ pub struct RoutedItemOutput {
     pub request_index: usize,
     /// The routed backend.
     pub backend: Candidate,
+    /// Exact admitted record and available source occurrences for this position.
+    pub admitted: AdmittedItemAccounting,
     /// The routed kind's output.
     pub output: KindOutput,
 }
@@ -164,8 +171,8 @@ pub struct RoutedGeneration {
     /// `None` when no Kani group ran.
     pub claim_map: Option<ClaimMap<ExactScalarClaim>>,
     /// The FR-014 oracle crate the Kani arm generated for its group: `Cargo.toml`, `src/lib.rs`
-    /// and `claim-map.json`, byte-identical to `generate_exact_scalar_oracles`'s artifacts over the
-    /// group's derived items. Every `Generated` claim's oracle symbol is defined in its
+    /// and `claim-map.json`, generated from the group's admitted package roots. Every `Generated`
+    /// claim's oracle symbol is defined in its
     /// `src/lib.rs`. `None` when no Kani group ran.
     pub oracle_artifacts: Option<Vec<Artifact>>,
 }
@@ -173,6 +180,10 @@ pub struct RoutedGeneration {
 /// A whole-call refusal; nothing is generated.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RoutedGenerationError {
+    /// Request positions or keys disagree with admitted FR-330 accounting.
+    Package(PackageRequestError),
+    /// Direct generation from the admitted package failed as a whole.
+    ContractScalar(ContractScalarError),
     /// The routed kind is not the kind the backend's identity converts to.
     BackendKindDisagrees {
         /// The item's request index.
@@ -218,8 +229,6 @@ pub enum RoutedGenerationError {
     },
     /// The Kani arm refused its group as a whole.
     Kani(KaniObligationError),
-    /// FR-014 generation over the derived items failed as a whole.
-    Oracle(OracleGenerationError),
 }
 
 /// The harnesses by proof symbol, which is what a record's `Supported` disposition names. Two
@@ -246,8 +255,15 @@ fn index_harnesses(
 
 /// What one kind's arm produced.
 struct ArmOutput {
-    outputs: Vec<RoutedItemOutput>,
+    outputs: Vec<ArmItemOutput>,
     rejected: bool,
+}
+
+/// Backend output before the one admitted accounting envelope is attached.
+struct ArmItemOutput {
+    request_index: usize,
+    backend: Candidate,
+    output: KindOutput,
 }
 
 /// Runs the generation arm of every routed item's backend kind.
@@ -258,7 +274,8 @@ struct ArmOutput {
 /// Trace: TC-033
 // Implements: FR-022
 pub fn generate_routed(
-    package: &CheckedPackageV2,
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
     routed: &[RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<RoutedGeneration, RoutedGenerationError> {
@@ -271,17 +288,35 @@ pub fn generate_routed(
         ))
     });
     refuse_inconsistent_routing(&ordered, contexts)?;
+    let package_items =
+        PackageItems::new(package, positions).map_err(RoutedGenerationError::Package)?;
 
     let mut items = Vec::with_capacity(ordered.len());
+    let mut admitted_by_index = BTreeMap::new();
+    let mut lowered = Vec::with_capacity(ordered.len());
+    for item in ordered {
+        let admitted = package_items
+            .at(item.request_index, &item.node_id)
+            .map_err(RoutedGenerationError::Package)?;
+        admitted_by_index.insert(item.request_index, admitted.accounting());
+        match admitted {
+            PackageItem::Lowered { .. } => lowered.push(item),
+            PackageItem::Refused { .. } => items.push(ArmItemOutput {
+                request_index: item.request_index,
+                backend: item.backend.clone(),
+                output: KindOutput::PackageRefused,
+            }),
+        }
+    }
     let mut rejected = Vec::new();
     let mut claim_map = None;
     let mut oracle_artifacts = None;
-    let kinds = ordered
+    let kinds = lowered
         .iter()
         .map(|item| item.kind.clone())
         .collect::<BTreeSet<_>>();
     for kind in kinds {
-        let group = ordered
+        let group = lowered
             .iter()
             .copied()
             .filter(|item| item.kind == kind)
@@ -292,7 +327,7 @@ pub fn generate_routed(
         let arm = match &kind {
             BackendKind::Kani => {
                 let (arm, kani_claim_map, kani_artifacts) =
-                    generate_kani(package, &group, contexts)?;
+                    generate_kani(package, positions, &group, contexts)?;
                 claim_map = Some(kani_claim_map);
                 oracle_artifacts = Some(kani_artifacts);
                 arm
@@ -300,7 +335,7 @@ pub fn generate_routed(
             BackendKind::Process(_) => ArmOutput {
                 outputs: group
                     .iter()
-                    .map(|item| RoutedItemOutput {
+                    .map(|item| ArmItemOutput {
                         request_index: item.request_index,
                         backend: item.backend.clone(),
                         output: KindOutput::Process,
@@ -315,6 +350,22 @@ pub fn generate_routed(
         items.extend(arm.outputs);
     }
     items.sort_by_key(|item| item.request_index);
+    let items = items
+        .into_iter()
+        .map(|item| {
+            let admitted = admitted_by_index.remove(&item.request_index).ok_or(
+                RoutedGenerationError::Package(PackageRequestError::Position {
+                    request_index: item.request_index,
+                }),
+            )?;
+            Ok(RoutedItemOutput {
+                request_index: item.request_index,
+                backend: item.backend,
+                admitted,
+                output: item.output,
+            })
+        })
+        .collect::<Result<Vec<_>, RoutedGenerationError>>()?;
     Ok(RoutedGeneration {
         items,
         rejected,
@@ -362,7 +413,8 @@ fn refuse_inconsistent_routing(
 
 /// The Kani arm, and the claim map and oracle crate it derived: one `negotiate_kani_obligations` call over `group`, in ascending request index.
 fn generate_kani(
-    package: &CheckedPackageV2,
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
     group: &[&RoutedGenerationItem],
     contexts: &GenerationContexts<'_>,
 ) -> Result<(ArmOutput, ClaimMap<ExactScalarClaim>, Vec<Artifact>), RoutedGenerationError> {
@@ -371,7 +423,18 @@ fn generate_kani(
             kind: BackendKind::Kani,
         });
     };
-    let (claim_map, artifacts) = derive_claim_map(package, group)?;
+    let ExactScalarOracles {
+        claim_map,
+        artifacts,
+    } = generate_contract_scalar_oracles(
+        package,
+        positions,
+        &group
+            .iter()
+            .map(|item| item.request_index)
+            .collect::<Vec<_>>(),
+    )
+    .map_err(RoutedGenerationError::ContractScalar)?;
     let items = group
         .iter()
         .map(|item| ObligationItem::ScalarClaim {
@@ -410,7 +473,7 @@ fn route_records(
     records: Vec<ObligationRecord>,
     group: &[&RoutedGenerationItem],
     harnesses: &mut BTreeMap<HarnessSymbol, KaniScalarObligationHarness>,
-) -> Result<Vec<RoutedItemOutput>, RoutedGenerationError> {
+) -> Result<Vec<ArmItemOutput>, RoutedGenerationError> {
     pair_records(records, group)?
         .into_iter()
         .map(|(mut record, item)| {
@@ -424,7 +487,7 @@ fn route_records(
                 | ObligationDisposition::Unsupported { .. }
                 | ObligationDisposition::InvalidRequest { .. } => None,
             };
-            Ok(RoutedItemOutput {
+            Ok(ArmItemOutput {
                 request_index: item.request_index,
                 backend: item.backend.clone(),
                 output: KindOutput::Kani {
@@ -472,50 +535,6 @@ fn pair_records<'g>(
         });
     }
     Ok(records.into_iter().zip(group.iter().copied()).collect())
-}
-
-/// The FR-014 claim map of `group`'s distinct nodes: each derivable node generated from its
-/// derived descriptor, each other node a `NoDerivableClaim` claim, ascending by node id; and the
-/// oracle crate FR-014 generated for the derivable nodes.
-fn derive_claim_map(
-    package: &CheckedPackageV2,
-    group: &[&RoutedGenerationItem],
-) -> Result<(ClaimMap<ExactScalarClaim>, Vec<Artifact>), RoutedGenerationError> {
-    // A node routed twice is one claim: FR-014 refuses every copy of a repeated request, and FR-015
-    // reports the repeat as its own `DuplicateItem`.
-    let mut node_ids = group
-        .iter()
-        .map(|item| item.node_id.clone())
-        .collect::<Vec<_>>();
-    node_ids.sort();
-    node_ids.dedup();
-    let mut derivable = Vec::new();
-    let mut underivable = Vec::new();
-    for (node_id, derived) in node_ids
-        .iter()
-        .zip(derive_exact_scalar_items(package, &node_ids))
-    {
-        match derived {
-            Ok(item) => derivable.push(item),
-            Err(refusal) => {
-                underivable.push(ExactScalarClaim::derivation_refused(
-                    package,
-                    node_id.clone(),
-                    refusal,
-                ));
-            }
-        }
-    }
-    let ExactScalarOracles {
-        artifacts,
-        mut claim_map,
-    } = generate_exact_scalar_oracles(package, &derivable)
-        .map_err(RoutedGenerationError::Oracle)?;
-    claim_map.items.extend(underivable);
-    claim_map
-        .items
-        .sort_by(|left, right| left.node_id.cmp(&right.node_id));
-    Ok((claim_map, artifacts))
 }
 
 #[cfg(test)]
@@ -688,13 +707,13 @@ mod tests {
             &group,
             &mut harnesses,
         );
-        assert_eq!(
+        assert!(matches!(
             refused,
             Err(RoutedGenerationError::KaniDuplicatePositionOutOfRange {
                 first_index: 7,
                 items: 3
             })
-        );
+        ));
 
         let routed = route_records(
             vec![record(0), duplicate_record(0), duplicate_record(1)],
@@ -712,6 +731,9 @@ mod tests {
                     _ => None,
                 },
                 super::KindOutput::Process => panic!("Kani records have Kani output"),
+                super::KindOutput::PackageRefused => {
+                    panic!("Kani records have Kani output")
+                }
             })
             .collect::<Vec<_>>();
         assert_eq!(positions, vec![None, Some(10), Some(11)]);

@@ -251,9 +251,13 @@ otherwise.
 
 ## Behavior
 
-- When generation begins, the generator shall lower every requested node
-  through Contract IR's complete lowering with a scalar tag profile and select
-  exactly one generated or refused disposition per item.
+- Before production generation begins, the driver shall lower the full request
+  once through Contract IR with CG's public routed lowering profile and admit
+  the resulting FR-330 package. The generator shall consume that package's
+  ordered accounting and reached graph, selecting exactly one generated or
+  refused disposition per requested item without lowering again (FR-039).
+  A `lowered` package record may still receive this generator's typed
+  `RequiresBound` refusal for an unbounded scalar operand.
 - When a requested item is requested exactly once, passes every check this
   requirement states, and its node carries the catalogued `operation.identity`
   the admission guarantees, the generator shall emit an oracle function that
@@ -423,7 +427,7 @@ otherwise.
 | FR-014-AC-7 | Composite, collection, function, model, relation, state, temporal and protocol nodes are refused with their blocked or unsupported reason and never reported as generated. | Test (TC-024) |
 | FR-014-AC-8 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
-| FR-014-AC-10 | A descriptor parameter whose bound is missing, repeated, unreadable or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused with a typed reason. | Test (TC-024) |
+| FR-014-AC-10 | A descriptor parameter whose admitted bound is missing, repeated or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused by CG with a typed reason. A malformed bound with a noncanonical integer endpoint such as `05` is refused by Contract IR's strict checked-package reader before CG receives an admitted item; CG retains its defensive typed `UnreadableBound` refusal for an admitted bound it cannot decode. Contract IR's FR-038 "Mode" reader rule also refuses a bare Float32 addition authored with the non-exact `nearest-even` mode and no `float_rounding` type pin as `invalid_package`/`operation-mode-type-mismatch` at `operation.mode/value`, before CG can classify a missing rounding bound. | Test (TC-024) |
 | FR-014-AC-11 | A claim whose descriptor passes every check this requirement states, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value, marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |
 | FR-014-AC-12 | A descriptor naming a different catalogued operation than the node's own is not confirmed, including where the two share one operand shape and one checked bound; nor is a descriptor naming an operation the catalogue has no entry for. | Test (TC-024) |
 | FR-014-AC-13 | A descriptor whose implied identity matches the node's but whose law definition is absent from that node's `operation.laws`, or whose mode value disagrees with that node's `operation.mode`, is not confirmed; the item still lowers and still generates the oracle its descriptor names, marked `caller_declared` with a typed blocked item. | Test (TC-024) |

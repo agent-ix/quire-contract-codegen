@@ -1352,8 +1352,23 @@ fn generate(
         .cloned()
         .map(|item| package.ids.resolve_call(item))
         .collect::<Vec<_>>();
-    let output = generate_exact_function_oracles(&package.checked, &functions, &items)
-        .expect("generation succeeds");
+    let requested = functions
+        .iter()
+        .map(|function| function.node_id.clone())
+        .chain(items.iter().map(|item| item.call_node_id.clone()))
+        .collect::<Vec<_>>();
+    let admitted = admitted_function_contract(&package.checked, &requested);
+    let function_positions = (0..functions.len()).collect::<Vec<_>>();
+    let item_positions = (functions.len()..requested.len()).collect::<Vec<_>>();
+    let output = generate_exact_function_oracles(
+        &admitted,
+        &driver_positions(&requested),
+        &function_positions,
+        &functions,
+        &item_positions,
+        &items,
+    )
+    .expect("generation succeeds");
     FixtureOracles {
         output,
         ids: package.ids.clone(),

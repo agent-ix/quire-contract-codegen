@@ -14,7 +14,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
+use quire_contract_model::{CheckedNodeId, ContractPackageV1};
 use serde::Serialize;
+
+use super::contract_package::{
+    AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
+};
 
 fn serialize_domain_kind<S: serde::Serializer>(
     kind: &DomainKind,
@@ -570,6 +575,81 @@ pub fn negotiate_backend_provider(
             disposition: negotiate_item(&envelope.manifest, item),
         })
         .collect())
+}
+
+/// The decision for one exact FR-330 request position.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractItemSettlement {
+    /// Position among the original driver items; context roots do not count.
+    pub request_index: usize,
+    /// Exact requested key, including repeated positions.
+    pub node_id: CheckedNodeId,
+    /// The exact admitted accounting record and source occurrences.
+    pub admitted: AdmittedItemAccounting,
+    /// The backend settlement after `Lowered`; absent for an IR-refused item.
+    pub backend: Option<ItemSettlement>,
+}
+
+/// A whole-request mismatch before any item can be settled.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ContractNegotiationError {
+    /// The FR-331 envelope is invalid.
+    Envelope(EnvelopeRefusal),
+    /// Request positions and exact keys disagree with the admitted package.
+    Package(PackageRequestError),
+    /// The FR-331 envelope and the original request have different position counts.
+    EnvelopeItemCount {
+        /// Number of original request positions.
+        requested: usize,
+        /// Number of FR-331 item records supplied.
+        supplied: usize,
+    },
+}
+
+/// Settle every request position from one admitted FR-330 package.
+///
+/// FR-019 still owns backend negotiation for a lowered item. A non-lowered
+/// item retains its exact FR-330 record and cannot become backend-supported.
+pub fn negotiate_contract_package(
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
+    envelope: &BackendProviderEnvelope,
+) -> Result<Vec<ContractItemSettlement>, ContractNegotiationError> {
+    let items = PackageItems::new(package, positions).map_err(ContractNegotiationError::Package)?;
+    let backend =
+        negotiate_backend_provider(envelope).map_err(ContractNegotiationError::Envelope)?;
+    if backend.len() != items.driver_count() {
+        return Err(ContractNegotiationError::EnvelopeItemCount {
+            requested: items.driver_count(),
+            supplied: backend.len(),
+        });
+    }
+    backend
+        .into_iter()
+        .enumerate()
+        .map(|(request_index, settlement)| {
+            let node_id =
+                items
+                    .driver_node(request_index)
+                    .ok_or(ContractNegotiationError::Package(
+                        PackageRequestError::Position { request_index },
+                    ))?;
+            let item = items
+                .at(request_index, node_id)
+                .map_err(ContractNegotiationError::Package)?;
+            let admitted = item.accounting();
+            let backend = match item {
+                PackageItem::Lowered { .. } => Some(settlement),
+                PackageItem::Refused { .. } => None,
+            };
+            Ok(ContractItemSettlement {
+                request_index,
+                node_id: node_id.clone(),
+                admitted,
+                backend,
+            })
+        })
+        .collect()
 }
 
 /// Settle one item, evaluating FR-290's rules in order; the first match settles.

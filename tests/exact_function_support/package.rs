@@ -28,10 +28,58 @@ mod ce;
 pub use ce::*;
 
 use quire_contract_codegen::{
-    ExactFunctionBody, ExactFunctionDeclaration, ExactFunctionItem, FunctionParameter,
+    ContractRequestPosition, ExactFunctionBody, ExactFunctionDeclaration, ExactFunctionItem,
+    FunctionParameter,
+};
+use quire_contract_model::{
+    CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2,
+    CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
+    ContractPackageWireV1, LoweringProfileRef,
 };
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Lower all function bodies and call items once, then admit the one FR-330 value.
+pub fn admitted_function_contract(
+    checked: &CheckedPackageV2,
+    requested: &[CheckedNodeId],
+) -> ContractPackageV1 {
+    let profile = CompleteLoweringProfileV2 {
+        reference: LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.exact-function/v1".into(),
+        },
+        supported_tags: BTreeSet::from([
+            CheckedNodeTag::ScalarType,
+            CheckedNodeTag::CompositeType,
+            CheckedNodeTag::BoundedDomain,
+            CheckedNodeTag::Value,
+            CheckedNodeTag::Expression,
+            CheckedNodeTag::Claim,
+            CheckedNodeTag::Correspondence,
+        ]),
+        require_bounds: false,
+        work_limit: 65_536,
+    };
+    let lowered = checked.lower(requested, &profile);
+    match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("Contract IR must admit its FR-330 output: {other:?}"),
+    }
+}
+
+/// Mark every lowering root in this function fixture as one driver request.
+pub fn driver_positions(requested: &[CheckedNodeId]) -> Vec<ContractRequestPosition> {
+    requested
+        .iter()
+        .cloned()
+        .map(|node_id| ContractRequestPosition::DriverItem { node_id })
+        .collect()
+}
 
 impl FixtureIds {
     /// Resolves every checked node key in one declaration against its admitted fixture.

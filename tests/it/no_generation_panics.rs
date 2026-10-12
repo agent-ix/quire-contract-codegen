@@ -16,7 +16,7 @@ use quire_contract_codegen::{
 use quire_contract_model::CheckedNodeId;
 
 use crate::common::panic_scan::{non_test_code_outside_literals, panic_tokens_in};
-use crate::kani_obligations::scalar_package;
+use crate::kani_obligations::{admitted_scalar_claims, scalar_package};
 
 /// The corpus file formerly holding the dated exception (NFR-005 Scope, IR-746).
 const CORPUS: &str = "src/kani/generate/corpus/bounded_kani_corpus.rs";
@@ -444,8 +444,9 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
     .expect("a node id");
 
     let disposition_of = |claim_map: &quire_contract_codegen::ClaimMap<_>| {
+        let admitted = admitted_scalar_claims(&package, claim_map);
         let items = [ObligationItem::ScalarClaim {
-            package: &package,
+            package: &admitted,
             claim_map,
             node_id: &target,
         }];

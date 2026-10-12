@@ -52,8 +52,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2, ClauseKind, ClauseRef, ExecutionPoint,
+    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedSemanticNodeV2, ClauseKind,
+    ClauseRef, ContractPackageV1, ExecutionPoint,
 };
 
 use crate::{
@@ -526,12 +526,13 @@ fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> Ite
 }
 
 fn classify_node<'a>(
-    package: &CheckedPackageV2,
+    package: &ContractPackageV1,
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
 ) -> ItemState<'a> {
     let graph_node = package
-        .graph()
+        .wire()
+        .semantic_graph
         .nodes
         .iter()
         .find(|node| &node.node_id == node_id);
@@ -542,17 +543,19 @@ fn classify_node<'a>(
     let subject = ObligationSubject::CheckedNode {
         node_id: node_id.clone(),
         source_map: package
-            .source_map()
+            .wire()
+            .source_map
+            .nodes
             .iter()
             .filter(|entry| &entry.node_id == node_id)
-            .cloned()
+            .flat_map(|entry| entry.occurrences.iter().cloned())
             .collect(),
     };
     let identity = Some(ItemIdentity::Node {
-        package: package.package_id().digest.to_string(),
+        package: package.identity().digest.to_string(),
         node: node_id.clone(),
     });
-    let outcome = if &claim_map.package_id != package.package_id() {
+    let outcome = if claim_map.package_id != package.wire().package.source.package_id {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)
     } else {
         match claim_map
@@ -576,7 +579,7 @@ fn classify_node<'a>(
 /// Guards [`Outcome::LoweredScalar`] against a node whose graph entry does not match the one
 /// recognized `state`/`frame` role pair, and against a node absent from the graph entirely.
 /// [`ClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim
-/// map assembled by another caller names only node ids [`CheckedPackageV2::graph`] also carries --
+/// map assembled by another caller names only node ids the admitted FR-330 graph also carries --
 /// that invariant holds only for a claim map this crate's own
 /// [`crate::oracle::scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
 /// whose [`GeneratedScalarClaim`](crate::oracle::scalar::GeneratedScalarClaim) bounds still resolve can therefore reach
@@ -619,10 +622,11 @@ fn refuse_unknown_node_kind<'a>(
     })
 }
 
-fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> Outcome<'a> {
+fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> Outcome<'a> {
     let graph = |id: &CheckedNodeId| {
         package
-            .graph()
+            .wire()
+            .semantic_graph
             .nodes
             .iter()
             .find(|node| &node.node_id == id)
@@ -748,6 +752,8 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                 })
             }
             ExactScalarRefusal::DuplicateRequest
+            | ExactScalarRefusal::PackageAccounting { .. }
+            | ExactScalarRefusal::SelectedDependencyUnsupported { .. }
             | ExactScalarRefusal::AmbiguousBound { .. }
             | ExactScalarRefusal::BoundMismatch { .. }
             | ExactScalarRefusal::OperandUnsupported { .. }

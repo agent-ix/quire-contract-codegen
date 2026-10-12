@@ -21,14 +21,16 @@ use crate::scratch_crate::{runtime_dependency, seed_lock};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
-    CompositeEqualityRefusal, DeclarationRefusalCause, EqualityOperandDescriptor,
-    EqualityOperatorKind, IllTypedCauseKind, OracleGenerationError, RecordedSchedule,
-    UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
+    CompositeEqualityRefusal, ContractRequestPosition, DeclarationRefusalCause,
+    EqualityOperandDescriptor, EqualityOperatorKind, IllTypedCauseKind, OracleGenerationError,
+    RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
     derive_structural_candidates, CheckedNodeTag, CheckedPackageRefusalCause,
     CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
-    CompleteLoweringProfileV2, CompleteLoweringRecordV2, StructuralCandidateError,
+    CheckedPackageLimit, CheckedPackageReadLimits, CompleteLoweringProfileV2,
+    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
+    ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
 use quire_contract_runtime::exact::{
     CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
@@ -205,11 +207,57 @@ fn generate(package: &FixturePackage, items: &[CompositeEqualityItem]) -> Fixtur
         .cloned()
         .map(|item| package.ids.resolve_item(item))
         .collect::<Vec<_>>();
-    let output = generate_composite_equality_oracles(&package.checked, &items, Default::default())
-        .expect("generation succeeds");
+    let requested = items
+        .iter()
+        .map(|item| item.node_id.clone())
+        .collect::<Vec<_>>();
+    let lowered = package.checked.lower(&requested, &admitted_profile());
+    let admitted = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("IR must admit its package: {other:?}"),
+    };
+    let positions = (0..items.len()).collect::<Vec<_>>();
+    let roots = requested
+        .iter()
+        .cloned()
+        .map(|node_id| ContractRequestPosition::DriverItem { node_id })
+        .collect::<Vec<_>>();
+    let output = generate_composite_equality_oracles(
+        &admitted,
+        &roots,
+        &positions,
+        &items,
+        Default::default(),
+    )
+    .expect("generation succeeds");
     FixtureOracles {
         output,
         ids: package.ids.clone(),
+    }
+}
+
+fn admitted_profile() -> CompleteLoweringProfileV2 {
+    CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.composite-equality/v1".into(),
+        },
+        supported_tags: [
+            CheckedNodeTag::ScalarType,
+            CheckedNodeTag::CompositeType,
+            CheckedNodeTag::BoundedDomain,
+            CheckedNodeTag::Value,
+            CheckedNodeTag::Expression,
+            CheckedNodeTag::Claim,
+            CheckedNodeTag::Correspondence,
+        ]
+        .into(),
+        require_bounds: false,
+        work_limit: 65_536,
     }
 }
 
@@ -217,8 +265,19 @@ fn generate(package: &FixturePackage, items: &[CompositeEqualityItem]) -> Fixtur
 #[test]
 fn invalid_type_resolution_work_limit_refuses_before_lowering() {
     let package = admit(corpus_package());
+    let lowered = package.checked.lower(&[], &admitted_profile());
+    let admitted = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("IR must admit its package: {other:?}"),
+    };
     let result = generate_composite_equality_oracles(
-        &package.checked,
+        &admitted,
+        &[],
+        &[],
         &[],
         CompositeEqualityLimits {
             type_resolution_work_units: u64::MAX,
@@ -438,9 +497,8 @@ fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
 /// A call whose lowered contract package is longer than the checked package, read under a ceiling
 /// that admits the checked package and is one byte below that lowered package, fails every
 /// requested record for bytes (Contract IR FR-038-AC-95): every item is refused as
-/// `LoweringByteLimitExceeded` with the ceiling as `limit` and one shared `consumed` above it,
-/// never as `LoweringWorkExhausted`, and none generates. The per-node case and each other limit
-/// kind are asserted on hand-built records in the module's own tests.
+/// typed `PackageAccounting::Failed(Bytes)` with the ceiling as `limit` and one shared
+/// `consumed` above it; none generates.
 #[test]
 fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
     use crate::common::byte_ceiling::{
@@ -471,8 +529,21 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
         |ceiling: u64| generate(&admit_with(&builder, limits_under(ceiling)), &items);
     let byte_refusal = |claim: &CompositeEqualityClaim| match &claim.result {
         ClaimDisposition::Refused {
-            refusal: CompositeEqualityRefusal::LoweringByteLimitExceeded { limit, consumed },
-        } => Some((*limit, *consumed)),
+            refusal:
+                CompositeEqualityRefusal::PackageAccounting {
+                    record:
+                        ContractFeatureRecordV1::Failed {
+                            limit_kind: CheckedPackageLimit::Bytes,
+                            limit,
+                            consumed,
+                            ..
+                        },
+                    ..
+                },
+        } => Some((
+            limit.parse::<u64>().expect("limit"),
+            consumed.parse::<u64>().expect("consumed"),
+        )),
         _ => None,
     };
 

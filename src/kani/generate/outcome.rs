@@ -5,7 +5,7 @@
 use quire_contract_model::{
     BoundPackage, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
-    ClauseKind, ClauseRef, DependencyIdentity, SourceSpan,
+    ClauseKind, ClauseRef, ContractPackageV1, DependencyIdentity, SourceSpan,
 };
 use serde::{Serialize, Serializer};
 
@@ -77,7 +77,7 @@ pub enum ObligationItem<'a> {
     /// One node of an FR-014 exact scalar claim map.
     ScalarClaim {
         /// The admitted package the claim map was generated from.
-        package: &'a CheckedPackageV2,
+        package: &'a ContractPackageV1,
         /// The claim map.
         claim_map: &'a ClaimMap<ExactScalarClaim>,
         /// The claimed node.
