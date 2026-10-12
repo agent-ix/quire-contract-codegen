@@ -33,6 +33,10 @@ Ran the planless repository audit over the specification, source and tests at th
 - Evidence: no run evidence for all 738 criteria; no execution evidence was assessed.
 - Coverage diagnostics: 13 declarations/verification-method diagnostics were reported by `quire coverage`; 11 untracked test symbols were reported. The untracked tags are pre-existing AD-004/FR-322 identifiers and not introduced by the changed files.
 - Changed criterion bindings: FR-038-AC-1 and AC-5 are `method-without-symbol` (Inspection); AC-2, AC-3, AC-4 and AC-6 are tagged. AC-3's binders include catalog, oracle and Kani consumer tests.
-- Reverse-gap inventory: the changed production surface adds one private module with internal operator metadata and updates three existing consumers; these behaviors are owned by FR-038 and the existing FR-014/FR-015 consumer requirements. No new public API, source stub, test stub, or unowned behavior was identified in the changed files.
+- Reverse-gap inventory: at the original reviewed commit, the changed production surface added one private module with internal operator metadata and updated three existing consumers; those behaviors are owned by FR-038 and the existing FR-014/FR-015 consumer requirements.
 - Delta applicability: rechecked commits `43af85923ec459bc56530f6907f8131b5ae08b7d` and `1ed03534dda396928e79e45b97169775a8b0327d` against the original reviewed commit. The test-only deltas change expected identity data/fixture-ID resolution and remove four needless borrows; they change no specification criterion or trace tag. The original computed matrix assessment remains applicable; matrix was not rerun.
 - Semantic review: skipped (not requested).
+
+## Current-head Delta Review
+
+Independent changed-scope review of `44bd1f895d72d1eaa799c91dfbc5beffff072223` and `754287f10dd024563af5cdde0bbedfde0f49f83b` found no new FR-038 trace gap, reverse gap, source stub, test stub, or unowned behavior. The final production API exposes the typed operator through `oracle::operator_catalog::IntegerOperator`; its behavior remains within FR-038 and the existing FR-014/FR-015 consumers. No new requirement or trace tag changed. The prior repository-wide matrix result (318 untagged, 11 ignored-only) is unchanged; the matrix was not rerun for these path-only deltas.

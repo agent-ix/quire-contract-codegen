@@ -42,3 +42,9 @@ Rechecked exact head `43af85923ec459bc56530f6907f8131b5ae08b7d` against `311718a
 The Rust lane found no additional production correctness, panic-surface, unsafe, boundary-conversion, or test-seam issue in the changed code. The typed catalog and closed consumer matches preserve family, arity, result, operand order, runtime call selection, and existing caller-declared refusal behavior. At the original commit, the local identity test's other metadata projections were checked against expected values but its identity round trip was self-referential; the delta now checks identity against a separate literal expectation.
 
 No Cargo, Kani, or full repository gates were run. The compile failure in FND-002 was identified by the test's expected field type and expression type.
+
+## Current-head Delta Review
+
+Independent review of `44bd1f895d72d1eaa799c91dfbc5beffff072223` against `b3841c0ca9a08fa3d34b06d2adbbe06e425d2106` found no new code or Rust findings. The catalog relocation, import-cycle removal, and total `FrameSymbol` mapping preserve the recorded FND-001..003 dispositions.
+
+Independent review of `754287f10dd024563af5cdde0bbedfde0f49f83b` against `44bd1f895d72d1eaa799c91dfbc5beffff072223` also found no new findings. The canonical public API is `oracle::operator_catalog::IntegerOperator`; the root-level re-export is removed, owned callers use the canonical path, and no stale root-path references remain. Both reviews used `git diff --check`; neither ran Cargo, Kani, or the matrix.
