@@ -9,11 +9,827 @@
 use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
 use quire_contract_codegen::{
-    generate_exact_function_oracles, CallPointKind, ClaimDisposition, ExactFunctionItem,
-    ExactFunctionRefusal, GeneratedExactFunctionClaim, UpstreamBlocker,
+    generate_exact_function_oracles, generate_function_schedules, CallPointKind, ClaimDisposition,
+    ExactFunctionItem, ExactFunctionRefusal, FunctionScheduleDeclaration,
+    FunctionScheduleDisposition, FunctionScheduleItem, FunctionScheduleOperand as ScheduleOperand,
+    FunctionScheduleParameter, FunctionScheduledOperation, GeneratedExactFunctionClaim,
+    UpstreamBlocker,
 };
 use quire_contract_model::CheckedPackageV2;
 use std::ops::Deref;
+
+/// Trace: FR-021-AC-34, TC-031.
+#[test]
+fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
+    use serde_json::{json, Value};
+    use std::{fs, process::Command};
+
+    const COUNT: u32 = 129;
+    const BASE: u32 = 80_000;
+    const PARAM_BASE: u32 = 81_000;
+    const ITEM_BASE: u32 = 82_000;
+    const BODY_BASE: u32 = 83_000;
+
+    let op = |identity: &str| {
+        json!({
+            "identity": identity,
+            "laws": [],
+            "mode": null,
+            "member": null,
+            "leaves": [],
+        })
+    };
+    let mut builder = PackageBuilder::default();
+    builder
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(vec![]),
+        )
+        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(vec![]));
+    let int_type = key(T_INTEGER);
+    // Keep one admitted ordered pair of Integer formals and bind that pair in every declaration.
+    // Each of the 129 functions still has two Integer parameter slots; sharing the graph nodes
+    // avoids repeating their full node, identity-projection and source-map records in this strict
+    // reader fixture, which must fit the unchanged 1 MiB input limit.
+    for (code, name) in [(PARAM_BASE, "left"), (PARAM_BASE + 1, "right")] {
+        builder.code(
+            code,
+            "value",
+            "parameter",
+            T_INTEGER,
+            aggregate(vec![
+                bound_member("name", literal("text", name)),
+                bound_member("level", integer_literal(0)),
+            ]),
+        );
+    }
+    let shared_parameters = (code_id(PARAM_BASE), code_id(PARAM_BASE + 1));
+    let parameter_ids = vec![shared_parameters.clone(); COUNT as usize];
+    // The second requested item calls the terminal function, matching BODY_BASE+127's callee.
+    // Give its first argument a distinct admitted value node so its application identity does
+    // not collide with that function body while retaining two ordered Integer references.
+    builder.code(
+        PARAM_BASE + 2,
+        "value",
+        "parameter",
+        T_INTEGER,
+        aggregate(vec![
+            bound_member("name", literal("text", "item_left")),
+            bound_member("level", integer_literal(0)),
+        ]),
+    );
+    let item_left = code_id(PARAM_BASE + 2);
+
+    let call_body = |callee: &quire_contract_model::CheckedNodeId,
+                     params: &(
+        quire_contract_model::CheckedNodeId,
+        quire_contract_model::CheckedNodeId,
+    )| {
+        json!({
+            "term": "application",
+            "operator": "call",
+            "operation": op("quire.op.function.call"),
+            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "arguments": [
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": callee.digest}},
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.0.digest}},
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.1.digest}},
+            ],
+        })
+    };
+    let scalar_body = |params: &(
+        quire_contract_model::CheckedNodeId,
+        quire_contract_model::CheckedNodeId,
+    )| {
+        json!({
+            "term": "application",
+            "operator": "binary",
+            "operation": op("quire.op.integer.add"),
+            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "arguments": [
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.0.digest}},
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.1.digest}},
+            ],
+        })
+    };
+
+    let terminal = COUNT - 1;
+    let body_reference = |code: u32| {
+        let target = code_id(code);
+        json!({
+            "term": "reference",
+            "target": {"domain": target.domain, "digest": target.digest},
+        })
+    };
+    builder.application_node(
+        BODY_BASE + terminal,
+        "binary",
+        &int_type,
+        scalar_body(&parameter_ids[terminal as usize]),
+    );
+    let mut function_ids = vec![
+        quire_contract_model::CheckedNodeId {
+            domain: NODE_DOMAIN.into(),
+            digest: String::new().into(),
+        };
+        COUNT as usize
+    ];
+    let mut body_ids = vec![function_ids[0].clone(); COUNT as usize];
+    body_ids[terminal as usize] = code_id(BODY_BASE + terminal);
+    builder.code(
+        BASE + terminal,
+        "function",
+        "pure_function",
+        T_INTEGER,
+        body_reference(BODY_BASE + terminal),
+    );
+    function_ids[terminal as usize] = code_id(BASE + terminal);
+    for index in (0..terminal).rev() {
+        builder.application_node(
+            BODY_BASE + index,
+            "call",
+            &int_type,
+            call_body(
+                &function_ids[(index + 1) as usize],
+                &parameter_ids[index as usize],
+            ),
+        );
+        body_ids[index as usize] = code_id(BODY_BASE + index);
+        builder.code(
+            BASE + index,
+            "function",
+            "pure_function",
+            T_INTEGER,
+            body_reference(BODY_BASE + index),
+        );
+        function_ids[index as usize] = code_id(BASE + index);
+    }
+
+    let make_item_body = |callee: &quire_contract_model::CheckedNodeId,
+                          params: &(
+        quire_contract_model::CheckedNodeId,
+        quire_contract_model::CheckedNodeId,
+    )| {
+        json!({
+            "term": "application",
+            "operator": "call",
+            "operation": op("quire.op.function.call"),
+            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "arguments": [
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": callee.digest}},
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.0.digest}},
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": params.1.digest}},
+            ],
+        })
+    };
+    builder.application_node(
+        ITEM_BASE,
+        "call",
+        &int_type,
+        make_item_body(&function_ids[0], &parameter_ids[0]),
+    );
+    builder.application_node(
+        ITEM_BASE + 1,
+        "call",
+        &int_type,
+        make_item_body(
+            &function_ids[terminal as usize],
+            &(item_left, shared_parameters.1.clone()),
+        ),
+    );
+
+    let wire: Value = builder.wire();
+    let bytes = serde_json::to_vec(&wire).expect("serialize strict-reader fixture");
+    #[derive(Default)]
+    struct WireBytes {
+        node_count: usize,
+        nodes: u64,
+        projection_count: usize,
+        projections: u64,
+        source_map_count: usize,
+        source_maps: u64,
+    }
+    let category = |node: &Value| -> &'static str {
+        match (
+            node["node_tag"].as_str(),
+            node["semantic_form"].as_str(),
+            node["body"]["term"].as_str(),
+        ) {
+            (Some("function"), _, _) => "function",
+            (Some("value"), Some("parameter"), _) => "parameter",
+            (Some("expression"), _, Some("application")) => "application",
+            (Some("scalar_type"), _, _) => "scalar",
+            _ => "other",
+        }
+    };
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("fixture nodes");
+    let mut category_by_digest = std::collections::BTreeMap::new();
+    let mut wire_bytes = std::collections::BTreeMap::<String, WireBytes>::new();
+    for node in nodes {
+        let digest = node["node_id"]["digest"].as_str().expect("node digest");
+        let kind = category(node);
+        category_by_digest.insert(digest.to_owned(), kind.to_owned());
+        let entry = wire_bytes.entry(kind.to_owned()).or_default();
+        entry.node_count += 1;
+        entry.nodes += serde_json::to_vec(node).expect("node bytes").len() as u64;
+    }
+    let projections = wire["identity_preimage"]["identity_projection"]
+        .as_array()
+        .expect("identity projections");
+    for projection in projections {
+        let digest = projection["node_id"]["digest"]
+            .as_str()
+            .expect("projection digest");
+        let kind = category_by_digest
+            .get(digest)
+            .expect("projection corresponds to a node");
+        let entry = wire_bytes.entry(kind.clone()).or_default();
+        entry.projection_count += 1;
+        entry.projections += serde_json::to_vec(projection)
+            .expect("projection bytes")
+            .len() as u64;
+    }
+    let source_map = wire["source_map"].as_array().expect("source map");
+    for source_entry in source_map {
+        let digest = source_entry["node_id"]["digest"]
+            .as_str()
+            .expect("source-map digest");
+        let kind = category_by_digest
+            .get(digest)
+            .expect("source map corresponds to a node");
+        let entry = wire_bytes.entry(kind.clone()).or_default();
+        entry.source_map_count += 1;
+        entry.source_maps += serde_json::to_vec(source_entry)
+            .expect("source-map bytes")
+            .len() as u64;
+    }
+    for (kind, sizes) in &wire_bytes {
+        eprintln!(
+            "AC-34 wire {kind}: nodes={}B/{} items, projections={}B/{} items, source_map={}B/{} items",
+            sizes.nodes,
+            sizes.node_count,
+            sizes.projections,
+            sizes.projection_count,
+            sizes.source_maps,
+            sizes.source_map_count,
+        );
+    }
+    let array_bytes = |items: &[Value]| -> u64 {
+        items
+            .iter()
+            .map(|item| serde_json::to_vec(item).unwrap().len() as u64)
+            .sum::<u64>()
+            + 2
+            + items.len().saturating_sub(1) as u64
+    };
+    let section_bytes = array_bytes(nodes) + array_bytes(projections) + array_bytes(source_map);
+    eprintln!(
+        "AC-34 wire total={}B, node_array={}B, identity_projection_array={}B, source_map_array={}B, remainder={}B",
+        bytes.len(),
+        array_bytes(nodes),
+        array_bytes(projections),
+        array_bytes(source_map),
+        bytes.len() as u64 - section_bytes,
+    );
+    assert!(
+        bytes.len() < 1_048_576,
+        "checked source is {} bytes",
+        bytes.len()
+    );
+    let graph_ids = nodes
+        .iter()
+        .map(|node| {
+            node["node_id"]["digest"]
+                .as_str()
+                .expect("node digest")
+                .to_owned()
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    fn assert_typed_references_resolve(
+        value: &Value,
+        path: &str,
+        graph_ids: &std::collections::BTreeSet<String>,
+    ) {
+        match value {
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    assert_typed_references_resolve(item, &format!("{path}/{index}"), graph_ids);
+                }
+            }
+            Value::Object(object) => {
+                if object.get("domain").and_then(Value::as_str) == Some(NODE_DOMAIN) {
+                    let digest = object
+                        .get("digest")
+                        .and_then(Value::as_str)
+                        .expect("typed ref digest");
+                    assert!(
+                        graph_ids.contains(digest),
+                        "dangling typed reference at {path}: {digest}"
+                    );
+                    return;
+                }
+                for (member, child) in object {
+                    assert_typed_references_resolve(child, &format!("{path}/{member}"), graph_ids);
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+        }
+    }
+    for (index, node) in nodes.iter().enumerate() {
+        let path = format!("/semantic_graph/nodes/{index}");
+        let tag = node["node_tag"].as_str().unwrap_or("<missing-tag>");
+        let form = node["semantic_form"].as_str().unwrap_or("<missing-form>");
+        assert_typed_references_resolve(
+            node,
+            &format!("{path} [tag={tag}, form={form}]"),
+            &graph_ids,
+        );
+    }
+
+    let (checked, ids) = builder.admit_resolved();
+
+    let declarations = (0..COUNT)
+        .map(|index| FunctionScheduleDeclaration {
+            function_node_id: ids.resolve(&function_ids[index as usize]),
+            body_node_id: ids.resolve(&body_ids[index as usize]),
+            name: format!("chain_{index}"),
+            parameters: vec![
+                FunctionScheduleParameter {
+                    value_node_id: ids.resolve(&parameter_ids[index as usize].0),
+                    type_node_id: ids.resolve(&code_id(T_INTEGER)),
+                },
+                FunctionScheduleParameter {
+                    value_node_id: ids.resolve(&parameter_ids[index as usize].1),
+                    type_node_id: ids.resolve(&code_id(T_INTEGER)),
+                },
+            ],
+            result_type_node_id: ids.resolve(&code_id(T_INTEGER)),
+        })
+        .collect::<Vec<_>>();
+    let items = vec![
+        FunctionScheduleItem {
+            call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+            function: "chain_0".to_owned(),
+        },
+        FunctionScheduleItem {
+            call_node_id: ids.resolve(&code_id(ITEM_BASE + 1)),
+            function: format!("chain_{terminal}"),
+        },
+    ];
+    // One source traversal charges 3 node entries + 2 child edges + 3 instructions + 3 locations;
+    // a call also charges its declaration binding once.
+    let required_call_work = 3 + 2 + 3 + 3 + 1;
+    let required_scalar_work = 3 + 2 + 3 + 3;
+    let work_limit = required_call_work.max(required_scalar_work);
+    let generated = generate_function_schedules(&checked, &declarations, &items, work_limit)
+        .expect("caller-raised work limit admits the complete flat schedule");
+    assert_eq!(generated.functions.len(), COUNT as usize);
+    assert_eq!(generated.refused_functions.len(), 0);
+    for function in &generated.functions {
+        let declaration = declarations
+            .iter()
+            .find(|declaration| declaration.function_node_id == function.function_node_id)
+            .expect("generated function has its caller binding");
+        assert_eq!(declaration.parameters.len(), 2, "{} arity", function.name);
+        assert!(declaration
+            .parameters
+            .iter()
+            .all(|parameter| parameter.type_node_id == ids.resolve(&code_id(T_INTEGER))));
+        let parameter_instructions = function
+            .schedule
+            .instructions
+            .iter()
+            .filter_map(|instruction| match &instruction.operation {
+                FunctionScheduledOperation::Parameter(index) => Some((*index, &instruction.node)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            parameter_instructions
+                .iter()
+                .map(|(index, _)| *index)
+                .collect::<Vec<_>>(),
+            vec![0, 1],
+            "{} emits both parameter slots in declaration order",
+            function.name
+        );
+        assert_eq!(
+            parameter_instructions
+                .iter()
+                .map(|(_, node)| *node)
+                .collect::<Vec<_>>(),
+            declaration
+                .parameters
+                .iter()
+                .map(|parameter| &parameter.value_node_id)
+                .collect::<Vec<_>>(),
+            "{} slots retain their declared parameter identities",
+            function.name
+        );
+    }
+    let call_instructions = generated
+        .functions
+        .iter()
+        .flat_map(|function| &function.schedule.instructions)
+        .filter(|instruction| {
+            matches!(
+                instruction.operation,
+                FunctionScheduledOperation::Call { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(call_instructions.len(), 128);
+    assert!(call_instructions.iter().all(|instruction| {
+        instruction
+            .operands
+            .iter()
+            .map(|operand| match operand {
+                ScheduleOperand::Slot(slot) => slot.0,
+                ScheduleOperand::Literal { .. } => panic!("chain arguments are references"),
+            })
+            .collect::<Vec<_>>()
+            == vec![0, 1]
+    }));
+    for function in &generated.functions {
+        let Some(call) = function.schedule.instructions.iter().find(|instruction| {
+            matches!(
+                instruction.operation,
+                FunctionScheduledOperation::Call { .. }
+            )
+        }) else {
+            continue;
+        };
+        let argument_parameters = call
+            .operands
+            .iter()
+            .filter_map(|operand| match operand {
+                ScheduleOperand::Slot(slot) => function.schedule.instructions.get(slot.0 as usize),
+                ScheduleOperand::Literal { .. } => None,
+            })
+            .map(|instruction| instruction.operation.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            argument_parameters,
+            vec![
+                FunctionScheduledOperation::Parameter(0),
+                FunctionScheduledOperation::Parameter(1),
+            ],
+            "{} call arguments retain parameter source order",
+            function.name
+        );
+    }
+    let head_claims = generated
+        .claims
+        .iter()
+        .filter(|claim| claim.function == "chain_0")
+        .collect::<Vec<_>>();
+    assert_eq!(head_claims.len(), 1);
+    let head_root = match &head_claims[0].result {
+        FunctionScheduleDisposition::Scheduled { root, .. } => *root,
+        other => panic!("chain head item was not scheduled: {other:?}"),
+    };
+    let head_schedule = generated
+        .functions
+        .iter()
+        .find(|function| function.name == "chain_0")
+        .expect("chain head schedule");
+    assert_eq!(
+        head_schedule
+            .schedule
+            .instructions
+            .last()
+            .map(|instruction| instruction.output),
+        Some(head_root)
+    );
+    assert!(generated.source.len() < 1_048_576);
+
+    let one_less = generate_function_schedules(&checked, &declarations, &items, work_limit - 1)
+        .expect("one-less work limit returns per-function refusals");
+    assert_eq!(
+        one_less.functions.len(),
+        1,
+        "the terminal scalar still fits 11 units"
+    );
+    assert_eq!(one_less.refused_functions.len(), 128);
+    assert!(one_less.refused_functions.iter().all(|function| {
+        matches!(
+            function.refusal,
+            quire_contract_codegen::FunctionScheduleRefusal::WorkExhausted {
+                limit: 11,
+                consumed: 12
+            }
+        )
+    }));
+
+    let projection_denied = generate_function_schedules(&checked, &declarations, &items, 4)
+        .expect("projection work exhaustion is reported per function");
+    assert!(projection_denied.functions.is_empty());
+    assert_eq!(projection_denied.refused_functions.len(), COUNT as usize);
+    assert!(projection_denied.refused_functions.iter().all(|function| {
+        matches!(
+            function.refusal,
+            quire_contract_codegen::FunctionScheduleRefusal::WorkExhausted {
+                limit: 4,
+                consumed: 5
+            }
+        )
+    }));
+
+    let scalar_declaration = declarations[terminal as usize].clone();
+    let scalar_exact =
+        generate_function_schedules(&checked, std::slice::from_ref(&scalar_declaration), &[], 11)
+            .expect("the exact nested-scalar work budget admits its schedule");
+    assert_eq!(scalar_exact.functions.len(), 1);
+    let scalar_one_less =
+        generate_function_schedules(&checked, std::slice::from_ref(&scalar_declaration), &[], 10)
+            .expect("one-less scalar budget produces a typed refusal");
+    assert!(scalar_one_less.functions.is_empty());
+    assert!(matches!(
+        scalar_one_less
+            .refused_functions
+            .first()
+            .map(|function| &function.refusal),
+        Some(
+            quire_contract_codegen::FunctionScheduleRefusal::WorkExhausted {
+                limit: 10,
+                consumed: 11
+            }
+        )
+    ));
+
+    let reversed = items.iter().cloned().rev().collect::<Vec<_>>();
+    let permuted = generate_function_schedules(&checked, &declarations, &reversed, work_limit)
+        .expect("permuted request retains the same schedule");
+    assert_eq!(generated.source, permuted.source);
+    assert_eq!(generated.claims, permuted.claims);
+    assert_eq!(
+        serde_json::to_vec(&generated.claims).unwrap(),
+        serde_json::to_vec(&permuted.claims).unwrap(),
+    );
+    assert_eq!(
+        serde_json::to_vec(
+            &generated
+                .functions
+                .iter()
+                .map(|function| &function.schedule.locations)
+                .collect::<Vec<_>>()
+        )
+        .unwrap(),
+        serde_json::to_vec(
+            &permuted
+                .functions
+                .iter()
+                .map(|function| &function.schedule.locations)
+                .collect::<Vec<_>>()
+        )
+        .unwrap(),
+    );
+
+    let mut reordered_names = declarations.clone();
+    let (lower_index, higher_index) =
+        if declarations[0].function_node_id < declarations[1].function_node_id {
+            (0, 1)
+        } else {
+            (1, 0)
+        };
+    reordered_names[lower_index].name = "z_decl".to_owned();
+    reordered_names[higher_index].name = "a_decl".to_owned();
+    let claim_order = generate_function_schedules(
+        &checked,
+        &reordered_names,
+        &[
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "z_decl".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "a_decl".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "zz_unknown".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "aa_unknown".to_owned(),
+            },
+            FunctionScheduleItem {
+                call_node_id: ids.resolve(&code_id(ITEM_BASE)),
+                function: "zz_unknown".to_owned(),
+            },
+        ],
+        work_limit,
+    )
+    .expect("claim ordering and duplicate handling are independent of request order");
+    assert_eq!(
+        claim_order
+            .claims
+            .iter()
+            .map(|claim| claim.function.as_str())
+            .collect::<Vec<_>>(),
+        vec!["aa_unknown", "zz_unknown", "z_decl", "a_decl"]
+    );
+    assert!(matches!(
+        &claim_order.claims[1].result,
+        FunctionScheduleDisposition::Refused {
+            refusal: quire_contract_codegen::FunctionScheduleRefusal::DuplicateRequest { .. },
+            ..
+        }
+    ));
+
+    let directory = std::env::temp_dir().join(format!("ir496-schedule-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir_all(&directory).expect("create schedule compile directory");
+    let source = directory.join("schedule.rs");
+    fs::write(&source, &generated.source).expect("write generated schedule crate");
+    let output = Command::new("rustc")
+        .args(["--crate-type", "lib", "--crate-name", "function_schedule"])
+        .arg(&source)
+        .arg("-o")
+        .arg(directory.join("libfunction_schedule.rlib"))
+        .output()
+        .expect("invoke rustc for generated schedule crate");
+    assert!(
+        output.status.success(),
+        "generated schedule compile failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let _ = fs::remove_dir_all(&directory);
+}
+
+/// Trace: FR-021-AC-23, TC-031.
+#[test]
+fn tc_031_application_candidate_repair_admits_parent_after_child_key_changes() {
+    use serde_json::json;
+
+    const PARAM_LEFT: u32 = 84_001;
+    const PARAM_RIGHT: u32 = 84_002;
+    const CHILD: u32 = 84_010;
+    const PARENT: u32 = 84_011;
+    const FUNCTION: u32 = 84_012;
+    let mut builder = PackageBuilder::default();
+    builder
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(vec![]),
+        )
+        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(vec![]));
+    for (code, name) in [(PARAM_LEFT, "left"), (PARAM_RIGHT, "right")] {
+        builder.code(
+            code,
+            "value",
+            "parameter",
+            T_INTEGER,
+            aggregate(vec![
+                bound_member("name", literal("text", name)),
+                bound_member("level", integer_literal(0)),
+            ]),
+        );
+    }
+    let int_type = key(T_INTEGER);
+    let add_body = |left: &quire_contract_model::CheckedNodeId,
+                    right: &quire_contract_model::CheckedNodeId| {
+        json!({
+            "term": "application",
+            "operator": "binary",
+            "operation": {
+                "identity": "quire.op.integer.add",
+                "laws": [],
+                "mode": null,
+                "member": null,
+                "leaves": [],
+            },
+            "result_type": {"domain": NODE_DOMAIN, "digest": int_type},
+            "arguments": [
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": left.digest}},
+                {"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": right.digest}},
+            ],
+        })
+    };
+    builder.application_node(
+        CHILD,
+        "binary",
+        &int_type,
+        add_body(&code_id(PARAM_LEFT), &code_id(PARAM_RIGHT)),
+    );
+    let child_id = code_id(CHILD);
+    builder.application_node(
+        PARENT,
+        "binary",
+        &int_type,
+        add_body(&child_id, &code_id(PARAM_RIGHT)),
+    );
+    let parent_reference = code_id(PARENT);
+    builder.code(
+        FUNCTION,
+        "function",
+        "pure_function",
+        T_INTEGER,
+        json!({
+            "term": "reference",
+            "target": {"domain": NODE_DOMAIN, "digest": parent_reference.digest},
+        }),
+    );
+    let (initial_outcome, mut wire, ids) = builder.read_resolved();
+    assert!(matches!(
+        initial_outcome,
+        quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
+    ));
+    let child_id = ids.resolve(&child_id);
+    let parent_id = ids.resolve(&code_id(PARENT));
+    let old_child_digest = child_id.digest.to_string();
+    let old_parent_digest = parent_id.digest.to_string();
+    let old_parameter = ids.resolve(&code_id(PARAM_LEFT));
+    let old_parameter_digest = old_parameter.digest.to_string();
+
+    let nodes = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .expect("fixture nodes");
+    let parameter = nodes
+        .iter_mut()
+        .find(|node| node["node_id"]["digest"].as_str() == Some(&old_parameter_digest))
+        .expect("left parameter node");
+    parameter["body"]["members"][0]["value"]["value"] = json!("renamed_left");
+
+    let (repair_outcome, repaired, repair_ids) = PackageBuilder::from_wire(wire).read_resolved();
+    assert!(matches!(
+        repair_outcome,
+        quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
+    ));
+    let repaired_nodes = repaired["semantic_graph"]["nodes"]
+        .as_array()
+        .expect("repaired nodes");
+    let repaired_parameter = repaired_nodes
+        .iter()
+        .find(|node| node["body"]["members"][0]["value"]["value"].as_str() == Some("renamed_left"))
+        .expect("repaired parameter node");
+    let repaired_parameter_digest = repaired_parameter["node_id"]["digest"]
+        .as_str()
+        .expect("repaired parameter digest");
+    assert_ne!(repaired_parameter_digest, old_parameter_digest);
+
+    let repaired_child = repaired_nodes
+        .iter()
+        .find(|node| {
+            node["body"]["arguments"][0]["target"]["digest"].as_str()
+                == Some(repaired_parameter_digest)
+        })
+        .expect("repaired child application");
+    let repaired_child_digest = repaired_child["node_id"]["digest"]
+        .as_str()
+        .expect("repaired child digest");
+    assert_ne!(repaired_child_digest, old_child_digest);
+
+    let repaired_parent = repaired_nodes
+        .iter()
+        .find(|node| {
+            node["body"]["arguments"][0]["target"]["digest"].as_str() == Some(repaired_child_digest)
+        })
+        .expect("repaired parent application");
+    let repaired_parent_digest = repaired_parent["node_id"]["digest"]
+        .as_str()
+        .expect("repaired parent digest");
+    assert_ne!(repaired_parent_digest, old_parent_digest);
+    let resolved_parent = repair_ids.resolve(&parent_id);
+    assert_eq!(
+        resolved_parent.digest.as_ref(),
+        repaired_parent_digest,
+        "FixtureIds resolves the old application ID to its admitted candidate ID"
+    );
+    let function_id = repair_ids.resolve(&ids.resolve(&code_id(FUNCTION)));
+    let function_node = repaired_nodes
+        .iter()
+        .find(|node| node["node_id"]["digest"].as_str() == Some(function_id.digest.as_ref()))
+        .expect("repaired function node");
+    let descriptor = FunctionScheduleDeclaration {
+        function_node_id: function_id,
+        body_node_id: resolved_parent,
+        name: "parent".to_owned(),
+        parameters: vec![],
+        result_type_node_id: repair_ids.resolve(&ids.resolve(&code_id(T_INTEGER))),
+    };
+    let body_target: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(function_node["body"]["target"].clone())
+            .expect("function body target ID");
+    assert_eq!(
+        descriptor.body_node_id, body_target,
+        "the resolved function descriptor binds the admitted body target"
+    );
+    assert_eq!(
+        repaired_parent_digest,
+        body_target.digest.as_ref(),
+        "parent key should be recomputed after its child key changes"
+    );
+}
 
 // Duplicated per consumer (also `exact_function_agreement.rs`) for structural consistency with
 // the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds
