@@ -3,6 +3,7 @@
 
 //! FR-039 admitted-package routing controls.
 
+#[cfg(test)]
 mod tests {
     use crate::core::contract_package::{
         routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
