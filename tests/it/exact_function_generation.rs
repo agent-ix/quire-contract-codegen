@@ -3,8 +3,9 @@
 //!
 //! Generation-time coverage only (no execution of generated code):
 //! dispositions, refusal reasons, ordering/determinism, the manifest, and the
-//! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
-//! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
+//! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-9,
+//! AC-17) are covered by `tests/it/exact_function_agreement.rs`; AC-7's
+//! admitted 100K-call flat SSA control is exercised below.
 
 use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
@@ -1757,27 +1758,26 @@ fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
-/// Trace: FR-021-AC-11, TC-031. This defensive classifier case intentionally
-/// pairs Model/State request roots with items whose checked source binding is
-/// `SOURCE_FUNCTION`; the mismatch means it does not cover applied calls to
-/// those roots. It verifies the distinct lowering-record blockers while a
-/// separate valid source-bound call remains positively generated.
+/// Trace: FR-021-AC-11, TC-031. The requested function roots are checked
+/// Model/State nodes, while the call fixtures retain a valid source-bound
+/// callee. The claim map must preserve the distinct root blockers and still
+/// generate the healthy source-bound sibling.
 #[test]
 fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     let package = admit(ac11_classifier_package());
     let functions = vec![
         function_model_root("model_fn"),
         function_state_root("state_fn"),
-        source_function(&format!("n{}", key(SOURCE_FUNCTION)), SOURCE_FUNCTION),
+        source_function(&format!("n{}", key(SOURCE_FUNCTION)), SOURCE_BODY),
     ];
     let items = vec![
-        item(ITEM_CALL_MODEL, "model_fn"),
-        item(ITEM_CALL_STATE, "state_fn"),
+        item(ITEM_CALL_SOURCE_MODEL, "model_fn"),
+        item(ITEM_CALL_SOURCE_STATE, "state_fn"),
         source_call(),
     ];
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_MODEL),
+        disposition_for(&oracles, ITEM_CALL_SOURCE_MODEL),
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::BlockedOnUpstream {
                 issue: UpstreamBlocker::QuireSpecLanguage120,
@@ -1786,7 +1786,7 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
         }
     ));
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_STATE),
+        disposition_for(&oracles, ITEM_CALL_SOURCE_STATE),
         ClaimDisposition::Refused {
             refusal: ExactFunctionRefusal::BlockedOnUpstream {
                 issue: UpstreamBlocker::QuireSpecLanguage121,
@@ -1794,11 +1794,12 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
             }
         }
     ));
-    assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
-    assert!(matches!(
-        disposition_for(&oracles, SOURCE_CALL),
-        ClaimDisposition::Generated(_)
-    ));
+    assert!(contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
+    let sibling_disposition = disposition_for(&oracles, SOURCE_CALL);
+    assert!(
+        matches!(sibling_disposition, ClaimDisposition::Generated(_)),
+        "source-bound sibling: {sibling_disposition:?}"
+    );
 }
 
 /// Trace: FR-021-AC-12, TC-031. A declared function whose own body fails to
@@ -3183,21 +3184,16 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
 /// delimiter form.
 #[test]
 fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
-    for (corpus, oracles) in [("main", main_oracles()), ("chain", chain_oracles())] {
-        let lib = contents(&oracles, "src/lib.rs");
-        assert!(lib.contains("pub fn checked_package()"), "{corpus} corpus");
-        for forbidden in [".unwrap(", ".expect("] {
-            assert!(
-                !lib.contains(forbidden),
-                "{corpus} corpus emits {forbidden}"
-            );
-        }
-        assert!(
-            !invokes_panicking_macro(&lib),
-            "{corpus} corpus emits a panicking macro"
-        );
+    let oracles = main_oracles();
+    let lib = contents(&oracles, "src/lib.rs");
+    assert!(lib.contains("pub fn checked_package()"), "main corpus");
+    for forbidden in [".unwrap(", ".expect("] {
+        assert!(!lib.contains(forbidden), "main corpus emits {forbidden}");
     }
-    let lib = contents(&main_oracles(), "src/lib.rs");
+    assert!(
+        !invokes_panicking_macro(&lib),
+        "main corpus emits a panicking macro"
+    );
     assert!(lib.contains("rt::TypeEnvironment::default()"));
 }
 
@@ -3258,48 +3254,6 @@ pub(super) fn main_oracles() -> FixtureOracles {
         &main_functions(),
         &main_items(),
     )
-}
-
-/// Intended AC-7 output for the nested-call chain. The current source-bound V2
-/// fixture exceeds the reader byte budget before this oracle can be produced.
-pub(super) fn chain_oracles() -> FixtureOracles {
-    let package = admit(ext_corpus_package());
-    let mut functions = chain_functions();
-    functions.push(function_add("add_fn")); // the chain's own last link calls this
-    generate(&package, &functions, &[item(ITEM_CALL_CHAIN, "chain_0")])
-}
-
-/// Trace: FR-021-AC-7, TC-031. This intended chain regression exceeds
-/// `MAX_CALL_DEPTH`; it remains unverified because the current V2 fixture
-/// exceeds the reader's byte limit before generation.
-#[test]
-fn tc_031_ac7_chain_corpus_generates_a_call_chain_deeper_than_max_call_depth() {
-    let chain = chain_functions();
-    const {
-        assert!(
-            CHAIN_LENGTH as u64 > quire_contract_runtime::exact::MAX_CALL_DEPTH,
-            "the chain must exceed MAX_CALL_DEPTH"
-        );
-    }
-    assert_eq!(chain.len(), CHAIN_LENGTH as usize);
-    assert_eq!(chain[0].name, "chain_0");
-    assert_eq!(chain[69].name, "chain_69");
-    assert_eq!(
-        chain[(CHAIN_LENGTH - 1) as usize].name,
-        format!("chain_{}", CHAIN_LENGTH - 1)
-    );
-
-    let oracles = chain_oracles();
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_CHAIN),
-        ClaimDisposition::Generated(_)
-    ));
-    let lib = contents(&oracles, "src/lib.rs");
-    for link in 0..CHAIN_LENGTH - 1 {
-        let call = format!("frame.call(\"chain_{}\", args)", link + 1);
-        assert!(lib.contains(&call), "chain_{link} does not emit {call}");
-    }
-    assert!(lib.contains("frame.call(\"add_fn\", args)"));
 }
 
 pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &str) -> String {

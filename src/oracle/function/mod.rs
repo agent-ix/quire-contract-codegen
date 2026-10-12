@@ -133,8 +133,8 @@
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::contract_package::{
-    routed_contract_lowering_profile, ContractRequestPosition, PackageItem, PackageItems,
-    PackageRequestError,
+    routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
+    PackageItem, PackageItems, PackageRequestError,
 };
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
@@ -1724,7 +1724,7 @@ pub(crate) fn checked_integer_function_application_is_supported(
     };
     let positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
         node_id,
-        result_selection: crate::ContractDriverResultSelection::NotApplicable,
+        result_selection: ContractDriverResultSelection::NotApplicable,
     });
     let declaration_position = [0usize];
     let item_position = [1usize];
@@ -1866,6 +1866,16 @@ fn admitted_binary_body<'a>(
                 ..
             } = record
             {
+                if let Some(
+                    tag @ (CheckedNodeTag::Model
+                    | CheckedNodeTag::Relation
+                    | CheckedNodeTag::State
+                    | CheckedNodeTag::Temporal
+                    | CheckedNodeTag::Protocol),
+                ) = CheckedNodeTag::from_wire(node_tag.as_ref())
+                {
+                    return Err(unsupported_family(unsupported_node_id, tag));
+                }
                 return Err(ExactFunctionRefusal::Unsupported {
                     unsupported_node_id: unsupported_node_id.clone(),
                     node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())

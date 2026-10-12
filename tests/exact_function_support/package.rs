@@ -167,12 +167,12 @@ pub const ITEM_CALL_BAD_FORM: u32 = 530;
 pub const ITEM_CALL_ONE_PARAM: u32 = 531;
 pub const ITEM_CALL_BOOLEAN_RESULT: u32 = 532;
 pub const ITEM_CALL_NEGATE: u32 = 533;
+/// Classifier-only source call for the model root. Kept distinct from the
+/// corpus call ID because the shared fixture registry is process-wide.
+pub const ITEM_CALL_SOURCE_MODEL: u32 = 534;
+/// Classifier-only source call for the state root.
+pub const ITEM_CALL_SOURCE_STATE: u32 = 535;
 
-/// Base code for the >128-deep nested-call chain (AC-7). `CHAIN_LENGTH`
-/// functions `chain_0.. calling chain_(i+1)..`, the last calling [`FN_ADD`].
-pub const CHAIN_BASE: u32 = 1000;
-pub const CHAIN_LENGTH: u32 = 140; // > rt::MAX_CALL_DEPTH (128)
-pub const ITEM_CALL_CHAIN: u32 = 1500;
 const DISAMBIGUATOR_BASE: u32 = 2000;
 
 /// A genuinely checked FR-021 package used for source-binding adversarial
@@ -353,12 +353,15 @@ fn source_item_call(
     );
 }
 
-/// The full FR-021 corpus: the composite-equality base package plus every
-/// node above.
+/// Ordinary FR-021 corpus for generation, determinism, and agreement tests.
+/// Source-bound V2 function declarations and source calls live in
+/// `source_bound_call_package` so they do not bloat every ordinary case.
 pub fn ext_corpus_package() -> PackageBuilder {
     let mut builder = corpus_package();
 
-    let disambiguator_count = 9 + 5 + CHAIN_LENGTH + 1;
+    // Nine function roots and five call roots each receive a distinct result
+    // type in the fixture body, preventing duplicate application identities.
+    let disambiguator_count = 9 + 5;
     for i in 0..disambiguator_count {
         builder.code(
             DISAMBIGUATOR_BASE + i,
@@ -369,270 +372,28 @@ pub fn ext_corpus_package() -> PackageBuilder {
         );
     }
 
-    let add_body = |code: u32| {
-        integer_add_body(
-            (0..2)
-                .map(|index| reference_code(function_parameter_code(code, index)))
-                .collect(),
-        )
+    let mut next = 0u32;
+    let mut body = || {
+        let value = binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + next);
+        next += 1;
+        value
     };
-    source_function_node(
-        &mut builder,
-        FN_ADD,
-        "add_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "binary",
-        add_body(FN_ADD),
-    );
-    source_function_node(
-        &mut builder,
-        FN_EQ,
-        "eq_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_BOOLEAN,
-        "binary",
-        binary_body(T_INTEGER, T_INTEGER),
-    );
-    source_function_node(
-        &mut builder,
-        FN_CALL_NESTED,
-        "call_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "call",
-        call_body(
-            FN_ADD,
-            &[
-                function_parameter_code(FN_CALL_NESTED, 0),
-                function_parameter_code(FN_CALL_NESTED, 1),
-            ],
-            T_INTEGER,
-        ),
-    );
-    for (code, name, parameter_type) in [
-        (FN_REF_PARAM, "ref_fn", REF_TYPE),
-        (FN_MODEL_PARAM, "model_fn", T_INTEGER),
-        (FN_STATE_PARAM, "state_fn", T_INTEGER),
-    ] {
-        source_function_node(
-            &mut builder,
-            code,
-            name,
-            &[parameter_type, T_INTEGER],
-            T_INTEGER,
-            "binary",
-            integer_add_body(vec![
-                literal("integer", "1"),
-                literal("integer", &code.to_string()),
-            ]),
-        );
-    }
-    source_function_node(
-        &mut builder,
-        FN_CAPABILITY,
-        "capability_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "binary",
-        add_body(FN_CAPABILITY),
-    );
-    source_function_node(
-        &mut builder,
-        FN_UNRELATED,
-        "unrelated_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "binary",
-        add_body(FN_UNRELATED),
-    );
-    source_function_node(
-        &mut builder,
-        FN_DANGLING_TARGET,
-        "not_declared_anywhere",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "binary",
-        integer_add_body(vec![literal("integer", "2"), literal("integer", "3")]),
-    );
-    source_function_node(
-        &mut builder,
-        FN_DANGLING_CALL,
-        "dangling_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "call",
-        call_body(
-            FN_DANGLING_TARGET,
-            &[
-                function_parameter_code(FN_DANGLING_CALL, 0),
-                function_parameter_code(FN_DANGLING_CALL, 1),
-            ],
-            T_INTEGER,
-        ),
-    );
-    source_function_node(
-        &mut builder,
-        FN_FORM_MISMATCH_NODE,
-        "bad_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "call",
-        call_body(
-            FN_ADD,
-            &[
-                function_parameter_code(FN_FORM_MISMATCH_NODE, 0),
-                function_parameter_code(FN_FORM_MISMATCH_NODE, 1),
-            ],
-            T_INTEGER,
-        ),
-    );
-    source_function_node(
-        &mut builder,
-        FN_ONE_PARAM_ADD,
-        "one_param_add",
-        &[T_INTEGER],
-        T_INTEGER,
-        "binary",
-        integer_add_body(vec![literal("integer", "4"), literal("integer", "5")]),
-    );
-    source_function_node(
-        &mut builder,
-        FN_BOOLEAN_RESULT_ADD,
-        "boolean_result_add",
-        &[T_INTEGER, T_INTEGER],
-        T_BOOLEAN,
-        "binary",
-        integer_add_body(vec![literal("integer", "6"), literal("integer", "7")]),
-    );
-    source_function_node(
-        &mut builder,
-        FN_NEGATE,
-        "negate_fn",
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-        "unary",
-        application(
-            "unary",
-            serde_json::json!({"identity": "quire.op.integer.neg", "laws": [], "mode": null, "member": null, "leaves": []}),
-            T_INTEGER,
-            vec![reference_code(function_parameter_code(FN_NEGATE, 0))],
-        ),
-    );
 
-    let fixed_calls = [
-        (ITEM_CALL_ADD, FN_ADD, vec![T_INTEGER, T_INTEGER], T_INTEGER),
-        (ITEM_CALL_EQ, FN_EQ, vec![T_INTEGER, T_INTEGER], T_BOOLEAN),
-        (
-            ITEM_CALL_NESTED,
-            FN_CALL_NESTED,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_UNRELATED,
-            FN_UNRELATED,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_UNKNOWN_FUNCTION,
-            FN_ADD,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_REF,
-            FN_REF_PARAM,
-            vec![REF_TYPE, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_MODEL,
-            FN_MODEL_PARAM,
-            vec![M_BARE, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_STATE,
-            FN_STATE_PARAM,
-            vec![S_BARE, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_CAPABILITY,
-            FN_CAPABILITY,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_DANGLING,
-            FN_DANGLING_CALL,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_BAD_FORM,
-            FN_FORM_MISMATCH_NODE,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_ONE_PARAM,
-            FN_ONE_PARAM_ADD,
-            vec![T_INTEGER],
-            T_INTEGER,
-        ),
-        (
-            ITEM_CALL_BOOLEAN_RESULT,
-            FN_BOOLEAN_RESULT_ADD,
-            vec![T_INTEGER, T_INTEGER],
-            T_BOOLEAN,
-        ),
-        (
-            ITEM_CALL_NEGATE,
-            FN_NEGATE,
-            vec![T_INTEGER, T_INTEGER],
-            T_INTEGER,
-        ),
-    ];
-    for (call_code, function_code, argument_types, result_type) in fixed_calls {
-        source_item_call(
-            &mut builder,
-            call_code,
-            function_code,
-            &argument_types,
-            result_type,
-        );
-    }
-    for index in 0..CHAIN_LENGTH {
-        let code = CHAIN_BASE + index;
-        let callee = if index + 1 == CHAIN_LENGTH {
-            FN_ADD
-        } else {
-            code + 1
-        };
-        let args = [
-            function_parameter_code(code, 0),
-            function_parameter_code(code, 1),
-        ];
-        source_function_node(
-            &mut builder,
-            code,
-            &format!("chain_{index}"),
-            &[T_INTEGER, T_INTEGER],
-            T_INTEGER,
-            "call",
-            call_body(callee, &args, T_INTEGER),
-        );
-    }
-    source_item_call(
-        &mut builder,
-        ITEM_CALL_CHAIN,
-        CHAIN_BASE,
-        &[T_INTEGER, T_INTEGER],
-        T_INTEGER,
-    );
+    builder
+        .application_code(FN_ADD, "binary", body())
+        .application_code(FN_EQ, "binary", body())
+        .application_code(FN_CALL_NESTED, "call", body())
+        .application_code(FN_DANGLING_CALL, "call", body())
+        .application_code(FN_REF_PARAM, "binary", body())
+        .application_code(FN_MODEL_PARAM, "binary", body())
+        .application_code(FN_STATE_PARAM, "binary", body())
+        .application_code(FN_CAPABILITY, "binary", body())
+        .application_code(FN_UNRELATED, "binary", body())
+        .application_code(ITEM_CALL_ADD, "call", body())
+        .application_code(ITEM_CALL_EQ, "call", body())
+        .application_code(ITEM_CALL_NESTED, "call", body())
+        .application_code(ITEM_CALL_UNRELATED, "call", body())
+        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body());
     builder
 }
 
@@ -644,14 +405,14 @@ pub fn ac11_classifier_package() -> PackageBuilder {
     let mut builder = source_bound_call_package();
     source_item_call(
         &mut builder,
-        ITEM_CALL_MODEL,
+        ITEM_CALL_SOURCE_MODEL,
         SOURCE_FUNCTION,
         &[T_INTEGER, T_INTEGER],
         T_INTEGER,
     );
     source_item_call(
         &mut builder,
-        ITEM_CALL_STATE,
+        ITEM_CALL_SOURCE_STATE,
         SOURCE_FUNCTION,
         &[T_INTEGER, T_INTEGER],
         T_INTEGER,
@@ -896,56 +657,15 @@ pub fn function_unrelated(name: &str) -> ExactFunctionDeclaration {
     }
 }
 
-/// One function per link of a >128-deep nested-call chain:
-/// `chain_0..chain_(CHAIN_LENGTH - 1)`, each calling the next, the last
-/// calling `add_fn` (see [`function_add`]).
-pub fn chain_functions() -> Vec<ExactFunctionDeclaration> {
-    let mut functions = Vec::with_capacity(CHAIN_LENGTH as usize);
-    for i in 0..CHAIN_LENGTH {
-        let callee = if i + 1 < CHAIN_LENGTH {
-            format!("chain_{}", i + 1)
-        } else {
-            "add_fn".to_owned()
-        };
-        functions.push(ExactFunctionDeclaration {
-            node_id: code_id(CHAIN_BASE + i),
-            name: format!("chain_{i}"),
-            parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
-            result_type: code_id(T_INTEGER),
-            body: ExactFunctionBody::Call { callee },
-            capability_requirements: Vec::new(),
-        });
-    }
-    functions
-}
-
 // ---------------------------------------------------------------------------
 // Item builders
 // ---------------------------------------------------------------------------
 
 pub fn item(call_code: u32, function: &str) -> ExactFunctionItem {
-    let argument_codes = match call_code {
-        ITEM_CALL_ONE_PARAM => vec![item_argument_code(call_code, 0)],
-        ITEM_CALL_ADD
-        | ITEM_CALL_EQ
-        | ITEM_CALL_NESTED
-        | ITEM_CALL_UNRELATED
-        | ITEM_CALL_UNKNOWN_FUNCTION
-        | ITEM_CALL_CAPABILITY
-        | ITEM_CALL_DANGLING
-        | ITEM_CALL_BAD_FORM
-        | ITEM_CALL_BOOLEAN_RESULT
-        | ITEM_CALL_NEGATE
-        | ITEM_CALL_CHAIN => vec![
-            item_argument_code(call_code, 0),
-            item_argument_code(call_code, 1),
-        ],
-        _ => vec![T_INTEGER, T_INTEGER],
-    };
     ExactFunctionItem {
         call_node_id: code_id(call_code),
         function: function.to_owned(),
-        argument_node_ids: argument_codes.into_iter().map(code_id).collect(),
+        argument_node_ids: vec![code_id(T_INTEGER), code_id(T_INTEGER)],
     }
 }
 

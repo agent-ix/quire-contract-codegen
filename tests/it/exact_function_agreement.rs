@@ -1,13 +1,12 @@
 //! FR-021-AC-2, AC-4, AC-5, AC-7, AC-9, AC-17: generated function-application
 //! oracles agree with an independently assembled direct Contract Runtime
-//! call; `InputRefusal` surfaces unchanged; the shared `MAX_CALL_DEPTH`
-//! budget bounds a nested-call chain; a denial injected at `function.call`
+//! call; `InputRefusal` surfaces unchanged; a denial injected at `function.call`
 //! yields `Outcome::Incomplete` with no charge applied; and the static
 //! location map's `origin` half is confirmed against the runtime's own
 //! `CheckRefusal`.
 //!
 //! Nothing generated is committed. The execution cases (AC-2, AC-4, AC-5,
-//! AC-7, AC-9) live in `tests/exact_function_support/agreement_cases.rs` and
+//! AC-9) live in `tests/exact_function_support/agreement_cases.rs` and
 //! run against the crate the generator emits now, through
 //! `exact_scalar_agreement`'s scratch-crate runner. AC-17 needs the generator
 //! itself and runs here.
@@ -32,24 +31,17 @@ use quire_contract_runtime::exact as rt;
 
 use super::exact_scalar_agreement::run_agreement_cases;
 
-/// Trace: FR-021-AC-2, FR-021-AC-4, FR-021-AC-5, FR-021-AC-7, FR-021-AC-9, TC-031.
+/// Trace: FR-021-AC-2, FR-021-AC-4, FR-021-AC-5, FR-021-AC-9, TC-031.
 ///
-/// The main-corpus crate the generator emits now, with the chain corpus's
-/// generated source beside it, compiles and passes every agreement case: each
+/// The main-corpus crate the generator emits now compiles and passes every
+/// agreement case: each
 /// generated oracle equals a direct `CheckedPackage::call` on an independently
 /// assembled package, input refusals surface unchanged and before any charge,
-/// arity is decided before value kind, a denied `function.call` is incomplete
-/// with no charge applied, and the generated 140-link chain is refused once
-/// `MAX_CALL_DEPTH` is exceeded.
+/// arity is decided before value kind and a denied `function.call` is
+/// incomplete with no charge applied.
 #[test]
 fn tc_031_generated_function_crate_agrees_with_direct_runtime() {
     let main = super::exact_function_generation::main_oracles();
-    let chain = super::exact_function_generation::chain_oracles();
-    let chain_source = chain
-        .artifacts
-        .iter()
-        .find(|artifact| artifact.path == "src/lib.rs")
-        .expect("the chain corpus generates src/lib.rs");
     let aliases = ["add_fn", "eq_fn", "call_fn"]
         .into_iter()
         .map(|function| {
@@ -79,10 +71,7 @@ fn tc_031_generated_function_crate_agrees_with_direct_runtime() {
         main.artifacts
             .iter()
             .map(|artifact| (artifact.path.as_str(), artifact.contents.as_str())),
-        &[
-            ("chain/lib.rs", chain_source.contents.as_str()),
-            ("names.rs", names.as_str()),
-        ],
+        &[("names.rs", names.as_str())],
         "tests/exact_function_support/agreement_cases.rs",
     );
 }

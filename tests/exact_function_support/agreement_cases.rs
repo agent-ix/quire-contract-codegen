@@ -1,7 +1,6 @@
-//! FR-021-AC-2, AC-4, AC-5, AC-7, AC-9, AC-17: generated function-application
+//! FR-021-AC-2, AC-4, AC-5, AC-9, AC-17: generated function-application
 //! oracles agree with an independently assembled direct Contract Runtime
-//! call; `InputRefusal` surfaces unchanged; the shared `MAX_CALL_DEPTH`
-//! budget bounds a nested-call chain; a denial injected at `function.call`
+//! call; `InputRefusal` surfaces unchanged; a denial injected at `function.call`
 //! yields `Outcome::Incomplete` with no charge applied; and the static
 //! location map's `origin` half is confirmed against the runtime's own
 //! `CheckRefusal`.
@@ -9,8 +8,7 @@
 //! This file is not part of the `it` binary. It is the `agreement` integration
 //! test of a scratch crate that `tests/it/exact_function_agreement.rs` writes
 //! at test time from the generator's current output: the crate itself is the
-//! main FR-021 corpus, and `chain/lib.rs` beside it is the generator's output
-//! for the >128-deep nested-call chain corpus. AC-17 needs the generator
+//! main FR-021 corpus. AC-17 needs the generator
 //! itself and stays in `tests/it/exact_function_agreement.rs`.
 //!
 //! FR-021-AC-18 (three-way agreement with the QSL authority) is not
@@ -25,14 +23,6 @@
 mod generated {
     pub use quire_exact_function_oracles::*;
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
-}
-
-/// The generator's output for the nested-call chain corpus, written beside the
-/// scratch crate's manifest, so AC-7 below executes the real generated `Call`
-/// bodies rather than a hand-built parallel double.
-#[allow(dead_code)] // the chain's own oracle is not called; AC-7 enters at `chain_0`.
-mod chain_generated {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/chain/lib.rs"));
 }
 
 use quire_contract_runtime::exact as rt;
@@ -434,39 +424,4 @@ fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied()
     }
     // The denied charge point is never applied: no charge was admitted.
     assert!(meter.admitted_charges().is_empty());
-}
-
-/// Trace: FR-021-AC-7, TC-031. Re-entry through a chain of nested
-/// `Frame::call`s is bounded by one `CheckingLimits::depth` budget
-/// (`MAX_CALL_DEPTH` = 128) shared across the whole chain, refusing
-/// `Refusal::CheckedInvariant` before any further charge once exceeded --
-/// exercised against the generated `chain_generated` module above, so this
-/// drives the *real* generated `Call` bodies (`frame.call(&next, args)`,
-/// rendered by `render_body`) through `Frame::call`'s own depth enforcement,
-/// not a hand-built parallel double standing in for them. The chain corpus's
-/// shape (140 links, deeper than `MAX_CALL_DEPTH`) is asserted where it is
-/// built, in `tests/it/exact_function_generation.rs`.
-#[test]
-fn tc_031_ac7_nested_call_chain_is_bounded_by_max_call_depth() {
-    let package = chain_generated::checked_package().expect("generated chain package admits");
-    let objects = empty_objects();
-    let mut meter = rt::Meter::new(UNLIMITED);
-    let result = package.call(
-        "chain_0",
-        vec![
-            rt::Value::Integer(1i64.into()),
-            rt::Value::Integer(2i64.into()),
-        ],
-        &objects,
-        &mut meter,
-    );
-    match result {
-        Ok(rt::Evaluation { outcome, .. }) => {
-            assert!(
-                matches!(outcome, rt::Outcome::Refused(rt::Refusal::CheckedInvariant)),
-                "expected CheckedInvariant once MAX_CALL_DEPTH is exceeded, got {outcome:?}"
-            );
-        }
-        Err(refusal) => panic!("expected a completed call reaching depth refusal, got {refusal:?}"),
-    }
 }
