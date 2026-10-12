@@ -14,7 +14,7 @@ use quire_contract_codegen::{
     ExactFunctionRefusal, FunctionScheduleDeclaration, FunctionScheduleDisposition,
     FunctionScheduleItem, FunctionScheduleLimits, FunctionScheduleOperand as ScheduleOperand,
     FunctionScheduleParameter, FunctionScheduleRefusal as ScheduleRefusal,
-    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim,
 };
 use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;

@@ -33,10 +33,10 @@ use quire_contract_codegen::{
     ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniExecutionRefusal,
     KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
     KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError,
-    KindOutput, ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord,
-    ObligationSubject, OperationProvenance, RoutedGenerationItem,
-    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, KindOutput,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
+    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
     BoundPackage, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef,

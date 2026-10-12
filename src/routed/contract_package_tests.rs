@@ -1000,7 +1000,7 @@ mod tests {
             generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
             ExactFunctionItem, FunctionParameter,
         };
-        use crate::oracle::scalar::IntegerOperator;
+        use crate::oracle::operator_catalog::IntegerOperator;
 
         let source = "language \"ix:native\" edition \"1-draft\";\n\
             profile v = \"quire.value.complete/v1\";\n\
@@ -1123,9 +1123,8 @@ mod tests {
             generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
             ExactFunctionItem, FunctionParameter,
         };
-        use crate::oracle::scalar::{
-            generate_contract_scalar_oracles, ExactScalarRefusal, IntegerOperator,
-        };
+        use crate::oracle::operator_catalog::IntegerOperator;
+        use crate::oracle::scalar::{generate_contract_scalar_oracles, ExactScalarRefusal};
 
         let source = "language \"ix:native\" edition \"1-draft\";\n\
             profile v = \"quire.value.complete/v1\";\n\
