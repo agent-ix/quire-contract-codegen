@@ -30,6 +30,8 @@ pub use ce::*;
 use quire_contract_codegen::{
     ExactFunctionBody, ExactFunctionDeclaration, ExactFunctionItem, FunctionParameter,
 };
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 impl FixtureIds {
     /// Resolves every checked node key in one declaration against its admitted fixture.
@@ -350,26 +352,132 @@ pub fn item(call_code: u32, function: &str) -> ExactFunctionItem {
 // The byte-ceiling fixture (FR-021-AC-23)
 // ---------------------------------------------------------------------------
 
-/// The first code of the chain of nodes the byte-ceiling fixture declares as function bodies, and
-/// how many it has.
+/// The first code of the chain of nodes the byte-ceiling fixture declares as function bodies,
+/// and how many it has.
 pub const BYTE_BODY_BASE: u32 = 30_000;
 pub const BYTE_BODY_COUNT: u32 = 220;
-/// The first code of the chain of nodes it requests as `call` items, and how many it has. The
-/// two chains differ in length so the body lowering and the call-node lowering of one call give
-/// different `consumed` under one ceiling.
-pub const BYTE_CALL_BASE: u32 = 40_000;
-pub const BYTE_CALL_COUNT: u32 = 190;
+/// Call items request a prefix of the same chain. The two request sets differ in length, so
+/// their lowerings produce distinct byte charges while sharing admitted graph nodes.
+pub const BYTE_CALL_BASE: u32 = BYTE_BODY_BASE;
+pub const BYTE_CALL_COUNT: u32 = BYTE_BODY_COUNT - 1;
 
-/// [`ext_corpus_package`] plus the two chains of the byte-ceiling fixture. Each chain node
-/// reaches every node before it, so each lowered package (the function bodies, and the requested
-/// call nodes) lists its chain's closure in `dependencies` and is longer than the checked
-/// package, which grows linearly.
+/// Author the chain's source text and record every actual node-use token in it: one declaration,
+/// one requested call where applicable, and two predecessor references in the next equality.
+pub fn byte_ceiling_source(
+    body_count: u32,
+    call_count: u32,
+) -> (String, BTreeMap<u32, Vec<(usize, usize)>>) {
+    assert!(body_count > 0 && call_count > 0 && call_count <= body_count);
+    let mut source = String::new();
+    let mut sites: BTreeMap<u32, Vec<(usize, usize)>> = BTreeMap::new();
+    let mut token = |source: &mut String, code: u32| {
+        let start = source.len();
+        source.push_str(&format!("n{code}"));
+        sites.entry(code).or_default().push((start, source.len()));
+    };
+    for offset in 0..body_count {
+        let code = BYTE_BODY_BASE + offset;
+        source.push_str("let ");
+        token(&mut source, code);
+        source.push_str(" = eq(");
+        if offset == 0 {
+            source.push_str("true, true");
+        } else {
+            token(&mut source, code - 1);
+            source.push_str(", ");
+            token(&mut source, code - 1);
+        }
+        source.push_str(")\n");
+        if offset < call_count {
+            source.push_str("call ");
+            token(&mut source, code);
+            source.push('\n');
+        }
+    }
+    (source, sites)
+}
+
+/// A small reader-admitted base plus one shared chain. Source-map correspondence and request
+/// accounting are represented separately in the two lowerings; the test measures their actual
+/// canonical byte lengths before choosing a ceiling.
 pub fn byte_ceiling_package() -> PackageBuilder {
-    let mut builder = ext_corpus_package();
+    byte_ceiling_package_with_shape(BYTE_BODY_COUNT, BYTE_CALL_COUNT)
+}
+
+/// The same topology at a smaller size for a bounded reader/lowering control.
+pub fn byte_ceiling_package_with_shape(body_count: u32, call_count: u32) -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
     builder
-        .boolean_equality_chain_from(BYTE_BODY_BASE, BYTE_BODY_COUNT, "true")
-        .boolean_equality_chain_from(BYTE_CALL_BASE, BYTE_CALL_COUNT, "false");
-    builder
+        .code(
+            T_BOOLEAN,
+            "scalar_type",
+            "boolean",
+            T_BOOLEAN,
+            aggregate(vec![]),
+        )
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(vec![]),
+        )
+        .boolean_equality_chain_from(BYTE_BODY_BASE, body_count, "true");
+
+    let (source, sites) = byte_ceiling_source(body_count, call_count);
+    let source_ref = serde_json::json!({
+        "authority": "agent-ix",
+        "identity": "ir764-ac23-source",
+        "digest_domain": "quire.source.bytes/v1",
+        "digest": format!("{:x}", Sha256::digest(source.as_bytes())),
+    });
+    let mut wire = builder.raw_wire();
+    wire["lock"]["sources"]
+        .as_array_mut()
+        .expect("locked sources")
+        .push(source_ref.clone());
+    let mut entries = Vec::new();
+    let mut replaced = std::collections::BTreeSet::new();
+    for (code, spans) in sites {
+        let node_id = code_id(code);
+        replaced.insert(node_id.digest.to_string());
+        let node = wire["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("graph nodes")
+            .iter_mut()
+            .find(|node| node["node_id"]["digest"] == node_id.digest.as_ref())
+            .expect("source-backed chain node");
+        node["occurrences"] = serde_json::Value::Array(
+            spans
+                .iter()
+                .enumerate()
+                .map(|(ordinal, _)| {
+                    serde_json::json!({
+                        "role": if ordinal == 0 { "declaration" } else { "expression" },
+                        "ordinal": ordinal,
+                    })
+                })
+                .collect(),
+        );
+        for (ordinal, (start, end)) in spans.into_iter().enumerate() {
+            entries.push(serde_json::json!({
+                "node_id": node_id,
+                "role": if ordinal == 0 { "declaration" } else { "expression" },
+                "ordinal": ordinal,
+                "regions": [{"source": source_ref, "start": start, "end": end}],
+            }));
+        }
+    }
+    let map = wire["source_map"].as_array_mut().expect("source map");
+    map.retain(|entry| {
+        !replaced.contains(
+            entry["node_id"]["digest"]
+                .as_str()
+                .expect("source node digest"),
+        )
+    });
+    map.extend(entries);
+    PackageBuilder::from_wire(wire)
 }
 
 /// One function per body-chain node of [`byte_ceiling_package`].

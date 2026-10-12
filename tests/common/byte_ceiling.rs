@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2,
-    CompleteLoweringProfileV2,
+    CompleteLoweringProfileV2, CompleteLoweringRecordV2,
 };
 
 /// The largest ceiling a fixture is read under, far above any fixture's lowered package.
@@ -57,6 +57,50 @@ pub fn lowered_package_length(
     profile: &CompleteLoweringProfileV2,
 ) -> u64 {
     let lowering = package.lower(requested, profile);
+    let lowered_count = lowering
+        .records
+        .iter()
+        .filter(|record| matches!(record, CompleteLoweringRecordV2::Lowered { .. }))
+        .count();
+    assert_eq!(
+        lowered_count,
+        requested.len(),
+        "only {lowered_count}/{} requested nodes lowered; first non-lowered record: {:?}",
+        requested.len(),
+        lowering
+            .records
+            .iter()
+            .find(|record| !matches!(record, CompleteLoweringRecordV2::Lowered { .. }))
+    );
+    let package_nodes = lowering
+        .package
+        .lowered()
+        .iter()
+        .map(|node| &node.node.node_id)
+        .chain(
+            lowering
+                .package
+                .dependencies()
+                .iter()
+                .map(|dependency| &dependency.node.node_id),
+        )
+        .collect::<BTreeSet<_>>();
+    for (requested_id, record) in requested.iter().zip(&lowering.records) {
+        let CompleteLoweringRecordV2::Lowered { node } = record else {
+            unreachable!("all records were checked as lowered");
+        };
+        assert_eq!(&node.node.node_id, requested_id);
+        assert!(
+            package_nodes.contains(requested_id),
+            "requested node absent from lowered package"
+        );
+        assert!(
+            node.dependencies
+                .iter()
+                .all(|dependency| package_nodes.contains(dependency)),
+            "lowered node closure is incomplete for {requested_id:?}"
+        );
+    }
     let bytes = lowering
         .package
         .canonical_bytes()
