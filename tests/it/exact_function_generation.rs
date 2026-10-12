@@ -2062,6 +2062,299 @@ fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     );
 }
 
+/// Trace: FR-021-AC-33, TC-031. A reader-admitted fairness root keeps its request identity,
+/// refuses with the temporal cause, and leaves a supported function sibling byte-identical.
+#[test]
+fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
+    use serde_json::{json, Value};
+    use std::{fs, path::PathBuf};
+
+    const MODEL_NODE: u32 = 992_001;
+    const FAIRNESS_NODE: u32 = 992_002;
+    const FUNCTION_BODY: u32 = 992_003;
+    const HEALTHY_CALL: u32 = 992_004;
+
+    let qspec = PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout"));
+    let fixture = qspec.join("proposals/checked-package-v2/fixtures/positive-all-families.json");
+    let mut wire: Value = serde_json::from_slice(&fs::read(fixture).expect("read published QSpec"))
+        .expect("published QSpec fixture JSON");
+    let (baseline, _) = PackageBuilder::from_wire(wire.clone()).read();
+    assert!(
+        matches!(
+            baseline,
+            quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
+        ),
+        "unmodified authoritative QSpec fixture must admit with the same runtime evidence"
+    );
+
+    // Reproduce the original bad incremental mutation: indexing an absent operation/laws path
+    // inserts null members into node 0's existing body. The reader must reject that malformed
+    // body, demonstrating why the candidate builder below uses checked object traversal.
+    let mut first_bad_mutation = wire.clone();
+    assert!(
+        first_bad_mutation["semantic_graph"]["nodes"][0]["body"]["operation"]["laws"]
+            .as_array_mut()
+            .is_none()
+    );
+    let refusal = read_mutated_wire(first_bad_mutation);
+    let refusal = match refusal {
+        quire_contract_model::CheckedPackageV2ReadResult::Refused(refusal) => refusal,
+        other => panic!("malformed first mutation unexpectedly admitted: {other:?}"),
+    };
+    let refusal_debug = format!("{refusal:?}");
+    eprintln!("first malformed mutation refusal: {refusal_debug}");
+    assert!(
+        refusal_debug.contains("InvalidSemanticGraph"),
+        "{refusal_debug}"
+    );
+    assert!(
+        refusal_debug.contains("/semantic_graph/nodes/0/body"),
+        "{refusal_debug}"
+    );
+
+    let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
+    let boolean_type = nodes
+        .iter()
+        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "boolean")
+        .unwrap()["node_id"]["digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let integer_type = nodes
+        .iter()
+        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+        .unwrap()["node_id"]["digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let text_type = nodes
+        .iter()
+        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "text")
+        .unwrap()["node_id"]["digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let infinite_trace =
+        json!({"authority":"agent-ix", "identity":"quire.temporal.infinite-trace/v1"});
+    for path in ["lock", "identity_preimage"] {
+        let selections = wire[path]["profile_selections"].as_array_mut().unwrap();
+        let temporal = selections
+            .iter_mut()
+            .find(|selection| selection["role"] == "temporal_profile")
+            .expect("published temporal profile selection");
+        temporal["definition"] = infinite_trace.clone();
+    }
+    for node in wire["semantic_graph"]["nodes"].as_array_mut().unwrap() {
+        let laws = node
+            .get_mut("body")
+            .and_then(Value::as_object_mut)
+            .and_then(|body| body.get_mut("operation"))
+            .and_then(Value::as_object_mut)
+            .and_then(|operation| operation.get_mut("laws"))
+            .and_then(Value::as_array_mut);
+        if let Some(laws) = laws {
+            for law in laws {
+                if law["role"] == "temporal_profile" {
+                    law["definition"] = infinite_trace.clone();
+                }
+            }
+        }
+    }
+
+    let mut builder = PackageBuilder::from_wire(wire);
+    builder.model_owned_object_type(MODEL_NODE, "acme/orders", "ix://acme/orders/Order");
+    let model_placeholder = key(MODEL_NODE);
+    let parameter_placeholder = key(992_005);
+    builder.node(
+        &parameter_placeholder,
+        "value",
+        "parameter",
+        &integer_type,
+        aggregate(vec![
+            bound_member(
+                "name",
+                json!({"term":"literal", "type":{"domain":NODE_DOMAIN, "digest":text_type}, "value":"left", "value_kind":"text"}),
+            ),
+            bound_member(
+                "level",
+                json!({"term":"literal", "type":{"domain":NODE_DOMAIN, "digest":integer_type}, "value":"0", "value_kind":"integer"}),
+            ),
+        ]),
+    );
+    builder.application_node_tagged(
+        FAIRNESS_NODE,
+        "temporal",
+        "fairness",
+        &boolean_type,
+        json!({
+            "term":"application", "operator":"temporal_fairness",
+            "operation":{
+                "identity":"quire.op.temporal.fair", "laws":[], "mode":null,
+                "member":{
+                    "kind":"fairness", "fairness_kind":"weak", "granularity":"each",
+                    "declaration":{"domain":NODE_DOMAIN, "digest":model_placeholder},
+                    "name":"size"
+                },
+                "leaves":[]
+            },
+            "result_type":{"domain":NODE_DOMAIN, "digest":boolean_type},
+            "arguments":[]
+        }),
+    );
+    let fairness_placeholder = code_id(FAIRNESS_NODE);
+    let clause = builder.raw_wire()["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["node_tag"] == "temporal" && node["semantic_form"] == "temporal_clause")
+        .expect("published temporal clause")
+        .clone();
+    let clause_digest = clause["node_id"]["digest"].as_str().unwrap().to_owned();
+    let mut wire = builder.raw_wire();
+    let clause = wire["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|node| node["node_id"]["digest"] == clause_digest)
+        .expect("temporal clause to update");
+    let arguments = clause["body"]["arguments"].as_array_mut().unwrap();
+    arguments[4] = json!({
+        "term":"aggregate", "members":[{"term":"reference", "target":{
+            "domain":NODE_DOMAIN, "digest":fairness_placeholder.digest
+        }}]
+    });
+    let dependencies = clause["dependencies"].as_array_mut().unwrap();
+    dependencies.push(json!({"domain":NODE_DOMAIN, "digest":fairness_placeholder.digest}));
+    builder = PackageBuilder::from_wire(wire);
+
+    let body = json!({
+        "term":"application", "operator":"binary",
+        "operation":{"identity":"quire.op.integer.add","laws":[],"mode":null,"member":null,"leaves":[]},
+        "result_type":{"domain":NODE_DOMAIN, "digest":integer_type},
+        "arguments":[
+            {"term":"reference", "target":{"domain":NODE_DOMAIN, "digest":parameter_placeholder}},
+            {"term":"reference", "target":{"domain":NODE_DOMAIN, "digest":parameter_placeholder}}
+        ]
+    });
+    builder
+        .application_node_tagged(
+            FUNCTION_BODY,
+            "expression",
+            "binary",
+            &integer_type,
+            body.clone(),
+        )
+        .application_node_tagged(HEALTHY_CALL, "expression", "call", &integer_type, body);
+
+    let (admission, _resolved_wire, ids) = builder.read_resolved();
+    let package = match admission {
+        quire_contract_model::CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("candidate must be admitted by public CheckedPackageV2::read: {other:?}"),
+    };
+    let fairness_id = ids.resolve(&fairness_placeholder);
+    let model_id = ids.resolve(&id(&model_placeholder));
+    let body_id = ids.resolve(&code_id(FUNCTION_BODY));
+    let call_id = ids.resolve(&code_id(HEALTHY_CALL));
+    let parameter_id = ids.resolve(&id(&parameter_placeholder));
+    let fairness = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == fairness_id)
+        .expect("reader-admitted fairness node");
+    assert_eq!(fairness.node_tag.as_ref(), "temporal");
+    assert_eq!(fairness.semantic_form.as_ref(), "fairness");
+    assert_eq!(fairness.dependencies, vec![model_id]);
+
+    let function = quire_contract_codegen::ExactFunctionDeclaration {
+        node_id: body_id.clone(),
+        name: "healthy_fairness_sibling".into(),
+        parameters: vec![
+            quire_contract_codegen::FunctionParameter {
+                name: "left".into(),
+                type_node_id: ids.resolve(&id(&integer_type)),
+            },
+            quire_contract_codegen::FunctionParameter {
+                name: "right".into(),
+                type_node_id: ids.resolve(&id(&integer_type)),
+            },
+        ],
+        result_type: ids.resolve(&id(&integer_type)),
+        body: quire_contract_codegen::ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
+        },
+        capability_requirements: Vec::new(),
+    };
+    let direct_item = ExactFunctionItem {
+        call_node_id: fairness_id.clone(),
+        function: "healthy_fairness_sibling".into(),
+        argument_node_ids: vec![parameter_id.clone(), parameter_id.clone()],
+    };
+    let healthy_item = ExactFunctionItem {
+        call_node_id: call_id.clone(),
+        function: "healthy_fairness_sibling".into(),
+        argument_node_ids: vec![parameter_id.clone(), parameter_id],
+    };
+    let mut roots = vec![body_id.clone(), fairness_id.clone(), call_id.clone()];
+    roots.sort();
+    let position = |id: &quire_contract_model::CheckedNodeId| {
+        roots.iter().position(|root| root == id).unwrap()
+    };
+    let requests = driver_positions(&roots);
+    let contract = admitted_function_contract(&package, &roots);
+    let combined = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[position(&body_id)],
+        std::slice::from_ref(&function),
+        &[position(&fairness_id), position(&call_id)],
+        &[direct_item, healthy_item.clone()],
+    )
+    .unwrap();
+    let healthy_only = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[position(&body_id)],
+        &[function],
+        &[position(&call_id)],
+        &[healthy_item],
+    )
+    .unwrap();
+    let direct = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == fairness_id)
+        .expect("direct fairness claim retains requested identity");
+    assert!(matches!(
+        &direct.result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag: "temporal" }
+        } if unsupported_node_id == &fairness_id
+    ));
+    let generated = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == call_id)
+        .expect("healthy sibling claim");
+    let generated_alone = healthy_only
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == call_id)
+        .expect("healthy sibling claim without fairness");
+    assert!(matches!(&generated.result, ClaimDisposition::Generated(_)));
+    assert_eq!(generated.result, generated_alone.result);
+    assert_eq!(
+        contents(&combined, "src/lib.rs"),
+        contents(&healthy_only, "src/lib.rs")
+    );
+    assert_eq!(combined.location_map, healthy_only.location_map);
+    assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
+}
+
 /// Trace: FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
 /// node id requested twice under one binding refuses every copy.
 #[test]
