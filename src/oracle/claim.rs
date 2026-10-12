@@ -73,7 +73,7 @@ pub struct ClaimMap<C> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
     /// The caller's request sequence disagrees with admitted FR-330 accounting.
-    PackageRequest(crate::routed::contract_package::PackageRequestError),
+    PackageRequest(crate::core::contract_package::PackageRequestError),
     /// A lowered record has no admitted Contract IR package value.
     ContractPackageUnavailable,
     /// Generated source exceeds the effective caller-selected byte ceiling.

@@ -17,7 +17,7 @@ use qsl_replay::{DomainKey, DomainKind, ProofBound};
 use quire_contract_model::{CheckedNodeId, ContractPackageV1};
 use serde::Serialize;
 
-use super::contract_package::{
+use crate::core::contract_package::{
     AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
 

@@ -573,7 +573,19 @@ pub(crate) fn admitted_scalar_claims(
         .iter()
         .map(|claim| claim.node_id.clone())
         .collect::<Vec<_>>();
-    let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
+    // Direct FR-015 claim controls need their admitted state/model nodes in the
+    // package graph. The built-in routed profile intentionally excludes those
+    // families before Kani settlement.
+    let mut profile = routed_contract_lowering_profile();
+    profile.reference.identity = "quire.codegen.kani-direct-test/v1".into();
+    profile.supported_tags.extend([
+        quire_contract_model::CheckedNodeTag::Model,
+        quire_contract_model::CheckedNodeTag::Relation,
+        quire_contract_model::CheckedNodeTag::State,
+        quire_contract_model::CheckedNodeTag::Temporal,
+        quire_contract_model::CheckedNodeTag::Protocol,
+    ]);
+    let lowered = checked.lower(&requested, &profile);
     match ContractPackageWireV1::read(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         CheckedPackageReadLimits::bounded(),
@@ -2118,12 +2130,20 @@ fn routed_scalar_increment() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
 ) {
-    let (package, ids) = package::bounded_increment_package().admit_resolved();
-    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
-    let lowered = package.lower(
-        std::slice::from_ref(&node_id),
-        &routed_contract_lowering_profile(),
+    const NARROW: u32 = 49_100;
+    let mut builder = package::bounded_increment_package();
+    let bound = builder.bound(&package::Bound::Integer(0, 9));
+    builder.narrow(
+        NARROW,
+        package::code_id(package::BOUNDED_INCREMENT).digest.as_ref(),
+        &bound,
     );
+    builder.expression_occurrences();
+    let (package, ids) = builder.admit_resolved();
+    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
+    let narrow_id = ids.resolve(&package::code_id(NARROW));
+    let roots = [node_id.clone(), narrow_id.clone()];
+    let lowered = package.lower(&roots, &routed_contract_lowering_profile());
     let admitted = match ContractPackageWireV1::read(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         CheckedPackageReadLimits::bounded(),
@@ -2132,10 +2152,34 @@ fn routed_scalar_increment() -> (
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR must admit the routed scalar package: {other:?}"),
     };
-    let positions = [ContractRequestPosition::DriverItem {
-        node_id: node_id.clone(),
-        result_selection: quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
-    }];
+    let occurrence = |node: &quire_contract_model::CheckedNodeId| {
+        let entries = package
+            .source_map()
+            .iter()
+            .filter(|entry| {
+                &entry.node_id == node
+                    && entry.role == quire_contract_model::CheckedOccurrenceRole::Expression
+            })
+            .collect::<Vec<_>>();
+        let [entry] = entries.as_slice() else {
+            panic!("one caller-authored expression occurrence");
+        };
+        quire_contract_model::ContractOccurrenceKeyV1 {
+            node_id: node.clone(),
+            role: entry.role.clone(),
+            ordinal: entry.ordinal,
+        }
+    };
+    let positions = [
+        ContractRequestPosition::DriverItem {
+            node_id: node_id.clone(),
+            result_selection: quire_contract_codegen::ContractDriverResultSelection::OwnResult {
+                application: occurrence(&node_id),
+                conversion: Some(occurrence(&narrow_id)),
+            },
+        },
+        ContractRequestPosition::ContextRoot { node_id: narrow_id },
+    ];
     let generation = generate_routed(
         &admitted,
         &positions,

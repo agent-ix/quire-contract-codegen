@@ -47,14 +47,14 @@
 
 use super::operator_catalog::{IntegerOperator, Operator as CatalogOperator};
 use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
+use crate::core::contract_package::{
+    ContractDriverResultSelection, ContractRequestPosition, PackageItem, PackageItems,
+    PackageRequestError,
+};
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{classify_lowering_failure, LoweringFailure};
-use crate::routed::contract_package::{
-    ContractDriverResultSelection, ContractRequestPosition, PackageItem, PackageItems,
-    PackageRequestError,
-};
 use quire_contract_model::{
     BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageV2,
     CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteContractNodeV2,

@@ -115,6 +115,10 @@ pub use oracle::bound_v1::{
 
 pub use crate::core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
 pub use crate::core::profile::RUNTIME_DEPENDENCY_SOURCE;
+pub use core::contract_package::{
+    routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
+    ContractRequestPosition, PackageRequestError,
+};
 pub use kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver};
 pub use kani::census::{
     ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
@@ -148,10 +152,6 @@ pub use routed::capability::{
     ContractItemSettlement, ContractNegotiationError, Disposition, EnvelopeRefusal,
     ExtentClassification, ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem,
     RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
-};
-pub use routed::contract_package::{
-    routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
-    ContractRequestPosition, PackageRequestError,
 };
 pub use routed::generate::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,

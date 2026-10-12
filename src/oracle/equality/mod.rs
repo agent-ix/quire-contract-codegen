@@ -67,15 +67,15 @@
 use crate::core::artifact::{
     Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES, MAX_GENERATED_SOURCE_BYTES,
 };
+use crate::core::contract_package::{
+    ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
+};
 use crate::core::naming::unique_names;
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
-};
-use crate::routed::contract_package::{
-    ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
 #[cfg(test)]
 use quire_contract_model::CheckedPackageV2;

@@ -10,6 +10,9 @@ pub(crate) mod artifact;
 // The one caller of quire-canonical's RFC 8785 encoder and digest.
 // Implements: FR-016-AC-21
 pub(crate) mod canonical;
+// Typed access to one admitted FR-330 package.
+// Implements: FR-039
+pub(crate) mod contract_package;
 // The generation diagnostic vocabulary, below every generator.
 pub(crate) mod diagnostic;
 // Identity newtypes of a generated harness.

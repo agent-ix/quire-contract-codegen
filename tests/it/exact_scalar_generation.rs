@@ -18,7 +18,7 @@ use quire_contract_codegen::{
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
     ExactScalarRefusal, GeneratedScalarClaim, OperationProvenance, OracleGenerationError,
     RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
-    SCALAR_LOWERING_SUPPORTED_TAGS,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
@@ -906,16 +906,70 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
         .collect::<Vec<_>>();
     let alone = generate(&package, &generated_only);
     assert_eq!(contents(&alone, "src/lib.rs"), lib);
-    let generated_claims = |oracles: &ExactScalarOracles| {
-        oracles
-            .claim_map
-            .items
+    let expected_identity = |items: &[ExactScalarItem]| {
+        let mut roots = items
             .iter()
-            .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
-            .cloned()
-            .collect::<Vec<_>>()
+            .map(|item| item.node_id.clone())
+            .collect::<Vec<_>>();
+        roots.sort();
+        roots.dedup();
+        let profile = quire_contract_model::CompleteLoweringProfileV2 {
+            reference: quire_contract_model::LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.exact-scalar/v1".into(),
+            },
+            supported_tags: BTreeSet::from(SCALAR_LOWERING_SUPPORTED_TAGS),
+            require_bounds: true,
+            work_limit: SCALAR_LOWERING_WORK_LIMIT,
+        };
+        package
+            .lower(&roots, &profile)
+            .package
+            .wire()
+            .expect("direct scalar roots lower")
+            .identity()
+            .clone()
     };
-    assert_eq!(generated_claims(&alone), generated_claims(&oracles));
+    let full_identity = expected_identity(&items);
+    let alone_identity = expected_identity(&generated_only);
+    assert_ne!(
+        full_identity, alone_identity,
+        "request roots bind package identity"
+    );
+    let full_claims = oracles
+        .claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+        .collect::<Vec<_>>();
+    let alone_claims = alone
+        .claim_map
+        .items
+        .iter()
+        .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
+        .collect::<Vec<_>>();
+    assert_eq!(alone_claims.len(), full_claims.len());
+    for (alone, full) in alone_claims.iter().zip(&full_claims) {
+        assert_eq!(alone.node_id, full.node_id);
+        assert_eq!(alone.operation, full.operation);
+        let (ClaimDisposition::Generated(left), ClaimDisposition::Generated(right)) =
+            (&alone.result, &full.result)
+        else {
+            panic!("selected claims are generated");
+        };
+        assert_eq!(left.contract_package_identity, alone_identity);
+        assert_eq!(right.contract_package_identity, full_identity);
+        assert_eq!(left.symbol, right.symbol);
+        assert_eq!(left.package_id, right.package_id);
+        assert_eq!(left.semantic_form, right.semantic_form);
+        assert_eq!(left.semantic_type, right.semantic_type);
+        assert_eq!(left.source_map, right.source_map);
+        assert_eq!(left.claims, right.claims);
+        assert_eq!(left.bounds, right.bounds);
+        assert_eq!(left.checked_bounds, right.checked_bounds);
+        assert_eq!(left.dependencies, right.dependencies);
+        assert_eq!(left.oracle_source, right.oracle_source);
+    }
 
     // A refusal of one copy of a duplicated sibling does not depend on its
     // descriptors' arrival order, and a single copy of the same node generates.
@@ -1034,20 +1088,34 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
          supported_tags (cg#134) -- update whichever one is stale"
     );
 
+    let profile = quire_contract_model::CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.exact-scalar/v1".into(),
+        },
+        supported_tags: claim_supported_tags,
+        require_bounds: true,
+        work_limit: SCALAR_LOWERING_WORK_LIMIT,
+    };
+    let mut complete_request = golden_items()
+        .iter()
+        .map(|item| fixture_ids.resolve(&item.node_id))
+        .collect::<Vec<_>>();
+    complete_request.sort();
+    complete_request.dedup();
+    let expected_package_identity = package
+        .lower(&complete_request, &profile)
+        .package
+        .wire()
+        .expect("full direct request lowers")
+        .identity()
+        .clone();
     let lowered = package.lower(
         &corpus()
             .iter()
             .map(|expression| fixture_ids.resolve(&code_id(expression.code)))
             .collect::<Vec<_>>(),
-        &quire_contract_model::CompleteLoweringProfileV2 {
-            reference: quire_contract_model::LoweringProfileRef {
-                authority: "agent-ix".into(),
-                identity: "quire.codegen.exact-scalar/v1".into(),
-            },
-            supported_tags: claim_supported_tags,
-            require_bounds: true,
-            work_limit: u64::MAX,
-        },
+        &profile,
     );
     for (expression, record) in corpus().iter().zip(&lowered.records) {
         let quire_contract_model::CompleteLoweringRecordV2::Lowered { node } = record else {
@@ -1072,7 +1140,7 @@ fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
         assert_eq!(generated.package_id, *package.package_id());
         assert_eq!(
             generated.contract_package_identity,
-            *lowered.package.wire().expect("lowered package").identity()
+            expected_package_identity
         );
         assert!(serde_json::to_value(generated)
             .expect("generated claim")
@@ -3169,7 +3237,18 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
         }
 
         let arms = code.matches("CompleteLoweringRecordV2::Failed").count();
-        assert_eq!(arms, 1, "{path} has one `Failed` arm");
+        if path != "src/oracle/scalar/mod.rs" {
+            assert_eq!(
+                arms, 0,
+                "{path} consumes admitted package accounting instead"
+            );
+            assert!(
+                code.contains("PackageItem::Refused") && code.contains("PackageAccounting"),
+                "{path} retains the admitted package refusal path"
+            );
+            continue;
+        }
+        assert_eq!(arms, 1, "{path} has one direct-lowering `Failed` arm");
         let arm = &code[code
             .find("CompleteLoweringRecordV2::Failed")
             .expect("the arm")..];

@@ -21,6 +21,10 @@ use quire_contract_model::{CheckedNodeId, ContractPackageV1};
 
 use crate::{
     core::artifact::Artifact,
+    core::contract_package::{
+        AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems,
+        PackageRequestError,
+    },
     core::identity::{HarnessPath, HarnessSymbol},
     kani::generate::negotiate::negotiate_kani_obligations,
     kani::generate::outcome::{
@@ -33,10 +37,6 @@ use crate::{
         generate_contract_scalar_oracles, ContractScalarError, ExactScalarClaim, ExactScalarOracles,
     },
     routed::capability::{BackendDescriptor, BackendKind, Candidate},
-    routed::contract_package::{
-        AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems,
-        PackageRequestError,
-    },
 };
 
 /// One item the driver routed to a backend.
