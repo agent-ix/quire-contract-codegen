@@ -22,8 +22,9 @@ use quire_contract_codegen::{
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
-    CheckedPackageReadLimits, CheckedPackageRefusalCause, CheckedPackageRefusalCode,
-    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2, StructuralCandidateError,
+    CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageRefusalCause,
+    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
+    StructuralCandidateError,
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval, QuantityTarget,
@@ -2330,6 +2331,203 @@ fn add_over(low: i64, high: i64) -> ExactScalarOperation {
         operator: IntegerOperator::Add,
         domain: bounded(low, high),
     }
+}
+
+/// Trace: FR-014-AC-44, TC-024. An admitted direct temporal formula request keeps its node
+/// identity and settles as a typed unsupported refusal without producing oracle code.
+#[test]
+fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
+    let package = qspec_package("positive-all-families.json");
+    let node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.semantic_form.as_ref() == "formula"
+                && node.body.get("operator").and_then(Value::as_str) == Some("temporal_formula")
+        })
+        .expect("QSpec fixture has an admitted temporal_formula root");
+    let requested_id = node.node_id.clone();
+    let oracles = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: requested_id.clone(),
+            operation: add_over(-100, 100),
+        }],
+    )
+    .expect("direct unsupported request settles in claim map");
+    assert_eq!(oracles.claim_map.items.len(), 1);
+    let claim = &oracles.claim_map.items[0];
+    assert_eq!(claim.node_id, requested_id);
+    assert!(
+        matches!(
+            &claim.result,
+            ClaimDisposition::Refused { refusal: ExactScalarRefusal::Unsupported { unsupported_node_id, node_tag: "temporal" } }
+                if unsupported_node_id == &requested_id
+        ),
+        "expected direct typed temporal refusal, got {:?}",
+        claim.result
+    );
+    assert!(!oracles
+        .claim_map
+        .items
+        .iter()
+        .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+}
+
+fn qspec_package(fixture: &str) -> CheckedPackageV2 {
+    let root =
+        PathBuf::from(std::env::var_os("QSPEC_DIR").expect("QSPEC_DIR points at published QSpec"));
+    let bytes = fs::read(
+        root.join("proposals/checked-package-v2/fixtures")
+            .join(fixture),
+    )
+    .expect("read authoritative QSpec fixture");
+    let wire: Value = serde_json::from_slice(&bytes).expect("QSpec fixture JSON");
+    let canonical = serde_json::to_vec(&wire).expect("canonical QSpec fixture bytes");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    if let Some(selection) = wire["lock"]["model_selections"]
+        .as_array()
+        .and_then(|rows| rows.first())
+    {
+        let identity = selection["identity"]
+            .as_str()
+            .expect("model selection identity");
+        let digest = selection["digest"]
+            .as_str()
+            .expect("model selection digest");
+        let document = match identity {
+            "acme/orders" => "domain-package-acme-orders.json",
+            other => panic!("no published model document for QSpec selection {other}"),
+        };
+        evidence.insert_domain_package_document(
+            digest,
+            fs::read(root.join("proposals/checked-package-v2").join(document))
+                .expect("read selected QSpec model package"),
+        );
+    }
+    match CheckedPackageV2::read(&canonical, CheckedPackageReadLimits::bounded(), &evidence) {
+        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("authoritative QSpec fixture must be admitted: {other:?}"),
+    }
+}
+
+/// Trace: FR-014-AC-44, TC-024. A directly requested case keeps its operation and node identity
+/// while producing no generated claim.
+#[test]
+fn tc_024_ac44_direct_control_case_is_unsupported() {
+    let package = qspec_package("positive-union-nodes.json");
+    let node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.semantic_form.as_ref() == "case"
+                && node.body.get("operator").and_then(Value::as_str) == Some("case")
+        })
+        .expect("QSpec fixture has an admitted case root");
+    let requested_id = node.node_id.clone();
+    let oracles = generate_exact_scalar_oracles(
+        &package,
+        &[ExactScalarItem {
+            node_id: requested_id.clone(),
+            operation: add_over(-100, 100),
+        }],
+    )
+    .expect("direct unsupported request settles in claim map");
+    let claim = &oracles.claim_map.items[0];
+    assert_eq!(claim.node_id, requested_id);
+    assert_eq!(claim.operation.identity, "integer.add domain=[-100,100]");
+    assert!(
+        matches!(
+            &claim.result,
+            ClaimDisposition::Refused { refusal: ExactScalarRefusal::Unsupported { unsupported_node_id, node_tag: "expression" } }
+                if unsupported_node_id == &requested_id
+        ),
+        "expected direct typed control.case refusal, got {:?}",
+        claim.result
+    );
+    assert!(!oracles
+        .claim_map
+        .items
+        .iter()
+        .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
+}
+
+/// A directly requested case must keep its identity through the public function path.
+#[test]
+fn tc_031_ac32_direct_control_case_is_unsupported() {
+    use quire_contract_codegen::ContractRequestPosition;
+    use quire_contract_codegen::{
+        generate_exact_function_oracles, ExactFunctionItem, ExactFunctionRefusal,
+    };
+    use quire_contract_model::{
+        CheckedNodeTag, CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult,
+        ContractPackageWireV1, LoweringProfileRef,
+    };
+    let package = qspec_package("positive-union-nodes.json");
+    let case = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.semantic_form.as_ref() == "case"
+                && node.body.get("operator").and_then(Value::as_str) == Some("case")
+        })
+        .expect("admitted case root");
+    let id = case.node_id.clone();
+    let lowered = package.lower(
+        std::slice::from_ref(&id),
+        &CompleteLoweringProfileV2 {
+            reference: LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.exact-function/v1".into(),
+            },
+            supported_tags: [
+                CheckedNodeTag::ScalarType,
+                CheckedNodeTag::CompositeType,
+                CheckedNodeTag::BoundedDomain,
+                CheckedNodeTag::Value,
+                CheckedNodeTag::Expression,
+                CheckedNodeTag::Claim,
+                CheckedNodeTag::Correspondence,
+            ]
+            .into(),
+            require_bounds: false,
+            work_limit: 65_536,
+        },
+    );
+    let contract = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().unwrap(),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("lowered function request should be admitted: {other:?}"),
+    };
+    let output = generate_exact_function_oracles(
+        &contract,
+        &[ContractRequestPosition::DriverItem {
+            node_id: id.clone(),
+            result_selection: quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        }],
+        &[],
+        &[],
+        &[0],
+        &[ExactFunctionItem {
+            call_node_id: id.clone(),
+            function: "missing".into(),
+            argument_node_ids: vec![],
+        }],
+    )
+    .unwrap();
+    assert!(
+        matches!(&output.claim_map.items[0].result,
+        ClaimDisposition::Refused { refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag: "expression" } } if unsupported_node_id == &id),
+        "{:?}",
+        output.claim_map.items[0].result
+    );
 }
 
 fn two_parameter_admitted() -> &'static (CheckedPackageV2, FixtureIds) {

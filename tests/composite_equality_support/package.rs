@@ -873,6 +873,24 @@ impl PackageBuilder {
 fn evidence() -> CheckedPackageEvidence {
     let mut evidence = CheckedPackageEvidence::new();
     evidence.support_feature("quire.value.complete/v1");
+    if let Some(qspec_dir) = std::env::var_os("QSPEC_DIR") {
+        let root = std::path::PathBuf::from(qspec_dir).join("proposals/checked-package-v2");
+        let fixture: Value = serde_json::from_slice(
+            &std::fs::read(root.join("fixtures/positive-union-nodes.json"))
+                .expect("read published QSpec model-selection metadata"),
+        )
+        .expect("published QSpec fixture JSON");
+        if let Some(selection) = fixture["lock"]["model_selections"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
+        {
+            evidence.insert_domain_package_document(
+                selection["digest"].as_str().expect("model digest"),
+                std::fs::read(root.join("domain-package-acme-orders.json"))
+                    .expect("read published selected QSpec model package"),
+            );
+        }
+    }
     evidence
 }
 
