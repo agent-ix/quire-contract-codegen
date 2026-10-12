@@ -95,6 +95,76 @@ mod tests {
             .collect()
     }
 
+    fn referenced_node_id(checked: &CheckedPackageV2, term: &serde_json::Value) -> CheckedNodeId {
+        let target = term.get("target").expect("reference target");
+        let digest = target
+            .get("digest")
+            .and_then(serde_json::Value::as_str)
+            .expect("reference target digest");
+        let domain = target
+            .get("domain")
+            .and_then(serde_json::Value::as_str)
+            .expect("reference target domain");
+        checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+            })
+            .expect("reference target node")
+            .node_id
+            .clone()
+    }
+
+    fn source_call_arguments(
+        checked: &CheckedPackageV2,
+        call_id: &CheckedNodeId,
+    ) -> Vec<CheckedNodeId> {
+        let call = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &node.node_id == call_id)
+            .expect("checked source call");
+        call.body
+            .get("arguments")
+            .and_then(serde_json::Value::as_array)
+            .expect("source call arguments")
+            .iter()
+            .skip(1)
+            .map(|argument| referenced_node_id(checked, argument))
+            .collect()
+    }
+
+    fn source_function_body(checked: &CheckedPackageV2, name: &str) -> CheckedNodeId {
+        let function = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_tag.as_ref() == "function"
+                    && node.semantic_form.as_ref() == "pure_function"
+                    && node.declaration.as_ref().is_some_and(|declaration| {
+                        declaration.qualified_name.len() == 1
+                            && declaration.qualified_name[0].as_ref() == name
+                    })
+            })
+            .expect("named checked function");
+        let body = function
+            .body
+            .get("members")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|members| {
+                members.iter().find(|member| {
+                    member.get("name").and_then(serde_json::Value::as_str) == Some("body")
+                })
+            })
+            .and_then(|member| member.get("value"))
+            .expect("function body binding");
+        referenced_node_id(checked, body)
+    }
+
     fn occurrence(checked: &CheckedPackageV2, node_id: &CheckedNodeId) -> ContractOccurrenceKeyV1 {
         let sources = checked
             .source_map()
@@ -1052,6 +1122,7 @@ mod tests {
             .expect("QSL Integer type")
             .node_id
             .clone();
+        let call_arguments = source_call_arguments(&checked, &call);
         let requested = vec![addition.clone(), call.clone()];
         let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
@@ -1081,7 +1152,7 @@ mod tests {
         let call_item = ExactFunctionItem {
             call_node_id: call.clone(),
             function: "add".to_owned(),
-            argument_node_ids: vec![call.clone(), call.clone()],
+            argument_node_ids: call_arguments,
         };
         let generated = generate_exact_function_oracles(
             &admitted,
@@ -1155,20 +1226,7 @@ mod tests {
             .expect("Integer scalar type")
             .node_id
             .clone();
-        let addition = checked
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-                    && node.semantic_type == integer
-            })
-            .expect("plain function addition")
-            .node_id
-            .clone();
+        let addition = source_function_body(&checked, "add");
         let unbounded = checked
             .graph()
             .nodes
@@ -1231,6 +1289,7 @@ mod tests {
             equality.clone(),
             unbounded.clone(),
         ];
+        let call_arguments = source_call_arguments(&checked, &call);
         let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
             lowered.package.canonical_bytes().expect("FR-330 bytes"),
@@ -1270,7 +1329,7 @@ mod tests {
             &[ExactFunctionItem {
                 call_node_id: call,
                 function: "add".to_owned(),
-                argument_node_ids: vec![requested[1].clone(), requested[1].clone()],
+                argument_node_ids: call_arguments,
             }],
         )
         .expect("function generation");
