@@ -52,12 +52,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
-    CheckedSemanticNodeV2, ClauseKind, ClauseRef, ExecutionPoint,
+    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedSemanticNodeV2, ClauseKind,
+    ClauseRef, ContractPackageV1, ExecutionPoint,
 };
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     core::naming::unique_names,
@@ -103,7 +104,7 @@ pub fn negotiate_kani_obligations(
         .map(|item| classify(item, request.unwind, request.ceilings))
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
-    assign_names(&mut states);
+    assign_names(request.items, &mut states);
     resolve_assumptions(&mut states);
     let rejected = states.iter().any(|state| state.outcome.is_invalid());
     let mut records = Vec::with_capacity(states.len());
@@ -204,6 +205,7 @@ enum ItemIdentity {
     Node {
         package: String,
         node: CheckedNodeId,
+        result_selection: ContractDriverResultSelection,
     },
     /// One role of one state clause. `DuplicateItem` spans this arm and one role only.
     StateFrame {
@@ -286,7 +288,9 @@ fn classify<'a>(
             package,
             claim_map,
             node_id,
-        } => classify_node(package, claim_map, node_id),
+            claim_index,
+            result_selection,
+        } => classify_node(package, claim_map, node_id, claim_index, result_selection),
         ObligationItem::StateFrame {
             package,
             clause,
@@ -344,7 +348,7 @@ fn classify_state_frame<'a>(
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 enum NameKey {
     Clause(String, u64, String),
-    Node(CheckedNodeId),
+    Node(CheckedNodeId, usize),
 }
 
 fn clause_key(clause: &ClauseRef) -> NameKey {
@@ -360,7 +364,7 @@ fn clause_key(clause: &ClauseRef) -> NameKey {
 /// oracle functions (any may be embedded beside another as an assumed precondition), then the
 /// module and harness names of every clause and scalar obligation. A name depends on its item and
 /// on the siblings sharing its readable stem, never on the item's request position.
-fn assign_names(states: &mut [ItemState<'_>]) {
+fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
     let oracle_slots = states
         .iter()
         .enumerate()
@@ -406,13 +410,18 @@ fn assign_names(states: &mut [ItemState<'_>]) {
                     clause_key(lowered.clause.identity()),
                 ),
             )),
-            Outcome::LoweredScalar(lowered) => Some((
-                index,
-                (
-                    scalar_stem(&lowered.operation_identity),
-                    NameKey::Node(lowered.node_id.clone()),
-                ),
-            )),
+            Outcome::LoweredScalar(lowered) => {
+                let Some(ObligationItem::ScalarClaim { claim_index, .. }) = items.get(index) else {
+                    return None;
+                };
+                Some((
+                    index,
+                    (
+                        scalar_stem(&lowered.operation_identity),
+                        NameKey::Node(lowered.node_id.clone(), *claim_index),
+                    ),
+                ))
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -526,12 +535,15 @@ fn classify_clause<'a>(package: &'a BoundPackage, clause_ref: &ClauseRef) -> Ite
 }
 
 fn classify_node<'a>(
-    package: &CheckedPackageV2,
+    package: &ContractPackageV1,
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
+    claim_index: usize,
+    result_selection: &ContractDriverResultSelection,
 ) -> ItemState<'a> {
     let graph_node = package
-        .graph()
+        .wire()
+        .semantic_graph
         .nodes
         .iter()
         .find(|node| &node.node_id == node_id);
@@ -542,23 +554,26 @@ fn classify_node<'a>(
     let subject = ObligationSubject::CheckedNode {
         node_id: node_id.clone(),
         source_map: package
-            .source_map()
+            .wire()
+            .source_map
+            .nodes
             .iter()
             .filter(|entry| &entry.node_id == node_id)
-            .cloned()
+            .flat_map(|entry| entry.occurrences.iter().cloned())
             .collect(),
     };
     let identity = Some(ItemIdentity::Node {
-        package: package.package_id().digest.to_string(),
+        package: package.identity().digest.to_string(),
         node: node_id.clone(),
+        result_selection: result_selection.clone(),
     });
-    let outcome = if &claim_map.package_id != package.package_id() {
+    let outcome = if claim_map.package_id != package.wire().package.source.package_id {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)
     } else {
         match claim_map
             .items
-            .iter()
-            .find(|claim| &claim.node_id == node_id)
+            .get(claim_index)
+            .filter(|claim| &claim.node_id == node_id)
         {
             None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
             Some(claim) => classify_claim(package, claim),
@@ -576,7 +591,7 @@ fn classify_node<'a>(
 /// Guards [`Outcome::LoweredScalar`] against a node whose graph entry does not match the one
 /// recognized `state`/`frame` role pair, and against a node absent from the graph entirely.
 /// [`ClaimMap`]/[`ExactScalarClaim`] are fully `pub`, so nothing enforces that a claim
-/// map assembled by another caller names only node ids [`CheckedPackageV2::graph`] also carries --
+/// map assembled by another caller names only node ids the admitted FR-330 graph also carries --
 /// that invariant holds only for a claim map this crate's own
 /// [`crate::oracle::scalar::generate_exact_scalar_oracles`] produced. A hand-assembled claim map
 /// whose [`GeneratedScalarClaim`](crate::oracle::scalar::GeneratedScalarClaim) bounds still resolve can therefore reach
@@ -619,10 +634,11 @@ fn refuse_unknown_node_kind<'a>(
     })
 }
 
-fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> Outcome<'a> {
+fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> Outcome<'a> {
     let graph = |id: &CheckedNodeId| {
         package
-            .graph()
+            .wire()
+            .semantic_graph
             .nodes
             .iter()
             .find(|node| &node.node_id == id)
@@ -748,6 +764,9 @@ fn classify_claim<'a>(package: &CheckedPackageV2, claim: &ExactScalarClaim) -> O
                 })
             }
             ExactScalarRefusal::DuplicateRequest
+            | ExactScalarRefusal::IncompleteContext
+            | ExactScalarRefusal::PackageAccounting { .. }
+            | ExactScalarRefusal::SelectedDependencyUnsupported { .. }
             | ExactScalarRefusal::AmbiguousBound { .. }
             | ExactScalarRefusal::BoundMismatch { .. }
             | ExactScalarRefusal::OperandUnsupported { .. }

@@ -1,0 +1,325 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Agent-IX
+
+//! FR-039: position-preserving access to Contract IR's admitted FR-330 package.
+
+use std::collections::BTreeSet;
+
+use quire_contract_model::{
+    CheckedNodeId, CheckedNodeTag, CheckedSourceMapEntry, CompleteLoweringProfileV2,
+    ContractFeatureRecordV1, ContractOccurrenceKeyV1, ContractPackageV1, ContractReachedClosureV1,
+    ContractRootViewError, ContractRootViewV1, LoweringProfileRef,
+};
+
+/// The CG-owned lowering profile for one mixed routed request.
+///
+/// The driver passes this profile to Contract IR before submitting the single
+/// admitted package to negotiation and generation. Its tags cover the built-in
+/// scalar, equality and exact-function arms; process providers do not enlarge
+/// that set. A lowered scalar with an unbounded operand still receives CG's
+/// typed `RequiresBound` refusal from its admitted reached closure.
+///
+/// Trace: FR-039-AC-2, TC-053.
+#[must_use]
+pub fn routed_contract_lowering_profile() -> CompleteLoweringProfileV2 {
+    CompleteLoweringProfileV2 {
+        reference: LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.routed-contract/v1".into(),
+        },
+        supported_tags: BTreeSet::from([
+            CheckedNodeTag::ScalarType,
+            CheckedNodeTag::CompositeType,
+            CheckedNodeTag::BoundedDomain,
+            CheckedNodeTag::Value,
+            CheckedNodeTag::Expression,
+            CheckedNodeTag::Function,
+            CheckedNodeTag::Claim,
+            CheckedNodeTag::Correspondence,
+        ]),
+        require_bounds: false,
+        work_limit: 65_536,
+    }
+}
+
+/// The role of one root in the exact sequence passed to Contract IR lowering.
+///
+/// Driver items retain their request order even when context-only roots are
+/// interleaved. A context root has FR-330 accounting but no backend settlement
+/// or generated claim of its own.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ContractRequestPosition {
+    /// One original driver request, including repeated requested node IDs.
+    DriverItem {
+        /// Exact root key of this original driver request.
+        node_id: CheckedNodeId,
+        /// Caller-authored result occurrence for scalar expressions.
+        result_selection: ContractDriverResultSelection,
+    },
+    /// A root needed to represent the meaning of a driver item.
+    ContextRoot {
+        /// Exact root key submitted only to represent request context.
+        node_id: CheckedNodeId,
+    },
+}
+
+/// The result occurrence selected by the driver for one request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ContractDriverResultSelection {
+    /// This request has no scalar result-context query.
+    NotApplicable,
+    /// The caller selected this application's own result and optional direct narrow.
+    OwnResult {
+        /// Exact checked application occurrence.
+        application: ContractOccurrenceKeyV1,
+        /// Exact checked conversion occurrence, when the result is narrowed.
+        conversion: Option<ContractOccurrenceKeyV1>,
+    },
+}
+
+impl ContractRequestPosition {
+    /// The exact root key submitted at this lowering position.
+    #[must_use]
+    pub fn node_id(&self) -> &CheckedNodeId {
+        match self {
+            Self::DriverItem { node_id, .. } | Self::ContextRoot { node_id } => node_id,
+        }
+    }
+}
+
+/// A mismatch between the driver's request and one admitted package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PackageRequestError {
+    /// The caller supplied a different number of descriptors and request positions.
+    ItemPositions {
+        /// Number of descriptors.
+        items: usize,
+        /// Number of request positions.
+        positions: usize,
+    },
+    /// The package has a different number of accounting records.
+    Count {
+        /// Number of keys the caller requested.
+        requested: usize,
+        /// Number of admitted accounting records.
+        accounted: usize,
+    },
+    /// An accounting record names a different exact requested key.
+    Identity {
+        /// Position of the disagreement.
+        request_index: usize,
+        /// Exact key requested by the caller.
+        requested: CheckedNodeId,
+        /// Exact key in the admitted accounting record.
+        accounted: CheckedNodeId,
+    },
+    /// A lowering root, driver or context, disagrees with IR accounting.
+    AccountingIdentity {
+        /// Position in the full lowering request.
+        accounting_index: usize,
+        /// Exact root key passed to lowering.
+        requested: CheckedNodeId,
+        /// Exact key in admitted FR-330 accounting.
+        accounted: CheckedNodeId,
+    },
+    /// A requested position is outside the admitted accounting.
+    Position {
+        /// Position outside the admitted accounting.
+        request_index: usize,
+    },
+    /// The admitted traversal could not reproduce a lowered item's closure.
+    ReachedClosure {
+        /// Position of the lowered record.
+        request_index: usize,
+        /// Exact key whose closure failed.
+        node_id: CheckedNodeId,
+        /// Reader traversal's typed failure.
+        cause: Box<ContractRootViewError>,
+    },
+}
+
+/// The exact admitted FR-330 decision and source occurrences at one request position.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdmittedItemAccounting {
+    /// Contract IR's original typed record, including a `Lowered` disposition.
+    pub record: ContractFeatureRecordV1,
+    /// Exact source occurrences in the admitted request-position source map.
+    pub occurrences: Vec<CheckedSourceMapEntry>,
+}
+
+/// The admitted meaning and exact available source occurrences for one position.
+pub(crate) enum PackageItem<'a> {
+    /// The root is represented in the package's semantic graph.
+    Lowered {
+        record: &'a ContractFeatureRecordV1,
+        closure: ContractReachedClosureV1<'a>,
+        occurrences: &'a [CheckedSourceMapEntry],
+    },
+    /// The original typed accounting record remains the cause of refusal.
+    Refused {
+        record: &'a ContractFeatureRecordV1,
+        occurrences: &'a [CheckedSourceMapEntry],
+    },
+}
+
+impl PackageItem<'_> {
+    /// Own the record and occurrences once for a public production decision.
+    pub(crate) fn accounting(&self) -> AdmittedItemAccounting {
+        match self {
+            Self::Lowered {
+                record,
+                occurrences,
+                ..
+            }
+            | Self::Refused {
+                record,
+                occurrences,
+            } => AdmittedItemAccounting {
+                record: (**record).clone(),
+                occurrences: occurrences.to_vec(),
+            },
+        }
+    }
+}
+
+/// A checked correspondence between request positions and one admitted package.
+pub(crate) struct PackageItems<'a> {
+    package: &'a ContractPackageV1,
+    positions: &'a [ContractRequestPosition],
+    driver_to_accounting: Vec<usize>,
+}
+
+impl<'a> PackageItems<'a> {
+    /// Match every position and exact key before any item can be consumed.
+    pub(crate) fn new(
+        package: &'a ContractPackageV1,
+        positions: &'a [ContractRequestPosition],
+    ) -> Result<Self, PackageRequestError> {
+        let accounted = &package.wire().feature_accounting;
+        if positions.len() != accounted.len() {
+            return Err(PackageRequestError::Count {
+                requested: positions.len(),
+                accounted: accounted.len(),
+            });
+        }
+        let mut driver_to_accounting = Vec::new();
+        for (accounting_index, (position, record)) in positions.iter().zip(accounted).enumerate() {
+            if position.node_id() != record.node_id() {
+                return Err(PackageRequestError::AccountingIdentity {
+                    accounting_index,
+                    requested: position.node_id().clone(),
+                    accounted: record.node_id().clone(),
+                });
+            }
+            if matches!(position, ContractRequestPosition::DriverItem { .. }) {
+                driver_to_accounting.push(accounting_index);
+            }
+        }
+        Ok(Self {
+            package,
+            positions,
+            driver_to_accounting,
+        })
+    }
+
+    /// Number of original driver requests, excluding context-only roots.
+    pub(crate) fn driver_count(&self) -> usize {
+        self.driver_to_accounting.len()
+    }
+
+    /// Exact key of one driver request, independently of context-root order.
+    pub(crate) fn driver_node(&self, request_index: usize) -> Option<&'a CheckedNodeId> {
+        let accounting_index = *self.driver_to_accounting.get(request_index)?;
+        self.package
+            .wire()
+            .feature_accounting
+            .get(accounting_index)
+            .map(ContractFeatureRecordV1::node_id)
+    }
+
+    /// Caller-authored result selection for one driver position.
+    pub(crate) fn result_selection(
+        &self,
+        request_index: usize,
+    ) -> Option<&'a ContractDriverResultSelection> {
+        let accounting_index = *self.driver_to_accounting.get(request_index)?;
+        match self.positions.get(accounting_index)? {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => Some(result_selection),
+            ContractRequestPosition::ContextRoot { .. } => None,
+        }
+    }
+
+    /// Whether the selected conversion root belongs to this driver's
+    /// contiguous context span, before the next driver position.
+    pub(crate) fn has_context_root(&self, request_index: usize, node_id: &CheckedNodeId) -> bool {
+        let Some(accounting_index) = self.driver_to_accounting.get(request_index).copied() else {
+            return false;
+        };
+        self.positions[accounting_index + 1..]
+            .iter()
+            .take_while(|position| matches!(position, ContractRequestPosition::ContextRoot { .. }))
+            .any(|position| position.node_id() == node_id)
+    }
+
+    /// Return the exact admitted outcome at one request position.
+    pub(crate) fn at(
+        &self,
+        request_index: usize,
+        node_id: &CheckedNodeId,
+    ) -> Result<PackageItem<'a>, PackageRequestError> {
+        let accounting_index = *self
+            .driver_to_accounting
+            .get(request_index)
+            .ok_or(PackageRequestError::Position { request_index })?;
+        let wire = self.package.wire();
+        let record = wire
+            .feature_accounting
+            .get(accounting_index)
+            .ok_or(PackageRequestError::Position { request_index })?;
+        if record.node_id() != node_id {
+            return Err(PackageRequestError::Identity {
+                request_index,
+                requested: node_id.clone(),
+                accounted: record.node_id().clone(),
+            });
+        }
+        // The sole IR reader guarantees source-map alignment with accounting.
+        let occurrences = wire.source_map.requested_items[accounting_index]
+            .occurrences
+            .as_slice();
+        match record {
+            ContractFeatureRecordV1::Lowered { node_id } => {
+                let view = self.package.reached_closure(node_id).map_err(|cause| {
+                    PackageRequestError::ReachedClosure {
+                        request_index,
+                        node_id: node_id.clone(),
+                        cause: Box::new(cause),
+                    }
+                })?;
+                let ContractRootViewV1::Lowered(closure) = view else {
+                    return Err(PackageRequestError::ReachedClosure {
+                        request_index,
+                        node_id: node_id.clone(),
+                        cause: Box::new(ContractRootViewError::Inconsistent),
+                    });
+                };
+                Ok(PackageItem::Lowered {
+                    record,
+                    closure,
+                    occurrences,
+                })
+            }
+            ContractFeatureRecordV1::Unsupported { .. }
+            | ContractFeatureRecordV1::RequiresBound { .. }
+            | ContractFeatureRecordV1::InvalidInput { .. }
+            | ContractFeatureRecordV1::Failed { .. }
+            | ContractFeatureRecordV1::InvalidBody { .. }
+            | ContractFeatureRecordV1::BodyIncomplete { .. } => Ok(PackageItem::Refused {
+                record,
+                occurrences,
+            }),
+        }
+    }
+}

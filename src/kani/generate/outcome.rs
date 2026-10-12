@@ -5,11 +5,12 @@
 use quire_contract_model::{
     BoundPackage, CheckedModelFieldsError, CheckedNodeId, CheckedNodeTag, CheckedPackageIncomplete,
     CheckedPackageLimit, CheckedPackageRefusal, CheckedPackageV2, CheckedSourceMapEntry,
-    ClauseKind, ClauseRef, DependencyIdentity, SourceSpan,
+    ClauseKind, ClauseRef, ContractPackageV1, DependencyIdentity, SourceSpan,
 };
 use serde::{Serialize, Serializer};
 
 use crate::{
+    core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     kani::identity::{
@@ -74,14 +75,18 @@ pub enum ObligationItem<'a> {
         /// The clause.
         clause: &'a ClauseRef,
     },
-    /// One node of an FR-014 exact scalar claim map.
+    /// One selected occurrence in an FR-014 exact scalar claim map.
     ScalarClaim {
         /// The admitted package the claim map was generated from.
-        package: &'a CheckedPackageV2,
+        package: &'a ContractPackageV1,
         /// The claim map.
         claim_map: &'a ClaimMap<ExactScalarClaim>,
         /// The claimed node.
         node_id: &'a CheckedNodeId,
+        /// Index of this selected occurrence in the claim map; its node must match `node_id`.
+        claim_index: usize,
+        /// The caller's selected result occurrence, or `NotApplicable` for a direct node claim.
+        result_selection: &'a ContractDriverResultSelection,
     },
 }
 
@@ -367,7 +372,8 @@ pub enum InvalidObligationItem {
     },
     /// The clause is not an executable clause of the package.
     UnknownClause,
-    /// The node has no entry in the claim map, or (see `refuse_unknown_node_kind`) the claim
+    /// The selected claim index is absent or names another node, or (see
+    /// `refuse_unknown_node_kind`) the claim
     /// naming it has no entry in the admitted graph -- the same code
     /// [`ExactScalarRefusal::InvalidInput`] already reports for "the node is not in the admitted
     /// graph" through `classify_claim`'s `Refused` arm.

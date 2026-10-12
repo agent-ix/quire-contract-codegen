@@ -491,6 +491,36 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    /// Give source-authored scalar expressions the QSL occurrence role used by
+    /// FR-049 result selection. Both graph and source-map occurrences remain
+    /// aligned before the public checked reader admits this fixture.
+    pub fn expression_occurrences(&mut self) -> &mut Self {
+        let expressions = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes")
+            .iter_mut()
+            .filter(|node| node["node_tag"] == "expression")
+            .map(|node| {
+                for occurrence in node["occurrences"]
+                    .as_array_mut()
+                    .expect("fixture occurrences")
+                {
+                    occurrence["role"] = json!("expression");
+                }
+                node["node_id"].clone()
+            })
+            .collect::<Vec<_>>();
+        for source in self.value["source_map"]
+            .as_array_mut()
+            .expect("fixture source map")
+        {
+            if expressions.contains(&source["node_id"]) {
+                source["role"] = json!("expression");
+            }
+        }
+        self
+    }
+
     pub fn node(
         &mut self,
         digest: &str,
@@ -982,12 +1012,14 @@ impl PackageBuilder {
                 .iter()
                 .map(|foreign| self.bound(foreign))
                 .collect::<Vec<_>>();
+            let body = bound.body();
+            let bounded_type = bound.bounded_type();
             self.node_with(
                 &digest,
                 "bounded_domain",
                 bound.form(),
-                &bound.bounded_type(),
-                bound.body(),
+                &bounded_type,
+                body,
                 &foreign,
             );
         }
@@ -1381,12 +1413,11 @@ pub const WRONG_ARITY: u32 = 2017;
 pub const UNBOUNDED: u32 = 2021;
 /// An integer addition bounded in the IR, requested as mathematical.
 pub const MATHEMATICAL: u32 = 2022;
-/// A binary32 addition with no rounding bound.
+/// A binary32 addition whose non-exact mode has no pinned result or operand type.
 pub const MISSING_ROUNDING: u32 = 2023;
 /// An integer addition reaching two integer ranges.
 pub const AMBIGUOUS: u32 = 2024;
 /// An integer addition whose range spells a bound non-canonically.
-pub const UNREADABLE: u32 = 2025;
 /// An integer addition whose only integer bound has the text form.
 pub const WRONG_BOUND_FORM: u32 = 2026;
 /// A floor division bounded `[-5, 5]`, requested over `[-1000, 1000]`.
@@ -2480,6 +2511,46 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     );
 }
 
+/// A minimal checked wire proving a non-exact Float32 mode over bare Float32
+/// types is refused before CG can classify its missing rounding bound.
+pub fn missing_rounding_package() -> PackageBuilder {
+    let mut builder = PackageBuilder::default();
+    builder.code(
+        T_FLOAT32,
+        "scalar_type",
+        "float32",
+        &key(T_FLOAT32),
+        aggregate(),
+    );
+    builder.code(
+        V_FLOAT32,
+        "value",
+        "literal",
+        &key(T_FLOAT32),
+        literal("float32_bits", "0"),
+    );
+    builder.select_definition(ieee_profile_definition());
+    builder.application_bounded(
+        MISSING_ROUNDING,
+        "expression",
+        "binary",
+        &key(T_FLOAT32),
+        application(
+            "binary",
+            op_full(
+                "quire.op.ieee.float32.add",
+                vec![law("ieee_profile", ieee_profile_definition())],
+                Some(mode_kv("rounding", "nearest-even")),
+                None,
+            ),
+            &key(T_FLOAT32),
+            vec![reference(&key(V_FLOAT32)), literal("float32_bits", "1")],
+        ),
+        &[],
+    );
+    builder
+}
+
 /// The complete package: types, values, the corpus, and refused nodes.
 fn corpus_package_with_expression_operand() -> PackageBuilder {
     let mut builder = PackageBuilder::default();
@@ -2616,33 +2687,6 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         );
     }
     builder
-        .application_bounded(
-            MISSING_ROUNDING,
-            "expression",
-            "binary",
-            &key(T_FLOAT32),
-            application(
-                "binary",
-                op_full(
-                    "quire.op.ieee.float32.add",
-                    vec![law("ieee_profile", ieee_profile_definition())],
-                    Some(mode_kv("rounding", "nearest-even")),
-                    None,
-                ),
-                &key(T_FLOAT32),
-                // A second operand distinct from corpus code 1061's own
-                // `ieee(1061, F32_2, ..., Add, Binary32, NearestEven)` --
-                // that corpus expression's `operation` (via
-                // `corpus_operation`'s `IeeeArithmetic` arm) is byte-
-                // identical to this fixture's, so a matching pair of
-                // `reference(V_FLOAT32)` arguments here would give this
-                // node the same digest as code 1061's and IR's
-                // `validate_graph` would refuse the whole package as a
-                // duplicate node id.
-                vec![reference(&key(V_FLOAT32)), literal("float32_bits", "1")],
-            ),
-            &[],
-        )
         .application_bounded(
             QUANTITY_EXACT,
             "expression",
@@ -3124,23 +3168,6 @@ pub fn literal_quantity_package() -> PackageBuilder {
     let mut builder = corpus_package_with_expression_operand();
     builder.omit_code(EXPRESSION_OPERAND);
     builder.omit_code(WRONG_OPERAND);
-    builder
-}
-
-/// The noncanonical integer endpoint is a reader refusal fixture, outside the admitted corpus.
-pub fn unreadable_package() -> PackageBuilder {
-    let mut builder = corpus_package();
-    let bound = unreadable_bound();
-    let bound_key = builder.bound(&bound);
-    let operand = builder.dedicated_operand("integer", &[bound_key]);
-    builder.application_bounded(
-        UNREADABLE,
-        "expression",
-        "binary",
-        &key(T_INTEGER),
-        integer_pair_for_operand(UNREADABLE, &operand),
-        &[bound],
-    );
     builder
 }
 
@@ -4023,14 +4050,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         },
     ));
     items.push(item(
-        MISSING_ROUNDING,
-        ExactScalarOperation::IeeeArithmetic {
-            operator: IeeeArithmeticOperator::Add,
-            width: IeeeWidth::Binary32,
-            rounding: RoundingMode::NearestEven,
-        },
-    ));
-    items.push(item(
         DOMAIN_MISMATCH,
         ExactScalarOperation::IntegerDivision {
             profile: DivisionProfile::Floor,
@@ -4067,11 +4086,54 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
 
 #[cfg(test)]
 mod bound_tests {
-    use super::{Bound, DEC, INT, TEXT};
+    use super::{aggregate, key, node_ref, Bound, PackageBuilder, DEC, INT, TEXT, T_INTEGER};
+    use quire_contract_model::CheckedPackageV2ReadResult;
     use serde_json::json;
 
     fn keys(bounds: &[Bound]) -> Vec<String> {
         bounds.iter().map(Bound::key).collect()
+    }
+
+    /// Trace: FR-014-AC-10, TC-024.
+    #[test]
+    fn anonymous_integer_authority_admits_one_integer_range() {
+        let mut builder = PackageBuilder::default();
+        builder.code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            &key(T_INTEGER),
+            aggregate(),
+        );
+        let anonymous = key(T_INTEGER);
+        let range_source = builder.bound(&Bound::Integer(0, 9));
+
+        let (outcome, _, ids) = builder.read_resolved();
+        let CheckedPackageV2ReadResult::Admitted(package) = outcome else {
+            panic!("one range over anonymous Integer must admit: {outcome:?}");
+        };
+        let anonymous = ids.resolve(&super::id(&anonymous));
+        let integer_node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == anonymous)
+            .expect("admitted structural Integer");
+        assert!(integer_node.declaration.is_none());
+        let range = ids.resolve(&super::id(&range_source));
+        let checked_range = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == range)
+            .expect("admitted integer range");
+        assert_eq!(checked_range.semantic_type, anonymous);
+        for member in checked_range.body["members"]
+            .as_array()
+            .expect("admitted bounds")
+        {
+            assert_eq!(member["value"]["type"], node_ref(&anonymous.digest));
+        }
     }
 
     /// Pins `Bound::foreign`'s derivation against the exact per-variant lists this crate

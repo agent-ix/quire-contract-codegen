@@ -59,10 +59,11 @@ pub use kani::generate::lower::FamilyLoweringError;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
-    DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
-    ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, OperationClaim,
-    OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm,
-    EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    ContractScalarError, DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
+    ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator,
+    OperationClaim, OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator,
+    ScalarForm, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
+    SCALAR_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::equality::{
@@ -114,6 +115,10 @@ pub use oracle::bound_v1::{
 
 pub use crate::core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
 pub use crate::core::profile::RUNTIME_DEPENDENCY_SOURCE;
+pub use core::contract_package::{
+    routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
+    ContractRequestPosition, PackageRequestError,
+};
 pub use kani::abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType, KaniSolver};
 pub use kani::census::{
     ProofDependencyEdge, ProofDependencyKind, ProofDependencyRequest, ProofDependencyState,
@@ -142,8 +147,9 @@ pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,
 };
 pub use routed::capability::{
-    negotiate_backend_provider, BackendDescriptor, BackendId, BackendKind, BackendProviderEnvelope,
-    Candidate, Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal,
+    negotiate_backend_provider, negotiate_contract_package, BackendDescriptor, BackendId,
+    BackendKind, BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause,
+    ContractItemSettlement, ContractNegotiationError, Disposition, EnvelopeRefusal,
     ExtentClassification, ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem,
     RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };

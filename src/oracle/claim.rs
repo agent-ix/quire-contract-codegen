@@ -70,8 +70,12 @@ pub struct ClaimMap<C> {
 /// closed match was not written to expect means the generator's
 /// understanding of that type has gone stale, which puts every item's
 /// result in doubt, not just the one that surfaced it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OracleGenerationError {
+    /// The caller's request sequence disagrees with admitted FR-330 accounting.
+    PackageRequest(crate::core::contract_package::PackageRequestError),
+    /// A lowered record has no admitted Contract IR package value.
+    ContractPackageUnavailable,
     /// Generated source exceeds the effective caller-selected byte ceiling.
     SourceTooLarge {
         /// First source size that exceeds the selected ceiling.

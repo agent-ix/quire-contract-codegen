@@ -7,6 +7,9 @@
 // Capability settlement.
 // Implements: FR-019
 pub(crate) mod capability;
+// Production package access lives in the shared core; these controls exercise routed use.
+#[cfg(test)]
+mod contract_package_tests;
 // Generation for items the driver has already settled and routed.
 // Implements: FR-022
 pub(crate) mod generate;

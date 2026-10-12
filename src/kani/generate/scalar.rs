@@ -690,12 +690,19 @@ mod tests {
             },
             result: ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
                 symbol: "oracle_test".to_owned(),
-                ir_id: serde_json::from_value(serde_json::json!({
-                    "domain": "quire.checked-semantic-node/v1",
+                contract_package_identity: serde_json::from_value(serde_json::json!({
+                    "domain": "quire.contract-ir.semantic/v1",
                     "algorithm": "sha256",
                     "digest": "3".repeat(64),
                 }))
-                .expect("ir id"),
+                .expect("contract package identity"),
+                node_id: node_id("2"),
+                package_id: serde_json::from_value(serde_json::json!({
+                    "domain": "quire.checked-package.semantic/v2",
+                    "algorithm": "sha256",
+                    "digest": "5".repeat(64),
+                }))
+                .expect("source package identity"),
                 semantic_form: "expression".to_owned(),
                 semantic_type: node_id("4"),
                 source_map: Vec::new(),
@@ -752,12 +759,19 @@ mod tests {
             },
             result: ClaimDisposition::Generated(Box::new(GeneratedScalarClaim {
                 symbol: "oracle_test".to_owned(),
-                ir_id: serde_json::from_value(json!({
-                    "domain": "quire.checked-semantic-node/v1",
+                contract_package_identity: serde_json::from_value(json!({
+                    "domain": "quire.contract-ir.semantic/v1",
                     "algorithm": "sha256",
                     "digest": "3".repeat(64),
                 }))
-                .expect("ir id"),
+                .expect("contract package identity"),
+                node_id: checked_node_id("2"),
+                package_id: serde_json::from_value(json!({
+                    "domain": "quire.checked-package.semantic/v2",
+                    "algorithm": "sha256",
+                    "digest": "5".repeat(64),
+                }))
+                .expect("source package identity"),
                 semantic_form: "expression".to_owned(),
                 semantic_type: checked_node_id("4"),
                 source_map: Vec::new(),

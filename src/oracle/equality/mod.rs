@@ -1,5 +1,5 @@
-//! Exact complete-V1 composite/structural equality oracle generation from
-//! CheckedPackage V2 (FR-018).
+//! Exact composite/structural equality oracle generation from one admitted
+//! ContractPackage V1 (FR-018, FR-039).
 //!
 //! This is the composite/structural sibling of [`crate::oracle::scalar`]
 //! (FR-014): a requested item names one checked `binary` expression node and a
@@ -67,6 +67,9 @@
 use crate::core::artifact::{
     Artifact, MAX_ARTIFACTS, MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES, MAX_GENERATED_SOURCE_BYTES,
 };
+use crate::core::contract_package::{
+    ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
+};
 use crate::core::naming::unique_names;
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
@@ -74,10 +77,11 @@ use crate::oracle::scalar::{
     aggregate_members, bound_members, literal_count, read_decimal_range, read_integer_range,
     read_rational_range, read_text_bounds, COLLECTION_BOUNDS_MEMBERS,
 };
-use crate::oracle::{classify_lowering_failure, LoweringFailure};
+#[cfg(test)]
+use quire_contract_model::CheckedPackageV2;
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
+    CheckedNodeId, CheckedNodeTag, CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry,
+    ContractFeatureRecordV1, ContractPackageV1,
 };
 use quire_contract_runtime::exact::{
     self as rt, CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration,
@@ -350,6 +354,18 @@ impl TryFrom<rt::DeclarationCause> for DeclarationRefusalCause {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum CompositeEqualityRefusal {
+    /// Exact refusal and available source occurrences from admitted FR-330 accounting.
+    PackageAccounting {
+        /// Reader-provided accounting disposition.
+        record: Box<ContractFeatureRecordV1>,
+        /// Reader-provided source occurrences for this request position.
+        occurrences: Vec<CheckedSourceMapEntry>,
+    },
+    /// Selected external targets require an external resolver; their identities are preserved.
+    SelectedDependencyUnsupported {
+        /// Ordered `(package_id, target_node_id)` pairs from the admitted closure.
+        references: Vec<(CheckedSemanticId, CheckedNodeId)>,
+    },
     /// The item's node id and descriptor were requested more than once;
     /// every copy is refused.
     DuplicateRequest,
@@ -491,8 +507,10 @@ pub struct GeneratedCompositeEqualityClaim {
     pub environment_symbol: String,
     /// Generated oracle function name.
     pub oracle_symbol: String,
-    /// Contract IR identity of the lowered expression node.
-    pub ir_id: CheckedSemanticId,
+    /// Identity of the one Contract IR package that admitted this claim.
+    pub contract_package_identity: CheckedSemanticId,
+    /// Exact requested node key.
+    pub node_id: CheckedNodeId,
     /// Package id.
     pub package_id: CheckedSemanticId,
     /// Semantic type key of the expression node.
@@ -501,6 +519,10 @@ pub struct GeneratedCompositeEqualityClaim {
     pub source_map: Vec<CheckedSourceMapEntry>,
     /// Reachable claim keys.
     pub claims: Vec<CheckedNodeId>,
+    /// Reachable bounded-domain keys.
+    pub bounds: Vec<CheckedNodeId>,
+    /// Every reached key except the root.
+    pub dependencies: Vec<CheckedNodeId>,
     /// The descriptor the request supplied: operator and both operands'
     /// source and conversion-target node ids, read from the request, never
     /// from the generated source.
@@ -584,28 +606,45 @@ pub struct CompositeEqualityOracles {
     pub claim_map: ClaimMap<CompositeEqualityClaim>,
 }
 
-/// Generate composite equality oracles for `items` from an admitted package.
+/// Generate composite equality oracles for `items` from one admitted FR-330 package.
+///
+/// Each `positions` entry names the matching item in `requested`; accounting
+/// and source occurrences are read at that exact index. A mismatch refuses
+/// the whole call before publication.
 ///
 /// Fails as a whole for an invalid work-limit setting, generated-source or
 /// publication bounds, claim-map serialization, or an unknown Contract Runtime
 /// `#[non_exhaustive]` variant. Item-specific problems are refusals in the
 /// claim map.
 pub fn generate_composite_equality_oracles(
-    package: &CheckedPackageV2,
+    package: &ContractPackageV1,
+    requested: &[ContractRequestPosition],
+    positions: &[usize],
     items: &[CompositeEqualityItem],
     limits: CompositeEqualityLimits,
 ) -> Result<CompositeEqualityOracles, OracleGenerationError> {
     if limits.type_resolution_work_units == u64::MAX {
         return Err(OracleGenerationError::InvalidTypeResolutionWorkLimit);
     }
+    let accounting =
+        PackageItems::new(package, requested).map_err(OracleGenerationError::PackageRequest)?;
+    if positions.len() != items.len() {
+        return Err(OracleGenerationError::PackageRequest(
+            PackageRequestError::ItemPositions {
+                items: items.len(),
+                positions: positions.len(),
+            },
+        ));
+    }
     let graph: Graph<'_> = package
-        .graph()
+        .wire()
+        .semantic_graph
         .nodes
         .iter()
         .map(|node| (&node.node_id, node))
         .collect();
     let mut bounds_by_type: BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>> = BTreeMap::new();
-    for node in package.graph().nodes.iter() {
+    for node in package.wire().semantic_graph.nodes.iter() {
         if CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain) {
             bounds_by_type
                 .entry(&node.semantic_type)
@@ -620,63 +659,112 @@ pub fn generate_composite_equality_oracles(
     // every copy (FR-018-AC-11); one node id under two descriptors is two
     // distinct items.
     let mut counts: BTreeMap<DescriptorKey, u32> = BTreeMap::new();
-    let mut by_key: BTreeMap<DescriptorKey, &CompositeEqualityItem> = BTreeMap::new();
-    for item in items {
+    let mut by_key: BTreeMap<DescriptorKey, (usize, &CompositeEqualityItem)> = BTreeMap::new();
+    for (item, &request_index) in items.iter().zip(positions) {
+        if accounting.driver_node(request_index) != Some(&item.node_id) {
+            let Some(accounted) = accounting.driver_node(request_index) else {
+                return Err(OracleGenerationError::PackageRequest(
+                    PackageRequestError::Position { request_index },
+                ));
+            };
+            return Err(OracleGenerationError::PackageRequest(
+                PackageRequestError::Identity {
+                    request_index,
+                    requested: item.node_id.clone(),
+                    accounted: accounted.clone(),
+                },
+            ));
+        }
         let key = DescriptorKey::of(item);
         *counts.entry(key.clone()).or_insert(0) += 1;
-        by_key.entry(key).or_insert(item);
+        by_key.entry(key).or_insert((request_index, item));
     }
-
-    let requested: Vec<CheckedNodeId> = by_key.values().map(|item| item.node_id.clone()).collect();
-    let lowering = package.lower(&requested, &lowering_profile());
 
     let mut source = SourceBuilder::new(limits.source_bytes)?;
     let mut claims = Vec::with_capacity(by_key.len());
     // Generated claims as (claim position, key, item, checked item), rendered once every
     // generated oracle is named.
     let mut pending = Vec::new();
-    for ((key, item), record) in by_key.into_iter().zip(&lowering.records) {
+    for (key, (request_index, item)) in by_key {
         let duplicate = counts.get(&key).copied().unwrap_or(0) > 1;
         let result = if duplicate {
             ClaimDisposition::Refused {
                 refusal: CompositeEqualityRefusal::DuplicateRequest,
             }
         } else {
-            match check_item(
-                &graph,
-                &bounds_by_type,
-                record,
-                item,
-                limits.type_resolution_work_units,
-            ) {
-                Ok(generated) => {
-                    let claim =
-                        ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
-                            environment_symbol: String::new(),
-                            oracle_symbol: String::new(),
-                            ir_id: generated.node.ir_id.clone(),
-                            package_id: lowering.package.source_package_id().clone(),
-                            semantic_type: generated.node.semantic_type.clone(),
-                            source_map: generated.node.source_map.clone(),
-                            claims: generated.node.claims.clone(),
-                            descriptor: recorded_descriptor(item),
-                            declaration_keys: generated.declaration_keys.clone(),
-                            declaration_runtime_keys: generated
-                                .declaration_keys
-                                .iter()
-                                .map(|id| id.digest.to_lowercase())
+            let admitted = accounting
+                .at(request_index, &item.node_id)
+                .map_err(OracleGenerationError::PackageRequest)?;
+            match admitted {
+                PackageItem::Refused {
+                    record,
+                    occurrences,
+                } => ClaimDisposition::Refused {
+                    refusal: CompositeEqualityRefusal::PackageAccounting {
+                        record: Box::new(record.clone()),
+                        occurrences: occurrences.to_vec(),
+                    },
+                },
+                PackageItem::Lowered { closure, .. } if !closure.selected_references.is_empty() => {
+                    ClaimDisposition::Refused {
+                        refusal: CompositeEqualityRefusal::SelectedDependencyUnsupported {
+                            references: closure
+                                .selected_references
+                                .into_iter()
+                                .map(|reference| (reference.package, reference.node))
                                 .collect(),
-                            schedule: generated.checked.schedule().try_into()?,
-                        }));
-                    pending.push((claims.len(), key, item, generated));
-                    claim
+                        },
+                    }
                 }
-                Err(ItemCheckError::Refusal(refusal)) => ClaimDisposition::Refused { refusal },
-                // An RT `#[non_exhaustive]` enum yielded a variant this
-                // generator does not know: not this one item's refusal, so it
-                // aborts the whole generation (see
-                // `OracleGenerationError::UnknownRuntimeVariant`'s own doc).
-                Err(ItemCheckError::Generation(error)) => return Err(error),
+                PackageItem::Lowered {
+                    closure,
+                    occurrences,
+                    ..
+                } => match check_item(
+                    &graph,
+                    &bounds_by_type,
+                    closure.root,
+                    item,
+                    limits.type_resolution_work_units,
+                ) {
+                    Ok(generated) => {
+                        let claim = ClaimDisposition::Generated(Box::new(
+                            GeneratedCompositeEqualityClaim {
+                                environment_symbol: String::new(),
+                                oracle_symbol: String::new(),
+                                contract_package_identity: package.identity().clone(),
+                                node_id: item.node_id.clone(),
+                                package_id: package.wire().package.source.package_id.clone(),
+                                semantic_type: closure.root.semantic_type.clone(),
+                                source_map: occurrences.to_vec(),
+                                claims: closure.claims,
+                                bounds: closure.bounds,
+                                dependencies: closure
+                                    .nodes
+                                    .iter()
+                                    .filter(|entry| entry.node.node_id != item.node_id)
+                                    .map(|entry| entry.node.node_id.clone())
+                                    .collect(),
+                                descriptor: recorded_descriptor(item),
+                                declaration_keys: generated.declaration_keys.clone(),
+                                declaration_runtime_keys: generated
+                                    .declaration_keys
+                                    .iter()
+                                    .map(|id| id.digest.to_lowercase())
+                                    .collect(),
+                                schedule: generated.checked.schedule().try_into()?,
+                            },
+                        ));
+                        pending.push((claims.len(), key, item, generated));
+                        claim
+                    }
+                    Err(ItemCheckError::Refusal(refusal)) => ClaimDisposition::Refused { refusal },
+                    // An RT `#[non_exhaustive]` enum yielded a variant this
+                    // generator does not know: not this one item's refusal, so it
+                    // aborts the whole generation (see
+                    // `OracleGenerationError::UnknownRuntimeVariant`'s own doc).
+                    Err(ItemCheckError::Generation(error)) => return Err(error),
+                },
             }
         };
         claims.push(CompositeEqualityClaim {
@@ -693,7 +781,7 @@ pub fn generate_composite_equality_oracles(
     render_and_emit(&mut claims, &mut source, pending, render_item)?;
 
     let claim_map = ClaimMap {
-        package_id: lowering.package.source_package_id().clone(),
+        package_id: package.wire().package.source.package_id.clone(),
         blocked: vec![UpstreamBlocker::OperationIdentityNotConsumed],
         items: claims,
     };
@@ -748,26 +836,6 @@ fn recorded_descriptor(item: &CompositeEqualityItem) -> RecordedDescriptor {
     }
 }
 
-fn lowering_profile() -> CompleteLoweringProfileV2 {
-    CompleteLoweringProfileV2 {
-        reference: quire_contract_model::LoweringProfileRef {
-            authority: "agent-ix".into(),
-            identity: "quire.codegen.composite-equality/v1".into(),
-        },
-        supported_tags: BTreeSet::from([
-            CheckedNodeTag::ScalarType,
-            CheckedNodeTag::CompositeType,
-            CheckedNodeTag::BoundedDomain,
-            CheckedNodeTag::Value,
-            CheckedNodeTag::Expression,
-            CheckedNodeTag::Claim,
-            CheckedNodeTag::Correspondence,
-        ]),
-        require_bounds: false,
-        work_limit: COMPOSITE_EQUALITY_LOWERING_WORK_LIMIT,
-    }
-}
-
 type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
 // ---------------------------------------------------------------------------
@@ -807,8 +875,7 @@ impl DescriptorKey {
 // ---------------------------------------------------------------------------
 
 /// A checked, admitted item ready to emit.
-struct CheckedItem<'r> {
-    node: &'r quire_contract_model::CompleteContractNodeV2,
+struct CheckedItem {
     checked: rt::CheckedEquality,
     left_source: ValueType,
     left_target: Option<ValueType>,
@@ -840,35 +907,38 @@ impl From<OracleGenerationError> for ItemCheckError {
     }
 }
 
-fn check_item<'r>(
+fn check_item(
     graph: &Graph<'_>,
     bounds_by_type: &BTreeMap<&CheckedNodeId, Vec<&CheckedSemanticNodeV2>>,
-    record: &'r CompleteLoweringRecordV2,
+    node: &CheckedSemanticNodeV2,
     item: &CompositeEqualityItem,
     type_resolution_work_units: u64,
-) -> Result<CheckedItem<'r>, ItemCheckError> {
-    let node = lowered(record)?;
-    if node.node_tag != CheckedNodeTag::Expression {
+) -> Result<CheckedItem, ItemCheckError> {
+    let tag = CheckedNodeTag::from_wire(&node.node_tag);
+    if tag != Some(CheckedNodeTag::Expression) {
+        if let Some(CheckedNodeTag::Protocol) = tag {
+            return Err(unsupported_family(&node.node_id, CheckedNodeTag::Protocol).into());
+        }
         return Err(CompositeEqualityRefusal::NotExpression {
-            node_tag: node.node_tag.as_wire(),
+            node_tag: tag.map_or("unknown", |tag| tag.as_wire()),
         }
         .into());
     }
-    if &*node.node.semantic_form == "call" {
+    if &*node.semantic_form == "call" {
         return Err(CompositeEqualityRefusal::BlockedOnUpstream {
-            unsupported_node_id: node.node.node_id.clone(),
+            unsupported_node_id: node.node_id.clone(),
             node_tag: "expression.call",
             issue: UpstreamBlocker::QuireContractRuntime34,
         }
         .into());
     }
-    if &*node.node.semantic_form != "binary" {
+    if &*node.semantic_form != "binary" {
         return Err(CompositeEqualityRefusal::FormMismatch {
-            found: node.node.semantic_form.to_string(),
+            found: node.semantic_form.to_string(),
         }
         .into());
     }
-    let arguments = application_arguments(&node.node.body)
+    let arguments = application_arguments(&node.body)
         .filter(|arguments| arguments.len() == 2)
         .ok_or(CompositeEqualityRefusal::BodyMismatch)?;
     check_operand_types(graph, arguments, item)?;
@@ -925,7 +995,6 @@ fn check_item<'r>(
         };
 
     Ok(CheckedItem {
-        node,
         checked,
         left_source,
         left_target,
@@ -934,68 +1003,6 @@ fn check_item<'r>(
         composites,
         declaration_keys,
     })
-}
-
-fn lowered(
-    record: &CompleteLoweringRecordV2,
-) -> Result<&quire_contract_model::CompleteContractNodeV2, CompositeEqualityRefusal> {
-    match record {
-        CompleteLoweringRecordV2::Lowered { node } => Ok(node),
-        CompleteLoweringRecordV2::Unsupported {
-            unsupported_node_id,
-            node_tag,
-            ..
-        } => Err(unsupported_family(unsupported_node_id, *node_tag)),
-        CompleteLoweringRecordV2::RequiresBound { unbounded_type, .. } => {
-            Err(CompositeEqualityRefusal::MissingBound {
-                bounded_type: unbounded_type.clone(),
-                expected_form: "bound",
-            })
-        }
-        CompleteLoweringRecordV2::InvalidInput { .. } => {
-            Err(CompositeEqualityRefusal::InvalidInput)
-        }
-        CompleteLoweringRecordV2::InvalidBody { body_node_id, .. } => {
-            Err(CompositeEqualityRefusal::InvalidBody {
-                body_node_id: body_node_id.clone(),
-            })
-        }
-        CompleteLoweringRecordV2::BodyIncomplete { body_node_id, .. } => {
-            Err(CompositeEqualityRefusal::BodyIncomplete {
-                body_node_id: body_node_id.clone(),
-            })
-        }
-        // FR-014-AC-42 keeps this arm from binding the record's fields, so the typed outcome is
-        // read back through the classifier, which returns `None` for a record that is not
-        // `Failed`. This arm only runs for a `Failed` record, so the `InvalidInput` fallback is
-        // unreachable; it exists because the arm cannot hand the classifier a narrower type.
-        CompleteLoweringRecordV2::Failed { .. } => Err(classify_lowering_failure(record).map_or(
-            CompositeEqualityRefusal::InvalidInput,
-            CompositeEqualityRefusal::from,
-        )),
-    }
-}
-
-impl From<LoweringFailure> for CompositeEqualityRefusal {
-    fn from(failure: LoweringFailure) -> Self {
-        match failure {
-            LoweringFailure::WorkExhausted { limit, consumed } => {
-                Self::LoweringWorkExhausted { limit, consumed }
-            }
-            LoweringFailure::ByteLimitExceeded { limit, consumed } => {
-                Self::LoweringByteLimitExceeded { limit, consumed }
-            }
-            LoweringFailure::LimitUnrecognised {
-                limit_kind,
-                limit,
-                consumed,
-            } => Self::LoweringLimitUnrecognised {
-                limit_kind,
-                limit,
-                consumed,
-            },
-        }
-    }
 }
 
 fn unsupported_family(node_id: &CheckedNodeId, tag: CheckedNodeTag) -> CompositeEqualityRefusal {
@@ -1434,7 +1441,7 @@ fn rebuild_cardinality(
 
 /// Why one item could not be rendered. Private: the public failure type is
 /// [`OracleGenerationError`], which the item boundary maps this onto.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum RenderError {
     /// A `ValueType` family this generator never reconstructs: the item is refused as
     /// [`CompositeEqualityRefusal::Unsupported`] naming the family.
@@ -1476,7 +1483,7 @@ impl RenderedItem {
     }
 }
 
-fn render_item(generated: &CheckedItem<'_>) -> Result<RenderedItem, RenderError> {
+fn render_item(generated: &CheckedItem) -> Result<RenderedItem, RenderError> {
     // Every reachable record/tuple declaration, in the same `NodeKey`
     // order `TypeEnvironment::new` admitted at generation time.
     let composites: Vec<String> = generated
@@ -2238,7 +2245,6 @@ mod tests {
         limits: CompositeEqualityLimits,
     ) -> (Vec<Result<(), CompositeEqualityRefusal>>, SourceBuilder) {
         assert!(operands.len() <= 2, "fixture has two distinct item ids");
-        let mut records = Vec::new();
         let mut items = Vec::new();
         for ((left, right), (left_digit, right_digit, expression_digit)) in
             operands.iter().zip([('8', '0', '9'), ('6', '1', '7')])
@@ -2273,22 +2279,6 @@ mod tests {
                 ]},
             }))
             .unwrap();
-            records.push(CompleteLoweringRecordV2::Lowered {
-                node: Box::new(quire_contract_model::CompleteContractNodeV2 {
-                    node: expression.clone(),
-                    node_tag: CheckedNodeTag::Expression,
-                    source_map: Vec::new(),
-                    semantic_type: left.source_type.clone(),
-                    dependencies: Vec::new(),
-                    bounds: Vec::new(),
-                    claims: Vec::new(),
-                    ir_id: CheckedSemanticId {
-                        domain: "quire.contract-ir.semantic/v1".into(),
-                        algorithm: "sha256".into(),
-                        digest: "0".repeat(64).into(),
-                    },
-                }),
-            });
             items.push(CompositeEqualityItem {
                 node_id: expression_id,
                 operator: EqualityOperatorKind::Equal,
@@ -2301,15 +2291,14 @@ mod tests {
         }
         let graph: Graph<'_> = nodes.iter().map(|node| (&node.node_id, node)).collect();
         let mut source = SourceBuilder::new(limits.source_bytes).expect("synthetic source starts");
-        let outcomes = records
+        let outcomes = items
             .iter()
-            .zip(&items)
             .enumerate()
-            .map(|(index, (record, item))| {
+            .map(|(index, item)| {
                 match check_item(
                     &graph,
                     &BTreeMap::new(),
-                    record,
+                    graph.get(&item.node_id).copied().expect("synthetic node"),
                     item,
                     limits.type_resolution_work_units,
                 ) {
@@ -3244,45 +3233,6 @@ fn deep_matches_shallow() {{
         }
     }
 
-    /// A `failed` record is refused by its limit kind through the one shared classifier: `work`
-    /// as `LoweringWorkExhausted`, `bytes` as `LoweringByteLimitExceeded` with the record's own
-    /// `limit` and `consumed` (the per-node case Contract IR's FR-038-AC-95 defines and CG's
-    /// public API cannot reach), and every other kind as `LoweringLimitUnrecognised` under its
-    /// snake_case name, never as work exhaustion and without a panic.
-    ///
-    /// Trace: FR-018-AC-20, TC-029.
-    #[test]
-    fn tc_029_a_failed_record_is_refused_by_its_limit_kind() {
-        use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
-        use quire_contract_model::CheckedPackageLimit;
-
-        assert_eq!(
-            lowered(&failed_record(CheckedPackageLimit::Work, 65_536, 65_537)).err(),
-            Some(CompositeEqualityRefusal::LoweringWorkExhausted {
-                limit: 65_536,
-                consumed: 65_537
-            })
-        );
-        assert_eq!(
-            lowered(&failed_record(CheckedPackageLimit::Bytes, 1_000, 1_001)).err(),
-            Some(CompositeEqualityRefusal::LoweringByteLimitExceeded {
-                limit: 1_000,
-                consumed: 1_001
-            })
-        );
-        for (kind, name) in unrecognised_kinds() {
-            assert_eq!(
-                lowered(&failed_record(kind, 7, 9)).err(),
-                Some(CompositeEqualityRefusal::LoweringLimitUnrecognised {
-                    limit_kind: name,
-                    limit: 7,
-                    consumed: 9
-                }),
-                "{name}"
-            );
-        }
-    }
-
     fn semantic_id(digit: char) -> CheckedSemanticId {
         CheckedSemanticId {
             domain: "quire.checked-semantic/v1".into(),
@@ -3305,11 +3255,14 @@ fn deep_matches_shallow() {{
             result: ClaimDisposition::Generated(Box::new(GeneratedCompositeEqualityClaim {
                 environment_symbol: String::new(),
                 oracle_symbol: String::new(),
-                ir_id: semantic_id('a'),
+                contract_package_identity: semantic_id('a'),
+                node_id: node_id(node),
                 package_id: semantic_id('b'),
                 semantic_type: node_id('c'),
                 source_map: Vec::new(),
                 claims: Vec::new(),
+                bounds: Vec::new(),
+                dependencies: Vec::new(),
                 descriptor: RecordedDescriptor {
                     operator: EqualityOperatorKind::Equal,
                     left_source_type: node_id('d'),
@@ -3322,6 +3275,24 @@ fn deep_matches_shallow() {{
                 schedule: RecordedSchedule::Plan,
             })),
         }
+    }
+
+    #[test]
+    fn generated_claim_serializes_package_and_requested_id_without_node_ir_id() {
+        let claim = generated_claim('8');
+        let ClaimDisposition::Generated(generated) = &claim.result else {
+            panic!("fixture must generate");
+        };
+        let value = serde_json::to_value(generated).expect("generated claim serializes");
+        assert_eq!(
+            value["contract_package_identity"],
+            serde_json::json!(semantic_id('a'))
+        );
+        assert_eq!(value["node_id"], serde_json::json!(claim.node_id));
+        assert_eq!(value["package_id"], serde_json::json!(semantic_id('b')));
+        assert_eq!(value["bounds"], serde_json::json!([]));
+        assert_eq!(value["dependencies"], serde_json::json!([]));
+        assert!(value.get("ir_id").is_none());
     }
 
     fn rendered_item() -> RenderedItem {
@@ -3394,7 +3365,7 @@ fn deep_matches_shallow() {{
             enum_name: "CollectionKind",
         };
         assert_eq!(
-            settle_render(&mut item, Err(RenderError::Generation(error))).err(),
+            settle_render(&mut item, Err(RenderError::Generation(error.clone()))).err(),
             Some(error)
         );
         assert_eq!(
@@ -3445,7 +3416,7 @@ fn deep_matches_shallow() {{
         let mut source = SourceBuilder::default();
         let result = render_and_emit(&mut claims, &mut source, pending, |fails| {
             if *fails {
-                Err(error)
+                Err(error.clone())
             } else {
                 Ok(rendered_item())
             }
@@ -3485,7 +3456,7 @@ fn deep_matches_shallow() {{
         let quantity = RenderError::UnsupportedValueType { family: "quantity" };
 
         // Both render: the stem is shared, so the two are numbered in key order.
-        let (result, claims, lib) = emit_two([false, false], quantity);
+        let (result, claims, lib) = emit_two([false, false], quantity.clone());
         assert_eq!(result, Ok(()));
         assert_eq!(
             symbols(&claims[0]),
@@ -3498,7 +3469,7 @@ fn deep_matches_shallow() {{
         assert_eq!(lib.matches("pub fn environment_").count(), 2);
 
         // The second fails: the first is untouched in claim, and holds the bare stem.
-        let (result, claims, lib) = emit_two([false, true], quantity);
+        let (result, claims, lib) = emit_two([false, true], quantity.clone());
         assert_eq!(result, Ok(()));
         assert_eq!(
             symbols(&claims[0]),
@@ -3509,7 +3480,7 @@ fn deep_matches_shallow() {{
         assert_eq!(lib.matches("pub fn environment_").count(), 1);
 
         // The first fails: the second is the one that survives, under the bare stem.
-        let (result, claims, lib) = emit_two([true, false], quantity);
+        let (result, claims, lib) = emit_two([true, false], quantity.clone());
         assert_eq!(result, Ok(()));
         assert_eq!(claims[0].result, unsupported('1', "quantity"));
         assert_eq!(
@@ -3529,7 +3500,7 @@ fn deep_matches_shallow() {{
         let error = OracleGenerationError::UnknownRuntimeVariant {
             enum_name: "TextProfile",
         };
-        let (result, _, _) = emit_two([false, true], RenderError::Generation(error));
+        let (result, _, _) = emit_two([false, true], RenderError::Generation(error.clone()));
         assert_eq!(result, Err(error));
     }
 }

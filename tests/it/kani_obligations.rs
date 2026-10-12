@@ -23,23 +23,25 @@ use std::{
 use crate::scratch_crate::{runtime_dependency, write_manifest};
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
-    reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
+    reference, Bound, MISSING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, generate_exact_scalar_oracles, generate_routed,
-    negotiate_kani_obligations, Candidate, ClaimDisposition, ClaimMap, ExactScalarClaim,
-    ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, GenerationContexts,
-    InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniGenerationContext,
-    KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
-    KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarObligationHarness,
-    KaniSolver, KaniTool, KaniToolError, KindOutput, ObligationDisposition, ObligationItem,
-    ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
-    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    negotiate_kani_obligations, routed_contract_lowering_profile, Candidate, ClaimDisposition,
+    ClaimMap, ContractRequestPosition, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
+    ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniExecutionRefusal,
+    KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
+    KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
+    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, KindOutput,
+    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
+    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
+    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
-    BoundPackage, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef, RequirementRef,
-    EXECUTABLE_PROJECTION_FORMAT,
+    BoundPackage, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind, ClauseRef,
+    ContractDependencies, ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
+    RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 
@@ -433,10 +435,13 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
         .collect::<Vec<_>>();
     let (scalar, claim_map, ids) = scalar_package();
     let node = ids.resolve(&code_id(1001));
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &scalar,
+        package: &admitted,
         claim_map: &claim_map,
         node_id: &node,
+        claim_index: claim_index(&claim_map, &node),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -457,7 +462,9 @@ const FRAME: u32 = 3002;
 /// The object type `FRAME` frames.
 const FRAMED_OBJECT: u32 = 3004;
 
-pub(crate) fn scalar_package() -> (
+fn scalar_package_with_occurrences(
+    expression_occurrences: bool,
+) -> (
     CheckedPackageV2,
     ClaimMap<ExactScalarClaim>,
     package::FixtureIds,
@@ -512,6 +519,17 @@ pub(crate) fn scalar_package() -> (
             &key(FRAMED_OBJECT),
             json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
         );
+    if expression_occurrences {
+        builder.expression_occurrences();
+        let (_, ids) = builder.admit_resolved();
+        let unsatisfiable = builder.bound(&Bound::Integer(5, -5));
+        builder.narrow(
+            49_301,
+            ids.resolve(&code_id(UNSATISFIABLE)).digest.as_ref(),
+            &unsatisfiable,
+        );
+        builder.expression_occurrences();
+    }
     let (package, ids) = builder.admit_resolved();
     let mut items = golden_items()
         .into_iter()
@@ -530,6 +548,67 @@ pub(crate) fn scalar_package() -> (
     (package, oracles.claim_map, ids)
 }
 
+pub(crate) fn scalar_package() -> (
+    CheckedPackageV2,
+    ClaimMap<ExactScalarClaim>,
+    package::FixtureIds,
+) {
+    scalar_package_with_occurrences(false)
+}
+
+/// The same authored fixture with QSL expression occurrences for FR-049 routing.
+pub(crate) fn routed_scalar_package() -> (
+    CheckedPackageV2,
+    ClaimMap<ExactScalarClaim>,
+    package::FixtureIds,
+) {
+    scalar_package_with_occurrences(true)
+}
+
+/// Admit one Contract IR package for the exact scalar claim-map roots.
+pub(crate) fn admitted_scalar_claims(
+    checked: &CheckedPackageV2,
+    claims: &ClaimMap<ExactScalarClaim>,
+) -> ContractPackageV1 {
+    let requested = claims
+        .items
+        .iter()
+        .map(|claim| claim.node_id.clone())
+        .collect::<Vec<_>>();
+    // Direct FR-015 claim controls need their admitted state/model nodes in the
+    // package graph. The built-in routed profile intentionally excludes those
+    // families before Kani settlement.
+    let mut profile = routed_contract_lowering_profile();
+    profile.reference.identity = "quire.codegen.kani-direct-test/v1".into();
+    profile.supported_tags.extend([
+        quire_contract_model::CheckedNodeTag::Model,
+        quire_contract_model::CheckedNodeTag::Relation,
+        quire_contract_model::CheckedNodeTag::State,
+        quire_contract_model::CheckedNodeTag::Temporal,
+        quire_contract_model::CheckedNodeTag::Protocol,
+    ]);
+    let lowered = checked.lower(&requested, &profile);
+    match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("Contract IR must admit scalar claims: {other:?}"),
+    }
+}
+
+fn claim_index(
+    claim_map: &ClaimMap<ExactScalarClaim>,
+    node_id: &quire_contract_model::CheckedNodeId,
+) -> usize {
+    claim_map
+        .items
+        .iter()
+        .position(|claim| &claim.node_id == node_id)
+        .expect("test claim map contains selected node")
+}
+
 fn scalar_records(
     package: &CheckedPackageV2,
     claim_map: &ClaimMap<ExactScalarClaim>,
@@ -540,12 +619,15 @@ fn scalar_records(
         .iter()
         .map(|code| fixture_ids.resolve(&code_id(*code)))
         .collect::<Vec<_>>();
+    let admitted = admitted_scalar_claims(package, claim_map);
     let items = ids
         .iter()
         .map(|node_id| ObligationItem::ScalarClaim {
-            package,
+            package: &admitted,
             claim_map,
             node_id,
+            claim_index: claim_index(claim_map, node_id),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         })
         .collect::<Vec<_>>();
     let (records, harnesses) =
@@ -805,10 +887,13 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     // per-operand bounded ranges are TC-033's.
     let (scalar, claim_map, ids) = scalar_package();
     let node_1001 = ids.resolve(&code_id(1001));
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &scalar,
+        package: &admitted,
         claim_map: &claim_map,
         node_id: &node_1001,
+        claim_index: claim_index(&claim_map, &node_1001),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let (records, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -842,10 +927,13 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
 fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (scalar, claim_map, ids) = scalar_package();
     let node_1001 = ids.resolve(&code_id(1001));
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &scalar,
+        package: &admitted,
         claim_map: &claim_map,
         node_id: &node_1001,
+        claim_index: claim_index(&claim_map, &node_1001),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let (_, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -948,12 +1036,15 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
         .iter()
         .filter(|claim| matches!(claim.result, ClaimDisposition::Generated(_)))
         .collect::<Vec<_>>();
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = generated
         .iter()
         .map(|claim| ObligationItem::ScalarClaim {
-            package: &scalar,
+            package: &admitted,
             claim_map: &claim_map,
             node_id: &claim.node_id,
+            claim_index: claim_index(&claim_map, &claim.node_id),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         })
         .collect::<Vec<_>>();
     let (_, harnesses) =
@@ -990,24 +1081,15 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 #[test]
 fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
     let (scalar, claim_map, ids) = scalar_package();
-    let records = scalar_records(
-        &scalar,
-        &claim_map,
-        &ids,
-        &[UNBOUNDED, MISSING_ROUNDING, MODEL, STATE, FRAME],
-    );
+    let records = scalar_records(&scalar, &claim_map, &ids, &[UNBOUNDED, MODEL, STATE, FRAME]);
     assert_eq!(
         records[0].disposition,
         ObligationDisposition::RequiresBound {
             unbounded_type: ids.resolve(&code_id(T_INTEGER))
         }
     );
-    assert!(matches!(
-        records[1].disposition,
-        ObligationDisposition::RequiresBound { .. }
-    ));
     assert_eq!(
-        unsupported(&records[2]),
+        unsupported(&records[1]),
         &UnsupportedObligation::BlockedOnUpstream {
             node_id: ids.resolve(&code_id(MODEL)),
             node_tag: "model",
@@ -1015,13 +1097,13 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
         }
     );
     assert_eq!(
-        unsupported(&records[3]),
+        unsupported(&records[2]),
         &UnsupportedObligation::NoFiniteEncoding {
             node_id: ids.resolve(&code_id(STATE)),
             node_tag: "state",
         }
     );
-    assert_eq!(records[4].kind, Some(ObligationKind::Frame));
+    assert_eq!(records[3].kind, Some(ObligationKind::Frame));
     let model = ids.resolve(&code_id(FRAMED_OBJECT));
     let frame = ids.resolve(&code_id(FRAME));
     // The frame is typed by FRAMED_OBJECT, and IR names the first unsupported member in
@@ -1038,9 +1120,9 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
             node_tag: "state",
         }
     };
-    assert_eq!(unsupported(&records[4]), &first_refusal);
+    assert_eq!(unsupported(&records[3]), &first_refusal);
     assert!(matches!(
-        &records[4].subject,
+        &records[3].subject,
         ObligationSubject::CheckedNode { node_id, source_map } if node_id == &ids.resolve(&code_id(FRAME)) && !source_map.is_empty()
     ));
 
@@ -1129,10 +1211,13 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
         result: ClaimDisposition::Generated(generated),
     });
 
+    let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &package,
+        package: &admitted,
         claim_map: &claim_map,
         node_id: &node_id,
+        claim_index: claim_index(&claim_map, &node_id),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     let KaniObligationOutcome::Emitted {
@@ -1253,10 +1338,13 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
         result: ClaimDisposition::Generated(generated),
     });
 
+    let admitted = admitted_scalar_claims(&package, &claim_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &package,
+        package: &admitted,
         claim_map: &claim_map,
         node_id: &missing_node_id,
+        claim_index: claim_index(&claim_map, &missing_node_id),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     let KaniObligationOutcome::Rejected { records } = &outcome else {
@@ -1525,12 +1613,15 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
             .all(|claim| claim.operation.provenance == OperationProvenance::IrConfirmed),
         "every generated V2 claim's operation is IR-confirmed"
     );
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let items = generated
         .iter()
         .map(|claim| ObligationItem::ScalarClaim {
-            package: &scalar,
+            package: &admitted,
             claim_map: &claim_map,
             node_id: &claim.node_id,
+            claim_index: claim_index(&claim_map, &claim.node_id),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         })
         .collect::<Vec<_>>();
     let (records, scalar_harnesses) =
@@ -1604,10 +1695,13 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
             blocked_on: UpstreamBlocker::OperationIdentityNotConsumed,
         }
     );
+    let admitted = admitted_scalar_claims(&package, &oracles.claim_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &package,
+        package: &admitted,
         claim_map: &oracles.claim_map,
         node_id: &mismatched,
+        claim_index: claim_index(&oracles.claim_map, &mismatched),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let (records, scalar_harnesses) =
         emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
@@ -1638,6 +1732,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let package = bound_package(1000);
     let other_package = bound_package(999);
     let (scalar, claim_map, ids) = scalar_package();
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
     let refs = [
         clause(PRECONDITION),
         clause(POSTCONDITION),
@@ -1668,14 +1763,19 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
             clause: &refs[3],
         },
         ObligationItem::ScalarClaim {
-            package: &scalar,
+            package: &admitted,
             claim_map: &claim_map,
             node_id: &missing,
+            // Deliberately outside the map: this item tests UnknownNode.
+            claim_index: claim_map.items.len(),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         },
         ObligationItem::ScalarClaim {
-            package: &scalar,
+            package: &admitted,
             claim_map: &claim_map,
             node_id: &unbounded,
+            claim_index: claim_index(&claim_map, &unbounded),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         },
     ];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::withdraw")).unwrap();
@@ -1731,10 +1831,14 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
         (foreign, map)
     };
     let node = code_id(1001);
+    let admitted = admitted_scalar_claims(&scalar, &foreign_map);
     let items = [ObligationItem::ScalarClaim {
-        package: &scalar,
+        package: &admitted,
         claim_map: &foreign_map,
         node_id: &node,
+        // PackageMismatch takes precedence over claim selection.
+        claim_index: 0,
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let outcome = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap();
     assert_eq!(
@@ -2063,10 +2167,59 @@ fn routed_scalar_increment() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
 ) {
-    let (package, ids) = package::bounded_increment_package().admit_resolved();
+    const NARROW: u32 = 49_100;
+    let mut builder = package::bounded_increment_package();
+    let bound = builder.bound(&package::Bound::Integer(0, 9));
+    builder.narrow(
+        NARROW,
+        package::code_id(package::BOUNDED_INCREMENT).digest.as_ref(),
+        &bound,
+    );
+    builder.expression_occurrences();
+    let (package, ids) = builder.admit_resolved();
     let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
+    let narrow_id = ids.resolve(&package::code_id(NARROW));
+    let roots = [node_id.clone(), narrow_id.clone()];
+    let lowered = package.lower(&roots, &routed_contract_lowering_profile());
+    let admitted = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => package,
+        other => panic!("IR must admit the routed scalar package: {other:?}"),
+    };
+    let occurrence = |node: &quire_contract_model::CheckedNodeId| {
+        let entries = package
+            .source_map()
+            .iter()
+            .filter(|entry| {
+                &entry.node_id == node
+                    && entry.role == quire_contract_model::CheckedOccurrenceRole::Expression
+            })
+            .collect::<Vec<_>>();
+        let [entry] = entries.as_slice() else {
+            panic!("one caller-authored expression occurrence");
+        };
+        quire_contract_model::ContractOccurrenceKeyV1 {
+            node_id: node.clone(),
+            role: entry.role.clone(),
+            ordinal: entry.ordinal,
+        }
+    };
+    let positions = [
+        ContractRequestPosition::DriverItem {
+            node_id: node_id.clone(),
+            result_selection: quire_contract_codegen::ContractDriverResultSelection::OwnResult {
+                application: occurrence(&node_id),
+                conversion: Some(occurrence(&narrow_id)),
+            },
+        },
+        ContractRequestPosition::ContextRoot { node_id: narrow_id },
+    ];
     let generation = generate_routed(
-        &package,
+        &admitted,
+        &positions,
         &[RoutedGenerationItem::from_descriptor(
             0,
             node_id,
