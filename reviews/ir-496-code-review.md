@@ -27,3 +27,14 @@ Reviewed public PR #367 at `0ce345ff1fb66f6bd9c5a445aeb6411cb9720a4b` against `o
 | FND-004 | medium | Claims sort by function name before the declaring node id required by FR-021-AC-24 | src/oracle/function/mod.rs:518 |
 | FND-005 | medium | Repeated request items produce duplicate claims instead of one DuplicateRequest disposition | src/oracle/function/mod.rs:455 |
 | FND-006 | medium | The emitted operation set has no branch/stop instructions for charge-boundary control flow | src/oracle/function/schedule.rs:108 |
+
+## Dispositions
+
+- FND-001: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`.
+- FND-002: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`.
+- FND-003: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`.
+- FND-004: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`.
+- FND-005: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`.
+- FND-006: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`.
+
+The same-reviewer delta review of `6b61567cea79b1e246d6a87eb5941979c6e650a` found all six findings fixed. This scoped seed does not claim FR-021-AC-7's 100K schedule acceptance or AC-28.

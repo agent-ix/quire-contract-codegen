@@ -30,3 +30,9 @@ Planless repository matrix and reverse-gap audit, with focused source/test inspe
 - Reverse-gap inventory: 122 public function declarations inventoried across `src/`; the new public `generate_function_schedules` API is owned by FR-021. Untraced behaviors: 0. Changed source stubs: 0. Changed test stubs: 0.
 - Plan completion: not assessed
 - Semantic review: skipped; not requested.
+
+## Dispositions
+
+- Changed-scope AC-26: fixed at `6b61567cea79b1e246d6a87eb5941979c6e650a`; explicit charge-before-action branches and denied-charge-to-Stop behavior are covered.
+- AC-28: deferred outside this scoped seed PR. The source ceiling remains unchanged, and this PR does not claim raised-limit/deep-body acceptance.
+- Repository-wide matrix: the original 323-untagged-criteria FAIL is retained from the review baseline and was not recomputed for this delta. It is not evidence that this scoped PR introduces 323 gaps.
