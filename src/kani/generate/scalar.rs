@@ -1,7 +1,9 @@
 //! The scalar family: lowering an IR-confirmed V2 exact-scalar claim and rendering its Kani
 //! harness (FR-015).
 
-use crate::operator_catalog::{Operator as CatalogOperator, ScalarKaniOperator as ScalarOperation};
+use crate::oracle::operator_catalog::{
+    Operator as CatalogOperator, ScalarKaniOperator as ScalarOperation,
+};
 use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
 use crate::{

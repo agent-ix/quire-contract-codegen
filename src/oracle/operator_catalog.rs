@@ -3,8 +3,20 @@
 //! This is a CG-side projection of identities already admitted by Contract IR. It does not
 //! participate in admission and deliberately contains only operations with current V2 consumers.
 
-use crate::oracle::scalar::IntegerOperator;
 use quire_contract_runtime::exact::OrderingOperator;
+
+/// Integer `+`, `-`, `*` and unary `-` shared by the catalog and scalar oracle API.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntegerOperator {
+    /// `a + b`.
+    Add,
+    /// `a - b`.
+    Subtract,
+    /// `a * b`.
+    Multiply,
+    /// `-a`.
+    Negate,
+}
 
 /// Typed identity for an operation shared by scalar oracle and Kani consumers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,7 +43,7 @@ pub(crate) struct Entry {
     pub(crate) scalar_operator: Option<IntegerOperator>,
     pub(crate) scalar_kani: Option<ScalarKaniOperator>,
     pub(crate) ordering_operator: Option<OrderingOperator>,
-    pub(crate) frame_symbol: Option<&'static str>,
+    pub(crate) frame_symbol: Option<FrameSymbol>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,6 +62,29 @@ pub(crate) enum OperandOrder {
 pub(crate) enum ResultKind {
     Integer,
     Boolean,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FrameSymbol {
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
+    Equal,
+    NotEqual,
+}
+
+impl FrameSymbol {
+    pub(crate) const fn rust(self) -> &'static str {
+        match self {
+            Self::Less => "<",
+            Self::LessOrEqual => "<=",
+            Self::Greater => ">",
+            Self::GreaterOrEqual => ">=",
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -134,7 +169,7 @@ impl Operator {
                 None,
                 None,
                 Some(OrderingOperator::Less),
-                Some("<"),
+                Some(FrameSymbol::Less),
             ),
             O::LessOrEqual => (
                 "quire.op.integer.le",
@@ -144,7 +179,7 @@ impl Operator {
                 None,
                 None,
                 Some(OrderingOperator::LessOrEqual),
-                Some("<="),
+                Some(FrameSymbol::LessOrEqual),
             ),
             O::Greater => (
                 "quire.op.integer.gt",
@@ -154,7 +189,7 @@ impl Operator {
                 None,
                 None,
                 Some(OrderingOperator::Greater),
-                Some(">"),
+                Some(FrameSymbol::Greater),
             ),
             O::GreaterOrEqual => (
                 "quire.op.integer.ge",
@@ -164,7 +199,7 @@ impl Operator {
                 None,
                 None,
                 Some(OrderingOperator::GreaterOrEqual),
-                Some(">="),
+                Some(FrameSymbol::GreaterOrEqual),
             ),
             O::Equal => (
                 "quire.op.integer.eq",
@@ -174,7 +209,7 @@ impl Operator {
                 None,
                 None,
                 None,
-                Some("=="),
+                Some(FrameSymbol::Equal),
             ),
             O::NotEqual => (
                 "quire.op.integer.ne",
@@ -184,7 +219,7 @@ impl Operator {
                 None,
                 None,
                 None,
-                Some("!="),
+                Some(FrameSymbol::NotEqual),
             ),
         };
         Entry {
@@ -262,7 +297,7 @@ mod tests {
                 OperandOrder::LeftThenRight,
                 ResultKind::Boolean,
                 None,
-                Some("<"),
+                Some(FrameSymbol::Less),
             ),
             (
                 "quire.op.integer.le",
@@ -270,7 +305,7 @@ mod tests {
                 OperandOrder::LeftThenRight,
                 ResultKind::Boolean,
                 None,
-                Some("<="),
+                Some(FrameSymbol::LessOrEqual),
             ),
             (
                 "quire.op.integer.gt",
@@ -278,7 +313,7 @@ mod tests {
                 OperandOrder::LeftThenRight,
                 ResultKind::Boolean,
                 None,
-                Some(">"),
+                Some(FrameSymbol::Greater),
             ),
             (
                 "quire.op.integer.ge",
@@ -286,7 +321,7 @@ mod tests {
                 OperandOrder::LeftThenRight,
                 ResultKind::Boolean,
                 None,
-                Some(">="),
+                Some(FrameSymbol::GreaterOrEqual),
             ),
             (
                 "quire.op.integer.eq",
@@ -294,7 +329,7 @@ mod tests {
                 OperandOrder::LeftThenRight,
                 ResultKind::Boolean,
                 None,
-                Some("=="),
+                Some(FrameSymbol::Equal),
             ),
             (
                 "quire.op.integer.ne",
@@ -302,7 +337,7 @@ mod tests {
                 OperandOrder::LeftThenRight,
                 ResultKind::Boolean,
                 None,
-                Some("!="),
+                Some(FrameSymbol::NotEqual),
             ),
         ];
         assert_eq!(Operator::ALL.len(), expected.len());

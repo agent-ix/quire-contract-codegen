@@ -24,7 +24,7 @@
 //! full FR-014/FR-018 operator matrix:
 //!
 //! - Scalar bodies: unbounded (`IntegerDomain::Mathematical`) integer
-//!   arithmetic only -- [`crate::oracle::scalar::IntegerOperator::Add`],
+//!   arithmetic only -- [`crate::oracle::operator_catalog::IntegerOperator::Add`],
 //!   `Subtract` and `Multiply` (binary; `Negate` is unary and out of scope,
 //!   since FR-021's Inputs names only *binary* scalar expressions).
 //! - Composite-equality bodies: [`crate::oracle::equality::EqualityOperatorKind`]
@@ -51,7 +51,7 @@
 //! below.
 //!
 //! Reused types, not reimplemented: this module imports
-//! [`crate::oracle::scalar::IntegerOperator`] and
+//! [`crate::oracle::operator_catalog::IntegerOperator`] and
 //! [`crate::oracle::equality::EqualityOperatorKind`] directly rather than
 //! declaring parallel enums, so a caller's scalar or equality descriptor is
 //! the same type FR-014/FR-018 already validate elsewhere in this crate.
@@ -136,7 +136,7 @@ use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::equality::EqualityOperatorKind;
-use crate::oracle::scalar::IntegerOperator;
+use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, LoweringFailure};
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,

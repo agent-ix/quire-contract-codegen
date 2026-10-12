@@ -35,7 +35,7 @@ use quire_contract_model::{
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::operator_catalog::Operator as CatalogOperator;
+use crate::oracle::operator_catalog::{FrameSymbol, Operator as CatalogOperator};
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
@@ -119,18 +119,15 @@ impl StateComparison {
     }
 
     fn rust(self) -> &'static str {
-        let operator = match self {
-            Self::Lt => CatalogOperator::Less,
-            Self::Le => CatalogOperator::LessOrEqual,
-            Self::Gt => CatalogOperator::Greater,
-            Self::Ge => CatalogOperator::GreaterOrEqual,
-            Self::Eq => CatalogOperator::Equal,
-            Self::Ne => CatalogOperator::NotEqual,
+        let symbol = match self {
+            Self::Lt => FrameSymbol::Less,
+            Self::Le => FrameSymbol::LessOrEqual,
+            Self::Gt => FrameSymbol::Greater,
+            Self::Ge => FrameSymbol::GreaterOrEqual,
+            Self::Eq => FrameSymbol::Equal,
+            Self::Ne => FrameSymbol::NotEqual,
         };
-        operator
-            .entry()
-            .frame_symbol
-            .expect("each state comparison has a catalogued Rust symbol")
+        symbol.rust()
     }
 }
 

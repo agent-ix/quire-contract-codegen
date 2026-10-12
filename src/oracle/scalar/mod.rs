@@ -45,10 +45,10 @@
 //! the generated source. An item that fails any check receives a typed
 //! [`ExactScalarRefusal`] and contributes no code; its siblings are unaffected.
 
+use super::operator_catalog::{IntegerOperator, Operator as CatalogOperator};
 use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
-use crate::operator_catalog::Operator as CatalogOperator;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{classify_lowering_failure, LoweringFailure};
 use quire_contract_model::{
@@ -103,19 +103,6 @@ pub struct ExactScalarItem {
     pub node_id: CheckedNodeId,
     /// Operation law the node denotes.
     pub operation: ExactScalarOperation,
-}
-
-/// Integer `+`, `-`, `*` and unary `-`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IntegerOperator {
-    /// `a + b`.
-    Add,
-    /// `a - b`.
-    Subtract,
-    /// `a * b`.
-    Multiply,
-    /// `-a`.
-    Negate,
 }
 
 /// Rational `+`, `-`, `*`, `/`, unary `-`, and integer division to a rational.
@@ -3001,10 +2988,10 @@ fn family_of_identity(identity: &str) -> Option<Family> {
     use OrderingOperator as O;
     if let Some(entry) = CatalogOperator::from_identity(identity).map(CatalogOperator::entry) {
         return Some(match entry.family {
-            crate::operator_catalog::Family::IntegerArithmetic => {
+            super::operator_catalog::Family::IntegerArithmetic => {
                 Family::IntegerArithmetic(entry.scalar_operator?)
             }
-            crate::operator_catalog::Family::IntegerOrdering => {
+            super::operator_catalog::Family::IntegerOrdering => {
                 Family::Ordering(entry.ordering_operator?, OrderingOperandKind::Integer)
             }
         });
