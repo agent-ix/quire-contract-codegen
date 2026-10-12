@@ -10,6 +10,7 @@ use quire_contract_model::{
 use serde::{Serialize, Serializer};
 
 use crate::{
+    core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     kani::identity::{
@@ -84,6 +85,8 @@ pub enum ObligationItem<'a> {
         node_id: &'a CheckedNodeId,
         /// Index of this selected occurrence in the claim map; its node must match `node_id`.
         claim_index: usize,
+        /// The caller's selected result occurrence, or `NotApplicable` for a direct node claim.
+        result_selection: &'a ContractDriverResultSelection,
     },
 }
 

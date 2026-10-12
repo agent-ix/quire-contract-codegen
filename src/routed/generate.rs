@@ -438,16 +438,35 @@ fn generate_kani(
             .collect::<Vec<_>>(),
     )
     .map_err(RoutedGenerationError::ContractScalar)?;
+    let driver_selections = positions
+        .iter()
+        .filter_map(|position| match position {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => Some(result_selection),
+            ContractRequestPosition::ContextRoot { .. } => None,
+        })
+        .collect::<Vec<_>>();
     let items = group
         .iter()
         .zip(claim_indexes)
-        .map(|(item, claim_index)| ObligationItem::ScalarClaim {
-            package,
-            claim_map: &claim_map,
-            node_id: &item.node_id,
-            claim_index,
+        .map(|(item, claim_index)| {
+            let result_selection = driver_selections.get(item.request_index).copied().ok_or(
+                RoutedGenerationError::ContractScalar(ContractScalarError::Request(
+                    PackageRequestError::Position {
+                        request_index: item.request_index,
+                    },
+                )),
+            )?;
+            Ok(ObligationItem::ScalarClaim {
+                package,
+                claim_map: &claim_map,
+                node_id: &item.node_id,
+                claim_index,
+                result_selection,
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, RoutedGenerationError>>()?;
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
         ceilings: context.ceilings,
         items: &items,

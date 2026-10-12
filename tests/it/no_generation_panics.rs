@@ -454,6 +454,7 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
                 .iter()
                 .position(|claim| claim.node_id == target)
                 .expect("selected claim"),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
         }];
         let outcome = negotiate_kani_obligations(&KaniObligationRequest {
             ceilings: crate::common::proof_ceilings::proof_ceilings(),

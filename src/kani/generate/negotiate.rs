@@ -58,6 +58,7 @@ use quire_contract_model::{
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     core::naming::unique_names,
@@ -103,7 +104,7 @@ pub fn negotiate_kani_obligations(
         .map(|item| classify(item, request.unwind, request.ceilings))
         .collect::<Vec<_>>();
     reject_duplicates_and_mixtures(request.items, &mut states);
-    assign_names(&mut states);
+    assign_names(request.items, &mut states);
     resolve_assumptions(&mut states);
     let rejected = states.iter().any(|state| state.outcome.is_invalid());
     let mut records = Vec::with_capacity(states.len());
@@ -204,7 +205,7 @@ enum ItemIdentity {
     Node {
         package: String,
         node: CheckedNodeId,
-        claim_index: usize,
+        result_selection: ContractDriverResultSelection,
     },
     /// One role of one state clause. `DuplicateItem` spans this arm and one role only.
     StateFrame {
@@ -288,7 +289,8 @@ fn classify<'a>(
             claim_map,
             node_id,
             claim_index,
-        } => classify_node(package, claim_map, node_id, claim_index),
+            result_selection,
+        } => classify_node(package, claim_map, node_id, claim_index, result_selection),
         ObligationItem::StateFrame {
             package,
             clause,
@@ -362,7 +364,7 @@ fn clause_key(clause: &ClauseRef) -> NameKey {
 /// oracle functions (any may be embedded beside another as an assumed precondition), then the
 /// module and harness names of every clause and scalar obligation. A name depends on its item and
 /// on the siblings sharing its readable stem, never on the item's request position.
-fn assign_names(states: &mut [ItemState<'_>]) {
+fn assign_names(items: &[ObligationItem<'_>], states: &mut [ItemState<'_>]) {
     let oracle_slots = states
         .iter()
         .enumerate()
@@ -409,7 +411,7 @@ fn assign_names(states: &mut [ItemState<'_>]) {
                 ),
             )),
             Outcome::LoweredScalar(lowered) => {
-                let Some(ItemIdentity::Node { claim_index, .. }) = &state.identity else {
+                let Some(ObligationItem::ScalarClaim { claim_index, .. }) = items.get(index) else {
                     return None;
                 };
                 Some((
@@ -537,6 +539,7 @@ fn classify_node<'a>(
     claim_map: &ClaimMap<ExactScalarClaim>,
     node_id: &CheckedNodeId,
     claim_index: usize,
+    result_selection: &ContractDriverResultSelection,
 ) -> ItemState<'a> {
     let graph_node = package
         .wire()
@@ -562,7 +565,7 @@ fn classify_node<'a>(
     let identity = Some(ItemIdentity::Node {
         package: package.identity().digest.to_string(),
         node: node_id.clone(),
-        claim_index,
+        result_selection: result_selection.clone(),
     });
     let outcome = if claim_map.package_id != package.wire().package.source.package_id {
         Outcome::Invalid(InvalidObligationItem::PackageMismatch)

@@ -443,6 +443,7 @@ fn fr015(
                 .iter()
                 .position(|claim| &claim.node_id == *node_id)
                 .expect("selected claim"),
+            result_selection: &ContractDriverResultSelection::NotApplicable,
         })
         .collect::<Vec<_>>();
     let outcome = negotiate_kani_obligations(&KaniObligationRequest {
