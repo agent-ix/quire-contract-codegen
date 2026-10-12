@@ -142,12 +142,13 @@ use crate::routed::contract_package::{
     ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
+    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
     ContractFeatureRecordV1, ContractPackageV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 // Target-neutral iterative SSA scheduling, introduced independently of the historical adapter.
 pub mod schedule;
@@ -1645,6 +1646,26 @@ fn admitted_binary_body<'a>(
         ));
     }
     Ok((closure, occurrences))
+}
+
+fn lowering_profile() -> CompleteLoweringProfileV2 {
+    CompleteLoweringProfileV2 {
+        reference: quire_contract_model::LoweringProfileRef {
+            authority: "agent-ix".into(),
+            identity: "quire.codegen.exact-function/v1".into(),
+        },
+        supported_tags: BTreeSet::from([
+            CheckedNodeTag::ScalarType,
+            CheckedNodeTag::CompositeType,
+            CheckedNodeTag::BoundedDomain,
+            CheckedNodeTag::Value,
+            CheckedNodeTag::Expression,
+            CheckedNodeTag::Claim,
+            CheckedNodeTag::Correspondence,
+        ]),
+        require_bounds: false,
+        work_limit: EXACT_FUNCTION_LOWERING_WORK_LIMIT,
+    }
 }
 
 fn schedule_lowering_failure(

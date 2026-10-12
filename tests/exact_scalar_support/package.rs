@@ -430,7 +430,6 @@ pub struct PackageBuilder {
     value: Value,
     bounds: BTreeSet<String>,
     dedicated_operands: BTreeSet<String>,
-    integer_bound_authority: Option<String>,
 }
 
 fn admitted_fixture_ids() -> &'static Mutex<BTreeMap<String, FixtureIds>> {
@@ -487,7 +486,6 @@ impl Default for PackageBuilder {
             value,
             bounds: BTreeSet::new(),
             dedicated_operands: BTreeSet::new(),
-            integer_bound_authority: None,
         }
     }
 }
@@ -608,54 +606,6 @@ impl PackageBuilder {
     ) -> &mut Self {
         register_code(code, key(code));
         self.node(&key(code), tag, form, semantic_type, body)
-    }
-
-    /// Add an anonymous structural Integer authority while retaining its
-    /// source occurrence. The checked reader determines its final node key.
-    pub fn anonymous_integer_type(&mut self, code: u32) -> String {
-        assert!(
-            self.bounds.is_empty() && self.integer_bound_authority.is_none(),
-            "select the Integer bound authority before registering bounds"
-        );
-        let digest = key(code);
-        self.code(code, "scalar_type", "integer", &digest, aggregate());
-        let node = self.value["semantic_graph"]["nodes"]
-            .as_array_mut()
-            .expect("nodes")
-            .last_mut()
-            .expect("new Integer node");
-        node.as_object_mut()
-            .expect("Integer node")
-            .remove("declaration");
-        node.as_object_mut().expect("Integer node").remove("owner");
-        node["occurrences"][0]["role"] = json!("generated");
-        self.value["source_map"]
-            .as_array_mut()
-            .expect("source map")
-            .last_mut()
-            .expect("new Integer source entry")["role"] = json!("generated");
-        self.integer_bound_authority = Some(digest.clone());
-        digest
-    }
-
-    fn corpus_type(&self, form: &str) -> String {
-        if form == "integer" {
-            self.integer_bound_authority
-                .clone()
-                .unwrap_or_else(|| result_type(form))
-        } else {
-            result_type(form)
-        }
-    }
-
-    fn corpus_literal(&self, kind: &str, value: &str) -> Value {
-        let mut literal = literal(kind, value);
-        if kind == "integer" {
-            if let Some(authority) = &self.integer_bound_authority {
-                literal["type"] = node_ref(authority);
-            }
-        }
-        literal
     }
 
     /// A node that depends on `bounds`, adding each bound node once.
@@ -805,7 +755,7 @@ impl PackageBuilder {
         let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("dedicated operand key"));
         if self.dedicated_operands.insert(digest.clone()) {
             let (kind, value, ty) = match form {
-                "integer" => ("integer", "3", self.corpus_type("integer")),
+                "integer" => ("integer", "3", key(T_INTEGER)),
                 "rational" => ("rational", "1/2", key(T_RATIONAL)),
                 "decimal" => ("decimal", "1.5", key(T_DECIMAL)),
                 "float32" => ("float32_bits", "0", key(T_FLOAT32)),
@@ -814,7 +764,7 @@ impl PackageBuilder {
                 other => panic!("dedicated_operand: no literal form known for {other}"),
             };
             let ty = ty_override.unwrap_or(&ty);
-            let mut body = self.corpus_literal(kind, value);
+            let mut body = literal(kind, value);
             body["type"] = node_ref(ty);
             self.node(&digest, "value", "literal", ty, body);
         }
@@ -1032,25 +982,8 @@ impl PackageBuilder {
                 .iter()
                 .map(|foreign| self.bound(foreign))
                 .collect::<Vec<_>>();
-            let mut body = bound.body();
-            if let Some(authority) = &self.integer_bound_authority {
-                if let Some(members) = body["members"].as_array_mut() {
-                    for member in members {
-                        if member["value"]["value_kind"] == "integer" {
-                            member["value"]["type"] = node_ref(authority);
-                        }
-                    }
-                }
-            }
-            let bounded_type = if matches!(bound, Bound::Integer(..)) {
-                if let Some(authority) = &self.integer_bound_authority {
-                    authority.clone()
-                } else {
-                    bound.bounded_type()
-                }
-            } else {
-                bound.bounded_type()
-            };
+            let body = bound.body();
+            let bounded_type = bound.bounded_type();
             self.node_with(
                 &digest,
                 "bounded_domain",
@@ -2488,7 +2421,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         })
         .collect::<Vec<_>>();
     if expression.code == LITERAL_OPERAND {
-        arguments[1] = builder.corpus_literal("integer", "3");
+        arguments[1] = literal("integer", "3");
     }
     // Code 1014 is `division(1014, Truncating, -5, 5, INT5)`: same
     // profile, operands and result as code 1011's
@@ -2500,7 +2433,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     // node id. A literal second operand keeps 1014 a genuine, distinct
     // node without touching the domain-mismatch behavior under test.
     if expression.code == 1014 {
-        arguments[1] = builder.corpus_literal("integer", "1014");
+        arguments[1] = literal("integer", "1014");
     }
     // No catalogued `convert` identity accepts a `text` operand family
     // (see `corpus_operation`'s `TextAdmission` arm), so Contract IR refuses
@@ -2523,7 +2456,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         arguments = vec![literal("text", &format!("a{}-{profile}", expression.code))];
     }
     let (catalog_operator, operation) = corpus_operation(&expression);
-    let node_semantic_type = pinned_type.unwrap_or_else(|| builder.corpus_type(expression.result));
+    let node_semantic_type = pinned_type.unwrap_or_else(|| result_type(expression.result));
     let node_bounds: &[Bound] = if matches!(expression.operation, Op::TextAdmission { .. }) {
         &[]
     } else {
@@ -2631,11 +2564,6 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             json!({"term": "aggregate", "members": [member("rounding", literal("text", rounding))]}),
         );
     }
-    // An integer_range is closed over the model's anonymous structural
-    // Integer authority. Keep the declared T_INTEGER node for the corpus's
-    // source-owned identity controls; bound construction opts into this
-    // separate authority before the first bound is registered.
-    builder.anonymous_integer_type(39_000);
     for (code, ty, kind, value) in [
         (V_INTEGER, key(T_INTEGER), "integer", "3"),
         (V_RATIONAL, key(T_RATIONAL), "rational", "1/2"),
@@ -3210,23 +3138,6 @@ pub fn literal_quantity_package() -> PackageBuilder {
     let mut builder = corpus_package_with_expression_operand();
     builder.omit_code(EXPRESSION_OPERAND);
     builder.omit_code(WRONG_OPERAND);
-    builder
-}
-
-/// The noncanonical integer endpoint is a reader refusal fixture, outside the admitted corpus.
-pub fn unreadable_package() -> PackageBuilder {
-    let mut builder = corpus_package();
-    let bound = unreadable_bound();
-    let bound_key = builder.bound(&bound);
-    let operand = builder.dedicated_operand("integer", &[bound_key]);
-    builder.application_bounded(
-        UNREADABLE,
-        "expression",
-        "binary",
-        &key(T_INTEGER),
-        integer_pair_for_operand(UNREADABLE, &operand),
-        &[bound],
-    );
     builder
 }
 
@@ -4164,7 +4075,7 @@ mod bound_tests {
             &key(T_INTEGER),
             aggregate(),
         );
-        let anonymous = builder.anonymous_integer_type(39_001);
+        let anonymous = key(T_INTEGER);
         let range_source = builder.bound(&Bound::Integer(0, 9));
 
         let (outcome, _, ids) = builder.read_resolved();
@@ -4172,8 +4083,13 @@ mod bound_tests {
             panic!("one range over anonymous Integer must admit: {outcome:?}");
         };
         let anonymous = ids.resolve(&super::id(&anonymous));
-        let source_owned = ids.resolve(&super::id(&key(T_INTEGER)));
-        assert_ne!(anonymous, source_owned);
+        let integer_node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == anonymous)
+            .expect("admitted structural Integer");
+        assert!(integer_node.declaration.is_none());
         let range = ids.resolve(&super::id(&range_source));
         let checked_range = package
             .graph()

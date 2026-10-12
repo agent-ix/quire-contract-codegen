@@ -1925,8 +1925,7 @@ fn tc_024_missing_rounding_mode_is_a_strict_reader_refusal() {
     assert!(refusal.expected_node_id().is_none());
 }
 
-/// A corpus-style source-owned Integer may coexist with the anonymous Integer
-/// authority that the strict reader requires for integer-range endpoints.
+/// The corpus Integer is the anonymous structural authority required by the reader.
 /// Trace: FR-014-AC-10, TC-024.
 #[test]
 fn tc_024_anonymous_integer_range_generates_one_addition() {
@@ -1940,7 +1939,7 @@ fn tc_024_anonymous_integer_range_generates_one_addition() {
         &key(T_INTEGER),
         json!({"term": "aggregate", "members": []}),
     );
-    let integer = builder.anonymous_integer_type(39_010);
+    let integer = key(T_INTEGER);
     let typed_literal = |value: &str| {
         json!({
             "term": "literal",
@@ -1988,9 +1987,7 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     let CheckedPackageV2ReadResult::Admitted(package) = outcome else {
         panic!("corpus must admit before CG generation: {outcome:?}");
     };
-    let anonymous = ids.resolve(&id(&key(39_000)));
-    let declared = ids.resolve(&id(&key(T_INTEGER)));
-    assert_ne!(anonymous, declared);
+    let anonymous = ids.resolve(&id(&key(T_INTEGER)));
     let int5 = ids.resolve(&id(&INT5.key()));
     let range = package
         .graph()
@@ -2001,17 +1998,17 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     assert_eq!(range.semantic_type, anonymous);
 
     let rounded = ids.resolve(&code_id(1053));
-    let result_bound = ids.resolve(&id(&Bound::Decimal(-100, 100, 0, 0, "nearest-away").key()));
+    let result_type = ids.resolve(&code_id(T_DECIMAL_AWAY));
     let conversion = package
         .graph()
         .nodes
         .iter()
         .find(|node| node.node_id == rounded)
         .expect("admitted nearest-away decimal conversion");
-    assert_eq!(conversion.semantic_type, result_bound);
+    assert_eq!(conversion.semantic_type, result_type);
     assert_eq!(
         conversion.body["result_type"],
-        serde_json::to_value(&result_bound).expect("bound id serializes")
+        serde_json::to_value(&result_type).expect("type id serializes")
     );
     assert_eq!(
         conversion.body["operation"]["mode"],

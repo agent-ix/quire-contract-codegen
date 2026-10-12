@@ -26,9 +26,9 @@ use quire_contract_codegen::{
     RecordedSchedule, UpstreamBlocker, COMPOSITE_EQUALITY_CRATE_NAME,
 };
 use quire_contract_model::{
-    derive_structural_candidates, CheckedNodeTag, CheckedPackageRefusalCause,
-    CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
-    CheckedPackageLimit, CheckedPackageReadLimits, CompleteLoweringProfileV2,
+    derive_structural_candidates, CheckedNodeTag, CheckedPackageLimit, CheckedPackageReadLimits,
+    CheckedPackageRefusalCause, CheckedPackageRefusalCode, CheckedPackageV2,
+    CheckedPackageV2ReadResult, CheckedSemanticNodeV2, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
     ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
