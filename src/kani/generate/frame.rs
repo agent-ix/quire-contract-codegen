@@ -35,6 +35,7 @@ use quire_contract_model::{
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::operator_catalog::Operator as CatalogOperator;
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError},
@@ -103,26 +104,33 @@ pub struct StateFrameObligations {
 
 impl StateComparison {
     fn from_operation(identity: &str) -> Option<Self> {
-        Some(match identity {
-            "quire.op.integer.lt" => Self::Lt,
-            "quire.op.integer.le" => Self::Le,
-            "quire.op.integer.gt" => Self::Gt,
-            "quire.op.integer.ge" => Self::Ge,
-            "quire.op.integer.eq" => Self::Eq,
-            "quire.op.integer.ne" => Self::Ne,
-            _ => return None,
+        Some(match CatalogOperator::from_identity(identity)? {
+            CatalogOperator::Less => Self::Lt,
+            CatalogOperator::LessOrEqual => Self::Le,
+            CatalogOperator::Greater => Self::Gt,
+            CatalogOperator::GreaterOrEqual => Self::Ge,
+            CatalogOperator::Equal => Self::Eq,
+            CatalogOperator::NotEqual => Self::Ne,
+            CatalogOperator::Add
+            | CatalogOperator::Subtract
+            | CatalogOperator::Multiply
+            | CatalogOperator::Negate => return None,
         })
     }
 
     fn rust(self) -> &'static str {
-        match self {
-            Self::Lt => "<",
-            Self::Le => "<=",
-            Self::Gt => ">",
-            Self::Ge => ">=",
-            Self::Eq => "==",
-            Self::Ne => "!=",
-        }
+        let operator = match self {
+            Self::Lt => CatalogOperator::Less,
+            Self::Le => CatalogOperator::LessOrEqual,
+            Self::Gt => CatalogOperator::Greater,
+            Self::Ge => CatalogOperator::GreaterOrEqual,
+            Self::Eq => CatalogOperator::Equal,
+            Self::Ne => CatalogOperator::NotEqual,
+        };
+        operator
+            .entry()
+            .frame_symbol
+            .expect("each state comparison has a catalogued Rust symbol")
     }
 }
 
@@ -1172,6 +1180,66 @@ fn frame_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Frame rendering keeps each comparison identity and its authored operand direction.
+    ///
+    /// Trace: FR-038-AC-1, FR-038-AC-3, FR-038-AC-6, TC-025.
+    #[test]
+    fn state_projection_uses_catalogued_comparison_symbols() {
+        let cases = [
+            ("quire.op.integer.lt", StateComparison::Lt, "<"),
+            ("quire.op.integer.le", StateComparison::Le, "<="),
+            ("quire.op.integer.gt", StateComparison::Gt, ">"),
+            ("quire.op.integer.ge", StateComparison::Ge, ">="),
+            ("quire.op.integer.eq", StateComparison::Eq, "=="),
+            ("quire.op.integer.ne", StateComparison::Ne, "!="),
+        ];
+        for (identity, expected, symbol) in cases {
+            assert_eq!(StateComparison::from_operation(identity), Some(expected));
+            assert_eq!(expected.rust(), symbol);
+        }
+        assert_eq!(
+            StateComparison::from_operation("quire.op.integer.add"),
+            None
+        );
+        assert_eq!(
+            StateComparison::from_operation("quire.op.integer.unknown"),
+            None
+        );
+
+        let abi = Abi {
+            state_path: "crate::State",
+            subject_path: "crate::operate",
+            state_fields: &["balance"],
+        };
+        let scope = scope("withdraw");
+        let pre_on_left = postcondition_body(
+            &abi,
+            &scope,
+            &[],
+            &Postcondition {
+                field: "balance",
+                comparison: StateComparison::Lt,
+                left_is_pre: true,
+            },
+            "m",
+        );
+        assert!(pre_on_left.contains("pre.balance < post.balance"));
+        assert!(!pre_on_left.contains("post.balance < pre.balance"));
+        let post_on_left = postcondition_body(
+            &abi,
+            &scope,
+            &[],
+            &Postcondition {
+                field: "balance",
+                comparison: StateComparison::Lt,
+                left_is_pre: false,
+            },
+            "m",
+        );
+        assert!(post_on_left.contains("post.balance < pre.balance"));
+        assert!(!post_on_left.contains("pre.balance < post.balance"));
+    }
 
     fn scope(operation: &str) -> StateFrameScope {
         let id = |digest: &str| -> CheckedNodeId {

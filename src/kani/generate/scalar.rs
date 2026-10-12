@@ -1,6 +1,7 @@
 //! The scalar family: lowering an IR-confirmed V2 exact-scalar claim and rendering its Kani
 //! harness (FR-015).
 
+use crate::operator_catalog::{Operator as CatalogOperator, ScalarKaniOperator as ScalarOperation};
 use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
 use crate::{
@@ -45,27 +46,15 @@ pub(super) struct LoweredScalarClaim {
 /// between the four -- the catalogued identity, the operand names, the exact result, the range of
 /// reachable results -- is an exhaustive method here, so adding an operation is one new variant the
 /// compiler checks at every use.
-#[derive(Clone, Copy)]
-enum ScalarOperation {
-    Add,
-    Subtract,
-    Multiply,
-    Negate,
-}
-
 impl ScalarOperation {
     /// The renderable operation for an IR-confirmed operation identity, or `None` when this
     /// generator has no scalar-harness renderer for it. Recognizing these four exact catalogued
     /// identities is not a vocabulary bridge: it only recognizes, among identities IR already
     /// confirmed, which ones this generator additionally knows how to turn into a harness.
     fn of(operation_identity: &str) -> Option<Self> {
-        match operation_identity {
-            "quire.op.integer.add" => Some(Self::Add),
-            "quire.op.integer.sub" => Some(Self::Subtract),
-            "quire.op.integer.mul" => Some(Self::Multiply),
-            "quire.op.integer.negate" => Some(Self::Negate),
-            _ => None,
-        }
+        CatalogOperator::from_identity(operation_identity)?
+            .entry()
+            .scalar_kani
     }
 
     /// The oracle's parameter names, in call order, which are also the harness's variable names.
@@ -491,6 +480,40 @@ mod tests {
         claim::ClaimDisposition,
         scalar::{OperationClaim, OperationProvenance},
     };
+
+    /// The scalar Kani projection selects exactly the four integer arithmetic entries.
+    ///
+    /// Trace: FR-038-AC-3, FR-038-AC-4, FR-015-AC-37, TC-025.
+    #[test]
+    fn scalar_projection_uses_catalogued_arithmetic_identities_only() {
+        assert_eq!(
+            ScalarOperation::of("quire.op.integer.add"),
+            Some(ScalarOperation::Add)
+        );
+        assert_eq!(
+            ScalarOperation::of("quire.op.integer.sub"),
+            Some(ScalarOperation::Subtract)
+        );
+        assert_eq!(
+            ScalarOperation::of("quire.op.integer.mul"),
+            Some(ScalarOperation::Multiply)
+        );
+        assert_eq!(
+            ScalarOperation::of("quire.op.integer.negate"),
+            Some(ScalarOperation::Negate)
+        );
+        assert_eq!(ScalarOperation::of("quire.op.integer.lt"), None);
+        assert_eq!(ScalarOperation::of("quire.op.integer.eq"), None);
+        assert_eq!(ScalarOperation::of("quire.op.integer.unknown"), None);
+        assert_eq!(
+            ScalarOperation::Subtract.operand_names(),
+            &["left", "right"]
+        );
+        assert_eq!(
+            ScalarOperation::Subtract.native_expression(),
+            "i128::from(left_native) - i128::from(right_native)"
+        );
+    }
 
     /// The symbolic domain is read from binding-shaped `min`/`max` members (the shape QSL emits,
     /// FR-322); a bare-literal member is not symbolic.

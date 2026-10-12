@@ -48,6 +48,7 @@
 use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
+use crate::operator_catalog::Operator as CatalogOperator;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{classify_lowering_failure, LoweringFailure};
 use quire_contract_model::{
@@ -1273,7 +1274,7 @@ fn check_parameters(
                 &_ => {
                     return Err(ItemCheckError::Generation(
                         OracleGenerationError::unknown_variant("IntegerDomain"),
-                    ))
+                    ));
                 }
             };
             let result = bounds.equal(BoundForm::IntegerRange, read_integer_range, declared)?;
@@ -1319,7 +1320,7 @@ fn check_parameters(
             &_ => {
                 return Err(ItemCheckError::Generation(
                     OracleGenerationError::unknown_variant("QuantityTarget"),
-                ))
+                ));
             }
         },
         ExactScalarOperation::Ordering { .. }
@@ -1359,7 +1360,7 @@ impl Bounds<'_, '_> {
                 return Err(ExactScalarRefusal::MissingBound {
                     bounded_type: bound.semantic_type.clone(),
                     expected_form: form,
-                })
+                });
             }
             None => self.scalar_result_bound(form)?,
         };
@@ -1401,7 +1402,7 @@ impl Bounds<'_, '_> {
                 return Err(ExactScalarRefusal::AmbiguousBound {
                     bounded_type: bounded_type.clone(),
                     expected_form: form,
-                })
+                });
             }
         };
         match narrowed {
@@ -1410,20 +1411,20 @@ impl Bounds<'_, '_> {
                 return Err(ExactScalarRefusal::MissingBound {
                     bounded_type: bound.semantic_type.clone(),
                     expected_form: form,
-                })
+                });
             }
             [bound] if &bound.semantic_type != bounded_type => {
                 return Err(ExactScalarRefusal::MissingBound {
                     bounded_type: bounded_type.clone(),
                     expected_form: form,
-                })
+                });
             }
             [bound] => return Ok(bound),
             [_, _, ..] => {
                 return Err(ExactScalarRefusal::AmbiguousBound {
                     bounded_type: bounded_type.clone(),
                     expected_form: form,
-                })
+                });
             }
         }
         let candidates = self
@@ -1950,10 +1951,10 @@ fn catalogued_operation(
     use ExactScalarOperation as Op;
     Ok(match operation {
         Op::IntegerArithmetic { operator, .. } => plain(match operator {
-            IntegerOperator::Add => "quire.op.integer.add",
-            IntegerOperator::Subtract => "quire.op.integer.sub",
-            IntegerOperator::Multiply => "quire.op.integer.mul",
-            IntegerOperator::Negate => "quire.op.integer.negate",
+            IntegerOperator::Add => CatalogOperator::Add.entry().identity,
+            IntegerOperator::Subtract => CatalogOperator::Subtract.entry().identity,
+            IntegerOperator::Multiply => CatalogOperator::Multiply.entry().identity,
+            IntegerOperator::Negate => CatalogOperator::Negate.entry().identity,
         }),
         Op::IntegerDivision { .. } => plain("quire.op.integer.div"),
         Op::IntegerModulo { .. } => plain("quire.op.integer.mod"),
@@ -2073,11 +2074,12 @@ fn ordering_identity(
 ) -> Result<&'static str, OracleGenerationError> {
     use OrderingOperandKind as Kind;
     use OrderingOperator as Op;
+    if matches!(operands, Kind::Integer) {
+        return CatalogOperator::from_ordering_operator(*operator)
+            .map(|operation| operation.entry().identity)
+            .ok_or_else(|| OracleGenerationError::unknown_variant("OrderingOperator"));
+    }
     Ok(match (operands, operator) {
-        (Kind::Integer, Op::Less) => "quire.op.integer.lt",
-        (Kind::Integer, Op::LessOrEqual) => "quire.op.integer.le",
-        (Kind::Integer, Op::Greater) => "quire.op.integer.gt",
-        (Kind::Integer, Op::GreaterOrEqual) => "quire.op.integer.ge",
         (Kind::Rational, Op::Less) => "quire.op.rational.lt",
         (Kind::Rational, Op::LessOrEqual) => "quire.op.rational.le",
         (Kind::Rational, Op::Greater) => "quire.op.rational.gt",
@@ -2601,8 +2603,12 @@ impl SourceBuilder {
                 // specific to this lowering; `from_integer` itself is an uncharged
                 // construction, so the lift below is free.
                 let (parameters, lift_prelude, operation) = match operator {
-                    RationalOperator::Negate => (unary("&rt::Rational"), Vec::new(), "Negate(operand)"),
-                    RationalOperator::Add => (binary("&rt::Rational"), Vec::new(), "Add(left, right)"),
+                    RationalOperator::Negate => {
+                        (unary("&rt::Rational"), Vec::new(), "Negate(operand)")
+                    }
+                    RationalOperator::Add => {
+                        (binary("&rt::Rational"), Vec::new(), "Add(left, right)")
+                    }
                     RationalOperator::Subtract => {
                         (binary("&rt::Rational"), Vec::new(), "Subtract(left, right)")
                     }
@@ -2751,21 +2757,15 @@ impl SourceBuilder {
                 )],
                 call: "Ok(rt::admit_text(operand, &text_type, meter))".to_owned(),
             },
-            ExactScalarOperation::TextComparison { operator } => comparison_body(
-                "&rt::Text",
-                "compare_text",
-                *operator,
-            )?,
-            ExactScalarOperation::EnumComparison { operator } => comparison_body(
-                "&rt::EnumValue",
-                "compare_enum",
-                *operator,
-            )?,
-            ExactScalarOperation::QuantityComparison { operator } => comparison_body(
-                "&rt::Quantity",
-                "compare_quantity",
-                *operator,
-            )?,
+            ExactScalarOperation::TextComparison { operator } => {
+                comparison_body("&rt::Text", "compare_text", *operator)?
+            }
+            ExactScalarOperation::EnumComparison { operator } => {
+                comparison_body("&rt::EnumValue", "compare_enum", *operator)?
+            }
+            ExactScalarOperation::QuantityComparison { operator } => {
+                comparison_body("&rt::Quantity", "compare_quantity", *operator)?
+            }
             ExactScalarOperation::QuantityArithmetic { operator } => {
                 let (parameters, operation) = match operator {
                     QuantityOperator::Add => (binary("&rt::Quantity"), "Add(left, right)"),
@@ -2794,7 +2794,10 @@ impl SourceBuilder {
                 let target = match target {
                     QuantityTarget::Exact => "rt::QuantityTarget::Exact".to_owned(),
                     QuantityTarget::Decimal(decimal) => {
-                        format!("rt::QuantityTarget::Decimal({})", self.decimal_type(decimal)?)
+                        format!(
+                            "rt::QuantityTarget::Decimal({})",
+                            self.decimal_type(decimal)?
+                        )
                     }
                     QuantityTarget::Integer { domain, rounding } => format!(
                         "rt::QuantityTarget::Integer {{ domain: {}, rounding: {} }}",
@@ -2996,11 +2999,17 @@ fn family_of_identity(identity: &str) -> Option<Family> {
     use ComparisonOperator as C;
     use OrderingOperandKind as K;
     use OrderingOperator as O;
+    if let Some(entry) = CatalogOperator::from_identity(identity).map(CatalogOperator::entry) {
+        return Some(match entry.family {
+            crate::operator_catalog::Family::IntegerArithmetic => {
+                Family::IntegerArithmetic(entry.scalar_operator?)
+            }
+            crate::operator_catalog::Family::IntegerOrdering => {
+                Family::Ordering(entry.ordering_operator?, OrderingOperandKind::Integer)
+            }
+        });
+    }
     Some(match identity {
-        "quire.op.integer.add" => Family::IntegerArithmetic(IntegerOperator::Add),
-        "quire.op.integer.sub" => Family::IntegerArithmetic(IntegerOperator::Subtract),
-        "quire.op.integer.mul" => Family::IntegerArithmetic(IntegerOperator::Multiply),
-        "quire.op.integer.negate" => Family::IntegerArithmetic(IntegerOperator::Negate),
         "quire.op.integer.div" => Family::IntegerDivision,
         "quire.op.integer.mod" => Family::IntegerModulo,
         "quire.op.rational.add" => Family::RationalArithmetic(RationalOperator::Add),
@@ -3008,10 +3017,6 @@ fn family_of_identity(identity: &str) -> Option<Family> {
         "quire.op.rational.mul" => Family::RationalArithmetic(RationalOperator::Multiply),
         "quire.op.rational.negate" => Family::RationalArithmetic(RationalOperator::Negate),
         "quire.op.rational.div" => Family::RationalDivision,
-        "quire.op.integer.lt" => Family::Ordering(O::Less, K::Integer),
-        "quire.op.integer.le" => Family::Ordering(O::LessOrEqual, K::Integer),
-        "quire.op.integer.gt" => Family::Ordering(O::Greater, K::Integer),
-        "quire.op.integer.ge" => Family::Ordering(O::GreaterOrEqual, K::Integer),
         "quire.op.rational.lt" => Family::Ordering(O::Less, K::Rational),
         "quire.op.rational.le" => Family::Ordering(O::LessOrEqual, K::Rational),
         "quire.op.rational.gt" => Family::Ordering(O::Greater, K::Rational),

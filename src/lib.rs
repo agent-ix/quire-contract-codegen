@@ -11,6 +11,8 @@ mod core;
 mod kani;
 // The oracle subsystem.
 mod oracle;
+// The single internal identity table shared by admitted V2 consumers.
+mod operator_catalog;
 // The publication subsystem.
 mod publication;
 // The routed subsystem.
