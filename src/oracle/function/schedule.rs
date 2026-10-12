@@ -414,6 +414,7 @@ pub(crate) fn build_schedule(
     work_limit: u64,
 ) -> Result<Schedule, ScheduleRefusal> {
     let mut work = WorkCounter::new(work_limit)?;
+    charge_graph_actions(root, nodes, &mut work)?;
     build_schedule_with_work(
         root,
         nodes,
@@ -424,7 +425,63 @@ pub(crate) fn build_schedule(
     )
 }
 
-/// Builds one schedule using the same budget already charged by graph projection.
+#[cfg(test)]
+fn charge_graph_actions(
+    root: &CheckedNodeId,
+    nodes: &BTreeMap<CheckedNodeId, GraphNode>,
+    work: &mut WorkCounter,
+) -> Result<(), ScheduleRefusal> {
+    enum GraphEvent {
+        Enter(CheckedNodeId),
+        Continue {
+            edges: Vec<GraphOperand>,
+            next: usize,
+        },
+    }
+
+    let mut seen = BTreeSet::new();
+    let mut stack = vec![GraphEvent::Enter(root.clone())];
+    while let Some(event) = stack.pop() {
+        match event {
+            GraphEvent::Enter(node) => {
+                work.charge()?;
+                if !seen.insert(node.clone()) {
+                    continue;
+                }
+                let graph_node = nodes
+                    .get(&node)
+                    .ok_or_else(|| ScheduleRefusal::MissingNode(node.clone()))?;
+                let edges = match &graph_node.kind {
+                    NodeKind::Parameter => Vec::new(),
+                    NodeKind::Binary { left, right, .. } => vec![left.clone(), right.clone()],
+                    NodeKind::Call {
+                        callee: _,
+                        arguments,
+                    } => {
+                        work.charge()?;
+                        arguments.clone()
+                    }
+                };
+                stack.push(GraphEvent::Continue { edges, next: 0 });
+            }
+            GraphEvent::Continue { edges, next } => {
+                if let Some(edge) = edges.get(next).cloned() {
+                    work.charge()?;
+                    stack.push(GraphEvent::Continue {
+                        edges,
+                        next: next + 1,
+                    });
+                    if let GraphOperand::Node(child) = edge {
+                        stack.push(GraphEvent::Enter(child));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Builds one schedule using the work counter already charged by graph projection.
 pub(crate) fn build_schedule_with_work(
     root: &CheckedNodeId,
     nodes: &BTreeMap<CheckedNodeId, GraphNode>,
@@ -457,7 +514,6 @@ pub(crate) fn build_schedule_with_work(
     while let Some(event) = stack.pop() {
         match event {
             Event::Enter { node, parent } => {
-                work.charge()?;
                 let graph_node = nodes
                     .get(&node)
                     .ok_or_else(|| ScheduleRefusal::MissingNode(node.clone()))?;
@@ -500,8 +556,6 @@ pub(crate) fn build_schedule_with_work(
                     NodeKind::Parameter => (Vec::new(), 0),
                     NodeKind::Binary { left, right, .. } => (vec![left.clone(), right.clone()], 0),
                     NodeKind::Call { callee, arguments } => {
-                        // Argument zero is charged before the binding reference is inspected.
-                        work.charge()?;
                         let binding = functions
                             .get(callee)
                             .ok_or_else(|| ScheduleRefusal::UnknownCallee(callee.clone()))?;
@@ -539,7 +593,6 @@ pub(crate) fn build_schedule_with_work(
                 child_ordinal_base,
             } => {
                 if next < edges.len() {
-                    work.charge()?;
                     let child = edges[next].clone();
                     stack.push(Event::Continue {
                         node: node.clone(),
@@ -1126,18 +1179,22 @@ mod tests {
     /// Trace: FR-021-AC-27, TC-031.
     fn ac27_unknown_operation_and_mismatched_operand_types_refuse_before_schedule() {
         let root = id(3);
-        let unsupported = BTreeMap::from([(
-            root.clone(),
-            node(
-                3,
-                ValueKind::Integer,
-                NodeKind::Binary {
-                    operation_identity: "quire.op.integer.div".to_owned(),
-                    left: id(1).into(),
-                    right: id(2).into(),
-                },
+        let unsupported = BTreeMap::from([
+            (id(1), node(1, ValueKind::Integer, NodeKind::Parameter)),
+            (id(2), node(2, ValueKind::Integer, NodeKind::Parameter)),
+            (
+                root.clone(),
+                node(
+                    3,
+                    ValueKind::Integer,
+                    NodeKind::Binary {
+                        operation_identity: "quire.op.integer.div".to_owned(),
+                        left: id(1).into(),
+                        right: id(2).into(),
+                    },
+                ),
             ),
-        )]);
+        ]);
         let current = binding(90, vec![], ValueKind::Integer);
         assert!(matches!(
             build_schedule(

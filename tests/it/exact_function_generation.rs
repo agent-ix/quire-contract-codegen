@@ -526,6 +526,42 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         )
     }));
 
+    let projection_denied = generate_function_schedules(&checked, &declarations, &items, 4)
+        .expect("projection work exhaustion is reported per function");
+    assert!(projection_denied.functions.is_empty());
+    assert_eq!(projection_denied.refused_functions.len(), COUNT as usize);
+    assert!(projection_denied.refused_functions.iter().all(|function| {
+        matches!(
+            function.refusal,
+            quire_contract_codegen::FunctionScheduleRefusal::WorkExhausted {
+                limit: 4,
+                consumed: 5
+            }
+        )
+    }));
+
+    let scalar_declaration = declarations[terminal as usize].clone();
+    let scalar_exact =
+        generate_function_schedules(&checked, std::slice::from_ref(&scalar_declaration), &[], 11)
+            .expect("the exact nested-scalar work budget admits its schedule");
+    assert_eq!(scalar_exact.functions.len(), 1);
+    let scalar_one_less =
+        generate_function_schedules(&checked, std::slice::from_ref(&scalar_declaration), &[], 10)
+            .expect("one-less scalar budget produces a typed refusal");
+    assert!(scalar_one_less.functions.is_empty());
+    assert!(matches!(
+        scalar_one_less
+            .refused_functions
+            .first()
+            .map(|function| &function.refusal),
+        Some(
+            quire_contract_codegen::FunctionScheduleRefusal::WorkExhausted {
+                limit: 10,
+                consumed: 11
+            }
+        )
+    ));
+
     let reversed = items.iter().cloned().rev().collect::<Vec<_>>();
     let permuted = generate_function_schedules(&checked, &declarations, &reversed, work_limit)
         .expect("permuted request retains the same schedule");

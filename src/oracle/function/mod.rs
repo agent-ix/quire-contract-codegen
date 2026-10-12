@@ -406,26 +406,30 @@ pub fn generate_function_schedules(
         let result = if let Some(refusal) = lowering_failures.get(&declaration.body_node_id) {
             Err(refusal.clone())
         } else {
-            project_body_graph(&source_nodes, &type_kinds, &declaration.body_node_id).and_then(
-                |projected| {
-                    let schedule = schedule::build_schedule_with_work(
-                        &declaration.body_node_id,
-                        &projected,
-                        &parameters,
-                        binding,
-                        &bindings,
-                        &mut work,
-                    )?;
-                    let root = schedule
-                        .instructions
-                        .last()
-                        .map(|instruction| instruction.output)
-                        .ok_or_else(|| {
-                            schedule::ScheduleRefusal::MissingNode(declaration.body_node_id.clone())
-                        })?;
-                    Ok((schedule, root))
-                },
+            project_body_graph(
+                &source_nodes,
+                &type_kinds,
+                &declaration.body_node_id,
+                &mut work,
             )
+            .and_then(|projected| {
+                let schedule = schedule::build_schedule_with_work(
+                    &declaration.body_node_id,
+                    &projected,
+                    &parameters,
+                    binding,
+                    &bindings,
+                    &mut work,
+                )?;
+                let root = schedule
+                    .instructions
+                    .last()
+                    .map(|instruction| instruction.output)
+                    .ok_or_else(|| {
+                        schedule::ScheduleRefusal::MissingNode(declaration.body_node_id.clone())
+                    })?;
+                Ok((schedule, root))
+            })
         };
         match result {
             Ok((schedule, root)) => {
@@ -577,31 +581,63 @@ fn project_body_graph(
     source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
     root: &CheckedNodeId,
+    work: &mut schedule::WorkCounter,
 ) -> Result<BTreeMap<CheckedNodeId, schedule::GraphNode>, schedule::ScheduleRefusal> {
+    enum ProjectionEvent {
+        Enter(CheckedNodeId),
+        Continue {
+            children: Vec<schedule::GraphOperand>,
+            next: usize,
+        },
+    }
+
     let mut projected = BTreeMap::new();
-    let mut pending = vec![root.clone()];
-    while let Some(node_id) = pending.pop() {
-        if projected.contains_key(&node_id) {
-            continue;
-        }
-        let source = source_nodes
-            .get(&node_id)
-            .ok_or_else(|| schedule::ScheduleRefusal::MissingNode(node_id.clone()))?;
-        let (value_kind, kind, children) = project_function_node(source, type_kinds)?
-            .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(node_id.clone()))?;
-        for child in children {
-            if let schedule::GraphOperand::Node(child) = child {
-                pending.push(child);
+    let mut stack = vec![ProjectionEvent::Enter(root.clone())];
+    while let Some(event) = stack.pop() {
+        match event {
+            ProjectionEvent::Enter(node_id) => {
+                work.charge()?;
+                if projected.contains_key(&node_id) {
+                    continue;
+                }
+                let source = source_nodes
+                    .get(&node_id)
+                    .ok_or_else(|| schedule::ScheduleRefusal::MissingNode(node_id.clone()))?;
+                if source
+                    .body
+                    .get("operator")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("call")
+                {
+                    // The call's argument-zero declaration binding is a child edge and is
+                    // charged before its identity is decoded or any value argument is visited.
+                    work.charge()?;
+                }
+                let (value_kind, kind, children) = project_function_node(source, type_kinds)?
+                    .ok_or_else(|| schedule::ScheduleRefusal::MalformedTerm(node_id.clone()))?;
+                projected.insert(
+                    node_id.clone(),
+                    schedule::GraphNode {
+                        id: node_id,
+                        value_kind,
+                        kind,
+                    },
+                );
+                stack.push(ProjectionEvent::Continue { children, next: 0 });
+            }
+            ProjectionEvent::Continue { children, next } => {
+                if let Some(child) = children.get(next).cloned() {
+                    work.charge()?;
+                    stack.push(ProjectionEvent::Continue {
+                        children,
+                        next: next + 1,
+                    });
+                    if let schedule::GraphOperand::Node(child) = child {
+                        stack.push(ProjectionEvent::Enter(child));
+                    }
+                }
             }
         }
-        projected.insert(
-            node_id.clone(),
-            schedule::GraphNode {
-                id: node_id,
-                value_kind,
-                kind,
-            },
-        );
     }
     Ok(projected)
 }
