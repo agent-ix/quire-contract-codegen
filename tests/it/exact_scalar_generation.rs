@@ -1708,6 +1708,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::BlockedOnUpstream { .. } => "BlockedOnUpstream",
         ExactScalarRefusal::RequiresBound { .. } => "RequiresBound",
         ExactScalarRefusal::MissingBound { .. } => "MissingBound",
+        ExactScalarRefusal::IncompleteContext => "IncompleteContext",
         ExactScalarRefusal::AmbiguousBound { .. } => "AmbiguousBound",
         ExactScalarRefusal::UnreadableBound { .. } => "UnreadableBound",
         ExactScalarRefusal::BoundMismatch { .. } => "BoundMismatch",

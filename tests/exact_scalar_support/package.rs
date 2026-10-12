@@ -491,6 +491,36 @@ impl Default for PackageBuilder {
 }
 
 impl PackageBuilder {
+    /// Give source-authored scalar expressions the QSL occurrence role used by
+    /// FR-049 result selection. Both graph and source-map occurrences remain
+    /// aligned before the public checked reader admits this fixture.
+    pub fn expression_occurrences(&mut self) -> &mut Self {
+        let expressions = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes")
+            .iter_mut()
+            .filter(|node| node["node_tag"] == "expression")
+            .map(|node| {
+                for occurrence in node["occurrences"]
+                    .as_array_mut()
+                    .expect("fixture occurrences")
+                {
+                    occurrence["role"] = json!("expression");
+                }
+                node["node_id"].clone()
+            })
+            .collect::<Vec<_>>();
+        for source in self.value["source_map"]
+            .as_array_mut()
+            .expect("fixture source map")
+        {
+            if expressions.contains(&source["node_id"]) {
+                source["role"] = json!("expression");
+            }
+        }
+        self
+    }
+
     pub fn node(
         &mut self,
         digest: &str,

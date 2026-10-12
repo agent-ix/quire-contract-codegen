@@ -752,6 +752,7 @@ fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> 
                 })
             }
             ExactScalarRefusal::DuplicateRequest
+            | ExactScalarRefusal::IncompleteContext
             | ExactScalarRefusal::PackageAccounting { .. }
             | ExactScalarRefusal::SelectedDependencyUnsupported { .. }
             | ExactScalarRefusal::AmbiguousBound { .. }

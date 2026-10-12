@@ -52,12 +52,15 @@ use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{classify_lowering_failure, LoweringFailure};
 use crate::routed::contract_package::{
-    ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
+    ContractDriverResultSelection, ContractRequestPosition, PackageItem, PackageItems,
+    PackageRequestError,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CompleteContractNodeV2, CompleteLoweringProfileV2,
-    CompleteLoweringRecordV2, ContractFeatureRecordV1, ContractPackageV1, ContractRootViewError,
+    BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageV2,
+    CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteContractNodeV2,
+    CompleteLoweringProfileV2, CompleteLoweringRecordV2, ContractFeatureRecordV1,
+    ContractOccurrenceKeyV1, ContractPackageV1, ContractResultContextV1, ContractResultViewV1,
+    ContractRootViewError,
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
@@ -355,6 +358,16 @@ impl BoundForm {
             Self::TextBounds => "text_bounds",
         }
     }
+
+    fn ir(self) -> BoundedDomainForm {
+        match self {
+            Self::IntegerRange => BoundedDomainForm::IntegerRange,
+            Self::RationalRange => BoundedDomainForm::RationalRange,
+            Self::DecimalRange => BoundedDomainForm::DecimalRange,
+            Self::FloatRounding => BoundedDomainForm::FloatRounding,
+            Self::TextBounds => BoundedDomainForm::TextBounds,
+        }
+    }
 }
 
 /// Where a claim's operation identity comes from.
@@ -414,7 +427,7 @@ pub enum ExactScalarRefusal {
     /// The original admitted package accounting and its exact available sources.
     PackageAccounting {
         /// The complete typed refusal, including its payload.
-        record: ContractFeatureRecordV1,
+        record: Box<ContractFeatureRecordV1>,
         /// Source occurrences for this requested position.
         occurrences: Vec<CheckedSourceMapEntry>,
     },
@@ -455,6 +468,8 @@ pub enum ExactScalarRefusal {
         /// The form the descriptor needs.
         expected_form: BoundForm,
     },
+    /// The caller supplied no applicable or no represented result occurrence.
+    IncompleteContext,
     /// More than one reachable bound of that form bounds the result type.
     AmbiguousBound {
         /// The result type.
@@ -862,15 +877,26 @@ pub(crate) fn generate_contract_scalar_oracles(
     let mut claims = Vec::with_capacity(positions.len());
     let mut pending = Vec::new();
     let mut counts = BTreeMap::new();
+    let mut selected_keys = Vec::with_capacity(positions.len());
     for &request_index in positions {
         let node_id = items
             .driver_node(request_index)
             .ok_or(ContractScalarError::Request(
                 PackageRequestError::Position { request_index },
             ))?;
-        *counts.entry(node_id).or_insert(0usize) += 1;
+        let selection =
+            items
+                .result_selection(request_index)
+                .ok_or(ContractScalarError::Request(
+                    PackageRequestError::Position { request_index },
+                ))?;
+        let key = selected_scalar_key(package, &items, request_index, node_id, selection);
+        if let Some(key) = &key {
+            *counts.entry(key.clone()).or_insert(0usize) += 1;
+        }
+        selected_keys.push(key);
     }
-    for &request_index in positions {
+    for (&request_index, selected_key) in positions.iter().zip(&selected_keys) {
         let node_id = items
             .driver_node(request_index)
             .ok_or(ContractScalarError::Request(
@@ -887,16 +913,12 @@ pub(crate) fn generate_contract_scalar_oracles(
                 String::new(),
                 ClaimDisposition::Refused {
                     refusal: ExactScalarRefusal::PackageAccounting {
-                        record: record.clone(),
+                        record: Box::new(record.clone()),
                         occurrences: occurrences.to_vec(),
                     },
                 },
             ),
-            PackageItem::Lowered {
-                closure,
-                occurrences: _,
-                ..
-            } => {
+            PackageItem::Lowered { closure, .. } => {
                 let root_sources = closure
                     .nodes
                     .iter()
@@ -906,7 +928,7 @@ pub(crate) fn generate_contract_scalar_oracles(
                         ContractScalarError::Request(PackageRequestError::ReachedClosure {
                             request_index,
                             node_id: node_id.clone(),
-                            cause: ContractRootViewError::Inconsistent,
+                            cause: Box::new(ContractRootViewError::Inconsistent),
                         })
                     })?;
                 let identity = closure
@@ -917,7 +939,17 @@ pub(crate) fn generate_contract_scalar_oracles(
                     .unwrap_or_default()
                     .to_owned();
                 let tag = CheckedNodeTag::from_wire(&closure.root.node_tag);
-                if counts.get(&node_id).copied().unwrap_or(0) > 1 {
+                if selected_key.is_none() {
+                    (
+                        identity,
+                        ClaimDisposition::Refused {
+                            refusal: ExactScalarRefusal::IncompleteContext,
+                        },
+                    )
+                } else if selected_key
+                    .as_ref()
+                    .is_some_and(|key| counts.get(key).copied().unwrap_or(0) > 1)
+                {
                     (
                         identity,
                         ClaimDisposition::Refused {
@@ -938,8 +970,15 @@ pub(crate) fn generate_contract_scalar_oracles(
                         },
                     )
                 } else {
-                    match contract_checked_operation(&graph, &closure, tag, node_id)
-                        .map_err(ContractScalarError::Oracle)?
+                    let selection = items.result_selection(request_index).ok_or(
+                        ContractScalarError::Request(PackageRequestError::Position {
+                            request_index,
+                        }),
+                    )?;
+                    match contract_checked_operation(
+                        &graph, &closure, tag, node_id, package, selection,
+                    )
+                    .map_err(ContractScalarError::Oracle)?
                     {
                         Ok((operation, checked_bounds)) => {
                             let dependencies = closure
@@ -986,13 +1025,16 @@ pub(crate) fn generate_contract_scalar_oracles(
             result,
         });
     }
+    // Emit in selected-occurrence order, including two requests over one
+    // expression node. Request permutation cannot rename or reorder source.
+    pending.sort_by(|left, right| selected_keys[left.0].cmp(&selected_keys[right.0]));
     let names = unique_names(
         pending
             .iter()
             .map(|(claim, operation)| {
                 Ok((
                     format!("oracle_{}", operation_name(operation)?),
-                    claims[*claim].node_id.clone(),
+                    selected_keys[*claim].clone(),
                 ))
             })
             .collect::<Result<Vec<_>, OracleGenerationError>>()
@@ -1010,6 +1052,15 @@ pub(crate) fn generate_contract_scalar_oracles(
             generated.symbol = symbol;
         }
     }
+    // FR-014's claim-map order is node order. The selected pair breaks ties
+    // over one expression node without consulting driver request indexes.
+    let mut keyed_claims = claims.into_iter().zip(selected_keys).collect::<Vec<_>>();
+    keyed_claims.sort_by(|(left, left_key), (right, right_key)| {
+        left.node_id
+            .cmp(&right.node_id)
+            .then(left_key.cmp(right_key))
+    });
+    let claims = keyed_claims.into_iter().map(|(claim, _)| claim).collect();
     let claim_map = ClaimMap {
         package_id: package.wire().package.source.package_id.clone(),
         blocked: Vec::new(),
@@ -1040,11 +1091,85 @@ pub(crate) fn generate_contract_scalar_oracles(
     })
 }
 
-fn contract_checked_operation(
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+enum SelectedScalarKey {
+    NotApplicable(CheckedNodeId),
+    OwnResult {
+        node_id: CheckedNodeId,
+        application_ordinal: u64,
+        conversion: Option<(CheckedNodeId, u64)>,
+    },
+}
+
+fn selected_scalar_key(
+    package: &ContractPackageV1,
+    items: &PackageItems<'_>,
+    request_index: usize,
+    node_id: &CheckedNodeId,
+    selection: &ContractDriverResultSelection,
+) -> Option<SelectedScalarKey> {
+    let ContractDriverResultSelection::OwnResult {
+        application,
+        conversion,
+    } = selection
+    else {
+        return Some(SelectedScalarKey::NotApplicable(node_id.clone()));
+    };
+    let sources = &package.wire().source_map.nodes;
+    sources
+        .iter()
+        .find(|source| source.node_id == *node_id)?
+        .occurrences
+        .iter()
+        .find(|source| {
+            application.node_id == *node_id
+                && application.role == CheckedOccurrenceRole::Expression
+                && source.role == application.role
+                && source.ordinal == application.ordinal
+        })?;
+    if let Some(conversion) = conversion {
+        if conversion.role != CheckedOccurrenceRole::Expression
+            || !items.has_context_root(request_index, &conversion.node_id)
+        {
+            return None;
+        }
+        sources
+            .iter()
+            .find(|entry| entry.node_id == conversion.node_id)?
+            .occurrences
+            .iter()
+            .find(|entry| entry.role == conversion.role && entry.ordinal == conversion.ordinal)?;
+    }
+    let ContractResultViewV1::Lowered(view) = package
+        .result_context(
+            node_id,
+            application,
+            conversion.as_ref(),
+            BoundedDomainForm::IntegerRange,
+        )
+        .ok()?
+    else {
+        return None;
+    };
+    if matches!(view.context, ContractResultContextV1::IncompleteContext) {
+        return None;
+    }
+    Some(SelectedScalarKey::OwnResult {
+        node_id: node_id.clone(),
+        application_ordinal: application.ordinal,
+        conversion: conversion
+            .as_ref()
+            .map(|key| (key.node_id.clone(), key.ordinal)),
+    })
+}
+
+fn contract_checked_operation<'a>(
     graph: &Graph<'_>,
-    closure: &quire_contract_model::ContractReachedClosureV1<'_>,
+    closure: &'a quire_contract_model::ContractReachedClosureV1<'_>,
     tag: Option<CheckedNodeTag>,
     node_id: &CheckedNodeId,
+    package: &'a ContractPackageV1,
+    selection: &'a ContractDriverResultSelection,
 ) -> Result<
     Result<(ExactScalarOperation, Vec<CheckedNodeId>), ExactScalarRefusal>,
     OracleGenerationError,
@@ -1058,15 +1183,32 @@ fn contract_checked_operation(
             |tag| unsupported_family(node_id, tag),
         )));
     }
-    let operation =
-        match derive_operation_from_view(graph, closure.root, BoundView::admitted(closure)) {
-            Ok(operation) => operation,
-            Err(refusal) => return Ok(Err(refusal)),
-        };
+    let ContractDriverResultSelection::OwnResult {
+        application,
+        conversion,
+    } = selection
+    else {
+        return Ok(Err(ExactScalarRefusal::IncompleteContext));
+    };
+    if &application.node_id != node_id {
+        return Ok(Err(ExactScalarRefusal::IncompleteContext));
+    }
+    let bounds = BoundView::admitted(
+        closure,
+        SelectedResult {
+            package,
+            application,
+            conversion: conversion.as_ref(),
+        },
+    );
+    let operation = match derive_operation_from_view(graph, closure.root, bounds.clone()) {
+        Ok(operation) => operation,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
     if let Err(refusal) = contract_scalar_shape(graph, closure.root, &operation)? {
         return Ok(Err(refusal));
     }
-    match check_parameters_from_view(graph, BoundView::admitted(closure), &operation) {
+    match check_parameters_from_view(graph, bounds, &operation) {
         Ok(checked) => Ok(Ok((operation, checked))),
         Err(ItemCheckError::Refusal(refusal)) => Ok(Err(refusal)),
         Err(ItemCheckError::Generation(error)) => Err(error),
@@ -1637,6 +1779,14 @@ struct BoundView<'n> {
     root: &'n CheckedSemanticNodeV2,
     semantic_type: CheckedNodeId,
     bounds: Vec<CheckedNodeId>,
+    selected: Option<SelectedResult<'n>>,
+}
+
+#[derive(Clone)]
+struct SelectedResult<'a> {
+    package: &'a ContractPackageV1,
+    application: &'a ContractOccurrenceKeyV1,
+    conversion: Option<&'a ContractOccurrenceKeyV1>,
 }
 
 impl<'n> BoundView<'n> {
@@ -1645,14 +1795,19 @@ impl<'n> BoundView<'n> {
             root: &node.node,
             semantic_type: node.semantic_type.clone(),
             bounds: node.bounds.clone(),
+            selected: None,
         }
     }
 
-    fn admitted(closure: &'n quire_contract_model::ContractReachedClosureV1<'_>) -> Self {
+    fn admitted(
+        closure: &'n quire_contract_model::ContractReachedClosureV1<'_>,
+        selected: SelectedResult<'n>,
+    ) -> Self {
         Self {
             root: closure.root,
             semantic_type: closure.root.semantic_type.clone(),
             bounds: closure.bounds.clone(),
+            selected: Some(selected),
         }
     }
 }
@@ -1676,6 +1831,47 @@ impl Bounds<'_, '_> {
         form: BoundForm,
         read: fn(&[Value]) -> Option<T>,
     ) -> Result<(CheckedNodeId, T), ExactScalarRefusal> {
+        if let Some(selected) = &self.node.selected {
+            let result = selected
+                .package
+                .result_context(
+                    &self.node.root.node_id,
+                    selected.application,
+                    selected.conversion,
+                    form.ir(),
+                )
+                .map_err(|_| ExactScalarRefusal::IncompleteContext)?;
+            let bound = match result {
+                ContractResultViewV1::Lowered(result) => match result.context {
+                    ContractResultContextV1::DirectBounded { bound }
+                    | ContractResultContextV1::Narrowed { bound, .. } => bound.node,
+                    ContractResultContextV1::MissingBound { type_key } => {
+                        return Err(ExactScalarRefusal::MissingBound {
+                            bounded_type: type_key,
+                            expected_form: form,
+                        });
+                    }
+                    ContractResultContextV1::Unnarrowed => {
+                        return Err(ExactScalarRefusal::MissingBound {
+                            bounded_type: self.node.semantic_type.clone(),
+                            expected_form: form,
+                        });
+                    }
+                    ContractResultContextV1::IncompleteContext => {
+                        return Err(ExactScalarRefusal::IncompleteContext);
+                    }
+                },
+                ContractResultViewV1::NonLowered(_) | ContractResultViewV1::Absent => {
+                    return Err(ExactScalarRefusal::IncompleteContext);
+                }
+            };
+            let value = aggregate_members(&bound.body)
+                .and_then(read)
+                .ok_or_else(|| ExactScalarRefusal::UnreadableBound {
+                    bound: bound.node_id.clone(),
+                })?;
+            return Ok((bound.node_id.clone(), value));
+        }
         let bounded_type = &self.node.semantic_type;
         let typing = self.graph.get(bounded_type).copied();
         let bound = match typing.filter(|typing| is_bounded_domain(typing)) {
@@ -1818,11 +2014,36 @@ impl Bounds<'_, '_> {
             }
         }
         let owned = own_bounds(self.graph, &self.node.root.body);
-        let result_typed = self
-            .graph
-            .get(&self.node.semantic_type)
-            .is_some_and(|typing| is_bounded_domain(typing))
-            || self.narrowing().narrowed();
+        let result_typed = if let Some(selected) = &self.node.selected {
+            match selected
+                .package
+                .result_context(
+                    &self.node.root.node_id,
+                    selected.application,
+                    selected.conversion,
+                    BoundedDomainForm::IntegerRange,
+                )
+                .map_err(|_| ExactScalarRefusal::IncompleteContext)?
+            {
+                ContractResultViewV1::Lowered(result) => match result.context {
+                    ContractResultContextV1::DirectBounded { .. }
+                    | ContractResultContextV1::Narrowed { .. } => true,
+                    ContractResultContextV1::Unnarrowed => false,
+                    ContractResultContextV1::MissingBound { .. } => selected.conversion.is_some(),
+                    ContractResultContextV1::IncompleteContext => {
+                        return Err(ExactScalarRefusal::IncompleteContext);
+                    }
+                },
+                ContractResultViewV1::NonLowered(_) | ContractResultViewV1::Absent => {
+                    return Err(ExactScalarRefusal::IncompleteContext);
+                }
+            }
+        } else {
+            self.graph
+                .get(&self.node.semantic_type)
+                .is_some_and(|typing| is_bounded_domain(typing))
+                || self.narrowing().narrowed()
+        };
         if result_typed || owned.iter().any(Option::is_some) {
             let plain = arguments
                 .iter()
@@ -3513,13 +3734,18 @@ impl Derivation<'_, '_, '_> {
     }
 
     fn integer_domain(&self) -> Result<IntegerDomain, ExactScalarRefusal> {
-        let domain = self.read(BoundForm::IntegerRange, read_integer_range)?;
-        // Derivation refuses what generation refuses, so the two never disagree on a node.
-        Bounds {
+        let bounds = Bounds {
             graph: self.graph,
             node: self.bounds.clone(),
+        };
+        // A reached bounded operand beside a plain reference is refused for
+        // operand ownership before the selected own result can lack a bound.
+        if self.bounds.selected.is_some() {
+            bounds.integer_operand_bounds()?;
         }
-        .integer_operand_bounds()?;
+        let domain = self.read(BoundForm::IntegerRange, read_integer_range)?;
+        // Derivation refuses what generation refuses, so the two never disagree on a node.
+        bounds.integer_operand_bounds()?;
         Ok(IntegerDomain::Bounded(domain))
     }
 

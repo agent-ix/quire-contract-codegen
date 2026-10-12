@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedSourceMapEntry, CompleteLoweringProfileV2,
-    ContractFeatureRecordV1, ContractPackageV1, ContractReachedClosureV1, ContractRootViewError,
-    ContractRootViewV1, LoweringProfileRef,
+    ContractFeatureRecordV1, ContractOccurrenceKeyV1, ContractPackageV1, ContractReachedClosureV1,
+    ContractRootViewError, ContractRootViewV1, LoweringProfileRef,
 };
 
 /// The CG-owned lowering profile for one mixed routed request.
@@ -53,6 +53,8 @@ pub enum ContractRequestPosition {
     DriverItem {
         /// Exact root key of this original driver request.
         node_id: CheckedNodeId,
+        /// Caller-authored result occurrence for scalar expressions.
+        result_selection: ContractDriverResultSelection,
     },
     /// A root needed to represent the meaning of a driver item.
     ContextRoot {
@@ -61,12 +63,26 @@ pub enum ContractRequestPosition {
     },
 }
 
+/// The result occurrence selected by the driver for one request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ContractDriverResultSelection {
+    /// This request has no scalar result-context query.
+    NotApplicable,
+    /// The caller selected this application's own result and optional direct narrow.
+    OwnResult {
+        /// Exact checked application occurrence.
+        application: ContractOccurrenceKeyV1,
+        /// Exact checked conversion occurrence, when the result is narrowed.
+        conversion: Option<ContractOccurrenceKeyV1>,
+    },
+}
+
 impl ContractRequestPosition {
     /// The exact root key submitted at this lowering position.
     #[must_use]
     pub fn node_id(&self) -> &CheckedNodeId {
         match self {
-            Self::DriverItem { node_id } | Self::ContextRoot { node_id } => node_id,
+            Self::DriverItem { node_id, .. } | Self::ContextRoot { node_id } => node_id,
         }
     }
 }
@@ -118,7 +134,7 @@ pub enum PackageRequestError {
         /// Exact key whose closure failed.
         node_id: CheckedNodeId,
         /// Reader traversal's typed failure.
-        cause: ContractRootViewError,
+        cause: Box<ContractRootViewError>,
     },
 }
 
@@ -169,6 +185,7 @@ impl PackageItem<'_> {
 /// A checked correspondence between request positions and one admitted package.
 pub(crate) struct PackageItems<'a> {
     package: &'a ContractPackageV1,
+    positions: &'a [ContractRequestPosition],
     driver_to_accounting: Vec<usize>,
 }
 
@@ -176,7 +193,7 @@ impl<'a> PackageItems<'a> {
     /// Match every position and exact key before any item can be consumed.
     pub(crate) fn new(
         package: &'a ContractPackageV1,
-        positions: &[ContractRequestPosition],
+        positions: &'a [ContractRequestPosition],
     ) -> Result<Self, PackageRequestError> {
         let accounted = &package.wire().feature_accounting;
         if positions.len() != accounted.len() {
@@ -200,6 +217,7 @@ impl<'a> PackageItems<'a> {
         }
         Ok(Self {
             package,
+            positions,
             driver_to_accounting,
         })
     }
@@ -217,6 +235,32 @@ impl<'a> PackageItems<'a> {
             .feature_accounting
             .get(accounting_index)
             .map(ContractFeatureRecordV1::node_id)
+    }
+
+    /// Caller-authored result selection for one driver position.
+    pub(crate) fn result_selection(
+        &self,
+        request_index: usize,
+    ) -> Option<&'a ContractDriverResultSelection> {
+        let accounting_index = *self.driver_to_accounting.get(request_index)?;
+        match self.positions.get(accounting_index)? {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => Some(result_selection),
+            ContractRequestPosition::ContextRoot { .. } => None,
+        }
+    }
+
+    /// Whether the selected conversion root belongs to this driver's
+    /// contiguous context span, before the next driver position.
+    pub(crate) fn has_context_root(&self, request_index: usize, node_id: &CheckedNodeId) -> bool {
+        let Some(accounting_index) = self.driver_to_accounting.get(request_index).copied() else {
+            return false;
+        };
+        self.positions[accounting_index + 1..]
+            .iter()
+            .take_while(|position| matches!(position, ContractRequestPosition::ContextRoot { .. }))
+            .any(|position| position.node_id() == node_id)
     }
 
     /// Return the exact admitted outcome at one request position.
@@ -251,14 +295,14 @@ impl<'a> PackageItems<'a> {
                     PackageRequestError::ReachedClosure {
                         request_index,
                         node_id: node_id.clone(),
-                        cause,
+                        cause: Box::new(cause),
                     }
                 })?;
                 let ContractRootViewV1::Lowered(closure) = view else {
                     return Err(PackageRequestError::ReachedClosure {
                         request_index,
                         node_id: node_id.clone(),
-                        cause: ContractRootViewError::Inconsistent,
+                        cause: Box::new(ContractRootViewError::Inconsistent),
                     });
                 };
                 Ok(PackageItem::Lowered {
@@ -283,8 +327,8 @@ impl<'a> PackageItems<'a> {
 #[cfg(test)]
 mod tests {
     use super::{
-        routed_contract_lowering_profile, ContractRequestPosition, PackageItem, PackageItems,
-        PackageRequestError,
+        routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
+        PackageItem, PackageItems, PackageRequestError,
     };
     use crate::routed::capability::{
         negotiate_contract_package, BackendDescriptor, BackendProviderEnvelope, Candidate,
@@ -300,11 +344,11 @@ mod tests {
         SuppliedLibrary,
     };
     use quire_contract_model::{
-        CheckedNodeId, CheckedNodeTag, CheckedPackageEvidence, CheckedPackageReadLimits,
-        CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult,
-        CompleteLoweringProfileV2, ContractDependencies, ContractDependencyInput,
-        ContractFeatureRecordV1, ContractPackageReadResult, ContractPackageWireV1,
-        ContractRootViewV1, LoweringProfileRef,
+        CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageEvidence,
+        CheckedPackageReadLimits, CheckedPackageRefusalCode, CheckedPackageV2,
+        CheckedPackageV2ReadResult, CompleteLoweringProfileV2, ContractDependencies,
+        ContractDependencyInput, ContractFeatureRecordV1, ContractOccurrenceKeyV1,
+        ContractPackageReadResult, ContractPackageWireV1, ContractRootViewV1, LoweringProfileRef,
     };
 
     const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
@@ -365,8 +409,40 @@ mod tests {
         node_ids
             .iter()
             .cloned()
-            .map(|node_id| ContractRequestPosition::DriverItem { node_id })
+            .map(|node_id| ContractRequestPosition::DriverItem {
+                node_id,
+                result_selection: ContractDriverResultSelection::NotApplicable,
+            })
             .collect()
+    }
+
+    fn occurrence(checked: &CheckedPackageV2, node_id: &CheckedNodeId) -> ContractOccurrenceKeyV1 {
+        let sources = checked
+            .source_map()
+            .iter()
+            .filter(|source| {
+                &source.node_id == node_id && source.role == CheckedOccurrenceRole::Expression
+            })
+            .collect::<Vec<_>>();
+        let [source] = sources.as_slice() else {
+            panic!("one QSL expression occurrence required for selected key");
+        };
+        ContractOccurrenceKeyV1 {
+            node_id: node_id.clone(),
+            role: source.role.clone(),
+            ordinal: source.ordinal,
+        }
+    }
+
+    fn own_result(
+        checked: &CheckedPackageV2,
+        application: &CheckedNodeId,
+        conversion: Option<&CheckedNodeId>,
+    ) -> ContractDriverResultSelection {
+        ContractDriverResultSelection::OwnResult {
+            application: occurrence(checked, application),
+            conversion: conversion.map(|node_id| occurrence(checked, node_id)),
+        }
     }
 
     fn empty_backend_request(count: usize) -> BackendProviderEnvelope {
@@ -435,15 +511,18 @@ mod tests {
         let positions = vec![
             ContractRequestPosition::DriverItem {
                 node_id: function.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
             },
             ContractRequestPosition::ContextRoot {
                 node_id: function.clone(),
             },
             ContractRequestPosition::DriverItem {
                 node_id: absent.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
             },
             ContractRequestPosition::DriverItem {
                 node_id: function.clone(),
+                result_selection: ContractDriverResultSelection::NotApplicable,
             },
         ];
         let lowered = source.lower(&requested, &profile());
@@ -578,7 +657,10 @@ mod tests {
             PackageItem::Lowered { .. } => panic!("absent sibling cannot lower"),
         }
         let mut swapped = positions;
-        swapped[0] = ContractRequestPosition::DriverItem { node_id: absent };
+        swapped[0] = ContractRequestPosition::DriverItem {
+            node_id: absent,
+            result_selection: ContractDriverResultSelection::NotApplicable,
+        };
         assert!(matches!(
             PackageItems::new(&admitted, &swapped),
             Err(PackageRequestError::AccountingIdentity {
@@ -588,6 +670,7 @@ mod tests {
         ));
         swapped[0] = ContractRequestPosition::DriverItem {
             node_id: function.clone(),
+            result_selection: ContractDriverResultSelection::NotApplicable,
         };
         swapped[1] = ContractRequestPosition::ContextRoot {
             node_id: requested[2].clone(),
@@ -639,8 +722,8 @@ mod tests {
                 ContractPackageReadResult::Admitted(package) => package,
                 other => panic!("IR must admit its own FR-330 output: {other:?}"),
             };
-            let items = PackageItems::new(&admitted, &drivers(std::slice::from_ref(&expression)))
-                .expect("exact request");
+            let positions = drivers(std::slice::from_ref(&expression));
+            let items = PackageItems::new(&admitted, &positions).expect("exact request");
             match items.at(0, &expression).expect("first position") {
                 PackageItem::Lowered { closure, .. } => {
                     assert_eq!(
@@ -736,7 +819,12 @@ mod tests {
                     unwind: 1,
                 }),
             };
-            let generated = generate_routed(&admitted, &drivers(&requested), &routes, &contexts)
+            let mut positions = drivers(&requested);
+            positions[0] = ContractRequestPosition::DriverItem {
+                node_id: requested[0].clone(),
+                result_selection: own_result(&checked, &requested[0], None),
+            };
+            let generated = generate_routed(&admitted, &positions, &routes, &contexts)
                 .expect("routed generation consumes admitted package");
             assert_eq!(generated.items[0].request_index, 0);
             assert_eq!(generated.items[1].request_index, 1);
@@ -775,6 +863,251 @@ mod tests {
         );
     }
 
+    /// A scalar caller must select its own checked application occurrence.
+    /// Trace: FR-039-AC-2, FR-049-AC-1, TC-053.
+    #[test]
+    fn scalar_own_result_without_conversion_differs_from_not_applicable() {
+        use crate::oracle::claim::ClaimDisposition;
+        use crate::oracle::scalar::{generate_contract_scalar_oracles, ExactScalarRefusal};
+
+        let checked = admitted_source(&SOURCE.replace("a = a", "a < 5"));
+        let expression = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.integer.lt")
+            })
+            .expect("QSL ordering application")
+            .node_id
+            .clone();
+        let lowered = checked.lower(
+            std::slice::from_ref(&expression),
+            &routed_contract_lowering_profile(),
+        );
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("IR must admit ordering: {other:?}"),
+        };
+        let omitted = generate_contract_scalar_oracles(
+            &admitted,
+            &drivers(std::slice::from_ref(&expression)),
+            &[0],
+        )
+        .expect("typed scalar refusal");
+        assert!(matches!(
+            &omitted.claim_map.items[0].result,
+            ClaimDisposition::Refused {
+                refusal: ExactScalarRefusal::IncompleteContext
+            }
+        ));
+        let selected = [ContractRequestPosition::DriverItem {
+            node_id: expression.clone(),
+            result_selection: own_result(&checked, &expression, None),
+        }];
+        let generated = generate_contract_scalar_oracles(&admitted, &selected, &[0])
+            .expect("selected scalar generation");
+        assert!(matches!(
+            &generated.claim_map.items[0].result,
+            ClaimDisposition::Generated(_)
+        ));
+    }
+
+    /// RR-16 supplies two result contexts for one semantic add key.
+    /// Trace: FR-039-AC-2, FR-049-AC-1, FR-049-AC-5, TC-053.
+    #[test]
+    fn duplicate_expression_uses_each_selected_conversion_context() {
+        use crate::oracle::claim::ClaimDisposition;
+        use crate::oracle::scalar::{generate_contract_scalar_oracles, ExactScalarRefusal};
+
+        let checked = admitted_source(
+            "language \"ix:native\" edition \"1-draft\";\n\
+             profile v = \"quire.value.complete/v1\";\n\
+             function g using v(p: Int[0, 10]): Boolean pure { true }\n\
+             function h using v(q: Int[0, 20]): Boolean pure { true }\n\
+             function f using v(x: Int[0, 9]): Boolean pure { g(x + 1) and h(x + 1) }\n",
+        );
+        let adds = checked
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.integer.add")
+            })
+            .collect::<Vec<_>>();
+        let [add] = adds.as_slice() else {
+            panic!("RR-16 must share one addition node");
+        };
+        let add = add.node_id.clone();
+        let applications = checked
+            .source_map()
+            .iter()
+            .filter(|entry| entry.node_id == add && entry.role == CheckedOccurrenceRole::Expression)
+            .map(|entry| ContractOccurrenceKeyV1 {
+                node_id: add.clone(),
+                role: entry.role.clone(),
+                ordinal: entry.ordinal,
+            })
+            .collect::<Vec<_>>();
+        let [first, second] = applications.as_slice() else {
+            panic!("RR-16 must retain two source occurrences");
+        };
+        assert_ne!(first.ordinal, second.ordinal);
+        let mut conversions = checked
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.numeric.narrow")
+                    && node.body.pointer("/arguments/0/target")
+                        == Some(&serde_json::to_value(&add).expect("typed key"))
+            })
+            .map(|node| {
+                let bound = checked
+                    .graph()
+                    .nodes
+                    .iter()
+                    .find(|bound| bound.node_id == node.semantic_type)
+                    .expect("narrow target bound");
+                let maximum = bound
+                    .body
+                    .pointer("/members/1/value/value")
+                    .and_then(serde_json::Value::as_str)
+                    .expect("integer upper endpoint");
+                (
+                    maximum.to_owned(),
+                    node.node_id.clone(),
+                    bound.node_id.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        conversions.sort_by(|left, right| left.0.cmp(&right.0));
+        let [(first_max, first_conversion, first_bound), (second_max, second_conversion, second_bound)] =
+            conversions.as_slice()
+        else {
+            panic!("RR-16 must have two direct narrows");
+        };
+        assert_eq!((first_max.as_str(), second_max.as_str()), ("10", "20"));
+        assert_ne!(first_bound, second_bound);
+        let roots = [
+            add.clone(),
+            first_conversion.clone(),
+            add.clone(),
+            second_conversion.clone(),
+        ];
+        let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
+        let admitted = match ContractPackageWireV1::read(
+            lowered.package.canonical_bytes().expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("RR-16 IR package must admit: {other:?}"),
+        };
+        let positions = [
+            ContractRequestPosition::DriverItem {
+                node_id: add.clone(),
+                result_selection: ContractDriverResultSelection::OwnResult {
+                    application: first.clone(),
+                    conversion: Some(occurrence(&checked, first_conversion)),
+                },
+            },
+            ContractRequestPosition::ContextRoot {
+                node_id: first_conversion.clone(),
+            },
+            ContractRequestPosition::DriverItem {
+                node_id: add.clone(),
+                result_selection: ContractDriverResultSelection::OwnResult {
+                    application: second.clone(),
+                    conversion: Some(occurrence(&checked, second_conversion)),
+                },
+            },
+            ContractRequestPosition::ContextRoot {
+                node_id: second_conversion.clone(),
+            },
+        ];
+        let result = generate_contract_scalar_oracles(&admitted, &positions, &[0, 1])
+            .expect("two selected scalar items");
+        for (item, expected) in result
+            .claim_map
+            .items
+            .iter()
+            .zip([first_bound, second_bound])
+        {
+            let ClaimDisposition::Generated(claim) = &item.result else {
+                panic!(
+                    "each occurrence generates from its own context: {:?}",
+                    item.result
+                );
+            };
+            assert_eq!(claim.checked_bounds.first(), Some(expected));
+        }
+        let mut forged = positions.clone();
+        if let ContractRequestPosition::DriverItem {
+            result_selection, ..
+        } = &mut forged[2]
+        {
+            *result_selection = ContractDriverResultSelection::OwnResult {
+                application: second.clone(),
+                conversion: Some(occurrence(&checked, first_conversion)),
+            };
+        }
+        let refusal = generate_contract_scalar_oracles(&admitted, &forged, &[1])
+            .expect("cross-context choice is a per-item refusal");
+        assert!(matches!(
+            &refusal.claim_map.items[0].result,
+            ClaimDisposition::Refused {
+                refusal: ExactScalarRefusal::IncompleteContext
+            }
+        ));
+
+        let repeated_roots = [
+            add.clone(),
+            first_conversion.clone(),
+            add.clone(),
+            first_conversion.clone(),
+        ];
+        let repeated_lowered = checked.lower(&repeated_roots, &routed_contract_lowering_profile());
+        let repeated = match ContractPackageWireV1::read(
+            repeated_lowered
+                .package
+                .canonical_bytes()
+                .expect("FR-330 bytes"),
+            CheckedPackageReadLimits::bounded(),
+            &ContractDependencies::new(),
+        ) {
+            ContractPackageReadResult::Admitted(package) => package,
+            other => panic!("repeated selected package must admit: {other:?}"),
+        };
+        let repeated_positions = [
+            positions[0].clone(),
+            positions[1].clone(),
+            positions[0].clone(),
+            positions[1].clone(),
+        ];
+        let duplicate = generate_contract_scalar_oracles(&repeated, &repeated_positions, &[0, 1])
+            .expect("duplicate pair receives typed refusals");
+        assert!(duplicate.claim_map.items.iter().all(|item| matches!(
+            &item.result,
+            ClaimDisposition::Refused {
+                refusal: ExactScalarRefusal::DuplicateRequest
+            }
+        )));
+    }
+
     /// Trace: FR-039-AC-1, TC-053.
     #[test]
     fn admitted_bounded_integer_operation_generates_from_reached_bounds() {
@@ -793,7 +1126,25 @@ mod tests {
             .expect("QSL integer addition")
             .node_id
             .clone();
-        let lowered = checked.lower(std::slice::from_ref(&expression), &profile());
+        let conversions = checked
+            .graph()
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("quire.op.numeric.narrow")
+                    && node.body.pointer("/arguments/0/target")
+                        == Some(&serde_json::to_value(&expression).expect("typed key"))
+            })
+            .collect::<Vec<_>>();
+        let [conversion] = conversions.as_slice() else {
+            panic!("QSL must select one direct narrow for bounded result");
+        };
+        let conversion = conversion.node_id.clone();
+        let roots = [expression.clone(), conversion.clone()];
+        let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
             lowered.package.canonical_bytes().expect("FR-330 bytes"),
             CheckedPackageReadLimits::bounded(),
@@ -802,12 +1153,18 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => package,
             other => panic!("IR must admit bounded expression: {other:?}"),
         };
-        let generated = crate::oracle::scalar::generate_contract_scalar_oracles(
-            &admitted,
-            &drivers(std::slice::from_ref(&expression)),
-            &[0],
-        )
-        .expect("admitted bounded operation generates");
+        let positions = [
+            ContractRequestPosition::DriverItem {
+                node_id: expression.clone(),
+                result_selection: own_result(&checked, &expression, Some(&conversion)),
+            },
+            ContractRequestPosition::ContextRoot {
+                node_id: conversion,
+            },
+        ];
+        let generated =
+            crate::oracle::scalar::generate_contract_scalar_oracles(&admitted, &positions, &[0])
+                .expect("admitted bounded operation generates");
         let claim = &generated.claim_map.items[0];
         let crate::oracle::claim::ClaimDisposition::Generated(generated_claim) = &claim.result
         else {
@@ -876,7 +1233,7 @@ mod tests {
                     record: actual,
                     occurrences: actual_occurrences,
                 },
-            } if actual == &record && actual_occurrences == &occurrences
+            } if actual.as_ref() == &record && actual_occurrences == &occurrences
         ));
         assert!(!generated
             .artifacts
@@ -1178,7 +1535,12 @@ mod tests {
             equality.claim_map.items[0].result,
             ClaimDisposition::Generated(_)
         ));
-        let scalar = generate_contract_scalar_oracles(&admitted, &drivers(&requested), &[3])
+        let mut positions = drivers(&requested);
+        positions[3] = ContractRequestPosition::DriverItem {
+            node_id: unbounded.clone(),
+            result_selection: own_result(&checked, &unbounded, None),
+        };
+        let scalar = generate_contract_scalar_oracles(&admitted, &positions, &[3])
             .expect("scalar settlement");
         assert!(
             matches!(
@@ -1219,7 +1581,7 @@ mod tests {
                 unwind: 1,
             }),
         };
-        let generated = generate_routed(&admitted, &drivers(&requested), &routed, &contexts)
+        let generated = generate_routed(&admitted, &positions, &routed, &contexts)
             .expect("Kani produces a typed backend refusal");
         let [output] = generated.items.as_slice() else {
             panic!("one routed driver item");
@@ -1410,8 +1772,8 @@ mod tests {
             ContractPackageReadResult::Admitted(package) => package,
             other => panic!("FR-330 reader must admit selected call: {other:?}"),
         };
-        let items = PackageItems::new(&admitted, &drivers(std::slice::from_ref(&call)))
-            .expect("exact request identity");
+        let positions = drivers(std::slice::from_ref(&call));
+        let items = PackageItems::new(&admitted, &positions).expect("exact request identity");
         let PackageItem::Lowered { closure, .. } = items.at(0, &call).expect("root view") else {
             panic!("selected call must lower");
         };

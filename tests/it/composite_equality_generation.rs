@@ -202,16 +202,71 @@ impl Deref for FixtureOracles {
 }
 
 fn generate(package: &FixturePackage, items: &[CompositeEqualityItem]) -> FixtureOracles {
+    generate_with_context(package, items, &[])
+}
+
+fn generate_with_context(
+    package: &FixturePackage,
+    items: &[CompositeEqualityItem],
+    extra_context: &[quire_contract_model::CheckedNodeId],
+) -> FixtureOracles {
     let items = items
         .iter()
         .cloned()
         .map(|item| package.ids.resolve_item(item))
         .collect::<Vec<_>>();
-    let requested = items
+    let mut requested = items
         .iter()
         .map(|item| item.node_id.clone())
         .collect::<Vec<_>>();
-    let lowered = package.checked.lower(&requested, &admitted_profile());
+    // The complete lowering request is identical under descriptor permutation;
+    // positions below still map each original item to its own accounting root.
+    requested.sort();
+    // Bounds are separate checked roots, not dependencies of the expression or
+    // composite type. Select only bounds of the caller's operand types; unrelated
+    // recursive or malformed fixture nodes must stay outside this FR-330 package.
+    let selected_types = items
+        .iter()
+        .flat_map(|item| {
+            [
+                Some(&item.left.source_type),
+                item.left.conversion_target.as_ref(),
+                Some(&item.right.source_type),
+                item.right.conversion_target.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+        })
+        .collect::<BTreeSet<_>>();
+    let graph = &package.checked.graph().nodes;
+    let selected_groups = graph
+        .iter()
+        .filter(|node| selected_types.contains(&node.node_id))
+        .filter_map(|node| node.recursion_group.as_ref())
+        .collect::<BTreeSet<_>>();
+    let mut context_roots = graph
+        .iter()
+        .filter(|node| {
+            (CheckedNodeTag::from_wire(&node.node_tag) == Some(CheckedNodeTag::BoundedDomain)
+                && selected_types.contains(&node.semantic_type))
+                || node
+                    .recursion_group
+                    .as_ref()
+                    .is_some_and(|group| selected_groups.contains(group))
+        })
+        .map(|node| node.node_id.clone())
+        .collect::<Vec<_>>();
+    for node_id in extra_context {
+        if !context_roots.contains(node_id) {
+            context_roots.push(node_id.clone());
+        }
+    }
+    let lowering_roots = requested
+        .iter()
+        .chain(&context_roots)
+        .cloned()
+        .collect::<Vec<_>>();
+    let lowered = package.checked.lower(&lowering_roots, &admitted_profile());
     let admitted = match ContractPackageWireV1::read(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
         CheckedPackageReadLimits::bounded(),
@@ -220,12 +275,35 @@ fn generate(package: &FixturePackage, items: &[CompositeEqualityItem]) -> Fixtur
         ContractPackageReadResult::Admitted(package) => package,
         other => panic!("IR must admit its package: {other:?}"),
     };
-    let positions = (0..items.len()).collect::<Vec<_>>();
-    let roots = requested
+    let mut available = std::collections::BTreeMap::new();
+    for (position, node_id) in requested.iter().enumerate() {
+        available
+            .entry(node_id.clone())
+            .or_insert_with(std::collections::VecDeque::new)
+            .push_back(position);
+    }
+    let positions = items
+        .iter()
+        .map(|item| {
+            available
+                .get_mut(&item.node_id)
+                .and_then(std::collections::VecDeque::pop_front)
+                .expect("the canonical request retains every selected equality item")
+        })
+        .collect::<Vec<_>>();
+    let mut roots = requested
         .iter()
         .cloned()
-        .map(|node_id| ContractRequestPosition::DriverItem { node_id })
+        .map(|node_id| ContractRequestPosition::DriverItem {
+            node_id,
+            result_selection: quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
         .collect::<Vec<_>>();
+    roots.extend(
+        context_roots
+            .into_iter()
+            .map(|node_id| ContractRequestPosition::ContextRoot { node_id }),
+    );
     let output = generate_composite_equality_oracles(
         &admitted,
         &roots,
@@ -494,13 +572,11 @@ fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
 
 /// Trace: FR-018-AC-20, TC-029.
 ///
-/// A call whose lowered contract package is longer than the checked package, read under a ceiling
-/// that admits the checked package and is one byte below that lowered package, fails every
-/// requested record for bytes (Contract IR FR-038-AC-95): every item is refused as
-/// typed `PackageAccounting::Failed(Bytes)` with the ceiling as `limit` and one shared
-/// `consumed` above it; none generates.
+/// A call whose lowered contract package exceeds the Contract IR byte ceiling
+/// has no package for CG to consume. Contract IR FR-038-AC-95 retains the exact
+/// typed Failed(Bytes) records and publishes no package or generated artifact.
 #[test]
-fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
+fn tc_029_ac20_byte_ceiling_has_failed_records_and_no_contract_package() {
     use crate::common::byte_ceiling::{
         limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
     };
@@ -525,28 +601,6 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
             )
         })
         .collect::<Vec<_>>();
-    let generate_under =
-        |ceiling: u64| generate(&admit_with(&builder, limits_under(ceiling)), &items);
-    let byte_refusal = |claim: &CompositeEqualityClaim| match &claim.result {
-        ClaimDisposition::Refused {
-            refusal:
-                CompositeEqualityRefusal::PackageAccounting {
-                    record:
-                        ContractFeatureRecordV1::Failed {
-                            limit_kind: CheckedPackageLimit::Bytes,
-                            limit,
-                            consumed,
-                            ..
-                        },
-                    ..
-                },
-        } => Some((
-            limit.parse::<u64>().expect("limit"),
-            consumed.parse::<u64>().expect("consumed"),
-        )),
-        _ => None,
-    };
-
     let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
     let measured = admit_with(&builder, limits_under(LARGEST_CEILING));
     let requested = vec![measured.key(BYTE_CHAIN_BASE); items.len()];
@@ -562,12 +616,13 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
          ({checked_length} bytes), so a ceiling one byte below it admits the checked package"
     );
     // At the lowered package's own length no record fails for bytes: the ceiling is exact.
-    let exact = generate_under(lowered_length);
-    assert!(exact
-        .claim_map
-        .items
-        .iter()
-        .all(|claim| byte_refusal(claim).is_none()));
+    let exact = generate(&admit_with(&builder, limits_under(lowered_length)), &items);
+    assert!(exact.claim_map.items.iter().all(|claim| !matches!(
+        claim.result,
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::PackageAccounting { .. }
+        }
+    )));
     assert!(exact.claim_map.items.iter().any(|claim| {
         matches!(
             &claim.result,
@@ -576,29 +631,36 @@ fn tc_029_ac20_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
         )
     }));
 
-    let oracles = generate_under(ceiling);
-    assert_eq!(oracles.claim_map.items.len(), items.len());
+    let under = admit_with(&builder, limits_under(ceiling));
+    let failed = under.checked.lower(&requested, &admitted_profile());
+    assert_eq!(failed.records.len(), items.len());
     let mut consumed_seen = BTreeSet::new();
-    for claim in &oracles.claim_map.items {
-        let Some((limit, consumed)) = byte_refusal(claim) else {
-            panic!("expected a byte-ceiling refusal: {claim:?}");
+    for (record, expected_node) in failed.records.iter().zip(&requested) {
+        let CompleteLoweringRecordV2::Failed {
+            node_id,
+            limit_kind: CheckedPackageLimit::Bytes,
+            limit,
+            consumed,
+            ..
+        } = record
+        else {
+            panic!("expected a typed Contract IR byte-ceiling refusal: {record:?}");
         };
-        assert_eq!(limit, ceiling);
+        assert_eq!(node_id, expected_node);
+        assert_eq!(*limit, ceiling);
         assert!(
-            consumed > ceiling,
+            *consumed > ceiling,
             "{consumed} is above the ceiling {ceiling}"
         );
-        consumed_seen.insert(consumed);
+        consumed_seen.insert(*consumed);
     }
     assert_eq!(
         consumed_seen.len(),
         1,
         "one shared `consumed`: {consumed_seen:?}"
     );
-    assert!(
-        !contents(&oracles, "src/lib.rs").contains("pub fn oracle_"),
-        "none generates"
-    );
+    assert!(failed.package.canonical_bytes().is_none());
+    assert!(failed.package.wire().is_none());
 }
 
 /// Trace: FR-018-AC-1, TC-029.
@@ -1091,9 +1153,9 @@ fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
     }
 }
 
-/// Trace: FR-018-AC-7, TC-029. `E_REFERENCE` is the "operand reaching a `reference` composite"
-/// case (a record with a `REF_TYPE` field); the direct `REF_TYPE` operand is
-/// `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`.
+/// Trace: FR-018-AC-7, TC-029. Reader-admissible unsupported families retain
+/// their own generator blockers; reference composites have a reader-stage
+/// control in `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`.
 #[test]
 fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     let package = admit(corpus_package());
@@ -1123,12 +1185,6 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
             typed(T_INTEGER),
         ),
         item(
-            E_REFERENCE,
-            EqualityOperatorKind::Equal,
-            typed(R_WITH_REF),
-            typed(R_WITH_REF),
-        ),
-        item(
             E_CALL,
             EqualityOperatorKind::Equal,
             typed(T_INTEGER),
@@ -1137,20 +1193,45 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     ];
     let oracles = generate(&package, &items);
 
-    let blocker_of = |node: u32| match refused(only_claim(&oracles, node)) {
-        CompositeEqualityRefusal::BlockedOnUpstream { issue, .. } => *issue,
-        other => panic!("node {node}: expected BlockedOnUpstream, got {other:?}"),
-    };
-    assert_eq!(blocker_of(M_BARE), UpstreamBlocker::QuireSpecLanguage120);
-    assert_eq!(blocker_of(S_BARE), UpstreamBlocker::QuireSpecLanguage121);
-    assert_eq!(blocker_of(T_BARE), UpstreamBlocker::QuireSpecLanguage121);
-    assert_eq!(blocker_of(F_BARE), UpstreamBlocker::QuireContractRuntime34);
-    assert_eq!(blocker_of(E_CALL), UpstreamBlocker::QuireContractRuntime34);
-    assert_eq!(
-        blocker_of(E_REFERENCE),
-        UpstreamBlocker::QuireSpecLanguage120
-    );
-    for node in [M_BARE, F_BARE, S_BARE, T_BARE, E_REFERENCE, E_CALL] {
+    for (code, tag) in [
+        (M_BARE, CheckedNodeTag::Model),
+        (F_BARE, CheckedNodeTag::Function),
+        (S_BARE, CheckedNodeTag::State),
+        (T_BARE, CheckedNodeTag::Temporal),
+    ] {
+        let key = oracles.key(code);
+        let CompositeEqualityRefusal::PackageAccounting {
+            record: boxed_record,
+            occurrences,
+        } = refused(only_claim(&oracles, code))
+        else {
+            panic!("node {code}: expected exact FR-330 Unsupported accounting");
+        };
+        assert!(matches!(
+            boxed_record.as_ref(),
+            ContractFeatureRecordV1::Unsupported {
+                node_id,
+                unsupported_node_id,
+                node_tag,
+            } if node_id == &key && unsupported_node_id == &key && node_tag.as_ref() == tag.as_wire()
+        ));
+        let expected = package
+            .checked
+            .source_map()
+            .iter()
+            .filter(|source| source.node_id == key)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(occurrences, &expected);
+    }
+    assert!(matches!(
+        refused(only_claim(&oracles, E_CALL)),
+        CompositeEqualityRefusal::BlockedOnUpstream {
+            issue: UpstreamBlocker::QuireContractRuntime34,
+            ..
+        }
+    ));
+    for node in [M_BARE, F_BARE, S_BARE, T_BARE, E_CALL] {
         assert!(claims_for(&oracles, node)
             .iter()
             .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
@@ -1613,7 +1694,18 @@ fn tuple_source(extras: &[u32], members: &[u32]) -> (FixtureOracles, String) {
         typed(TUP_PAIR),
         typed(TUP_PAIR),
     )];
-    let oracles = generate(&package, &items);
+    // These two scalar members name their base type; their separate bounded
+    // domains are caller-authored context roots, not body dependencies.
+    let context = members
+        .iter()
+        .filter_map(|member| match *member {
+            T_DECIMAL_SMALL => Some(BD_DECIMAL),
+            T_RATIONAL_NARROW => Some(BD_RATIONAL_NARROW),
+            _ => None,
+        })
+        .map(|code| package.key(code))
+        .collect::<Vec<_>>();
+    let oracles = generate_with_context(&package, &items, &context);
     let lib = contents(&oracles, "src/lib.rs").to_owned();
     (oracles, lib)
 }

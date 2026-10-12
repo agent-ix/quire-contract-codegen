@@ -357,7 +357,7 @@ pub enum CompositeEqualityRefusal {
     /// Exact refusal and available source occurrences from admitted FR-330 accounting.
     PackageAccounting {
         /// Reader-provided accounting disposition.
-        record: ContractFeatureRecordV1,
+        record: Box<ContractFeatureRecordV1>,
         /// Reader-provided source occurrences for this request position.
         occurrences: Vec<CheckedSourceMapEntry>,
     },
@@ -701,23 +701,21 @@ pub fn generate_composite_equality_oracles(
                     occurrences,
                 } => ClaimDisposition::Refused {
                     refusal: CompositeEqualityRefusal::PackageAccounting {
-                        record: record.clone(),
+                        record: Box::new(record.clone()),
                         occurrences: occurrences.to_vec(),
                     },
                 },
-                PackageItem::Lowered {
-                    closure,
-                    occurrences: _,
-                    ..
-                } if !closure.selected_references.is_empty() => ClaimDisposition::Refused {
-                    refusal: CompositeEqualityRefusal::SelectedDependencyUnsupported {
-                        references: closure
-                            .selected_references
-                            .into_iter()
-                            .map(|reference| (reference.package, reference.node))
-                            .collect(),
-                    },
-                },
+                PackageItem::Lowered { closure, .. } if !closure.selected_references.is_empty() => {
+                    ClaimDisposition::Refused {
+                        refusal: CompositeEqualityRefusal::SelectedDependencyUnsupported {
+                            references: closure
+                                .selected_references
+                                .into_iter()
+                                .map(|reference| (reference.package, reference.node))
+                                .collect(),
+                        },
+                    }
+                }
                 PackageItem::Lowered {
                     closure,
                     occurrences,

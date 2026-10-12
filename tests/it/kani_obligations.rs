@@ -460,7 +460,9 @@ const FRAME: u32 = 3002;
 /// The object type `FRAME` frames.
 const FRAMED_OBJECT: u32 = 3004;
 
-pub(crate) fn scalar_package() -> (
+fn scalar_package_with_occurrences(
+    expression_occurrences: bool,
+) -> (
     CheckedPackageV2,
     ClaimMap<ExactScalarClaim>,
     package::FixtureIds,
@@ -515,6 +517,17 @@ pub(crate) fn scalar_package() -> (
             &key(FRAMED_OBJECT),
             json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
         );
+    if expression_occurrences {
+        builder.expression_occurrences();
+        let (_, ids) = builder.admit_resolved();
+        let unsatisfiable = builder.bound(&Bound::Integer(5, -5));
+        builder.narrow(
+            49_301,
+            ids.resolve(&code_id(UNSATISFIABLE)).digest.as_ref(),
+            &unsatisfiable,
+        );
+        builder.expression_occurrences();
+    }
     let (package, ids) = builder.admit_resolved();
     let mut items = golden_items()
         .into_iter()
@@ -531,6 +544,23 @@ pub(crate) fn scalar_package() -> (
     }
     let oracles = generate_exact_scalar_oracles(&package, &items).expect("claim map");
     (package, oracles.claim_map, ids)
+}
+
+pub(crate) fn scalar_package() -> (
+    CheckedPackageV2,
+    ClaimMap<ExactScalarClaim>,
+    package::FixtureIds,
+) {
+    scalar_package_with_occurrences(false)
+}
+
+/// The same authored fixture with QSL expression occurrences for FR-049 routing.
+pub(crate) fn routed_scalar_package() -> (
+    CheckedPackageV2,
+    ClaimMap<ExactScalarClaim>,
+    package::FixtureIds,
+) {
+    scalar_package_with_occurrences(true)
 }
 
 /// Admit one Contract IR package for the exact scalar claim-map roots.
@@ -2104,6 +2134,7 @@ fn routed_scalar_increment() -> (
     };
     let positions = [ContractRequestPosition::DriverItem {
         node_id: node_id.clone(),
+        result_selection: quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
     }];
     let generation = generate_routed(
         &admitted,

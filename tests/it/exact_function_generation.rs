@@ -1342,6 +1342,46 @@ fn generate(
     functions: &[quire_contract_codegen::ExactFunctionDeclaration],
     items: &[ExactFunctionItem],
 ) -> FixtureOracles {
+    let input = admitted_full_request(package, functions, items);
+    generate_in_request(package, &input, functions, items)
+}
+
+struct AdmittedFunctionRequest {
+    contract: quire_contract_model::ContractPackageV1,
+    roots: Vec<quire_contract_codegen::ContractRequestPosition>,
+}
+
+/// One complete FR-330 lowering request, independent of descriptor ordering.
+/// Repeated root keys retain separate accounting positions.
+fn admitted_full_request(
+    package: &FixturePackage,
+    functions: &[quire_contract_codegen::ExactFunctionDeclaration],
+    items: &[ExactFunctionItem],
+) -> AdmittedFunctionRequest {
+    let mut requested = functions
+        .iter()
+        .map(|function| package.ids.resolve(&function.node_id))
+        .chain(
+            items
+                .iter()
+                .map(|item| package.ids.resolve(&item.call_node_id)),
+        )
+        .collect::<Vec<_>>();
+    requested.sort();
+    AdmittedFunctionRequest {
+        contract: admitted_function_contract(&package.checked, &requested),
+        roots: driver_positions(&requested),
+    }
+}
+
+/// Select descriptors from one admitted complete request without changing its
+/// root sequence or package identity for subset and permutation controls.
+fn generate_in_request(
+    package: &FixturePackage,
+    input: &AdmittedFunctionRequest,
+    functions: &[quire_contract_codegen::ExactFunctionDeclaration],
+    items: &[ExactFunctionItem],
+) -> FixtureOracles {
     let functions = functions
         .iter()
         .cloned()
@@ -1352,17 +1392,34 @@ fn generate(
         .cloned()
         .map(|item| package.ids.resolve_call(item))
         .collect::<Vec<_>>();
-    let requested = functions
+    let mut available = std::collections::BTreeMap::new();
+    for (position, root) in input.roots.iter().enumerate() {
+        let node_id = match root {
+            quire_contract_codegen::ContractRequestPosition::DriverItem { node_id, .. }
+            | quire_contract_codegen::ContractRequestPosition::ContextRoot { node_id } => node_id,
+        };
+        available
+            .entry(node_id.clone())
+            .or_insert_with(std::collections::VecDeque::new)
+            .push_back(position);
+    }
+    let mut take_position = |node_id: &quire_contract_model::CheckedNodeId| {
+        available
+            .get_mut(node_id)
+            .and_then(std::collections::VecDeque::pop_front)
+            .unwrap_or_else(|| panic!("full FR-330 request lacks selected root {node_id:?}"))
+    };
+    let function_positions = functions
         .iter()
-        .map(|function| function.node_id.clone())
-        .chain(items.iter().map(|item| item.call_node_id.clone()))
+        .map(|function| take_position(&function.node_id))
         .collect::<Vec<_>>();
-    let admitted = admitted_function_contract(&package.checked, &requested);
-    let function_positions = (0..functions.len()).collect::<Vec<_>>();
-    let item_positions = (functions.len()..requested.len()).collect::<Vec<_>>();
+    let item_positions = items
+        .iter()
+        .map(|item| take_position(&item.call_node_id))
+        .collect::<Vec<_>>();
     let output = generate_exact_function_oracles(
-        &admitted,
-        &driver_positions(&requested),
+        &input.contract,
+        &input.roots,
         &function_positions,
         &functions,
         &item_positions,
@@ -1391,17 +1448,12 @@ fn disposition_for(
 
 /// Trace: FR-021-AC-23, TC-031.
 ///
-/// The generator lowers twice, the declared functions' bodies and then the requested `call`
-/// nodes. Read under a ceiling that admits the checked package and is one byte below the shorter
-/// of the two lowered packages, both lowerings fail for bytes (Contract IR FR-038-AC-95): every
-/// function is absent from `checked_package()` and the location map, and every item is refused as
-/// `LoweringByteLimitExceeded` with the ceiling as `limit` and the call-node lowering's
-/// `consumed`, which the fixture makes differ from the body lowering's, so the call-node-first
-/// order is asserted through the call. Never `LoweringWorkExhausted`. The mapping of a record to
-/// a refusal is asserted on hand-built records in the module's own tests; per-function isolation
-/// is FR-021-AC-12's.
+/// Under a ceiling below either canonical lowered package, Contract IR returns
+/// distinct typed Failed(Bytes) accounting for body and call root requests but
+/// no ContractPackage for CG to consume. At an exact sufficient ceiling, the
+/// admitted package still reaches the function generator.
 #[test]
-fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
+fn tc_031_ac23_byte_ceiling_has_failed_records_and_no_contract_package() {
     use crate::common::byte_ceiling::{
         limits_under, lowered_package_length, measuring_profile, LARGEST_CEILING,
     };
@@ -1410,13 +1462,6 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     let builder = byte_ceiling_package();
     let functions = byte_ceiling_functions();
     let items = byte_ceiling_items();
-    let byte_refusal = |claim: &quire_contract_codegen::ExactFunctionClaim| match &claim.result {
-        ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::LoweringByteLimitExceeded { limit, consumed },
-        } => Some((*limit, *consumed)),
-        _ => None,
-    };
-
     let checked_length = u64::try_from(serde_json::to_vec(&builder.wire()).unwrap().len()).unwrap();
     let generous = admit_with(&builder, limits_under(LARGEST_CEILING));
     let body_nodes = functions
@@ -1430,6 +1475,12 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
     let profile = measuring_profile(false, "quire.codegen.exact-function/v1");
     let body_length = lowered_package_length(&generous, &body_nodes, &profile);
     let call_length = lowered_package_length(&generous, &call_nodes, &profile);
+    let combined_nodes = body_nodes
+        .iter()
+        .chain(&call_nodes)
+        .cloned()
+        .collect::<Vec<_>>();
+    let combined_length = lowered_package_length(&generous, &combined_nodes, &profile);
     let ceiling = body_length.min(call_length) - 1;
     assert!(
         ceiling >= checked_length,
@@ -1439,50 +1490,52 @@ fn tc_031_ac23_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_re
 
     // Each lowering alone, under the same ceiling: both fail for bytes, with different `consumed`.
     let package = admit_with(&builder, limits_under(ceiling));
-    let consumed_alone =
-        |requested: &[CheckedNodeId]| match &package.lower(requested, &profile).records[..] {
-            [CompleteLoweringRecordV2::Failed {
+    let consumed_alone = |requested: &[CheckedNodeId]| {
+        let lowered = package.lower(requested, &profile);
+        assert_eq!(lowered.records.len(), requested.len());
+        assert!(lowered.package.canonical_bytes().is_none());
+        assert!(lowered.package.wire().is_none());
+        let mut consumed_seen = std::collections::BTreeSet::new();
+        for (record, expected_node) in lowered.records.iter().zip(requested) {
+            let CompleteLoweringRecordV2::Failed {
+                node_id,
                 limit_kind: CheckedPackageLimit::Bytes,
                 limit,
                 consumed,
                 ..
-            }, ..] => {
-                assert_eq!(*limit, ceiling);
-                *consumed
-            }
-            other => panic!("expected a byte-ceiling failure, got {other:?}"),
-        };
+            } = record
+            else {
+                panic!("expected a typed byte-ceiling failure, got {record:?}");
+            };
+            assert_eq!(node_id, expected_node);
+            assert_eq!(*limit, ceiling);
+            assert!(*consumed > ceiling);
+            consumed_seen.insert(*consumed);
+        }
+        assert_eq!(consumed_seen.len(), 1);
+        *consumed_seen.first().expect("one shared consumed count")
+    };
     let body_consumed = consumed_alone(&body_nodes);
     let call_consumed = consumed_alone(&call_nodes);
     assert_ne!(body_consumed, call_consumed);
 
-    let oracles = generate(&package, &functions, &items);
-    assert_eq!(oracles.claim_map.items.len(), items.len());
-    for claim in &oracles.claim_map.items {
-        assert_eq!(
-            byte_refusal(claim),
-            Some((ceiling, call_consumed)),
-            "the call-node lowering's refusal is checked first: {claim:?}"
-        );
-    }
-    assert!(oracles.location_map.is_empty(), "no function is located");
-    let lib = oracles
-        .artifacts
+    // The full mixed request is larger than either isolated request. At its
+    // exact ceiling the producer has a package; the default FR-330 reader's
+    // separate one-megabyte limit is outside this producer-ceiling control.
+    let exact = admit_with(&builder, limits_under(combined_length));
+    let admitted_lowering = exact.checked.lower(&combined_nodes, &profile);
+    assert_eq!(admitted_lowering.records.len(), combined_nodes.len());
+    assert!(admitted_lowering
+        .records
         .iter()
-        .find(|artifact| artifact.path == "src/lib.rs")
-        .expect("src/lib.rs");
-    assert!(
-        !lib.contents.contains("byte_fn_"),
-        "every function is absent from checked_package()"
+        .all(|record| matches!(record, CompleteLoweringRecordV2::Lowered { .. })));
+    assert_eq!(
+        admitted_lowering
+            .package
+            .canonical_bytes()
+            .map(|bytes| bytes.len()),
+        Some(usize::try_from(combined_length).expect("bounded byte count"))
     );
-
-    // At the longer lowered package's own length neither lowering fails for bytes.
-    let exact = admit_with(&builder, limits_under(body_length.max(call_length)));
-    assert!(generate(&exact, &functions, &items)
-        .claim_map
-        .items
-        .iter()
-        .all(|claim| byte_refusal(claim).is_none()));
 }
 
 /// Trace: FR-021-AC-23, TC-031. Both request sets over the shared chain must
@@ -1670,11 +1723,11 @@ fn tc_031_ac8_generated_source_never_names_check_mode_kernel() {
     assert!(!lib.contains("CheckMode::Kernel"));
 }
 
-/// Trace: FR-021-AC-10, TC-031. A function whose declared parameter type
-/// reaches a `reference` composite form at any depth is refused as blocked
-/// on quire-spec-language#120 for every item naming it.
+/// Trace: FR-021-AC-10, TC-031. A reference parameter type outside the
+/// admitted FR-330 graph is refused at that exact type key before CG can
+/// classify its deeper family.
 #[test]
-fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
+fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     let package = admit(ext_corpus_package());
     let functions = vec![function_ref_param("ref_fn")];
     let items = vec![item(ITEM_CALL_ADD, "ref_fn")];
@@ -1682,21 +1735,17 @@ fn tc_031_ac10_reference_parameter_blocked_on_qsl_120() {
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                issue: UpstreamBlocker::QuireSpecLanguage120,
-                ..
-            }
-        }
+            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
+        } if *type_node_id == oracles.key(REF_TYPE)
     ));
+    assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
-/// Trace: FR-021-AC-11, TC-031. Model nodes are blocked on
-/// quire-spec-language#120 and state nodes on quire-spec-language#121 --
-/// two distinct blockers. (The corpus carries no `relation`/`protocol`
-/// node, matching FR-018's own TC-029 precedent for this same family
-/// split: `spec/oracle/matrix/tests.md`'s FR-018 row records the identical gap.)
+/// Trace: FR-021-AC-11, TC-031. Model and state parameter types excluded by
+/// the fixed FR-330 profile retain their distinct checked keys in typed
+/// UnknownTypeNode refusals, with no generated function oracle.
 #[test]
-fn tc_031_ac11_model_and_state_are_distinct_blockers() {
+fn tc_031_ac11_model_and_state_outside_package_keep_distinct_type_keys() {
     let package = admit(ext_corpus_package());
     let functions = vec![
         function_model_param("model_fn"),
@@ -1710,21 +1759,16 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                issue: UpstreamBlocker::QuireSpecLanguage120,
-                ..
-            }
-        }
+            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
+        } if *type_node_id == oracles.key(M_BARE)
     ));
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_EQ),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::BlockedOnUpstream {
-                issue: UpstreamBlocker::QuireSpecLanguage121,
-                ..
-            }
-        }
+            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
+        } if *type_node_id == oracles.key(S_BARE)
     ));
+    assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
 /// Trace: FR-021-AC-12, TC-031. A declared function whose own body fails to
@@ -2104,11 +2148,12 @@ impl DuplicateNodeFixture {
             .filter(|(code, _)| self.distinct_items.contains(code))
             .map(|(code, function)| item(*code, function))
             .collect();
-        let baseline = generate(package, &baseline_functions, &baseline_items);
+        let input = admitted_full_request(package, &self.functions, &requested);
+        let baseline = generate_in_request(package, &input, &baseline_functions, &baseline_items);
 
         let mut first: Option<FixtureOracles> = None;
         for order in permutations(&self.functions) {
-            let oracles = generate(package, &order, &requested);
+            let oracles = generate_in_request(package, &input, &order, &requested);
             match &first {
                 Some(first) => assert_eq!(first, &oracles, "request order changed the output"),
                 None => first = Some(oracles.clone()),
@@ -2455,9 +2500,31 @@ fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
 fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
     let package = admit(ext_corpus_package());
     let functions = [function_add("add_fn")];
-    let oracles = both_orders(&package, &functions, ["add_fn", "zz_unknown"]);
-    let solo_add = generate(&package, &functions, &[item(ITEM_CALL_ADD, "add_fn")]);
-    let solo_unknown = generate(&package, &functions, &[item(ITEM_CALL_ADD, "zz_unknown")]);
+    let full_items = [
+        item(ITEM_CALL_ADD, "add_fn"),
+        item(ITEM_CALL_ADD, "zz_unknown"),
+    ];
+    let input = admitted_full_request(&package, &functions, &full_items);
+    let oracles = generate_in_request(&package, &input, &functions, &full_items);
+    let reversed = generate_in_request(
+        &package,
+        &input,
+        &functions,
+        &full_items.into_iter().rev().collect::<Vec<_>>(),
+    );
+    assert_eq!(oracles, reversed, "request order changed the output");
+    let solo_add = generate_in_request(
+        &package,
+        &input,
+        &functions,
+        &[item(ITEM_CALL_ADD, "add_fn")],
+    );
+    let solo_unknown = generate_in_request(
+        &package,
+        &input,
+        &functions,
+        &[item(ITEM_CALL_ADD, "zz_unknown")],
+    );
     assert_eq!(solo_unknown.claim_map.items.len(), 1);
     assert_eq!(solo_add.claim_map.items.len(), 1);
     assert!(matches!(

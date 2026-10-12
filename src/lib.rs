@@ -150,8 +150,8 @@ pub use routed::capability::{
     RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 pub use routed::contract_package::{
-    routed_contract_lowering_profile, AdmittedItemAccounting, ContractRequestPosition,
-    PackageRequestError,
+    routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
+    ContractRequestPosition, PackageRequestError,
 };
 pub use routed::generate::{
     generate_routed, GenerationContexts, KaniGenerationContext, KindOutput, RoutedGeneration,

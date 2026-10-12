@@ -1,5 +1,5 @@
-//! Exact complete-V1 function-application oracle generation from CheckedPackage
-//! V2 (FR-021).
+//! Exact complete-V1 function-application oracle generation from one admitted
+//! ContractPackage V1 (FR-021, FR-039).
 //!
 //! A requested item names one declared function (assembled, with its sibling
 //! declarations, into one `quire_contract_runtime::exact::PackageDeclarations`)
@@ -1218,7 +1218,7 @@ pub enum ExactFunctionRefusal {
     /// Exact refusal and source occurrences from admitted FR-330 accounting.
     PackageAccounting {
         /// Reader-provided disposition.
-        record: ContractFeatureRecordV1,
+        record: Box<ContractFeatureRecordV1>,
         /// Exact source occurrences at the requested position.
         occurrences: Vec<CheckedSourceMapEntry>,
     },
@@ -1617,7 +1617,7 @@ fn admitted_binary_body<'a>(
             occurrences,
         } => {
             return Err(ExactFunctionRefusal::PackageAccounting {
-                record: record.clone(),
+                record: Box::new(record.clone()),
                 occurrences: occurrences.to_vec(),
             });
         }
@@ -2165,8 +2165,7 @@ pub fn generate_exact_function_oracles(
                 &survivors,
                 &function_index,
                 &package_refusal,
-                &package.wire().package.source.package_id,
-                package.identity(),
+                package,
                 item,
                 admitted,
             ) {
@@ -2350,8 +2349,7 @@ fn item_disposition(
     survivors: &[&ExactFunctionDeclaration],
     function_index: &BTreeMap<&CheckedNodeId, usize>,
     package_refusal: &Option<String>,
-    package_id: &CheckedSemanticId,
-    contract_package_identity: &CheckedSemanticId,
+    package: &ContractPackageV1,
     item: &ExactFunctionItem,
     admitted: PackageItem<'_>,
 ) -> Result<(String, GeneratedExactFunctionClaim), ExactFunctionRefusal> {
@@ -2401,9 +2399,9 @@ fn item_disposition(
         stem,
         GeneratedExactFunctionClaim {
             oracle_symbol: String::new(),
-            contract_package_identity: contract_package_identity.clone(),
+            contract_package_identity: package.identity().clone(),
             node_id: item.call_node_id.clone(),
-            package_id: package_id.clone(),
+            package_id: package.wire().package.source.package_id.clone(),
             semantic_type: node.semantic_type.clone(),
             source_map: occurrences.to_vec(),
             claims: closure.claims,
@@ -2623,6 +2621,8 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
+    use quire_contract_model::CheckedPackageLimit;
 
     /// Trace: FR-021-AC-27, TC-031.
     #[test]
@@ -2700,42 +2700,6 @@ mod tests {
         assert!(value.get("ir_id").is_none());
         for key in ["claims", "bounds", "dependencies"] {
             assert_eq!(value[key], serde_json::json!([]), "{key}");
-        }
-    }
-
-    /// A `failed` record is refused by its limit kind through the one shared classifier: `work`
-    /// as `LoweringWorkExhausted`, `bytes` as `LoweringByteLimitExceeded` with the record's own
-    /// `limit` and `consumed`, and every other kind as `LoweringLimitUnrecognised` under its
-    /// snake_case name, never as work exhaustion and without a panic. Per-function isolation is
-    /// FR-021-AC-12's, asserted by the `tc_031_ac12_*` tests through the classification loop.
-    ///
-    /// Trace: FR-021-AC-23, TC-031.
-    #[test]
-    fn tc_031_a_failed_record_is_refused_by_its_limit_kind() {
-        assert_eq!(
-            lowered_binary_body(&failed_record(CheckedPackageLimit::Work, 65_536, 65_537)).err(),
-            Some(ExactFunctionRefusal::LoweringWorkExhausted {
-                limit: 65_536,
-                consumed: 65_537
-            })
-        );
-        assert_eq!(
-            lowered_binary_body(&failed_record(CheckedPackageLimit::Bytes, 1_000, 1_001)).err(),
-            Some(ExactFunctionRefusal::LoweringByteLimitExceeded {
-                limit: 1_000,
-                consumed: 1_001
-            })
-        );
-        for (kind, name) in unrecognised_kinds() {
-            assert_eq!(
-                lowered_binary_body(&failed_record(kind, 7, 9)).err(),
-                Some(ExactFunctionRefusal::LoweringLimitUnrecognised {
-                    limit_kind: name,
-                    limit: 7,
-                    consumed: 9
-                }),
-                "{name}"
-            );
         }
     }
 

@@ -77,7 +77,10 @@ pub fn driver_positions(requested: &[CheckedNodeId]) -> Vec<ContractRequestPosit
     requested
         .iter()
         .cloned()
-        .map(|node_id| ContractRequestPosition::DriverItem { node_id })
+        .map(|node_id| ContractRequestPosition::DriverItem {
+            node_id,
+            result_selection: quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
         .collect()
 }
 
