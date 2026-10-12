@@ -1389,7 +1389,14 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
     assert_eq!(
         refusal,
         &ExactScalarRefusal::BoundMismatch {
-            bound: fixture_ids.resolve(&id(&DEC.key())),
+            bound: fixture_ids.resolve(&id(&Bound::Decimal(
+                -100_000,
+                100_000,
+                0,
+                2,
+                "nearest-even"
+            )
+            .key(),)),
             form: BoundForm::DecimalRange,
         }
     );
