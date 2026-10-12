@@ -51,3 +51,12 @@ No full CI, Cargo test, or Kani run was started in this reviewer pass because th
 ### FND-002 — medium
 
 `tc_029_ac32_direct_control_case_is_unsupported` has no `Trace: FR-018-AC-32` line or Rust `#[trace]` attribute, and `quire matrix` reports FR-018-AC-32 as `untagged`. Its single assertion checks only the refusal variant and causative node id; it does not assert the request-keyed claim identity, absence of generated source/symbol, or that a healthy sibling claim/source remains byte-identical. Add the trace binding and assertions that discriminate the rest of AC-32.
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e44aba8aa331ade926397a1ec1de86992c0fa949 |
+| FND-002 | fixed | e44aba8aa331ade926397a1ec1de86992c0fa949 |
+
+The Makefile now provides an overridable QSPEC_DIR default from SIBLINGS and passes it to `cargo test`; the GitHub workflow also checks out QSpec and sets QSPEC_DIR. The equality test is trace-bound and verifies identity, typed refusal, no generated case output, and unchanged healthy sibling output.

@@ -51,3 +51,13 @@ Quire's computed matrix marks FR-018-AC-32 `untagged`. The only new equality tes
 ### FND-003 — medium
 
 The tagged `tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal` tests an IR-admitted call whose separately declared function body is temporal. It does not cover AC-33's distinct direct-call-node cases (formula, fairness, case). The test is useful evidence for the declared-body clause, while the remaining direct-root AC-33 cases must stay open as the PR itself states.
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e44aba8aa331ade926397a1ec1de86992c0fa949 |
+| FND-002 | fixed | e44aba8aa331ade926397a1ec1de86992c0fa949 |
+| FND-003 | still-open | Direct formula and case call-node tests now exist, but no admitted temporal_fairness package or corresponding AC-33 test is present. IR-774 owns establishing authentic fairness reader admission; the fairness subcase remains open. |
+
+The Quire matrix tags FR-018-AC-32 to the new equality test and FR-021-AC-33 to the declared-body plus direct formula and case tests. The direct-root fairness case is still uncovered.
