@@ -15,6 +15,8 @@ pub(crate) mod equality;
 pub(crate) mod function;
 // Implements: FR-014
 pub(crate) mod scalar;
+// Shared typed identities for admitted V2 operator consumers.
+pub mod operator_catalog;
 
 use quire_contract_model::{CheckedPackageLimit, CompleteLoweringRecordV2};
 

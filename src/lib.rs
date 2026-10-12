@@ -9,8 +9,8 @@
 mod core;
 // The Kani subsystem.
 mod kani;
-// The oracle subsystem.
-mod oracle;
+// The oracle subsystem and its canonical operation catalog path.
+pub mod oracle;
 // The publication subsystem.
 mod publication;
 // The routed subsystem.
@@ -60,10 +60,9 @@ pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, Upstr
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
-    ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, IntegerOperator,
-    OperationClaim, OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator,
-    ScalarForm, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
-    SCALAR_LOWERING_WORK_LIMIT,
+    ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator, OperationClaim,
+    OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm,
+    EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::equality::{

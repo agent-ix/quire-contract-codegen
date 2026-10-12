@@ -1806,7 +1806,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
         }],
         result_type: code_id(T_INTEGER),
         body: quire_contract_codegen::ExactFunctionBody::Scalar {
-            operator: quire_contract_codegen::IntegerOperator::Add,
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
         },
         capability_requirements: Vec::new(),
     };
@@ -1836,7 +1836,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
         ],
         result_type: code_id(T_BOOLEAN),
         body: quire_contract_codegen::ExactFunctionBody::Scalar {
-            operator: quire_contract_codegen::IntegerOperator::Add,
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
         },
         capability_requirements: Vec::new(),
     };
@@ -1880,7 +1880,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
             ],
             result_type: code_id(T_INTEGER),
             body: quire_contract_codegen::ExactFunctionBody::Scalar {
-                operator: quire_contract_codegen::IntegerOperator::Add,
+                operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
             },
             capability_requirements: Vec::new(),
         },
@@ -2004,7 +2004,7 @@ fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
         ],
         result_type: code_id(T_INTEGER),
         body: quire_contract_codegen::ExactFunctionBody::Scalar {
-            operator: quire_contract_codegen::IntegerOperator::Negate,
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Negate,
         },
         capability_requirements: Vec::new(),
     }];

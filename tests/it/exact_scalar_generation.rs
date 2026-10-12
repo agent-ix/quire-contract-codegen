@@ -12,11 +12,12 @@ use std::{
 
 use crate::common::panic_scan::{comments_stripped, non_test_code, panic_tokens_in};
 use crate::scratch_crate::seed_lock;
+use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
-    ExactScalarRefusal, GeneratedScalarClaim, IntegerOperator, OperationProvenance,
-    OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
+    ExactScalarRefusal, GeneratedScalarClaim, OperationProvenance, OracleGenerationError,
+    RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
     SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_model::{
@@ -1251,7 +1252,7 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 /// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
 /// catalog says multiply and a harness whose `operation_identity` says `mul`.
 ///
-/// Trace: FR-014-AC-12, TC-024.
+/// Trace: FR-014-AC-12, FR-038-AC-3, TC-024.
 ///
 /// Backs AC-12: an `Add` descriptor against node 1004's catalogued `quire.op.integer.mul`, over
 /// the identical `[-1000,1000]` bound and the identical binary `&rt::Integer` shape, is not
@@ -1281,6 +1282,10 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
         },
         "an Add descriptor over a catalogued mul node must not be marked IrConfirmed"
     );
+    let mismatched_source = contents(&mismatched, "src/lib.rs");
+    let mismatched_body = function_body(mismatched_source, &symbol(&mismatched, 1004));
+    assert!(mismatched_body.contains("rt::IntegerArithmetic::Add("));
+    assert!(!mismatched_body.contains("rt::IntegerArithmetic::Multiply("));
 
     // The matching descriptor over the same node does confirm, reading the node's own
     // catalogued identity rather than re-deriving codegen's own descriptor string.
@@ -1300,6 +1305,104 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
         matched_claim.operation.provenance,
         OperationProvenance::IrConfirmed
     );
+    let matched_source = contents(&matched, "src/lib.rs");
+    let matched_body = function_body(matched_source, &symbol(&matched, 1004));
+    assert!(matched_body.contains("rt::IntegerArithmetic::Multiply("));
+    assert!(!matched_body.contains("rt::IntegerArithmetic::Add("));
+}
+
+/// Wrong arity and result form/target refuse before source is emitted, while binary operand
+/// order and the descriptor-selected runtime callee remain visible in generated code.
+///
+/// Trace: FR-038-AC-3, FR-014-AC-8, FR-014-AC-13, FR-014-AC-18, TC-024.
+#[test]
+fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order_and_target() {
+    let (package, fixture_ids) = corpus_package().admit_resolved();
+
+    let subtraction = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: code_id(1003),
+            operation: ExactScalarOperation::IntegerArithmetic {
+                operator: IntegerOperator::Subtract,
+                domain: bounded(-1000, 1000),
+            },
+        }],
+    );
+    let subtraction_source = contents(&subtraction, "src/lib.rs");
+    let subtraction_body = function_body(subtraction_source, &symbol(&subtraction, 1003));
+    assert!(subtraction_body.contains("Subtract(left, right)"));
+    assert!(!subtraction_body.contains("Subtract(right, left)"));
+
+    let ordering = derive_one(&package, 1041).expect("integer less-than descriptor");
+    let ordering_oracles = generate(&package, &[ordering]);
+    let ordering_source = contents(&ordering_oracles, "src/lib.rs");
+    let ordering_body = function_body(ordering_source, &symbol(&ordering_oracles, 1041));
+    assert!(ordering_body.contains(
+        "rt::order_numbers(rt::OrderingOperator::Less, rt::OrderedOperands::Integers(left, right), meter)"
+    ));
+    assert!(!ordering_body.contains(
+        "rt::order_numbers(rt::OrderingOperator::Less, rt::OrderedOperands::Integers(right, left), meter)"
+    ));
+
+    let golden = generate(&package, &golden_items());
+    assert_eq!(
+        refusal_of(&golden, WRONG_ARITY),
+        ExactScalarRefusal::FormMismatch {
+            expected: "unary",
+            found: "binary".to_owned(),
+        }
+    );
+    assert_eq!(
+        refusal_of(&golden, WRONG_RESULT),
+        ExactScalarRefusal::ResultTypeMismatch {
+            expected: ScalarForm::Decimal,
+            found: Some("integer".to_owned()),
+        }
+    );
+    let golden_source = contents(&golden, "src/lib.rs");
+    assert!(!golden_source.contains(code_id(WRONG_ARITY).digest.as_ref()));
+    assert!(!golden_source.contains(code_id(WRONG_RESULT).digest.as_ref()));
+
+    let conversion_node_id = fixture_ids.resolve(&code_id(1086));
+    let wrong_conversion_target = generate(
+        &package,
+        &[ExactScalarItem {
+            node_id: conversion_node_id.clone(),
+            operation: ExactScalarOperation::QuantityConversion {
+                target: QuantityTarget::Decimal(decimal_type(
+                    -5,
+                    5,
+                    0,
+                    2,
+                    RoundingMode::NearestEven,
+                )),
+            },
+        }],
+    );
+    let ClaimDisposition::Refused { refusal } = &wrong_conversion_target.claim_map.items[0].result
+    else {
+        panic!(
+            "wrong conversion target was not refused: {:?}",
+            wrong_conversion_target.claim_map.items[0]
+        );
+    };
+    assert_eq!(
+        refusal,
+        &ExactScalarRefusal::BoundMismatch {
+            bound: fixture_ids.resolve(&id(&Bound::Decimal(
+                -100_000,
+                100_000,
+                0,
+                2,
+                "nearest-even"
+            )
+            .key(),)),
+            form: BoundForm::DecimalRange,
+        }
+    );
+    assert!(!contents(&wrong_conversion_target, "src/lib.rs")
+        .contains(conversion_node_id.digest.as_ref()));
 }
 
 /// The scalar nodes shared by the admitted work-exhaustion fixture and its
