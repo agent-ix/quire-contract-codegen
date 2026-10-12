@@ -80,7 +80,11 @@ fn structural_candidates(
 
 /// Settle application candidates, including references to other applications, after
 /// structural references are repaired.
-fn application_candidates(raw: &Value, ids: &mut FixtureIds, limits: CheckedPackageReadLimits) {
+fn application_candidates(
+    raw: &Value,
+    ids: &mut FixtureIds,
+    limits: CheckedPackageReadLimits,
+) -> usize {
     let node_count = raw["semantic_graph"]["nodes"]
         .as_array()
         .expect("fixture graph nodes")
@@ -89,11 +93,11 @@ fn application_candidates(raw: &Value, ids: &mut FixtureIds, limits: CheckedPack
     // newly substituted graph until those dependencies settle, using only the
     // public pre-read candidate API. The bounded reader loop remains the final
     // authority for malformed and semantically refused fixtures.
-    for _ in 0..node_count {
+    for round in 0..node_count {
         let mut graph = raw["semantic_graph"]["nodes"].clone();
         substitute(&mut graph, ids);
         let Ok(nodes) = serde_json::from_value::<Vec<CheckedSemanticNodeV2>>(graph) else {
-            return;
+            return round;
         };
         let mut changed = false;
         for node in &nodes {
@@ -101,20 +105,28 @@ fn application_candidates(raw: &Value, ids: &mut FixtureIds, limits: CheckedPack
             if raw_body["term"] != "application" {
                 continue;
             }
+            // A predecessor may have acquired its candidate earlier in this pass. Refresh this
+            // node against the evolving map so a graph-ordered chain settles in one pass.
+            let mut draft = serde_json::to_value(node).expect("fixture node serializes");
+            substitute(&mut draft, ids);
+            let Ok(draft) = serde_json::from_value::<CheckedSemanticNodeV2>(draft) else {
+                return round;
+            };
             let Ok(candidate) =
-                derive_application_node_id(ApplicationNodeDraft::new(node), None, limits.bytes)
+                derive_application_node_id(ApplicationNodeDraft::new(&draft), None, limits.bytes)
             else {
                 continue;
             };
-            if &node.node_id != candidate.candidate_node_id() {
-                ids.insert(&node.node_id, candidate.candidate_node_id());
+            if &draft.node_id != candidate.candidate_node_id() {
+                ids.insert(&draft.node_id, candidate.candidate_node_id());
                 changed = true;
             }
         }
         if !changed {
-            break;
+            return round + 1;
         }
     }
+    node_count
 }
 
 impl FixtureIds {
@@ -429,7 +441,7 @@ pub fn resolve_wire(
         .expect("fixture node-count cap")
         .max(1);
     let (mut ids, groups) = structural_candidates(raw, limits).unwrap_or_default();
-    application_candidates(raw, &mut ids, limits);
+    let _ = application_candidates(raw, &mut ids, limits);
     let mut seen = BTreeSet::new();
     let mut bytes_charged = 0u64;
     let mut work_charged = 0u64;
@@ -568,5 +580,51 @@ mod tests {
             "a later non-application ID substitution refreshes the dependent application key"
         );
         assert!(application_key_updates(&wire, 1 << 20).is_empty());
+    }
+
+    /// Trace: FR-037-AC-1, TC-052. A predecessor-first chain consumes each public
+    /// candidate within one changing graph pass and settles to those candidate IDs.
+    #[test]
+    fn predecessor_first_candidates_settle_in_one_changing_pass() {
+        let key = |code: u32| CheckedNodeId {
+            domain: NODE_DOMAIN.into(),
+            digest: format!("{code:064x}").into(),
+        };
+        let reference = |target: &CheckedNodeId| json!({"term": "reference", "target": target});
+        let provisional = [key(1), key(2), key(3)];
+        let mut nodes = Vec::new();
+        for (position, node_id) in provisional.iter().enumerate() {
+            let argument = if position == 0 {
+                json!({"term": "literal", "value_kind": "integer", "value": "1"})
+            } else {
+                reference(&provisional[position - 1])
+            };
+            nodes.push(json!({
+                "node_id": node_id,
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "expression",
+                "semantic_form": "binary",
+                "semantic_type": key(9),
+                "dependencies": [],
+                "occurrences": [],
+                "body": {"term": "application", "arguments": [argument]},
+            }));
+        }
+        let raw = json!({"semantic_graph": {"nodes": nodes}});
+        let limits = CheckedPackageReadLimits::bounded();
+        let mut ids = FixtureIds::default();
+        assert_eq!(application_candidates(&raw, &mut ids, limits), 2);
+
+        let mut resolved = raw["semantic_graph"]["nodes"].clone();
+        substitute(&mut resolved, &ids);
+        let resolved: Vec<CheckedSemanticNodeV2> =
+            serde_json::from_value(resolved).expect("resolved fixture nodes");
+        for (original, node) in provisional.iter().zip(&resolved) {
+            assert_ne!(&node.node_id, original);
+            let candidate =
+                derive_application_node_id(ApplicationNodeDraft::new(node), None, limits.bytes)
+                    .expect("public candidate for settled application");
+            assert_eq!(&node.node_id, candidate.candidate_node_id());
+        }
     }
 }

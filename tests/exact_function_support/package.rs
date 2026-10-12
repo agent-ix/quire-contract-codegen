@@ -134,7 +134,7 @@ pub fn ext_corpus_package() -> PackageBuilder {
             DISAMBIGUATOR_BASE + i,
             "scalar_type",
             "boolean",
-            T_BOOLEAN,
+            DISAMBIGUATOR_BASE + i,
             aggregate(vec![]),
         );
     }
