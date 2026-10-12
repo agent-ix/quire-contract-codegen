@@ -1,4 +1,4 @@
-//! FR-021-AC-2, AC-4, AC-5, AC-7, AC-9, AC-17: generated function-application
+//! FR-021-AC-2, AC-4, AC-5, AC-9, AC-17: generated function-application
 //! oracles agree with an independently assembled direct Contract Runtime
 //! call; `InputRefusal` surfaces unchanged; a denial injected at `function.call`
 //! yields `Outcome::Incomplete` with no charge applied; and the static
