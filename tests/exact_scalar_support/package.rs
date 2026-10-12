@@ -3209,11 +3209,12 @@ pub const BYTE_CHAIN_BASE: u32 = 31_000;
 /// The chain's initial bounded literal code.
 pub const BYTE_CHAIN_VALUE: u32 = BYTE_CHAIN_BASE - 1;
 
+/// Byte-offset spans of each actual source token, grouped by its fixture node code.
+pub type SourceTokenSites = BTreeMap<u32, Vec<(usize, usize)>>;
+
 /// Build a source-backed chain whose additions use each predecessor twice and whose requests
 /// each have an actual occurrence in the authored source.
-pub fn source_backed_byte_chain(
-    count: u32,
-) -> (PackageBuilder, String, BTreeMap<u32, Vec<(usize, usize)>>) {
+pub fn source_backed_byte_chain(count: u32) -> (PackageBuilder, String, SourceTokenSites) {
     assert!(count > 0);
     let mut builder = PackageBuilder::default();
     let integer_type = key(T_INTEGER);
@@ -3234,7 +3235,7 @@ pub fn source_backed_byte_chain(
     );
 
     let mut source = String::new();
-    let mut sites: BTreeMap<u32, Vec<(usize, usize)>> = BTreeMap::new();
+    let mut sites = SourceTokenSites::new();
     let mut token = |source: &mut String, code: u32| {
         let start = source.len();
         source.push_str(&format!("n{code}"));
