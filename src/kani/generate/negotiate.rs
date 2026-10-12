@@ -52,12 +52,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedSemanticNodeV2, ClauseKind,
-    ClauseRef, ContractPackageV1, ExecutionPoint,
+    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedSemanticNodeV2, ClauseKind, ClauseRef, ContractDependencies,
+    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ExecutionPoint,
 };
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    core::contract_package::routed_contract_lowering_profile,
     core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
@@ -597,6 +599,19 @@ pub(crate) fn classify_scalar_form(
     package: &CheckedPackageV2,
     node_id: &CheckedNodeId,
 ) -> ScalarFormAssessment {
+    let requested = [node_id.clone()];
+    let lowered = package.lower(&requested, &routed_contract_lowering_profile());
+    let Some(bytes) = lowered.package.canonical_bytes() else {
+        return ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode);
+    };
+    let contract = match ContractPackageWireV1::read(
+        bytes,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        _ => return ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode),
+    };
     let outcome = match crate::oracle::scalar::derive_exact_scalar_items(
         package,
         std::slice::from_ref(node_id),
@@ -610,7 +625,7 @@ pub(crate) fn classify_scalar_form(
                 Ok(plan) => plan
                     .claims()
                     .first()
-                    .map(|claim| classify_claim(package, claim))
+                    .map(|claim| classify_claim(&contract, claim))
                     .unwrap_or(Outcome::Invalid(InvalidObligationItem::UnknownNode)),
                 Err(_) => Outcome::Invalid(InvalidObligationItem::UnknownNode),
             }
@@ -624,7 +639,7 @@ pub(crate) fn classify_scalar_form(
                 },
                 result: ClaimDisposition::Refused { refusal },
             };
-            classify_claim(package, &claim)
+            classify_claim(&contract, &claim)
         }
     };
     let graph_node = package

@@ -55,6 +55,7 @@ pub fn admitted_function_contract(
             CheckedNodeTag::BoundedDomain,
             CheckedNodeTag::Value,
             CheckedNodeTag::Expression,
+            CheckedNodeTag::Function,
             CheckedNodeTag::Claim,
             CheckedNodeTag::Correspondence,
         ]),
@@ -172,6 +173,7 @@ pub const ITEM_CALL_NEGATE: u32 = 533;
 pub const CHAIN_BASE: u32 = 1000;
 pub const CHAIN_LENGTH: u32 = 140; // > rt::MAX_CALL_DEPTH (128)
 pub const ITEM_CALL_CHAIN: u32 = 1500;
+const DISAMBIGUATOR_BASE: u32 = 2000;
 
 /// A genuinely checked FR-021 package used for source-binding adversarial
 /// cases. Unlike `ext_corpus_package`, this declaration is a `function`
@@ -182,6 +184,7 @@ pub const SOURCE_BODY: u32 = 2602;
 pub const SOURCE_FUNCTION: u32 = 2603;
 pub const SOURCE_OTHER_FUNCTION: u32 = 2604;
 pub const SOURCE_CALL: u32 = 2605;
+pub const SOURCE_OTHER_BODY: u32 = 2606;
 
 fn source_reference(code: u32) -> serde_json::Value {
     let id = code_id(code);
@@ -682,11 +685,19 @@ pub fn source_bound_call_package() -> PackageBuilder {
         "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
         "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
     });
+    let other_body = serde_json::json!({
+        "term": "application", "operator": "binary",
+        "operation": {"identity": "quire.op.integer.sub", "laws": [], "mode": null,
+        "member": null, "leaves": []},
+        "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+        "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
+    });
     builder.application_node(SOURCE_BODY, "binary", &key(T_INTEGER), body);
-    let declaration_body = || {
+    builder.application_node(SOURCE_OTHER_BODY, "binary", &key(T_INTEGER), other_body);
+    let declaration_body = |body_code| {
         aggregate(vec![
             serde_json::json!({"term": "binding", "name": "parameters", "value": aggregate(vec![source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)])}),
-            serde_json::json!({"term": "binding", "name": "body", "value": source_reference(SOURCE_BODY)}),
+            serde_json::json!({"term": "binding", "name": "body", "value": source_reference(body_code)}),
         ])
     };
     builder
@@ -695,14 +706,14 @@ pub fn source_bound_call_package() -> PackageBuilder {
             "function",
             "pure_function",
             T_INTEGER,
-            declaration_body(),
+            declaration_body(SOURCE_BODY),
         )
         .code(
             SOURCE_OTHER_FUNCTION,
             "function",
             "pure_function",
             T_INTEGER,
-            declaration_body(),
+            declaration_body(SOURCE_OTHER_BODY),
         );
     let call_op = serde_json::json!({
         "identity": "quire.op.function.call", "laws": [], "mode": null,
@@ -721,14 +732,14 @@ pub fn source_bound_call_package() -> PackageBuilder {
     builder
 }
 
-pub fn source_function(name: &str, code: u32) -> ExactFunctionDeclaration {
+pub fn source_function(name: &str, body_code: u32) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
-        node_id: code_id(code),
+        node_id: code_id(body_code),
         name: name.to_owned(),
         parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
-            operator: quire_contract_codegen::IntegerOperator::Add,
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
         },
         capability_requirements: Vec::new(),
     }

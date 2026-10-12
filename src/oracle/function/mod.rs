@@ -146,8 +146,7 @@ use quire_contract_model::{
     CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2, CheckedSemanticId,
     CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteLoweringProfileV2,
     CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
-    ContractReachedClosureV1,
+    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
@@ -1564,6 +1563,52 @@ fn source_call_matches(
     }) && expected.next().is_none()
 }
 
+fn source_function_node_id<'a>(
+    graph: &Graph<'a>,
+    name: &str,
+    body_node_id: &CheckedNodeId,
+) -> Option<&'a CheckedNodeId> {
+    let mut matching = graph.values().filter(|node| {
+        if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
+            return false;
+        }
+        let has_name = node.declaration.as_ref().is_some_and(|declaration| {
+            declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == name
+        });
+        let body =
+            binding_value(&node.body, "body").and_then(|term| reference_node_id(term, graph));
+        has_name && body == Some(body_node_id)
+    });
+    let node = matching.next()?;
+    matching.next().is_none().then_some(&node.node_id)
+}
+
+fn binding_value<'a>(body: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+    body.get("members")?
+        .as_array()?
+        .iter()
+        .find(|member| {
+            member.get("term").and_then(serde_json::Value::as_str) == Some("binding")
+                && member.get("name").and_then(serde_json::Value::as_str) == Some(name)
+        })?
+        .get("value")
+}
+
+fn reference_node_id<'a>(term: &serde_json::Value, graph: &Graph<'a>) -> Option<&'a CheckedNodeId> {
+    if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
+        return None;
+    }
+    let target = term.get("target")?;
+    let digest = target.get("digest")?.as_str()?;
+    let domain = target.get("domain")?.as_str()?;
+    graph
+        .values()
+        .find(|node| {
+            node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+        })
+        .map(|node| &node.node_id)
+}
+
 /// Classify one source-backed integer function application with the same V1 reader and generator
 /// used after routed settlement. No source artifact is returned to the negotiation path.
 pub(crate) fn checked_integer_function_application_is_supported(
@@ -1619,8 +1664,8 @@ pub(crate) fn checked_integer_function_application_is_supported(
             type_node_id: parameter_node.semantic_type.clone(),
         });
     }
-    let Some(body_id) = binding_value(&function_node.body, "body")
-        .and_then(|term| reference_node_id(term, &graph))
+    let Some(body_id) =
+        binding_value(&function_node.body, "body").and_then(|term| reference_node_id(term, &graph))
     else {
         return false;
     };
@@ -1643,16 +1688,11 @@ pub(crate) fn checked_integer_function_application_is_supported(
     let Some(call_node) = graph.get(call_node_id).copied() else {
         return false;
     };
-    if !source_call_matches(
-        &call_node.body,
-        &graph,
-        function_node_id,
-        argument_node_ids,
-    ) {
+    if !source_call_matches(&call_node.body, &graph, function_node_id, argument_node_ids) {
         return false;
     }
     let declaration = ExactFunctionDeclaration {
-        node_id: function_node_id.clone(),
+        node_id: body_id.clone(),
         name: name_segments[0].to_string(),
         parameters,
         result_type: function_node.semantic_type.clone(),
@@ -1664,13 +1704,13 @@ pub(crate) fn checked_integer_function_application_is_supported(
         function: name_segments[0].to_string(),
         argument_node_ids: argument_node_ids.to_vec(),
     };
-    let requested_ids = [function_node_id.clone(), call_node_id.clone()];
+    let requested_ids = [body_id.clone(), call_node_id.clone()];
     let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
-    let Ok(bytes) = lowered.package.canonical_bytes() else {
+    let Some(bytes) = lowered.package.canonical_bytes() else {
         return false;
     };
     let contract = match ContractPackageWireV1::read(
-        &bytes,
+        bytes,
         CheckedPackageReadLimits::bounded(),
         &ContractDependencies::new(),
     ) {
@@ -2615,7 +2655,6 @@ fn item_disposition(
         });
     }
     if node
-        .node
         .body
         .get("operator")
         .and_then(serde_json::Value::as_str)
@@ -2628,10 +2667,13 @@ fn item_disposition(
             .iter()
             .map(|source| (&source.node_id, source))
             .collect::<Graph<'_>>();
+        let source_function_id =
+            source_function_node_id(&graph, &declaration.name, &declaration.node_id)
+                .ok_or(ExactFunctionRefusal::BodyMismatch)?;
         if !source_call_matches(
-            &node.node.body,
+            &node.body,
             &graph,
-            function_node_id,
+            source_function_id,
             &item.argument_node_ids,
         ) {
             return Err(ExactFunctionRefusal::BodyMismatch);

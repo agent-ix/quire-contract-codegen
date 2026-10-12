@@ -14,8 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use qsl_replay::{DomainKey, DomainKind, ProofBound};
-use quire_contract_model::{CheckedNodeId, ContractPackageV1};
 use quire_contract_model::ClauseKind;
+use quire_contract_model::{CheckedNodeId, ContractPackageV1};
 use serde::Serialize;
 
 use crate::core::contract_package::{

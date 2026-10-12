@@ -124,7 +124,11 @@ mod tests {
         }
     }
 
-    fn empty_backend_request(count: usize) -> BackendProviderEnvelope {
+    fn empty_backend_request(
+        count: usize,
+        package: &CheckedPackageV2,
+        node_id: &CheckedNodeId,
+    ) -> BackendProviderEnvelope {
         BackendProviderEnvelope {
             contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
             capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
@@ -135,6 +139,10 @@ mod tests {
                     extent: None,
                     named_backend: None,
                     candidates: Candidates::Set(Vec::new()),
+                    kani_form: crate::routed::capability::KaniForm::OutsideSet {
+                        package: Box::new(package.clone()),
+                        node_id: node_id.clone(),
+                    },
                 })
                 .collect(),
         }
@@ -215,8 +223,12 @@ mod tests {
             other => panic!("FR-330 reader must admit IR output: {other:?}"),
         };
         let items = PackageItems::new(&admitted, &positions).expect("positions and keys match");
-        let settled = negotiate_contract_package(&admitted, &positions, &empty_backend_request(3))
-            .expect("production settlement consumes the admitted package");
+        let settled = negotiate_contract_package(
+            &admitted,
+            &positions,
+            &empty_backend_request(3, &source, &function),
+        )
+        .expect("production settlement consumes the admitted package");
         assert_eq!(settled.len(), 3);
         for index in [0, 2] {
             let ContractItemSettlement { backend, .. } = &settled[index];

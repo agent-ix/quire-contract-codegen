@@ -1647,7 +1647,7 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
     let package = admit(ext_corpus_package());
     let mut declaration = function_add("add_fn");
     declaration.body = quire_contract_codegen::ExactFunctionBody::Scalar {
-        operator: quire_contract_codegen::IntegerOperator::Subtract,
+        operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Subtract,
     };
     let oracles = generate(&package, &[declaration], &[item(ITEM_CALL_ADD, "add_fn")]);
     assert!(matches!(
@@ -3461,13 +3461,25 @@ fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
     let (checked, ids) = source_bound_call_package().admit_resolved();
     let function_name = format!("n{}", key(SOURCE_FUNCTION));
     let other_name = format!("n{}", key(SOURCE_OTHER_FUNCTION));
-    let function = ids.resolve_function(source_function(&function_name, SOURCE_FUNCTION));
-    let other = ids.resolve_function(source_function(&other_name, SOURCE_OTHER_FUNCTION));
+    let function = ids.resolve_function(source_function(&function_name, SOURCE_BODY));
+    let other = ids.resolve_function(source_function(&other_name, SOURCE_OTHER_BODY));
     let item = ids.resolve_call(source_call());
+    assert_ne!(function.node_id, ids.resolve(&code_id(SOURCE_FUNCTION)));
+    assert_ne!(other.node_id, ids.resolve(&code_id(SOURCE_OTHER_FUNCTION)));
+    let requested = [
+        function.node_id.clone(),
+        other.node_id.clone(),
+        item.call_node_id.clone(),
+    ];
+    let contract = package::admitted_function_contract(&checked, &requested);
+    let positions = package::driver_positions(&requested);
 
     let good = generate_exact_function_oracles(
-        &checked,
-        std::slice::from_ref(&function),
+        &contract,
+        &positions,
+        &[0, 1],
+        &[function.clone(), other.clone()],
+        &[2],
         std::slice::from_ref(&item),
     )
     .expect("valid source-backed call is planned");
@@ -3482,9 +3494,15 @@ fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
 
     let mut wrong_callee = item.clone();
     wrong_callee.function = other_name;
-    let wrong =
-        generate_exact_function_oracles(&checked, &[function.clone(), other], &[wrong_callee])
-            .expect("wrong source callee is a per-item refusal");
+    let wrong = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &[0, 1],
+        &[function.clone(), other],
+        &[2],
+        &[wrong_callee],
+    )
+    .expect("wrong source callee is a per-item refusal");
     assert!(matches!(
         wrong.claim_map.items[0].result,
         ClaimDisposition::Refused {
@@ -3494,8 +3512,15 @@ fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
 
     let mut reordered = item;
     reordered.argument_node_ids.reverse();
-    let reordered = generate_exact_function_oracles(&checked, &[function], &[reordered])
-        .expect("reordered source arguments are a per-item refusal");
+    let reordered = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &[0],
+        &[function],
+        &[2],
+        &[reordered],
+    )
+    .expect("reordered source arguments are a per-item refusal");
     assert!(matches!(
         reordered.claim_map.items[0].result,
         ClaimDisposition::Refused {

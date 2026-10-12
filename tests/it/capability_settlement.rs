@@ -1182,10 +1182,17 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
         .checked_bounds
         .first()
         .expect("division plan identifies its exact checked bound");
+    let contract = exact_function_fixture::admitted_function_contract(
+        &package,
+        std::slice::from_ref(&node_id),
+    );
+    let result_selection = quire_contract_codegen::ContractDriverResultSelection::NotApplicable;
     let items = [ObligationItem::ScalarClaim {
-        package: &package,
+        package: &contract,
         claim_map: &claim_map,
         node_id: &node_id,
+        claim_index: 0,
+        result_selection: &result_selection,
     }];
     let request = KaniObligationRequest {
         ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
@@ -1551,13 +1558,18 @@ fn kani_settlement_matches_the_complete_checked_scalar_claim_map() {
     let claim_map = quire_contract_codegen::generate_exact_scalar_oracles(&package, &derivable)
         .expect("source-derived scalar plan renders")
         .claim_map;
+    let contract = exact_function_fixture::admitted_function_contract(&package, &node_ids);
+    let result_selection = quire_contract_codegen::ContractDriverResultSelection::NotApplicable;
     let kani_items = claim_map
         .items
         .iter()
-        .map(|claim| ObligationItem::ScalarClaim {
-            package: &package,
+        .enumerate()
+        .map(|(claim_index, claim)| ObligationItem::ScalarClaim {
+            package: &contract,
             claim_map: &claim_map,
             node_id: &claim.node_id,
+            claim_index,
+            result_selection: &result_selection,
         })
         .collect::<Vec<_>>();
     let kani_request = KaniObligationRequest {

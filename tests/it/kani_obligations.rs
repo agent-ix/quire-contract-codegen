@@ -23,8 +23,7 @@ use std::{
 use crate::scratch_crate::{runtime_dependency, write_manifest};
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
-    reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
-    V_BOOLEAN,
+    reference, Bound, MISSING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_BOOLEAN,
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
