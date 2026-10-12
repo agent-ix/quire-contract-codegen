@@ -76,24 +76,26 @@ pub use oracle::equality::{
 };
 
 pub use oracle::function::{
-    generate_exact_function_oracles, generate_function_schedules, CallPointKind, ExactFunctionBody,
-    ExactFunctionClaim, ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles,
-    ExactFunctionRefusal, FunctionParameter, FunctionScheduleClaim, FunctionScheduleDeclaration,
+    generate_exact_function_oracles, generate_function_schedules,
+    generate_function_schedules_with_limits, CallPointKind, ExactFunctionBody, ExactFunctionClaim,
+    ExactFunctionDeclaration, ExactFunctionItem, ExactFunctionOracles, ExactFunctionRefusal,
+    FunctionParameter, FunctionScheduleClaim, FunctionScheduleDeclaration,
     FunctionScheduleDisposition, FunctionScheduleGeneration, FunctionScheduleItem,
-    FunctionScheduleParameter, GeneratedExactFunctionClaim, LocationMapEntry, RecordedLocation,
-    RecordedOrigin, RefusedFunctionBody, ScheduledFunctionBody, EXACT_FUNCTION_CRATE_NAME,
-    EXACT_FUNCTION_LOWERING_WORK_LIMIT,
+    FunctionScheduleLimits, FunctionScheduleParameter, GeneratedExactFunctionClaim,
+    LocationMapEntry, RecordedLocation, RecordedOrigin, RefusedFunctionBody, ScheduledFunctionBody,
+    EXACT_FUNCTION_CRATE_NAME, EXACT_FUNCTION_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::function::schedule::{
     BlockId as FunctionScheduleBlockId, ControlAction as FunctionScheduleControlAction,
     ControlBlock as FunctionScheduleControlBlock, ControlEdge as FunctionScheduleControlEdge,
     EdgeCondition as FunctionScheduleEdgeCondition, Instruction as FunctionScheduleInstruction,
+    LocationQueryRefusal as FunctionScheduleLocationQueryRefusal,
     LocationRecord as FunctionScheduleLocation, Occurrence as FunctionScheduleOccurrence,
     Operand as FunctionScheduleOperand, Operation as FunctionScheduleOperation,
     Schedule as FunctionBodySchedule, ScheduleRefusal as FunctionScheduleRefusal,
     ScheduledOperation as FunctionScheduledOperation, SsaSlot as FunctionScheduleSlot,
-    ValueKind as FunctionScheduleValueKind,
+    ValueKind as FunctionScheduleValueKind, DEFAULT_GENERATION_WORK_LIMIT,
 };
 
 pub use evidence::bound_coverage::{

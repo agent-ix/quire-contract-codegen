@@ -9,16 +9,17 @@
 use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
 use quire_contract_codegen::{
-    generate_exact_function_oracles, generate_function_schedules, CallPointKind, ClaimDisposition,
-    ExactFunctionItem, ExactFunctionRefusal, FunctionScheduleDeclaration,
-    FunctionScheduleDisposition, FunctionScheduleItem, FunctionScheduleOperand as ScheduleOperand,
-    FunctionScheduleParameter, FunctionScheduledOperation, GeneratedExactFunctionClaim,
-    UpstreamBlocker,
+    generate_exact_function_oracles, generate_function_schedules,
+    generate_function_schedules_with_limits, CallPointKind, ClaimDisposition, ExactFunctionItem,
+    ExactFunctionRefusal, FunctionScheduleDeclaration, FunctionScheduleDisposition,
+    FunctionScheduleItem, FunctionScheduleLimits, FunctionScheduleOperand as ScheduleOperand,
+    FunctionScheduleParameter, FunctionScheduleRefusal as ScheduleRefusal,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
-use quire_contract_model::CheckedPackageV2;
+use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;
 
-/// Trace: FR-021-AC-34, TC-031.
+/// Trace: FR-021-AC-28, FR-021-AC-34, TC-031.
 #[test]
 fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     use serde_json::{json, Value};
@@ -388,6 +389,34 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let work_limit = required_call_work.max(required_scalar_work);
     let generated = generate_function_schedules(&checked, &declarations, &items, work_limit)
         .expect("caller-raised work limit admits the complete flat schedule");
+    let generated_with_limits = generate_function_schedules_with_limits(
+        &checked,
+        &declarations,
+        &items,
+        FunctionScheduleLimits {
+            generation_work_units: work_limit,
+            source_bytes: generated.source_bytes,
+        },
+    )
+    .expect("the public source limit admits the measured complete source");
+    assert_eq!(generated_with_limits, generated);
+    assert_eq!(
+        generate_function_schedules_with_limits(
+            &checked,
+            &declarations,
+            &items,
+            FunctionScheduleLimits {
+                generation_work_units: work_limit,
+                source_bytes: generated.source_bytes - 1,
+            },
+        ),
+        Err(ScheduleRefusal::SourceTooLarge {
+            bytes: generated.source_bytes,
+            limit: generated.source_bytes - 1,
+            setting: "cg.function.source_bytes",
+        }),
+        "the public generator refuses one byte below its measured source size"
+    );
     assert_eq!(generated.functions.len(), COUNT as usize);
     assert_eq!(generated.refused_functions.len(), 0);
     for function in &generated.functions {
@@ -661,6 +690,391 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         String::from_utf8_lossy(&output.stderr)
     );
     let _ = fs::remove_dir_all(&directory);
+}
+
+/// Trace: FR-021-AC-7, FR-021-AC-25, FR-021-AC-27, FR-021-AC-28, FR-021-AC-29, TC-031.
+#[test]
+fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack() {
+    use serde_json::{json, Value};
+    use std::collections::BTreeMap;
+    use std::{fs, process::Command};
+    const CALLS: u32 = 100_000;
+    const PARAMETER: u32 = 1_100_000;
+    const HELPER: u32 = 1_100_001;
+    const OUTER_PARAMETER: u32 = 1_100_002;
+    const OUTER: u32 = 1_100_003;
+    const CALL_BASE: u32 = 1_200_000;
+    let calls = std::env::var("IR496_TEST_CALLS")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(CALLS);
+    assert!((1..=CALLS).contains(&calls));
+
+    let operation = json!({
+        "identity": "quire.op.function.call",
+        "laws": [],
+        "mode": null,
+        "member": null,
+        "leaves": [],
+    });
+    fn apply_seeded_ids(wire: &mut Value, replacements: &BTreeMap<String, String>) {
+        fn rewrite(value: &mut Value, replacements: &BTreeMap<String, String>) {
+            match value {
+                Value::Array(items) => {
+                    for item in items {
+                        rewrite(item, replacements);
+                    }
+                }
+                Value::Object(object) => {
+                    if object.get("domain").and_then(Value::as_str)
+                        == Some("quire.checked-semantic-node/v1")
+                    {
+                        if let Some(digest) = object.get("digest").and_then(Value::as_str) {
+                            if let Some(replacement) = replacements.get(digest) {
+                                object.insert("digest".to_owned(), json!(replacement));
+                            }
+                        }
+                        return;
+                    }
+                    for member in object.values_mut() {
+                        rewrite(member, replacements);
+                    }
+                }
+                Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+            }
+        }
+        rewrite(wire, replacements);
+    }
+    fn preseed_structural_candidates(wire: &mut Value, codes: &[u32]) -> BTreeMap<String, String> {
+        let nodes = wire["semantic_graph"]["nodes"]
+            .as_array()
+            .expect("fixture graph nodes");
+        let selected = codes
+            .iter()
+            .map(|code| {
+                let old = code_id(*code);
+                let node = nodes
+                    .iter()
+                    .find(|node| node["node_id"]["digest"].as_str() == Some(old.digest.as_ref()))
+                    .unwrap_or_else(|| panic!("no structural candidate node for code {code}"));
+                serde_json::from_value::<CheckedSemanticNodeV2>(node.clone())
+                    .expect("fixture node deserializes for candidate derivation")
+            })
+            .collect::<Vec<_>>();
+        let candidates = derive_structural_candidates(&selected, 1 << 20, 1 << 20)
+            .expect("small fixture candidates derive within limits");
+        let replacements = candidates
+            .nodes()
+            .iter()
+            .map(|candidate| {
+                let old = selected[candidate.position() as usize]
+                    .node_id
+                    .digest
+                    .to_string();
+                let new = candidate.candidate_node_id().digest.to_string();
+                (old, new)
+            })
+            .collect::<BTreeMap<_, _>>();
+        apply_seeded_ids(wire, &replacements);
+        replacements
+    }
+    let body_reference = |code: u32, seeded: &BTreeMap<String, String>| {
+        let mut target = code_id(code);
+        if let Some(digest) = seeded.get(target.digest.as_ref()) {
+            target.digest = digest.clone().into_boxed_str();
+        }
+        json!({
+            "term": "reference",
+            "target": {"domain": target.domain, "digest": target.digest},
+        })
+    };
+    let mut builder = PackageBuilder::default();
+    builder
+        .code(
+            T_INTEGER,
+            "scalar_type",
+            "integer",
+            T_INTEGER,
+            aggregate(vec![]),
+        )
+        .code(T_TEXT, "scalar_type", "text", T_TEXT, aggregate(vec![]));
+    let (base_result, base_wire, base_ids) = builder.read_resolved();
+    assert!(matches!(
+        base_result,
+        quire_contract_model::CheckedPackageV2ReadResult::Admitted(_)
+    ));
+    builder = PackageBuilder::from_wire(base_wire);
+    let mut seeded_ids = [T_INTEGER, T_TEXT]
+        .into_iter()
+        .filter_map(|code| {
+            let old = code_id(code);
+            let new = base_ids.resolve(&old);
+            (old.digest != new.digest).then(|| (old.digest.to_string(), new.digest.to_string()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    builder
+        .code(
+            PARAMETER,
+            "value",
+            "parameter",
+            T_INTEGER,
+            aggregate(vec![
+                bound_member("name", literal("text", "helper_input")),
+                bound_member("level", integer_literal(0)),
+            ]),
+        )
+        .code(
+            OUTER_PARAMETER,
+            "value",
+            "parameter",
+            T_INTEGER,
+            aggregate(vec![
+                bound_member("name", literal("text", "outer_input")),
+                bound_member("level", integer_literal(0)),
+            ]),
+        );
+
+    let mut wire = builder.raw_wire();
+    apply_seeded_ids(&mut wire, &seeded_ids);
+    seeded_ids.extend(preseed_structural_candidates(
+        &mut wire,
+        &[PARAMETER, OUTER_PARAMETER],
+    ));
+    builder = PackageBuilder::from_wire(wire);
+    builder.code(
+        HELPER,
+        "function",
+        "pure_function",
+        T_INTEGER,
+        body_reference(PARAMETER, &seeded_ids),
+    );
+
+    let mut wire = builder.raw_wire();
+    apply_seeded_ids(&mut wire, &seeded_ids);
+    seeded_ids.extend(preseed_structural_candidates(&mut wire, &[HELPER]));
+    builder = PackageBuilder::from_wire(wire);
+
+    let integer_type = seeded_ids
+        .get(code_id(T_INTEGER).digest.as_ref())
+        .cloned()
+        .unwrap_or_else(|| code_id(T_INTEGER).digest.to_string());
+    let helper_reference = body_reference(HELPER, &seeded_ids);
+    for ordinal in 0..calls {
+        let child = if ordinal == 0 {
+            OUTER_PARAMETER
+        } else {
+            CALL_BASE + ordinal - 1
+        };
+        builder.application_node(
+            CALL_BASE + ordinal,
+            "call",
+            &integer_type,
+            json!({
+                "term": "application",
+                "operator": "call",
+                "operation": operation.clone(),
+                "result_type": {"domain": NODE_DOMAIN, "digest": integer_type},
+                "arguments": [helper_reference.clone(), body_reference(child, &seeded_ids)],
+            }),
+        );
+    }
+    builder.code(
+        OUTER,
+        "function",
+        "pure_function",
+        T_INTEGER,
+        body_reference(CALL_BASE + calls - 1, &seeded_ids),
+    );
+    let mut wire = builder.raw_wire();
+    apply_seeded_ids(&mut wire, &seeded_ids);
+    seeded_ids.extend(preseed_structural_candidates(&mut wire, &[OUTER]));
+    builder = PackageBuilder::from_wire(wire);
+    eprintln!("IR-496 AC7 phase=builder-complete calls={calls}");
+
+    let limits = quire_contract_model::CheckedPackageReadLimits {
+        bytes: 1 << 30,
+        nodes: 110_000,
+        edges: 300_000,
+        occurrences: 500_000,
+        diagnostics: 10_000,
+        work: 100_000_000,
+    };
+    eprintln!("IR-496 AC7 phase=admission-start");
+    let (package, ids) = builder.admit_with_resolved(limits);
+    eprintln!(
+        "IR-496 AC7 phase=admission-complete admitted_v2_nodes={}",
+        package.graph().nodes.len()
+    );
+    let resolved_code_id = |code| {
+        let mut id = code_id(code);
+        if let Some(digest) = seeded_ids.get(id.digest.as_ref()) {
+            id.digest = digest.clone().into_boxed_str();
+        }
+        ids.resolve(&id)
+    };
+    let parameter = |code| FunctionScheduleParameter {
+        value_node_id: resolved_code_id(code),
+        type_node_id: resolved_code_id(T_INTEGER),
+    };
+    let declarations = vec![
+        FunctionScheduleDeclaration {
+            function_node_id: resolved_code_id(HELPER),
+            body_node_id: resolved_code_id(PARAMETER),
+            name: "helper".to_owned(),
+            parameters: vec![parameter(PARAMETER)],
+            result_type_node_id: resolved_code_id(T_INTEGER),
+        },
+        FunctionScheduleDeclaration {
+            function_node_id: resolved_code_id(OUTER),
+            body_node_id: ids.resolve(&code_id(CALL_BASE + calls - 1)),
+            name: "outer".to_owned(),
+            parameters: vec![parameter(OUTER_PARAMETER)],
+            result_type_node_id: resolved_code_id(T_INTEGER),
+        },
+    ];
+    let helper_function_node_id = resolved_code_id(HELPER);
+    let outer_function_node_id = resolved_code_id(OUTER);
+    let worker = std::thread::Builder::new()
+        .name("ir496-ac7-public-small-stack".to_owned())
+        .stack_size(512 * 1024)
+        .spawn(move || {
+            const REQUIRED_WORK: u64 = 500_003;
+            eprintln!("IR-496 AC7 phase=public-default-start");
+            let default_result = generate_function_schedules_with_limits(
+                &package,
+                &declarations,
+                &[],
+                FunctionScheduleLimits {
+                    generation_work_units: REQUIRED_WORK,
+                    source_bytes: 1_048_576,
+                },
+            );
+            let (raised, source_bytes, exceeded_default) = match default_result {
+                Err(ScheduleRefusal::SourceTooLarge {
+                    bytes,
+                    limit: 1_048_576,
+                    setting: "cg.function.source_bytes",
+                }) => {
+                    assert_eq!(calls, CALLS, "only the 100K case should exceed the default");
+                    eprintln!("IR-496 AC7 phase=public-default-complete bytes={bytes}");
+                    eprintln!("IR-496 AC7 phase=public-raised-start");
+                    let raised = generate_function_schedules_with_limits(
+                        &package,
+                        &declarations,
+                        &[],
+                        FunctionScheduleLimits {
+                            generation_work_units: REQUIRED_WORK,
+                            source_bytes: bytes,
+                        },
+                    )
+                    .expect("the measured caller source limit admits every schedule module");
+                    (raised, bytes, true)
+                }
+                Ok(generated) => {
+                    assert!(calls < CALLS, "the 100K case must exercise the source ceiling");
+                    let bytes = generated.source_bytes;
+                    (generated, bytes, false)
+                }
+                other => panic!("default source behavior was unexpected: {other:?}"),
+            };
+            assert_eq!(raised.functions.len(), 2);
+            let helper = raised
+                .functions
+                .iter()
+                .find(|function| function.function_node_id == helper_function_node_id)
+                .expect("the generated helper schedule is present");
+            let outer = raised
+                .functions
+                .iter()
+                .find(|function| function.function_node_id == outer_function_node_id)
+                .expect("the generated outer schedule is present");
+            assert_eq!(
+                raised
+                    .functions
+                    .iter()
+                    .filter(|function| function.function_node_id == helper_function_node_id)
+                    .count(),
+                1,
+                "the exact helper declaration has one generated schedule"
+            );
+            assert_eq!(
+                raised
+                    .functions
+                    .iter()
+                    .filter(|function| function.function_node_id == outer_function_node_id)
+                    .count(),
+                1,
+                "the exact outer declaration has one generated schedule"
+            );
+            let helper_instruction_count = helper.schedule.instructions.len();
+            let outer_instruction_count = outer.schedule.instructions.len();
+            eprintln!(
+                "IR-496 AC7 phase=public-raised-counts helper_instructions={helper_instruction_count} outer_instructions={outer_instruction_count}"
+            );
+            assert_eq!(helper_instruction_count, 1);
+            assert_eq!(outer_instruction_count, calls as usize + 1);
+            assert_eq!(outer.schedule.locations.len(), calls as usize + 1);
+            assert_eq!(raised.source_bytes, source_bytes);
+            if exceeded_default {
+                assert!(raised.source_bytes > 1_048_576);
+                assert!(raised.modules.len() > 1);
+            } else {
+                assert!(raised.source_bytes <= 1_048_576);
+            }
+            let measured_bytes = raised.modules.iter().fold(raised.source.len(), |total, module| {
+                total + module.contents.len()
+            });
+            assert_eq!(measured_bytes, raised.source_bytes);
+            assert!(raised.source.len() <= 16 * 1024 * 1024);
+            assert!(raised
+                .modules
+                .iter()
+                .all(|module| module.contents.len() <= 16 * 1024 * 1024));
+
+            let directory = std::env::temp_dir().join(format!(
+                "ir496-ac7-generated-schedule-{}",
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&directory);
+            let source_directory = directory.join("src");
+            fs::create_dir_all(&source_directory).expect("create generated schedule source dir");
+            let root_source = source_directory.join("lib.rs");
+            fs::write(&root_source, &raised.source).expect("write generated schedule root");
+            for module in &raised.modules {
+                let relative = module
+                    .path
+                    .strip_prefix("src/")
+                    .expect("schedule module path is rooted under src");
+                let path = source_directory.join(relative);
+                fs::create_dir_all(path.parent().expect("module path has a parent"))
+                    .expect("create generated module directory");
+                fs::write(path, &module.contents).expect("write generated schedule module");
+            }
+            let output = Command::new("rustc")
+                .args(["--crate-type", "lib", "--crate-name", "function_schedule"])
+                .arg(&root_source)
+                .arg("-o")
+                .arg(directory.join("libfunction_schedule.rlib"))
+                .output()
+                .expect("invoke rustc for generated schedule crate");
+            assert!(
+                output.status.success(),
+                "generated schedule crate compile failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let _ = fs::remove_dir_all(&directory);
+            eprintln!("IR-496 AC7 phase=public-raised-complete");
+            eprintln!(
+                "AC-7 admitted V2 public generation: call_nodes={calls}, instructions={}, source_bytes={}, modules={}",
+                outer_instruction_count,
+                raised.source_bytes,
+                raised.modules.len()
+            );
+        })
+        .expect("spawn the public generation worker with a 512 KiB stack");
+    worker
+        .join()
+        .expect("admitted deep generation fits 512 KiB");
 }
 
 /// Trace: FR-021-AC-23, TC-031.

@@ -131,7 +131,7 @@
 //! direct-expression-call shape cannot reach. AC-2's two legs (generated oracle, direct runtime
 //! call) are implemented and tested in full.
 
-use crate::core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES};
+use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
@@ -243,8 +243,30 @@ pub struct FunctionScheduleGeneration {
     pub refused_functions: Vec<RefusedFunctionBody>,
     /// One ordered disposition per requested call item.
     pub claims: Vec<FunctionScheduleClaim>,
-    /// Compilable crate source embedding the complete deterministic schedule tables.
+    /// Compilable crate root source embedding the deterministic schedule metadata.
     pub source: String,
+    /// Additional deterministic ordinal-range source modules for large schedules.
+    pub modules: Vec<Artifact>,
+    /// Total UTF-8 source bytes across the root and every module.
+    pub source_bytes: usize,
+}
+
+/// Caller-selected work and source ceilings for function schedule generation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FunctionScheduleLimits {
+    /// Maximum charged work per function body.
+    pub generation_work_units: u64,
+    /// Maximum total generated Rust source bytes across the crate and modules.
+    pub source_bytes: usize,
+}
+
+impl Default for FunctionScheduleLimits {
+    fn default() -> Self {
+        Self {
+            generation_work_units: schedule::DEFAULT_GENERATION_WORK_LIMIT,
+            source_bytes: MAX_GENERATED_SOURCE_BYTES,
+        }
+    }
 }
 
 /// Builds target-neutral flat body schedules from one admitted V2 graph.
@@ -257,8 +279,30 @@ pub fn generate_function_schedules(
     items: &[FunctionScheduleItem],
     work_limit: u64,
 ) -> Result<FunctionScheduleGeneration, schedule::ScheduleRefusal> {
+    generate_function_schedules_with_limits(
+        package,
+        declarations,
+        items,
+        FunctionScheduleLimits {
+            generation_work_units: work_limit,
+            source_bytes: MAX_GENERATED_SOURCE_BYTES,
+        },
+    )
+}
+
+/// Builds target-neutral schedules with caller-selected work and source-byte limits.
+///
+/// The work ceiling applies independently to each function body. The default source ceiling is
+/// 1,048,576 bytes; larger callers may raise it, while each emitted source artifact remains
+/// bounded by the publication artifact limit and is split into deterministic ordinal modules.
+pub fn generate_function_schedules_with_limits(
+    package: &CheckedPackageV2,
+    declarations: &[FunctionScheduleDeclaration],
+    items: &[FunctionScheduleItem],
+    limits: FunctionScheduleLimits,
+) -> Result<FunctionScheduleGeneration, schedule::ScheduleRefusal> {
     // Reject the unrepresentable setting before package indexing or graph projection begins.
-    let _ = schedule::WorkCounter::new(work_limit)?;
+    let _ = schedule::WorkCounter::new(limits.generation_work_units)?;
     let source_nodes: BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2> = package
         .graph()
         .nodes
@@ -402,7 +446,7 @@ pub fn generate_function_schedules(
                     .map_err(|_| schedule::ScheduleRefusal::CounterOverflow)
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
-        let mut work = schedule::WorkCounter::new(work_limit)?;
+        let mut work = schedule::WorkCounter::new(limits.generation_work_units)?;
         let result = if let Some(refusal) = lowering_failures.get(&declaration.body_node_id) {
             Err(refusal.clone())
         } else {
@@ -553,28 +597,179 @@ pub fn generate_function_schedules(
             .then_with(|| left.function.as_bytes().cmp(right.function.as_bytes()))
     });
 
-    let mut generation = FunctionScheduleGeneration {
+    let (source, modules, source_bytes) = render_schedule_source(
+        &function_bodies,
+        &refused_functions,
+        &claims,
+        limits.source_bytes,
+    )?;
+    Ok(FunctionScheduleGeneration {
         functions: function_bodies,
         refused_functions,
         claims,
-        source: String::new(),
-    };
-    let schedule_json = serde_json::to_string(&(
-        &generation.functions,
-        &generation.refused_functions,
-        &generation.claims,
-    ))
-    .map_err(|_| schedule::ScheduleRefusal::SerializationFailure)?;
-    generation.source = format!(
-        "/// Deterministic target-neutral function schedule.\npub const FUNCTION_SCHEDULE_JSON: &str = {schedule_json:?};\n"
+        source,
+        modules,
+        source_bytes,
+    })
+}
+
+const SCHEDULE_INSTRUCTIONS_PER_MODULE: usize = 1024;
+
+#[derive(Serialize)]
+struct ScheduleSourcePart<'a> {
+    function_node_id: &'a CheckedNodeId,
+    function_name: &'a str,
+    instruction_start: usize,
+    instruction_end: usize,
+    instructions: &'a [schedule::Instruction],
+    locations: &'a [schedule::LocationRecord],
+    control_flow: &'a [schedule::ControlBlock],
+}
+
+fn render_schedule_source(
+    functions: &[ScheduledFunctionBody],
+    refused_functions: &[RefusedFunctionBody],
+    claims: &[FunctionScheduleClaim],
+    source_limit: usize,
+) -> Result<(String, Vec<Artifact>, usize), schedule::ScheduleRefusal> {
+    let complete_json = serde_json::to_string(&(functions, refused_functions, claims))
+        .map_err(|_| schedule::ScheduleRefusal::SerializationFailure)?;
+    let flat_source = format!(
+        "/// Deterministic target-neutral function schedule.\npub const FUNCTION_SCHEDULE_JSON: &str = {complete_json:?};\n"
     );
-    if generation.source.len() > MAX_GENERATED_SOURCE_BYTES {
-        return Err(schedule::ScheduleRefusal::SourceTooLarge {
-            bytes: generation.source.len(),
-            limit: MAX_GENERATED_SOURCE_BYTES,
+    if flat_source.len() <= MAX_ARTIFACT_BYTES {
+        let source_bytes = flat_source.len();
+        if source_bytes > source_limit {
+            return Err(schedule::ScheduleRefusal::SourceTooLarge {
+                bytes: source_bytes,
+                limit: source_limit,
+                setting: "cg.function.source_bytes",
+            });
+        }
+        return Ok((flat_source, Vec::new(), source_bytes));
+    }
+
+    let metadata = functions
+        .iter()
+        .map(|function| {
+            (
+                &function.function_node_id,
+                &function.name,
+                function.schedule.entry,
+                function.schedule.instructions.len(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let metadata_json = serde_json::to_string(&(metadata, refused_functions, claims))
+        .map_err(|_| schedule::ScheduleRefusal::SerializationFailure)?;
+    let mut source = format!(
+        "/// Deterministic target-neutral function schedule metadata.\npub const FUNCTION_SCHEDULE_METADATA_JSON: &str = {metadata_json:?};\n"
+    );
+    let mut modules = Vec::new();
+    let mut declarations = String::new();
+    let mut module_values = String::new();
+    for (function_ordinal, function) in functions.iter().enumerate() {
+        let instruction_count = function.schedule.instructions.len();
+        let location_count = function.schedule.locations.len();
+        if instruction_count != location_count {
+            return Err(schedule::ScheduleRefusal::MalformedTerm(
+                function.function_node_id.clone(),
+            ));
+        }
+        let mut start = 0usize;
+        while start < instruction_count {
+            let end = start
+                .saturating_add(SCHEDULE_INSTRUCTIONS_PER_MODULE)
+                .min(instruction_count);
+            let block_start = start
+                .checked_mul(2)
+                .ok_or(schedule::ScheduleRefusal::CounterOverflow)?;
+            let mut block_end = end
+                .checked_mul(2)
+                .ok_or(schedule::ScheduleRefusal::CounterOverflow)?;
+            if end == instruction_count {
+                block_end = function.schedule.control_flow.len();
+            }
+            let part = ScheduleSourcePart {
+                function_node_id: &function.function_node_id,
+                function_name: &function.name,
+                instruction_start: start,
+                instruction_end: end,
+                instructions: &function.schedule.instructions[start..end],
+                locations: &function.schedule.locations[start..end],
+                control_flow: function
+                    .schedule
+                    .control_flow
+                    .get(block_start..block_end)
+                    .ok_or_else(|| {
+                        schedule::ScheduleRefusal::MalformedTerm(function.function_node_id.clone())
+                    })?,
+            };
+            let part_json = serde_json::to_string(&part)
+                .map_err(|_| schedule::ScheduleRefusal::SerializationFailure)?;
+            let module_name = format!("schedule_{function_ordinal:06}_{start:06}_{end:06}");
+            let module_source = format!(
+                "/// Ordinal range {start}..{end} for function schedule {function_ordinal}.\npub const FUNCTION_SCHEDULE_PART_JSON: &str = {part_json:?};\n"
+            );
+            if module_source.len() > MAX_ARTIFACT_BYTES {
+                return Err(schedule::ScheduleRefusal::SourceArtifactTooLarge {
+                    bytes: module_source.len(),
+                    limit: MAX_ARTIFACT_BYTES,
+                });
+            }
+            declarations.push_str(&format!("mod {module_name};\n"));
+            module_values.push_str(&format!(
+                "    {module_name}::FUNCTION_SCHEDULE_PART_JSON,\n"
+            ));
+            modules.push(Artifact::new(
+                format!("src/{module_name}.rs"),
+                module_source,
+            ));
+            start = end;
+        }
+    }
+    let artifact_count = modules
+        .len()
+        .checked_add(1)
+        .ok_or(schedule::ScheduleRefusal::CounterOverflow)?;
+    if artifact_count > crate::core::artifact::MAX_ARTIFACTS {
+        return Err(schedule::ScheduleRefusal::TooManySourceModules {
+            count: artifact_count,
+            limit: crate::core::artifact::MAX_ARTIFACTS,
         });
     }
-    Ok(generation)
+    source.push_str(&declarations);
+    source.push_str(
+        "\n/// Serialized per-range schedule tables in function and instruction order.\n",
+    );
+    source.push_str("pub const FUNCTION_SCHEDULE_PARTS: &[&str] = &[\n");
+    source.push_str(&module_values);
+    source.push_str("];\n");
+    if source.len() > MAX_ARTIFACT_BYTES {
+        return Err(schedule::ScheduleRefusal::SourceArtifactTooLarge {
+            bytes: source.len(),
+            limit: MAX_ARTIFACT_BYTES,
+        });
+    }
+    let source_bytes = modules.iter().try_fold(source.len(), |total, module| {
+        total
+            .checked_add(module.contents.len())
+            .ok_or(schedule::ScheduleRefusal::CounterOverflow)
+    })?;
+    if source_bytes > crate::core::artifact::MAX_BUNDLE_BYTES {
+        return Err(schedule::ScheduleRefusal::SourceBundleTooLarge {
+            bytes: source_bytes,
+            limit: crate::core::artifact::MAX_BUNDLE_BYTES,
+        });
+    }
+    if source_bytes > source_limit {
+        return Err(schedule::ScheduleRefusal::SourceTooLarge {
+            bytes: source_bytes,
+            limit: source_limit,
+            setting: "cg.function.source_bytes",
+        });
+    }
+    Ok((source, modules, source_bytes))
 }
 
 fn project_body_graph(
