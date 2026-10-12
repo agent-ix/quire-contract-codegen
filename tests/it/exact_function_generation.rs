@@ -1864,6 +1864,204 @@ fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
     ));
 }
 
+fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
+    fixture: &str,
+    wanted_form: &str,
+    body_code: u32,
+    call_code: u32,
+    expected_tag: &'static str,
+) {
+    use serde_json::json;
+    use std::{fs, path::PathBuf};
+
+    let qspec = PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout"));
+    let wire: serde_json::Value = serde_json::from_slice(
+        &fs::read(
+            qspec
+                .join("proposals/checked-package-v2/fixtures")
+                .join(fixture),
+        )
+        .expect("read authoritative QSpec fixture"),
+    )
+    .expect("QSpec fixture JSON");
+    let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
+    let requested_root = nodes
+        .iter()
+        .find(|node| {
+            node["semantic_form"] == wanted_form
+                && (wanted_form != "case" || node["body"]["operator"] == "case")
+        })
+        .expect("QSpec fixture contains requested root");
+    let requested_id: quire_contract_model::CheckedNodeId =
+        serde_json::from_value(requested_root["node_id"].clone()).unwrap();
+    let integer_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+            .unwrap()["node_id"]
+            .clone(),
+    )
+    .unwrap();
+    let value_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| {
+                node["node_tag"] == "value"
+                    && node["semantic_form"] == "literal"
+                    && node["body"]["value_kind"] == "integer"
+            })
+            .unwrap()["node_id"]
+            .clone(),
+    )
+    .unwrap();
+    let node_ref =
+        |id: &quire_contract_model::CheckedNodeId| json!({"domain":id.domain, "digest":id.digest});
+    let body = json!({
+        "term":"application", "operator":"binary",
+        "operation":{"identity":"quire.op.integer.mul","laws":[],"mode":null,"member":null,"leaves":[]},
+        "result_type":node_ref(&integer_id),
+        "arguments":[{"term":"reference","target":node_ref(&value_id)},{"term":"reference","target":node_ref(&value_id)}],
+    });
+    let mut builder = PackageBuilder::from_wire(wire);
+    builder
+        .application_node_tagged(
+            body_code,
+            "expression",
+            "binary",
+            integer_id.digest.as_ref(),
+            body.clone(),
+        )
+        .application_node_tagged(
+            call_code,
+            "expression",
+            "call",
+            integer_id.digest.as_ref(),
+            body,
+        );
+    let package = admit(builder);
+    let requested_id = package.ids.resolve(&requested_id);
+    let body_id = package.ids.resolve(&code_id(body_code));
+    let healthy_call_id = package.ids.resolve(&code_id(call_code));
+    let integer_id = package.ids.resolve(&integer_id);
+    let value_id = package.ids.resolve(&value_id);
+    let function = quire_contract_codegen::ExactFunctionDeclaration {
+        node_id: body_id.clone(),
+        name: "healthy_fn".into(),
+        parameters: vec![
+            quire_contract_codegen::FunctionParameter {
+                name: "left".into(),
+                type_node_id: integer_id.clone(),
+            },
+            quire_contract_codegen::FunctionParameter {
+                name: "right".into(),
+                type_node_id: integer_id.clone(),
+            },
+        ],
+        result_type: integer_id,
+        body: quire_contract_codegen::ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Multiply,
+        },
+        capability_requirements: Vec::new(),
+    };
+    let direct_item = ExactFunctionItem {
+        call_node_id: requested_id.clone(),
+        function: "healthy_fn".into(),
+        argument_node_ids: vec![value_id.clone(), value_id.clone()],
+    };
+    let healthy_item = ExactFunctionItem {
+        call_node_id: healthy_call_id.clone(),
+        function: "healthy_fn".into(),
+        argument_node_ids: vec![value_id.clone(), value_id],
+    };
+    let mut roots = vec![
+        body_id.clone(),
+        requested_id.clone(),
+        healthy_call_id.clone(),
+    ];
+    roots.sort();
+    let requests = driver_positions(&roots);
+    let position = |id: &quire_contract_model::CheckedNodeId| {
+        roots.iter().position(|root| root == id).unwrap()
+    };
+    let contract = admitted_function_contract(&package.checked, &roots);
+    let combined = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[position(&body_id)],
+        &[function.clone()],
+        &[position(&requested_id), position(&healthy_call_id)],
+        &[direct_item, healthy_item.clone()],
+    )
+    .unwrap();
+    let healthy_only = generate_exact_function_oracles(
+        &contract,
+        &requests,
+        &[position(&body_id)],
+        &[function],
+        &[position(&healthy_call_id)],
+        &[healthy_item],
+    )
+    .unwrap();
+    let direct = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == requested_id)
+        .expect("direct claim retains request identity");
+    assert!(matches!(
+        &direct.result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag }
+        } if unsupported_node_id == &requested_id && *node_tag == expected_tag
+    ));
+    let generated = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy_call_id)
+        .expect("healthy sibling claim");
+    let generated_only = healthy_only
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == healthy_call_id)
+        .expect("standalone healthy sibling claim");
+    assert!(matches!(&generated.result, ClaimDisposition::Generated(_)));
+    assert_eq!(generated.result, generated_only.result);
+    assert_eq!(
+        contents(&combined, "src/lib.rs"),
+        contents(&healthy_only, "src/lib.rs")
+    );
+    assert_eq!(combined.location_map, healthy_only.location_map);
+    assert!(!contents(&combined, "src/lib.rs").contains(requested_id.digest.as_ref()));
+}
+
+/// Trace: FR-021-AC-33, TC-031. A directly requested formula call-node settles to Unsupported,
+/// retains its request identity, and does not alter a healthy function sibling.
+#[test]
+fn tc_031_ac33_direct_formula_call_node_is_unsupported() {
+    tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
+        "positive-clause-operations.json",
+        "formula",
+        991_001,
+        991_002,
+        "temporal",
+    );
+}
+
+/// Trace: FR-021-AC-33, TC-031. A directly requested case call-node settles to Unsupported,
+/// retains its request identity, and does not alter a healthy function sibling.
+#[test]
+fn tc_031_ac33_direct_case_call_node_is_unsupported() {
+    tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
+        "positive-union-nodes.json",
+        "case",
+        991_011,
+        991_012,
+        "expression",
+    );
+}
+
 /// Trace: FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
 /// node id requested twice under one binding refuses every copy.
 #[test]

@@ -368,6 +368,171 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
     );
 }
 
+/// Trace: FR-018-AC-32, TC-029. The direct case keeps its claim identity and typed cause,
+/// schedules no source/location, and leaves a healthy equality sibling byte-identical.
+#[test]
+fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() {
+    use quire_contract_model::LoweringProfileRef;
+    use serde_json::json;
+    use std::{fs, path::PathBuf};
+
+    const BOOLEAN: u32 = 930_101;
+    const EQUALITY: u32 = 930_102;
+    let qspec = PathBuf::from(std::env::var_os("QSPEC_DIR").expect("published QSpec checkout"));
+    let wire: serde_json::Value = serde_json::from_slice(
+        &fs::read(qspec.join("proposals/checked-package-v2/fixtures/positive-union-nodes.json"))
+            .expect("read authoritative QSpec fixture"),
+    )
+    .expect("QSpec fixture JSON");
+    let nodes = wire["semantic_graph"]["nodes"].as_array().unwrap();
+    let node_ref = |digest: &str| json!({"domain": NODE_DOMAIN, "digest": digest});
+    let case_id: quire_contract_model::CheckedNodeId = serde_json::from_value(
+        nodes
+            .iter()
+            .find(|node| node["semantic_form"] == "case")
+            .unwrap()["node_id"]
+            .clone(),
+    )
+    .unwrap();
+    let integer_type = nodes
+        .iter()
+        .find(|node| node["node_tag"] == "scalar_type" && node["semantic_form"] == "integer")
+        .unwrap()["node_id"]["digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let integer_literals: Vec<String> = nodes
+        .iter()
+        .filter(|node| node["node_tag"] == "value" && node["semantic_form"] == "literal")
+        .take(2)
+        .map(|node| node["node_id"]["digest"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(integer_literals.len(), 2);
+
+    let mut builder = PackageBuilder::from_wire(wire);
+    builder
+        .code(
+            BOOLEAN,
+            "scalar_type",
+            "boolean",
+            BOOLEAN,
+            aggregate(vec![]),
+        )
+        .application_node_tagged(
+            EQUALITY,
+            "expression",
+            "binary",
+            &key(BOOLEAN),
+            json!({
+                "term":"application", "operator":"binary",
+                "operation":{"identity":"quire.op.integer.eq","laws":[],"mode":null,"member":null,"leaves":[]},
+                "result_type":node_ref(&key(BOOLEAN)),
+                "arguments":integer_literals.iter().map(|digest| json!({"term":"reference","target":node_ref(digest)})).collect::<Vec<_>>(),
+            }),
+        );
+    let (admission, _, ids) = builder.read_resolved();
+    let package = match admission {
+        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("extended QSpec fixture should admit: {other:?}"),
+    };
+    let case_id = ids.resolve(&case_id);
+    let equality_id = ids.resolve(&code_id(EQUALITY));
+    let integer_id = ids.resolve(&id(&integer_type));
+    let lowered = package.lower(
+        &[case_id.clone(), equality_id.clone()],
+        &CompleteLoweringProfileV2 {
+            reference: LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.composite-equality/v1".into(),
+            },
+            supported_tags: BTreeSet::from([
+                CheckedNodeTag::ScalarType,
+                CheckedNodeTag::CompositeType,
+                CheckedNodeTag::BoundedDomain,
+                CheckedNodeTag::Value,
+                CheckedNodeTag::Expression,
+                CheckedNodeTag::Claim,
+                CheckedNodeTag::Correspondence,
+            ]),
+            require_bounds: false,
+            work_limit: 65_536,
+        },
+    );
+    let contract = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().unwrap(),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("lowered QSpec sibling request should admit: {other:?}"),
+    };
+    let case_item = CompositeEqualityItem {
+        node_id: case_id.clone(),
+        operator: EqualityOperatorKind::Equal,
+        left: EqualityOperandDescriptor::typed(integer_id.clone()),
+        right: EqualityOperandDescriptor::typed(integer_id.clone()),
+    };
+    let equality_item = CompositeEqualityItem {
+        node_id: equality_id.clone(),
+        operator: EqualityOperatorKind::Equal,
+        left: EqualityOperandDescriptor::typed(integer_id.clone()),
+        right: EqualityOperandDescriptor::typed(integer_id),
+    };
+    let requests =
+        [case_id.clone(), equality_id.clone()].map(|node_id| ContractRequestPosition::DriverItem {
+            node_id,
+            result_selection: quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        });
+    let combined = generate_composite_equality_oracles(
+        &contract,
+        &requests,
+        &[0, 1],
+        &[case_item, equality_item.clone()],
+        Default::default(),
+    )
+    .unwrap();
+    let equality_only = generate_composite_equality_oracles(
+        &contract,
+        &requests,
+        &[1],
+        &[equality_item],
+        Default::default(),
+    )
+    .unwrap();
+
+    let refused = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == case_id)
+        .expect("case claim retained");
+    assert!(matches!(
+        &refused.result,
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::Unsupported { unsupported_node_id, node_tag: "expression" }
+        } if unsupported_node_id == &case_id
+    ));
+    let generated = combined
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == equality_id)
+        .expect("healthy equality claim retained");
+    assert!(matches!(&generated.result, ClaimDisposition::Generated(_)));
+    let equality_only_claim = equality_only
+        .claim_map
+        .items
+        .iter()
+        .find(|claim| claim.node_id == equality_id)
+        .expect("standalone healthy equality claim");
+    assert_eq!(generated.result, equality_only_claim.result);
+    assert_eq!(
+        contents(&combined, "src/lib.rs"),
+        contents(&equality_only, "src/lib.rs")
+    );
+    assert!(!contents(&combined, "src/lib.rs").contains(case_id.digest.as_ref()));
+}
+
 fn contents<'o>(oracles: &'o CompositeEqualityOracles, path: &str) -> &'o str {
     &oracles
         .artifacts

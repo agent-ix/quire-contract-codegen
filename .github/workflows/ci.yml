@@ -10,6 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check out authoritative QSpec fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: agent-ix/quire-specification
+          path: quire-specification
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.98.1
         with:
@@ -29,6 +35,8 @@ jobs:
 
       - name: Test
         run: cargo test
+        env:
+          QSPEC_DIR: ${{ github.workspace }}/quire-specification
 
       - name: Rust 1.98.1 compatibility
         run: cargo +1.98.1 check --locked --all-targets --message-format=json
