@@ -1575,15 +1575,18 @@ fn source_function_node_id<'a>(
         let has_name = node.declaration.as_ref().is_some_and(|declaration| {
             declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == name
         });
-        let body =
-            binding_value(&node.body, "body").and_then(|term| reference_node_id(term, graph));
+        let body = binding_value(&node.body, "body")
+            .and_then(|term| reference_node_id(term, graph.values().copied()));
         has_name && body == Some(body_node_id)
     });
     let node = matching.next()?;
     matching.next().is_none().then_some(&node.node_id)
 }
 
-fn binding_value<'a>(body: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+pub(crate) fn binding_value<'a>(
+    body: &'a serde_json::Value,
+    name: &str,
+) -> Option<&'a serde_json::Value> {
     body.get("members")?
         .as_array()?
         .iter()
@@ -1594,15 +1597,17 @@ fn binding_value<'a>(body: &'a serde_json::Value, name: &str) -> Option<&'a serd
         .get("value")
 }
 
-fn reference_node_id<'a>(term: &serde_json::Value, graph: &Graph<'a>) -> Option<&'a CheckedNodeId> {
+pub(crate) fn reference_node_id<'a>(
+    term: &serde_json::Value,
+    mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
+) -> Option<&'a CheckedNodeId> {
     if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
         return None;
     }
     let target = term.get("target")?;
     let digest = target.get("digest")?.as_str()?;
     let domain = target.get("domain")?.as_str()?;
-    graph
-        .values()
+    nodes
         .find(|node| {
             node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
         })
@@ -1647,7 +1652,7 @@ pub(crate) fn checked_integer_function_application_is_supported(
     };
     let mut parameters = Vec::with_capacity(parameter_terms.len());
     for term in parameter_terms {
-        let Some(parameter_id) = reference_node_id(term, &graph) else {
+        let Some(parameter_id) = reference_node_id(term, graph.values().copied()) else {
             return false;
         };
         let Some(parameter_node) = graph.get(parameter_id).copied() else {
@@ -1664,8 +1669,8 @@ pub(crate) fn checked_integer_function_application_is_supported(
             type_node_id: parameter_node.semantic_type.clone(),
         });
     }
-    let Some(body_id) =
-        binding_value(&function_node.body, "body").and_then(|term| reference_node_id(term, &graph))
+    let Some(body_id) = binding_value(&function_node.body, "body")
+        .and_then(|term| reference_node_id(term, graph.values().copied()))
     else {
         return false;
     };

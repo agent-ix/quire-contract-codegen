@@ -95,28 +95,6 @@ mod tests {
             .collect()
     }
 
-    fn referenced_node_id(checked: &CheckedPackageV2, term: &serde_json::Value) -> CheckedNodeId {
-        let target = term.get("target").expect("reference target");
-        let digest = target
-            .get("digest")
-            .and_then(serde_json::Value::as_str)
-            .expect("reference target digest");
-        let domain = target
-            .get("domain")
-            .and_then(serde_json::Value::as_str)
-            .expect("reference target domain");
-        checked
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| {
-                node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
-            })
-            .expect("reference target node")
-            .node_id
-            .clone()
-    }
-
     fn source_call_arguments(
         checked: &CheckedPackageV2,
         call_id: &CheckedNodeId,
@@ -133,7 +111,11 @@ mod tests {
             .expect("source call arguments")
             .iter()
             .skip(1)
-            .map(|argument| referenced_node_id(checked, argument))
+            .map(|argument| {
+                crate::oracle::function::reference_node_id(argument, checked.graph().nodes.iter())
+                    .expect("call argument reference")
+                    .clone()
+            })
             .collect()
     }
 
@@ -151,18 +133,11 @@ mod tests {
                     })
             })
             .expect("named checked function");
-        let body = function
-            .body
-            .get("members")
-            .and_then(serde_json::Value::as_array)
-            .and_then(|members| {
-                members.iter().find(|member| {
-                    member.get("name").and_then(serde_json::Value::as_str) == Some("body")
-                })
-            })
-            .and_then(|member| member.get("value"))
+        let body = crate::oracle::function::binding_value(&function.body, "body")
             .expect("function body binding");
-        referenced_node_id(checked, body)
+        crate::oracle::function::reference_node_id(body, checked.graph().nodes.iter())
+            .expect("function body reference")
+            .clone()
     }
 
     fn occurrence(checked: &CheckedPackageV2, node_id: &CheckedNodeId) -> ContractOccurrenceKeyV1 {
