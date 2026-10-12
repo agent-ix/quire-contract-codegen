@@ -25,10 +25,11 @@ use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
     reference, Bound, MISSING, MISSING_ROUNDING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED,
 };
+use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, generate_exact_scalar_oracles, generate_routed,
     negotiate_kani_obligations, Candidate, ClaimDisposition, ClaimMap, ExactScalarClaim,
-    ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, GenerationContexts, IntegerOperator,
+    ExactScalarItem, ExactScalarOperation, ExactScalarRefusal, GenerationContexts,
     InvalidObligationItem, KaniExecutionRefusal, KaniExecutionRequest, KaniGenerationContext,
     KaniInconclusiveReason, KaniInstallation, KaniObligationError, KaniObligationHarness,
     KaniObligationOutcome, KaniObligationRequest, KaniRunOutcome, KaniScalarObligationHarness,

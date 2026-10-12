@@ -21,9 +21,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 
+use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     DecimalOperator, ExactScalarItem, ExactScalarOperation, IeeeArithmeticOperator,
-    IntegerOperator, OrderingOperandKind, QuantityOperator, RationalOperator,
+    OrderingOperandKind, QuantityOperator, RationalOperator,
 };
 use quire_contract_model::{
     derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,

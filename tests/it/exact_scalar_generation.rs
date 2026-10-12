@@ -12,11 +12,12 @@ use std::{
 
 use crate::common::panic_scan::{comments_stripped, non_test_code, panic_tokens_in};
 use crate::scratch_crate::seed_lock;
+use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
-    ExactScalarRefusal, GeneratedScalarClaim, IntegerOperator, OperationProvenance,
-    OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
+    ExactScalarRefusal, GeneratedScalarClaim, OperationProvenance, OracleGenerationError,
+    RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
     SCALAR_LOWERING_SUPPORTED_TAGS,
 };
 use quire_contract_model::{

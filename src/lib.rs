@@ -9,8 +9,8 @@
 mod core;
 // The Kani subsystem.
 mod kani;
-// The oracle subsystem.
-mod oracle;
+// The oracle subsystem and its canonical operation catalog path.
+pub mod oracle;
 // The publication subsystem.
 mod publication;
 // The routed subsystem.
@@ -57,7 +57,6 @@ pub use kani::generate::lower::finite_reference_graphs::{
 };
 pub use kani::generate::lower::FamilyLoweringError;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
-pub use oracle::operator_catalog::IntegerOperator;
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
     DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
