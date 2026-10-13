@@ -15,13 +15,14 @@ use std::cell::RefCell;
 use qsl_replay::{
     replay_state_clause, CallSiteRefusal, Category, ClauseName, ClauseSelectionInput,
     DisagreementCause, DomainKey, DomainKind, EvaluatedValue, FiniteBound, Identifier, Integer,
-    ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, Verdict, WireNodeId,
-    WitnessEnvelope, WitnessSettlement,
+    ReplayRequestWire, ReplayResult, ReplaySource, StateClauseReplayResult, TerminalValue, Verdict,
+    WireNodeId, WitnessEnvelope, WitnessSettlement,
 };
 use quire_contract_codegen::{
-    DocumentLabel, KaniRunOutcome, OperationDeclaration, StateClauseHarnessMember,
-    StateClauseModelFieldsCause, StateClauseReplay, StateClauseReplayError,
-    StateClauseReplayInputs, StateComparison, StateFrameProperty, StateObjectAddress,
+    run_terminal_value, DocumentLabel, KaniRunOutcome, OperationDeclaration,
+    StateClauseHarnessMember, StateClauseModelFieldsCause, StateClauseReplay,
+    StateClauseReplayError, StateClauseReplayInputs, StateComparison, StateFrameProperty,
+    StateObjectAddress,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -659,6 +660,36 @@ fn tc_035_the_documents_hold_the_playback_the_post_state_and_their_digests() {
     assert_eq!(changed_post.pre.0, pre.0);
 }
 
+/// The debit at the declared floor leaves an exact out-of-range post-state observation. QSL
+/// replays it as a violated witness and the ordinary falsified terminal is refuted.
+///
+/// Trace: FR-029-AC-18, TC-040
+#[test]
+fn tc_040_out_of_range_debit_post_state_is_exact_and_refuted() {
+    let twin = Twin::new();
+    let fixture = emitted_fixture(&twin, BALANCE);
+    let replay = built(&twin, &fixture, BALANCE, (0, 0), (-1, 0));
+    let docs = documents(&replay.wire);
+    assert_eq!(integers(&docs.pre.1)["balance"]["integer"], "0");
+    assert_eq!(integers(&docs.post.1)["balance"]["integer"], "-1");
+    let result = replay
+        .replay()
+        .expect("QSL replays the observed post state");
+    let arm = witness_arm(&result);
+    assert_eq!(
+        arm.settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+    assert_eq!(arm.category(), Category::Violation);
+    let outcome = KaniRunOutcome::Falsified {
+        counterexample: String::new(),
+    };
+    assert_eq!(
+        run_terminal_value(&outcome, 0, Some((&result).into())).expect("falsified run maps"),
+        TerminalValue::Refuted
+    );
+}
+
 /// A state field with no playback value, or no post-state value, is refused by name and no
 /// default is supplied.
 ///
@@ -959,10 +990,8 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 /// The falsified operation-contract harness of a postcondition state clause over a subject
 /// mutated to debit is replayed from its real Kani playback through `replay_state_clause`, which
 /// reproduces the violation. The subject is the debit that stops at the floor of `balance`'s range
-/// (`deposit_debiting_within_range`): the wrapping debit's real playback is the floor, whose native
-/// post state is -1, outside the range, and QSL's snapshot admission refuses it (`invalid-value`).
-/// How a violation that yields such a post state should settle is a pending QSL ruling and is not
-/// decided here (see the replay spec's Current state).
+/// (`deposit_debiting_within_range`); the wrapping debit's out-of-range post state is covered by
+/// FR-029-AC-18 below.
 ///
 /// Trace: FR-024-AC-18, FR-024-AC-34, TC-035
 #[test]
@@ -1060,4 +1089,66 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
         malformed.decode_falsification(&generated.postcondition.identity, &malformed_run),
         Err(StateClauseReplayError::Decode(_))
     ));
+}
+
+/// Real Kani playback of the wrapping debit starts at the range floor. The native subject's
+/// -1 post state survives CG's snapshot construction and QSL settles the violation.
+///
+/// Trace: FR-029-AC-18, TC-040
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
+    let twin = Twin::new();
+    let (package, clause) = twin.emitted_package(BALANCE);
+    let generated = quire_contract_codegen::generate_state_frame_obligations(
+        &quire_contract_codegen::StateFrameRequest {
+            ceilings: crate::common::proof_ceilings::proof_ceilings(),
+            package: &package,
+            clause: &clause,
+            state_path: "crate::subject::Account",
+            state_fields: &["balance", "audit"],
+            subject_path: "crate::subject::deposit_debiting",
+            unwind: 4,
+        },
+    )
+    .expect("emitted package generates");
+    let outcome = prove(&generated.postcondition);
+    falsified(
+        outcome.clone(),
+        "postcondition `post.balance >= pre.balance` failed",
+    );
+    let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
+    inputs.playback.clear();
+    inputs
+        .decode_falsification(&generated.postcondition.identity, &outcome)
+        .expect("real Kani playback decodes");
+    assert_eq!(
+        inputs.playback,
+        [("balance".to_owned(), 0), ("audit".to_owned(), 0)]
+    );
+    let mut account = subject::Account {
+        balance: 0,
+        audit: 0,
+    };
+    subject::deposit_debiting(&mut account);
+    assert_eq!((account.balance, account.audit), (-1, 0));
+    inputs.post_state = vec![
+        ("balance".to_owned(), account.balance),
+        ("audit".to_owned(), account.audit),
+    ];
+    let replay = StateClauseReplay::new(inputs).expect("exact post state builds");
+    let docs = documents(&replay.wire);
+    assert_eq!(integers(&docs.pre.1)["balance"]["integer"], "0");
+    assert_eq!(integers(&docs.post.1)["balance"]["integer"], "-1");
+    let result = replay.replay().expect("QSL replays the exact post state");
+    let arm = witness_arm(&result);
+    assert_eq!(
+        arm.settlement(),
+        WitnessSettlement::ReproducedWithEvaluatedWitness
+    );
+    assert_eq!(arm.category(), Category::Violation);
+    assert_eq!(
+        run_terminal_value(&outcome, 0, Some((&result).into())).expect("falsified run maps"),
+        TerminalValue::Refuted
+    );
 }

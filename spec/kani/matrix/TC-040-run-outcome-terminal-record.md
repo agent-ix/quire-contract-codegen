@@ -56,8 +56,7 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
     `terminal_value` mapping and CG's pass-through for any actual fault report; do not construct
     a report or assert that an invariant fault can be induced by public input.
 17. Map the `falsified` state-clause run of `deposit_debiting`, whose post-state value lies outside
-    its field's declared range, with the exact unclamped post snapshot (FR-029-AC-18, planned,
-    pending QSL-634, IR-460).
+    its field's declared range, with the exact unclamped post snapshot (FR-029-AC-18, IR-460).
 
 ## Expected Results
 
@@ -100,9 +99,7 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
     `Fault` or `Admission(Fault)` report yields Failed, without fabricating one. Changing one
     observation member cannot bind as the same report (FR-029-AC-27/28).
 17. The post snapshot holds the exact unclamped value and CG refuses nothing itself, and the run is
-    `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, planned, pending
-    QSL-634, IR-460). Not built: QSL-634 is not merged, and until it lands the run reads
-    `Inconclusive(ReplayRefused(InvalidRuntimeInput))`.
+    `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, IR-460).
 
 ## Status
 
@@ -112,5 +109,6 @@ exists until FR-028-AC-3 adds it, so FR-029-AC-3 stays planned. Step 9 (FR-029-A
 by `tc_040_a_fault_in_any_replay_wrapper_is_failed`, which builds each fault wrapper from QSL's
 constructible `InternalFault` (QSL bcca433) and asserts `Failed`. Step 15 (FR-029-AC-16, IR-460)
 is covered: the reproduced and the inconclusive results are real `StateClauseReplayResult`s of the
-QSL twin. The state-clause fault readings are step 9's (FR-029-AC-10). Steps 16 and 17 are planned
-(IR-635 parity in TC-048; FR-029-AC-18, pending QSL-634) and have no test.
+QSL twin. The state-clause fault readings are step 9's (FR-029-AC-10). Step 16 remains planned
+(IR-635 parity in TC-048). Step 17 is covered by the normal replay control and real-Kani
+`deposit_debiting` test.
