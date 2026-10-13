@@ -154,6 +154,20 @@ pub struct ScalarObligationArgument {
     pub maximum: i64,
 }
 
+/// Exact IR source and range used for one recursively inferred scalar operand.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferredScalarOperand {
+    /// Zero-based argument position.
+    pub position: usize,
+    /// Referenced expression whose interval was inferred.
+    pub source_node_id: CheckedNodeId,
+    /// Inclusive exact lower endpoint.
+    pub lower: String,
+    /// Inclusive exact upper endpoint.
+    pub upper: String,
+}
+
 /// What a V2 scalar obligation harness proves and how it is run. Parallel to [`KaniObligationIdentity`] but for an IR-confirmed exact-scalar claim,
 /// which has no QSL clause, declaration or subject signature -- a node id and its confirmed
 /// operation identity stand in their place.
@@ -174,6 +188,8 @@ pub struct ScalarObligationIdentity {
     pub harness_symbol: HarnessSymbol,
     /// Symbolic arguments, in call order.
     pub arguments: Vec<ScalarObligationArgument>,
+    /// Exact IR evidence for operands ranged by recursive inference.
+    pub inferred_operands: Vec<InferredScalarOperand>,
     /// Solver.
     pub solver: KaniSolver,
     /// Loop unwind bound.

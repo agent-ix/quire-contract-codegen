@@ -14,10 +14,12 @@ use quire_contract_codegen::{
     RoutedGenerationItem, UnsupportedObligation,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageReadLimits, CheckedPackageV2,
-    ContractDependencies, ContractFeatureRecordV1, ContractOccurrenceKeyV1,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
+    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractFeatureRecordV1,
+    ContractOccurrenceKeyV1, ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1,
 };
+
+use qsl_replay::{compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits};
 
 use crate::kani_obligations::{
     admitted_scalar_claims, package, routed_scalar_package, scalar_package,
@@ -49,6 +51,14 @@ struct AdmittedRoutingInput {
 fn admitted_routing_input(
     checked: &CheckedPackageV2,
     routed: &[RoutedGenerationItem],
+) -> AdmittedRoutingInput {
+    admitted_routing_input_with_limits(checked, routed, CheckedPackageReadLimits::bounded())
+}
+
+fn admitted_routing_input_with_limits(
+    checked: &CheckedPackageV2,
+    routed: &[RoutedGenerationItem],
+    read_limits: CheckedPackageReadLimits,
 ) -> AdmittedRoutingInput {
     let mut requested = routed
         .iter()
@@ -121,7 +131,7 @@ fn admitted_routing_input(
     let lowered = checked.lower(&roots, &routed_contract_lowering_profile());
     let package = match ContractPackageWireV1::read(
         lowered.package.canonical_bytes().expect("FR-330 bytes"),
-        CheckedPackageReadLimits::bounded(),
+        read_limits,
         &ContractDependencies::new(),
     ) {
         ContractPackageReadResult::Admitted(package) => *package,
@@ -1149,6 +1159,479 @@ fn tc_033_qsl_shaped_plain_operands_refuse_and_selected_narrowing_generates() {
         .rust
         .contents
         .contains("exact >= i128::from(10_i64) && exact <= i128::from(29_i64);"));
+}
+
+const NESTED_QSL_SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
+profile v = \"quire.value.complete/v1\";\n\
+function add_nested using v(x: Int[0, 9]): Int[0, 20] pure { (x + 1) + 1 }\n\
+function multiply_negative using v(x: Int[1, 9]): Int[-9, -1] pure { x * -1 }\n\
+function negate_nested using v(x: Int[0, 9]): Int[-10, -1] pure { -(x + 1) }\n\
+function plain_add_nested using v(x: Int[0, 9], p: Integer): Integer pure { (x + p) + 1 }\n\
+function plain_negate_nested using v(x: Int[0, 9], p: Integer): Integer pure { -(x + p) }\n\
+function huge_nested using v(x: Int[0, 9]): Int[0, 9] pure { (x + 100000000000000000000000) + -100000000000000000000000 }\n";
+
+fn nested_qsl_package() -> CheckedPackageV2 {
+    let compiled = compile_package(
+        SourceIdentity::new("test", "ir306-nested.native", "git", "fixture"),
+        "ir306-nested.native",
+        NESTED_QSL_SOURCE.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("nested operand fixture compiles through QSL's public facade");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    match CheckedPackageV2::read(
+        compiled.bytes(),
+        CheckedPackageReadLimits::bounded(),
+        &evidence,
+    ) {
+        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("QSL-emitted nested operand package is admitted by IR: {other:?}"),
+    }
+}
+
+fn deep_qsl_package() -> CheckedPackageV2 {
+    let expression = (0..66).fold("x".to_owned(), |value, _| format!("({value} + 0)"));
+    let source = format!(
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction deep_nested using v(x: Int[0, 9]): Int[0, 9] pure {{ {expression} }}\nfunction sibling using v(x: Int[0, 9]): Int[0, 10] pure {{ x + 1 }}\n"
+    );
+    let compiled = compile_package(
+        SourceIdentity::new("test", "ir306-deep.native", "git", "fixture"),
+        "ir306-deep.native",
+        source.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("deep operand fixture compiles through QSL's public facade");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    match CheckedPackageV2::read(
+        compiled.bytes(),
+        CheckedPackageReadLimits::bounded(),
+        &evidence,
+    ) {
+        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("QSL-emitted deep operand package is admitted by IR: {other:?}"),
+    }
+}
+
+fn wide_qsl_package() -> CheckedPackageV2 {
+    fn product_tree(start: u128, count: u128) -> String {
+        if count == 1 {
+            return format!("(x * {})", 10_u128.pow(38) - start);
+        }
+        let half = count / 2;
+        format!(
+            "({} * {})",
+            product_tree(start, half),
+            product_tree(start + half, count - half)
+        )
+    }
+    let wide_product = product_tree(0, 40);
+    let source = format!(
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction wide_nested using v(x: Int[1, 1]): Int[0, 0] pure {{ ({wide_product}) - ({wide_product}) }}\n"
+    );
+    let compiled = compile_package(
+        SourceIdentity::new("test", "ir306-wide.native", "git", "fixture"),
+        "ir306-wide.native",
+        source.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("wide endpoint fixture compiles through QSL's public facade");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    match CheckedPackageV2::read(
+        compiled.bytes(),
+        CheckedPackageReadLimits::bounded(),
+        &evidence,
+    ) {
+        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("QSL-emitted wide operand package is admitted by IR: {other:?}"),
+    }
+}
+
+fn work_qsl_package() -> CheckedPackageV2 {
+    fn balanced(start: u64, count: u64) -> String {
+        if count == 1 {
+            return format!("(x + {start})");
+        }
+        let half = count / 2;
+        format!(
+            "({} + {})",
+            balanced(start, half),
+            balanced(start + half, count - half)
+        )
+    }
+    let expression = format!("({}) + 0", balanced(0, 1400));
+    let source = format!(
+        "language \"ix:native\" edition \"1-draft\";\nprofile v = \"quire.value.complete/v1\";\nfunction work_nested using v(x: Int[0, 0]): Int[0, 979300] pure {{ {expression} }}\nfunction sibling using v(x: Int[0, 9]): Int[0, 10] pure {{ x + 1 }}\n"
+    );
+    let compiled = compile_package(
+        SourceIdentity::new("test", "ir306-work.native", "git", "fixture"),
+        "ir306-work.native",
+        source.as_bytes(),
+        [],
+        &DependencyInput::default(),
+        StageLimits::default(),
+        ReplayLimits::default(),
+    )
+    .expect("high-work operand fixture compiles through QSL's public facade");
+    let mut evidence = CheckedPackageEvidence::new();
+    evidence.support_feature("quire.value.complete/v1");
+    match CheckedPackageV2::read(
+        compiled.bytes(),
+        CheckedPackageReadLimits {
+            bytes: 16 << 20,
+            ..CheckedPackageReadLimits::bounded()
+        },
+        &evidence,
+    ) {
+        CheckedPackageV2ReadResult::Admitted(package) => *package,
+        other => panic!("QSL-emitted high-work operand package is admitted by IR: {other:?}"),
+    }
+}
+
+fn qsl_function_application(package: &CheckedPackageV2, function: &str) -> CheckedNodeId {
+    let declaration = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.declaration.as_ref().is_some_and(|declaration| {
+                declaration.qualified_name.len() == 1
+                    && declaration.qualified_name[0].as_ref() == function
+            })
+        })
+        .unwrap_or_else(|| panic!("QSL output declares {function}"));
+    let body = declaration.body["members"]
+        .as_array()
+        .and_then(|members| members.iter().find(|member| member["name"] == "body"))
+        .unwrap_or_else(|| panic!("QSL function {function} has a body binding"));
+    let body_id: CheckedNodeId = serde_json::from_value(body["value"]["target"].clone())
+        .unwrap_or_else(|error| panic!("QSL function {function} body is a reference: {error}"));
+    let body_node = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id == body_id)
+        .unwrap_or_else(|| panic!("QSL function {function} body is in the graph"));
+    if body_node.semantic_form.as_ref() == "conversion" {
+        serde_json::from_value(body_node.body["arguments"][0]["target"].clone())
+            .unwrap_or_else(|error| panic!("QSL narrowing references its application: {error}"))
+    } else {
+        body_id
+    }
+}
+
+fn route_qsl_function(
+    package: &CheckedPackageV2,
+    function: &str,
+) -> (
+    ObligationRecord,
+    Option<KaniScalarObligationHarness>,
+    RoutedGeneration,
+) {
+    let node_id = qsl_function_application(package, function);
+    let routed = [route(0, &node_id)];
+    let input = admitted_routing_input(package, &routed);
+    let generation = generate_routed(
+        &input.package,
+        &input.positions,
+        &routed,
+        &kani_context("crate::subject", 1),
+    )
+    .expect("QSL-emitted application routes through public generation");
+    let [item] = generation.items.as_slice() else {
+        panic!("one routed QSL application, got {:?}", generation.items);
+    };
+    let (record, harness) = kani_parts(&item.output);
+    (record.clone(), harness.cloned(), generation)
+}
+
+fn route_qsl_functions(
+    package: &CheckedPackageV2,
+    functions: &[&str],
+    read_limits: CheckedPackageReadLimits,
+) -> RoutedGeneration {
+    let routed = functions
+        .iter()
+        .enumerate()
+        .map(|(index, function)| route(index, &qsl_function_application(package, function)))
+        .collect::<Vec<_>>();
+    let input = admitted_routing_input_with_limits(package, &routed, read_limits);
+    generate_routed(
+        &input.package,
+        &input.positions,
+        &routed,
+        &kani_context("crate::subject", 1),
+    )
+    .expect("QSL-emitted applications route through public generation")
+}
+
+/// The QSL compiler emits nested applications as references to plain-Integer expression nodes;
+/// only leaves carry the authored bounded parameter or literal. Each routed outer operation must
+/// infer a finite range through that graph, while a plain-Integer parameter at any nested depth
+/// remains a typed refusal.
+///
+/// Trace: FR-014-AC-45, FR-014-AC-46, FR-015-AC-103, FR-015-AC-104, TC-024, TC-033
+#[test]
+fn tc_033_qsl_emitted_nested_integer_operands_are_bounded_or_require_bounds() {
+    let package = nested_qsl_package();
+    for (function, identity, expected, result) in [
+        (
+            "add_nested",
+            "quire.op.integer.add",
+            vec![(1, 10), (1, 1)],
+            (0, 20),
+        ),
+        (
+            "multiply_negative",
+            "quire.op.integer.mul",
+            vec![(1, 9), (-1, -1)],
+            (-9, -1),
+        ),
+        (
+            "negate_nested",
+            "quire.op.integer.negate",
+            vec![(1, 10)],
+            (-10, -1),
+        ),
+    ] {
+        let (record, harness, generation) = route_qsl_function(&package, function);
+        assert!(
+            matches!(record.disposition, ObligationDisposition::Supported { .. }),
+            "QSL function {function} must be Supported: {record:#?}"
+        );
+        let harness = harness.expect("Supported nested operation carries a harness");
+        assert_eq!(harness.identity.operation_identity, identity, "{function}");
+        assert_eq!(ranges(&harness), expected, "{function}");
+        let [inferred] = harness.identity.inferred_operands.as_slice() else {
+            panic!("{function} records one inferred operand source");
+        };
+        let inferred_position = usize::from(function == "multiply_negative");
+        assert_eq!(
+            inferred.position, inferred_position,
+            "{function} inferred argument position"
+        );
+        assert_eq!(
+            (inferred.lower.as_str(), inferred.upper.as_str()),
+            match function {
+                "multiply_negative" => ("-1", "-1"),
+                _ => ("1", "10"),
+            },
+            "{function} exact inferred endpoints"
+        );
+        let outer = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == harness.identity.node_id)
+            .expect("routed node is in the admitted graph");
+        assert_eq!(
+            serde_json::to_value(&inferred.source_node_id).expect("serialize source identity"),
+            outer.body["arguments"][inferred_position]["target"],
+            "{function} identity names the direct nested expression"
+        );
+        assert!(
+            harness.rust.contents.contains(&format!(
+                "exact >= i128::from({}) && exact <= i128::from({});",
+                lit(result.0),
+                lit(result.1)
+            )),
+            "{function} asserts the outer declared result interval"
+        );
+        let claim = generation
+            .claim_map
+            .as_ref()
+            .and_then(|claims| {
+                claims
+                    .items
+                    .iter()
+                    .find(|claim| claim.node_id == harness.identity.node_id)
+            })
+            .expect("the routed outer application has a scalar claim");
+        assert!(
+            matches!(
+                claim.operation.provenance,
+                quire_contract_codegen::OperationProvenance::IrConfirmed
+            ),
+            "{function} claim is IR-confirmed: {claim:#?}"
+        );
+    }
+
+    for function in ["plain_add_nested", "plain_negate_nested"] {
+        let (record, harness, _) = route_qsl_function(&package, function);
+        assert!(
+            matches!(
+                record.disposition,
+                ObligationDisposition::RequiresBound { .. }
+            ),
+            "nested plain parameter in {function} requires a bound: {record:#?}"
+        );
+        assert!(harness.is_none(), "{function} emits no harness");
+    }
+
+    let (huge, harness, _) = route_qsl_function(&package, "huge_nested");
+    assert_eq!(
+        huge.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::DomainNotRepresentableInI64 {
+                operation_identity: "quire.op.integer.add".to_owned(),
+                lower: "100000000000000000000000".to_owned(),
+                upper: "100000000000000000000009".to_owned(),
+            }
+        }
+    );
+    assert!(
+        harness.is_none(),
+        "out-of-i64 inferred range emits no harness"
+    );
+}
+
+/// Trace: FR-014-AC-46, FR-015-AC-104, TC-024, TC-033.
+#[test]
+fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() {
+    let package = deep_qsl_package();
+    let (record, harness, _) = route_qsl_function(&package, "deep_nested");
+    assert!(matches!(
+        record.disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::OracleRefused {
+                refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
+                    limit_kind: quire_contract_codegen::OperandRangeLimitKind::Depth,
+                    limit: 64,
+                    consumed: 65,
+                    ..
+                }
+            }
+        }
+    ));
+    assert!(harness.is_none(), "a limit refusal emits no harness");
+
+    let package = wide_qsl_package();
+    let (record, harness, _) = route_qsl_function(&package, "wide_nested");
+    assert!(
+        matches!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::OracleRefused {
+                    refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
+                        limit_kind: quire_contract_codegen::OperandRangeLimitKind::EndpointBits,
+                        limit: 4096,
+                        consumed: 5050,
+                        ..
+                    }
+                }
+            }
+        ),
+        "wide endpoint disposition: {:#?}",
+        record.disposition
+    );
+    assert!(
+        harness.is_none(),
+        "an endpoint-width refusal emits no harness"
+    );
+
+    let package = work_qsl_package();
+    // This oversized package exists only to cross the scalar inference work ceiling; keep its
+    // larger read limit local to this test path. Normal fixture readers retain the default 1 MiB.
+    let work_read_limits = CheckedPackageReadLimits {
+        bytes: 16 << 20,
+        ..CheckedPackageReadLimits::bounded()
+    };
+    let generation = route_qsl_functions(&package, &["work_nested", "sibling"], work_read_limits);
+    let (record, harness) = kani_parts(&generation.items[0].output);
+    assert!(
+        matches!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::OracleRefused {
+                    refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
+                        limit_kind: quire_contract_codegen::OperandRangeLimitKind::Work,
+                        limit: 4096,
+                        consumed: 4097,
+                        ..
+                    }
+                }
+            }
+        ),
+        "work-limit disposition: {:#?}",
+        record.disposition
+    );
+    assert!(harness.is_none(), "a work refusal emits no harness");
+    let (sibling_record, sibling_harness) = kani_parts(&generation.items[1].output);
+    assert!(matches!(
+        sibling_record.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let isolated = route_qsl_functions(&package, &["sibling"], work_read_limits);
+    let (isolated_record, isolated_harness) = kani_parts(&isolated.items[0].output);
+    assert_eq!(
+        sibling_record.disposition, isolated_record.disposition,
+        "work refusal leaves sibling disposition unchanged"
+    );
+    assert_eq!(sibling_record.subject, isolated_record.subject);
+    let sibling_node = qsl_function_application(&package, "sibling");
+    let combined_claim = generation
+        .claim_map
+        .as_ref()
+        .and_then(|claims| {
+            claims
+                .items
+                .iter()
+                .find(|claim| claim.node_id == sibling_node)
+        })
+        .expect("combined generation retains sibling claim");
+    let isolated_claim = isolated
+        .claim_map
+        .as_ref()
+        .and_then(|claims| {
+            claims
+                .items
+                .iter()
+                .find(|claim| claim.node_id == sibling_node)
+        })
+        .expect("isolated generation retains sibling claim");
+    assert_eq!(combined_claim.node_id, isolated_claim.node_id);
+    assert_eq!(combined_claim.operation, isolated_claim.operation);
+    match (&combined_claim.result, &isolated_claim.result) {
+        (ClaimDisposition::Generated(combined), ClaimDisposition::Generated(isolated)) => {
+            assert_eq!(combined.symbol, isolated.symbol);
+            assert_eq!(combined.semantic_form, isolated.semantic_form);
+            assert_eq!(combined.semantic_type, isolated.semantic_type);
+            assert_eq!(combined.source_map, isolated.source_map);
+            assert_eq!(combined.claims, isolated.claims);
+            assert_eq!(combined.bounds, isolated.bounds);
+            assert_eq!(combined.checked_bounds, isolated.checked_bounds);
+            assert_eq!(combined.dependencies, isolated.dependencies);
+            assert_eq!(combined.oracle_source, isolated.oracle_source);
+            // These identities describe the selected request package and vary with selection.
+        }
+        (combined, isolated) => assert_eq!(combined, isolated),
+    }
+    assert_eq!(
+        sibling_harness, isolated_harness,
+        "work refusal leaves sibling harness unchanged"
+    );
+
+    let package = nested_qsl_package();
+    let (supported, harness, _) = route_qsl_function(&package, "add_nested");
+    assert!(matches!(
+        supported.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    assert!(
+        harness.is_some(),
+        "a refused sibling cannot suppress a supported harness"
+    );
 }
 
 /// A literal operand is constrained to its own value, so a QSL-shaped node the literal pushes

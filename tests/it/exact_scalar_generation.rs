@@ -1782,6 +1782,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
         ExactScalarRefusal::UnreadableBound { .. } => "UnreadableBound",
         ExactScalarRefusal::BoundMismatch { .. } => "BoundMismatch",
         ExactScalarRefusal::OperandUnsupported { .. } => "OperandUnsupported",
+        ExactScalarRefusal::OperandRangeLimitExceeded { .. } => "OperandRangeLimitExceeded",
         ExactScalarRefusal::UnitlessLiteralOperand { .. } => "UnitlessLiteralOperand",
         ExactScalarRefusal::InvalidBody { .. } => "InvalidBody",
         ExactScalarRefusal::BodyIncomplete { .. } => "BodyIncomplete",

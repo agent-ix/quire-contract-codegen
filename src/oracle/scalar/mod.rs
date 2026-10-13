@@ -55,6 +55,7 @@ use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
 use crate::oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
+use num_bigint::BigInt;
 use quire_contract_model::{
     BoundedDomainForm, CheckedNodeId, CheckedNodeTag, CheckedOccurrenceRole, CheckedPackageV2,
     CheckedSemanticId, CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteContractNodeV2,
@@ -496,6 +497,17 @@ pub enum ExactScalarRefusal {
         /// The term kind.
         term: String,
     },
+    /// Recursive operand inference exceeded one of its explicit resource ceilings.
+    OperandRangeLimitExceeded {
+        /// The expression whose visit exceeded the ceiling.
+        node_id: CheckedNodeId,
+        /// The finite limit that was reached.
+        limit_kind: OperandRangeLimitKind,
+        /// The configured limit.
+        limit: u64,
+        /// The first denied count or endpoint width.
+        consumed: u64,
+    },
     /// A literal stands where a quantity is required; a literal carries no unit.
     UnitlessLiteralOperand {
         /// Zero-based argument position.
@@ -583,6 +595,18 @@ pub enum ExactScalarRefusal {
         /// Why derivation refused.
         reason: ClaimDerivationRefusal,
     },
+}
+
+/// A finite ceiling applied while inferring a recursive integer operand interval.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperandRangeLimitKind {
+    /// Maximum nested application/value depth.
+    Depth,
+    /// Maximum distinct semantic nodes visited.
+    Work,
+    /// Maximum magnitude width of either exact endpoint.
+    EndpointBits,
 }
 
 /// Traceability for one generated oracle.
@@ -1724,6 +1748,12 @@ pub(crate) enum OperandRange {
     Literal(String),
     /// Over the result bound: an operand that is neither (the shape IR-299 tracks).
     Result,
+    /// Exact range recursively inferred from this referenced application tree.
+    Inferred {
+        source: CheckedNodeId,
+        lower: String,
+        upper: String,
+    },
 }
 
 /// How a Kani harness ranges each of the node's arguments, by position: over the
@@ -1753,7 +1783,8 @@ pub(crate) fn operand_ranges(
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .map(|argument| {
+        .enumerate()
+        .map(|(position, argument)| {
             if let Some(bound) = operand_own_bound(&graph, argument) {
                 OperandRange::Bound(bound.node_id.clone())
             } else if let Some(literal) = operand_literal(&graph, argument) {
@@ -1764,11 +1795,239 @@ pub(crate) fn operand_ranges(
                         .unwrap_or_default()
                         .to_owned(),
                 )
+            } else if let Some(source) = reference_target(argument) {
+                infer_integer_range(&graph, &source, position).ok().map_or(
+                    OperandRange::Result,
+                    |(lower, upper)| OperandRange::Inferred {
+                        source,
+                        lower,
+                        upper,
+                    },
+                )
             } else {
                 OperandRange::Result
             }
         })
         .collect()
+}
+
+/// Infer an exact integer interval from canonical literals, bounded integer parameters, and the
+/// four admitted integer operations. The recursion is deliberately limited to plain-Integer
+/// application results: an operand's own bounded type is handled by `operand_own_bound`.
+const OPERAND_RANGE_MAX_DEPTH: u64 = 64;
+const OPERAND_RANGE_MAX_WORK: u64 = 4096;
+const OPERAND_RANGE_MAX_ENDPOINT_BITS: u64 = 4096;
+
+fn infer_integer_range(
+    graph: &Graph<'_>,
+    node_id: &CheckedNodeId,
+    position: usize,
+) -> Result<(String, String), ExactScalarRefusal> {
+    fn visit(
+        graph: &Graph<'_>,
+        node_id: &CheckedNodeId,
+        position: usize,
+        active: &mut BTreeSet<CheckedNodeId>,
+        memo: &mut BTreeMap<CheckedNodeId, (BigInt, BigInt)>,
+        depth: u64,
+        work: &mut u64,
+    ) -> Result<(BigInt, BigInt), ExactScalarRefusal> {
+        if let Some(range) = memo.get(node_id) {
+            return Ok(range.clone());
+        }
+        if depth > OPERAND_RANGE_MAX_DEPTH {
+            return Err(ExactScalarRefusal::OperandRangeLimitExceeded {
+                node_id: node_id.clone(),
+                limit_kind: OperandRangeLimitKind::Depth,
+                limit: OPERAND_RANGE_MAX_DEPTH,
+                consumed: depth,
+            });
+        }
+        *work += 1;
+        if *work > OPERAND_RANGE_MAX_WORK {
+            return Err(ExactScalarRefusal::OperandRangeLimitExceeded {
+                node_id: node_id.clone(),
+                limit_kind: OperandRangeLimitKind::Work,
+                limit: OPERAND_RANGE_MAX_WORK,
+                consumed: *work,
+            });
+        }
+        if !active.insert(node_id.clone()) {
+            return Err(ExactScalarRefusal::InvalidBody {
+                body_node_id: node_id.clone(),
+            });
+        }
+        let node = graph
+            .get(node_id)
+            .ok_or_else(|| ExactScalarRefusal::InvalidBody {
+                body_node_id: node_id.clone(),
+            })?;
+        let result = if is_literal_value(node) {
+            let literal = literal_integer(&node.body).ok_or_else(|| {
+                ExactScalarRefusal::OperandTypeMismatch {
+                    position,
+                    expected: ScalarForm::Integer,
+                    found: literal_form(&node.body),
+                }
+            })?;
+            let value = literal.to_string().parse::<BigInt>().map_err(|_| {
+                ExactScalarRefusal::InvalidBody {
+                    body_node_id: node_id.clone(),
+                }
+            })?;
+            (value.clone(), value)
+        } else if let Some(typing) = graph.get(&node.semantic_type) {
+            if is_bounded_domain(typing) {
+                let range =
+                    read_integer_range(aggregate_members(&typing.body).ok_or_else(|| {
+                        ExactScalarRefusal::InvalidBody {
+                            body_node_id: typing.node_id.clone(),
+                        }
+                    })?)
+                    .ok_or_else(|| ExactScalarRefusal::InvalidBody {
+                        body_node_id: typing.node_id.clone(),
+                    })?;
+                (
+                    range.lower().to_string().parse().map_err(|_| {
+                        ExactScalarRefusal::InvalidBody {
+                            body_node_id: typing.node_id.clone(),
+                        }
+                    })?,
+                    range.upper().to_string().parse().map_err(|_| {
+                        ExactScalarRefusal::InvalidBody {
+                            body_node_id: typing.node_id.clone(),
+                        }
+                    })?,
+                )
+            } else if &*node.node_tag == CheckedNodeTag::Value.as_wire()
+                && scalar_type_form(graph, &node.semantic_type).as_deref() == Some("integer")
+            {
+                return Err(ExactScalarRefusal::RequiresBound {
+                    unbounded_type: node.semantic_type.clone(),
+                });
+            } else if &*node.node_tag == CheckedNodeTag::Expression.as_wire()
+                && scalar_type_form(graph, &node.semantic_type).as_deref() == Some("integer")
+            {
+                let operation = node
+                    .body
+                    .get("operation")
+                    .and_then(|v| v.get("identity"))
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| ExactScalarRefusal::InvalidBody {
+                        body_node_id: node_id.clone(),
+                    })?;
+                let integer_operator = CatalogOperator::from_identity(operation)
+                    .and_then(|catalogued| catalogued.entry().scalar_operator)
+                    .ok_or_else(|| ExactScalarRefusal::OperandUnsupported {
+                        position,
+                        term: operation.to_owned(),
+                    })?;
+                let args = node
+                    .body
+                    .get("arguments")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| ExactScalarRefusal::InvalidBody {
+                        body_node_id: node_id.clone(),
+                    })?;
+                let (expected_operator, expected_arity) = match integer_operator {
+                    IntegerOperator::Add
+                    | IntegerOperator::Subtract
+                    | IntegerOperator::Multiply => ("binary", 2),
+                    IntegerOperator::Negate => ("unary", 1),
+                };
+                if node.body.get("operator").and_then(Value::as_str) != Some(expected_operator)
+                    || args.len() != expected_arity
+                {
+                    return Err(ExactScalarRefusal::InvalidBody {
+                        body_node_id: node_id.clone(),
+                    });
+                }
+                let mut ranges = Vec::with_capacity(args.len());
+                for arg in args {
+                    let target = reference_target(arg).ok_or_else(|| {
+                        ExactScalarRefusal::OperandUnsupported {
+                            position,
+                            term: arg
+                                .get("term")
+                                .and_then(Value::as_str)
+                                .unwrap_or("missing")
+                                .to_owned(),
+                        }
+                    })?;
+                    ranges.push(visit(
+                        graph,
+                        &target,
+                        position,
+                        active,
+                        memo,
+                        depth + 1,
+                        work,
+                    )?);
+                }
+                match (integer_operator, ranges.as_slice()) {
+                    (IntegerOperator::Add, [(al, au), (bl, bu)]) => (al + bl, au + bu),
+                    (IntegerOperator::Subtract, [(al, au), (bl, bu)]) => (al - bu, au - bl),
+                    (IntegerOperator::Multiply, [(al, au), (bl, bu)]) => {
+                        let products = [al * bl, al * bu, au * bl, au * bu];
+                        let mut products = products.into_iter();
+                        let first =
+                            products
+                                .next()
+                                .ok_or_else(|| ExactScalarRefusal::InvalidBody {
+                                    body_node_id: node_id.clone(),
+                                })?;
+                        products.fold((first.clone(), first), |(lower, upper), product| {
+                            (lower.min(product.clone()), upper.max(product))
+                        })
+                    }
+                    (IntegerOperator::Negate, [(lower, upper)]) => (-upper, -lower),
+                    _ => {
+                        return Err(ExactScalarRefusal::InvalidBody {
+                            body_node_id: node_id.clone(),
+                        })
+                    }
+                }
+            } else {
+                return Err(ExactScalarRefusal::OperandTypeMismatch {
+                    position,
+                    expected: ScalarForm::Integer,
+                    found: scalar_type_form(graph, &node.semantic_type),
+                });
+            }
+        } else if &*node.node_tag == CheckedNodeTag::Expression.as_wire() {
+            return Err(ExactScalarRefusal::InvalidBody {
+                body_node_id: node_id.clone(),
+            });
+        } else {
+            return Err(ExactScalarRefusal::OperandUnsupported {
+                position,
+                term: node.node_tag.to_string(),
+            });
+        };
+        for endpoint in [&result.0, &result.1] {
+            if endpoint.bits() > OPERAND_RANGE_MAX_ENDPOINT_BITS {
+                return Err(ExactScalarRefusal::OperandRangeLimitExceeded {
+                    node_id: node_id.clone(),
+                    limit_kind: OperandRangeLimitKind::EndpointBits,
+                    limit: OPERAND_RANGE_MAX_ENDPOINT_BITS,
+                    consumed: endpoint.bits(),
+                });
+            }
+        }
+        active.remove(node_id);
+        memo.insert(node_id.clone(), result.clone());
+        Ok(result)
+    }
+    let (lower, upper) = visit(
+        graph,
+        node_id,
+        position,
+        &mut BTreeSet::new(),
+        &mut BTreeMap::new(),
+        0,
+        &mut 0,
+    )?;
+    Ok((lower.to_string(), upper.to_string()))
 }
 
 // ---------------------------------------------------------------------------
@@ -2134,10 +2393,34 @@ impl Bounds<'_, '_> {
                 || self.narrowing().narrowed()
         };
         if result_typed || owned.iter().any(Option::is_some) {
+            for (position, (argument, own)) in arguments.iter().zip(&owned).enumerate() {
+                let Some(target) = reference_target(argument) else {
+                    continue;
+                };
+                let eligible = own.is_none()
+                    && self.graph.get(&target).is_some_and(|node| {
+                        &*node.node_tag == CheckedNodeTag::Expression.as_wire()
+                            && scalar_type_form(self.graph, &node.semantic_type).as_deref()
+                                == Some("integer")
+                    });
+                if eligible {
+                    infer_integer_range(self.graph, &target, position)?;
+                }
+            }
             let plain = arguments
                 .iter()
                 .zip(&owned)
                 .find_map(|(argument, own)| match own {
+                    None if reference_target(argument).is_some_and(|target| {
+                        self.graph.get(&target).is_some_and(|node| {
+                            &*node.node_tag == CheckedNodeTag::Expression.as_wire()
+                                && scalar_type_form(self.graph, &node.semantic_type).as_deref()
+                                    == Some("integer")
+                        })
+                    }) =>
+                    {
+                        None
+                    }
                     None => plain_reference_type(self.graph, argument),
                     Some(_) => None,
                 });
@@ -4009,6 +4292,154 @@ mod tests {
             "digest": digit.to_string().repeat(64),
         }))
         .expect("node id")
+    }
+
+    fn inference_node(
+        id: CheckedNodeId,
+        tag: &str,
+        form: &str,
+        semantic_type: CheckedNodeId,
+        body: Value,
+    ) -> CheckedSemanticNodeV2 {
+        CheckedSemanticNodeV2 {
+            node_id: id,
+            owner: None,
+            schema_version: "quire.checked-semantic-graph/v2".into(),
+            node_tag: tag.into(),
+            semantic_form: form.into(),
+            semantic_type,
+            dependencies: Vec::new(),
+            occurrences: Vec::new(),
+            recursion_group: None,
+            nominal_identity_preimage: None,
+            declaration: None,
+            body,
+        }
+    }
+
+    fn inference_application_node(
+        id: CheckedNodeId,
+        integer_type: &CheckedNodeId,
+        operation: &str,
+        arguments: Vec<Value>,
+    ) -> CheckedSemanticNodeV2 {
+        inference_node(
+            id,
+            "expression",
+            "binary",
+            integer_type.clone(),
+            serde_json::json!({
+                "term": "application",
+                "operator": if operation.ends_with("negate") { "unary" } else { "binary" },
+                "operation": {"identity": operation},
+                "arguments": arguments,
+            }),
+        )
+    }
+
+    fn reference(id: &CheckedNodeId) -> Value {
+        serde_json::json!({"term": "reference", "target": id})
+    }
+
+    fn inference_graph(nodes: &[CheckedSemanticNodeV2]) -> Graph<'_> {
+        nodes.iter().map(|node| (&node.node_id, node)).collect()
+    }
+
+    /// Admission normally prevents malformed cycles and references; the inference boundary still
+    /// reports each cause distinctly if a damaged graph reaches it.
+    #[test]
+    fn tc_024_nested_inference_reports_missing_cycle_unsupported_and_bad_literals() {
+        let integer = node_id('0');
+        let scalar = inference_node(
+            integer.clone(),
+            "scalar_type",
+            "integer",
+            integer.clone(),
+            Value::Null,
+        );
+        let missing = node_id('b');
+        let root_id = node_id('a');
+        let root = inference_application_node(
+            root_id.clone(),
+            &integer,
+            "quire.op.integer.negate",
+            vec![reference(&missing)],
+        );
+        let nodes = [scalar.clone(), root];
+        let graph = inference_graph(&nodes);
+        assert_eq!(
+            infer_integer_range(&graph, &root_id, 2),
+            Err(ExactScalarRefusal::InvalidBody {
+                body_node_id: missing.clone()
+            })
+        );
+
+        let cycle = inference_application_node(
+            root_id.clone(),
+            &integer,
+            "quire.op.integer.negate",
+            vec![reference(&root_id)],
+        );
+        let nodes = [scalar.clone(), cycle];
+        let graph = inference_graph(&nodes);
+        assert_eq!(
+            infer_integer_range(&graph, &root_id, 0),
+            Err(ExactScalarRefusal::InvalidBody {
+                body_node_id: root_id.clone()
+            })
+        );
+
+        let unsupported = inference_application_node(
+            root_id.clone(),
+            &integer,
+            "quire.op.integer.divide",
+            Vec::new(),
+        );
+        let nodes = [scalar.clone(), unsupported];
+        let graph = inference_graph(&nodes);
+        assert_eq!(
+            infer_integer_range(&graph, &root_id, 1),
+            Err(ExactScalarRefusal::OperandUnsupported {
+                position: 1,
+                term: "quire.op.integer.divide".to_owned()
+            })
+        );
+
+        for (literal_value, found) in [("text", Some("text")), ("01", Some("integer"))] {
+            let literal_id = node_id('c');
+            let value_kind = if literal_value == "text" {
+                "text"
+            } else {
+                "integer"
+            };
+            let literal = inference_node(
+                literal_id.clone(),
+                "value",
+                "literal",
+                integer.clone(),
+                serde_json::json!({
+                    "term": "literal",
+                    "value_kind": value_kind,
+                    "value": literal_value,
+                }),
+            );
+            let unary = inference_application_node(
+                root_id.clone(),
+                &integer,
+                "quire.op.integer.negate",
+                vec![reference(&literal_id)],
+            );
+            let nodes = [scalar.clone(), literal, unary];
+            let graph = inference_graph(&nodes);
+            assert_eq!(
+                infer_integer_range(&graph, &root_id, 3),
+                Err(ExactScalarRefusal::OperandTypeMismatch {
+                    position: 3,
+                    expected: ScalarForm::Integer,
+                    found: found.map(str::to_owned),
+                })
+            );
+        }
     }
 
     #[test]

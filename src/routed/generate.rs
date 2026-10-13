@@ -778,6 +778,7 @@ mod tests {
                 module_symbol: ModuleSymbol::try_from(module).expect("a module symbol"),
                 harness_symbol: HarnessSymbol::try_from(symbol).expect("a harness symbol"),
                 arguments: Vec::new(),
+                inferred_operands: Vec::new(),
                 solver: KaniSolver::Cadical,
                 unwind: 1,
                 options: Vec::new(),
