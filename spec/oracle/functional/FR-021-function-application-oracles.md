@@ -252,8 +252,8 @@ QSL application API.
 | FR-021-AC-7 | A tree-shaped 100,000-node V2 `expression`/`call` graph whose nested children are separate admitted nodes reached by `reference` produces a flat SSA instruction table on a 512 KiB stack when caller work and source-byte limits fit it; no CG analysis or emission depth cap participates. The schedule crate compiles. Running the concrete oracle against the QSL-owned iterative evaluator is a separate planned leg after QSL-358/IR-349; no Contract Runtime `MAX_CALL_DEPTH` behavior is required. | Test (TC-031) |
 | FR-021-AC-8 | The schedule marks only linked-package admission as applicable and never marks a kernel-mode package applicable. Concrete mode admission is checked through the QSL-owned API when available. PLANNED (QSL-358/IR-349 for concrete admission). | Inspection (TC-031) |
 | FR-021-AC-9 | The schedule preserves a `function.call` charge point and an incomplete stop before body work; the eventual oracle returns the QSL-owned incomplete outcome at a denied charge without applying it. PLANNED (QSL-358/IR-349 for execution). | Test (TC-031) |
-| FR-021-AC-10 | A declared parameter or result type reaching a `reference` composite form is blocked on quire-spec-language#120 when that type is present in the admitted graph. On the FR-330 package path, a reference parameter type absent from the admitted package graph is refused earlier as `UnknownTypeNode` naming the exact checked type key; no oracle source or schedule root is emitted. The eventual oracle admits no meter charge for it. PLANNED (QSL-358/IR-349 for runtime charge assertion). | Test (TC-031) |
-| FR-021-AC-11 | Model and relation nodes have quire-spec-language#120 blockers, and state, temporal nodes other than directly requested `formula` and `fairness` roots, and protocol nodes have quire-spec-language#121 blockers when those nodes are present in the admitted graph. On the FR-330 package path with the fixed built-in profile, model and state parameter types omitted from the package graph are refused earlier as distinct `UnknownTypeNode` claims naming each original checked type key; neither generates source or a schedule root. A requested temporal clause keeps its blocker only when its root lowers and its type is present. | Test (TC-031) |
+| FR-021-AC-10 | A declared parameter or result type reaching a `reference` composite form is refused as blocked on quire-spec-language#120, with no schedule root or concrete code for that function. The eventual oracle admits no meter charge for it. PLANNED (QSL-358/IR-349 for runtime charge assertion). | Test (TC-031) |
+| FR-021-AC-11 | Model and relation lowering records map to the quire-spec-language#120 blocker; state, temporal nodes other than directly requested `formula` and `fairness` roots, and protocol lowering records map to quire-spec-language#121; the blockers remain distinct. A requested temporal clause keeps that blocker even if its first unsupported reachable node is a formula or fairness child. TC-031's defensive Model/State classifier case pairs those request roots with call items bound to a different checked source function, so it does not establish applied-call behavior. The source-bound applied-call leg is PLANNED pending a reader-admissible upstream representation. | Test (TC-031, defensive classifier case only); PLANNED (source-bound Model/State applied calls pending reader representation) |
 | FR-021-AC-12 | A declared function whose own body fails to lower — an unlowerable node, a form none of this generator's classifiers admits, or a nested `call` naming a function absent from the request — refuses every item bound to that function with a typed reason, without changing an unrelated package's items. | Test (TC-031) |
 | FR-021-AC-13 | Schedule source and claim-map bytes are identical across runs and request permutations; entries order by call-node id, declaring function-node id, then source argument-node ids, with the name tie-break AC-24 specifies. | Test (TC-031) |
 | FR-021-AC-14 | The schedule crate declares `publish = false`, compiles without a Contract Runtime `exact` dependency, contains no charge amount or literal outcome/value standing in for owner execution, and stays within caller-selected source bytes and publication artifact limits. Concrete QSL-owner-path emission is PLANNED (QSL-358/IR-349). | Test (TC-031) |
@@ -332,6 +332,24 @@ written.
 - **Downstream**: [TC-031](../matrix/TC-031-function-application-oracles.md).
 
 ## Status
+
+AC-7 remains unverified. The current source-bound V2 fixture's wire sizes were
+measured before reader admission; no admission, lowering or generation was
+attempted for these depth samples. The default reader byte limit is 1,048,576.
+
+| Fixture | Serialized bytes | Within reader byte limit |
+|---------|-----------------:|:------------------------:|
+| Minimal checked-package base plus integer type | 11,505 | Yes |
+| Base plus `FN_ADD` | 21,313 | Yes |
+| One chain function | 39,423 | Yes |
+| 128 chain functions (`MAX_CALL_DEPTH`) | 1,355,522 | No |
+| 129 chain functions (`MAX_CALL_DEPTH + 1`) | 1,365,888 | No |
+
+The required 100,000-node graph remains the AC-7 acceptance target. The
+measured 128- and 129-function chain fixtures exceed the V2 reader's byte
+budget. This result is limited to those serialized fixtures; whether a smaller
+valid encoding fits remains unresolved under IR-768. These measurements do not
+establish AC-7 admission or generation.
 
 The target-neutral graph analysis, flat schedule, compact location map and
 caller limits are planned in IR-511. The current implementation and existing

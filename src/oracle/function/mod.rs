@@ -133,7 +133,8 @@
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
 use crate::core::contract_package::{
-    ContractRequestPosition, PackageItem, PackageItems, PackageRequestError,
+    routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
+    PackageItem, PackageItems, PackageRequestError,
 };
 use crate::core::naming::{bounded_readable_component, unique_names};
 use crate::core::profile::oracle_crate_manifest;
@@ -142,9 +143,10 @@ use crate::oracle::equality::EqualityOperatorKind;
 use crate::oracle::operator_catalog::IntegerOperator;
 use crate::oracle::{classify_lowering_failure, direct_unsupported_form, LoweringFailure};
 use quire_contract_model::{
-    CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticId, CheckedSemanticNodeV2,
-    CheckedSourceMapEntry, CompleteLoweringProfileV2, CompleteLoweringRecordV2,
-    ContractFeatureRecordV1, ContractPackageV1, ContractReachedClosureV1,
+    CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits, CheckedPackageV2, CheckedSemanticId,
+    CheckedSemanticNodeV2, CheckedSourceMapEntry, CompleteLoweringProfileV2,
+    CompleteLoweringRecordV2, ContractDependencies, ContractFeatureRecordV1,
+    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
 use serde::Serialize;
@@ -1502,6 +1504,248 @@ pub struct ExactFunctionOracles {
 
 type Graph<'a> = BTreeMap<&'a CheckedNodeId, &'a CheckedSemanticNodeV2>;
 
+/// Check that the admitted application names this exact function and ordered argument list.
+fn source_call_matches(
+    body: &serde_json::Value,
+    graph: &Graph<'_>,
+    function_node_id: &CheckedNodeId,
+    argument_node_ids: &[CheckedNodeId],
+) -> bool {
+    if !graph.values().any(|node| {
+        &node.node_id == function_node_id
+            && &*node.node_tag == "function"
+            && &*node.semantic_form == "pure_function"
+    }) {
+        return false;
+    }
+    if body.get("term").and_then(serde_json::Value::as_str) != Some("application")
+        || body.get("operator").and_then(serde_json::Value::as_str) != Some("call")
+        || body
+            .pointer("/operation/identity")
+            .and_then(serde_json::Value::as_str)
+            != Some("quire.op.function.call")
+    {
+        return false;
+    }
+    let Some(arguments) = body.get("arguments").and_then(serde_json::Value::as_array) else {
+        return false;
+    };
+    if arguments.len() != argument_node_ids.len() + 1 {
+        return false;
+    }
+    let mut expected = std::iter::once(function_node_id).chain(argument_node_ids.iter());
+    arguments.iter().all(|term| {
+        let Some(target) = term
+            .get("term")
+            .filter(|term| term.as_str() == Some("reference"))
+            .and_then(|_| term.get("target"))
+        else {
+            return false;
+        };
+        let Some(digest) = target.get("digest").and_then(serde_json::Value::as_str) else {
+            return false;
+        };
+        let Some(domain) = target.get("domain").and_then(serde_json::Value::as_str) else {
+            return false;
+        };
+        let Some(actual_id) = graph
+            .values()
+            .find(|node| {
+                node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+            })
+            .map(|node| &node.node_id)
+        else {
+            return false;
+        };
+        expected
+            .next()
+            .is_some_and(|expected_id| actual_id == expected_id)
+    }) && expected.next().is_none()
+}
+
+fn source_function_node_id<'a>(
+    graph: &Graph<'a>,
+    name: &str,
+    body_node_id: &CheckedNodeId,
+) -> Option<&'a CheckedNodeId> {
+    let mut matching = graph.values().filter(|node| {
+        if &*node.node_tag != "function" || &*node.semantic_form != "pure_function" {
+            return false;
+        }
+        let has_name = node.declaration.as_ref().is_some_and(|declaration| {
+            declaration.qualified_name.len() == 1 && declaration.qualified_name[0].as_ref() == name
+        });
+        let body = binding_value(&node.body, "body")
+            .and_then(|term| reference_node_id(term, graph.values().copied()));
+        has_name && body == Some(body_node_id)
+    });
+    let node = matching.next()?;
+    matching.next().is_none().then_some(&node.node_id)
+}
+
+pub(crate) fn binding_value<'a>(
+    body: &'a serde_json::Value,
+    name: &str,
+) -> Option<&'a serde_json::Value> {
+    body.get("members")?
+        .as_array()?
+        .iter()
+        .find(|member| {
+            member.get("term").and_then(serde_json::Value::as_str) == Some("binding")
+                && member.get("name").and_then(serde_json::Value::as_str) == Some(name)
+        })?
+        .get("value")
+}
+
+pub(crate) fn reference_node_id<'a>(
+    term: &serde_json::Value,
+    mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
+) -> Option<&'a CheckedNodeId> {
+    if term.get("term").and_then(serde_json::Value::as_str) != Some("reference") {
+        return None;
+    }
+    let target = term.get("target")?;
+    let digest = target.get("digest")?.as_str()?;
+    let domain = target.get("domain")?.as_str()?;
+    nodes
+        .find(|node| {
+            node.node_id.digest.as_ref() == digest && node.node_id.domain.as_ref() == domain
+        })
+        .map(|node| &node.node_id)
+}
+
+/// Classify one source-backed integer function application with the same V1 reader and generator
+/// used after routed settlement. No source artifact is returned to the negotiation path.
+pub(crate) fn checked_integer_function_application_is_supported(
+    checked: &CheckedPackageV2,
+    function_node_id: &CheckedNodeId,
+    call_node_id: &CheckedNodeId,
+    argument_node_ids: &[CheckedNodeId],
+) -> bool {
+    let graph: Graph<'_> = checked
+        .graph()
+        .nodes
+        .iter()
+        .map(|node| (&node.node_id, node))
+        .collect();
+    let Some(function_node) = graph.get(function_node_id).copied() else {
+        return false;
+    };
+    if &*function_node.node_tag != "function" || &*function_node.semantic_form != "pure_function" {
+        return false;
+    }
+    let Some(name_segments) = function_node
+        .declaration
+        .as_ref()
+        .map(|declaration| declaration.qualified_name.as_slice())
+    else {
+        return false;
+    };
+    if name_segments.len() != 1 {
+        return false;
+    }
+    let Some(parameter_terms) = binding_value(&function_node.body, "parameters")
+        .and_then(|value| value.get("members"))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    let mut parameters = Vec::with_capacity(parameter_terms.len());
+    for term in parameter_terms {
+        let Some(parameter_id) = reference_node_id(term, graph.values().copied()) else {
+            return false;
+        };
+        let Some(parameter_node) = graph.get(parameter_id).copied() else {
+            return false;
+        };
+        let Some(name) = binding_value(&parameter_node.body, "name")
+            .and_then(|value| value.get("value"))
+            .and_then(serde_json::Value::as_str)
+        else {
+            return false;
+        };
+        parameters.push(FunctionParameter {
+            name: name.to_owned(),
+            type_node_id: parameter_node.semantic_type.clone(),
+        });
+    }
+    let Some(body_id) = binding_value(&function_node.body, "body")
+        .and_then(|term| reference_node_id(term, graph.values().copied()))
+    else {
+        return false;
+    };
+    let Some(body_node) = graph.get(body_id).copied() else {
+        return false;
+    };
+    let Some(operation_identity) = body_node
+        .body
+        .pointer("/operation/identity")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return false;
+    };
+    let operator = match operation_identity {
+        "quire.op.integer.add" => IntegerOperator::Add,
+        "quire.op.integer.sub" => IntegerOperator::Subtract,
+        "quire.op.integer.mul" => IntegerOperator::Multiply,
+        _ => return false,
+    };
+    let Some(call_node) = graph.get(call_node_id).copied() else {
+        return false;
+    };
+    if !source_call_matches(&call_node.body, &graph, function_node_id, argument_node_ids) {
+        return false;
+    }
+    let declaration = ExactFunctionDeclaration {
+        node_id: body_id.clone(),
+        name: name_segments[0].to_string(),
+        parameters,
+        result_type: function_node.semantic_type.clone(),
+        body: ExactFunctionBody::Scalar { operator },
+        capability_requirements: Vec::new(),
+    };
+    let item = ExactFunctionItem {
+        call_node_id: call_node_id.clone(),
+        function: name_segments[0].to_string(),
+        argument_node_ids: argument_node_ids.to_vec(),
+    };
+    let requested_ids = [body_id.clone(), call_node_id.clone()];
+    let lowered = checked.lower(&requested_ids, &routed_contract_lowering_profile());
+    let Some(bytes) = lowered.package.canonical_bytes() else {
+        return false;
+    };
+    let contract = match ContractPackageWireV1::read(
+        bytes,
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        _ => return false,
+    };
+    let positions = requested_ids.map(|node_id| ContractRequestPosition::DriverItem {
+        node_id,
+        result_selection: ContractDriverResultSelection::NotApplicable,
+    });
+    let declaration_position = [0usize];
+    let item_position = [1usize];
+    let declarations = [declaration];
+    let items = [item];
+    let Ok(oracles) = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &declaration_position,
+        &declarations,
+        &item_position,
+        &items,
+    ) else {
+        return false;
+    };
+    matches!(
+        oracles.claim_map.items.first().map(|claim| &claim.result),
+        Some(ClaimDisposition::Generated(_))
+    )
+}
+
 /// One supported operand kind: this generator's V1 scalar/equality operand
 /// vocabulary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1622,6 +1866,16 @@ fn admitted_binary_body<'a>(
                 ..
             } = record
             {
+                if let Some(
+                    tag @ (CheckedNodeTag::Model
+                    | CheckedNodeTag::Relation
+                    | CheckedNodeTag::State
+                    | CheckedNodeTag::Temporal
+                    | CheckedNodeTag::Protocol),
+                ) = CheckedNodeTag::from_wire(node_tag.as_ref())
+                {
+                    return Err(unsupported_family(unsupported_node_id, tag));
+                }
                 return Err(ExactFunctionRefusal::Unsupported {
                     unsupported_node_id: unsupported_node_id.clone(),
                     node_tag: CheckedNodeTag::from_wire(node_tag.as_ref())
@@ -1806,6 +2060,18 @@ fn classify_body_shape<'r>(
             let arguments = application_arguments(&node.body)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+            let operation_identity = node
+                .body
+                .pointer("/operation/identity")
+                .and_then(serde_json::Value::as_str);
+            let expected_identity = match operator {
+                BinaryIntegerOperator::Add => "quire.op.integer.add",
+                BinaryIntegerOperator::Subtract => "quire.op.integer.sub",
+                BinaryIntegerOperator::Multiply => "quire.op.integer.mul",
+            };
+            if operation_identity != Some(expected_identity) {
+                return Err(ExactFunctionRefusal::BodyMismatch);
+            }
             let _ = arguments;
             Ok(ClassifiedBody::Scalar(operator))
         }
@@ -2414,6 +2680,31 @@ fn item_disposition(
             expected: declaration.parameters.len(),
             found: item.argument_node_ids.len(),
         });
+    }
+    if node
+        .body
+        .get("operator")
+        .and_then(serde_json::Value::as_str)
+        == Some("call")
+    {
+        let graph = package
+            .wire()
+            .semantic_graph
+            .nodes
+            .iter()
+            .map(|source| (&source.node_id, source))
+            .collect::<Graph<'_>>();
+        let source_function_id =
+            source_function_node_id(&graph, &declaration.name, &declaration.node_id)
+                .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        if !source_call_matches(
+            &node.body,
+            &graph,
+            source_function_id,
+            &item.argument_node_ids,
+        ) {
+            return Err(ExactFunctionRefusal::BodyMismatch);
+        }
     }
     let index = function_index[&declaration.node_id];
     if let Some(cause) = package_refusal {

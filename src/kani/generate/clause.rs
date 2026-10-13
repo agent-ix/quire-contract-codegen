@@ -10,15 +10,15 @@ use quire_contract_model::{
 
 use crate::{
     core::diagnostic::{GenerationDiagnostic, GenerationErrorCode},
-    core::naming::reference_identifier,
+    core::naming::{oracle_symbol, reference_identifier},
     kani::abi::{
         i64_literal, readable_component, KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType,
     },
     kani::generate::outcome::UnsupportedObligation,
     kani::identity::{ObligationBinding, ObligationKind},
     oracle::boolean_v1::{
-        generate_boolean_oracle_shaped, typed_dependency_parameters, DependencyParameter,
-        OracleRequest, OracleShape, RustValueType,
+        generate_boolean_oracle_shaped, measure_named_boolean_oracle, typed_dependency_parameters,
+        DependencyParameter, OracleRequest, OracleShape, RustValueType,
     },
 };
 
@@ -72,30 +72,17 @@ pub(super) fn lower_clause(
     clause: &BoundClause,
     kind: ObligationKind,
 ) -> Result<ClauseOracle, UnsupportedObligation> {
-    let obligations = clause.expression().obligations().len();
-    if obligations > 0 {
-        return Err(UnsupportedObligation::DefinednessNotEncoded { obligations });
-    }
     let identity = clause.identity();
     let oracle_request = OracleRequest {
         requirement: identity.requirement(),
         clause: identity.clause(),
         expression: clause.expression(),
     };
-    let first_code =
-        |diagnostics: Vec<GenerationDiagnostic>| UnsupportedObligation::ClauseLowering {
-            generation_code: diagnostics
-                .first()
-                .map_or(GenerationErrorCode::UnsupportedExpression, |diagnostic| {
-                    diagnostic.code
-                }),
-        };
-    // The clause oracle is embedded where a plain `bool` is required, so a clause holding integer
-    // arithmetic is refused rather than read as one (FR-031).
-    let parameters =
-        typed_dependency_parameters(&oracle_request, OracleShape::PlainBool).map_err(first_code)?;
+    let plan = prepare_clause(clause, kind, &oracle_request)?;
+    let _measured_oracle_bytes = plan.oracle_source_bytes;
+    let parameters = plan.parameters;
     let bundle = generate_boolean_oracle_shaped(&oracle_request, OracleShape::PlainBool)
-        .map_err(first_code)?;
+        .map_err(clause_diagnostic)?;
     let symbol =
         oracle_function_symbol(&bundle.rust.contents).ok_or(UnsupportedObligation::RenderFailed)?;
     Ok(ClauseOracle {
@@ -118,6 +105,108 @@ pub(super) fn lower_clause(
             )
             .collect(),
     })
+}
+
+/// Artifact-free FR-015 lowering preflight shared by settlement and generation.
+pub(crate) fn classify_bound_clause(clause: &BoundClause) -> Result<(), UnsupportedObligation> {
+    let identity = clause.identity();
+    let request = OracleRequest {
+        requirement: identity.requirement(),
+        clause: identity.clause(),
+        expression: clause.expression(),
+    };
+    let Some(kind) = obligation_kind(clause.kind()) else {
+        return Err(UnsupportedObligation::ClauseKindNotObligation {
+            kind: clause.kind(),
+        });
+    };
+    prepare_clause(clause, kind, &request).map(|_| ())
+}
+
+/// The shared, artifact-free FR-015 lowering plan for one admitted clause. It validates the
+/// typed oracle, its Kani ABI, and its exact source-size ceiling; generation consumes the same
+/// parameter plan and only materializes source after settlement.
+fn prepare_clause(
+    clause: &BoundClause,
+    kind: ObligationKind,
+    request: &OracleRequest<'_>,
+) -> Result<PreparedClause, UnsupportedObligation> {
+    let parameters = typed_clause_parameters(clause, request)?;
+    let identity = clause.identity();
+    let symbol = oracle_symbol(
+        identity.requirement().requirement().as_str(),
+        identity.requirement().revision().get(),
+        identity.clause().as_str(),
+    );
+    let oracle_source_bytes =
+        measure_named_boolean_oracle(request, &symbol, OracleShape::PlainBool)
+            .map_err(clause_diagnostic)?;
+    validate_clause_abi(clause, kind, &parameters)?;
+    Ok(PreparedClause {
+        parameters,
+        oracle_source_bytes,
+    })
+}
+
+/// Pure typed lowering facts consumed by both settlement and generation.
+struct PreparedClause {
+    parameters: Vec<DependencyParameter>,
+    oracle_source_bytes: usize,
+}
+
+fn validate_clause_abi(
+    clause: &BoundClause,
+    kind: ObligationKind,
+    parameters: &[DependencyParameter],
+) -> Result<(), UnsupportedObligation> {
+    let identity = clause.identity();
+    let oracle = ClauseOracle {
+        clause: identity.clone(),
+        kind,
+        anchor: clause.anchor().clone(),
+        symbol: String::new(),
+        source: String::new(),
+        parameters: parameters
+            .iter()
+            .map(|parameter| Parameter {
+                dependency: parameter.dependency.clone(),
+                value_type: parameter.value_type.clone(),
+            })
+            .collect(),
+    };
+    match kind {
+        ObligationKind::Precondition => abi(&[(&oracle, SlotContext::Precondition)]).map(|_| ()),
+        ObligationKind::Postcondition => abi(&[(&oracle, SlotContext::Postcondition)]).map(|_| ()),
+        ObligationKind::Invariant => abi(&[
+            (&oracle, SlotContext::InvariantBefore),
+            (&oracle, SlotContext::InvariantAfter),
+        ])
+        .map(|_| ()),
+        ObligationKind::Frame => Ok(()),
+    }
+}
+
+fn typed_clause_parameters(
+    clause: &BoundClause,
+    request: &OracleRequest<'_>,
+) -> Result<Vec<DependencyParameter>, UnsupportedObligation> {
+    let obligations = clause.expression().obligations().len();
+    if obligations > 0 {
+        return Err(UnsupportedObligation::DefinednessNotEncoded { obligations });
+    }
+    // The clause oracle is embedded where a plain `bool` is required, so a clause holding integer
+    // arithmetic is refused rather than read as one (FR-031).
+    typed_dependency_parameters(request, OracleShape::PlainBool).map_err(clause_diagnostic)
+}
+
+fn clause_diagnostic(diagnostics: Vec<GenerationDiagnostic>) -> UnsupportedObligation {
+    UnsupportedObligation::ClauseLowering {
+        generation_code: diagnostics
+            .first()
+            .map_or(GenerationErrorCode::UnsupportedExpression, |diagnostic| {
+                diagnostic.code
+            }),
+    }
 }
 
 /// The one `pub fn oracle_…` the oracle generator emits.

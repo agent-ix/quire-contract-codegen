@@ -58,12 +58,12 @@ pub use kani::generate::lower::finite_reference_graphs::{
 pub use kani::generate::lower::FamilyLoweringError;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
-    derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
-    ContractScalarError, DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
-    ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator,
-    OperationClaim, OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator,
-    ScalarForm, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
-    SCALAR_LOWERING_WORK_LIMIT,
+    derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles,
+    render_exact_scalar_plan, BoundForm, ClaimDerivationRefusal, DecimalOperator, ExactScalarClaim,
+    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarPlan, ExactScalarRefusal,
+    GeneratedScalarClaim, IeeeArithmeticOperator, OperationClaim, OperationProvenance,
+    OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm, EXACT_SCALAR_CRATE_NAME,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::equality::{
@@ -150,7 +150,8 @@ pub use routed::capability::{
     negotiate_backend_provider, negotiate_contract_package, BackendDescriptor, BackendId,
     BackendKind, BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause,
     ContractItemSettlement, ContractNegotiationError, Disposition, EnvelopeRefusal,
-    ExtentClassification, ExtentDomain, ItemSettlement, Mode, ProviderOrigin, RequestItem,
+    ExtentClassification, ExtentDomain, ItemSettlement, KaniForm, KaniFormFamily, KaniFormIdentity,
+    KaniFormName, KaniObligationRole, KaniStateFrameRole, Mode, ProviderOrigin, RequestItem,
     RequestedKind, BACKEND_PROVIDER_CONTRACT, CAPABILITY_VOCABULARY,
 };
 pub use routed::generate::{

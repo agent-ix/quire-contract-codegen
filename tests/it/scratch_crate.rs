@@ -57,7 +57,7 @@ mod tests {
             .to_owned()
     }
 
-    /// Trace: AD-004 L-11.
+    /// Architecture evidence: AD-004 L-11.
     #[test]
     fn a_scratch_crate_resolves_the_runtime_commit_cg_locks() {
         let directory =

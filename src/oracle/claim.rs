@@ -112,6 +112,8 @@ pub enum OracleGenerationError {
     ClaimMapSerialization,
     /// The location map could not be serialized.
     LocationMapSerialization,
+    /// A previously validated lowering plan violated an internal render invariant.
+    InvalidPlanState,
     /// A Contract Runtime `#[non_exhaustive]` enum yielded a variant this
     /// generator's own exhaustive match does not know.
     UnknownRuntimeVariant {

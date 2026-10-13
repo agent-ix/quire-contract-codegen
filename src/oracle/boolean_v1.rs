@@ -64,6 +64,7 @@ pub(crate) enum OracleShape {
 
 struct RenderedExpression {
     source: String,
+    bytes: usize,
     implication_regions: Vec<(u32, u32)>,
     /// Whether the clause holds an integer arithmetic node.
     has_arithmetic: bool,
@@ -124,32 +125,41 @@ pub(crate) struct DependencyParameter {
 
 struct SourceBuilder {
     source: String,
+    bytes: usize,
+    retain_source: bool,
     next_line: u32,
     implication_regions: Vec<(u32, u32)>,
 }
 
 impl SourceBuilder {
-    fn new() -> Self {
+    fn new(retain_source: bool) -> Self {
         Self {
             source: String::new(),
+            bytes: 0,
+            retain_source,
             next_line: 1,
             implication_regions: Vec::new(),
         }
     }
 
     fn line(&mut self, value: &str) -> Result<(), GenerationErrorCode> {
-        if self
-            .source
-            .len()
-            .saturating_add(value.len())
-            .saturating_add(1)
-            > MAX_GENERATED_SOURCE_BYTES
-        {
+        if self.bytes.saturating_add(value.len()).saturating_add(1) > MAX_GENERATED_SOURCE_BYTES {
             return Err(GenerationErrorCode::ResourceLimitExceeded);
         }
-        self.source.push_str(value);
-        self.source.push('\n');
+        self.bytes = self.bytes.saturating_add(value.len()).saturating_add(1);
+        if self.retain_source {
+            self.source.push_str(value);
+            self.source.push('\n');
+        }
         self.next_line = self.next_line.saturating_add(1);
+        Ok(())
+    }
+
+    fn append_measured(&mut self, bytes: usize) -> Result<(), GenerationErrorCode> {
+        if self.bytes.saturating_add(bytes) > MAX_GENERATED_SOURCE_BYTES {
+            return Err(GenerationErrorCode::ResourceLimitExceeded);
+        }
+        self.bytes = self.bytes.saturating_add(bytes);
         Ok(())
     }
 }
@@ -184,15 +194,55 @@ pub(crate) fn generate_named_boolean_oracle(
     symbol: &str,
     shape: OracleShape,
 ) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
+    match generate_boolean_oracle_build(request, symbol, shape, true)? {
+        OracleBuild::Generated(bundle) => Ok(bundle),
+        OracleBuild::Measured(_) => Err(single_diagnostic(
+            request,
+            GenerationErrorCode::InternalInvariantViolation,
+            "generated.rust",
+            "generation requested retained source but the builder returned a measured plan",
+        )),
+    }
+}
+
+/// Runs the same typed analysis and source-line accounting as generation without retaining a
+/// generated Rust source string or constructing artifacts.
+pub(crate) fn measure_named_boolean_oracle(
+    request: &OracleRequest<'_>,
+    symbol: &str,
+    shape: OracleShape,
+) -> Result<usize, Vec<GenerationDiagnostic>> {
+    match generate_boolean_oracle_build(request, symbol, shape, false)? {
+        OracleBuild::Measured(bytes) => Ok(bytes),
+        OracleBuild::Generated(_) => Err(single_diagnostic(
+            request,
+            GenerationErrorCode::InternalInvariantViolation,
+            "generated.rust",
+            "measurement requested source-free accounting but the builder retained an artifact",
+        )),
+    }
+}
+
+enum OracleBuild {
+    Generated(OracleArtifactBundle),
+    Measured(usize),
+}
+
+fn generate_boolean_oracle_build(
+    request: &OracleRequest<'_>,
+    symbol_text: &str,
+    shape: OracleShape,
+    retain_source: bool,
+) -> Result<OracleBuild, Vec<GenerationDiagnostic>> {
     if request.expression.nodes().len() < 128 {
-        return generate_boolean_oracle_inner(request, symbol, shape);
+        return generate_boolean_oracle_inner(request, symbol_text, shape, retain_source);
     }
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("contract-oracle-generation".to_owned())
             .stack_size(16 * 1024 * 1024)
             .spawn_scoped(scope, || {
-                generate_boolean_oracle_inner(request, symbol, shape)
+                generate_boolean_oracle_inner(request, symbol_text, shape, retain_source)
             })
             .map_err(|error| {
                 single_diagnostic(
@@ -217,7 +267,8 @@ fn generate_boolean_oracle_inner(
     request: &OracleRequest<'_>,
     symbol_text: &str,
     shape: OracleShape,
-) -> Result<OracleArtifactBundle, Vec<GenerationDiagnostic>> {
+    retain_source: bool,
+) -> Result<OracleBuild, Vec<GenerationDiagnostic>> {
     if request.expression.value_type() != &ValueType::Boolean {
         return Err(expression_diagnostic(
             request,
@@ -257,6 +308,7 @@ fn generate_boolean_oracle_inner(
         request.expression.expression(),
         &parameter_lookup,
         shape,
+        retain_source,
     )?;
     // A native oracle holding arithmetic returns an outcome and takes the caller's meter; every
     // other oracle returns a plain bool.
@@ -306,7 +358,7 @@ fn generate_boolean_oracle_inner(
         header.extend(native_helper_lines(rendered.helpers));
     }
 
-    let mut source = SourceBuilder::new();
+    let mut source = SourceBuilder::new(retain_source);
     for line in header.into_iter().chain([
         format!("/// Generated contract identity for `{requirement}@{revision}`."),
         format!("pub const {identity_symbol}: quire_contract_runtime::ContractIdentity<'static> ="),
@@ -325,10 +377,19 @@ fn generate_boolean_oracle_inner(
     }
     let expression_start = source.next_line;
     let offset = expression_start.saturating_sub(1);
-    for line in rendered.source.lines() {
-        source.line(line).map_err(|_| resource_error(request))?;
+    if retain_source {
+        for line in rendered.source.lines() {
+            source.line(line).map_err(|_| resource_error(request))?;
+        }
+    } else {
+        source
+            .append_measured(rendered.bytes)
+            .map_err(|_| resource_error(request))?;
     }
     source.line("}").map_err(|_| resource_error(request))?;
+    if !retain_source {
+        return Ok(OracleBuild::Measured(source.bytes));
+    }
     source.implication_regions = rendered
         .implication_regions
         .into_iter()
@@ -394,7 +455,10 @@ fn generate_boolean_oracle_inner(
         format!("source-maps/{symbol_text}.json"),
         source_map_contents,
     );
-    Ok(OracleArtifactBundle { rust, source_map })
+    Ok(OracleBuild::Generated(OracleArtifactBundle {
+        rust,
+        source_map,
+    }))
 }
 
 pub(crate) fn dependency_parameters(
@@ -898,6 +962,7 @@ fn render_expression(
     expression: &Expression,
     parameters: &BTreeMap<String, String>,
     shape: OracleShape,
+    retain_source: bool,
 ) -> Result<RenderedExpression, Vec<GenerationDiagnostic>> {
     let mut arithmetic = Vec::new();
     let has_arithmetic = mark_arithmetic(expression, &mut arithmetic);
@@ -907,7 +972,7 @@ fn render_expression(
         parameters,
         arithmetic,
         next_index: 0,
-        output: SourceBuilder::new(),
+        output: SourceBuilder::new(retain_source),
         helpers: Helpers::default(),
     };
     if shape == OracleShape::Native && has_arithmetic {
@@ -917,6 +982,7 @@ fn render_expression(
     }
     Ok(RenderedExpression {
         source: renderer.output.source,
+        bytes: renderer.output.bytes,
         implication_regions: renderer.output.implication_regions,
         has_arithmetic,
         helpers: renderer.helpers,
