@@ -22,6 +22,8 @@ pub(crate) mod outcome;
 pub(crate) mod precondition;
 // The validated harness path and the persisted per-harness record.
 pub(crate) mod record;
+#[cfg(test)]
+mod role_parity_tests;
 // The scalar family.
 pub(crate) mod scalar;
 // The V1 bundle generator; interim, see the file header.

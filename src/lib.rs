@@ -3,6 +3,10 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+// Integration fixture modules name this crate as an external dependency.
+#[cfg(test)]
+extern crate self as quire_contract_codegen;
+
 // The leaf directory: artifact, diagnostic, identity, profile and source-map.
 // `core` here is this crate's own layout module (the AD names the directory `core/`). In this
 // file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
