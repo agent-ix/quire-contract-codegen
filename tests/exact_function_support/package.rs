@@ -12,14 +12,11 @@
 //! bypasses the real V2 reader.
 //!
 //! FR-021 adds its own function-declaration and call-item nodes on top of
-//! that base: every one of them is built the same way `E_CALL` already is
-//! in the base module (`application_code(code, "call"|"binary",
-//! binary_body(T_INTEGER, T_INTEGER))`) -- the body's own content is inert
-//! for this generator's classifiers (they read only `semantic_form` and the
-//! caller-declared [`quire_contract_codegen::ExactFunctionBody`], never the
-//! node's `operation`/`arguments`), so every new node below reuses the same
-//! `binary_body(T_INTEGER, T_INTEGER)` shape and differs only in its own
-//! `semantic_form` and code.
+//! that base. Scalar function roots carry a checked `quire.op.integer.add`
+//! operation and Integer result; the equality root retains its equality
+//! operation, and call-item roots retain their call form. The function
+//! classifier checks scalar operation identity and body arity against the
+//! caller-declared [`quire_contract_codegen::ExactFunctionBody`].
 
 #![allow(dead_code)]
 
@@ -128,7 +125,7 @@ pub const FN_CALL_NESTED: u32 = 502;
 /// kind: its real `semantic_form` is `"call"`, so a `Scalar`-declared body
 /// against it is a `FormMismatch` -- AC-12's "a form none of this
 /// generator's classifiers admits" without a dedicated malformed node.
-pub const FN_FORM_MISMATCH_NODE: u32 = 513;
+pub const FN_FORM_MISMATCH_NODE: u32 = FN_CALL_NESTED;
 /// `f_dangling(a, b)`: `Call { callee: "not_declared" }` -- AC-12's dangling
 /// nested-call case.
 pub const FN_DANGLING_CALL: u32 = 503;
@@ -146,10 +143,6 @@ pub const FN_CAPABILITY: u32 = 507;
 /// function -- AC-12's "without changing an unrelated ... function's
 /// items" isolation control.
 pub const FN_UNRELATED: u32 = 508;
-pub const FN_ONE_PARAM_ADD: u32 = 509;
-pub const FN_BOOLEAN_RESULT_ADD: u32 = 510;
-pub const FN_NEGATE: u32 = 511;
-pub const FN_DANGLING_TARGET: u32 = 512;
 
 /// One `call` expression node per requested item.
 pub const ITEM_CALL_ADD: u32 = 520;
@@ -158,15 +151,6 @@ pub const ITEM_CALL_NESTED: u32 = 522;
 pub const ITEM_CALL_UNRELATED: u32 = 523;
 /// Names a function absent from every request's own declarations.
 pub const ITEM_CALL_UNKNOWN_FUNCTION: u32 = 524;
-pub const ITEM_CALL_REF: u32 = 525;
-pub const ITEM_CALL_MODEL: u32 = 526;
-pub const ITEM_CALL_STATE: u32 = 527;
-pub const ITEM_CALL_CAPABILITY: u32 = 528;
-pub const ITEM_CALL_DANGLING: u32 = 529;
-pub const ITEM_CALL_BAD_FORM: u32 = 530;
-pub const ITEM_CALL_ONE_PARAM: u32 = 531;
-pub const ITEM_CALL_BOOLEAN_RESULT: u32 = 532;
-pub const ITEM_CALL_NEGATE: u32 = 533;
 /// Classifier-only source call for the model root. Kept distinct from the
 /// corpus call ID because the shared fixture registry is process-wide.
 pub const ITEM_CALL_SOURCE_MODEL: u32 = 534;
@@ -363,37 +347,42 @@ pub fn ext_corpus_package() -> PackageBuilder {
     // type in the fixture body, preventing duplicate application identities.
     let disambiguator_count = 9 + 5;
     for i in 0..disambiguator_count {
+        let integer_result = matches!(i, 0 | 4 | 5 | 6 | 7 | 8);
         builder.code(
             DISAMBIGUATOR_BASE + i,
             "scalar_type",
-            "boolean",
+            if integer_result { "integer" } else { "boolean" },
             DISAMBIGUATOR_BASE + i,
             aggregate(vec![]),
         );
     }
 
     let mut next = 0u32;
-    let mut body = || {
-        let value = binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + next);
+    let mut body = |integer_add: bool| {
+        let mut value = binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + next);
+        if integer_add {
+            value["operation"]["identity"] =
+                serde_json::Value::String("quire.op.integer.add".to_owned());
+        }
         next += 1;
         value
     };
 
     builder
-        .application_code(FN_ADD, "binary", body())
-        .application_code(FN_EQ, "binary", body())
-        .application_code(FN_CALL_NESTED, "call", body())
-        .application_code(FN_DANGLING_CALL, "call", body())
-        .application_code(FN_REF_PARAM, "binary", body())
-        .application_code(FN_MODEL_PARAM, "binary", body())
-        .application_code(FN_STATE_PARAM, "binary", body())
-        .application_code(FN_CAPABILITY, "binary", body())
-        .application_code(FN_UNRELATED, "binary", body())
-        .application_code(ITEM_CALL_ADD, "call", body())
-        .application_code(ITEM_CALL_EQ, "call", body())
-        .application_code(ITEM_CALL_NESTED, "call", body())
-        .application_code(ITEM_CALL_UNRELATED, "call", body())
-        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body());
+        .application_node(FN_ADD, "binary", &key(T_INTEGER), body(true))
+        .application_code(FN_EQ, "binary", body(false))
+        .application_code(FN_CALL_NESTED, "call", body(false))
+        .application_code(FN_DANGLING_CALL, "call", body(false))
+        .application_node(FN_REF_PARAM, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_MODEL_PARAM, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_STATE_PARAM, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_CAPABILITY, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_UNRELATED, "binary", &key(T_INTEGER), body(true))
+        .application_code(ITEM_CALL_ADD, "call", body(false))
+        .application_code(ITEM_CALL_EQ, "call", body(false))
+        .application_code(ITEM_CALL_NESTED, "call", body(false))
+        .application_code(ITEM_CALL_UNRELATED, "call", body(false))
+        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body(false));
     builder
 }
 
@@ -596,7 +585,7 @@ pub fn function_ref_param(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
         node_id: code_id(FN_REF_PARAM),
         name: name.to_owned(),
-        parameters: vec![parameter("a", REF_TYPE), parameter("b", T_INTEGER)],
+        parameters: vec![parameter("a", REF_TYPE)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,

@@ -2060,6 +2060,18 @@ fn classify_body_shape<'r>(
             let arguments = application_arguments(&node.body)
                 .filter(|arguments| arguments.len() == 2)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+            let operation_identity = node
+                .body
+                .pointer("/operation/identity")
+                .and_then(serde_json::Value::as_str);
+            let expected_identity = match operator {
+                BinaryIntegerOperator::Add => "quire.op.integer.add",
+                BinaryIntegerOperator::Subtract => "quire.op.integer.sub",
+                BinaryIntegerOperator::Multiply => "quire.op.integer.mul",
+            };
+            if operation_identity != Some(expected_identity) {
+                return Err(ExactFunctionRefusal::BodyMismatch);
+            }
             let _ = arguments;
             Ok(ClassifiedBody::Scalar(operator))
         }
