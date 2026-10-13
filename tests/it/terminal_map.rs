@@ -7,13 +7,14 @@
 //! re-exports, so the `Declined` code arm is built through `qsl-replay` alone.
 
 use qsl_replay::{
-    std001_code, AdmissionFailure, CallSiteRefusal, Category, ClauseName, Code, DeclineCode,
-    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FieldName, FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, InternalFault,
-    MalformedTranscript, OperationName, PopulationName, ProofRefusalCause, QualifiedName,
-    ReplayLimits, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity,
-    StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
-    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
+    std001_code, AdmissionFailure, CallSiteRefusal, Category, Certification, ClauseName, Code,
+    DeclineCode, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
+    DisagreementCause, FieldName, FrameCounterexample, Identifier, IncompleteCause,
+    InconclusiveCause, InternalFault, MalformedTranscript, OperationName, PopulationName,
+    ProofBasis, ProofRefusalCause, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StateClauseCounterexample, Std001Code,
+    SuppliedLibrary, TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope,
+    WitnessFailure, WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -115,15 +116,18 @@ fn non_fault_refusal() -> ReplayRefusal {
     ReplayRefusal::SourceCount(2)
 }
 
-/// `verified` with three SUCCESS checks is `Proved { success_checks: 3 }`, and `falsified` with
-/// a reproduced replay is `Refuted`.
+/// `verified` with three SUCCESS checks is a certified `Proved` with three checks. A
+/// `falsified` run with a reproduced replay is `Refuted`.
 ///
 /// Trace: FR-029-AC-1, TC-040
 #[test]
 fn tc_040_verified_proves_its_checks_and_a_reproduced_falsification_refutes() {
     assert_eq!(
         map_run(&KaniRunOutcome::Verified, None),
-        TerminalValue::Proved { success_checks: 3 }
+        TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 3 },
+            certification: Certification::Certified,
+        }
     );
     assert_eq!(
         map_run(&falsified(), Some(ReplaySettlement::Reproduced)),
@@ -131,8 +135,8 @@ fn tc_040_verified_proves_its_checks_and_a_reproduced_falsification_refutes() {
     );
 }
 
-/// The vacuous-proof reason and `cover-unsatisfied` each map to `Proved { success_checks: 0 }`,
-/// which QSL reads as category `inconclusive` with the vacuity cause.
+/// The vacuous-proof reason and `cover-unsatisfied` each map to a certified `Proved` with
+/// zero checks, which QSL reads as category `inconclusive` with the vacuity cause.
 ///
 /// Trace: FR-029-AC-2, TC-040
 #[test]
@@ -145,7 +149,13 @@ fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks()
         },
     ] {
         let value = map_run(&outcome, None);
-        assert_eq!(value, TerminalValue::Proved { success_checks: 0 });
+        assert_eq!(
+            value,
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks: 0 },
+                certification: Certification::Certified,
+            }
+        );
         assert_eq!(value.category(), Category::Inconclusive);
         assert_eq!(
             value.vacuous_proof_cause(),
@@ -949,11 +959,17 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
     let proved = ir(KaniOutcomeKind::Proved, Std001Code::KANI_PROVED);
     assert_eq!(
         ir_outcome_terminal_value(&proved, 3, None),
-        Ok(TerminalValue::Proved { success_checks: 3 })
+        Ok(TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 3 },
+            certification: Certification::Certified,
+        })
     );
     assert_eq!(
         ir_outcome_terminal_value(&proved, 0, None),
-        Ok(TerminalValue::Proved { success_checks: 0 })
+        Ok(TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        })
     );
     assert_eq!(
         map_ir_settled(ReplaySettlement::Reproduced),
@@ -961,8 +977,8 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
     );
 }
 
-/// `Inconclusive` with `kani_vacuous_proof` is `Proved { success_checks: 0 }` whatever count the
-/// caller passes; with any other code it is `Failed`.
+/// `Inconclusive` with `kani_vacuous_proof` is a certified `Proved` with zero checks whatever
+/// count the caller passes; with any other code it is `Failed`.
 ///
 /// Trace: FR-030-AC-5, TC-041
 #[test]
@@ -970,7 +986,10 @@ fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_f
     let outcome = |code| ir(KaniOutcomeKind::Inconclusive, code);
     assert_eq!(
         map_ir(&outcome(Std001Code::KANI_VACUOUS_PROOF)),
-        TerminalValue::Proved { success_checks: 0 }
+        TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        }
     );
     for code in [
         Std001Code::KANI_BOUND_INVALID,

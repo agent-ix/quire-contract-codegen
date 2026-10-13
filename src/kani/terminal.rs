@@ -10,8 +10,8 @@
 //! no `proof_category` function exists here.
 
 use qsl_replay::{
-    Code, DeclineCode, DisagreementCause, IncompleteCause, InconclusiveCause, ProofRefusalCause,
-    ReplayRefusal, Std001Code, TerminalValue, UnavailabilityCause,
+    Certification, Code, DeclineCode, DisagreementCause, IncompleteCause, InconclusiveCause,
+    ProofBasis, ProofRefusalCause, ReplayRefusal, Std001Code, TerminalValue, UnavailabilityCause,
 };
 use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
 
@@ -73,8 +73,9 @@ impl std::error::Error for TerminalPairError {}
 /// Maps one run outcome, with the SUCCESS check count its transcript reports and, for a
 /// falsified outcome, its replay settlement, to QSL's terminal value (FR-029).
 ///
-/// A vacuous proof and a cover-unsatisfied run are `Proved { success_checks: 0 }`, which QSL
-/// reads as category `inconclusive`; no outcome maps to `Tested`.
+/// A vacuous proof and a cover-unsatisfied run have a zero-check `Checks` basis and
+/// `Certified` certification. QSL reads them as category `inconclusive`; no outcome maps to
+/// `Tested`.
 ///
 /// # Errors
 ///
@@ -87,14 +88,23 @@ pub fn run_terminal_value(
     use KaniInconclusiveReason as Reason;
     use KaniRunOutcome::{CoverUnsatisfied, Falsified, Inconclusive, Verified};
     Ok(match (outcome, settlement) {
-        (Verified, None) => TerminalValue::Proved { success_checks },
-        (CoverUnsatisfied { .. }, None) => TerminalValue::Proved { success_checks: 0 },
+        (Verified, None) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks },
+            certification: Certification::Certified,
+        },
+        (CoverUnsatisfied { .. }, None) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        },
         (
             Inconclusive {
                 reason: Reason::VacuousProof,
             },
             None,
-        ) => TerminalValue::Proved { success_checks: 0 },
+        ) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        },
         (
             Inconclusive {
                 reason: Reason::TimedOut,
@@ -133,8 +143,8 @@ pub fn run_terminal_value(
 /// only for `Unavailable` and `Inconclusive`, plus the `Declined` kinds, whose code is carried
 /// as the STD-001 code IR issued: [`DeclineCode::Std001`], never respelled as a QSL catalog
 /// code and never checked for registration (QSL records no issuer and refuses no unregistered
-/// code). It never reads `source_id` or `context`. A vacuous proof is `Proved { success_checks:
-/// 0 }`; no outcome maps to `Tested`.
+/// code). It never reads `source_id` or `context`. A vacuous proof has a zero-check `Checks`
+/// basis and `Certified` certification; no outcome maps to `Tested`.
 ///
 /// # Errors
 ///
@@ -150,7 +160,10 @@ pub fn ir_outcome_terminal_value(
         code: DeclineCode::Std001(outcome.code),
     };
     Ok(match (&outcome.kind, settlement) {
-        (Kind::Proved, None) => TerminalValue::Proved { success_checks },
+        (Kind::Proved, None) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks },
+            certification: Certification::Certified,
+        },
         (Kind::Counterexample, Some(settlement)) => settled(settlement),
         (Kind::Counterexample, None) => return Err(TerminalPairError::MissingSettlement),
         (Kind::Refused, None) => declined(ProofRefusalCause::Refused),
@@ -167,7 +180,10 @@ pub fn ir_outcome_terminal_value(
         }
         (Kind::Cancelled, None) => TerminalValue::Incomplete(IncompleteCause::Cancelled),
         (Kind::Inconclusive, None) if outcome.code == Std001Code::KANI_VACUOUS_PROOF => {
-            TerminalValue::Proved { success_checks: 0 }
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks: 0 },
+                certification: Certification::Certified,
+            }
         }
         (Kind::Inconclusive, None) => TerminalValue::Failed,
         (
