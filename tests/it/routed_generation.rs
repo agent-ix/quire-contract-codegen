@@ -1555,7 +1555,7 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
             ObligationDisposition::Unsupported {
                 reason: UnsupportedObligation::OracleRefused {
                     refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
-                        limit_kind: quire_contract_codegen::OperandRangeLimitKind::Work,
+                        limit_kind: quire_contract_codegen::OperandRangeLimitKind::Nodes,
                         limit: 4096,
                         consumed: 4097,
                         ..
