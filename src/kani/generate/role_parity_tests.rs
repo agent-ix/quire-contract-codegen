@@ -15,7 +15,7 @@ use crate::kani::generate::frame::{
 use crate::kani::generate::negotiate::negotiate_kani_obligations;
 use crate::kani::generate::outcome::{
     KaniObligationOutcome, KaniObligationRequest, ObligationDisposition, ObligationItem,
-    StateFrameRole, UnsupportedObligation,
+    StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole, UnsupportedObligation,
 };
 use crate::kani::identity::StateFrameHarness;
 
@@ -131,5 +131,67 @@ fn state_frame_one_role_refused_matches_direct_generation() {
     compare_roles(
         &native_twin::Twin::with_negated_balance_clause(),
         Some(StateFrameRole::Contract),
+    );
+
+    let (package, clause) =
+        native_twin::Twin::with_unbounded_audit_clause().emitted_package("AuditNeverDrops");
+    let ceilings = crate::kani::test_support::proof_ceilings::proof_ceilings();
+    let direct = StateFrameRequest {
+        ceilings,
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    };
+    let roles = [StateFrameRole::Frame, StateFrameRole::Contract];
+    let items = roles.map(|role| ObligationItem::StateFrame {
+        package: &package,
+        clause: &clause,
+        role,
+        state_path: STATE_PATH,
+        state_fields: &FIELDS,
+        subject_path: SUBJECT_PATH,
+    });
+    let outcome = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings,
+        items: &items,
+        subject_path: "crate::request::unrelated",
+        unwind: 4,
+    })
+    .expect("well-formed request");
+    let KaniObligationOutcome::Emitted {
+        records,
+        state_frame_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("refused lowering must retain both item records");
+    };
+    assert_eq!(records.len(), roles.len());
+    assert!(state_frame_harnesses.is_empty());
+    let refusals = roles.map(|role| generate_state_frame_role(&direct, role).unwrap_err());
+    assert_eq!(refusals[0], refusals[1]);
+    let StateFrameRefusal::NotLowered { refusal } = &refusals[0] else {
+        panic!("direct roles must refuse at lowering");
+    };
+    let StateFrameLoweringRefusal::RequiresBound { unbounded_type, .. } = &**refusal else {
+        panic!("unbounded audit must require a bound");
+    };
+    for (index, record) in records.iter().enumerate() {
+        assert_eq!(record.request_index, index);
+        assert_eq!(record.kind, Some(roles[index].obligation_kind()));
+        assert_eq!(
+            record.disposition,
+            ObligationDisposition::RequiresBound {
+                unbounded_type: unbounded_type.clone(),
+            }
+        );
+    }
+    assert_eq!(records[0].disposition, records[1].disposition);
+    assert_eq!(
+        generate_state_frame_obligations(&direct),
+        Err(refusals[0].clone())
     );
 }

@@ -279,16 +279,14 @@ unsatisfiable requires as `cover_unsatisfied`.
     `generate_state_frame_role` and reading `generate_state_frame_obligations` return the
     refusal of the failing role (FR-015-AC-68).
 
-The first code change backs steps 26 and 27, and the second steps 19, 21 to 25 and, apart from
-one comparison, steps 20 and 28; both have landed. The comparison against
-`generate_state_frame_role` is not testable from `tests/it` (crate-private) and no V2 package
-builder exists under `src/`; byte identity holds by construction. Steps 20 and 28 therefore
-compare the harnesses with `generate_state_frame_obligations` where a clause's roles both succeed
-and read the refusal it returns where one fails, and their tests carry no trace tag of
-FR-015-AC-60 or FR-015-AC-68, which stay planned until that comparison has a test. The tests are in
-`tests/it/kani_obligations_state_frame.rs`; the package they negotiate holds twenty-four shapes,
-each over nodes of its own and read under a byte ceiling above the default, which the corpus
-package alone nearly fills.
+The first code change backs steps 26 and 27, and the second backs steps 19 and 21 to 25; both
+have landed. Crate-internal tests now back steps 20 and 28 by comparing each negotiated item with
+`generate_state_frame_role` over an admitted V2 package, including exact supported harness bytes,
+both one-role refusals and a lowering refusal that records both roles alike. They also compare the
+two-role entry with the same fixture and carry trace tags for FR-015-AC-60 and FR-015-AC-68. The
+broader disposition tests remain in `tests/it/kani_obligations_state_frame.rs`; the package they
+negotiate holds twenty-four shapes, each over nodes of its own and read under a byte ceiling above
+the default, which the corpus package alone nearly fills.
 
 ## Composite equality over a bounded shadow (planned, IR-264, IR-241)
 
