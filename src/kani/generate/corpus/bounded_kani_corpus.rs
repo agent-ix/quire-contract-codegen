@@ -388,6 +388,42 @@ pub struct BoundedCorpusCase {
     pub artifacts: BoundedCorpusArtifacts,
 }
 
+impl BoundedCorpusCase {
+    /// Replays actual Kani counterexample playback against this case's retained QSL package.
+    ///
+    /// The package is compiled from the generated unit and imported dependency source each time;
+    /// the harness identity is then tied to QSL's selected function site.
+    pub fn replay_counterexample(
+        &self,
+        transcript: &str,
+    ) -> Result<crate::ReplayVerdict, BoundedCorpusReplayError> {
+        let package = compile_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
+            return Err(BoundedCorpusReplayError::SourceMismatch);
+        }
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| {
+                BoundedCorpusReplayError::Replay(
+                    crate::replay::function::SpineReplayError::Identity(error),
+                )
+            })?;
+        crate::replay::function::replay_harness_counterexample(&identity, transcript, &package)
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+}
+
+/// Why a retained corpus case could not be replayed against its QSL source.
+#[derive(Debug)]
+pub enum BoundedCorpusReplayError {
+    /// The retained unit/dependency package did not compile or select the corpus function.
+    Package(crate::replay::function::ReplayPackageError),
+    /// The package source did not match the case's retained source bytes.
+    SourceMismatch,
+    /// Kani playback could not be decoded or QSL refused the witness request.
+    Replay(crate::replay::function::SpineReplayError),
+}
+
 /// Why [`generate_bounded_kani_corpus_case`] emitted no case.
 ///
 /// A refusal is almost always a typed Contract IR [`KaniOutcome`] ([`BoundedCorpusError::Outcome`]),
@@ -907,11 +943,11 @@ fn render_artifacts(
     };
     let proof_graph_contents =
         artifact_json(&proof_graph_value).map_err(|error| error.to_string())?;
-    let qsl_source = format!(
+    let qsl_source = String::from(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
          import \"ir-453/corpus-dependency\" as d;\n\
-         function corpus_case using v(): Boolean pure {{ d::corpus_case(true) }}\n"
+         function corpus_case using v(): Boolean pure {{ d::corpus_case(true) }}\n",
     );
     let qsl_functions = if qsl_body.starts_with("function edge ") {
         qsl_body.to_owned()
@@ -938,6 +974,75 @@ fn render_artifacts(
     })
 }
 
+fn compile_qsl_package(
+    case: &BoundedCorpusCase,
+) -> Result<crate::replay::function::ReplayPackage, crate::replay::function::ReplayPackageError> {
+    use crate::replay::function::{DependencyLock, LockedSource, ReplayInputs, ReplayPackage};
+    use qsl_replay::{
+        call_site, DependencyInput, Identifier, QualifiedName, ReplayLimits, ScalarLimits,
+        SourceIdentity,
+    };
+    use std::collections::BTreeMap;
+
+    let maximum = u64::MAX;
+    let dependency_source = LockedSource {
+        authority: "agent-ix".to_owned(),
+        identity: "ir-453/corpus-dependency".to_owned(),
+        namespace: "generated".to_owned(),
+        revision: "ir-453".to_owned(),
+        bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
+    };
+    let dependency_function = QualifiedName::new(vec![Identifier::new("corpus_case").unwrap()])
+        .expect("static function name is a QSL identifier");
+    let dependency_package_id = call_site(
+        SourceIdentity::new(
+            &dependency_source.authority,
+            &dependency_source.identity,
+            &dependency_source.namespace,
+            &dependency_source.revision,
+        ),
+        &dependency_source.identity,
+        &dependency_source.bytes,
+        [],
+        &DependencyInput::default(),
+        &dependency_function,
+    )
+    .map_err(|refusal| crate::replay::function::ReplayPackageError::CallSite(Box::new(refusal)))?
+    .package_id;
+    ReplayPackage::new(
+        ReplayInputs {
+            source: LockedSource {
+                authority: "agent-ix".to_owned(),
+                identity: case.artifacts.qsl_source.path.clone(),
+                namespace: "generated".to_owned(),
+                revision: "ir-453".to_owned(),
+                bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
+            },
+            dependencies: vec![DependencyLock {
+                identity: dependency_source.identity.clone(),
+                package_id: dependency_package_id,
+                source: dependency_source,
+            }],
+            accounting_limits: ScalarLimits {
+                integer_bits: maximum,
+                decimal_digits: maximum,
+                scale_expansion: maximum,
+                text_input_bytes: maximum,
+                text_scalars: maximum,
+                normalized_scalars: maximum,
+                unit_edges: maximum,
+                value_occurrences: maximum,
+                work_units: maximum,
+                result_units: maximum,
+            },
+            stage_limits: BTreeMap::new(),
+            declared_domains: Vec::new(),
+            replay_limits: ReplayLimits::default(),
+        },
+        "corpus_case",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use quire_contract_ir::kani::{
@@ -953,12 +1058,7 @@ mod tests {
     };
     use super::{CheckedArithmeticRequest, CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
-    use crate::replay::function::{DependencyLock, LockedSource, ReplayInputs, ReplayPackage};
-    use qsl_replay::{
-        call_site, DependencyInput, Identifier, QualifiedName, ReplayLimits, ScalarLimits,
-        SourceIdentity,
-    };
-    use std::collections::BTreeMap;
+    use crate::replay::function::ReplayPackage;
     use std::{
         fs,
         path::PathBuf,
@@ -975,65 +1075,7 @@ mod tests {
     );
 
     fn qsl_package(case: &super::BoundedCorpusCase) -> ReplayPackage {
-        let maximum = u64::MAX;
-        let dependency_source = LockedSource {
-            authority: "agent-ix".to_owned(),
-            identity: "ir-453/corpus-dependency".to_owned(),
-            namespace: "generated".to_owned(),
-            revision: "ir-453".to_owned(),
-            bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
-        };
-        let dependency_function =
-            QualifiedName::new(vec![Identifier::new("corpus_case").unwrap()]).unwrap();
-        let dependency_package_id = call_site(
-            SourceIdentity::new(
-                &dependency_source.authority,
-                &dependency_source.identity,
-                &dependency_source.namespace,
-                &dependency_source.revision,
-            ),
-            &dependency_source.identity,
-            &dependency_source.bytes,
-            [],
-            &DependencyInput::default(),
-            &dependency_function,
-        )
-        .expect("the dependency QSL source compiles")
-        .package_id;
-        let source = case.artifacts.qsl_source.contents.as_bytes().to_vec();
-        ReplayPackage::new(
-            ReplayInputs {
-                source: LockedSource {
-                    authority: "agent-ix".to_owned(),
-                    identity: case.artifacts.qsl_source.path.clone(),
-                    namespace: "generated".to_owned(),
-                    revision: "ir-453".to_owned(),
-                    bytes: source.clone(),
-                },
-                dependencies: vec![DependencyLock {
-                    identity: dependency_source.identity.clone(),
-                    package_id: dependency_package_id,
-                    source: dependency_source,
-                }],
-                accounting_limits: ScalarLimits {
-                    integer_bits: maximum,
-                    decimal_digits: maximum,
-                    scale_expansion: maximum,
-                    text_input_bytes: maximum,
-                    text_scalars: maximum,
-                    normalized_scalars: maximum,
-                    unit_edges: maximum,
-                    value_occurrences: maximum,
-                    work_units: maximum,
-                    result_units: maximum,
-                },
-                stage_limits: BTreeMap::new(),
-                declared_domains: Vec::new(),
-                replay_limits: ReplayLimits::default(),
-            },
-            "corpus_case",
-        )
-        .unwrap_or_else(|error| {
+        super::compile_qsl_package(case).unwrap_or_else(|error| {
             panic!(
                 "the case's QSL source compiles and selects its generated function: {error}\n{}",
                 String::from_utf8_lossy(&source)
@@ -1252,7 +1294,6 @@ mod tests {
     #[ignore = "kani lane: run serially after the IR-453 focused checks"]
     fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
         use crate::kani::classify::KaniRunOutcome;
-        use crate::replay::function::replay_harness_counterexample;
         use crate::{EvidenceFailureCause, HarnessSymbol, ReplayVerdict};
 
         let cases = false_cases();
@@ -1261,11 +1302,8 @@ mod tests {
             else {
                 panic!("the generated false case must be falsified by Kani")
             };
-            let package = qsl_package(&case);
-            let identity = package
-                .harness_identity(None, case.harness_symbol.clone(), Vec::new())
-                .expect("the selected source has a zero-argument typed identity");
-            let verdict = replay_harness_counterexample(&identity, &counterexample, &package)
+            let verdict = case
+                .replay_counterexample(&counterexample)
                 .expect("QSL accepts the source-backed replay request");
             assert_eq!(verdict, ReplayVerdict::Reproduced);
 
