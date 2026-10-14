@@ -1328,8 +1328,7 @@ mod tests {
 
         let cases = false_cases();
         for case in &cases {
-            let KaniRunOutcome::Falsified { counterexample } = KaniTemp::new(&case).run(&case)
-            else {
+            let KaniRunOutcome::Falsified { counterexample } = KaniTemp::new(case).run(case) else {
                 panic!("the generated false case must be falsified by Kani")
             };
             let verdict = case
