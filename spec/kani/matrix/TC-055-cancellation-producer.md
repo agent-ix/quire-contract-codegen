@@ -40,7 +40,8 @@ map. The existing [TC-041](./TC-041-ir-outcome-terminal-map.md) continues to own
    returned `KaniGroupRun` entries, their actual process grouping and cleanup. Also submit
    otherwise groupable requests with distinct handles and verify separate launcher processes.
    Tag to FR-040-AC-5.
-4. Inspect the direct `quire-exact` dependency resolution, typed IR-to-exact exhaustive match and
+4. Compile the direct `quire-exact::CancelCause` use with
+   `qsl-replay::IncompleteCause::Cancelled`, and inspect the typed IR-to-exact exhaustive match and
    QSL imports. As map-unit controls, supply both source-bearing IR kinds and both typed
    `KaniRunOutcome::Cancelled` sources directly and assert the exact QSL cause; pair the latter
    with a replay settlement and assert `UnexpectedSettlement`. Keep these unit controls separate
