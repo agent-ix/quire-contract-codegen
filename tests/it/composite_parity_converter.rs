@@ -1,13 +1,13 @@
 //! FR-033/FR-030: bind public QSL composite reports before reading their terminal values.
 
 use qsl_replay::{
-    replay_composite_parity, settle_verified_shadow, CompositeEvidence, CompositeIdentity,
-    CompositeParityClaim, CompositeParityResult, DigestDomain, DigestRecord, EqualityOperator,
-    EqualityOutcome, FalsifiedParity, Identifier, InconclusiveCause, Integer,
-    NativeParityObservation, ObligationIdentity, Origin, Refinement, ReplayLimits, ReplayRefusal,
-    ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource, Role, ScalarLimits,
-    StateEnvironment, TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
-    WitnessValue,
+    replay_composite_parity, settle_verified_shadow, Certification, CompositeEvidence,
+    CompositeIdentity, CompositeParityClaim, CompositeParityResult, DigestDomain, DigestRecord,
+    EqualityOperator, EqualityOutcome, FalsifiedParity, Identifier, InconclusiveCause, Integer,
+    NativeParityObservation, ObligationIdentity, Origin, ProofBasis, Refinement, ReplayLimits,
+    ReplayRefusal, ReplayRequest, ReplayRequestRefusal, ReplayRequestWire, ReplaySource, Role,
+    ScalarLimits, StateEnvironment, TerminalValue, VerifiedShadow, VerifiedShadowResult,
+    WireNodeId, WitnessValue,
 };
 use quire_contract_codegen::{
     composite_parity_terminal_value, verified_shadow_terminal_value, CompositeReportError,
@@ -467,14 +467,20 @@ fn tc_048_verified_public_rows_keep_their_qsl_terminal_values() {
                 success_checks: 0,
                 refinement: Refinement::Exhausted,
             },
-            TerminalValue::Proved { success_checks: 0 },
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks: 0 },
+                certification: Certification::Certified,
+            },
         ),
         (
             VerifiedShadow {
                 success_checks: 3,
                 refinement: Refinement::Exhausted,
             },
-            TerminalValue::Proved { success_checks: 3 },
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks: 3 },
+                certification: Certification::Certified,
+            },
         ),
         (
             VerifiedShadow {
@@ -833,7 +839,10 @@ fn tc_048_verified_report_requires_success_count_and_refinement() {
     ));
     assert_eq!(
         bound.terminal_value(),
-        TerminalValue::Proved { success_checks: 3 }
+        TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 3 },
+            certification: Certification::Certified,
+        }
     );
     assert_eq!(
         verified_shadow_terminal_value(&sent, None).unwrap_err(),

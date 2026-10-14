@@ -18,10 +18,14 @@ use std::{
 use super::{
     memory::{MemoryObservation, MemoryObserver},
     namespace::{BackendCommand, NamespaceOwner},
+    owners::{LaunchOwners, PollOperation},
 };
 
+use quire_contract_ir::kani::KaniCancellationSource;
+use quire_exact::{Cancel, CancelCause};
+
 use rustix::{
-    event::{poll, PollFd, PollFlags},
+    event::{PollFd, PollFlags},
     io::Errno,
     process::{kill_process_group, waitid, Pid, Signal, WaitId, WaitIdOptions},
     time::Timespec,
@@ -46,6 +50,8 @@ pub(super) enum LaunchOutcome {
     /// killed and the launcher reaped. Production bounded execution confirms teardown of
     /// the entire owned PID namespace, including unobserved and escaped descendants.
     TimedOut,
+    /// The caller-owned handle stopped the run with this retained source.
+    Cancelled { source: KaniCancellationSource },
     /// Observed aggregate resident memory exceeded the identity ceiling; the tree was killed.
     MemoryExhausted,
     /// The tree could no longer be observed, so the run was stopped without classifying it.
@@ -105,10 +111,6 @@ enum CaptureFailure {
 /// What one capture thread returns: the whole stream, or why it could not.
 type Captured = Result<Vec<u8>, CaptureFailure>;
 
-/// The `poll(2)` a capture thread waits with. A parameter so that a failed poll, which no real pipe
-/// produces on demand, is exercised by a test.
-type PollFn = fn(&mut [PollFd<'_>], Option<&Timespec>) -> Result<usize, Errno>;
-
 /// Polling interval while waiting for the launcher to exit within its budget, and the longest a
 /// capture thread goes between looking at its stop flag. Short enough that a tight caller-declared
 /// timeout in a test is still observed promptly, long enough not to spin.
@@ -166,7 +168,16 @@ pub(super) fn run_launcher(
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> io::Result<LaunchOutcome> {
-    run_monitored(command, timeout, harnesses, None, None, None)
+    run_monitored(
+        command,
+        timeout,
+        harnesses,
+        None,
+        None,
+        None,
+        &Cancel::new(),
+        &LaunchOwners::real(),
+    )
 }
 
 /// A bounded launch together with the observations made by its enforcement mechanism.
@@ -187,6 +198,8 @@ pub(super) fn run_bounded_launcher(
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     deadline: Option<Instant>,
+    cancel: &Cancel,
+    owners: &LaunchOwners,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
     run_bounded_launcher_at(
         command,
@@ -194,6 +207,8 @@ pub(super) fn run_bounded_launcher(
         harnesses,
         std::path::Path::new("/proc"),
         deadline,
+        cancel,
+        owners,
     )
 }
 
@@ -203,6 +218,8 @@ fn run_bounded_launcher_at(
     harnesses: NonZeroUsize,
     procfs: &std::path::Path,
     deadline: Option<Instant>,
+    cancel: &Cancel,
+    owners: &LaunchOwners,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
     let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
@@ -211,8 +228,14 @@ fn run_bounded_launcher_at(
             memory: observer.observation(),
         });
     }
-    let (command, owner) =
-        NamespaceOwner::prepare(command).map_err(BoundedLaunchError::Unavailable)?;
+    if let Some(source) = observed_cancellation(cancel) {
+        return Ok(BoundedLaunch {
+            outcome: LaunchOutcome::Cancelled { source },
+            memory: observer.observation(),
+        });
+    }
+    let (command, owner) = NamespaceOwner::prepare(command, Arc::clone(&owners.confirmation))
+        .map_err(BoundedLaunchError::Unavailable)?;
     let outcome = run_monitored(
         command,
         ceilings.wall_clock,
@@ -220,6 +243,8 @@ fn run_bounded_launcher_at(
         Some((&mut observer, ceilings.memory_bytes.get())),
         Some(owner),
         deadline,
+        cancel,
+        owners,
     )
     .map_err(|error| {
         if error.kind() == io::ErrorKind::Unsupported || error.kind() == io::ErrorKind::NotFound {
@@ -241,6 +266,8 @@ fn run_monitored(
     mut memory: Option<(&mut MemoryObserver, u64)>,
     mut namespace: Option<NamespaceOwner>,
     supplied_deadline: Option<Instant>,
+    cancel: &Cancel,
+    owners: &LaunchOwners,
 ) -> io::Result<LaunchOutcome> {
     command
         .stdout(Stdio::piped())
@@ -249,6 +276,9 @@ fn run_monitored(
     let deadline = supplied_deadline.or_else(|| Instant::now().checked_add(timeout));
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         return Ok(LaunchOutcome::TimedOut);
+    }
+    if let Some(source) = observed_cancellation(cancel) {
+        return Ok(LaunchOutcome::Cancelled { source });
     }
     let mut child = command.spawn()?;
     drop(command); // Close the parent copies of child-only control descriptors before reading EOF.
@@ -269,8 +299,8 @@ fn run_monitored(
         stop: Arc::new(AtomicBool::new(false)),
         failed: Arc::new(AtomicBool::new(false)),
     };
-    let stdout_reader = spawn_capture(stdout, &flags, limit);
-    let stderr_reader = spawn_capture(stderr, &flags, limit);
+    let stdout_reader = spawn_capture(stdout, &flags, limit, Arc::clone(&owners.stdout));
+    let stderr_reader = spawn_capture(stderr, &flags, limit, Arc::clone(&owners.stderr));
 
     let startup = match &mut namespace {
         Some(owner) => match &mut memory {
@@ -280,7 +310,15 @@ fn run_monitored(
         None => Ok(None),
     };
     let exited = match &startup {
-        Ok(root) => wait_until_at(&child, deadline, &flags.failed, &mut memory, *root),
+        Ok(root) => wait_until_at(
+            &child,
+            deadline,
+            &flags.failed,
+            &mut memory,
+            *root,
+            cancel,
+            owners,
+        ),
         Err(error) if error.kind() == io::ErrorKind::TimedOut => Ok(WaitConclusion::TimedOut),
         Err(_) => Err(io::Error::other("namespace startup refused")), // Refusal is returned after owned cleanup.
     };
@@ -318,7 +356,8 @@ fn run_monitored(
         WaitConclusion::MemoryUnobserved { detail } => {
             return Ok(LaunchOutcome::MemoryUnobserved { detail })
         }
-        WaitConclusion::Completed | WaitConclusion::TimedOut => {}
+        WaitConclusion::Completed | WaitConclusion::TimedOut | WaitConclusion::Cancelled { .. } => {
+        }
     }
 
     let stdout_bytes = match stream_bytes(CaptureStream::Stdout, stdout_bytes, limit, harnesses) {
@@ -341,6 +380,7 @@ fn run_monitored(
             ),
         },
         WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
+        WaitConclusion::Cancelled { source } => LaunchOutcome::Cancelled { source },
         WaitConclusion::MemoryExhausted => LaunchOutcome::MemoryExhausted,
         WaitConclusion::MemoryUnobserved { detail } => LaunchOutcome::MemoryUnobserved { detail },
     };
@@ -401,6 +441,7 @@ struct CaptureFlags {
 enum WaitConclusion {
     Completed,
     TimedOut,
+    Cancelled { source: KaniCancellationSource },
     MemoryExhausted,
     MemoryUnobserved { detail: String },
 }
@@ -415,7 +456,15 @@ fn wait_until(
     failed: &AtomicBool,
     memory: &mut Option<(&mut MemoryObserver, u64)>,
 ) -> io::Result<WaitConclusion> {
-    wait_until_at(child, deadline, failed, memory, None)
+    wait_until_at(
+        child,
+        deadline,
+        failed,
+        memory,
+        None,
+        &Cancel::new(),
+        &LaunchOwners::real(),
+    )
 }
 
 fn wait_until_at(
@@ -424,6 +473,8 @@ fn wait_until_at(
     failed: &AtomicBool,
     memory: &mut Option<(&mut MemoryObserver, u64)>,
     namespace_root: Option<u32>,
+    cancel: &Cancel,
+    owners: &LaunchOwners,
 ) -> io::Result<WaitConclusion> {
     let pid = i32::try_from(child.id())
         .ok()
@@ -433,7 +484,10 @@ fn wait_until_at(
         // Observe before consulting exit: a backend that exited beside an observed overage
         // must never turn that overage into a completed verdict.
         if let Some((observer, ceiling)) = memory {
-            match observer.observe(namespace_root.unwrap_or_else(|| child.id())) {
+            match owners
+                .memory
+                .observe(observer, namespace_root.unwrap_or_else(|| child.id()))
+            {
                 Ok(bytes) if bytes > *ceiling => return Ok(WaitConclusion::MemoryExhausted),
                 Ok(_) => {}
                 Err(error) => {
@@ -448,6 +502,9 @@ fn wait_until_at(
             || deadline.is_some_and(|deadline| Instant::now() >= deadline)
         {
             return Ok(WaitConclusion::TimedOut);
+        }
+        if let Some(source) = observed_cancellation(cancel) {
+            return Ok(WaitConclusion::Cancelled { source });
         }
         match waitid(
             WaitId::Pid(pid),
@@ -464,7 +521,12 @@ fn wait_until_at(
 /// Starts a thread that reads `pipe` to its end, or until `stop` is set and nothing more is
 /// waiting in it. A failure sets `failed`, so the run stops waiting for a launcher whose output
 /// nobody is reading any more.
-fn spawn_capture<R>(pipe: R, flags: &CaptureFlags, limit: usize) -> thread::JoinHandle<Captured>
+fn spawn_capture<R>(
+    pipe: R,
+    flags: &CaptureFlags,
+    limit: usize,
+    poller: Arc<dyn PollOperation>,
+) -> thread::JoinHandle<Captured>
 where
     R: Read + AsFd + Send + 'static,
 {
@@ -477,7 +539,9 @@ where
         // The whole guard moves into the thread: a closure naming only `failure.failed` would
         // capture that field and drop the guard, and set the flag, here.
         let mut failure = failure;
-        let captured = capture(pipe, &stop, limit, STOP_DRAIN_LIMIT, poll);
+        let captured = capture(pipe, &stop, limit, STOP_DRAIN_LIMIT, |fds, timeout| {
+            poller.poll(fds, timeout)
+        });
         failure.failed = captured.is_err();
         captured
     })
@@ -521,7 +585,7 @@ fn capture<R: Read + AsFd>(
     stop: &AtomicBool,
     limit: usize,
     drain_limit: Duration,
-    poll_pipe: PollFn,
+    mut poll_pipe: impl FnMut(&mut [PollFd<'_>], Option<&Timespec>) -> Result<usize, Errno>,
 ) -> Captured {
     let mut kept = Vec::new();
     let mut chunk = [0_u8; 64 * 1024];
@@ -593,8 +657,17 @@ fn kill_process_tree(child: &mut Child) {
     let _ = child.kill();
 }
 
+/// Observe the caller's retained first event, not a clock or a meter charge.
+fn observed_cancellation(cancel: &Cancel) -> Option<KaniCancellationSource> {
+    cancel.cause().map(|cause| match cause {
+        CancelCause::Requested => KaniCancellationSource::Requested,
+        CancelCause::Deadline => KaniCancellationSource::Deadline,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use rustix::event::poll;
     use std::{fs, io::Write};
 
     use super::*;
@@ -642,6 +715,8 @@ mod tests {
             None,
             None,
             Some(Instant::now()),
+            &Cancel::new(),
+            &LaunchOwners::real(),
         )
         .unwrap();
         assert!(matches!(outcome, LaunchOutcome::TimedOut));
@@ -668,6 +743,8 @@ mod tests {
             NonZeroUsize::MIN,
             &directory.join("unavailable-procfs"),
             Instant::now().checked_add(Duration::from_secs(5)),
+            &Cancel::new(),
+            &LaunchOwners::real(),
         );
         assert!(matches!(result, Err(BoundedLaunchError::Unavailable(_))));
         assert!(
@@ -1220,7 +1297,12 @@ mod tests {
         };
 
         let (reader, _writer) = waiting();
-        let panicked = finish_capture(spawn_capture(PanickingPipe(reader), &flags, CAPTURE_LIMIT));
+        let panicked = finish_capture(spawn_capture(
+            PanickingPipe(reader),
+            &flags,
+            CAPTURE_LIMIT,
+            Arc::clone(&LaunchOwners::real().stdout),
+        ));
         assert!(
             matches!(&panicked, Err(CaptureFailure::Unread { detail }) if detail.contains("panicked")),
             "{panicked:?}"
@@ -1368,6 +1450,8 @@ mod tests {
             Some((&mut observer, u64::MAX)),
             None,
             None,
+            &Cancel::new(),
+            &LaunchOwners::real(),
         )
         .unwrap();
         assert!(

@@ -7,13 +7,14 @@
 //! re-exports, so the `Declined` code arm is built through `qsl-replay` alone.
 
 use qsl_replay::{
-    std001_code, AdmissionFailure, CallSiteRefusal, Category, ClauseName, Code, DeclineCode,
-    DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord, DisagreementCause,
-    FieldName, FrameCounterexample, Identifier, IncompleteCause, InconclusiveCause, InternalFault,
-    MalformedTranscript, OperationName, PopulationName, ProofRefusalCause, QualifiedName,
-    ReplayLimits, ReplayRefusal, ReportedInconclusiveCause, ScalarLimits, SourceIdentity,
-    StateClauseCounterexample, Std001Code, SuppliedLibrary, TerminalValue, UnavailabilityCause,
-    Verdict, Witness, WitnessEnvelope, WitnessFailure, WitnessPacket,
+    std001_code, AdmissionFailure, CallSiteRefusal, Category, Certification, ClauseName, Code,
+    DeclineCode, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
+    DisagreementCause, FieldName, FrameCounterexample, Identifier, IncompleteCause,
+    InconclusiveCause, InternalFault, MalformedTranscript, OperationName, PopulationName,
+    ProofBasis, ProofRefusalCause, QualifiedName, ReplayLimits, ReplayRefusal,
+    ReportedInconclusiveCause, ScalarLimits, SourceIdentity, StateClauseCounterexample, Std001Code,
+    SuppliedLibrary, TerminalValue, UnavailabilityCause, Verdict, Witness, WitnessEnvelope,
+    WitnessFailure, WitnessPacket,
 };
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
@@ -23,7 +24,8 @@ use quire_contract_codegen::{
     ReplaySettlement, ReplayVerdict, ScopeMember, SpineReplayError, StateClauseReplay,
     StateClauseReplayError, StateFrameRefusal, TerminalPairError,
 };
-use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
+use quire_exact::CancelCause;
 
 use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
 
@@ -59,6 +61,28 @@ fn settlement_free_outcomes() -> Vec<KaniRunOutcome> {
     ];
     outcomes.extend(REASONS.map(inconclusive));
     outcomes
+}
+
+/// Both direct run-map cancellation sources preserve their exact cause and refuse replay pairs.
+/// Trace: FR-029-AC-15, FR-029-AC-29, FR-040-AC-7
+#[test]
+fn direct_cancelled_run_maps_exact_source_and_rejects_settlement() {
+    for (source, exact) in [
+        (KaniCancellationSource::Requested, CancelCause::Requested),
+        (KaniCancellationSource::Deadline, CancelCause::Deadline),
+    ] {
+        let outcome = KaniRunOutcome::Cancelled { source };
+        assert_eq!(
+            run_terminal_value(&outcome, 0, None),
+            Ok(TerminalValue::Incomplete(IncompleteCause::Cancelled {
+                source: exact
+            }))
+        );
+        assert_eq!(
+            run_terminal_value(&outcome, 0, Some(ReplaySettlement::Reproduced)),
+            Err(TerminalPairError::UnexpectedSettlement)
+        );
+    }
 }
 
 fn map_run(outcome: &KaniRunOutcome, settlement: Option<ReplaySettlement<'_>>) -> TerminalValue {
@@ -115,15 +139,18 @@ fn non_fault_refusal() -> ReplayRefusal {
     ReplayRefusal::SourceCount(2)
 }
 
-/// `verified` with three SUCCESS checks is `Proved { success_checks: 3 }`, and `falsified` with
-/// a reproduced replay is `Refuted`.
+/// `verified` with three SUCCESS checks is a certified `Proved` with three checks. A
+/// `falsified` run with a reproduced replay is `Refuted`.
 ///
 /// Trace: FR-029-AC-1, TC-040
 #[test]
 fn tc_040_verified_proves_its_checks_and_a_reproduced_falsification_refutes() {
     assert_eq!(
         map_run(&KaniRunOutcome::Verified, None),
-        TerminalValue::Proved { success_checks: 3 }
+        TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 3 },
+            certification: Certification::Certified,
+        }
     );
     assert_eq!(
         map_run(&falsified(), Some(ReplaySettlement::Reproduced)),
@@ -131,8 +158,8 @@ fn tc_040_verified_proves_its_checks_and_a_reproduced_falsification_refutes() {
     );
 }
 
-/// The vacuous-proof reason and `cover-unsatisfied` each map to `Proved { success_checks: 0 }`,
-/// which QSL reads as category `inconclusive` with the vacuity cause.
+/// The vacuous-proof reason and `cover-unsatisfied` each map to a certified `Proved` with
+/// zero checks, which QSL reads as category `inconclusive` with the vacuity cause.
 ///
 /// Trace: FR-029-AC-2, TC-040
 #[test]
@@ -145,7 +172,13 @@ fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks()
         },
     ] {
         let value = map_run(&outcome, None);
-        assert_eq!(value, TerminalValue::Proved { success_checks: 0 });
+        assert_eq!(
+            value,
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks: 0 },
+                certification: Certification::Certified,
+            }
+        );
         assert_eq!(value.category(), Category::Inconclusive);
         assert_eq!(
             value.vacuous_proof_cause(),
@@ -818,7 +851,18 @@ fn ir_outcomes() -> Vec<KaniOutcome> {
         ir(Kind::Unavailable, Std001Code::KANI_SOLVER_ABSENT),
         ir(Kind::TimedOut, Std001Code::KANI_BOUND_EXHAUSTED),
         ir(Kind::ResourceExhausted, Std001Code::KANI_BOUND_EXHAUSTED),
-        ir(Kind::Cancelled, Std001Code::KANI_BOUND_EXHAUSTED),
+        ir(
+            Kind::Cancelled {
+                source: KaniCancellationSource::Requested,
+            },
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
+        ir(
+            Kind::Cancelled {
+                source: KaniCancellationSource::Deadline,
+            },
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
         ir(Kind::Inconclusive, Std001Code::KANI_VACUOUS_PROOF),
     ]
 }
@@ -855,8 +899,8 @@ fn tc_041_every_expressible_pair_maps_to_one_value() {
         }
     }
     with_settlements(|settlement| values.push(map_ir_settled(settlement)));
-    // Nine kinds with no settlement and the counterexample with each of the six readings.
-    assert_eq!(values.len(), 9 + 6);
+    // Ten source-bearing outcomes with no settlement and six counterexample readings.
+    assert_eq!(values.len(), 10 + 6);
 }
 
 /// A pair outside the map's input is a typed refusal, not a value: a counterexample needs its
@@ -931,7 +975,22 @@ fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
     for (kind, cause) in [
         (Kind::TimedOut, IncompleteCause::TimedOut),
         (Kind::ResourceExhausted, IncompleteCause::ResourceExhausted),
-        (Kind::Cancelled, IncompleteCause::Cancelled),
+        (
+            Kind::Cancelled {
+                source: KaniCancellationSource::Requested,
+            },
+            IncompleteCause::Cancelled {
+                source: CancelCause::Requested,
+            },
+        ),
+        (
+            Kind::Cancelled {
+                source: KaniCancellationSource::Deadline,
+            },
+            IncompleteCause::Cancelled {
+                source: CancelCause::Deadline,
+            },
+        ),
     ] {
         assert_eq!(
             map_ir(&ir(kind, Std001Code::KANI_BOUND_EXHAUSTED)),
@@ -943,17 +1002,23 @@ fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
 /// `Proved` carries the transcript's SUCCESS check count, zero included, and a `Counterexample`
 /// with a reproduced replay is `Refuted`.
 ///
-/// Trace: FR-030-AC-4, TC-041
+/// Trace: FR-030-AC-4, FR-030-AC-18, TC-041
 #[test]
 fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refutes() {
     let proved = ir(KaniOutcomeKind::Proved, Std001Code::KANI_PROVED);
     assert_eq!(
         ir_outcome_terminal_value(&proved, 3, None),
-        Ok(TerminalValue::Proved { success_checks: 3 })
+        Ok(TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 3 },
+            certification: Certification::Certified,
+        })
     );
     assert_eq!(
         ir_outcome_terminal_value(&proved, 0, None),
-        Ok(TerminalValue::Proved { success_checks: 0 })
+        Ok(TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        })
     );
     assert_eq!(
         map_ir_settled(ReplaySettlement::Reproduced),
@@ -961,16 +1026,19 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
     );
 }
 
-/// `Inconclusive` with `kani_vacuous_proof` is `Proved { success_checks: 0 }` whatever count the
-/// caller passes; with any other code it is `Failed`.
+/// `Inconclusive` with `kani_vacuous_proof` is a certified `Proved` with zero checks whatever
+/// count the caller passes; with any other code it is `Failed`.
 ///
-/// Trace: FR-030-AC-5, TC-041
+/// Trace: FR-030-AC-5, FR-030-AC-18, TC-041
 #[test]
 fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_failed() {
     let outcome = |code| ir(KaniOutcomeKind::Inconclusive, code);
     assert_eq!(
         map_ir(&outcome(Std001Code::KANI_VACUOUS_PROOF)),
-        TerminalValue::Proved { success_checks: 0 }
+        TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        }
     );
     for code in [
         Std001Code::KANI_BOUND_INVALID,
@@ -992,7 +1060,7 @@ fn tc_041_no_outcome_maps_to_tested() {
         .collect();
     values.push(map_ir_settled(ReplaySettlement::Reproduced));
     with_settlements(|settlement| values.push(map_ir_settled(settlement)));
-    assert_eq!(values.len(), 9 + 1 + 5);
+    assert_eq!(values.len(), 10 + 1 + 5);
     assert!(
         values.iter().all(|value| *value != TerminalValue::Tested),
         "{values:?}"
@@ -1042,6 +1110,18 @@ fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
                     .map(|segment| segment.ident.to_string())
                     .collect();
                 let [kind, variant] = segments.as_slice() else {
+                    return None;
+                };
+                (kind == "Kind").then(|| out.push(variant.clone()))
+            }
+            Pat::Struct(structure) => {
+                let names: Vec<_> = structure
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect();
+                let [kind, variant] = names.as_slice() else {
                     return None;
                 };
                 (kind == "Kind").then(|| out.push(variant.clone()))

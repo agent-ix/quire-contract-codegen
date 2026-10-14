@@ -10,12 +10,16 @@
 //! no `proof_category` function exists here.
 
 use qsl_replay::{
-    Code, DeclineCode, DisagreementCause, IncompleteCause, InconclusiveCause, ProofRefusalCause,
-    ReplayRefusal, Std001Code, TerminalValue, UnavailabilityCause,
+    Certification, Code, DeclineCode, DisagreementCause, IncompleteCause, InconclusiveCause,
+    ProofBasis, ProofRefusalCause, ReplayRefusal, Std001Code, TerminalValue, UnavailabilityCause,
 };
-use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+use quire_contract_ir::kani::{
+    KaniCancellationSource, KaniOutcome, KaniOutcomeError, KaniOutcomeKind,
+};
+use quire_exact::CancelCause;
 
 use crate::kani::classify::{KaniInconclusiveReason, KaniRunOutcome};
+use crate::kani::run::execute::KaniExecutionEvidence;
 
 /// The settlement of a falsified run's replay, read as one of the six readings FR-029 states.
 /// The driver builds it from the replay path's result or error; [`run_terminal_value`] reads it.
@@ -44,8 +48,8 @@ pub enum ReplaySettlement<'a> {
     CgDefect,
 }
 
-/// A pair the map does not take: [`ReplaySettlement`] accompanies a falsified outcome only.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// A refused terminal conversion: invalid pairing or rejected IR cancellation construction.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TerminalPairError {
     /// A falsified outcome with no replay settlement: nothing says whether the counterexample
     /// reproduces.
@@ -53,6 +57,8 @@ pub enum TerminalPairError {
     /// An outcome other than falsified with a replay settlement: only a counterexample is
     /// replayed.
     UnexpectedSettlement,
+    /// The owning IR constructor refused cancellation execution evidence.
+    InvalidCancellation(KaniOutcomeError),
 }
 
 impl std::fmt::Display for TerminalPairError {
@@ -61,6 +67,7 @@ impl std::fmt::Display for TerminalPairError {
             Self::MissingSettlement => {
                 f.write_str("a falsified run needs the settlement of its counterexample's replay")
             }
+            Self::InvalidCancellation(error) => std::fmt::Display::fmt(error, f),
             Self::UnexpectedSettlement => {
                 f.write_str("only a falsified run carries a replay settlement")
             }
@@ -73,8 +80,9 @@ impl std::error::Error for TerminalPairError {}
 /// Maps one run outcome, with the SUCCESS check count its transcript reports and, for a
 /// falsified outcome, its replay settlement, to QSL's terminal value (FR-029).
 ///
-/// A vacuous proof and a cover-unsatisfied run are `Proved { success_checks: 0 }`, which QSL
-/// reads as category `inconclusive`; no outcome maps to `Tested`.
+/// A vacuous proof and a cover-unsatisfied run have a zero-check `Checks` basis and
+/// `Certified` certification. QSL reads them as category `inconclusive`; no outcome maps to
+/// `Tested`.
 ///
 /// # Errors
 ///
@@ -85,16 +93,25 @@ pub fn run_terminal_value(
     settlement: Option<ReplaySettlement<'_>>,
 ) -> Result<TerminalValue, TerminalPairError> {
     use KaniInconclusiveReason as Reason;
-    use KaniRunOutcome::{CoverUnsatisfied, Falsified, Inconclusive, Verified};
+    use KaniRunOutcome::{Cancelled, CoverUnsatisfied, Falsified, Inconclusive, Verified};
     Ok(match (outcome, settlement) {
-        (Verified, None) => TerminalValue::Proved { success_checks },
-        (CoverUnsatisfied { .. }, None) => TerminalValue::Proved { success_checks: 0 },
+        (Verified, None) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks },
+            certification: Certification::Certified,
+        },
+        (CoverUnsatisfied { .. }, None) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        },
         (
             Inconclusive {
                 reason: Reason::VacuousProof,
             },
             None,
-        ) => TerminalValue::Proved { success_checks: 0 },
+        ) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks: 0 },
+            certification: Certification::Certified,
+        },
         (
             Inconclusive {
                 reason: Reason::TimedOut,
@@ -116,9 +133,10 @@ pub fn run_terminal_value(
             },
             None,
         ) => TerminalValue::Failed,
+        (Cancelled { source }, None) => cancelled_value(*source),
         (Falsified { .. }, Some(settlement)) => settled(settlement),
         (Falsified { .. }, None) => return Err(TerminalPairError::MissingSettlement),
-        (Verified | CoverUnsatisfied { .. } | Inconclusive { .. }, Some(_)) => {
+        (Verified | CoverUnsatisfied { .. } | Inconclusive { .. } | Cancelled { .. }, Some(_)) => {
             return Err(TerminalPairError::UnexpectedSettlement)
         }
     })
@@ -133,8 +151,8 @@ pub fn run_terminal_value(
 /// only for `Unavailable` and `Inconclusive`, plus the `Declined` kinds, whose code is carried
 /// as the STD-001 code IR issued: [`DeclineCode::Std001`], never respelled as a QSL catalog
 /// code and never checked for registration (QSL records no issuer and refuses no unregistered
-/// code). It never reads `source_id` or `context`. A vacuous proof is `Proved { success_checks:
-/// 0 }`; no outcome maps to `Tested`.
+/// code). It never reads `source_id` or `context`. A vacuous proof has a zero-check `Checks`
+/// basis and `Certified` certification; no outcome maps to `Tested`.
 ///
 /// # Errors
 ///
@@ -150,7 +168,10 @@ pub fn ir_outcome_terminal_value(
         code: DeclineCode::Std001(outcome.code),
     };
     Ok(match (&outcome.kind, settlement) {
-        (Kind::Proved, None) => TerminalValue::Proved { success_checks },
+        (Kind::Proved, None) => TerminalValue::Proved {
+            basis: ProofBasis::Checks { success_checks },
+            certification: Certification::Certified,
+        },
         (Kind::Counterexample, Some(settlement)) => settled(settlement),
         (Kind::Counterexample, None) => return Err(TerminalPairError::MissingSettlement),
         (Kind::Refused, None) => declined(ProofRefusalCause::Refused),
@@ -165,9 +186,12 @@ pub fn ir_outcome_terminal_value(
         (Kind::ResourceExhausted, None) => {
             TerminalValue::Incomplete(IncompleteCause::ResourceExhausted)
         }
-        (Kind::Cancelled, None) => TerminalValue::Incomplete(IncompleteCause::Cancelled),
+        (Kind::Cancelled { source }, None) => cancelled_value(*source),
         (Kind::Inconclusive, None) if outcome.code == Std001Code::KANI_VACUOUS_PROOF => {
-            TerminalValue::Proved { success_checks: 0 }
+            TerminalValue::Proved {
+                basis: ProofBasis::Checks { success_checks: 0 },
+                certification: Certification::Certified,
+            }
         }
         (Kind::Inconclusive, None) => TerminalValue::Failed,
         (
@@ -178,7 +202,7 @@ pub fn ir_outcome_terminal_value(
             | Kind::Unavailable
             | Kind::TimedOut
             | Kind::ResourceExhausted
-            | Kind::Cancelled
+            | Kind::Cancelled { .. }
             | Kind::Inconclusive,
             Some(_),
         ) => return Err(TerminalPairError::UnexpectedSettlement),
@@ -197,5 +221,41 @@ fn settled(settlement: ReplaySettlement<'_>) -> TerminalValue {
             TerminalValue::Inconclusive(InconclusiveCause::ReplayRefused(code))
         }
         ReplaySettlement::Fault | ReplaySettlement::CgDefect => TerminalValue::Failed,
+    }
+}
+
+/// Convert only the source recorded by the owning IR cancellation carrier.
+fn cancelled_value(source: KaniCancellationSource) -> TerminalValue {
+    let source = match source {
+        KaniCancellationSource::Requested => CancelCause::Requested,
+        KaniCancellationSource::Deadline => CancelCause::Deadline,
+    };
+    TerminalValue::Incomplete(IncompleteCause::Cancelled { source })
+}
+
+impl KaniExecutionEvidence {
+    /// Construct and map the IR cancellation of this settled execution (FR-040).
+    ///
+    /// Non-cancelled evidence returns `None` and retains FR-029's ordinary map. Both returned
+    /// values retain the launcher's stored source; this entry never reads the caller's handle.
+    ///
+    /// # Errors
+    ///
+    /// The owning IR constructor's refusal, or the FR-030 pair refusal.
+    pub fn cancellation_terminal_value(
+        &self,
+    ) -> Result<Option<(KaniOutcome, qsl_replay::TerminalValue)>, TerminalPairError> {
+        let KaniRunOutcome::Cancelled { source } = self.outcome else {
+            return Ok(None);
+        };
+        let outcome = KaniOutcome::non_success(
+            KaniOutcomeKind::Cancelled { source },
+            quire_contract_model::std001_code!("kani_cancelled"),
+            &self.harness_path,
+            &self.launcher_path,
+        )
+        .map_err(TerminalPairError::InvalidCancellation)?;
+        let terminal = ir_outcome_terminal_value(&outcome, 0, None)?;
+        Ok(Some((outcome, terminal)))
     }
 }

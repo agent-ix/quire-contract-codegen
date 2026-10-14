@@ -157,7 +157,7 @@ pub const ITEM_CALL_SOURCE_MODEL: u32 = 534;
 /// Classifier-only source call for the state root.
 pub const ITEM_CALL_SOURCE_STATE: u32 = 535;
 
-const DISAMBIGUATOR_BASE: u32 = 2000;
+const BODY_PARAMETER_BASE: u32 = 2000;
 
 /// A genuinely checked FR-021 package used for source-binding adversarial
 /// cases. Unlike `ext_corpus_package`, this declaration is a `function`
@@ -178,14 +178,7 @@ fn source_reference(code: u32) -> serde_json::Value {
     })
 }
 
-/// `application_code`'s preimage is `{version, node_tag, semantic_form,
-/// semantic_type: T_BOOLEAN (fixed), declaration: None, recursion: null,
-/// body}` -- two calls sharing the same `(semantic_form, body)` pair
-/// collide on one digest (`InvalidSemanticGraph` at admission: a duplicate
-/// `node_id`). Every node this module adds therefore gets its own
-/// `result_type` disambiguator from a dedicated, freshly registered
-/// `scalar_type` placeholder pool, so no two of this module's own
-/// `application_code` calls can ever share a preimage.
+/// Parameter and body fixture IDs for the actual source-bound declarations below.
 const FUNCTION_PARAMETER_BASE: u32 = 50_000;
 const FUNCTION_BODY_BASE: u32 = 70_000;
 const ITEM_ARGUMENT_BASE: u32 = 100_000;
@@ -343,46 +336,45 @@ fn source_item_call(
 pub fn ext_corpus_package() -> PackageBuilder {
     let mut builder = corpus_package();
 
-    // Nine function roots and five call roots each receive a distinct result
-    // type in the fixture body, preventing duplicate application identities.
-    let disambiguator_count = 9 + 5;
-    for i in 0..disambiguator_count {
-        let integer_result = matches!(i, 0 | 4 | 5 | 6 | 7 | 8);
-        builder.code(
-            DISAMBIGUATOR_BASE + i,
-            "scalar_type",
-            if integer_result { "integer" } else { "boolean" },
-            DISAMBIGUATOR_BASE + i,
-            aggregate(vec![]),
+    let roots = [
+        (FN_ADD, "binary", true),
+        (FN_EQ, "binary", false),
+        (FN_CALL_NESTED, "call", false),
+        (FN_DANGLING_CALL, "call", false),
+        (FN_REF_PARAM, "binary", true),
+        (FN_MODEL_PARAM, "binary", true),
+        (FN_STATE_PARAM, "binary", true),
+        (FN_CAPABILITY, "binary", true),
+        (FN_UNRELATED, "binary", true),
+        (ITEM_CALL_ADD, "call", false),
+        (ITEM_CALL_EQ, "call", false),
+        (ITEM_CALL_NESTED, "call", false),
+        (ITEM_CALL_UNRELATED, "call", false),
+        (ITEM_CALL_UNKNOWN_FUNCTION, "call", false),
+    ];
+    for (index, (code, form, integer_result)) in roots.into_iter().enumerate() {
+        let parameter = BODY_PARAMETER_BASE + u32::try_from(index).expect("body parameter index");
+        // These classifier roots have no source function declaration or name binding.
+        // Their descriptors own runtime parameters; this typed source operand names
+        // the root rather than colliding with the shared corpus's `p2` parameter.
+        source_parameter(
+            &mut builder,
+            parameter,
+            &format!("body_{code}_left"),
+            T_INTEGER,
         );
+        let mut body = binary_body(T_INTEGER, T_INTEGER);
+        body["arguments"][0] = reference_code(parameter);
+        let result_type = if integer_result {
+            body["operation"]["identity"] = serde_json::json!("quire.op.integer.add");
+            body["result_type"] =
+                serde_json::json!({"domain": NODE_DOMAIN, "digest": key(T_INTEGER)});
+            T_INTEGER
+        } else {
+            T_BOOLEAN
+        };
+        builder.application_node(code, form, &key(result_type), body);
     }
-
-    let mut next = 0u32;
-    let mut body = |integer_add: bool| {
-        let mut value = binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + next);
-        if integer_add {
-            value["operation"]["identity"] =
-                serde_json::Value::String("quire.op.integer.add".to_owned());
-        }
-        next += 1;
-        value
-    };
-
-    builder
-        .application_node(FN_ADD, "binary", &key(T_INTEGER), body(true))
-        .application_code(FN_EQ, "binary", body(false))
-        .application_code(FN_CALL_NESTED, "call", body(false))
-        .application_code(FN_DANGLING_CALL, "call", body(false))
-        .application_node(FN_REF_PARAM, "binary", &key(T_INTEGER), body(true))
-        .application_node(FN_MODEL_PARAM, "binary", &key(T_INTEGER), body(true))
-        .application_node(FN_STATE_PARAM, "binary", &key(T_INTEGER), body(true))
-        .application_node(FN_CAPABILITY, "binary", &key(T_INTEGER), body(true))
-        .application_node(FN_UNRELATED, "binary", &key(T_INTEGER), body(true))
-        .application_code(ITEM_CALL_ADD, "call", body(false))
-        .application_code(ITEM_CALL_EQ, "call", body(false))
-        .application_code(ITEM_CALL_NESTED, "call", body(false))
-        .application_code(ITEM_CALL_UNRELATED, "call", body(false))
-        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body(false));
     builder
 }
 

@@ -16,6 +16,7 @@ use std::{
     os::fd::OwnedFd,
     path::{Path, PathBuf},
     process::{Child, Command},
+    sync::Arc,
     time::Instant,
 };
 
@@ -39,6 +40,8 @@ use rustix::{
 };
 #[cfg(target_os = "linux")]
 use serde::Deserialize;
+
+use super::owners::PollOperation;
 
 /// An internal command recipe with explicit environment inheritance and inherited stdin.
 /// Capture owns stdout/stderr; no caller-configured stream is silently reconstructed.
@@ -114,10 +117,14 @@ pub(super) struct NamespaceOwner {
     wrapper: Option<Pid>,
     init: Option<(u32, u64, OwnedFd)>,
     cleaned: bool,
+    confirmation: Arc<dyn PollOperation>,
 }
 
 impl NamespaceOwner {
-    pub(super) fn prepare(recipe: BackendCommand) -> io::Result<(Command, Self)> {
+    pub(super) fn prepare(
+        recipe: BackendCommand,
+        confirmation: Arc<dyn PollOperation>,
+    ) -> io::Result<(Command, Self)> {
         #[cfg(target_os = "linux")]
         let (gate_read, gate_write) = pipe_with(PipeFlags::CLOEXEC)?;
         #[cfg(target_os = "linux")]
@@ -170,6 +177,7 @@ impl NamespaceOwner {
                     wrapper: None,
                     init: None,
                     cleaned: false,
+                    confirmation,
                 },
             ))
         }
@@ -342,7 +350,7 @@ impl NamespaceOwner {
         }
         if let Some((_, _, handle)) = &self.init {
             let mut ready = [PollFd::new(handle, PollFlags::IN)];
-            poll(
+            self.confirmation.poll(
                 &mut ready,
                 Some(&Timespec {
                     tv_sec: 5,
@@ -515,7 +523,11 @@ mod tests {
     /// Trace: FR-028-AC-2, FR-028-AC-21.
     #[test]
     fn startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed() {
-        let (_command, mut owner) = NamespaceOwner::prepare(BackendCommand::new("sh")).unwrap();
+        let (_command, mut owner) = NamespaceOwner::prepare(
+            BackendCommand::new("sh"),
+            Arc::new(super::super::owners::SystemPoll),
+        )
+        .unwrap();
         let allowance = Instant::now();
         let error = owner
             .startup_information(Some(allowance + Duration::from_secs(600)), allowance)
@@ -541,7 +553,8 @@ mod tests {
             "sh".to_owned(),
             marker.display().to_string(),
         ]);
-        let (mut command, mut owner) = NamespaceOwner::prepare(recipe).unwrap();
+        let (mut command, mut owner) =
+            NamespaceOwner::prepare(recipe, Arc::new(super::super::owners::SystemPoll)).unwrap();
         command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -612,7 +625,8 @@ signal.pause()
             script.to_owned(),
             directory.display().to_string(),
         ]);
-        let (mut command, mut owner) = NamespaceOwner::prepare(recipe).unwrap();
+        let (mut command, mut owner) =
+            NamespaceOwner::prepare(recipe, Arc::new(super::super::owners::SystemPoll)).unwrap();
         command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

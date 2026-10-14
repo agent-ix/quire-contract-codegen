@@ -2402,11 +2402,13 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
             "acme/orders" => "domain-package-acme-orders.json",
             other => panic!("no published model document for QSpec selection {other}"),
         };
-        evidence.insert_domain_package_document(
-            digest,
-            fs::read(root.join("proposals/checked-package-v2").join(document))
-                .expect("read selected QSpec model package"),
-        );
+        evidence
+            .insert_domain_package_document(
+                digest,
+                fs::read(root.join("proposals/checked-package-v2").join(document))
+                    .expect("read selected QSpec model package"),
+            )
+            .expect("retain selected QSpec model package");
     }
     match CheckedPackageV2::read(&canonical, CheckedPackageReadLimits::bounded(), &evidence) {
         CheckedPackageV2ReadResult::Admitted(package) => *package,

@@ -123,7 +123,7 @@ fn domain_document(granted: &[&str]) -> Vec<u8> {
         json!({
             "identity": format!("{range}/constraints/{keyword}"),
             "keyword": keyword,
-            "operands": {"value": value},
+            "operands": {"value": value.to_string()},
             "appliesTo": "ix://quire/native/Integer",
             "diagnosticCode": format!("bound.{keyword}"),
             "origin": generated(&range),
@@ -180,6 +180,7 @@ fn domain_document(granted: &[&str]) -> Vec<u8> {
     }));
     json!({
         "contractVersion": "2.0.0",
+        "canonicalization": {"algorithm": "rfc8785-v1", "digest": "sha256-jcs"},
         "source": {
             "identity": format!("ix://{PACKAGE}/spec"),
             "version": "1.0.0",
@@ -549,7 +550,7 @@ impl Twin {
                     .iter_mut()
                     .find(|constraint| constraint["keyword"] == keyword)
                     .expect("bound");
-                bound["operands"]["value"] = json!(value);
+                bound["operands"]["value"] = json!(value.to_string());
             }
         }
         twin.domain = document.to_string().into_bytes();
@@ -630,6 +631,55 @@ impl Twin {
         self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
     }
 
+    /// Admit QSL's emitted graph with an unread field declared as a selected model variant.
+    pub fn emitted_package_with_unread_variant_audit(
+        &self,
+        clause: &str,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
+        let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let mut variant = construct("variant_type", "quire.meaning.model.variant-type/v1");
+        variant["construct"]["shape"] = json!("enumeration");
+        variant["construct"]["members"] = json!({"variants": "required"});
+        document["constructs"]
+            .as_array_mut()
+            .expect("constructs")
+            .push(variant);
+        let audit = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type");
+        audit["kind"]["name"] = json!("variant_type");
+        audit
+            .as_object_mut()
+            .expect("audit declaration")
+            .remove("scalar");
+        audit["constraints"] = json!([]);
+        audit["variants"] = json!(["Clear", "Flagged"].map(|name| {
+            json!({
+                "identity": format!("ix://{PACKAGE}/variant/audit_range-{name}"),
+                "name": name,
+                "origin": {"source": {
+                    "sourceIdentity": format!("ix://{PACKAGE}/spec"),
+                    "path": "tests/state_frame_support/native_twin.rs",
+                    "startLine": line!(),
+                    "startColumn": column!(),
+                }},
+            })
+        }));
+        let domain = document.to_string().into_bytes();
+        let previous = hex(&jcs_digest(&self.domain));
+        let selected = hex(&jcs_digest(&domain));
+        let source = String::from_utf8(self.unit.clone()).expect("native unit");
+        assert_eq!(source.matches(&previous).count(), 1, "one model selection");
+        let twin = Self {
+            unit: source.replacen(&previous, &selected, 1).into_bytes(),
+            domain,
+        };
+        twin.emitted_package(clause)
+    }
+
     fn emitted_package_with_model(
         &self,
         clause: &str,
@@ -657,7 +707,9 @@ impl Twin {
         }
         let bytes = wire.to_string().into_bytes();
         let mut evidence = CheckedPackageEvidence::new();
-        evidence.insert_domain_package_document(hex(&jcs_digest(&document)), document);
+        evidence
+            .insert_domain_package_document(hex(&jcs_digest(&document)), document)
+            .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
         let package =
             match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence) {

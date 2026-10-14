@@ -1925,13 +1925,13 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
 /// Trace: FR-017-AC-2, TC-027
 #[test]
 fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
+    let cancel = quire_exact::Cancel::new();
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
     let directory = write_crate(&harness, HEALTHY_SUBJECT);
-    let installation = KaniInstallation {
-        launcher: directory.join("cargo-kani"),
-    };
+    let installation = KaniInstallation::new(directory.join("cargo-kani"));
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
         crate_directory: &directory,
@@ -1955,6 +1955,7 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
 #[cfg(unix)]
 #[test]
 fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
+    let cancel = quire_exact::Cancel::new();
     use std::os::unix::fs::PermissionsExt;
 
     let package = bound_package(1000);
@@ -1968,8 +1969,9 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
             fs::write(&launcher, "#!/bin/sh\nexit 0\n").unwrap();
             fs::set_permissions(&launcher, fs::Permissions::from_mode(0o644)).unwrap();
         }
-        let installation = KaniInstallation { launcher };
+        let installation = KaniInstallation::new(launcher);
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
+            cancel: &cancel,
             installation: &installation,
             harness: (&harness).into(),
             crate_directory: &directory,
@@ -2043,8 +2045,10 @@ fn run(
     evidence_directory: &Path,
     label: &str,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
+    let cancel = quire_exact::Cancel::new();
     let crate_directory = write_crate(harness, subject);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
@@ -2075,6 +2079,7 @@ fn run(
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
+    let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let evidence_directory =
         PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligation-evidence");
@@ -2150,6 +2155,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     let harness = &harness;
     let crate_directory = write_crate(harness, HEALTHY_SUBJECT);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
@@ -2176,6 +2182,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
     )
     .unwrap();
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
         crate_directory: &crate_directory,
@@ -2379,9 +2386,11 @@ fn run_scalar_under_real_kani(
     harness: &KaniScalarObligationHarness,
     manifest: &quire_contract_codegen::Artifact,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
+    let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let crate_directory = write_scalar_crate(name, manifest, &harness.rust.contents);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
@@ -2401,6 +2410,7 @@ fn run_scalar_under_real_kani(
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_a_routed_scalar_harness_verifies() {
+    let cancel = quire_exact::Cancel::new();
     let (harness, manifest) = routed_scalar_increment();
     let evidence = run_scalar_under_real_kani("scalar-real", &harness, &manifest);
     assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
@@ -2415,6 +2425,7 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let crate_directory = write_scalar_crate("scalar-real-missing", &manifest, "//! empty\n");
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: (&harness).into(),
         crate_directory: &crate_directory,

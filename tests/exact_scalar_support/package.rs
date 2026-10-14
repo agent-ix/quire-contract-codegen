@@ -1095,7 +1095,9 @@ fn evidence() -> CheckedPackageEvidence {
     )
     .expect("canonical model document")
     .to_string();
-    evidence.insert_domain_package_document(digest, bytes);
+    evidence
+        .insert_domain_package_document(digest, bytes)
+        .expect("retain fixture model document");
     evidence
 }
 

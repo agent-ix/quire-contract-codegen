@@ -327,33 +327,13 @@ fn operand(type_code: u32) -> Value {
     reference(parameter_code(type_code))
 }
 
-/// A well-formed two-argument `binary` application body: each operand is a `reference` to a
-/// parameter node typed by its own declared type ([`operand`]). The generator still builds the
-/// runtime call entirely from the request descriptor, never from a resolved
-/// operand *value*, but since
-/// `quire_contract_codegen::composite_equality::check_operand_types` (FR-018
-/// Behavior: "disagrees with its descriptor's arity or operand types"),
-/// every caller of this function must pass the same two type codes its
-/// descriptor declares as `source_type`, or the item refuses before
-/// generation rather than after. The `operation` is the equality FR-093 lowers
-/// the left operand's family to ([`operation_for`]): Contract IR checks each
-/// operand's family against it, so a body whose operands are not of that
-/// family is refused `OperatorIneligible` at admission. `result_type`
-/// defaults to `T_BOOLEAN`, the body's actual result type;
-/// [`binary_body_with_result`] overrides it only where two callers would
-/// otherwise share one (type, type) pair and collide on one preimage digest.
+/// A Boolean equality over two declared parameter references. The application's result type
+/// agrees with its containing expression; distinct expressions use distinct operand nodes.
 pub fn binary_body(left_type: u32, right_type: u32) -> Value {
-    binary_body_with_result(left_type, right_type, T_BOOLEAN)
-}
-
-/// [`binary_body`], with an explicit `result_type` disambiguator. `IR-216`
-/// validates only that `result_type` resolves to a real node (see
-/// [`application`]'s doc comment), so any already-registered code serves.
-pub fn binary_body_with_result(left_type: u32, right_type: u32, result_type: u32) -> Value {
     application(
         "binary",
         operation_for(left_type),
-        result_type,
+        T_BOOLEAN,
         vec![operand(left_type), operand(right_type)],
     )
 }
@@ -906,11 +886,13 @@ fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
             .as_array()
             .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
         {
-            evidence.insert_domain_package_document(
-                selection["digest"].as_str().expect("model digest"),
-                std::fs::read(root.join("domain-package-acme-orders.json"))
-                    .expect("read published selected QSpec model package"),
-            );
+            evidence
+                .insert_domain_package_document(
+                    selection["digest"].as_str().expect("model digest"),
+                    std::fs::read(root.join("domain-package-acme-orders.json"))
+                        .expect("read published selected QSpec model package"),
+                )
+                .expect("retain selected QSpec model package");
         }
     }
     evidence
@@ -1463,6 +1445,19 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
         ),
     );
 
+    // The refused conversion descriptor and ordinary text equality still need distinct
+    // application identities, without assigning a non-Boolean result to an equality.
+    let bad_convert_parameter = parameter_code(E_BAD_CONVERT);
+    builder.code(
+        bad_convert_parameter,
+        "value",
+        "parameter",
+        T_TEXT,
+        parameter_body("bad_convert_left"),
+    );
+    let mut bad_convert_body = binary_body(T_TEXT, T_TEXT);
+    bad_convert_body["arguments"][0] = reference(bad_convert_parameter);
+
     builder
         .application_code(E_RECORD, "binary", binary_body(R_POINT, R_POINT))
         .application_code(
@@ -1475,14 +1470,7 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
         .application_code(E_TEXT, "binary", binary_body(T_TEXT, T_TEXT))
         .application_code(E_ENUM, "binary", binary_body_enum())
         .application_code(E_DUP, "binary", binary_body(R_DUP, R_DUP))
-        // Same (T_TEXT, T_TEXT) operand-reference pair as E_TEXT: a distinct
-        // `result_type` keeps the two application preimages from colliding
-        // (see `binary_body_with_result`'s doc comment).
-        .application_code(
-            E_BAD_CONVERT,
-            "binary",
-            binary_body_with_result(T_TEXT, T_TEXT, T_INTEGER),
-        )
+        .application_code(E_BAD_CONVERT, "binary", bad_convert_body)
         .application_code(E_REFERENCE, "binary", binary_body(R_WITH_REF, R_WITH_REF))
         .application_code(E_CALL, "call", binary_body(T_INTEGER, T_INTEGER))
         .application_code(E_SELF, "binary", binary_body(R_SELF, R_SELF))

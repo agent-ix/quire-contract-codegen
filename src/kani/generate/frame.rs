@@ -960,6 +960,7 @@ pub(crate) fn field_range(
             | CheckedMemberType::Integer
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)
+            | CheckedMemberType::Variant(_)
             | CheckedMemberType::Option(_)
             | CheckedMemberType::Collection { .. },
         ) => Err(BoundNotResolvedCause::ModelMemberNotI64Range {

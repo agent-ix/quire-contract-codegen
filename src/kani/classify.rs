@@ -1,6 +1,6 @@
 //! Classification of one Kani run from the report Kani exported for it (FR-017).
 
-use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
 use quire_contract_model::Std001Code;
 use serde::Serialize;
 
@@ -70,6 +70,11 @@ pub enum KaniRunOutcome {
         satisfied: u64,
         /// Total cover properties.
         total: u64,
+    },
+    /// The launcher stopped on the first caller-owned cancellation event it observed.
+    Cancelled {
+        /// Source retained at the launcher stop decision.
+        source: KaniCancellationSource,
     },
     /// The run established nothing.
     Inconclusive {

@@ -1486,7 +1486,9 @@ mod tests {
         .expect("imported call compiles");
         let mut evidence = CheckedPackageEvidence::new();
         evidence.support_feature("quire.value.complete/v1");
-        evidence.insert_dependency_package("test/geometry", std::sync::Arc::new(library.clone()));
+        evidence
+            .insert_dependency_package("test/geometry", std::sync::Arc::new(library.clone()))
+            .expect("retain imported geometry package");
         let checked = match CheckedPackageV2::read(
             compiled.bytes(),
             CheckedPackageReadLimits::bounded(),

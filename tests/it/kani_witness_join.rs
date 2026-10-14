@@ -273,9 +273,11 @@ fn write_crate(harness: &KaniObligationHarness, subject: &str) -> PathBuf {
 /// Runs the seeded defect through the real `execute_kani_obligation` (the actual code path
 /// this test's join relies on) and returns its real counterexample transcript.
 fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarness) -> String {
+    let cancel = quire_exact::Cancel::new();
     let crate_directory = write_crate(harness, SEEDED_FAILING_SUBJECT);
     let target_directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-witness-join");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation,
         harness: harness.into(),
         crate_directory: &crate_directory,
