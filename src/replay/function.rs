@@ -20,6 +20,7 @@ use qsl_replay::{
 };
 
 use crate::{
+    kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
     kani::identity::KaniObligationIdentity,
     kani::output::playback::DecodeFailure,
     kani::terminal::ReplaySettlement,
@@ -684,6 +685,196 @@ impl ReplayPackage {
             &arguments,
         )
     }
+}
+
+/// Why a retained corpus case could not be replayed against its QSL source.
+#[derive(Debug)]
+pub enum BoundedCorpusReplayError {
+    /// The retained unit/dependency package did not compile or select the corpus function.
+    Package(ReplayPackageError),
+    /// The package source did not match the case's retained source bytes.
+    SourceMismatch,
+    /// Kani playback could not be decoded or QSL refused the witness request.
+    Replay(SpineReplayError),
+}
+
+impl BoundedCorpusCase {
+    /// Replays actual Kani counterexample playback against this case's retained QSL package.
+    ///
+    /// The package is compiled from the generated unit and imported dependency source each time;
+    /// the harness identity is then tied to QSL's selected function site.
+    pub fn replay_counterexample(
+        &self,
+        transcript: &str,
+    ) -> Result<ReplayVerdict, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
+            return Err(BoundedCorpusReplayError::SourceMismatch);
+        }
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        replay_harness_counterexample(&identity, transcript, &package)
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
+            return Err(BoundedCorpusReplayError::SourceMismatch);
+        }
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        let claim = self.outcome.boolean_claim();
+        Ok(package.parameters().is_empty()
+            && identity.matches_package(&package)
+            && claim.is_some_and(|claim| {
+                package.evaluate_boolean_function(&identity).ok() == Some(claim)
+            }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn qsl_identity_rejects_case(
+        &self,
+        other: &Self,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        let other = compile_corpus_qsl_package(other).map_err(BoundedCorpusReplayError::Package)?;
+        Ok(!identity.matches_package(&other))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replay_counterexample_reproduces(
+        &self,
+        transcript: &str,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        self.replay_counterexample(transcript)
+            .map(|verdict| verdict == ReplayVerdict::Reproduced)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replay_rejects_other_case_package(
+        &self,
+        transcript: &str,
+        other: &Self,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        let other = compile_corpus_qsl_package(other).map_err(BoundedCorpusReplayError::Package)?;
+        replay_harness_counterexample(&identity, transcript, &other)
+            .map(|verdict| {
+                verdict == ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
+            })
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replay_rejects_wrong_harness(
+        &self,
+        transcript: &str,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        let Ok(harness) = crate::core::identity::HarnessSymbol::try_from("another_harness") else {
+            return Ok(false);
+        };
+        let identity = package
+            .harness_identity(None, harness, Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        replay_harness_counterexample(&identity, transcript, &package)
+            .map(|verdict| {
+                matches!(
+                    verdict,
+                    ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(_))
+                )
+            })
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+}
+
+fn compile_corpus_qsl_package(
+    case: &BoundedCorpusCase,
+) -> Result<ReplayPackage, ReplayPackageError> {
+    use qsl_replay::{
+        call_site, DependencyInput, Identifier, QualifiedName, ReplayLimits, ScalarLimits,
+        SourceIdentity,
+    };
+    use std::collections::BTreeMap;
+
+    let maximum = u64::MAX;
+    let dependency_source = LockedSource {
+        authority: "agent-ix".to_owned(),
+        identity: "ir-453/corpus-dependency".to_owned(),
+        namespace: "generated".to_owned(),
+        revision: "ir-453".to_owned(),
+        bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
+    };
+    let function = "corpus_case";
+    let invalid_function = || ReplayPackageError::InvalidFunction {
+        function: function.to_owned(),
+    };
+    let dependency_function = QualifiedName::new(vec![
+        Identifier::new(function).map_err(|_| invalid_function())?
+    ])
+    .map_err(|_| invalid_function())?;
+    let dependency_package_id = call_site(
+        SourceIdentity::new(
+            &dependency_source.authority,
+            &dependency_source.identity,
+            &dependency_source.namespace,
+            &dependency_source.revision,
+        ),
+        &dependency_source.identity,
+        &dependency_source.bytes,
+        [],
+        &DependencyInput::default(),
+        &dependency_function,
+    )
+    .map_err(ReplayPackageError::CallSite)?
+    .package_id;
+    ReplayPackage::new(
+        ReplayInputs {
+            source: LockedSource {
+                authority: "agent-ix".to_owned(),
+                identity: case.artifacts.qsl_source.path.clone(),
+                namespace: "generated".to_owned(),
+                revision: "ir-453".to_owned(),
+                bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
+            },
+            dependencies: vec![DependencyLock {
+                identity: dependency_source.identity.clone(),
+                package_id: dependency_package_id,
+                source: dependency_source,
+            }],
+            accounting_limits: ScalarLimits {
+                integer_bits: maximum,
+                decimal_digits: maximum,
+                scale_expansion: maximum,
+                text_input_bytes: maximum,
+                text_scalars: maximum,
+                normalized_scalars: maximum,
+                unit_edges: maximum,
+                value_occurrences: maximum,
+                work_units: maximum,
+                result_units: maximum,
+            },
+            stage_limits: BTreeMap::new(),
+            declared_domains: Vec::new(),
+            replay_limits: ReplayLimits::default(),
+        },
+        function,
+    )
 }
 
 /// Why a counterexample is evidence failure: the backend's evidence and the native replay do not

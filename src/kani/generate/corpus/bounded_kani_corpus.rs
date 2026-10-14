@@ -388,42 +388,6 @@ pub struct BoundedCorpusCase {
     pub artifacts: BoundedCorpusArtifacts,
 }
 
-impl BoundedCorpusCase {
-    /// Replays actual Kani counterexample playback against this case's retained QSL package.
-    ///
-    /// The package is compiled from the generated unit and imported dependency source each time;
-    /// the harness identity is then tied to QSL's selected function site.
-    pub fn replay_counterexample(
-        &self,
-        transcript: &str,
-    ) -> Result<crate::ReplayVerdict, BoundedCorpusReplayError> {
-        let package = compile_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
-        if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
-            return Err(BoundedCorpusReplayError::SourceMismatch);
-        }
-        let identity = package
-            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
-            .map_err(|error| {
-                BoundedCorpusReplayError::Replay(
-                    crate::replay::function::SpineReplayError::Identity(error),
-                )
-            })?;
-        crate::replay::function::replay_harness_counterexample(&identity, transcript, &package)
-            .map_err(BoundedCorpusReplayError::Replay)
-    }
-}
-
-/// Why a retained corpus case could not be replayed against its QSL source.
-#[derive(Debug)]
-pub enum BoundedCorpusReplayError {
-    /// The retained unit/dependency package did not compile or select the corpus function.
-    Package(crate::replay::function::ReplayPackageError),
-    /// The package source did not match the case's retained source bytes.
-    SourceMismatch,
-    /// Kani playback could not be decoded or QSL refused the witness request.
-    Replay(crate::replay::function::SpineReplayError),
-}
-
 /// Why [`generate_bounded_kani_corpus_case`] emitted no case.
 ///
 /// A refusal is almost always a typed Contract IR [`KaniOutcome`] ([`BoundedCorpusError::Outcome`]),
@@ -990,81 +954,6 @@ fn render_artifacts(
     })
 }
 
-fn compile_qsl_package(
-    case: &BoundedCorpusCase,
-) -> Result<crate::replay::function::ReplayPackage, crate::replay::function::ReplayPackageError> {
-    use crate::replay::function::{DependencyLock, LockedSource, ReplayInputs, ReplayPackage};
-    use qsl_replay::{
-        call_site, DependencyInput, Identifier, QualifiedName, ReplayLimits, ScalarLimits,
-        SourceIdentity,
-    };
-    use std::collections::BTreeMap;
-
-    let maximum = u64::MAX;
-    let dependency_source = LockedSource {
-        authority: "agent-ix".to_owned(),
-        identity: "ir-453/corpus-dependency".to_owned(),
-        namespace: "generated".to_owned(),
-        revision: "ir-453".to_owned(),
-        bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
-    };
-    let function = "corpus_case";
-    let invalid_function = || crate::replay::function::ReplayPackageError::InvalidFunction {
-        function: function.to_owned(),
-    };
-    let dependency_function = QualifiedName::new(vec![
-        Identifier::new(function).map_err(|_| invalid_function())?
-    ])
-    .map_err(|_| invalid_function())?;
-    let dependency_package_id = call_site(
-        SourceIdentity::new(
-            &dependency_source.authority,
-            &dependency_source.identity,
-            &dependency_source.namespace,
-            &dependency_source.revision,
-        ),
-        &dependency_source.identity,
-        &dependency_source.bytes,
-        [],
-        &DependencyInput::default(),
-        &dependency_function,
-    )
-    .map_err(crate::replay::function::ReplayPackageError::CallSite)?
-    .package_id;
-    ReplayPackage::new(
-        ReplayInputs {
-            source: LockedSource {
-                authority: "agent-ix".to_owned(),
-                identity: case.artifacts.qsl_source.path.clone(),
-                namespace: "generated".to_owned(),
-                revision: "ir-453".to_owned(),
-                bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
-            },
-            dependencies: vec![DependencyLock {
-                identity: dependency_source.identity.clone(),
-                package_id: dependency_package_id,
-                source: dependency_source,
-            }],
-            accounting_limits: ScalarLimits {
-                integer_bits: maximum,
-                decimal_digits: maximum,
-                scale_expansion: maximum,
-                text_input_bytes: maximum,
-                text_scalars: maximum,
-                normalized_scalars: maximum,
-                unit_edges: maximum,
-                value_occurrences: maximum,
-                work_units: maximum,
-                result_units: maximum,
-            },
-            stage_limits: BTreeMap::new(),
-            declared_domains: Vec::new(),
-            replay_limits: ReplayLimits::default(),
-        },
-        "corpus_case",
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use quire_contract_ir::kani::{
@@ -1080,7 +969,6 @@ mod tests {
     };
     use super::{CheckedArithmeticRequest, CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
-    use crate::replay::function::ReplayPackage;
     use std::{
         fs,
         path::PathBuf,
@@ -1095,15 +983,6 @@ mod tests {
         DispatchIndex,
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
-
-    fn qsl_package(case: &super::BoundedCorpusCase) -> ReplayPackage {
-        super::compile_qsl_package(case).unwrap_or_else(|error| {
-            panic!(
-                "the case's QSL source compiles and selects its generated function: {error}\n{}",
-                case.artifacts.qsl_source.contents
-            )
-        })
-    }
 
     fn false_cases() -> Vec<super::BoundedCorpusCase> {
         let fixture = fixture();
@@ -1199,9 +1078,14 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
             let report = fs::read(report_path).ok();
-            crate::classify_kani_run(output.status.success(), report.as_deref(), &text, None)
-                .unwrap_or_else(|refusal| panic!("Kani run refused as {refusal:?}: {text}"))
-                .outcome
+            crate::kani::classify::classify_kani_run(
+                output.status.success(),
+                report.as_deref(),
+                &text,
+                None,
+            )
+            .unwrap_or_else(|refusal| panic!("Kani run refused as {refusal:?}: {text}"))
+            .outcome
         }
     }
 
@@ -1288,27 +1172,9 @@ mod tests {
             .unwrap(),
         ];
         for case in &cases {
-            let package = qsl_package(case);
-            let identity = package
-                .harness_identity(None, case.harness_symbol.clone(), Vec::new())
-                .expect("the zero-argument selected function has a typed identity");
-            assert!(package.source_matches(case.artifacts.qsl_source.contents.as_bytes()));
-            assert!(identity.matches_package(&package));
-            assert!(package.parameters().is_empty());
-            assert_eq!(
-                package.evaluate_boolean_function(&identity).unwrap(),
-                case.outcome
-                    .boolean_claim()
-                    .expect("admitted case has a Boolean claim"),
-                "QSL evaluates the retained source to the case's semantic result"
-            );
+            assert!(case.qsl_source_matches_case_claim().unwrap());
         }
-        let first = qsl_package(&cases[0]);
-        let tied_identity = first
-            .harness_identity(None, cases[0].harness_symbol.clone(), Vec::new())
-            .unwrap();
-        let other_package = qsl_package(&cases[1]);
-        assert!(!tied_identity.matches_package(&other_package));
+        assert!(cases[0].qsl_identity_rejects_case(&cases[1]).unwrap());
         assert_ne!(
             cases[0].artifacts.qsl_dependency, cases[1].artifacts.qsl_dependency,
             "each imported dependency carries the case's own semantic source"
@@ -1323,47 +1189,24 @@ mod tests {
     #[ignore = "kani lane: run serially after the IR-453 focused checks"]
     fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
         use crate::kani::classify::KaniRunOutcome;
-        use crate::replay::function::replay_harness_counterexample;
-        use crate::{EvidenceFailureCause, HarnessSymbol, ReplayVerdict};
 
         let cases = false_cases();
         for case in &cases {
             let KaniRunOutcome::Falsified { counterexample } = KaniTemp::new(case).run(case) else {
                 panic!("the generated false case must be falsified by Kani")
             };
-            let verdict = case
-                .replay_counterexample(&counterexample)
-                .expect("QSL accepts the source-backed replay request");
-            assert_eq!(verdict, ReplayVerdict::Reproduced);
-            let package = qsl_package(case);
-            let identity = package
-                .harness_identity(None, case.harness_symbol.clone(), Vec::new())
-                .expect("selected QSL function has a typed source identity");
+            assert!(case
+                .replay_counterexample_reproduces(&counterexample)
+                .unwrap());
 
             let other_case = cases
                 .iter()
                 .find(|other| other.artifacts.qsl_source != case.artifacts.qsl_source)
                 .expect("the graph and collection cases retain different QSL sources");
-            let wrong_package = qsl_package(other_case);
-            assert_eq!(
-                replay_harness_counterexample(&identity, &counterexample, &wrong_package)
-                    .expect("a package mismatch is an evidence verdict"),
-                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
-            );
-
-            let wrong_harness = package
-                .harness_identity(
-                    None,
-                    HarnessSymbol::try_from("another_harness").unwrap(),
-                    Vec::new(),
-                )
-                .unwrap();
-            assert!(matches!(
-                replay_harness_counterexample(&wrong_harness, &counterexample, &package),
-                Ok(ReplayVerdict::EvidenceFailure(
-                    EvidenceFailureCause::Decode(_)
-                ))
-            ));
+            assert!(case
+                .replay_rejects_other_case_package(&counterexample, other_case)
+                .unwrap());
+            assert!(case.replay_rejects_wrong_harness(&counterexample).unwrap());
         }
     }
 
