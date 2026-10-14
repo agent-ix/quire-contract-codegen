@@ -89,10 +89,6 @@ pub fn unit_type() -> String {
     base_node_ids().unit
 }
 
-/// `validate_application_keys`'s own preimage version tag (Contract IR
-/// crates/quire-contract-model/src/checked_package/v2/operations.rs).
-const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
-
 /// A readable node key: the code, zero-padded to a 64-digit digest.
 pub fn key(code: u32) -> String {
     format!("{code:0>64}")
@@ -478,7 +474,12 @@ impl Default for PackageBuilder {
         let selection = json!({
             "identity": FIXTURE_MODEL,
             "digest_domain": "sha256-jcs",
-            "digest": sha256_hex(&serde_json::to_vec(&document).expect("model document")),
+            "digest": quire_canonical::sha256(
+                &document,
+                quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
+            )
+            .expect("canonical model document")
+            .to_string(),
         });
         value["lock"]["model_selections"] = json!([selection]);
         value["identity_preimage"]["model_selections"] = value["lock"]["model_selections"].clone();
@@ -656,20 +657,8 @@ impl PackageBuilder {
         self.node_with(&key(code), tag, form, semantic_type, body, &keys)
     }
 
-    /// Registers one application-bodied node with a provisional `node_id`
-    /// from the SHA-256 digest
-    /// of `{version, node_tag, semantic_form, semantic_type, declaration,
-    /// recursion, body}` over sorted-key JSON bytes (Contract IR
-    /// `crates/quire-contract-model/src/checked_package/v2/
-    /// operations.rs`). `digest` is not known until `declaration` -- itself
-    /// part of the preimage -- is built, so `declaration` is derived from
-    /// `code` (via `declaration_for`'s `label` parameter) rather than from
-    /// the digest this call computes. No node this module builds via this
-    /// method ever sets `recursion_group`, so `recursion` is always `null`
-    /// in the preimage. Also records `code -> digest` in the module's
-    /// application registry so [`code_id`] can look it up without rebuilding
-    /// the node. Admission uses IR's typed stale-key refusal to resolve this
-    /// builder-side identity to the reader's required key.
+    /// Registers an application under Contract IR's candidate identity. Its
+    /// declaration uses the fixture code because the final key is not known yet.
     pub fn application_code(
         &mut self,
         code: u32,
@@ -693,27 +682,36 @@ impl PackageBuilder {
         dependencies: &[String],
     ) -> &mut Self {
         let label = code.to_string();
-        let declaration = declaration_for(tag, form, &label);
-        let preimage = json!({
-            "version": APPLICATION_NODE_VERSION,
-            "node_tag": tag,
-            "semantic_form": form,
-            "semantic_type": node_ref(semantic_type),
-            "declaration": declaration,
-            "recursion": Value::Null,
-            "body": body,
-        });
-        let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
-        register_code(code, digest.clone());
         self.node_with_label(
-            &digest,
+            &key(code),
             &label,
             tag,
             form,
             semantic_type,
             body,
             dependencies,
+        );
+        let nodes = self.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes");
+        let node = nodes.last_mut().expect("application node just appended");
+        let draft: CheckedSemanticNodeV2 =
+            serde_json::from_value(node.clone()).expect("complete application draft");
+        let candidate = derive_application_node_id(
+            ApplicationNodeDraft::new(&draft),
+            None,
+            CheckedPackageReadLimits::bounded().bytes,
         )
+        .expect("application candidate");
+        let digest = candidate.candidate_node_id().digest.to_string();
+        node["node_id"] = node_ref(&digest);
+        self.value["source_map"]
+            .as_array_mut()
+            .expect("fixture source map")
+            .last_mut()
+            .expect("application source map just appended")["node_id"] = node_ref(&digest);
+        register_code(code, digest);
+        self
     }
 
     /// A `value`/`literal` node with `operand(form)`'s own content, at a
@@ -1091,7 +1089,13 @@ fn evidence() -> CheckedPackageEvidence {
     evidence.support_feature("quire.value.complete/v1");
     let document = fixture_model_document();
     let bytes = serde_json::to_vec(&document).expect("model document");
-    evidence.insert_domain_package_document(sha256_hex(&bytes), bytes);
+    let digest = quire_canonical::sha256(
+        &document,
+        quire_canonical::Limits::new(CheckedPackageReadLimits::bounded().bytes),
+    )
+    .expect("canonical model document")
+    .to_string();
+    evidence.insert_domain_package_document(digest, bytes);
     evidence
 }
 
@@ -2020,8 +2024,8 @@ fn float_type_for_rounding(form: &str, rounding: &str) -> String {
 /// `code` is folded into the second operand so callers that register
 /// several distinct expression nodes sharing this body's shape
 /// (operator/operation/result_type) still get distinct digests.
-/// `bounds`/`dependencies` are not part of the node-id preimage (only
-/// `body` is -- see `APPLICATION_NODE_VERSION`'s doc comment), so nodes
+/// `bounds`/`dependencies` are not part of Contract IR's application identity;
+/// only the `body` distinguishes these otherwise identical expressions, so nodes
 /// that differ only by their bound set collide on id unless `body` itself
 /// also varies. `operand_ref` is a caller-chosen node, never the plain
 /// shared `V_INTEGER`, so a caller pairing this body with a bound gets a
@@ -4182,6 +4186,77 @@ mod bound_tests {
             with_foreign.key(),
             "two Raw bounds with identical form/bounded/body but different foreign \
              dependencies must not collide in the dedupe keyed by this digest"
+        );
+    }
+}
+
+#[cfg(test)]
+mod fixture_identity_tests {
+    use super::*;
+
+    /// Trace: FR-037-AC-1, FR-037-AC-3, FR-037-AC-4, TC-052.
+    #[test]
+    fn exact_application_and_enum_member_candidates_match_admitted_nodes() {
+        let builder = bounded_increment_package();
+        let raw = builder.raw_wire();
+        let provisional = code_id(BOUNDED_INCREMENT);
+        let raw_node: CheckedSemanticNodeV2 = serde_json::from_value(
+            raw["semantic_graph"]["nodes"]
+                .as_array()
+                .expect("raw nodes")
+                .iter()
+                .find(|node| node["node_id"] == json!(provisional))
+                .expect("raw increment")
+                .clone(),
+        )
+        .expect("typed raw increment");
+        assert_eq!(
+            derive_application_node_id(
+                ApplicationNodeDraft::new(&raw_node),
+                None,
+                CheckedPackageReadLimits::bounded().bytes,
+            )
+            .expect("raw application candidate")
+            .candidate_node_id(),
+            &provisional,
+        );
+
+        let (admitted, ids) = builder.admit_resolved();
+        let admitted_id = ids.resolve(&provisional);
+        let checked = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == admitted_id)
+            .expect("admitted increment");
+        assert_eq!(
+            derive_application_node_id(
+                ApplicationNodeDraft::new(checked),
+                None,
+                CheckedPackageReadLimits::bounded().bytes,
+            )
+            .expect("admitted application candidate")
+            .candidate_node_id(),
+            &admitted_id,
+        );
+
+        let enum_id = id(&base_node_ids().enum_member);
+        assert!(admitted
+            .graph()
+            .nodes
+            .iter()
+            .any(|node| node.node_id == enum_id));
+        assert_eq!(
+            base_enum_member_preimage(&base_node_ids().enum_type, "OPEN")
+                .digest(CheckedPackageReadLimits::bounded().bytes)
+                .expect("OPEN identity"),
+            enum_id.digest.as_ref(),
+        );
+        assert_ne!(
+            base_enum_member_preimage(&base_node_ids().enum_type, "SHUT")
+                .digest(CheckedPackageReadLimits::bounded().bytes)
+                .expect("SHUT identity"),
+            enum_id.digest.as_ref(),
         );
     }
 }
