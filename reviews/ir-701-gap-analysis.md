@@ -463,3 +463,18 @@ bindings:
   ac_id: FR-015-AC-81
   trace: correct
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 at ab8506e: both existing certified Checks/vacuity tests now bind FR-030-AC-18; computed matrix reports tagged with those two real binders, and both exact tests passed. |
+| FND-002 | fixed | Round 1 at ab8506e: real RSS overage is positively gated; Deadline is recorded and asserted before the measured sample returns. Public execution retains MemoryExhausted and confirms child/sibling teardown. A post-sample, pre-overage cancellation-priority mutant failed with Cancelled Deadline; freshly rebuilt restored control passed. This proves post-sample reprioritization detection, not pre-sampler detection. |
+
+## Round 1 Verdict
+
+**PASS** — Both original medium findings are fixed on published PR #383 head `ab8506e113db958a21c552d6831a5d070c7931ff`; no new finding was identified in this fix-only disposition scope. The original review verdict and findings above remain historical and unchanged. Final full native/proof gates on the final artifact-bearing head remain pending; this is no merge approval.
+
+## Round 1 Evidence
+
+Independently inspected the two fix source paths, private mutant diff, actual build/list/test logs and author receipts `/tmp/ix-handoff/ir701-author-review-focused-ab8506e-receipt.json` and `/tmp/ix-handoff/ir701-author-priority-mutation-ab8506e-receipt.json`. Focused Clippy, fresh lib/IT builds and binary listings passed; four exact controls each selected one test, passed with zero ignored. The computed matrix binds FR-030-AC-18 to the two changed tagged tests. The private post-sample mutant built successfully, selected the real new control and failed with exit 101 at its outcome assertion (Cancelled Deadline versus MemoryExhausted); fresh restored build selected the same control and passed with zero ignored. Launch source bytes at the restored fix head equal the originally reviewed launcher. Receipt guards attribute clean exact heads, unchanged lock and owned process completion to the author-run harness. Reviewer ran no Cargo/build/Kani or gate-lock operations. Source/index remain clean at ab8506e.
