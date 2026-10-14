@@ -689,7 +689,9 @@ impl Twin {
         }
         let bytes = wire.to_string().into_bytes();
         let mut evidence = CheckedPackageEvidence::new();
-        evidence.insert_domain_package_document(hex(&jcs_digest(&document)), document);
+        evidence
+            .insert_domain_package_document(hex(&jcs_digest(&document)), document)
+            .expect("retain emitted model document");
         evidence.support_feature("quire.value.complete/v1");
         let package =
             match CheckedPackageV2::read(&bytes, CheckedPackageReadLimits::bounded(), &evidence) {

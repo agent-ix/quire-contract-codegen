@@ -675,7 +675,8 @@ fn original_imported_context_refuses_before_invocation() {
     .unwrap();
     let mut retained_evidence = evidence();
     retained_evidence
-        .insert_dependency_package(original_library.identity.clone(), original_admitted);
+        .insert_dependency_package(original_library.identity.clone(), original_admitted)
+        .expect("retain original equality library");
     let package = checked_with_dependencies(&source, &dependencies, &retained_evidence);
     let mut retained = inputs(&source);
     retained.dependencies.push(original_library);

@@ -927,11 +927,13 @@ fn evidence_for_wire(wire: &Value) -> CheckedPackageEvidence {
             .as_array()
             .and_then(|rows| rows.iter().find(|row| row["identity"] == "acme/orders"))
         {
-            evidence.insert_domain_package_document(
-                selection["digest"].as_str().expect("model digest"),
-                std::fs::read(root.join("domain-package-acme-orders.json"))
-                    .expect("read published selected QSpec model package"),
-            );
+            evidence
+                .insert_domain_package_document(
+                    selection["digest"].as_str().expect("model digest"),
+                    std::fs::read(root.join("domain-package-acme-orders.json"))
+                        .expect("read published selected QSpec model package"),
+                )
+                .expect("retain selected QSpec model package");
         }
     }
     evidence

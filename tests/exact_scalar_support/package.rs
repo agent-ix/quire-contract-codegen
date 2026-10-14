@@ -1091,7 +1091,9 @@ fn evidence() -> CheckedPackageEvidence {
     evidence.support_feature("quire.value.complete/v1");
     let document = fixture_model_document();
     let bytes = serde_json::to_vec(&document).expect("model document");
-    evidence.insert_domain_package_document(sha256_hex(&bytes), bytes);
+    evidence
+        .insert_domain_package_document(sha256_hex(&bytes), bytes)
+        .expect("retain fixture model document");
     evidence
 }
 
