@@ -43,7 +43,6 @@ mod bound_generation;
 mod bound_populations;
 mod bound_strategy_generation;
 mod bounded_kani_corpus;
-mod caller_text_admission;
 mod capability_settlement;
 mod composite_equality_agreement;
 mod composite_equality_generation;

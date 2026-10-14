@@ -150,6 +150,8 @@ mod tests {
     use quire_contract_runtime::exact::TextProfile;
     use std::{num::NonZeroU64, time::Duration};
 
+    use crate::oracle::caller_text::{generate_caller_text_oracle, CallerTextAdmissionRequest};
+
     fn request(profile: TextProfile, min: u64, max: u64) -> CallerTextKaniRequest {
         CallerTextKaniRequest {
             text_type: TextType::new(min, max, profile).expect("valid type"),
@@ -200,6 +202,26 @@ mod tests {
             .record
             .contents
             .contains("caller_text_nfc_1_1::caller_text_admission_agrees"));
+    }
+
+    /// Trace: FR-035-AC-1, FR-035-AC-4, FR-035-AC-5, TC-050.
+    #[test]
+    fn proof_harness_embeds_the_public_generated_oracle_artifact() {
+        let text_type = TextType::new(1, 1, TextProfile::Nfc).expect("valid type");
+        let oracle = generate_caller_text_oracle(CallerTextAdmissionRequest { text_type })
+            .expect("generated public oracle");
+        let harness = generate_caller_text_kani_harness(request(TextProfile::Nfc, 1, 1))
+            .expect("generated proof harness");
+        let embedded = oracle.source.contents.trim();
+        assert!(harness.rust.contents.contains(embedded));
+        assert_eq!(
+            harness
+                .rust
+                .contents
+                .matches("pub fn admit_caller_text(")
+                .count(),
+            1
+        );
     }
 
     /// Trace: FR-035-AC-4, FR-017-AC-26.
