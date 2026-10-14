@@ -121,7 +121,7 @@ For planned IR-516 arms, use admitted typed items with one registered candidate
 at a time. Derive the form, subject class, selected reduction and resolved
 memory model from the admitted package; vary only the candidate advertisement
 for a paired positive and negative case. Assert the exact disposition, warning
-cause, routed backend and unchanged obligation identity, and that each refused
+cause, routed backend and the identities required by FR-019, and that each refused
 item emits no artifact or engine request. Do not use display text to select an
 arm or count a current unregistered backend as implemented support.
 
@@ -150,13 +150,15 @@ arm or count a current unregistered backend as implemented support.
    request.
 5. For AC-38, route SG-1, SG-2 and SG-3 through EN-1, then submit each to an
    SMT-only candidate. Verify only SG-1 can route to SMT under advertisement.
-6. For AC-39, request no reduction, advertised symmetry, advertised POR and
-   their selected combination, comparing the selection in each routed
-   obligation. Compare each reduced obligation identity with the unreduced
-   identity for the same claim and assert they differ; changing only the
-   reduction selection also changes that identity. Remove one advertisement
-   and supply a POR subject without footprints as refusal controls. Verify
-   neither control runs unreduced.
+6. For AC-39, request no reduction, advertised symmetry, advertised POR,
+   their selected combination, and an advertised state constraint, comparing
+   the selection in each routed request. Compare symmetry-only, POR-only and
+   combined obligation identities with the unreduced identity for the same
+   claim and assert they differ. Changing only the state constraint leaves
+   that claim's obligation identity unchanged but changes its request
+   identity; a result for one constraint must not join the other request.
+   Remove one advertisement and supply a POR subject without footprints as
+   refusal controls. Verify neither control runs unreduced.
 7. For AC-40, repeat one otherwise equal request over a weak `parallel` with
    resolved model `tso`, then `ra`. Advertise and then remove that exact
    model. Verify the accepted route carries it and the other route refuses
@@ -224,7 +226,8 @@ subject without footprints, and a resolved memory model the candidate does not
 advertise each settle `unsupported`, warned, with
 `unsupported_projection`/`unsupported-requested-capability`, emit no artifact
 and start no engine. The accepted route preserves its typed form, subject,
-reduction and memory model. No per-step refinement result replaces the whole
+reduction and memory model, with symmetry and POR in obligation identity and
+state constraint in request identity only. No per-step refinement result replaces the whole
 TP-5 result, SG-2/SG-3 never reach SMT, and the protocol subject remains a
 protocol transition system. These are planned cases, not current support
 claims.

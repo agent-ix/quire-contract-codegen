@@ -213,9 +213,11 @@ generator entry and generation routing remain AD-004's and FR-022's concern.
   SMT arm shall accept SG-1 only, when advertised. SG-2 or SG-3 shall not be
   routed to the SMT arm (QSL ADR-022 GE-1 to GE-3).
 - An arm receiving a selected reduction shall require the candidate to
-  advertise that exact reduction and retain it in the routed obligation and
-  its obligation identity, so reduced and unreduced requests have distinct
-  identities.
+  advertise that exact reduction and retain the selection in the routed
+  request. Selected symmetry declarations and POR enter the obligation
+  identity, so their reduced and unreduced requests have distinct obligation
+  identities. A state constraint remains an EN-1 method parameter: it enters
+  the request identity, not the obligation identity (QSL ADR-021 SC-3, RV-8).
   A selected POR without subject footprints shall settle unsupported. It
   shall never silently run unreduced or add a reduction (QSL ADR-021 RV-6,
   RV-8 and RV-9).
@@ -402,7 +404,7 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-36 | PLANNED (IR-516). A TP-5 whole-refinement `temporal-satisfaction` item retains its safety and optional liveness halves on the concrete subject through EN-1, and the same whole item reaches an advertising SMT arm for RE-3 refutation; a separately requested RE-2 `operation-contract` item reaches the SMT arm for per-step safety checking, but its disposition cannot substitute for the whole-refinement item. An arm lacking the required TP-5 form settles the item `unsupported`. | Test (TC-030) |
 | FR-019-AC-37 | PLANNED (IR-516). HP-1 model, HP-2, HP-3 and HP-6 reach an advertising EN-1 arm; only HP-2 reaches an advertising SMT arm under its applicable EN-2 or EN-3 method. HP-4 and an unadvertised HP form settle unsupported before an engine, HP-5 stays on its possible-property path, and an HP-1 code claim is not settled as an EN-1 model claim. | Test (TC-030) |
 | FR-019-AC-38 | PLANNED (IR-516). An advertised SG-1, SG-2 or SG-3 item reaches EN-1 with its recorded form; only advertised SG-1 reaches an SMT arm. SG-2 or SG-3 against an SMT-only candidate settles unsupported and reaches no SMT engine. | Test (TC-030) |
-| FR-019-AC-39 | PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with the selection preserved in the routed obligation and its identity; reduced and unreduced requests for one claim have distinct obligation identities. An unadvertised selection or POR on a subject with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction. | Test (TC-030) |
+| FR-019-AC-39 | PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with the selection preserved in the routed request. Symmetry declarations and POR enter the obligation identity, so their reduced and unreduced requests for one claim have distinct obligation identities; a state constraint changes request identity but leaves obligation identity unchanged. An unadvertised selection or POR on a subject with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction. | Test (TC-030) |
 | FR-019-AC-40 | PLANNED (IR-516). For an item over a weak `parallel`, a candidate advertising the subject's resolved `tso` or `ra` model receives that exact model; a candidate lacking it settles `unsupported` with no artifact, and no arm weakens the resolved model. An `sc` subject is a separate strong-model control and does not take the weak-memory branch. | Test (TC-030) |
 | FR-019-AC-41 | PLANNED (IR-516). With otherwise equal form and kind advertisement, model and protocol subject classes are read separately; an arm that discharges only one class settles the other `unsupported`, while a supported protocol item retains its protocol transition-system subject identity through routing. | Test (TC-030) |
 
