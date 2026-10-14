@@ -122,7 +122,10 @@ impl Drop for CallerExecutorLane {
     }
 }
 
-fn caller_report(status: &str, checks: &[(&str, &str)]) -> String {
+type CallerCheck<'a> = (&'a str, &'a str);
+type CallerReportEntry<'a> = (&'a str, &'a str, &'a [CallerCheck<'a>]);
+
+fn caller_report(status: &str, checks: &[CallerCheck<'_>]) -> String {
     caller_batch_report(&[(
         "caller_text_nfc_1_1::caller_text_admission_agrees",
         status,
@@ -130,7 +133,7 @@ fn caller_report(status: &str, checks: &[(&str, &str)]) -> String {
     )])
 }
 
-fn caller_batch_report(entries: &[(&str, &str, &[(&str, &str)])]) -> String {
+fn caller_batch_report(entries: &[CallerReportEntry<'_>]) -> String {
     let results: Vec<_> = entries
         .iter()
         .map(|(harness_id, status, checks)| {
