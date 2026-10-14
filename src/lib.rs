@@ -60,6 +60,11 @@ pub use kani::generate::lower::finite_reference_graphs::{
     prepare_finite_graph_reaches, GraphLowering, GraphRequest,
 };
 pub use kani::generate::lower::FamilyLoweringError;
+pub use oracle::caller_text::{
+    admit_caller_text, generate_caller_text_oracle, validate_caller_text_proof,
+    CallerTextAdmissionRequest, CallerTextOracle, CallerTextProfile, CallerTextProofHarness,
+    CallerTextProofIdentity, CallerTextProofRefusal, CALLER_TEXT_PAYLOAD_CLASS,
+};
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles,
@@ -132,6 +137,9 @@ pub use kani::census::{
 pub use kani::classify::{
     classify_kani_run, ClassifiedRun, KaniInconclusiveReason, KaniRunOutcome,
 };
+pub use kani::generate::caller_text::{
+    generate_caller_text_kani_harness, CallerTextKaniGenerationError, CallerTextKaniRequest,
+};
 pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
 pub use kani::generate::v1_bundle::{
     generate_kani_bundle, KaniArtifactBundle, KaniRequest, KaniSubjectBinding, ProofDependencyGraph,
@@ -193,9 +201,10 @@ pub use kani::generate::outcome::{
     MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
-    EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
-    ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
-    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    CallerTextObligationIdentity, EmbeddedOracle, KaniCallerTextObligationHarness,
+    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding,
+    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
 };
 pub use kani::output::playback::DecodeFailure;

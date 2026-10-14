@@ -9,6 +9,8 @@ pub(crate) mod clause;
 pub(crate) mod contract;
 // The bounded-Kani corpus family.
 pub(crate) mod corpus;
+// Caller-ingress TextPayload admission (FR-035).
+pub mod caller_text;
 // The state-frame family.
 // Implements: FR-015 (IR-412: state-clause operation contract and frame effects).
 pub(crate) mod frame;
