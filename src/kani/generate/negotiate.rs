@@ -851,6 +851,7 @@ fn classify_claim<'a>(package: &ContractPackageV1, claim: &ExactScalarClaim) -> 
             | ExactScalarRefusal::AmbiguousBound { .. }
             | ExactScalarRefusal::BoundMismatch { .. }
             | ExactScalarRefusal::OperandUnsupported { .. }
+            | ExactScalarRefusal::OperandRangeLimitExceeded { .. }
             | ExactScalarRefusal::UnitlessLiteralOperand { .. }
             | ExactScalarRefusal::InvalidBody { .. }
             | ExactScalarRefusal::BodyIncomplete { .. }
