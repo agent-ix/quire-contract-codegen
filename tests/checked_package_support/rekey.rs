@@ -6,14 +6,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use quire_canonical::{sha256, Limits};
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationIdentityContext,
-    ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits,
-    CheckedPackageRefusalCause, CheckedPackageV2, CheckedPackageV2ReadResult,
-    CheckedSemanticNodeV2,
+    ApplicationIdentityError, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
+    CheckedPackageIdentityPreimageV2, CheckedPackageReadLimits, CheckedPackageRefusalCause,
+    CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 const MAX_CUMULATIVE_BYTES: u64 = 1_024 * 1_048_576;
 const MAX_READER_WORK: u64 = 256_000_000;
@@ -243,8 +243,13 @@ pub(super) fn refresh_identity(wire: &mut Value) {
         })
         .collect();
     wire["identity_preimage"]["identity_projection"] = Value::Array(projection);
-    let preimage = serde_json::to_vec(&wire["identity_preimage"]).expect("fixture preimage");
-    wire["package_id"]["digest"] = json!(format!("{:x}", Sha256::digest(preimage)));
+    let preimage: CheckedPackageIdentityPreimageV2 =
+        serde_json::from_value(wire["identity_preimage"].clone()).expect("typed fixture preimage");
+    // Fixture construction also serves large-package limit tests. The checked
+    // reader applies the requested byte ceiling when this wire is submitted.
+    wire["package_id"]["digest"] = json!(sha256(&preimage, Limits::new(u64::MAX))
+        .expect("canonical package identity")
+        .to_string());
 }
 
 /// Install a public pre-read candidate into every typed reference in a fixture wire.
@@ -591,7 +596,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-037-AC-1, TC-052. Group identity uses the complete ordered
+    /// Trace: FR-037-AC-2, TC-052. Group identity uses the complete ordered
     /// snapshot; an absent or partial context cannot supply the same candidate.
     #[test]
     fn grouped_application_candidates_require_complete_context() {
@@ -625,11 +630,30 @@ mod tests {
         .expect("grouped drafts");
         let draft = ApplicationNodeDraft::new(&nodes[1]);
         let limits = CheckedPackageReadLimits::bounded();
-        assert!(derive_application_node_id(draft, None, limits.bytes).is_err());
+        assert!(matches!(
+            derive_application_node_id(draft, None, limits.bytes),
+            Err(ApplicationIdentityError::MissingContext { .. })
+        ));
         let complete = ApplicationIdentityContext::try_new(&nodes, draft)
             .expect("complete ordered group context");
         let expected = derive_application_node_id(draft, Some(&complete), limits.bytes)
             .expect("complete public candidate");
+        assert!(matches!(
+            derive_application_node_id(draft, Some(&complete), 0),
+            Err(ApplicationIdentityError::CanonicalEncoding(
+                quire_canonical::Error::Limit(_)
+            ))
+        ));
+        let mut changed = nodes[1].clone();
+        changed.semantic_form = "binary".into();
+        assert!(matches!(
+            derive_application_node_id(
+                ApplicationNodeDraft::new(&changed),
+                Some(&complete),
+                limits.bytes
+            ),
+            Err(ApplicationIdentityError::ContextMismatch { .. })
+        ));
         let partial = ApplicationIdentityContext::try_new(&nodes[1..], draft)
             .expect("partial draft is structurally valid but lacks predecessor");
         let incomplete = derive_application_node_id(draft, Some(&partial), limits.bytes);

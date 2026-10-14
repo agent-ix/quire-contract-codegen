@@ -22,11 +22,10 @@ use quire_contract_codegen::{
     CompositeEqualityItem, EqualityOperandDescriptor, EqualityOperatorKind,
 };
 use quire_contract_model::{
-    CheckedNodeId, CheckedPackageEvidence, CheckedPackageReadLimits, CheckedPackageV2,
-    CheckedPackageV2ReadResult,
+    derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
+    CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 #[path = "../checked_package_support/rekey.rs"]
 mod rekey;
@@ -37,10 +36,6 @@ mod codes;
 pub use codes::*;
 
 pub const NODE_DOMAIN: &str = "quire.checked-semantic-node/v1";
-
-/// `validate_application_keys`'s own preimage version tag (Contract IR
-/// crates/quire-contract-model/src/checked_package/v2/operations.rs).
-const APPLICATION_NODE_VERSION: &str = "quire.application-node/v1";
 
 /// Every code this module ever builds a node for, mapped to its real node
 /// id: the computed application digest for an application-bodied node (see
@@ -426,10 +421,6 @@ fn application_dependencies(body: &Value) -> Vec<String> {
     targets.into_iter().collect()
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 /// Contract IR (FR-208 `DeclarationTagRules`/`DeclarationOccurrenceRule`)
 /// forbids `declaration` on `expression`/`relation`/`state`/`temporal`/
 /// `correspondence` nodes and on `value`/`enum_value` and `value`/`parameter` nodes (QSL emits a
@@ -641,23 +632,7 @@ impl PackageBuilder {
         self
     }
 
-    /// Registers one application-bodied `expression` node with a provisional
-    /// `node_id` from the
-    /// SHA-256 digest of `{version, node_tag, semantic_form, semantic_type,
-    /// declaration, recursion, body}` over sorted-key JSON bytes
-    /// (Contract IR,
-    /// crates/quire-contract-model/src/checked_package/v2/operations.rs).
-    /// `digest` is not known until `declaration` -- itself part of the
-    /// preimage -- is built, so `declaration` is derived from `code` (via
-    /// [`declaration_for`]'s `label` parameter) rather than from the digest
-    /// this call computes. Every node this module builds via this method is
-    /// `expression`-tagged, which `declaration_for` forbids a declaration
-    /// on, so `declaration` is always `None` in practice; the preimage still
-    /// includes the `None` to match IR's own shape exactly. Also records
-    /// `code -> digest` in the module's application registry so
-    /// [`code_id`] can look the builder-side digest up without rebuilding the
-    /// node. Admission uses IR's typed stale-key refusal to resolve the final
-    /// key required by the checked reader.
+    /// Registers an application under Contract IR's candidate identity.
     pub fn application_code(&mut self, code: u32, form: &str, body: Value) -> &mut Self {
         self.application_node(code, form, &key(T_BOOLEAN), body)
     }
@@ -686,25 +661,29 @@ impl PackageBuilder {
         body: Value,
     ) -> &mut Self {
         let label = code.to_string();
-        let declaration = declaration_for(tag, form, &label);
-        let preimage = json!({
-            "version": APPLICATION_NODE_VERSION,
-            "node_tag": tag,
-            "semantic_form": form,
-            "semantic_type": node_ref(semantic_type),
-            "declaration": declaration,
-            "recursion": Value::Null,
-            "body": body,
-        });
-        let digest = sha256_hex(&serde_json::to_vec(&preimage).expect("preimage"));
-        register_code(code, digest.clone());
         let dependencies = application_dependencies(&body);
-        self.node_in_group_labeled(&digest, &label, tag, form, semantic_type, body, None);
+        self.node_in_group_labeled(&key(code), &label, tag, form, semantic_type, body, None);
         let node = self.value["semantic_graph"]["nodes"]
             .as_array_mut()
             .and_then(|nodes| nodes.last_mut())
             .expect("the node just added");
         node["dependencies"] = Value::Array(dependencies.iter().map(|d| node_ref(d)).collect());
+        let draft: CheckedSemanticNodeV2 =
+            serde_json::from_value(node.clone()).expect("complete application draft");
+        let candidate = derive_application_node_id(
+            ApplicationNodeDraft::new(&draft),
+            None,
+            CheckedPackageReadLimits::bounded().bytes,
+        )
+        .expect("application candidate");
+        let digest = candidate.candidate_node_id().digest.to_string();
+        node["node_id"] = node_ref(&digest);
+        self.value["source_map"]
+            .as_array_mut()
+            .expect("fixture source map")
+            .last_mut()
+            .expect("application source map just appended")["node_id"] = node_ref(&digest);
+        register_code(code, digest);
         self
     }
 
@@ -1870,4 +1849,106 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
             typed(T_INTEGER),
         ),
     ]
+}
+
+#[cfg(test)]
+mod fixture_identity_tests {
+    use super::*;
+
+    /// Trace: FR-037-AC-1, FR-037-AC-4, TC-052.
+    #[test]
+    fn composite_application_candidate_matches_admitted_node() {
+        let builder = byte_ceiling_package();
+        let raw = builder.raw_wire();
+        let provisional = code_id(BYTE_CHAIN_BASE);
+        let raw_node: CheckedSemanticNodeV2 = serde_json::from_value(
+            raw["semantic_graph"]["nodes"]
+                .as_array()
+                .expect("raw nodes")
+                .iter()
+                .find(|node| node["node_id"] == json!(provisional))
+                .expect("raw equality")
+                .clone(),
+        )
+        .expect("typed raw equality");
+        assert_eq!(
+            derive_application_node_id(
+                ApplicationNodeDraft::new(&raw_node),
+                None,
+                CheckedPackageReadLimits::bounded().bytes,
+            )
+            .expect("raw application candidate")
+            .candidate_node_id(),
+            &provisional,
+        );
+
+        let (admitted, ids) = builder.admit_resolved();
+        let admitted_id = ids.resolve(&provisional);
+        let checked = admitted
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == admitted_id)
+            .expect("admitted equality");
+        assert_eq!(
+            derive_application_node_id(
+                ApplicationNodeDraft::new(checked),
+                None,
+                CheckedPackageReadLimits::bounded().bytes,
+            )
+            .expect("admitted application candidate")
+            .candidate_node_id(),
+            &admitted_id,
+        );
+    }
+
+    /// Trace: FR-037-AC-2, TC-052.
+    #[test]
+    fn grouped_application_candidate_matches_admitted_node() {
+        let mut builder = byte_ceiling_package();
+        let predecessor = registered_digest(BYTE_CHAIN_BASE);
+        builder.application_code(
+            BYTE_CHAIN_BASE + 1,
+            "binary",
+            application(
+                "binary",
+                equality_operation("boolean"),
+                T_BOOLEAN,
+                vec![reference_to(&predecessor), reference_to(&predecessor)],
+            ),
+        );
+        for node in builder.value["semantic_graph"]["nodes"]
+            .as_array_mut()
+            .expect("fixture nodes")
+        {
+            if node["node_id"] == node_ref(&predecessor)
+                || node["node_id"] == node_ref(&registered_digest(BYTE_CHAIN_BASE + 1))
+            {
+                node["recursion_group"] = json!("draft");
+            }
+        }
+        let (admitted, ids) = builder.admit_resolved();
+        let grouped = ids.resolve(&code_id(BYTE_CHAIN_BASE + 1));
+        let nodes = &admitted.graph().nodes;
+        let checked = nodes
+            .iter()
+            .find(|node| node.node_id == grouped)
+            .expect("admitted grouped application");
+        assert!(checked.recursion_group.is_some());
+        let context = quire_contract_model::ApplicationIdentityContext::try_new(
+            nodes,
+            ApplicationNodeDraft::new(checked),
+        )
+        .expect("complete admitted graph context");
+        assert_eq!(
+            derive_application_node_id(
+                ApplicationNodeDraft::new(checked),
+                Some(&context),
+                CheckedPackageReadLimits::bounded().bytes,
+            )
+            .expect("grouped application candidate")
+            .candidate_node_id(),
+            &grouped,
+        );
+    }
 }
