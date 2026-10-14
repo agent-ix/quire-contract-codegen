@@ -354,7 +354,15 @@ pub fn ext_corpus_package() -> PackageBuilder {
     ];
     for (index, (code, form, integer_result)) in roots.into_iter().enumerate() {
         let parameter = BODY_PARAMETER_BASE + u32::try_from(index).expect("body parameter index");
-        source_parameter(&mut builder, parameter, &format!("p{T_INTEGER}"), T_INTEGER);
+        // These classifier roots have no source function declaration or name binding.
+        // Their descriptors own runtime parameters; this typed source operand names
+        // the root rather than colliding with the shared corpus's `p2` parameter.
+        source_parameter(
+            &mut builder,
+            parameter,
+            &format!("body_{code}_left"),
+            T_INTEGER,
+        );
         let mut body = binary_body(T_INTEGER, T_INTEGER);
         body["arguments"][0] = reference_code(parameter);
         let result_type = if integer_result {

@@ -1453,7 +1453,7 @@ fn corpus_package_with_nested_ieee() -> PackageBuilder {
         "value",
         "parameter",
         T_TEXT,
-        parameter_body(&format!("p{T_TEXT}")),
+        parameter_body("bad_convert_left"),
     );
     let mut bad_convert_body = binary_body(T_TEXT, T_TEXT);
     bad_convert_body["arguments"][0] = reference(bad_convert_parameter);
