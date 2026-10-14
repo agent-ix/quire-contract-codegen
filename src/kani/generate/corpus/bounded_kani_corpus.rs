@@ -1,9 +1,9 @@
 //! Integrated bounded-Kani corpus generation over Contract IR's validated finite ABI.
 //!
 //! CG owns the semantic-family lowerers. This module owns the codegen-side
-//! vertical slice: once one lowering is admitted, it renders the four corpus roles (oracle,
-//! strategy, Kani harness, and proof-dependency graph) from the same profile selection, finite
-//! input, and declared proof-dependency census.  A non-success outcome returns before any role is
+//! vertical slice: once one lowering is admitted, it renders the corpus roles (oracle, strategy,
+//! Kani harness, QSL source and dependency, and proof-dependency graph) from the same profile
+//! selection, finite input, and declared proof-dependency census. A non-success outcome returns before any role is
 //! emitted.
 
 use std::{collections::BTreeSet, fmt::Write as _};
@@ -17,6 +17,7 @@ use quire_contract_model::{std001_code, Std001Code};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    core::identity::HarnessSymbol,
     core::{
         artifact::Artifact,
         canonical::{
@@ -119,6 +120,11 @@ pub struct BoundedCorpusArtifacts {
     pub strategy: Artifact,
     /// Kani harness artifact with no input-erasing assumptions.
     pub kani_harness: Artifact,
+    /// Real QSL source for this exact finite case; replay compiles these bytes through
+    /// `qsl_replay::call_site` rather than supplying a copied package.
+    pub qsl_source: Artifact,
+    /// The locked QSL library source imported by `qsl_source` for this case.
+    pub qsl_dependency: Artifact,
     /// Deterministic corpus-scoped proof-dependency graph for this case
     /// ([`CORPUS_PROOF_GRAPH_SCHEMA`]).
     pub proof_graph: Artifact,
@@ -376,6 +382,8 @@ pub struct BoundedCorpusCase {
     pub family: BoundedCorpusFamily,
     /// Exact Contract IR outcome shared by native/oracle/strategy/Kani case execution.
     pub outcome: KaniOutcome,
+    /// The exact Kani symbol whose playback is joined to this case's QSL source.
+    pub(crate) harness_symbol: HarnessSymbol,
     /// Generated roles derived from the same profile and finite input selection.
     pub artifacts: BoundedCorpusArtifacts,
 }
@@ -608,17 +616,25 @@ pub fn generate_bounded_kani_corpus_case(
             revision.clone(),
         )
     })?;
-    let (value, oracle_body) = match request {
+    let (value, oracle_body, qsl_body) = match request {
         BoundedCorpusRequest::Arithmetic(request) => {
             let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
             // Admission establishes the checked arithmetic/definedness property; the numeric
             // result itself is not a Boolean verdict (zero is as valid as any other in-range
             // result).
-            (true, render_arithmetic_oracle(&lowered))
+            (
+                true,
+                render_arithmetic_oracle(&lowered),
+                render_arithmetic_qsl(&lowered),
+            )
         }
         BoundedCorpusRequest::Graph(request) => {
             let lowered = prepare_finite_graph_reaches(profile, dispatch, input, request)?;
-            (lowered.reachable, render_graph_oracle(&lowered, input))
+            (
+                lowered.reachable,
+                render_graph_oracle(&lowered, input),
+                render_graph_qsl(&lowered, input),
+            )
         }
         BoundedCorpusRequest::Collection(request) => {
             let lowered = prepare_bounded_collection_query(profile, dispatch, input, request)?;
@@ -640,6 +656,7 @@ pub fn generate_bounded_kani_corpus_case(
             (
                 lowered.value,
                 format!("{{ let values = [{values}]; {predicate} }}"),
+                render_collection_qsl(&lowered.query.values, lowered.query.kind),
             )
         }
     };
@@ -656,12 +673,20 @@ pub fn generate_bounded_kani_corpus_case(
     };
     // Rendered before the identity is claimed, so a refused rendering records nothing.
     let name = format!("{}_{identity}", family.label());
+    let harness_symbol = HarnessSymbol::try_from(format!("corpus_case_{name}")).map_err(|_| {
+        CorpusRefusal::Refused.raise(
+            std001_code!("kani_corpus_serialization_failed"),
+            request_source_id.clone(),
+            revision.clone(),
+        )
+    })?;
     let Ok(artifacts) = render_artifacts(
         ceilings,
         family,
         &name,
         value,
         &oracle_body,
+        &qsl_body,
         &normalized_dependencies,
     ) else {
         // The caller's input is not at fault, so this is `Refused` and not `InvalidInput`.
@@ -681,6 +706,7 @@ pub fn generate_bounded_kani_corpus_case(
     Ok(BoundedCorpusCase {
         family,
         outcome,
+        harness_symbol,
         artifacts,
     })
 }
@@ -704,6 +730,100 @@ fn render_arithmetic_oracle(lowered: &ArithmeticLowering) -> String {
         lowered.request.minimum,
         lowered.request.maximum,
     )
+}
+
+fn render_arithmetic_qsl(lowered: &ArithmeticLowering) -> String {
+    let operator = match lowered.request.operator {
+        quire_contract_model::NumericOperator::Add => "+",
+        quire_contract_model::NumericOperator::Subtract => "-",
+        quire_contract_model::NumericOperator::Multiply => "*",
+        quire_contract_model::NumericOperator::Divide => "/",
+        quire_contract_model::NumericOperator::Remainder => "%",
+    };
+    let calculation = format!(
+        "({} {operator} {})",
+        lowered.request.left, lowered.request.right
+    );
+    format!(
+        "({calculation} >= {}) and ({calculation} <= {})",
+        lowered.request.minimum, lowered.request.maximum
+    )
+}
+
+fn render_collection_qsl(values: &[i128], kind: QueryKind) -> String {
+    match kind {
+        QueryKind::ForAllNonNegative => default_if_empty(
+            values
+                .iter()
+                .map(|value| format!("({value} >= 0)"))
+                .collect::<Vec<_>>()
+                .join(" and "),
+            "true",
+        ),
+        QueryKind::ExistsEqual(expected) => default_if_empty(
+            values
+                .iter()
+                .map(|value| format!("({value} = {expected})"))
+                .collect::<Vec<_>>()
+                .join(" or "),
+            "false",
+        ),
+    }
+}
+
+fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> String {
+    let mut objects = input
+        .input()
+        .objects
+        .iter()
+        .map(|object| object.identity.as_str())
+        .collect::<Vec<_>>();
+    objects.sort_unstable();
+    let index_of = |identity: &str| {
+        objects
+            .iter()
+            .position(|candidate| *candidate == identity)
+            .expect("validated graph request identities name input objects")
+    };
+    let edges = input
+        .input()
+        .references
+        .iter()
+        .filter(|edge| edge.field_id == lowered.request.field_id)
+        .map(|edge| (index_of(&edge.source_id), index_of(&edge.target_id)))
+        .collect::<BTreeSet<_>>();
+    let vertices = objects.len();
+    let adjacency = default_if_empty(
+        edges
+            .iter()
+            .map(|(source, target)| format!("(source = {source} and target = {target})"))
+            .collect::<Vec<_>>()
+            .join(" or "),
+        "false",
+    );
+    let target = index_of(&lowered.request.target_id);
+    let reachability = default_if_empty(
+        lowered
+            .expanded
+            .iter()
+            .map(|identity| format!("edge({}, {target})", index_of(identity)))
+            .collect::<Vec<_>>()
+            .join(" or "),
+        "false",
+    );
+    format!(
+        "function edge using v(source: Int[0, {last}], target: Int[0, {last}]): Boolean pure {{ {adjacency} }}\n\
+         function corpus_case using v(): Boolean pure {{ {reachability} }}",
+        last = vertices.saturating_sub(1),
+    )
+}
+
+fn default_if_empty(expression: String, fallback: &str) -> String {
+    if expression.is_empty() {
+        fallback.to_owned()
+    } else {
+        expression
+    }
 }
 
 fn render_graph_oracle(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> String {
@@ -750,6 +870,7 @@ fn render_artifacts(
     name: &str,
     value: bool,
     oracle_body: &str,
+    qsl_body: &str,
     dependencies: &[ProofDependencyEdge],
 ) -> Result<BoundedCorpusArtifacts, String> {
     let label = family.label();
@@ -786,10 +907,28 @@ fn render_artifacts(
     };
     let proof_graph_contents =
         artifact_json(&proof_graph_value).map_err(|error| error.to_string())?;
+    let qsl_source = format!(
+        "language \"ix:native\" edition \"1-draft\";\n\
+         profile v = \"quire.value.complete/v1\";\n\
+         import \"ir-453/corpus-dependency\" as d;\n\
+         function corpus_case using v(): Boolean pure {{ d::corpus_case() }}\n"
+    );
+    let qsl_functions = if qsl_body.starts_with("function edge ") {
+        qsl_body.to_owned()
+    } else {
+        format!("function corpus_case using v(): Boolean pure {{ {qsl_body} }}")
+    };
+    let qsl_dependency = format!(
+        "language \"ix:native\" edition \"1-draft\";\n\
+         profile v = \"quire.value.complete/v1\";\n\
+         {qsl_functions}\n"
+    );
     Ok(BoundedCorpusArtifacts {
         oracle: Artifact::new(format!("corpus/{name}.oracle.rs"), oracle),
         strategy: Artifact::new(format!("corpus/{name}.strategy.rs"), strategy),
         kani_harness: Artifact::new(format!("corpus/{name}.kani.rs"), harness),
+        qsl_source: Artifact::new(format!("corpus/{name}.qsl"), qsl_source),
+        qsl_dependency: Artifact::new(format!("corpus/{name}.dependency.qsl"), qsl_dependency),
         proof_graph: Artifact::new(
             format!("corpus/{name}.proof-graph.json"),
             proof_graph_contents,
@@ -812,6 +951,18 @@ mod tests {
     };
     use super::{CheckedArithmeticRequest, CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
+    use crate::replay::function::{DependencyLock, LockedSource, ReplayInputs, ReplayPackage};
+    use qsl_replay::{
+        call_site, DependencyInput, Identifier, QualifiedName, ReplayLimits, ScalarLimits,
+        SourceIdentity,
+    };
+    use std::collections::BTreeMap;
+    use std::{
+        fs,
+        path::PathBuf,
+        process::Command,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
 
@@ -820,6 +971,320 @@ mod tests {
         DispatchIndex,
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
+
+    fn qsl_package(case: &super::BoundedCorpusCase) -> ReplayPackage {
+        let maximum = u64::MAX;
+        let dependency_source = LockedSource {
+            authority: "agent-ix".to_owned(),
+            identity: "ir-453/corpus-dependency".to_owned(),
+            namespace: "generated".to_owned(),
+            revision: "ir-453".to_owned(),
+            bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
+        };
+        let dependency_function =
+            QualifiedName::new(vec![Identifier::new("corpus_case").unwrap()]).unwrap();
+        let dependency_package_id = call_site(
+            SourceIdentity::new(
+                &dependency_source.authority,
+                &dependency_source.identity,
+                &dependency_source.namespace,
+                &dependency_source.revision,
+            ),
+            &dependency_source.identity,
+            &dependency_source.bytes,
+            [],
+            &DependencyInput::default(),
+            &dependency_function,
+        )
+        .expect("the dependency QSL source compiles")
+        .package_id;
+        ReplayPackage::new(
+            ReplayInputs {
+                source: LockedSource {
+                    authority: "agent-ix".to_owned(),
+                    identity: case.artifacts.qsl_source.path.clone(),
+                    namespace: "generated".to_owned(),
+                    revision: "ir-453".to_owned(),
+                    bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
+                },
+                dependencies: vec![DependencyLock {
+                    identity: dependency_source.identity.clone(),
+                    package_id: dependency_package_id,
+                    source: dependency_source,
+                }],
+                accounting_limits: ScalarLimits {
+                    integer_bits: maximum,
+                    decimal_digits: maximum,
+                    scale_expansion: maximum,
+                    text_input_bytes: maximum,
+                    text_scalars: maximum,
+                    normalized_scalars: maximum,
+                    unit_edges: maximum,
+                    value_occurrences: maximum,
+                    work_units: maximum,
+                    result_units: maximum,
+                },
+                stage_limits: BTreeMap::new(),
+                declared_domains: Vec::new(),
+                replay_limits: ReplayLimits::default(),
+            },
+            "corpus_case",
+        )
+        .expect("the case's QSL source compiles and selects its generated function")
+    }
+
+    fn false_cases() -> Vec<super::BoundedCorpusCase> {
+        let fixture = fixture();
+        vec![
+            emit(
+                &fixture,
+                BoundedCorpusRequest::Graph(GraphRequest {
+                    source_id: "source".to_owned(),
+                    start_id: "b".to_owned(),
+                    target_id: "a".to_owned(),
+                    field_id: "next".to_owned(),
+                    max_expansions: 2,
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+            emit(
+                &fixture,
+                BoundedCorpusRequest::Collection(CollectionQuery {
+                    source_id: "source".to_owned(),
+                    values: vec![2, 2],
+                    max_items: 2,
+                    kind: QueryKind::ExistsEqual(7),
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+        ]
+    }
+
+    struct KaniTemp(PathBuf);
+
+    impl KaniTemp {
+        fn new(case: &super::BoundedCorpusCase) -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock is after Unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("ir-453-{}-{nonce}", std::process::id()));
+            fs::create_dir_all(path.join("src")).expect("temp crate source directory exists");
+            fs::write(
+                path.join("src/lib.rs"),
+                format!(
+                    "{}\n{}",
+                    case.artifacts.oracle.contents, case.artifacts.kani_harness.contents
+                ),
+            )
+            .expect("corpus Rust sources are writable");
+            fs::write(
+                path.join("Cargo.toml"),
+                "[package]\nname = \"ir453-corpus-playback\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
+            )
+            .expect("temporary manifest is writable");
+            fs::write(
+                path.join("build.rs"),
+                "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
+            )
+            .expect("temporary build script is writable");
+            Self(path)
+        }
+
+        fn run(&self, case: &super::BoundedCorpusCase) -> crate::kani::classify::KaniRunOutcome {
+            let report_path = self.0.join("report.json");
+            let output = Command::new("cargo")
+                .args([
+                    "kani",
+                    "-Z",
+                    "concrete-playback",
+                    "-Z",
+                    "unstable-options",
+                    "--export-json",
+                ])
+                .arg(&report_path)
+                .args([
+                    "--harness",
+                    case.harness_symbol.as_str(),
+                    "--concrete-playback",
+                    "print",
+                ])
+                .env(
+                    "CARGO_TARGET_DIR",
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("target/ir-453-bounded-corpus-replay-kani"),
+                )
+                .current_dir(&self.0)
+                .output()
+                .expect("cargo kani launches");
+            let text = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let report = fs::read(report_path).ok();
+            crate::classify_kani_run(output.status.success(), report.as_deref(), &text, None)
+                .unwrap_or_else(|refusal| panic!("Kani run refused as {refusal:?}: {text}"))
+                .outcome
+        }
+    }
+
+    impl Drop for KaniTemp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Each supported family retains source bytes that QSL compiles into the selected function
+    /// used by replay. No case turns its generated verdict into a literal `ReplaySource::Input`.
+    ///
+    /// Trace: TC-023.
+    #[test]
+    fn tc_023_each_corpus_case_compiles_its_retained_qsl_source() {
+        let (profile, dispatch, input) = fixture();
+        let cases = vec![
+            generate_bounded_kani_corpus_case(
+                crate::kani::test_support::proof_ceilings::proof_ceilings(),
+                &profile,
+                &dispatch,
+                &input,
+                BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
+                    source_id: "source",
+                    operator: NumericOperator::Add,
+                    left: 1,
+                    right: 1,
+                    minimum: 0,
+                    maximum: 2,
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+            emit(
+                &(profile.clone(), dispatch.clone(), input.clone()),
+                BoundedCorpusRequest::Graph(GraphRequest {
+                    source_id: "source".to_owned(),
+                    start_id: "a".to_owned(),
+                    target_id: "b".to_owned(),
+                    field_id: "next".to_owned(),
+                    max_expansions: 2,
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+            emit(
+                &(profile.clone(), dispatch.clone(), input.clone()),
+                BoundedCorpusRequest::Graph(GraphRequest {
+                    source_id: "source".to_owned(),
+                    start_id: "b".to_owned(),
+                    target_id: "a".to_owned(),
+                    field_id: "next".to_owned(),
+                    max_expansions: 2,
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+            emit(
+                &(profile.clone(), dispatch.clone(), input.clone()),
+                BoundedCorpusRequest::Collection(CollectionQuery {
+                    source_id: "source".to_owned(),
+                    values: vec![2, 2, 7],
+                    max_items: 3,
+                    kind: QueryKind::ExistsEqual(7),
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+            emit(
+                &(profile.clone(), dispatch.clone(), input.clone()),
+                BoundedCorpusRequest::Collection(CollectionQuery {
+                    source_id: "source".to_owned(),
+                    values: vec![2, 2],
+                    max_items: 2,
+                    kind: QueryKind::ExistsEqual(7),
+                }),
+                &[],
+                &mut EmittedCorpusIdentities::new(),
+            )
+            .unwrap(),
+        ];
+        for case in &cases {
+            let package = qsl_package(case);
+            let identity = package
+                .harness_identity(None, case.harness_symbol.clone(), Vec::new())
+                .expect("the zero-argument selected function has a typed identity");
+            assert!(package.source_matches(case.artifacts.qsl_source.contents.as_bytes()));
+            assert!(identity.matches_package(&package));
+            assert!(package.parameters().is_empty());
+        }
+        let first = qsl_package(&cases[0]);
+        let tied_identity = first
+            .harness_identity(None, cases[0].harness_symbol.clone(), Vec::new())
+            .unwrap();
+        let other_package = qsl_package(&cases[1]);
+        assert!(!tied_identity.matches_package(&other_package));
+        assert!(!other_package.source_matches(cases[0].artifacts.qsl_source.contents.as_bytes()));
+    }
+
+    /// The two false corpus families require real Kani playback and a reproduced typed QSL
+    /// violation. These are deliberately serial, ignored Kani-lane tests.
+    ///
+    /// Trace: TC-023, FR-015-AC-57.
+    #[test]
+    #[ignore = "kani lane: run serially after the IR-453 focused checks"]
+    fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
+        use crate::kani::classify::KaniRunOutcome;
+        use crate::replay::function::replay_harness_counterexample;
+        use crate::{EvidenceFailureCause, HarnessSymbol, ReplayVerdict};
+
+        let cases = false_cases();
+        for case in &cases {
+            let KaniRunOutcome::Falsified { counterexample } = KaniTemp::new(&case).run(&case)
+            else {
+                panic!("the generated false case must be falsified by Kani")
+            };
+            let package = qsl_package(&case);
+            let identity = package
+                .harness_identity(None, case.harness_symbol.clone(), Vec::new())
+                .expect("the selected source has a zero-argument typed identity");
+            let verdict = replay_harness_counterexample(&identity, &counterexample, &package)
+                .expect("QSL accepts the source-backed replay request");
+            assert_eq!(verdict, ReplayVerdict::Reproduced);
+
+            let other_case = cases
+                .iter()
+                .find(|other| other.artifacts.qsl_source != case.artifacts.qsl_source)
+                .expect("the graph and collection cases retain different QSL sources");
+            let wrong_package = qsl_package(other_case);
+            assert!(!wrong_package.source_matches(case.artifacts.qsl_source.contents.as_bytes()));
+            assert_eq!(
+                replay_harness_counterexample(&identity, &counterexample, &wrong_package)
+                    .expect("a package mismatch is an evidence verdict"),
+                ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
+            );
+
+            let wrong_harness = package
+                .harness_identity(
+                    None,
+                    HarnessSymbol::try_from("another_harness").unwrap(),
+                    Vec::new(),
+                )
+                .unwrap();
+            assert!(matches!(
+                replay_harness_counterexample(&wrong_harness, &counterexample, &package),
+                Ok(ReplayVerdict::EvidenceFailure(
+                    EvidenceFailureCause::Decode(_)
+                ))
+            ));
+        }
+    }
 
     /// Trace: TC-023. Owner serializers supply each value; the input projection
     /// retains three established key names and the two intentionally normalized populations.

@@ -11,12 +11,14 @@ relationships:
 ## Description
 
 Verify the current bounded-profile classifier, three CG-owned finite-input
-lowerers and four-artifact corpus emitter against FR-015-AC-82 through
+lowerers and corpus emitter against FR-015-AC-82 through
 FR-015-AC-95. Before AD-004 step 4g, the hand-built path's generated
 `KaniOutcome` is a case classification; after step 4g, generation returns no
 `KaniOutcome`. Only FR-017's installed-backend run provides proof evidence.
-The corpus retains no
-counterexample packet, so native replay remains planned and unbacked. Current
+Each successful case retains a QSL source unit and its imported dependency
+source. The real-Kani lane passes the run's actual falsification playback
+immediately to the replay facade; playback is run evidence, not a persisted
+case artifact. Current
 source tests carry `TC-023` trace tags. The computed matrix tags FR-015-AC-94
 with seven corpus unit tests; FR-015-AC-82 through FR-015-AC-93 and
 FR-015-AC-95 remain untagged. A trace tag alone does not establish proof
@@ -45,22 +47,31 @@ input leaves this replacement incomplete rather than substituting a caller
 expansion ceiling.
 Inspect the resolved Cargo graph for a reverse Contract IR-to-codegen dependency.
 
-Planned replay procedure: once a corpus case retains a real QSL source and
-counterexample packet, submit its counterexample through QSL's replay facade
-and compare the typed result. No current test or corpus artifact establishes
-that result.
+Replay procedure (IR-453): for each falsifiable family, compile the case's
+retained QSL unit and locked dependency through `call_site`, run the generated
+harness under Kani with concrete playback enabled, then pass the actual
+`Falsified` playback and the case's typed harness/site identity through the
+Witness replay arm. Require a typed reproduced violation. A mismatched harness
+or QSL package/site is evidence failure. The corpus does not model state/frame
+operations; their source-backed replay remains covered by the separate
+state/frame facade tests, not by a corpus case.
 
 ## Expected Results
 
-Every profile request has one ordered disposition per construct, or one typed
+Every successful corpus case has the oracle, strategy, Kani harness, QSL unit,
+locked dependency source and proof graph derived from its admitted request.
+Focused source tests compile each family through QSL's call-site API. The
+real-Kani false graph and collection cases replay their actual playback against
+the selected source package and settle as reproduced typed violations;
+wrong-harness and wrong-package evidence is refused. This does not claim
+state/frame corpus coverage. Every profile request has one ordered disposition per construct, or one typed
 request refusal. Each successful lowering returns the exact family result and
 each adverse case its original typed non-Boolean refusal, with no partial
-artifact or proof claim. One admitted corpus case has all four artifacts and
+artifact or proof claim. One admitted corpus case has all generated artifacts and
 one generated case classification until AD-004 step 4g retires that path;
 after step 4g, the symbolic V2 cases render through the shared path and the
 artifacts have no generation-time `KaniOutcome` or proof verdict. A refused
-case has no artifacts and claims no identity. Native replay
-remains unbacked. The dependency graph keeps Contract
+case has no artifacts and claims no identity. The dependency graph keeps Contract
 IR below codegen. Every
 finite-graph case expands identities in sorted depth-first order: a branch explored before the
 target branch consumes its expansion budget, while a target on an edge of the current identity
