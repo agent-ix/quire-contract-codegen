@@ -39,7 +39,11 @@ fn routed_scalar_source_ceiling_is_publicly_matchable() {
     fn source_ceiling(error: &RoutedGenerationError) -> Option<(usize, usize, &'static str)> {
         match error {
             RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
-                OracleGenerationError::SourceTooLarge { bytes, limit, setting },
+                OracleGenerationError::SourceTooLarge {
+                    bytes,
+                    limit,
+                    setting,
+                },
             )) => Some((*bytes, *limit, setting)),
             _ => None,
         }
