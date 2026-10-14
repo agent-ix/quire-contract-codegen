@@ -998,6 +998,7 @@ mod tests {
         )
         .expect("the dependency QSL source compiles")
         .package_id;
+        let source = case.artifacts.qsl_source.contents.as_bytes().to_vec();
         ReplayPackage::new(
             ReplayInputs {
                 source: LockedSource {
@@ -1005,7 +1006,7 @@ mod tests {
                     identity: case.artifacts.qsl_source.path.clone(),
                     namespace: "generated".to_owned(),
                     revision: "ir-453".to_owned(),
-                    bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
+                    bytes: source.clone(),
                 },
                 dependencies: vec![DependencyLock {
                     identity: dependency_source.identity.clone(),
@@ -1030,7 +1031,12 @@ mod tests {
             },
             "corpus_case",
         )
-        .expect("the case's QSL source compiles and selects its generated function")
+        .unwrap_or_else(|error| {
+            panic!(
+                "the case's QSL source compiles and selects its generated function: {error}\n{}",
+                String::from_utf8_lossy(&source)
+            )
+        })
     }
 
     fn false_cases() -> Vec<super::BoundedCorpusCase> {
