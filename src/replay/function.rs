@@ -733,7 +733,9 @@ impl<'a> From<&'a EvidenceFailureCause> for ReplaySettlement<'a> {
         match cause {
             // A playback that does not type against the persisted bindings, and a value outside
             // the harness proof bound, are this repository's defects.
-            EvidenceFailureCause::Decode(_) | EvidenceFailureCause::Domain { .. } => Self::CgDefect,
+            EvidenceFailureCause::Decode(_)
+            | EvidenceFailureCause::Domain { .. }
+            | EvidenceFailureCause::PackageIdentity => Self::CgDefect,
             EvidenceFailureCause::Verdict {
                 disagreement: Some(cause),
                 ..
