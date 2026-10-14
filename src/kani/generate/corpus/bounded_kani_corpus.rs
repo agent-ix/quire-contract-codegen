@@ -813,7 +813,7 @@ fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> St
     );
     format!(
         "function edge using v(source: Int[0, {last}], target: Int[0, {last}]): Boolean pure {{ {adjacency} }}\n\
-         function corpus_case using v(): Boolean pure {{ {reachability} }}",
+         function corpus_case using v(enabled: Boolean): Boolean pure {{ enabled and ({reachability}) }}",
         last = vertices.saturating_sub(1),
     )
 }
@@ -911,12 +911,14 @@ fn render_artifacts(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
          import \"ir-453/corpus-dependency\" as d;\n\
-         function corpus_case using v(): Boolean pure {{ d::corpus_case() }}\n"
+         function corpus_case using v(): Boolean pure {{ d::corpus_case(true) }}\n"
     );
     let qsl_functions = if qsl_body.starts_with("function edge ") {
         qsl_body.to_owned()
     } else {
-        format!("function corpus_case using v(): Boolean pure {{ {qsl_body} }}")
+        format!(
+            "function corpus_case using v(enabled: Boolean): Boolean pure {{ enabled and ({qsl_body}) }}"
+        )
     };
     let qsl_dependency = format!(
         "language \"ix:native\" edition \"1-draft\";\n\
