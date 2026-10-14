@@ -947,7 +947,7 @@ fn render_artifacts(
         "language \"ix:native\" edition \"1-draft\";\n\
          profile v = \"quire.value.complete/v1\";\n\
          import \"ir-453/corpus-dependency\" as d;\n\
-         function corpus_case using v(): Boolean pure {{ d::corpus_case(true) }}\n",
+         function corpus_case using v(): Boolean pure { d::corpus_case(true) }\n",
     );
     let qsl_functions = if qsl_body.starts_with("function edge ") {
         qsl_body.to_owned()
