@@ -3,7 +3,7 @@ id: SR-8829
 title: "Rust review — IR-306 nested integer operands"
 type: SpecReview
 analysis: code-review
-scope: "agent-ix/quire-contract-codegen; PR #374 Rust patch series on 9675c0d..ff62ddcab4fd1d2708172f910466ba4da4d2d50f; nested scalar inference, Kani identity propagation, routed refusal mapping and Rust tests"
+scope: "agent-ix/quire-contract-codegen; PR #374 Rust patch series on 9675c0d..7d6ca0cd596fab63e2bfddd666bc34615744fc78; nested scalar inference, Kani identity propagation, routed refusal mapping and Rust tests"
 review_set: subset
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-014
@@ -50,3 +50,12 @@ The interval walk bounds recursive application depth, node work, and endpoint bi
 ## Coverage
 
 Source and test changes were read directly; `git diff --check` returned no output. No builds, tests, Clippy or other gates were run under the dispatch instruction. Separate coder gate receipts were not independently rerun.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The direct inference unit test now carries `Trace: FR-014-AC-46, TC-024`. |
+| FND-002 | fixed | The AC42 guard checks the exact typed refusal declaration/conversion and asserts the permitted total `limit_kind` occurrence count, so an additional refusal use fails the assertion. |
+| FND-001 | fixed | Rebase confirmation at 1250c6e: the trace tag remains directly above the TC-024 nested inference test (`src/oracle/scalar/mod.rs:4394-4398`). |
+| FND-002 | fixed | Rebase confirmation at 1250c6e: the compact typed-field/conversion assertions and exact occurrence counts remain in place (`tests/it/exact_scalar_generation.rs:3420-3478`). |

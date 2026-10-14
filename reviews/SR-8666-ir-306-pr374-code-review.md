@@ -45,3 +45,7 @@ Reviewed the IR-306 Rust implementation and routed tests at frozen source head `
 | FND-002 | fixed | Round 2 at ff62ddc: `OperandRangeLimitKind` serializes snake_case and has the `Nodes` variant; the refusal carries it as `resource_kind` (`src/oracle/scalar/mod.rs:501-509,600-610`). |
 | FND-003 | fixed | Round 2 at ff62ddc: application depth is checked before memo reuse (`src/oracle/scalar/mod.rs:1840-1855`). |
 | FND-004 | fixed | Round 2 at ff62ddc: a malformed reference term returns `InvalidBody` with the enclosing body node id (`src/oracle/scalar/mod.rs:1970-1975`). |
+| FND-001 | fixed | Rebase confirmation at 1250c6e: inline literals still enter the inference path and produce checked singleton ranges (`src/oracle/scalar/mod.rs:1953-1968`); the rebased support fixture changes do not alter that production path. |
+| FND-002 | fixed | Rebase confirmation at 1250c6e: `Nodes` remains snake_case `nodes`, and the distinct refusal field remains `resource_kind` (`src/oracle/scalar/mod.rs:501-509,600-610`). |
+| FND-003 | fixed | Rebase confirmation at 1250c6e: application depth remains checked before memo reuse (`src/oracle/scalar/mod.rs:1840-1855`). |
+| FND-004 | fixed | Rebase confirmation at 1250c6e: malformed reference terms still return `InvalidBody` (`src/oracle/scalar/mod.rs:1970-1975`). |
