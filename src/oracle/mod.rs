@@ -11,6 +11,8 @@ pub(crate) mod clause;
 pub(crate) mod bound_v1;
 // Shared generation-result and claim vocabulary (FR-014, FR-018, FR-021).
 pub(crate) mod claim;
+// Caller-ingress TextPayload admission and finite proof request validation (FR-035).
+pub mod caller_text;
 // Implements: FR-018
 pub(crate) mod equality;
 // Implements: FR-021

@@ -10,6 +10,7 @@ use quire_canonical::FixedShape;
 use quire_contract_model::{CheckedNodeId, ClauseRef, DependencyIdentity, SourceSpan};
 use serde::{Deserialize, Serialize};
 
+use crate::oracle::caller_text::CallerTextProofIdentity;
 use crate::{
     core::artifact::Artifact,
     core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol},
@@ -475,6 +476,48 @@ impl KaniScalarObligationHarness {
                 &actual == expected
             })
     }
+}
+
+/// Caller-ingress Text admission proof identity (FR-035), separate from checked-node claims.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallerTextObligationIdentity {
+    /// Caller-declared profile, bounds, finite payload class and proof configuration.
+    pub caller_claim: CallerTextProofIdentity,
+    /// Resource ceilings applied by the executor.
+    pub ceilings: ProofCeilings,
+    /// Harness module symbol.
+    pub module_symbol: ModuleSymbol,
+    /// Proof function symbol.
+    pub harness_symbol: HarnessSymbol,
+    /// Solver.
+    pub solver: KaniSolver,
+    /// Loop unwind bound.
+    pub unwind: u32,
+    /// Every flag passed after `cargo kani`.
+    pub options: Vec<String>,
+}
+
+impl CallerTextObligationIdentity {
+    /// The `module::harness` path of this caller-ingress harness.
+    #[must_use]
+    pub fn harness_path(&self) -> HarnessPath {
+        HarnessPath {
+            module: self.module_symbol.clone(),
+            harness: self.harness_symbol.clone(),
+        }
+    }
+}
+
+/// One generated caller-ingress Text admission Kani harness.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniCallerTextObligationHarness {
+    /// Caller and execution identity.
+    pub identity: CallerTextObligationIdentity,
+    /// Self-contained Rust source.
+    pub rust: Artifact,
+    /// Persisted caller proof identity record.
+    pub record: Artifact,
 }
 
 impl KaniObligationIdentity {
