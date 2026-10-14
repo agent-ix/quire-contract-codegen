@@ -196,5 +196,8 @@ QSpec `ix://agent-ix/quire-specification/FR-330` owns the closed package and
 reader contract. Contract IR `ix://agent-ix/quire-contract-ir/FR-035` emits it.
 The CG requirement covers consumption of FR-322-AC-66's local carrier through
 FR-330-AC-4's one graph; the FR-322 reader owns target admission and refusal.
+TC-054's worked FR-322 carrier can exercise positive and adverse strict-reader
+controls now. QSL-764 must produce the carrier from source before genuine
+QSL/IR positive and changed-binding controls can verify CG consumption.
 Contract IR's planned IR-766 admitted-package traversal is required for the
 reached-key portion of generated claims.
