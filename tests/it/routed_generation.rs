@@ -7,11 +7,11 @@ use quire_contract_codegen::{
     generate_exact_scalar_oracles, generate_routed as generate_routed_impl,
     negotiate_kani_obligations, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
     Candidate, ClaimDerivationRefusal, ClaimDisposition, ContractDriverResultSelection,
-    ContractRequestPosition, ExactScalarRefusal, GenerationContexts, InvalidObligationItem,
-    KaniGenerationContext, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
-    KaniScalarObligationHarness, KindOutput, ObligationDisposition, ObligationItem,
-    ObligationRecord, ProviderOrigin, RoutedGeneration, RoutedGenerationError,
-    RoutedGenerationItem, UnsupportedObligation,
+    ContractRequestPosition, ContractScalarError, ExactScalarRefusal, GenerationContexts,
+    InvalidObligationItem, KaniGenerationContext, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniScalarObligationHarness, KindOutput, ObligationDisposition,
+    ObligationItem, ObligationRecord, OracleGenerationError, ProviderOrigin, RoutedGeneration,
+    RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -30,6 +30,33 @@ const RENDERED: [&str; 3] = [
     "quire.op.integer.sub",
     "quire.op.integer.negate",
 ];
+
+/// An external driver can name the scalar rendering envelope's typed source
+/// ceiling without reaching through a private module.
+/// Trace: FR-022-AC-25, TC-033.
+#[test]
+fn routed_scalar_source_ceiling_is_publicly_matchable() {
+    fn source_ceiling(error: &RoutedGenerationError) -> Option<(usize, usize, &'static str)> {
+        match error {
+            RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
+                OracleGenerationError::SourceTooLarge { bytes, limit, setting },
+            )) => Some((*bytes, *limit, setting)),
+            _ => None,
+        }
+    }
+
+    let error = RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
+        OracleGenerationError::SourceTooLarge {
+            bytes: 1025,
+            limit: 1024,
+            setting: "cg.scalar.source_bytes",
+        },
+    ));
+    assert_eq!(
+        source_ceiling(&error),
+        Some((1025, 1024, "cg.scalar.source_bytes"))
+    );
+}
 
 struct Fixture {
     package: CheckedPackageV2,
