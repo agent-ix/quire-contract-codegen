@@ -37,13 +37,16 @@ they apply there to `falsified`.
 Contract IR retired its own outcome-to-terminal map (Contract IR FR-031-AC-5, Linear IR-358) because the
 terminal value belongs to QSL and Contract IR must not depend on QSL. This repository owns the map.
 
-Two Kani maps exist and their domains do not overlap. [FR-029](./FR-029-run-outcome-terminal-record.md)
+Two Kani maps exist and their domains are selected by the producer. [FR-029](./FR-029-run-outcome-terminal-record.md)
 maps this repository's own `KaniRunOutcome`, which describes a run this repository executed. This
-requirement maps a `KaniOutcome` that Contract IR's Kani boundary produced and handed in. One Kani
-run has one outcome of one of those two types and so one terminal value. Precedence: when this
-repository executed the run, FR-029 governs and FR-030 is not applied to any outcome derived from
-that run; FR-030 applies only to an outcome that arrived from Contract IR and was not produced by
-a run of this repository. Items settled at negotiation (`unsupported`, `requires-bound`,
+requirement maps a `KaniOutcome` that Contract IR's Kani boundary produced and handed in, or one
+CG constructed from its settled cancellation evidence under
+[FR-040](./FR-040-cancellation-producer.md). One Kani run has one terminal value. Precedence:
+FR-029 governs an ordinary CG-executed run. For a source-bearing cancelled CG run, CG constructs
+one IR `Cancelled { source }` outcome from its own typed execution evidence and applies this map;
+FR-029 does not also map that run. An externally received IR outcome stays on this map's original
+input path and is never reinterpreted as CG execution evidence. Items settled at negotiation
+(`unsupported`, `requires-bound`,
 `invalid-request`; [FR-019](../../routed/functional/FR-019-capability-settlement.md)) have no `KaniOutcome` and no
 terminal value, so neither map applies to them. The SMT map below has a distinct input domain: a
 registered SMT backend result, not a `KaniOutcome` or `KaniRunOutcome`. It preserves the qualified
@@ -52,8 +55,8 @@ Kani path and cannot relabel a Kani result as an SMT proof.
 ## Inputs
 
 - One `quire_contract_ir::kani::KaniOutcome`: its closed `KaniOutcomeKind` and its stable cause
-  `code`. The IR outcome carries kind, `code`, `source_id` and `context` only; it has no
-  SUCCESS-check count.
+  `code`. The IR outcome carries kind, `code`, `source_id` and `context`; its `Cancelled` kind
+  additionally carries `KaniCancellationSource`. It has no SUCCESS-check count.
 - For a `Proved` outcome, the SUCCESS-check count taken from the Kani transcript this generator
   parsed, passed to the map as an explicit input, as [FR-029](./FR-029-run-outcome-terminal-record.md)
   takes it.
@@ -105,7 +108,8 @@ Kani path and cannot relabel a Kani result as an SMT proof.
   | `Unavailable`, any other cause | `Unsupported(UnavailabilityCause::BackendAbsent)` | none / none |
   | `TimedOut` | `Incomplete(IncompleteCause::TimedOut)` | none / none |
   | `ResourceExhausted` | `Incomplete(IncompleteCause::ResourceExhausted)` | none / none |
-  | `Cancelled` | `Incomplete(IncompleteCause::Cancelled)` | none / none |
+  | `Cancelled { source: Requested }` | `Incomplete(IncompleteCause::Cancelled { source: quire_exact::CancelCause::Requested })` | none / none |
+  | `Cancelled { source: Deadline }` | `Incomplete(IncompleteCause::Cancelled { source: quire_exact::CancelCause::Deadline })` | none / none |
   | `Inconclusive` with cause `kani_vacuous_proof` | `Proved { basis: ProofBasis::Checks { success_checks: 0 }, certification: Certification::Certified }`; QSL reports inconclusive/vacuous | `Checks { success_checks: 0 }` / `Certified` |
   | `Inconclusive`, any other cause | `Failed` | none / none |
 
@@ -214,7 +218,7 @@ composite facade. QSL #645 owns these rows. IR-666 tests their public reports th
 |----|----------|--------------|
 | FR-030-AC-1 | Every pair (`KaniOutcomeKind`, replay settlement) that the map's input can express maps to exactly one `TerminalValue`. | Test (TC-041) |
 | FR-030-AC-2 | `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with `ProofRefusalCause::Refused`, `InvalidInput` and `IncompleteInput` respectively, so no refusal cause is lost, and each carries the outcome's `Std001Code` unchanged as `DeclineCode::Std001`, including a code STD-001 does not register. | Test (TC-041) |
-| FR-030-AC-3 | `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with `IncompleteCause::TimedOut`, `ResourceExhausted` and `Cancelled` respectively. | Test (TC-041) |
+| FR-030-AC-3 | `TimedOut` and `ResourceExhausted` map to their distinct `Incomplete` causes. `Cancelled { source: Requested }` and `Cancelled { source: Deadline }` map to `IncompleteCause::Cancelled` carrying the corresponding `quire_exact::CancelCause`, with no source inferred from `code`, `source_id`, `context` or elapsed time. | Test (TC-041) |
 | FR-030-AC-4 | `Proved` with three SUCCESS checks maps to `Proved { basis: Checks { success_checks: 3 }, certification: Certified }`, zero checks maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` (category inconclusive/vacuous), and `Counterexample` with reproduced replay maps to `Refuted`. | Test (TC-041) |
 | FR-030-AC-5 | `Inconclusive` with cause `kani_vacuous_proof` maps to `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` (category inconclusive/vacuous), and `Inconclusive` with any other cause maps to `Failed`. | Test (TC-041) |
 | FR-030-AC-6 | No outcome maps to `Tested`. | Test (TC-041) |
@@ -260,6 +264,9 @@ composite facade. QSL #645 owns these rows. IR-666 tests their public reports th
 The existing Kani map is implemented (Linear IR-465, IR-358). Its proof payload still has
 the count-only shape; the `ProofBasis`/`Certification` amendment and the separate SMT map
 are planned and require QSL FR-127/FR-314 and QSpec FR-349 to become available in code.
+The source-bearing cancellation map and CG-produced cancellation path are planned under IR-701;
+the current `Cancelled` unit variant and QSL cancellation constructor do not satisfy the amended
+FR-030-AC-3 or [FR-040](./FR-040-cancellation-producer.md).
 `ir_outcome_terminal_value` in
 `kani/terminal.rs` is the one `match` over the pair (`KaniOutcomeKind`, replay settlement), with no
 wildcard arm, built on `qsl-replay`: `TerminalValue` has `Inconclusive` with
