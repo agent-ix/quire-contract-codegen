@@ -100,8 +100,10 @@ pub enum SpineReplayError {
     /// A witness-sourced request settled on the input arm.
     WrongArm,
     /// An input-sourced function evaluation returned no Boolean value.
+    #[cfg(test)]
     NoInputValue,
     /// The typed harness identity was created from a different QSL package/site.
+    #[cfg(test)]
     PackageIdentity,
     /// The harness has no function-contract obligation identity.
     Identity(ObligationIdentityError),
@@ -128,7 +130,9 @@ impl fmt::Display for SpineReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Refused(refusal) => write!(f, "the replay was refused: {refusal}"),
             Self::WrongArm => f.write_str("a witness-sourced request settled on the input arm"),
+            #[cfg(test)]
             Self::NoInputValue => f.write_str("the QSL input evaluation returned no Boolean value"),
+            #[cfg(test)]
             Self::PackageIdentity => {
                 f.write_str("the harness identity belongs to another QSL package")
             }
@@ -580,6 +584,7 @@ impl ReplayPackage {
     /// This uses the `Input` arm only to check the renderer's function result. It is not backend
     /// or counterexample evidence; corpus counterexamples must use
     /// [`replay_harness_counterexample`] and its `Witness` arm.
+    #[cfg(test)]
     pub(crate) fn evaluate_boolean_function(
         &self,
         identity: &ReplayHarnessIdentity,
@@ -762,9 +767,9 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
             | SpineReplayError::FieldDelimiter
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm
-            | SpineReplayError::NoInputValue
-            | SpineReplayError::PackageIdentity
             | SpineReplayError::Identity(_) => Self::CgDefect,
+            #[cfg(test)]
+            SpineReplayError::NoInputValue | SpineReplayError::PackageIdentity => Self::CgDefect,
             SpineReplayError::Refused(refusal) => Self::Refused(refusal),
         }
     }
