@@ -639,6 +639,7 @@ impl Twin {
         let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
         let mut variant = construct("variant_type", "quire.meaning.model.variant-type/v1");
         variant["construct"]["shape"] = json!("enumeration");
+        variant["construct"]["members"] = json!({"variants": "required"});
         document["constructs"]
             .as_array_mut()
             .expect("constructs")
