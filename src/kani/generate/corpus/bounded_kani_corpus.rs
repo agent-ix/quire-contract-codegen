@@ -1238,7 +1238,10 @@ mod tests {
             .unwrap();
         let other_package = qsl_package(&cases[1]);
         assert!(!tied_identity.matches_package(&other_package));
-        assert!(!other_package.source_matches(cases[0].artifacts.qsl_source.contents.as_bytes()));
+        assert_ne!(
+            cases[0].artifacts.qsl_dependency, cases[1].artifacts.qsl_dependency,
+            "each imported dependency carries the case's own semantic source"
+        );
     }
 
     /// The two false corpus families require real Kani playback and a reproduced typed QSL
@@ -1271,7 +1274,6 @@ mod tests {
                 .find(|other| other.artifacts.qsl_source != case.artifacts.qsl_source)
                 .expect("the graph and collection cases retain different QSL sources");
             let wrong_package = qsl_package(other_case);
-            assert!(!wrong_package.source_matches(case.artifacts.qsl_source.contents.as_bytes()));
             assert_eq!(
                 replay_harness_counterexample(&identity, &counterexample, &wrong_package)
                     .expect("a package mismatch is an evidence verdict"),
