@@ -7,6 +7,20 @@ relationships:
     type: verifies
   - target: ix://agent-ix/quire-specification/TC-271
     type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-018
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-020
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-021
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-022
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-023
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-025
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-027
+    type: references
   - target: ix://agent-ix/quire-spec-language/FR-335
     type: references
 ---
@@ -103,6 +117,59 @@ Ask each settlement that is not `supported`
 whether it routes a backend at all, and ask a manifest that repeats one backend
 identity the same question.
 
+For planned IR-516 arms, use admitted typed items with one registered candidate
+at a time. Derive the form, subject class, selected reduction and resolved
+memory model from the admitted package; vary only the candidate advertisement
+for a paired positive and negative case. Assert the exact disposition, warning
+cause, routed backend and the identities required by FR-019, and that each refused
+item emits no artifact or engine request. Do not use display text to select an
+arm or count a current unregistered backend as implemented support.
+
+1. For AC-34, enumerate EN-1's TP-1 through TP-4, TP-5, SG-1 through SG-3,
+   HP-1 model, HP-2, HP-3 and HP-6 forms, under both admitted model and
+   protocol subjects where each form admits the subject. Set the corresponding
+   advertisement, then remove it. Include HP-1 code and HP-5 as controls that
+   cannot turn into EN-1 every-behaviour claims.
+2. For AC-35, pair TP-1, TP-2 `on origin`, TP-2 `on each`, TP-3 and TP-4
+   with an SMT candidate advertising each form; verify the selected EN-2 or
+   EN-3 method is one ADR-018 assigns. Remove the form advertisement and
+   verify TP-4 never selects EN-3.
+   Check that negotiation emits no terminal verdict.
+3. For AC-36, compare a TP-5 whole-refinement item with and without abstract
+   fairness. Verify the EN-1 route retains its safety half and the optional
+   liveness half. Route the same whole item to an advertising SMT candidate
+   for RE-3 refutation, and request an RE-2 `operation-contract` item
+   separately for per-step checking. Assert that only the TP-5 item carries
+   the whole-refinement identity and that RE-2 cannot settle it. Remove the
+   form advertisement for a refusal control.
+4. For AC-37, exercise HP-1 model, HP-2, HP-3, HP-4, HP-5 and HP-6 with the
+   candidate and subject classes each form permits. Exercise EN-2 and EN-3
+   on HP-2 only where its safety shape permits induction. Verify HP-4 and an
+   unadvertised form refuse before engine invocation; verify HP-5 takes its
+   possible-property route and HP-1 code is a distinct `operation-contract`
+   request.
+5. For AC-38, route SG-1, SG-2 and SG-3 through EN-1, then submit each to an
+   SMT-only candidate. Verify only SG-1 can route to SMT under advertisement.
+6. For AC-39, request no reduction, advertised symmetry, advertised POR,
+   their selected combination, and an advertised state constraint, comparing
+   the selection in each routed request. Compare symmetry-only, POR-only and
+   combined obligation identities with the unreduced identity for the same
+   claim and assert they differ. Changing only the state constraint leaves
+   that claim's obligation identity unchanged but changes its request
+   identity; a result for one constraint must not join the other request.
+   Remove one advertisement and supply a POR subject without footprints as
+   refusal controls. Verify neither control runs unreduced.
+7. For AC-40, repeat one otherwise equal request over a weak `parallel` with
+   resolved model `tso`, then `ra`. Advertise and then remove that exact
+   model. Verify the accepted route carries it and the other route refuses
+   without substituting a weaker model. Use a separate `sc` strong-model
+   subject as the control; it must not enter the weak-memory branch.
+8. For AC-41, use one form valid on both a model and a protocol subject.
+   Hold its kind and form advertisements fixed, then route it through an arm
+   that discharges only one subject class and an arm that discharges both.
+   Compare dispositions and routed subject identities. A protocol acceptance retains its protocol
+   transition-system identity.
+
 For planned FR-019-AC-15, inspect the driver projection from each QSL
 `Registry::descriptors()` value to CG's descriptor. Build two registries separately, each with
 an otherwise equal descriptor, one with `Linked` and one with `Process` origin. Project each,
@@ -150,6 +217,26 @@ Every variant of the closed backend kind has a dispatched arm.
 
 No settlement other than `supported` routes a backend, and a manifest repeating an
 identity routes none.
+
+For AC-34 through AC-41, every positive case uses a validated candidate and
+only a form, subject class and modifier its arm discharges. After candidate
+validation, a missing form or modifier advertisement, an excluded form, a
+selected reduction without a capable candidate, a POR
+subject without footprints, and a resolved memory model the candidate does not
+advertise each settle `unsupported`, warned, with
+`unsupported_projection`/`unsupported-requested-capability`, emit no artifact
+and start no engine. The accepted route preserves its typed form, subject,
+reduction and memory model, with symmetry and POR in obligation identity and
+state constraint in request identity only. No per-step refinement result replaces the whole
+TP-5 result, SG-2/SG-3 never reach SMT, and the protocol subject remains a
+protocol transition system. These are planned cases, not current support
+claims.
+
+For the kind-advertisement control, distinguish an empty candidate set from a
+supplied candidate lacking the item's kind. The empty set settles `unsupported`
+under the existing candidate table; the supplied inconsistent candidate
+settles `invalid-request` with `invalid_capability`/`inconsistent-candidates`
+before a model-checking arm runs. Neither produces an artifact.
 
 Under FR-019-AC-25 through AC-33, every Implemented typed subpath has a valid
 bounded case that settles `supported` under the required advertisement. For

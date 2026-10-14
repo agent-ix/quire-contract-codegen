@@ -24,7 +24,10 @@ rejected certificates to their distinct terminal results and certification.
 1. Map an outcome of every `KaniOutcomeKind` and collect the values.
 2. Map `Refused`, `InvalidInput` and `IncompleteInput`, each with an IR `Std001Code`, one of them a
    code STD-001 does not register.
-3. Map `TimedOut`, `ResourceExhausted` and `Cancelled`.
+3. Map `TimedOut`, `ResourceExhausted`, `Cancelled { source: Requested }` and
+   `Cancelled { source: Deadline }`, changing the latter two outcomes' `code`, `source_id` and
+   `context` independently. This is a map-unit control; [TC-055](./TC-055-cancellation-producer.md)
+   owns the live producer path.
 4. Map `Proved` with a transcript count of three SUCCESS checks and with a count of zero, and map
    `Counterexample` with a reproduced replay. Inspect the basis, certification and category of
    both proof payloads, and confirm the counterexample has no proof fields.
@@ -83,7 +86,8 @@ rejected certificates to their distinct terminal results and certification.
 1. Exactly one value per expressible pair, and none is `Tested` (FR-030-AC-1, FR-030-AC-6).
 2. `Declined` with three distinct causes, each carrying the outcome's code unchanged as
    `DeclineCode::Std001`, the unregistered code included (FR-030-AC-2).
-3. `Incomplete` with three distinct causes (FR-030-AC-3).
+3. `Incomplete` with `TimedOut`, `ResourceExhausted` and both typed `Cancelled` sources;
+   changing outcome metadata does not change either cancellation source (FR-030-AC-3).
 4. `Proved { basis: Checks { success_checks: 3 }, certification: Certified }`, a zero-check
    `Proved { basis: Checks { success_checks: 0 }, certification: Certified }` read as
    inconclusive/vacuous, and `Refuted` without proof fields (FR-030-AC-4, FR-030-AC-18).
@@ -137,7 +141,8 @@ rejected certificates to their distinct terminal results and certification.
 
 ## Status
 
-Steps 1 to 13 cover the existing Kani outcome map in `tests/it/terminal_map.rs`; the
+Steps 1 to 13 cover the earlier Kani outcome map in `tests/it/terminal_map.rs`; the
+source-bearing cancellation cases in step 3 remain planned for IR-701. The
 `ProofBasis`/`Certification` assertions and SMT steps 17 to 18 are planned after QSL
 FR-127/FR-314 and the registered SMT backend are available. The current Kani tests assert
 the earlier count-only payload and do not yet satisfy the amended criteria. IR-666's public converter tests

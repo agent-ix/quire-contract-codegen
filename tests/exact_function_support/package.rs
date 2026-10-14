@@ -12,14 +12,11 @@
 //! bypasses the real V2 reader.
 //!
 //! FR-021 adds its own function-declaration and call-item nodes on top of
-//! that base: every one of them is built the same way `E_CALL` already is
-//! in the base module (`application_code(code, "call"|"binary",
-//! binary_body(T_INTEGER, T_INTEGER))`) -- the body's own content is inert
-//! for this generator's classifiers (they read only `semantic_form` and the
-//! caller-declared [`quire_contract_codegen::ExactFunctionBody`], never the
-//! node's `operation`/`arguments`), so every new node below reuses the same
-//! `binary_body(T_INTEGER, T_INTEGER)` shape and differs only in its own
-//! `semantic_form` and code.
+//! that base. Scalar function roots carry a checked `quire.op.integer.add`
+//! operation and Integer result; the equality root retains its equality
+//! operation, and call-item roots retain their call form. The function
+//! classifier checks scalar operation identity and body arity against the
+//! caller-declared [`quire_contract_codegen::ExactFunctionBody`].
 
 #![allow(dead_code)]
 
@@ -55,6 +52,7 @@ pub fn admitted_function_contract(
             CheckedNodeTag::BoundedDomain,
             CheckedNodeTag::Value,
             CheckedNodeTag::Expression,
+            CheckedNodeTag::Function,
             CheckedNodeTag::Claim,
             CheckedNodeTag::Correspondence,
         ]),
@@ -134,11 +132,9 @@ pub const FN_DANGLING_CALL: u32 = 503;
 /// `f_ref(a)`: one parameter typed `REF_TYPE` (a `reference` composite) --
 /// AC-10.
 pub const FN_REF_PARAM: u32 = 504;
-/// `f_model(a)`: one parameter typed `M_BARE` (`model` family) -- AC-11's
-/// `QuireSpecLanguage120` half.
+/// Valid scalar-signature call target used by the model-root classifier case.
 pub const FN_MODEL_PARAM: u32 = 505;
-/// `f_state(a)`: one parameter typed `S_BARE` (`state` family) -- AC-11's
-/// `QuireSpecLanguage121` half.
+/// Valid scalar-signature call target used by the state-root classifier case.
 pub const FN_STATE_PARAM: u32 = 506;
 /// `f_capability(a, b)`: `Scalar { Add }` with a non-empty
 /// `capability_requirements` -- AC-6.
@@ -155,12 +151,32 @@ pub const ITEM_CALL_NESTED: u32 = 522;
 pub const ITEM_CALL_UNRELATED: u32 = 523;
 /// Names a function absent from every request's own declarations.
 pub const ITEM_CALL_UNKNOWN_FUNCTION: u32 = 524;
+/// Classifier-only source call for the model root. Kept distinct from the
+/// corpus call ID because the shared fixture registry is process-wide.
+pub const ITEM_CALL_SOURCE_MODEL: u32 = 534;
+/// Classifier-only source call for the state root.
+pub const ITEM_CALL_SOURCE_STATE: u32 = 535;
 
-/// Base code for the >128-deep nested-call chain (AC-7). `CHAIN_LENGTH`
-/// functions `chain_0.. calling chain_(i+1)..`, the last calling [`FN_ADD`].
-pub const CHAIN_BASE: u32 = 1000;
-pub const CHAIN_LENGTH: u32 = 140; // > rt::MAX_CALL_DEPTH (128)
-pub const ITEM_CALL_CHAIN: u32 = 1500;
+const DISAMBIGUATOR_BASE: u32 = 2000;
+
+/// A genuinely checked FR-021 package used for source-binding adversarial
+/// cases. Unlike `ext_corpus_package`, this declaration is a `function`
+/// node whose parameter and body bindings point to separate checked nodes.
+pub const SOURCE_PARAM_A: u32 = 2600;
+pub const SOURCE_PARAM_B: u32 = 2601;
+pub const SOURCE_BODY: u32 = 2602;
+pub const SOURCE_FUNCTION: u32 = 2603;
+pub const SOURCE_OTHER_FUNCTION: u32 = 2604;
+pub const SOURCE_CALL: u32 = 2605;
+pub const SOURCE_OTHER_BODY: u32 = 2606;
+
+fn source_reference(code: u32) -> serde_json::Value {
+    let id = code_id(code);
+    serde_json::json!({
+        "term": "reference",
+        "target": {"domain": id.domain, "digest": id.digest}
+    })
+}
 
 /// `application_code`'s preimage is `{version, node_tag, semantic_form,
 /// semantic_type: T_BOOLEAN (fixed), declaration: None, recursion: null,
@@ -170,55 +186,321 @@ pub const ITEM_CALL_CHAIN: u32 = 1500;
 /// `result_type` disambiguator from a dedicated, freshly registered
 /// `scalar_type` placeholder pool, so no two of this module's own
 /// `application_code` calls can ever share a preimage.
-const DISAMBIGUATOR_BASE: u32 = 2000;
+const FUNCTION_PARAMETER_BASE: u32 = 50_000;
+const FUNCTION_BODY_BASE: u32 = 70_000;
+const ITEM_ARGUMENT_BASE: u32 = 100_000;
 
-fn disambiguated_body(index: u32) -> serde_json::Value {
-    binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + index)
+pub fn function_parameter_code(function_code: u32, index: usize) -> u32 {
+    FUNCTION_PARAMETER_BASE + function_code * 2 + u32::try_from(index).expect("parameter index")
 }
 
-/// The full FR-021 corpus: the composite-equality base package plus every
-/// node above.
+fn function_body_code(function_code: u32) -> u32 {
+    FUNCTION_BODY_BASE + function_code
+}
+
+pub fn item_argument_code(item_code: u32, index: usize) -> u32 {
+    ITEM_ARGUMENT_BASE + item_code * 2 + u32::try_from(index).expect("argument index")
+}
+
+fn reference_code(code: u32) -> serde_json::Value {
+    serde_json::json!({"term": "reference", "target": {"domain": NODE_DOMAIN, "digest": key(code)}})
+}
+
+fn application(
+    operator: &str,
+    operation: serde_json::Value,
+    result_type: u32,
+    arguments: Vec<serde_json::Value>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "term": "application",
+        "operator": operator,
+        "operation": operation,
+        "result_type": {"domain": NODE_DOMAIN, "digest": key(result_type)},
+        "arguments": arguments,
+    })
+}
+
+fn integer_add_body(arguments: Vec<serde_json::Value>) -> serde_json::Value {
+    application(
+        "binary",
+        serde_json::json!({
+            "identity": "quire.op.integer.add", "laws": [], "mode": null,
+            "member": null, "leaves": []
+        }),
+        T_INTEGER,
+        arguments,
+    )
+}
+
+fn call_body(function_code: u32, argument_codes: &[u32], result_type: u32) -> serde_json::Value {
+    application(
+        "call",
+        serde_json::json!({
+            "identity": "quire.op.function.call", "laws": [], "mode": null,
+            "member": null, "leaves": []
+        }),
+        result_type,
+        std::iter::once(reference_code(function_code))
+            .chain(argument_codes.iter().copied().map(reference_code))
+            .collect(),
+    )
+}
+
+fn source_parameter(builder: &mut PackageBuilder, code: u32, name: &str, type_code: u32) {
+    builder.code(
+        code,
+        "value",
+        "parameter",
+        type_code,
+        aggregate(vec![
+            bound_member("name", literal("text", name)),
+            bound_member("level", integer_literal(0)),
+        ]),
+    );
+}
+
+fn source_function_node(
+    builder: &mut PackageBuilder,
+    code: u32,
+    name: &str,
+    parameter_types: &[u32],
+    result_type: u32,
+    body_form: &str,
+    body: serde_json::Value,
+) {
+    let parameter_codes = parameter_types
+        .iter()
+        .enumerate()
+        .map(|(index, type_code)| {
+            let code = function_parameter_code(code, index);
+            source_parameter(
+                builder,
+                code,
+                if index == 0 { "a" } else { "b" },
+                *type_code,
+            );
+            code
+        })
+        .collect::<Vec<_>>();
+    let body_code = function_body_code(code);
+    builder.application_node(body_code, body_form, &key(result_type), body);
+    let declaration_body = aggregate(vec![
+        bound_member(
+            "parameters",
+            aggregate(
+                parameter_codes
+                    .iter()
+                    .copied()
+                    .map(reference_code)
+                    .collect(),
+            ),
+        ),
+        bound_member("body", reference_code(body_code)),
+    ]);
+    builder.code_named(
+        code,
+        name,
+        "function",
+        "pure_function",
+        result_type,
+        declaration_body,
+    );
+}
+
+fn source_item_call(
+    builder: &mut PackageBuilder,
+    item_code: u32,
+    function_code: u32,
+    argument_types: &[u32],
+    result_type: u32,
+) {
+    let argument_codes = argument_types
+        .iter()
+        .enumerate()
+        .map(|(index, type_code)| {
+            let code = item_argument_code(item_code, index);
+            source_parameter(
+                builder,
+                code,
+                &format!("call_{item_code}_arg_{index}"),
+                *type_code,
+            );
+            code
+        })
+        .collect::<Vec<_>>();
+    builder.application_node(
+        item_code,
+        "call",
+        &key(result_type),
+        call_body(function_code, &argument_codes, result_type),
+    );
+}
+
+/// Ordinary FR-021 corpus for generation, determinism, and agreement tests.
+/// Source-bound V2 function declarations and source calls live in
+/// `source_bound_call_package` so they do not bloat every ordinary case.
 pub fn ext_corpus_package() -> PackageBuilder {
     let mut builder = corpus_package();
 
-    let disambiguator_count = 9 + 5 + CHAIN_LENGTH + 1;
+    // Nine function roots and five call roots each receive a distinct result
+    // type in the fixture body, preventing duplicate application identities.
+    let disambiguator_count = 9 + 5;
     for i in 0..disambiguator_count {
+        let integer_result = matches!(i, 0 | 4 | 5 | 6 | 7 | 8);
         builder.code(
             DISAMBIGUATOR_BASE + i,
             "scalar_type",
-            "boolean",
+            if integer_result { "integer" } else { "boolean" },
             DISAMBIGUATOR_BASE + i,
             aggregate(vec![]),
         );
     }
 
     let mut next = 0u32;
-    let mut body = || {
-        let value = disambiguated_body(next);
+    let mut body = |integer_add: bool| {
+        let mut value = binary_body_with_result(T_INTEGER, T_INTEGER, DISAMBIGUATOR_BASE + next);
+        if integer_add {
+            value["operation"]["identity"] =
+                serde_json::Value::String("quire.op.integer.add".to_owned());
+        }
         next += 1;
         value
     };
 
     builder
-        .application_code(FN_ADD, "binary", body())
-        .application_code(FN_EQ, "binary", body())
-        .application_code(FN_CALL_NESTED, "call", body())
-        .application_code(FN_DANGLING_CALL, "call", body())
-        .application_code(FN_REF_PARAM, "binary", body())
-        .application_code(FN_MODEL_PARAM, "binary", body())
-        .application_code(FN_STATE_PARAM, "binary", body())
-        .application_code(FN_CAPABILITY, "binary", body())
-        .application_code(FN_UNRELATED, "binary", body())
-        .application_code(ITEM_CALL_ADD, "call", body())
-        .application_code(ITEM_CALL_EQ, "call", body())
-        .application_code(ITEM_CALL_NESTED, "call", body())
-        .application_code(ITEM_CALL_UNRELATED, "call", body())
-        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body());
-    for i in 0..CHAIN_LENGTH {
-        builder.application_code(CHAIN_BASE + i, "call", body());
-    }
-    builder.application_code(ITEM_CALL_CHAIN, "call", body());
+        .application_node(FN_ADD, "binary", &key(T_INTEGER), body(true))
+        .application_code(FN_EQ, "binary", body(false))
+        .application_code(FN_CALL_NESTED, "call", body(false))
+        .application_code(FN_DANGLING_CALL, "call", body(false))
+        .application_node(FN_REF_PARAM, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_MODEL_PARAM, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_STATE_PARAM, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_CAPABILITY, "binary", &key(T_INTEGER), body(true))
+        .application_node(FN_UNRELATED, "binary", &key(T_INTEGER), body(true))
+        .application_code(ITEM_CALL_ADD, "call", body(false))
+        .application_code(ITEM_CALL_EQ, "call", body(false))
+        .application_code(ITEM_CALL_NESTED, "call", body(false))
+        .application_code(ITEM_CALL_UNRELATED, "call", body(false))
+        .application_code(ITEM_CALL_UNKNOWN_FUNCTION, "call", body(false));
     builder
+}
+
+/// Minimal admitted corpus for the AC-11 defensive classifier boundary. The
+/// requested Model/State roots intentionally do not match the source-bound
+/// function on their call items; source-bound Model/State application remains
+/// planned until the reader admits a suitable representation.
+pub fn ac11_classifier_package() -> PackageBuilder {
+    let mut builder = source_bound_call_package();
+    source_item_call(
+        &mut builder,
+        ITEM_CALL_SOURCE_MODEL,
+        SOURCE_FUNCTION,
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+    );
+    source_item_call(
+        &mut builder,
+        ITEM_CALL_SOURCE_STATE,
+        SOURCE_FUNCTION,
+        &[T_INTEGER, T_INTEGER],
+        T_INTEGER,
+    );
+    builder
+}
+
+/// One admitted FR-021 function declaration and local call. The call's
+/// first argument is the declaration reference; its remaining references are
+/// ordered exactly as the two declared parameters.
+pub fn source_bound_call_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    for (code, name) in [(SOURCE_PARAM_A, "a"), (SOURCE_PARAM_B, "b")] {
+        builder.code(
+            code,
+            "value",
+            "parameter",
+            T_INTEGER,
+            aggregate(vec![
+                bound_member("name", literal("text", name)),
+                bound_member("level", integer_literal(0)),
+            ]),
+        );
+    }
+    let add_op = serde_json::json!({
+        "identity": "quire.op.integer.add", "laws": [], "mode": null,
+        "member": null, "leaves": []
+    });
+    let body = serde_json::json!({
+        "term": "application", "operator": "binary", "operation": add_op,
+        "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+        "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
+    });
+    let other_body = serde_json::json!({
+        "term": "application", "operator": "binary",
+        "operation": {"identity": "quire.op.integer.sub", "laws": [], "mode": null,
+        "member": null, "leaves": []},
+        "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+        "arguments": [source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
+    });
+    builder.application_node(SOURCE_BODY, "binary", &key(T_INTEGER), body);
+    builder.application_node(SOURCE_OTHER_BODY, "binary", &key(T_INTEGER), other_body);
+    let declaration_body = |body_code| {
+        aggregate(vec![
+            serde_json::json!({"term": "binding", "name": "parameters", "value": aggregate(vec![source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)])}),
+            serde_json::json!({"term": "binding", "name": "body", "value": source_reference(body_code)}),
+        ])
+    };
+    builder
+        .code(
+            SOURCE_FUNCTION,
+            "function",
+            "pure_function",
+            T_INTEGER,
+            declaration_body(SOURCE_BODY),
+        )
+        .code(
+            SOURCE_OTHER_FUNCTION,
+            "function",
+            "pure_function",
+            T_INTEGER,
+            declaration_body(SOURCE_OTHER_BODY),
+        );
+    let call_op = serde_json::json!({
+        "identity": "quire.op.function.call", "laws": [], "mode": null,
+        "member": null, "leaves": []
+    });
+    builder.application_node(
+        SOURCE_CALL,
+        "call",
+        &key(T_INTEGER),
+        serde_json::json!({
+            "term": "application", "operator": "call", "operation": call_op,
+            "result_type": {"domain": NODE_DOMAIN, "digest": key(T_INTEGER)},
+            "arguments": [source_reference(SOURCE_FUNCTION), source_reference(SOURCE_PARAM_A), source_reference(SOURCE_PARAM_B)]
+        }),
+    );
+    builder
+}
+
+pub fn source_function(name: &str, body_code: u32) -> ExactFunctionDeclaration {
+    ExactFunctionDeclaration {
+        node_id: code_id(body_code),
+        name: name.to_owned(),
+        parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
+        result_type: code_id(T_INTEGER),
+        body: ExactFunctionBody::Scalar {
+            operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
+        },
+        capability_requirements: Vec::new(),
+    }
+}
+
+pub fn source_call() -> ExactFunctionItem {
+    ExactFunctionItem {
+        call_node_id: code_id(SOURCE_CALL),
+        function: format!("n{}", key(SOURCE_FUNCTION)),
+        argument_node_ids: vec![code_id(SOURCE_PARAM_A), code_id(SOURCE_PARAM_B)],
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -312,11 +594,11 @@ pub fn function_ref_param(name: &str) -> ExactFunctionDeclaration {
     }
 }
 
-pub fn function_model_param(name: &str) -> ExactFunctionDeclaration {
+pub fn function_model_root(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
-        node_id: code_id(FN_MODEL_PARAM),
+        node_id: code_id(M_BARE),
         name: name.to_owned(),
-        parameters: vec![parameter("a", M_BARE)],
+        parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -325,11 +607,11 @@ pub fn function_model_param(name: &str) -> ExactFunctionDeclaration {
     }
 }
 
-pub fn function_state_param(name: &str) -> ExactFunctionDeclaration {
+pub fn function_state_root(name: &str) -> ExactFunctionDeclaration {
     ExactFunctionDeclaration {
-        node_id: code_id(FN_STATE_PARAM),
+        node_id: code_id(S_BARE),
         name: name.to_owned(),
-        parameters: vec![parameter("a", S_BARE)],
+        parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
         result_type: code_id(T_INTEGER),
         body: ExactFunctionBody::Scalar {
             operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
@@ -362,29 +644,6 @@ pub fn function_unrelated(name: &str) -> ExactFunctionDeclaration {
         },
         capability_requirements: Vec::new(),
     }
-}
-
-/// One function per link of a >128-deep nested-call chain:
-/// `chain_0..chain_(CHAIN_LENGTH - 1)`, each calling the next, the last
-/// calling `add_fn` (see [`function_add`]).
-pub fn chain_functions() -> Vec<ExactFunctionDeclaration> {
-    let mut functions = Vec::with_capacity(CHAIN_LENGTH as usize);
-    for i in 0..CHAIN_LENGTH {
-        let callee = if i + 1 < CHAIN_LENGTH {
-            format!("chain_{}", i + 1)
-        } else {
-            "add_fn".to_owned()
-        };
-        functions.push(ExactFunctionDeclaration {
-            node_id: code_id(CHAIN_BASE + i),
-            name: format!("chain_{i}"),
-            parameters: vec![parameter("a", T_INTEGER), parameter("b", T_INTEGER)],
-            result_type: code_id(T_INTEGER),
-            body: ExactFunctionBody::Call { callee },
-            capability_requirements: Vec::new(),
-        });
-    }
-    functions
 }
 
 // ---------------------------------------------------------------------------

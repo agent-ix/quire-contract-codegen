@@ -1341,6 +1341,14 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
         GenerationErrorCode::SerializationFailed.terminal_state(),
         GenerationTerminalState::Inconclusive
     );
+    assert_eq!(
+        GenerationErrorCode::InternalInvariantViolation.terminal_state(),
+        GenerationTerminalState::Inconclusive
+    );
+    assert_eq!(
+        serde_json::to_value(GenerationErrorCode::InternalInvariantViolation).unwrap(),
+        serde_json::Value::String("internal_invariant_violation".to_owned())
+    );
 }
 
 /// TC-003

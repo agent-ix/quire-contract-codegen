@@ -427,15 +427,11 @@ FR-024-AC-11 to FR-024-AC-30:
   order] }` and returns it from `call_site` as `FieldSite.domain`. Nothing breaks today, because
   QSL has no declared-domain check yet. The state-clause path should adopt `FieldSite.domain`
   before that check lands, and compute no key of its own.
-- Known gap, QSL ruling pending (QSL-634 / IR-460): the post-state values are not range-checked,
-  and a post state outside a field's declared range is refused by QSL admission and reads as
-  `Inconclusive(ReplayRefused(InvalidRuntimeInput))` (FR-029-AC-16). The wrapping debit subject
-  `deposit_debiting` reaches such a post state at the floor of `balance`'s range. QSL ruled
-  (QSL-634, filed, not merged) that an out-of-range pre state or argument stays refused and that an
-  out-of-range post-state value is the subject's output, so the witness: QSL will admit it as an
-  exact out-of-range observation, never clamped, and settle the replay reproduced or violated
-  naming the field, the range and the observed value, which CG maps to its ordinary violated
-  terminal (FR-029-AC-18, planned). Until QSL-634 lands CG keeps today's behaviour.
+- Out-of-range post-state values are preserved as observations, while an out-of-range pre state
+  or argument remains refused by QSL admission (QSL-634). The wrapping debit subject
+  `deposit_debiting` reaches -1 from the floor of `balance`'s range. CG puts that exact value in
+  the post snapshot, QSL settles the witness as a reproduced violation, and CG maps the run to
+  the ordinary `Refuted` terminal (FR-029-AC-18, IR-460).
 - The state-clause adapter in `src/replay/state_clause.rs` decodes a falsified postcondition
   harness's Kani playback into the named `i64` pre-state values that
   `StateClauseReplayInputs::playback` takes. It derives the ordered bindings from the harness's

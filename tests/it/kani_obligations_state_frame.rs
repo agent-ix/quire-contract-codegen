@@ -631,6 +631,40 @@ fn fixture(shape: &Shape) -> Fixture {
     fixture_with_resolver(shape).0
 }
 
+/// Source-backed fixtures for IR-295's exact planned state-frame refusal selectors.
+pub(crate) fn ir295_selector_fixture(negated: bool, grants_every_field: bool) -> Fixture {
+    let modifies: &'static [&'static str] = if grants_every_field {
+        &["audit", "balance"]
+    } else {
+        &model::GRANTED
+    };
+    let shape = Shape {
+        variant: if negated {
+            10
+        } else if grants_every_field {
+            1902
+        } else {
+            0
+        },
+        modifies,
+        condition: if negated {
+            Condition::Negated
+        } else {
+            Condition::PostGePre
+        },
+        ..Shape::HEALTHY
+    };
+    fixture(&shape)
+}
+
+pub(crate) fn ir295_healthy_fixture() -> Fixture {
+    emitted_fixture(&Twin::new(), "BalanceNeverDrops")
+}
+
+pub(crate) fn ir295_state_fields() -> &'static [&'static str] {
+    &STATE_FIELDS
+}
+
 /// The selected model fixture, with graph identities taken from QSL's emitted package.
 pub(crate) fn emitted_fixture(twin: &Twin, clause_name: &str) -> Fixture {
     let (package, clause) = twin.emitted_package(clause_name);
@@ -1615,11 +1649,9 @@ fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused()
 /// role; the record carries its symbol. The harness calls the item's own subject path, and the
 /// request's `subject_path` is not read.
 ///
-/// This does not back FR-015-AC-60, which stays planned and is not traced here: the comparison
-/// with `generate_state_frame_role` is not testable from `tests/it` (the function is
-/// crate-private and no V2 package builder exists under `src/`); byte identity holds by
-/// construction, and this test compares against the public entry for a clause whose roles both
-/// succeed.
+/// This integration test is traced only to TC-025: it compares with the public two-role entry,
+/// while the crate-internal role-parity test backs FR-015-AC-60 by comparing both direct roles
+/// with their negotiated items over a QSL-emitted fixture.
 ///
 /// Trace: TC-025
 #[test]
@@ -2091,10 +2123,9 @@ fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse
 /// lowering refuses both alike. `generate_state_frame_obligations` returns the refusal of the
 /// failing role, and a supported harness is the role's own.
 ///
-/// This does not back FR-015-AC-68, which stays planned and is not traced here: the comparison
-/// with `generate_state_frame_role` is not testable from `tests/it` (the function is
-/// crate-private and no V2 package builder exists under `src/`); byte identity holds by
-/// construction, and the harnesses are checked only for their role and clause.
+/// This integration test is traced only to TC-025: it checks harness role and clause, while the
+/// crate-internal role-parity test backs FR-015-AC-68 with direct `generate_state_frame_role`
+/// comparisons over the same QSL-emitted fixture.
 ///
 /// Trace: TC-025
 #[test]

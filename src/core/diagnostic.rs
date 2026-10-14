@@ -79,6 +79,8 @@ pub enum GenerationErrorCode {
     InvalidGeneratedSyntax,
     /// A deterministic source-map value could not be encoded.
     SerializationFailed,
+    /// An internal generator mode invariant was violated.
+    InternalInvariantViolation,
 }
 
 impl GenerationErrorCode {
@@ -93,9 +95,9 @@ impl GenerationErrorCode {
             | Self::UnsupportedIntegerDivision
             | Self::UnsupportedSaturatingArithmetic
             | Self::ResourceLimitExceeded => GenerationTerminalState::Unsupported,
-            Self::InvalidGeneratedSyntax | Self::SerializationFailed => {
-                GenerationTerminalState::Inconclusive
-            }
+            Self::InvalidGeneratedSyntax
+            | Self::SerializationFailed
+            | Self::InternalInvariantViolation => GenerationTerminalState::Inconclusive,
         }
     }
 }

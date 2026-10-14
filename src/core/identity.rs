@@ -118,7 +118,7 @@ impl fmt::Display for HarnessPath {
 mod tests {
     use super::{HarnessPath, HarnessSymbol, ModuleSymbol};
 
-    /// Trace: AD-004 L-10.
+    /// Architecture evidence: AD-004 L-10.
     #[test]
     fn l10_a_symbol_is_a_non_keyword_ascii_identifier() {
         for accepted in ["kob_scalar_add_1_proof", "_private", "check", "post_ab12"] {
@@ -138,7 +138,7 @@ mod tests {
         }
     }
 
-    /// Trace: AD-004 L-10.
+    /// Architecture evidence: AD-004 L-10.
     #[test]
     fn l10_a_harness_path_displays_module_then_harness_and_serializes_symbols_bare() {
         let path = HarnessPath {

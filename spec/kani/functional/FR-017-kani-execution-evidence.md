@@ -27,6 +27,10 @@ execution evidence. A caller may hand the generator several harnesses to run tog
 group in one launcher process, and retains one evidence record per harness. Unless a
 statement says "batch" or "group", it describes a run of one harness.
 
+[FR-040](./FR-040-cancellation-producer.md) adds the one launcher-observed cancellation outcome:
+the backend did not report a verdict for a run stopped by caller cancellation. Its typed source
+comes from the live execution control, and its group refusal produces no member evidence.
+
 Two words are used for two things below. A **batch** is the list of harnesses the caller hands to
 the batch entry, one call. A **group** is the harnesses of one batch that share one launcher
 process, so G groups are G processes; a group of one is a single run. A rule that says "the

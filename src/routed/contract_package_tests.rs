@@ -95,6 +95,51 @@ mod tests {
             .collect()
     }
 
+    fn source_call_arguments(
+        checked: &CheckedPackageV2,
+        call_id: &CheckedNodeId,
+    ) -> Vec<CheckedNodeId> {
+        let call = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| &node.node_id == call_id)
+            .expect("checked source call");
+        call.body
+            .get("arguments")
+            .and_then(serde_json::Value::as_array)
+            .expect("source call arguments")
+            .iter()
+            .skip(1)
+            .map(|argument| {
+                crate::oracle::function::reference_node_id(argument, checked.graph().nodes.iter())
+                    .expect("call argument reference")
+                    .clone()
+            })
+            .collect()
+    }
+
+    fn source_function_body(checked: &CheckedPackageV2, name: &str) -> CheckedNodeId {
+        let function = checked
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_tag.as_ref() == "function"
+                    && node.semantic_form.as_ref() == "pure_function"
+                    && node.declaration.as_ref().is_some_and(|declaration| {
+                        declaration.qualified_name.len() == 1
+                            && declaration.qualified_name[0].as_ref() == name
+                    })
+            })
+            .expect("named checked function");
+        let body = crate::oracle::function::binding_value(&function.body, "body")
+            .expect("function body binding");
+        crate::oracle::function::reference_node_id(body, checked.graph().nodes.iter())
+            .expect("function body reference")
+            .clone()
+    }
+
     fn occurrence(checked: &CheckedPackageV2, node_id: &CheckedNodeId) -> ContractOccurrenceKeyV1 {
         let sources = checked
             .source_map()
@@ -124,7 +169,11 @@ mod tests {
         }
     }
 
-    fn empty_backend_request(count: usize) -> BackendProviderEnvelope {
+    fn empty_backend_request(
+        count: usize,
+        package: &CheckedPackageV2,
+        node_id: &CheckedNodeId,
+    ) -> BackendProviderEnvelope {
         BackendProviderEnvelope {
             contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
             capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
@@ -135,6 +184,10 @@ mod tests {
                     extent: None,
                     named_backend: None,
                     candidates: Candidates::Set(Vec::new()),
+                    kani_form: crate::routed::capability::KaniForm::OutsideSet {
+                        package: Box::new(package.clone()),
+                        node_id: node_id.clone(),
+                    },
                 })
                 .collect(),
         }
@@ -215,8 +268,12 @@ mod tests {
             other => panic!("FR-330 reader must admit IR output: {other:?}"),
         };
         let items = PackageItems::new(&admitted, &positions).expect("positions and keys match");
-        let settled = negotiate_contract_package(&admitted, &positions, &empty_backend_request(3))
-            .expect("production settlement consumes the admitted package");
+        let settled = negotiate_contract_package(
+            &admitted,
+            &positions,
+            &empty_backend_request(3, &source, &function),
+        )
+        .expect("production settlement consumes the admitted package");
         assert_eq!(settled.len(), 3);
         for index in [0, 2] {
             let ContractItemSettlement { backend, .. } = &settled[index];
@@ -1040,6 +1097,7 @@ mod tests {
             .expect("QSL Integer type")
             .node_id
             .clone();
+        let call_arguments = source_call_arguments(&checked, &call);
         let requested = vec![addition.clone(), call.clone()];
         let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
@@ -1069,7 +1127,7 @@ mod tests {
         let call_item = ExactFunctionItem {
             call_node_id: call.clone(),
             function: "add".to_owned(),
-            argument_node_ids: vec![call.clone(), call.clone()],
+            argument_node_ids: call_arguments,
         };
         let generated = generate_exact_function_oracles(
             &admitted,
@@ -1143,20 +1201,7 @@ mod tests {
             .expect("Integer scalar type")
             .node_id
             .clone();
-        let addition = checked
-            .graph()
-            .nodes
-            .iter()
-            .find(|node| {
-                node.body
-                    .pointer("/operation/identity")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("quire.op.integer.add")
-                    && node.semantic_type == integer
-            })
-            .expect("plain function addition")
-            .node_id
-            .clone();
+        let addition = source_function_body(&checked, "add");
         let unbounded = checked
             .graph()
             .nodes
@@ -1219,6 +1264,7 @@ mod tests {
             equality.clone(),
             unbounded.clone(),
         ];
+        let call_arguments = source_call_arguments(&checked, &call);
         let lowered = checked.lower(&requested, &routed_contract_lowering_profile());
         let admitted = match ContractPackageWireV1::read(
             lowered.package.canonical_bytes().expect("FR-330 bytes"),
@@ -1258,7 +1304,7 @@ mod tests {
             &[ExactFunctionItem {
                 call_node_id: call,
                 function: "add".to_owned(),
-                argument_node_ids: vec![requested[1].clone(), requested[1].clone()],
+                argument_node_ids: call_arguments,
             }],
         )
         .expect("function generation");

@@ -27,6 +27,7 @@
 //! the prover; `execute_kani_obligation` does.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::{num::NonZeroU64, time::Duration};
 
 use quire_contract_model::{
     CheckedMemberType, CheckedNodeId, CheckedNodeTag, CheckedPackageV2, CheckedSemanticNodeV2,
@@ -91,6 +92,14 @@ pub struct StateFrameRequest<'a> {
     pub subject_path: &'a str,
     /// Loop unwind bound, `1..=MAX_OBLIGATION_UNWIND`.
     pub unwind: u32,
+}
+
+/// A ceiling value for artifact-free state-form classification, which never renders a harness.
+pub(crate) const fn default_settlement_ceilings() -> crate::kani::identity::ProofCeilings {
+    crate::kani::identity::ProofCeilings {
+        memory_bytes: NonZeroU64::MIN,
+        wall_clock: Duration::ZERO,
+    }
 }
 
 /// The two obligations one postcondition clause yields.
@@ -230,10 +239,80 @@ pub(crate) fn generate_state_frame_role(
     request: &StateFrameRequest<'_>,
     role: StateFrameRole,
 ) -> Result<StateFrameHarness, StateFrameRefusal> {
+    let plan = plan_state_frame_role(request, role)?;
+    render(
+        request,
+        &plan.scope,
+        &plan.domains,
+        &plan.unranged,
+        plan.property,
+        &plan.module,
+    )
+}
+
+/// Classify one state-frame form without constructing generated harness source.
+pub(crate) fn classify_state_frame_role(
+    request: &StateFrameRequest<'_>,
+    role: StateFrameRole,
+) -> Result<(), StateFrameRefusal> {
+    plan_state_frame_role(request, role).map(drop)
+}
+
+struct StateFramePlan {
+    scope: StateFrameScope,
+    domains: Vec<StateFieldDomain>,
+    unranged: Vec<StateUnrangedField>,
+    property: StateFrameProperty,
+    module: String,
+}
+
+fn plan_state_frame_role(
+    request: &StateFrameRequest<'_>,
+    role: StateFrameRole,
+) -> Result<StateFramePlan, StateFrameRefusal> {
     let prepared = prepare(request)?;
     match role {
-        StateFrameRole::Contract => contract_harness(request, &prepared),
-        StateFrameRole::Frame => frame_harness(request, &prepared),
+        StateFrameRole::Contract => {
+            let condition = prepared.condition.as_ref().map_err(Clone::clone)?;
+            require_state_field(request, &condition.field)?;
+            require_bound(&prepared, condition)?;
+            let (domains, unranged) =
+                state_domains(&prepared.graph, &prepared.shape.scope.object, request)?;
+            Ok(StateFramePlan {
+                scope: prepared.shape.scope.clone(),
+                domains,
+                unranged,
+                property: StateFrameProperty::Postcondition {
+                    field: condition.field.clone(),
+                    comparison: condition.comparison,
+                    left_is_pre: condition.left == Side::Pre,
+                },
+                module: format!("post_{}", short(&request.clause.digest)),
+            })
+        }
+        StateFrameRole::Frame => {
+            let granted = prepared.grants.as_ref().map_err(Clone::clone)?;
+            for field in granted {
+                require_state_field(request, field)?;
+            }
+            let checked = checked_fields(request, &prepared, granted)?;
+            let (domains, unranged) =
+                state_domains(&prepared.graph, &prepared.shape.scope.object, request)?;
+            Ok(StateFramePlan {
+                scope: prepared.shape.scope.clone(),
+                domains,
+                unranged,
+                property: StateFrameProperty::Frame {
+                    granted: granted.iter().cloned().collect(),
+                    checked,
+                },
+                module: format!(
+                    "frame_{}_{}",
+                    short(&prepared.shape.scope.anchor.digest),
+                    short(&request.clause.digest)
+                ),
+            })
+        }
     }
 }
 

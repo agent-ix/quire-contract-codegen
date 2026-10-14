@@ -783,6 +783,22 @@ impl PackageBuilder {
         self.node(&key(code), tag, form, &key(semantic_type), body)
     }
 
+    /// Adds a declaration node with an explicit qualified name. Function
+    /// fixture declarations use the same source name as their typed generator
+    /// descriptor instead of deriving a synthetic name from the fixture code.
+    pub fn code_named(
+        &mut self,
+        code: u32,
+        name: &str,
+        tag: &str,
+        form: &str,
+        semantic_type: u32,
+        body: Value,
+    ) -> &mut Self {
+        register_code(code, key(code));
+        self.node_in_group_labeled(&key(code), name, tag, form, &key(semantic_type), body, None)
+    }
+
     pub fn code_in_group(
         &mut self,
         code: u32,

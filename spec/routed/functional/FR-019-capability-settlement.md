@@ -23,6 +23,20 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-contract-ir/FR-029
     type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-018
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-020
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-021
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-022
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-023
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-025
+    type: references
+  - target: ix://agent-ix/quire-spec-language/ADR-027
+    type: references
 ---
 # FR-019: Settle every capability claim at one negotiation point
 
@@ -154,6 +168,69 @@ For an unsupported IR profile entry, IR FR-029 owns the absence of an artifact,
 - The generator shall settle `requires-bound` only as a negotiation
   disposition.
 - The generator shall never surface `requires-bound` as a verification result.
+
+### Planned model-checking negotiation arms (IR-516)
+
+The following arms are specification of future registered backends, not claims
+that CG currently implements or advertises them. They extend the same
+per-backend-kind dispatch above. Each arm reads the admitted item's recorded
+property form and subject class after the existing request, candidate and
+manifest checks; it never substitutes a form, subject, reduction or memory
+model to obtain support. The existing FR-290 request and candidate checks run
+first: a supplied candidate that lacks the item's kind settles
+`invalid-request` with `invalid_capability`/`inconsistent-candidates`. After
+those checks select a valid candidate, a form, reduction or resolved memory
+model that its arm does not discharge settles `unsupported`, warned, with
+`unsupported_projection`/`unsupported-requested-capability`, and emits no
+artifact. An empty candidate set retains the existing unsupported disposition.
+Settlement does not assert a verification result. The single
+generator entry and generation routing remain AD-004's and FR-022's concern.
+
+- The EN-1 explicit-state arm shall distinguish TP-1 through TP-4, TP-5's
+  safety and optional liveness halves, SG-1 through SG-3, and HP-1's model
+  claim, HP-2, HP-3 and HP-6, each on its admitted model or protocol subject.
+  It shall settle a form only when its descriptor advertises the required
+  capability and the form is one EN-1 discharges (QSL ADR-018, ADR-020,
+  ADR-022 and ADR-023). HP-1's code claim and HP-5 do not become EN-1
+  every-behaviour proofs through this arm.
+- The SMT temporal arm shall read TP-1 through TP-4 and the subject class,
+  selecting only EN-2 unrolling or EN-3 induction where QSL ADR-018 assigns
+  that method. It shall not claim an EN-3 liveness proof or treat a
+  bounded-to-`k` search as an exhaustive proof.
+- For TP-5, the EN-1 arm shall retain both halves on the concrete subject;
+  the SMT arm shall route ADR-020 RE-3 unrolling of the existing whole
+  refinement `temporal-satisfaction` item for refutation, and shall route
+  separately requested RE-2 per-step `operation-contract` records for their
+  safety-half obligations. An RE-2 disposition shall not stand in for the
+  whole refinement verdict.
+- For HP forms, the EN-1 arm shall accept only HP-1 model, HP-2, HP-3 and
+  HP-6; the SMT arm shall accept HP-2 only where its advertised EN-2 or EN-3
+  method applies. HP-4 shall settle unsupported before reaching an engine;
+  HP-5 belongs to QSL ADR-022's possible-property path. HP-1's code claim
+  remains an `operation-contract` item for the Kani arm only if its typed
+  lowering and advertisement admit it (QSL ADR-023 XC-1 to XC-5).
+- For state-graph forms, the EN-1 arm shall accept SG-1, SG-2 and SG-3; the
+  SMT arm shall accept SG-1 only, when advertised. SG-2 or SG-3 shall not be
+  routed to the SMT arm (QSL ADR-022 GE-1 to GE-3).
+- An arm receiving a selected reduction shall require the candidate to
+  advertise that exact reduction and retain the selection in the routed
+  request. Selected symmetry declarations and POR enter the obligation
+  identity, so their reduced and unreduced requests have distinct obligation
+  identities. A state constraint remains an EN-1 method parameter: it enters
+  the request identity, not the obligation identity (QSL ADR-021 SC-3, RV-8).
+  A selected POR without subject footprints shall settle unsupported. It
+  shall never silently run unreduced or add a reduction (QSL ADR-021 RV-6,
+  RV-8 and RV-9).
+- An arm over a subject with a weak `parallel` shall read its resolved `tso`
+  or `ra` model and require the candidate to advertise that model. The arm
+  shall retain the resolved model in the routed obligation and never weaken
+  it to fit a candidate (QSL ADR-025 MX-7 and MM-5). An `sc` subject is a
+  separate strong-model control.
+- Every model-checking arm shall read whether the admitted subject is a
+  model or a protocol and route it only if that arm discharges the subject
+  class under the candidate's advertised capability. A protocol subject shall retain its
+  protocol transition-system identity; it shall not be treated as an
+  ordinary model graph (QSL ADR-027 DS-2).
 
 ### The process-provider kind (QSL ADR-029 PV-4)
 
@@ -322,6 +399,14 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-30 | For the same typed IR tag/form, changing only its display or debug text leaves Kani's disposition, cause and named form identity unchanged. | Test (TC-030) |
 | FR-019-AC-31 | For a Kani-supported unbounded form against a `bounded`-only advertisement, `finite_bound_available=true` settles `requires-bound`, with no substituted bound and no artifact. | Test (TC-030) |
 | FR-019-AC-32 | When a caller supplies a finite bound in a new bounded request for a Kani-supported form, negotiation settles `supported` and preserves the exact supplied proof-bound value, domain kind and domain identity. | Test (TC-030) |
+| FR-019-AC-34 | PLANNED (IR-516). With one EN-1 candidate, an advertised admitted TP-1 through TP-4, TP-5, SG-1 through SG-3, or HP-1 model/HP-2/HP-3/HP-6 form settles through its explicit-state arm with the recorded form and model-or-protocol subject intact; an unadvertised form or HP-1 code claim does not settle `supported` through EN-1. | Test (TC-030) |
+| FR-019-AC-35 | PLANNED (IR-516). With one SMT temporal candidate advertising the item's kind and form, TP-1 through TP-4 route only to an EN-2 or EN-3 method ADR-018 assigns to that form and subject; TP-4 does not route to EN-3, and a form absent from the candidate's advertised form set settles `unsupported` with no engine request. | Test (TC-030) |
+| FR-019-AC-36 | PLANNED (IR-516). A TP-5 whole-refinement `temporal-satisfaction` item retains its safety and optional liveness halves on the concrete subject through EN-1, and the same whole item reaches an advertising SMT arm for RE-3 refutation; a separately requested RE-2 `operation-contract` item reaches the SMT arm for per-step safety checking, but its disposition cannot substitute for the whole-refinement item. An arm lacking the required TP-5 form settles the item `unsupported`. | Test (TC-030) |
+| FR-019-AC-37 | PLANNED (IR-516). HP-1 model, HP-2, HP-3 and HP-6 reach an advertising EN-1 arm; only HP-2 reaches an advertising SMT arm under its applicable EN-2 or EN-3 method. HP-4 and an unadvertised HP form settle unsupported before an engine, HP-5 stays on its possible-property path, and an HP-1 code claim is not settled as an EN-1 model claim. | Test (TC-030) |
+| FR-019-AC-38 | PLANNED (IR-516). An advertised SG-1, SG-2 or SG-3 item reaches EN-1 with its recorded form; only advertised SG-1 reaches an SMT arm. SG-2 or SG-3 against an SMT-only candidate settles unsupported and reaches no SMT engine. | Test (TC-030) |
+| FR-019-AC-39 | PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with the selection preserved in the routed request. Symmetry declarations and POR enter the obligation identity, so their reduced and unreduced requests for one claim have distinct obligation identities; a state constraint changes request identity but leaves obligation identity unchanged. An unadvertised selection or POR on a subject with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction. | Test (TC-030) |
+| FR-019-AC-40 | PLANNED (IR-516). For an item over a weak `parallel`, a candidate advertising the subject's resolved `tso` or `ra` model receives that exact model; a candidate lacking it settles `unsupported` with no artifact, and no arm weakens the resolved model. An `sc` subject is a separate strong-model control and does not take the weak-memory branch. | Test (TC-030) |
+| FR-019-AC-41 | PLANNED (IR-516). With otherwise equal form and kind advertisement, model and protocol subject classes are read separately; an arm that discharges only one class settles the other `unsupported`, while a supported protocol item retains its protocol transition-system subject identity through routing. | Test (TC-030) |
 
 ## Dependencies
 

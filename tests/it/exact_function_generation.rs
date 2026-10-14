@@ -3,8 +3,9 @@
 //!
 //! Generation-time coverage only (no execution of generated code):
 //! dispositions, refusal reasons, ordering/determinism, the manifest, and the
-//! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-7,
-//! AC-9, AC-17) are covered by `tests/it/exact_function_agreement.rs`.
+//! static location map. Execution-level criteria (AC-2, AC-4, AC-5, AC-9,
+//! AC-17) are covered by `tests/it/exact_function_agreement.rs`; AC-7's
+//! admitted 100K-call flat SSA control is exercised below.
 
 use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
@@ -14,7 +15,7 @@ use quire_contract_codegen::{
     ExactFunctionRefusal, FunctionScheduleDeclaration, FunctionScheduleDisposition,
     FunctionScheduleItem, FunctionScheduleLimits, FunctionScheduleOperand as ScheduleOperand,
     FunctionScheduleParameter, FunctionScheduleRefusal as ScheduleRefusal,
-    FunctionScheduledOperation, GeneratedExactFunctionClaim,
+    FunctionScheduledOperation, GeneratedExactFunctionClaim, UpstreamBlocker,
 };
 use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;
@@ -1256,7 +1257,7 @@ use package::*;
 
 /// The main FR-021 corpus: one Scalar, one CompositeEquality and one Call
 /// function (TC-031 step 1(a)); one function each refused for a `reference`
-/// operand (AC-10), a model node (AC-11), a state node (AC-11), an
+/// operand (AC-10), a model root (AC-11), a state root (AC-11), an
 /// undischargeable capability (AC-6), and a dangling nested call (AC-12);
 /// and one function wholly unrelated to any of the refused ones, to prove
 /// isolation (AC-12).
@@ -1266,8 +1267,8 @@ fn main_functions() -> Vec<quire_contract_codegen::ExactFunctionDeclaration> {
         function_eq("eq_fn"),
         function_call_nested("call_fn", "add_fn"),
         function_ref_param("ref_fn"),
-        function_model_param("model_fn"),
-        function_state_param("state_fn"),
+        function_model_root("model_fn"),
+        function_state_root("state_fn"),
         function_capability("capability_fn"),
         function_dangling_call("dangling_fn"),
         function_unrelated("unrelated_fn"),
@@ -1277,7 +1278,6 @@ fn main_functions() -> Vec<quire_contract_codegen::ExactFunctionDeclaration> {
 fn main_items() -> Vec<ExactFunctionItem> {
     vec![
         item(ITEM_CALL_ADD, "add_fn"),
-        item(ITEM_CALL_ADD, "eq_fn"), // same call node, different function (AC-13 key)
         item(ITEM_CALL_EQ, "eq_fn"),
         item(ITEM_CALL_NESTED, "call_fn"),
         item(ITEM_CALL_UNRELATED, "unrelated_fn"),
@@ -1642,6 +1642,23 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     ));
 }
 
+/// A caller-selected scalar operator cannot override the checked body operation identity.
+#[test]
+fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
+    let package = admit(source_bound_call_package());
+    let mut declaration = source_function(&format!("n{}", key(SOURCE_FUNCTION)), SOURCE_BODY);
+    declaration.body = quire_contract_codegen::ExactFunctionBody::Scalar {
+        operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Subtract,
+    };
+    let oracles = generate(&package, &[declaration], &[source_call()]);
+    assert!(matches!(
+        disposition_for(&oracles, SOURCE_CALL),
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+}
+
 /// Trace: FR-021-AC-3, TC-031. The claim-map entry for a generated item
 /// records the applied function's name and its `Origin::Body{function,
 /// index}` equal to the request's own declared-function ordering (functions
@@ -1741,34 +1758,48 @@ fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
-/// Trace: FR-021-AC-11, TC-031. Model and state parameter types excluded by
-/// the fixed FR-330 profile retain their distinct checked keys in typed
-/// UnknownTypeNode refusals, with no generated function oracle.
+/// Trace: FR-021-AC-11, TC-031. The requested function roots are checked
+/// Model/State nodes, while the call fixtures retain a valid source-bound
+/// callee. The claim map must preserve the distinct root blockers and still
+/// generate the healthy source-bound sibling.
 #[test]
-fn tc_031_ac11_model_and_state_outside_package_keep_distinct_type_keys() {
-    let package = admit(ext_corpus_package());
+fn tc_031_ac11_model_and_state_are_distinct_blockers() {
+    let package = admit(ac11_classifier_package());
     let functions = vec![
-        function_model_param("model_fn"),
-        function_state_param("state_fn"),
+        function_model_root("model_fn"),
+        function_state_root("state_fn"),
+        source_function(&format!("n{}", key(SOURCE_FUNCTION)), SOURCE_BODY),
     ];
     let items = vec![
-        item(ITEM_CALL_ADD, "model_fn"),
-        item(ITEM_CALL_EQ, "state_fn"),
+        item(ITEM_CALL_SOURCE_MODEL, "model_fn"),
+        item(ITEM_CALL_SOURCE_STATE, "state_fn"),
+        source_call(),
     ];
     let oracles = generate(&package, &functions, &items);
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_ADD),
+        disposition_for(&oracles, ITEM_CALL_SOURCE_MODEL),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
-        } if *type_node_id == oracles.key(M_BARE)
+            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                issue: UpstreamBlocker::QuireSpecLanguage120,
+                ..
+            }
+        }
     ));
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_EQ),
+        disposition_for(&oracles, ITEM_CALL_SOURCE_STATE),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::UnknownTypeNode { type_node_id }
-        } if *type_node_id == oracles.key(S_BARE)
+            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                issue: UpstreamBlocker::QuireSpecLanguage121,
+                ..
+            }
+        }
     ));
-    assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
+    assert!(contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
+    let sibling_disposition = disposition_for(&oracles, SOURCE_CALL);
+    assert!(
+        matches!(sibling_disposition, ClaimDisposition::Generated(_)),
+        "source-bound sibling: {sibling_disposition:?}"
+    );
 }
 
 /// Trace: FR-021-AC-12, TC-031. A declared function whose own body fails to
@@ -1835,7 +1866,7 @@ fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
     let call_id = package.ids.resolve(&code_id(ITEM_CALL_ADD));
     let mut temporal_body = function_add("temporal_body");
     temporal_body.node_id = body_id.clone();
-    let functions = vec![temporal_body, function_unrelated("unrelated_fn")];
+    let functions = vec![temporal_body, function_eq("unrelated_fn")];
     let items = vec![
         item(ITEM_CALL_ADD, "temporal_body"),
         item(ITEM_CALL_UNRELATED, "unrelated_fn"),
@@ -1845,7 +1876,11 @@ fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
     assert!(matches!(
         disposition_for(&oracles, ITEM_CALL_ADD),
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag: "temporal" }
+            refusal: ExactFunctionRefusal::BlockedOnUpstream {
+                unsupported_node_id,
+                node_tag: "temporal",
+                issue: UpstreamBlocker::QuireSpecLanguage121,
+            }
         } if *unsupported_node_id == body_id
     ));
     assert_eq!(
@@ -1858,10 +1893,11 @@ fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
             .node_id,
         call_id
     );
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_UNRELATED),
-        ClaimDisposition::Generated(_)
-    ));
+    let sibling = disposition_for(&oracles, ITEM_CALL_UNRELATED);
+    assert!(
+        matches!(sibling, ClaimDisposition::Generated(_)),
+        "healthy sibling disposition: {sibling:?}"
+    );
 }
 
 fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
@@ -2008,12 +2044,33 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
         .iter()
         .find(|claim| claim.node_id == requested_id)
         .expect("direct claim retains request identity");
-    assert!(matches!(
-        &direct.result,
-        ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag }
-        } if unsupported_node_id == &requested_id && *node_tag == expected_tag
-    ));
+    match (&direct.result, expected_tag) {
+        (
+            ClaimDisposition::Refused {
+                refusal:
+                    ExactFunctionRefusal::BlockedOnUpstream {
+                        unsupported_node_id,
+                        node_tag: "temporal",
+                        issue: UpstreamBlocker::QuireSpecLanguage121,
+                    },
+            },
+            "temporal",
+        ) => assert_eq!(unsupported_node_id, &requested_id),
+        (
+            ClaimDisposition::Refused {
+                refusal:
+                    ExactFunctionRefusal::Unsupported {
+                        unsupported_node_id,
+                        node_tag,
+                    },
+            },
+            tag,
+        ) => {
+            assert_eq!(unsupported_node_id, &requested_id);
+            assert_eq!(*node_tag, tag);
+        }
+        (other, tag) => panic!("expected unsupported {tag} for requested node: {other:?}"),
+    }
     let generated = combined
         .claim_map
         .items
@@ -2330,7 +2387,11 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     assert!(matches!(
         &direct.result,
         ClaimDisposition::Refused {
-            refusal: ExactFunctionRefusal::Unsupported { unsupported_node_id, node_tag: "temporal" }
+        refusal: ExactFunctionRefusal::BlockedOnUpstream {
+            unsupported_node_id,
+            node_tag: "temporal",
+            issue: UpstreamBlocker::QuireSpecLanguage121,
+        }
         } if unsupported_node_id == &fairness_id
     ));
     let generated = combined
@@ -2407,10 +2468,10 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
         }
     ));
 
-    // Result type: FN_EQ's node, a Scalar body (Integer-only), declared
+    // Result type: FN_ADD's node, a Scalar body (Integer-only), declared
     // with a Boolean result.
     let result_mismatch = quire_contract_codegen::ExactFunctionDeclaration {
-        node_id: code_id(FN_EQ),
+        node_id: code_id(FN_ADD),
         name: "boolean_result_add".to_owned(),
         parameters: vec![
             quire_contract_codegen::FunctionParameter {
@@ -2452,10 +2513,10 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     let functions = vec![
         function_add("dup"),       // node FN_ADD
         function_unrelated("dup"), // node FN_UNRELATED, same name, different node
-        function_eq("solo_eq"),    // node FN_EQ, unique name
+        function_eq("solo_eq"),
         quire_contract_codegen::ExactFunctionDeclaration {
-            node_id: code_id(FN_CAPABILITY),
-            name: "solo_add".to_owned(),
+            node_id: code_id(E_TUPLE),
+            name: "solo_eq_2".to_owned(),
             parameters: vec![
                 quire_contract_codegen::FunctionParameter {
                     name: "a".to_owned(),
@@ -2466,9 +2527,9 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
                     type_node_id: code_id(T_INTEGER),
                 },
             ],
-            result_type: code_id(T_INTEGER),
-            body: quire_contract_codegen::ExactFunctionBody::Scalar {
-                operator: quire_contract_codegen::oracle::operator_catalog::IntegerOperator::Add,
+            result_type: code_id(T_BOOLEAN),
+            body: quire_contract_codegen::ExactFunctionBody::CompositeEquality {
+                operator: quire_contract_codegen::EqualityOperatorKind::Equal,
             },
             capability_requirements: Vec::new(),
         },
@@ -2476,7 +2537,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     let items = vec![
         item(ITEM_CALL_ADD, "dup"),
         item(ITEM_CALL_EQ, "solo_eq"),
-        item(ITEM_CALL_UNRELATED, "solo_add"),
+        item(ITEM_CALL_NESTED, "solo_eq_2"),
     ];
     let oracles = generate(&package, &functions, &items);
 
@@ -2495,11 +2556,11 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
         .all(|entry| entry.function != "dup"));
 
     // Node ids are content digests, not the numeric placeholder codes
-    // above, so the surviving order (solo_eq, solo_add) is whichever the
+    // above, so the surviving order (solo_eq, solo_eq_2) is whichever the
     // generator's own node-id sort gives -- re-derived here exactly as
     // `generate_exact_function_oracles` computes it, the same pattern
     // `tc_031_ac3`/`tc_031_ac15` already use, rather than hardcoded.
-    let mut survivor_node_ids = [oracles.key(FN_EQ), oracles.key(FN_CAPABILITY)];
+    let mut survivor_node_ids = [oracles.key(FN_EQ), oracles.key(E_TUPLE)];
     survivor_node_ids.sort();
     let expected_index = |node_id: &quire_contract_model::CheckedNodeId| {
         survivor_node_ids
@@ -2508,32 +2569,32 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
             .expect("survivor node id")
     };
 
-    let solo_eq_entry = oracles
+    let eq_entry = oracles
         .location_map
         .iter()
         .find(|entry| entry.function == "solo_eq")
         .expect("solo_eq has a location map entry");
-    let solo_add_entry = oracles
+    let eq_2_entry = oracles
         .location_map
         .iter()
-        .find(|entry| entry.function == "solo_add")
-        .expect("solo_add has a location map entry");
+        .find(|entry| entry.function == "solo_eq_2")
+        .expect("solo_eq_2 has a location map entry");
     assert_eq!(oracles.location_map.len(), 2);
-    match &solo_eq_entry.location.origin {
+    match &eq_entry.location.origin {
         quire_contract_codegen::RecordedOrigin::Body { function, index } => {
             assert_eq!(function, "solo_eq");
             assert_eq!(*index, expected_index(&oracles.key(FN_EQ)));
         }
     }
-    match &solo_add_entry.location.origin {
+    match &eq_2_entry.location.origin {
         quire_contract_codegen::RecordedOrigin::Body { function, index } => {
-            assert_eq!(function, "solo_add");
-            assert_eq!(*index, expected_index(&oracles.key(FN_CAPABILITY)));
+            assert_eq!(function, "solo_eq_2");
+            assert_eq!(*index, expected_index(&oracles.key(E_TUPLE)));
         }
     }
     assert_ne!(
         expected_index(&oracles.key(FN_EQ)),
-        expected_index(&oracles.key(FN_CAPABILITY)),
+        expected_index(&oracles.key(E_TUPLE)),
         "the two survivors must occupy distinct indices"
     );
     assert!(matches!(
@@ -2541,7 +2602,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
         ClaimDisposition::Generated(_)
     ));
     assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_UNRELATED),
+        disposition_for(&oracles, ITEM_CALL_NESTED),
         ClaimDisposition::Generated(_)
     ));
 }
@@ -2766,12 +2827,12 @@ fn tc_031_ac22_fixture_i_both_bodies_admissible() {
         functions: vec![
             function_add("pair_one"),
             function_add("pair_two"),
-            function_eq("solo"),
+            function_unrelated("unrelated_fn"),
         ],
         items: vec![
             (ITEM_CALL_ADD, "pair_one"),
             (ITEM_CALL_EQ, "pair_two"),
-            (ITEM_CALL_UNRELATED, "solo"),
+            (ITEM_CALL_UNRELATED, "unrelated_fn"),
         ],
         pair_names: vec!["pair_one", "pair_two"],
         absent_names: vec!["pair_one", "pair_two"],
@@ -2792,12 +2853,12 @@ fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
         functions: vec![
             on_node(function_capability("pair_one"), FN_ADD),
             function_add("pair_two"),
-            function_eq("solo"),
+            function_unrelated("unrelated_fn"),
         ],
         items: vec![
             (ITEM_CALL_ADD, "pair_one"),
             (ITEM_CALL_EQ, "pair_two"),
-            (ITEM_CALL_UNRELATED, "solo"),
+            (ITEM_CALL_UNRELATED, "unrelated_fn"),
         ],
         pair_names: vec!["pair_one", "pair_two"],
         absent_names: vec!["pair_one", "pair_two"],
@@ -2819,13 +2880,13 @@ fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
             function_add("shared"),
             function_add("shared"),
             function_unrelated("shared"),
-            function_eq("solo"),
+            function_eq("eq_fn"),
         ],
-        items: vec![(ITEM_CALL_ADD, "shared"), (ITEM_CALL_UNRELATED, "solo")],
+        items: vec![(ITEM_CALL_ADD, "shared"), (ITEM_CALL_EQ, "eq_fn")],
         pair_names: vec!["shared"],
         absent_names: vec!["shared"],
         duplicate_items: vec![ITEM_CALL_ADD],
-        distinct_items: vec![ITEM_CALL_UNRELATED],
+        distinct_items: vec![ITEM_CALL_EQ],
     }
     .check(&package);
 }
@@ -2839,19 +2900,19 @@ fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee()
     let package = admit(ext_corpus_package());
     let fixture = DuplicateNodeFixture {
         functions: vec![
-            function_add("pair_one"),
-            function_add("pair_two"),
-            function_call_nested("caller", "pair_one"),
-            function_eq("solo"),
+            function_add("add_fn"),
+            function_add("add_fn"),
+            function_call_nested("call_fn", "add_fn"),
+            function_unrelated("unrelated_fn"),
         ],
         items: vec![
-            (ITEM_CALL_ADD, "pair_one"),
-            (ITEM_CALL_EQ, "pair_two"),
-            (ITEM_CALL_NESTED, "caller"),
-            (ITEM_CALL_UNRELATED, "solo"),
+            (ITEM_CALL_ADD, "add_fn"),
+            (ITEM_CALL_EQ, "add_fn"),
+            (ITEM_CALL_NESTED, "call_fn"),
+            (ITEM_CALL_UNRELATED, "unrelated_fn"),
         ],
-        pair_names: vec!["pair_one", "pair_two"],
-        absent_names: vec!["pair_one", "pair_two", "caller"],
+        pair_names: vec!["add_fn"],
+        absent_names: vec!["add_fn", "call_fn"],
         duplicate_items: vec![ITEM_CALL_ADD, ITEM_CALL_EQ],
         distinct_items: vec![ITEM_CALL_UNRELATED],
     };
@@ -2868,7 +2929,7 @@ fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee()
             disposition_for(&oracles, ITEM_CALL_NESTED),
             ClaimDisposition::Refused {
                 refusal: ExactFunctionRefusal::UnknownCallee { callee }
-            } if callee == "pair_one"
+            } if callee == "add_fn"
         ));
     }
 }
@@ -3171,21 +3232,16 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
 /// delimiter form.
 #[test]
 fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
-    for (corpus, oracles) in [("main", main_oracles()), ("chain", chain_oracles())] {
-        let lib = contents(&oracles, "src/lib.rs");
-        assert!(lib.contains("pub fn checked_package()"), "{corpus} corpus");
-        for forbidden in [".unwrap(", ".expect("] {
-            assert!(
-                !lib.contains(forbidden),
-                "{corpus} corpus emits {forbidden}"
-            );
-        }
-        assert!(
-            !invokes_panicking_macro(&lib),
-            "{corpus} corpus emits a panicking macro"
-        );
+    let oracles = main_oracles();
+    let lib = contents(&oracles, "src/lib.rs");
+    assert!(lib.contains("pub fn checked_package()"), "main corpus");
+    for forbidden in [".unwrap(", ".expect("] {
+        assert!(!lib.contains(forbidden), "main corpus emits {forbidden}");
     }
-    let lib = contents(&main_oracles(), "src/lib.rs");
+    assert!(
+        !invokes_panicking_macro(&lib),
+        "main corpus emits a panicking macro"
+    );
     assert!(lib.contains("rt::TypeEnvironment::default()"));
 }
 
@@ -3246,50 +3302,6 @@ pub(super) fn main_oracles() -> FixtureOracles {
         &main_functions(),
         &main_items(),
     )
-}
-
-/// The generator's current output for the nested-call chain corpus (deeper
-/// than `MAX_CALL_DEPTH`), which `exact_function_agreement` executes for AC-7.
-pub(super) fn chain_oracles() -> FixtureOracles {
-    let package = admit(ext_corpus_package());
-    let mut functions = chain_functions();
-    functions.push(function_add("add_fn")); // the chain's own last link calls this
-    generate(&package, &functions, &[item(ITEM_CALL_CHAIN, "chain_0")])
-}
-
-/// Trace: FR-021-AC-7, TC-031. The chain corpus is `CHAIN_LENGTH` (> 128)
-/// functions `chain_0 .. chain_139`, each generated body calling the next and
-/// the last calling `add_fn`, and its one item generates -- so the AC-7
-/// execution case in `exact_function_agreement` really does enter a generated
-/// chain deeper than `MAX_CALL_DEPTH`.
-#[test]
-fn tc_031_ac7_chain_corpus_generates_a_call_chain_deeper_than_max_call_depth() {
-    let chain = chain_functions();
-    const {
-        assert!(
-            CHAIN_LENGTH as u64 > quire_contract_runtime::exact::MAX_CALL_DEPTH,
-            "the chain must exceed MAX_CALL_DEPTH"
-        );
-    }
-    assert_eq!(chain.len(), CHAIN_LENGTH as usize);
-    assert_eq!(chain[0].name, "chain_0");
-    assert_eq!(chain[69].name, "chain_69");
-    assert_eq!(
-        chain[(CHAIN_LENGTH - 1) as usize].name,
-        format!("chain_{}", CHAIN_LENGTH - 1)
-    );
-
-    let oracles = chain_oracles();
-    assert!(matches!(
-        disposition_for(&oracles, ITEM_CALL_CHAIN),
-        ClaimDisposition::Generated(_)
-    ));
-    let lib = contents(&oracles, "src/lib.rs");
-    for link in 0..CHAIN_LENGTH - 1 {
-        let call = format!("frame.call(\"chain_{}\", args)", link + 1);
-        assert!(lib.contains(&call), "chain_{link} does not emit {call}");
-    }
-    assert!(lib.contains("frame.call(\"add_fn\", args)"));
 }
 
 pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &str) -> String {
@@ -3440,4 +3452,81 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     // all, so a JSON-key absence check on `claim-map.json` here would only
     // restate what the type system already guarantees at compile time, not
     // exercise any behavior of this generator.
+}
+
+/// This package uses the FR-021 checked shape: a `function/pure_function`
+/// declaration binds parameter nodes and an expression body; its local call
+/// references the declaration followed by ordered argument references.
+/// Trace: FR-021-AC-27
+#[test]
+fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
+    let (checked, ids) = source_bound_call_package().admit_resolved();
+    let function_name = format!("n{}", key(SOURCE_FUNCTION));
+    let other_name = format!("n{}", key(SOURCE_OTHER_FUNCTION));
+    let function = ids.resolve_function(source_function(&function_name, SOURCE_BODY));
+    let other = ids.resolve_function(source_function(&other_name, SOURCE_OTHER_BODY));
+    let item = ids.resolve_call(source_call());
+    assert_ne!(function.node_id, ids.resolve(&code_id(SOURCE_FUNCTION)));
+    assert_ne!(other.node_id, ids.resolve(&code_id(SOURCE_OTHER_FUNCTION)));
+    let requested = [
+        function.node_id.clone(),
+        other.node_id.clone(),
+        item.call_node_id.clone(),
+    ];
+    let contract = package::admitted_function_contract(&checked, &requested);
+    let positions = package::driver_positions(&requested);
+
+    let good = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &[0, 1],
+        &[function.clone(), other.clone()],
+        &[2],
+        std::slice::from_ref(&item),
+    )
+    .expect("valid source-backed call is planned");
+    assert!(
+        matches!(
+            good.claim_map.items[0].result,
+            ClaimDisposition::Generated(_)
+        ),
+        "{:?}",
+        good.claim_map.items[0].result
+    );
+
+    let mut wrong_callee = item.clone();
+    wrong_callee.function = other_name;
+    let wrong = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &[0, 1],
+        &[function.clone(), other],
+        &[2],
+        &[wrong_callee],
+    )
+    .expect("wrong source callee is a per-item refusal");
+    assert!(matches!(
+        wrong.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BodyMismatch
+        }
+    ));
+
+    let mut reordered = item;
+    reordered.argument_node_ids.reverse();
+    let reordered = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &[0],
+        &[function],
+        &[2],
+        &[reordered],
+    )
+    .expect("reordered source arguments are a per-item refusal");
+    assert!(matches!(
+        reordered.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: ExactFunctionRefusal::BodyMismatch
+        }
+    ));
 }
