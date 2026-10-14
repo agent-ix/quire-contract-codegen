@@ -657,6 +657,14 @@ fn kill_process_tree(child: &mut Child) {
     let _ = child.kill();
 }
 
+/// Observe the caller's retained first event, not a clock or a meter charge.
+fn observed_cancellation(cancel: &Cancel) -> Option<KaniCancellationSource> {
+    cancel.cause().map(|cause| match cause {
+        CancelCause::Requested => KaniCancellationSource::Requested,
+        CancelCause::Deadline => KaniCancellationSource::Deadline,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use rustix::event::poll;
@@ -1468,12 +1476,4 @@ mod tests {
         );
         fs::remove_dir_all(root).unwrap();
     }
-}
-
-/// Observe the caller's retained first event, not a clock or a meter charge.
-fn observed_cancellation(cancel: &Cancel) -> Option<KaniCancellationSource> {
-    cancel.cause().map(|cause| match cause {
-        CancelCause::Requested => KaniCancellationSource::Requested,
-        CancelCause::Deadline => KaniCancellationSource::Deadline,
-    })
 }
