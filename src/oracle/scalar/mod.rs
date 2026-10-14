@@ -4393,6 +4393,8 @@ mod tests {
 
     /// Admission normally prevents malformed cycles and references; the inference boundary still
     /// reports each cause distinctly if a damaged graph reaches it.
+    ///
+    /// Trace: FR-014-AC-46, TC-024.
     #[test]
     fn tc_024_nested_inference_reports_missing_cycle_unsupported_and_bad_literals() {
         let integer = node_id('0');

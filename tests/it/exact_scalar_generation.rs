@@ -3421,26 +3421,30 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
             "{path} accesses a limit kind"
         );
 
-        let lines = code.lines().collect::<Vec<_>>();
-        for (at, line) in lines.iter().enumerate() {
-            if line.contains("limit_kind") {
-                let permitted_variant = lines[..at]
-                    .iter()
-                    .rposition(|earlier| {
-                        earlier.contains("LoweringLimitUnrecognised")
-                            || earlier.contains("LimitUnrecognised")
-                    })
-                    .is_some_and(|variant_at| at - variant_at <= 12);
-                assert!(
-                    permitted_variant,
-                    "{path}:{} names `limit_kind` outside the refusal: {line}",
-                    at + 1
-                );
-            }
-        }
-
         let arms = code.matches("CompleteLoweringRecordV2::Failed").count();
+        let compact = code
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect::<String>();
+        assert!(
+            compact.contains("LoweringLimitUnrecognised{limit_kind:&'staticstr,"),
+            "{path} carries the field on the unrecognised lowering refusal"
+        );
         if path != "src/oracle/scalar/mod.rs" {
+            let expected_uses = if path == "src/oracle/equality/mod.rs" {
+                1
+            } else {
+                assert!(
+                    compact.contains("LoweringFailure::LimitUnrecognised{limit_kind,limit,consumed,}=>schedule::ScheduleRefusal::LoweringLimitUnrecognised{limit_kind,"),
+                    "{path} transfers the field only into the typed schedule refusal"
+                );
+                3
+            };
+            assert_eq!(
+                compact.matches("limit_kind").count(),
+                expected_uses,
+                "{path} names `limit_kind` only in its typed lowering refusal and conversion"
+            );
             assert_eq!(
                 arms, 0,
                 "{path} consumes admitted package accounting instead"
@@ -3451,6 +3455,19 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
             );
             continue;
         }
+        assert_eq!(
+            compact.matches("limit_kind").count(),
+            3,
+            "{path} names `limit_kind` only in the typed lowering refusal and its conversion"
+        );
+        assert!(
+            compact.contains("LoweringLimitUnrecognised{limit_kind:&'staticstr,"),
+            "{path} carries the field on the unrecognised lowering refusal"
+        );
+        assert!(
+            compact.contains("LoweringFailure::LimitUnrecognised{limit_kind,limit,consumed,}=>Self::LoweringLimitUnrecognised{limit_kind,"),
+            "{path} binds the field only while converting the unrecognised lowering cause"
+        );
         assert_eq!(arms, 1, "{path} has one direct-lowering `Failed` arm");
         let arm = &code[code
             .find("CompleteLoweringRecordV2::Failed")
