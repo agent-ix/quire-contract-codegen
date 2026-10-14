@@ -5163,13 +5163,14 @@ mod tests {
     }
     // -- Derivation (IR-294) ---------------------------------------------------------------
 
-    /// One descriptor per catalogued identity the forward map can name.
+    /// One explicit test descriptor per current `ExactScalarOperation` variant.
     fn every_operation() -> Vec<ExactScalarOperation> {
         use ExactScalarOperation as Op;
         let domain = IntegerDomain::Mathematical;
         let decimal = DecimalType::new(0_i64.into(), 9_i64.into(), 0, 0, RoundingMode::NearestEven)
             .expect("type");
         let mut all = Vec::new();
+        let text = TextType::new(0, 4, TextProfile::Nfc).expect("text");
         for operator in [
             IntegerOperator::Add,
             IntegerOperator::Subtract,
@@ -5263,6 +5264,7 @@ mod tests {
             target: IeeeWidth::Binary64,
             rounding: RoundingMode::NearestEven,
         });
+        all.push(Op::TextAdmission { text_type: text });
         for operator in ComparisonOperator::ALL {
             all.push(Op::TextComparison { operator });
             all.push(Op::EnumComparison { operator });
@@ -5335,10 +5337,10 @@ mod tests {
     }
 
     /// The inverse identity match and the forward `catalogued_operation` are two exhaustive
-    /// matches over the catalogued descriptors, kept aligned by this round trip: every descriptor's forward
-    /// identity inverts to the family that descriptor belongs to, no two families share an
-    /// identity, and `every_operation` covers every `ExactScalarOperation` variant. A catalogued
-    /// identity added to one map and not the other fails here.
+    /// matches over checked scalar descriptors, kept aligned by this round trip. Caller Text
+    /// admission and same-width IEEE conversion remain descriptors of their variants but have no
+    /// checked scalar identity. Every current variant is listed, and each catalogued descriptor's
+    /// identity inverts to its family with no shared identities.
     ///
     /// Trace: FR-014-AC-18, FR-014-AC-19, TC-024.
     #[test]
@@ -5355,10 +5357,15 @@ mod tests {
         );
         let mut seen = BTreeMap::new();
         for operation in &operations {
-            let family = expected_family(operation).expect("every descriptor here is catalogued");
+            let Some(family) = expected_family(operation) else {
+                assert!(catalogued_operation(operation)
+                    .expect("known operation descriptor")
+                    .is_none());
+                continue;
+            };
             let identity = catalogued_operation(operation)
                 .expect("every descriptor here is a known RT variant")
-                .expect("every descriptor here has a catalogued identity")
+                .expect("catalogued descriptor has an identity")
                 .identity;
             assert_eq!(
                 family_of_identity(identity),

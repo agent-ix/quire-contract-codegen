@@ -123,25 +123,39 @@ impl Drop for CallerExecutorLane {
 }
 
 fn caller_report(status: &str, checks: &[(&str, &str)]) -> String {
-    let checks: Vec<_> = checks
+    caller_batch_report(&[(
+        "caller_text_nfc_1_1::caller_text_admission_agrees",
+        status,
+        checks,
+    )])
+}
+
+fn caller_batch_report(entries: &[(&str, &str, &[(&str, &str)])]) -> String {
+    let results: Vec<_> = entries
         .iter()
-        .enumerate()
-        .map(|(index, (status, category))| {
+        .map(|(harness_id, status, checks)| {
+            let checks: Vec<_> = checks
+                .iter()
+                .enumerate()
+                .map(|(index, (status, category))| {
+                    serde_json::json!({
+                        "id": index + 1,
+                        "status": status,
+                        "category": category,
+                        "location": { "file": "src/lib.rs", "line": "10", "column": "5" }
+                    })
+                })
+                .collect();
             serde_json::json!({
-                "id": index + 1,
+                "harness_id": harness_id,
                 "status": status,
-                "category": category,
-                "location": { "file": "src/lib.rs", "line": "10", "column": "5" }
+                "checks": checks
             })
         })
         .collect();
     serde_json::json!({
         "metadata": { "version": "1.0" },
-        "verification_results": { "results": [{
-            "harness_id": "caller_text_nfc_1_1::caller_text_admission_agrees",
-            "status": status,
-            "checks": checks
-        }] }
+        "verification_results": { "results": results }
     })
     .to_string()
 }
@@ -337,4 +351,115 @@ fn tc_050_caller_executor_preserves_outcomes_and_refuses_untrusted_execution() {
             ..
         }))
     ));
+}
+
+/// Missing cover evidence stays inconclusive, and a compatible batch binds each caller's report
+/// outcome and playback to that member's own typed identity and selected harness path.
+///
+/// Trace: FR-017-AC-26, TC-050.
+#[test]
+fn tc_050_caller_executor_preserves_no_cover_and_mixed_batch_member_identity() {
+    let no_cover_report = caller_report("Success", &[("Success", "assertion")]);
+    let no_cover = CallerExecutorLane::new("no-cover-summary", Some(&no_cover_report), 0);
+    let evidence = execute_kani_obligation(&no_cover.request()).expect("inconclusive caller run");
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: quire_contract_codegen::KaniInconclusiveReason::MissingCoverSummary
+        }
+    );
+    assert_eq!(
+        evidence.caller_text_claim,
+        Some(no_cover.harness.identity.caller_claim.clone())
+    );
+    assert_eq!(
+        evidence.selected_harness_path.as_deref(),
+        Some("caller_text_nfc_1_1::caller_text_admission_agrees")
+    );
+
+    let first = no_cover.harness.clone();
+    let second = generate_caller_text_kani_harness(request(TextProfile::Nfd, 1, 1))
+        .expect("second caller profile");
+    let first_path = first.identity.harness_path().to_string();
+    let second_path = second.identity.harness_path().to_string();
+    let batch_report = caller_batch_report(&[
+        (
+            &first_path,
+            "Success",
+            &[("Success", "assertion"), ("Satisfied", "cover")],
+        ),
+        (
+            &second_path,
+            "Failure",
+            &[("Failure", "assertion"), ("Satisfied", "cover")],
+        ),
+    ]);
+    let batch = CallerExecutorLane::new("mixed-batch", Some(&batch_report), 1);
+    write_crate(&batch.root, &[first.clone(), second.clone()]);
+    let playback = format!(
+        "Concrete playback unit test for `{second_path}`:\n```\n/// Test generated for harness `{second_path}`\n///\n/// Check for `assertion`: \"caller admission agreement\"\n\n#[test]\nfn caller_text_mutation() {{\n    kani::concrete_playback_run(vec![], caller_text_admission_agrees);\n}}\n```\n"
+    );
+    fs::write(batch.root.join("playback.txt"), &playback).expect("write playback fixture");
+    fs::write(
+        &batch.installation.launcher,
+        format!(
+            "#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\nfor last; do :; done\ncp '{}' \"$last\"\ncat '{}'\nexit 1\n",
+            batch.root.join("report.json").display(),
+            batch.root.join("playback.txt").display()
+        ),
+    )
+    .expect("write batch launcher");
+    fs::set_permissions(
+        &batch.installation.launcher,
+        fs::Permissions::from_mode(0o755),
+    )
+    .expect("make batch launcher executable");
+
+    let requests = [
+        KaniExecutionRequest {
+            installation: &batch.installation,
+            harness: (&first).into(),
+            crate_directory: &batch.crate_directory,
+            target_directory: &batch.target_directory,
+        },
+        KaniExecutionRequest {
+            installation: &batch.installation,
+            harness: (&second).into(),
+            crate_directory: &batch.crate_directory,
+            target_directory: &batch.target_directory,
+        },
+    ];
+    let mut groups = execute_kani_obligations(&requests).expect("compatible caller batch");
+    assert_eq!(groups.len(), 1);
+    let group = groups.pop().expect("one caller batch");
+    assert_eq!(group.members, [0, 1]);
+    let evidence = group.evidence.expect("classified batch members");
+    assert_eq!(evidence.len(), 2);
+    assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
+    assert_eq!(evidence[0].kind, None);
+    assert_eq!(
+        evidence[0].caller_text_claim,
+        Some(first.identity.caller_claim.clone())
+    );
+    assert_eq!(
+        evidence[0].selected_harness_path.as_deref(),
+        Some(first_path.as_str())
+    );
+    assert_eq!(evidence[1].kind, None);
+    assert_eq!(
+        evidence[1].caller_text_claim,
+        Some(second.identity.caller_claim.clone())
+    );
+    assert_eq!(
+        evidence[1].selected_harness_path.as_deref(),
+        Some(second_path.as_str())
+    );
+    assert!(matches!(
+        &evidence[1].outcome,
+        KaniRunOutcome::Falsified { counterexample }
+            if counterexample.contains(&second_path)
+                && counterexample.contains("kani::concrete_playback_run")
+                && !counterexample.contains(&first_path)
+    ));
+    assert!(evidence.iter().all(|item| item.batch.is_some()));
 }
