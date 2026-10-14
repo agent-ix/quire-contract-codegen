@@ -1,6 +1,8 @@
 //! The Kani backend this crate runs and where it is located (FR-017).
 
-use std::{env, ffi::OsString, fmt, fs, io, path::PathBuf};
+use std::{env, ffi::OsString, fmt, fs, io, path::PathBuf, sync::Arc};
+
+use super::owners::LaunchOwners;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -53,14 +55,38 @@ impl fmt::Display for KaniToolError {
 
 impl std::error::Error for KaniToolError {}
 
-/// Where the Kani launcher lives.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// The Kani launcher and immutable dependencies of its bounded execution owners.
+#[derive(Clone, Debug)]
 pub struct KaniInstallation {
     /// The `cargo-kani` executable that is invoked directly.
     pub launcher: PathBuf,
+    owners: Arc<LaunchOwners>,
 }
 
+impl PartialEq for KaniInstallation {
+    fn eq(&self, other: &Self) -> bool {
+        self.launcher == other.launcher && Arc::ptr_eq(&self.owners, &other.owners)
+    }
+}
+
+impl Eq for KaniInstallation {}
+
 impl KaniInstallation {
+    /// Construct an installation with the real bounded observation and teardown owners.
+    pub fn new(launcher: impl Into<PathBuf>) -> Self {
+        Self::with_owners(launcher.into(), LaunchOwners::real())
+    }
+
+    /// Construct with immutable owner dependencies; the public execution path stays identical.
+    pub(super) fn with_owners(launcher: PathBuf, owners: Arc<LaunchOwners>) -> Self {
+        Self { launcher, owners }
+    }
+
+    /// The construction-time dependencies shared by every run of this installation.
+    pub(super) fn owners(&self) -> &LaunchOwners {
+        &self.owners
+    }
+
     /// Inspects the launcher's current file kind and Unix execute bits before dispatch.
     /// This snapshot does not pin the file or eliminate replacement/permission races at exec.
     pub(super) fn require_executable(&self) -> Result<(), KaniToolError> {
@@ -123,7 +149,7 @@ impl KaniInstallation {
                 tool: KaniTool::Launcher,
                 path: PathBuf::from(&launcher_name),
             })?;
-        Ok(Self { launcher })
+        Ok(Self::new(launcher))
     }
 }
 

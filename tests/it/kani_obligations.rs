@@ -1929,9 +1929,7 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
     let directory = write_crate(&harness, HEALTHY_SUBJECT);
-    let installation = KaniInstallation {
-        launcher: directory.join("cargo-kani"),
-    };
+    let installation = KaniInstallation::new(directory.join("cargo-kani"));
     let refusal = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
@@ -1971,7 +1969,7 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
             fs::write(&launcher, "#!/bin/sh\nexit 0\n").unwrap();
             fs::set_permissions(&launcher, fs::Permissions::from_mode(0o644)).unwrap();
         }
-        let installation = KaniInstallation { launcher };
+        let installation = KaniInstallation::new(launcher);
         let refusal = execute_kani_obligation(&KaniExecutionRequest {
             cancel: &cancel,
             installation: &installation,

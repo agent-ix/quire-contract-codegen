@@ -374,17 +374,23 @@ fn start(
     }
     let mut ceilings = request.harness.view().ceilings;
     ceilings.wall_clock = timeout;
-    run_bounded_launcher(command, ceilings, harnesses, deadline, request.cancel).map_err(|error| {
-        match error {
-            BoundedLaunchError::Unavailable(cause) => {
-                KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
-            }
-            BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
-                tool: KaniTool::Launcher,
-                path: request.installation.launcher.clone(),
-                error,
-            }),
+    run_bounded_launcher(
+        command,
+        ceilings,
+        harnesses,
+        deadline,
+        request.cancel,
+        request.installation.owners(),
+    )
+    .map_err(|error| match error {
+        BoundedLaunchError::Unavailable(cause) => {
+            KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
         }
+        BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
+            tool: KaniTool::Launcher,
+            path: request.installation.launcher.clone(),
+            error,
+        }),
     })
 }
 
@@ -538,11 +544,11 @@ fn plan_groups<'a, 'b>(
 
 /// Whether two requests can be run by one launcher process: the same option vector once the
 /// harness selection is removed, the same identity ceilings, and the same launcher, crate and target
-/// directory, plus identical caller-owned cancellation handles.
+/// directory and owner dependencies, plus identical caller-owned cancellation handles.
 fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest<'_>) -> bool {
     first.cancel == other.cancel
         && first.harness.view().ceilings == other.harness.view().ceilings
-        && first.installation.launcher == other.installation.launcher
+        && first.installation == other.installation
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
         && without_selection(first.harness.view().options)
@@ -1168,7 +1174,7 @@ mod tests {
         );
         let result = report_fixture::single(&KaniExecutionRequest {
             cancel: &cancel,
-            installation: &KaniInstallation { launcher },
+            installation: &KaniInstallation::new(launcher),
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: &crate_directory,
             target_directory: &target_directory,
@@ -1241,9 +1247,7 @@ mod tests {
                 "--exact".to_owned(),
             ],
         );
-        let installation = KaniInstallation {
-            launcher: PathBuf::from("cargo-kani"),
-        };
+        let installation = KaniInstallation::new(PathBuf::from("cargo-kani"));
         let request = KaniExecutionRequest {
             cancel: &cancel,
             installation: &installation,
@@ -1759,7 +1763,7 @@ exit 0
                 directory,
                 crate_directory,
                 target_directory,
-                installation: KaniInstallation { launcher },
+                installation: KaniInstallation::new(launcher),
                 cancel: Cancel::new(),
             }
         }
@@ -2037,6 +2041,354 @@ exec sleep 45
             recorded_process_gone(&stand_in.directory.join("calls.child"));
             result
         })
+    }
+
+    /// One positively acknowledged owner operation; its production dependency remains real.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct OwnerGate {
+        entered: std::sync::mpsc::SyncSender<()>,
+        release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+        claimed: std::sync::atomic::AtomicBool,
+        attempts: std::sync::atomic::AtomicUsize,
+        failed: std::sync::atomic::AtomicBool,
+    }
+
+    #[cfg(target_os = "linux")]
+    struct OwnerControl {
+        entered: std::sync::mpsc::Receiver<()>,
+        release: std::sync::mpsc::SyncSender<()>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl OwnerGate {
+        fn new() -> (std::sync::Arc<Self>, OwnerControl) {
+            let (entered, observed) = std::sync::mpsc::sync_channel(1);
+            let (release, released) = std::sync::mpsc::sync_channel(1);
+            (
+                std::sync::Arc::new(Self {
+                    entered,
+                    release: std::sync::Mutex::new(released),
+                    claimed: std::sync::atomic::AtomicBool::new(false),
+                    attempts: std::sync::atomic::AtomicUsize::new(0),
+                    failed: std::sync::atomic::AtomicBool::new(false),
+                }),
+                OwnerControl {
+                    entered: observed,
+                    release,
+                },
+            )
+        }
+
+        fn enter(&self) -> bool {
+            use std::sync::atomic::Ordering;
+            self.attempts.fetch_add(1, Ordering::AcqRel);
+            if self.claimed.swap(true, Ordering::AcqRel) {
+                return false;
+            }
+            self.entered
+                .send(())
+                .expect("owner operation has a controller");
+            self.release
+                .lock()
+                .unwrap()
+                .recv_timeout(T)
+                .expect("owner operation released");
+            true
+        }
+
+        fn refuse(&self) {
+            self.failed
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+
+        fn await_refusal(&self) {
+            let until = Instant::now() + T;
+            while !self.failed.load(std::sync::atomic::Ordering::Acquire) {
+                assert!(
+                    Instant::now() < until,
+                    "owner selected its injected refusal"
+                );
+                std::thread::yield_now();
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl OwnerControl {
+        fn entered(&self) {
+            self.entered
+                .recv_timeout(T)
+                .expect("actual owner operation reached");
+        }
+        fn release(&self) {
+            self.release
+                .send(())
+                .expect("actual owner operation awaiting release");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct FailingMemory {
+        ready: PathBuf,
+        gate: std::sync::Arc<OwnerGate>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::MemorySampling for FailingMemory {
+        fn observe(
+            &self,
+            observer: &mut super::super::memory::MemoryObserver,
+            root: u32,
+        ) -> std::io::Result<u64> {
+            let measured = observer.observe(root)?;
+            if self.ready.is_file() && self.gate.enter() {
+                self.gate.refuse();
+                return Err(std::io::Error::other("injected RSS observation failure"));
+            }
+            Ok(measured)
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct ControlledPoll {
+        ready: Option<PathBuf>,
+        gate: std::sync::Arc<OwnerGate>,
+        fail: bool,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::PollOperation for ControlledPoll {
+        fn poll(
+            &self,
+            fds: &mut [rustix::event::PollFd<'_>],
+            timeout: Option<&rustix::time::Timespec>,
+        ) -> Result<usize, rustix::io::Errno> {
+            let observed = rustix::event::poll(fds, timeout)?;
+            if self.ready.as_ref().is_none_or(|ready| ready.is_file()) && self.gate.enter() {
+                if self.ready.is_none() {
+                    assert!(
+                        observed > 0,
+                        "real owned init pidfd confirmed after actual signals"
+                    );
+                    assert!(fds
+                        .iter()
+                        .any(|fd| fd.revents().contains(rustix::event::PollFlags::IN)));
+                }
+                if self.fail {
+                    self.gate.refuse();
+                    return Err(rustix::io::Errno::IO);
+                }
+            }
+            Ok(observed)
+        }
+    }
+
+    /// A failed real RSS observation owns the public refusal even if a cause is already recorded.
+    /// Trace: FR-040-AC-4
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn memory_observation_failure_competing_with_cancellation_refuses_public_evidence() {
+        use super::super::owners::{LaunchOwners, SystemPoll};
+        for cancel_before_failure in [false, true] {
+            let harness = member("failed_memory", "check", 4);
+            let mut stand_in = StandIn::running("cancel-memory-observation", CANCELLATION_BARRIER);
+            stand_in.containing(&[&harness]);
+            let (memory, observation) = OwnerGate::new();
+            let (cleanup, teardown) = OwnerGate::new();
+            stand_in.installation = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(FailingMemory {
+                        ready: stand_in.directory.join("calls.ready"),
+                        gate: memory.clone(),
+                    }),
+                    stdout: std::sync::Arc::new(SystemPoll),
+                    stderr: std::sync::Arc::new(SystemPoll),
+                    confirmation: std::sync::Arc::new(ControlledPoll {
+                        ready: None,
+                        gate: cleanup,
+                        fail: false,
+                    }),
+                }),
+            );
+            let normal = KaniInstallation::new(stand_in.installation.launcher.clone());
+            assert_eq!(normal, KaniInstallation::new(normal.launcher.clone()));
+            let cloned = stand_in.installation.clone();
+            let distinct = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: normal.owners().memory.clone(),
+                    stdout: normal.owners().stdout.clone(),
+                    stderr: normal.owners().stderr.clone(),
+                    confirmation: normal.owners().confirmation.clone(),
+                }),
+            );
+            let request = stand_in.request(&harness, T);
+            let mut other = stand_in.request(&harness, T);
+            other.installation = &cloned;
+            assert!(shares_process(&request, &other));
+            other.installation = &distinct;
+            assert!(!shares_process(&request, &other));
+            std::thread::scope(|scope| {
+                let worker =
+                    scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
+                observation.entered();
+                if cancel_before_failure {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                }
+                observation.release();
+                teardown.entered();
+                if !cancel_before_failure {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                }
+                teardown.release();
+                let refusal = worker.join().unwrap().unwrap_err();
+                assert!(
+                    matches!(
+                        refusal,
+                        KaniExecutionRefusal::MemoryObservationFailed { .. }
+                    ),
+                    "{refusal:?}"
+                );
+            });
+            assert!(memory.failed.load(std::sync::atomic::Ordering::Acquire));
+            assert_eq!(stand_in.calls().len(), 1);
+            recorded_process_gone(&stand_in.directory.join("calls.child"));
+        }
+    }
+
+    /// Actual pipe polling failure refuses even when cancellation selected the preceding stop.
+    /// Trace: FR-040-AC-4
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unread_capture_competing_with_cancellation_refuses_public_evidence() {
+        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+        for cancel_before_unread in [false, true] {
+            let harness = member("failed_capture", "check", 4);
+            let mut stand_in = StandIn::running("cancel-unread-capture", CANCELLATION_BARRIER);
+            stand_in.containing(&[&harness]);
+            let (capture, pipe) = OwnerGate::new();
+            let (cleanup, teardown) = OwnerGate::new();
+            stand_in.installation = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ProcessMemory),
+                    stdout: std::sync::Arc::new(ControlledPoll {
+                        ready: Some(stand_in.directory.join("calls.ready")),
+                        gate: capture.clone(),
+                        fail: true,
+                    }),
+                    stderr: std::sync::Arc::new(SystemPoll),
+                    confirmation: std::sync::Arc::new(ControlledPoll {
+                        ready: None,
+                        gate: cleanup,
+                        fail: false,
+                    }),
+                }),
+            );
+            std::thread::scope(|scope| {
+                let worker =
+                    scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
+                pipe.entered();
+                if cancel_before_unread {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                    teardown.entered();
+                    pipe.release();
+                } else {
+                    pipe.release();
+                    teardown.entered();
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                }
+                teardown.release();
+                let refusal = worker.join().unwrap().unwrap_err();
+                assert!(
+                    matches!(
+                        refusal,
+                        KaniExecutionRefusal::OutputUnread {
+                            stream: CaptureStream::Stdout,
+                            ..
+                        }
+                    ),
+                    "{refusal:?}"
+                );
+            });
+            assert!(capture.failed.load(std::sync::atomic::Ordering::Acquire));
+            assert_eq!(stand_in.calls().len(), 1);
+            recorded_process_gone(&stand_in.directory.join("calls.child"));
+        }
+    }
+
+    /// Confirmation failure leaves the actual owner unconfirmed; its real Drop retries teardown.
+    /// Trace: FR-040-AC-4
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cleanup_nonconfirmation_competing_with_cancellation_refuses_public_evidence() {
+        use super::super::owners::{LaunchOwners, ProcessMemory, SystemPoll};
+        for cancel_before_cleanup in [false, true] {
+            let harness = member("failed_cleanup", "check", 4);
+            let body = format!(
+                r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
+printf '%s' "$$" > "$CALLS.child"
+printf 'ready' > "$CALLS.ready"
+while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
+{VERIFY_EVERY_HARNESS}"#
+            );
+            let mut stand_in = StandIn::running("cancel-cleanup-confirmation", &body);
+            stand_in.containing(&[&harness]);
+            let (cleanup, teardown) = OwnerGate::new();
+            stand_in.installation = KaniInstallation::with_owners(
+                stand_in.installation.launcher.clone(),
+                std::sync::Arc::new(LaunchOwners {
+                    memory: std::sync::Arc::new(ProcessMemory),
+                    stdout: std::sync::Arc::new(SystemPoll),
+                    stderr: std::sync::Arc::new(SystemPoll),
+                    confirmation: std::sync::Arc::new(ControlledPoll {
+                        ready: None,
+                        gate: cleanup.clone(),
+                        fail: true,
+                    }),
+                }),
+            );
+            std::thread::scope(|scope| {
+                let worker =
+                    scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
+                let until = Instant::now() + T;
+                while !stand_in.directory.join("calls.ready").is_file() {
+                    assert!(Instant::now() < until, "actual backend ready");
+                    std::thread::yield_now();
+                }
+                if cancel_before_cleanup {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                } else {
+                    fs::write(stand_in.directory.join("calls.finish"), b"finish").unwrap();
+                }
+                teardown.entered();
+                teardown.release();
+                cleanup.await_refusal();
+                if !cancel_before_cleanup {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                }
+                let refusal = worker.join().unwrap().unwrap_err();
+                assert!(
+                    matches!(
+                        refusal,
+                        KaniExecutionRefusal::MemoryObservationFailed { .. }
+                    ),
+                    "{refusal:?}"
+                );
+            });
+            assert!(cleanup.failed.load(std::sync::atomic::Ordering::Acquire));
+            assert_eq!(
+                cleanup.attempts.load(std::sync::atomic::Ordering::Acquire),
+                2,
+                "real Drop retries the failed owner confirmation"
+            );
+            assert_eq!(stand_in.calls().len(), 1);
+            recorded_process_gone(&stand_in.directory.join("calls.child"));
+        }
     }
 
     /// Reversing real caller events reverses the launch/evidence/IR/QSL cause; no report exists.
@@ -2430,9 +2782,7 @@ exec sleep 45
     #[test]
     fn tc_043_the_member_timeout_is_whole_seconds_rounded_up_and_omitted_above_kani_maximum() {
         let cancel = quire_exact::Cancel::new();
-        let installation = KaniInstallation {
-            launcher: PathBuf::from("cargo-kani"),
-        };
+        let installation = KaniInstallation::new(PathBuf::from("cargo-kani"));
         let harness = member("a", "check", 4);
         let timeout_argument = |timeout: Duration| -> Option<String> {
             let mut harness = harness.clone();

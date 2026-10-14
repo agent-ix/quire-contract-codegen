@@ -13,3 +13,6 @@ pub(crate) mod tool;
 pub(crate) mod memory;
 
 mod namespace;
+
+// Construction-time dependencies of the existing launch owners.
+mod owners;

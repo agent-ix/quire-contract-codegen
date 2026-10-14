@@ -146,7 +146,7 @@ impl Lane {
         Self {
             crate_directory: directory.join("crate"),
             directory,
-            installation: KaniInstallation { launcher },
+            installation: KaniInstallation::new(launcher),
             counts,
             cancel: quire_exact::Cancel::new(),
         }
