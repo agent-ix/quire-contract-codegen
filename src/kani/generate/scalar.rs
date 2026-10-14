@@ -37,6 +37,7 @@ pub(super) struct LoweredScalarClaim {
     operation: ScalarOperation,
     /// Each operand's inclusive range, in call order.
     operands: Vec<(i64, i64)>,
+    inferred_operands: Vec<crate::kani::identity::InferredScalarOperand>,
     /// The result's inclusive range: the checked domain a completed result must lie in.
     lower: i64,
     upper: i64,
@@ -235,6 +236,7 @@ pub(super) fn lower_scalar_claim(
         }),
     };
     let (lower, upper) = to_i64((lower, upper))?;
+    let mut inferred_operands = Vec::new();
     let operands = operation.operands(|position| match operand_ranges.get(position) {
         None | Some(OperandRange::Result) => Ok((lower, upper)),
         Some(OperandRange::Literal(value)) => to_i64((value, value)),
@@ -248,6 +250,19 @@ pub(super) fn lower_scalar_claim(
             .flatten()
             .ok_or(ScalarLoweringRefusal::NoRenderer)
             .and_then(to_i64),
+        Some(OperandRange::Inferred {
+            source,
+            lower,
+            upper,
+        }) => {
+            inferred_operands.push(crate::kani::identity::InferredScalarOperand {
+                position,
+                source_node_id: source.clone(),
+                lower: lower.clone(),
+                upper: upper.clone(),
+            });
+            to_i64((lower, upper))
+        }
     })?;
     let (reachable_lower, reachable_upper) = operands.reachable();
     if reachable_upper < i128::from(lower) || reachable_lower > i128::from(upper) {
@@ -269,6 +284,7 @@ pub(super) fn lower_scalar_claim(
         oracle_symbol: generated.symbol.clone(),
         operation,
         operands: operands.ranges(),
+        inferred_operands,
         lower,
         upper,
         module_symbol,
@@ -439,6 +455,7 @@ mod {module} {{\n\
         module_symbol: path.module,
         harness_symbol: path.harness,
         arguments,
+        inferred_operands: lowered.inferred_operands.clone(),
         solver: KaniSolver::Cadical,
         unwind: request.unwind,
         options,

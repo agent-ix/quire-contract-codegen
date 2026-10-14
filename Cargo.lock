@@ -1427,6 +1427,7 @@ version = "0.1.0"
 dependencies = [
  "command-fds",
  "jsonschema 0.17.1",
+ "num-bigint",
  "proptest",
  "qsl-replay",
  "quire-canonical",

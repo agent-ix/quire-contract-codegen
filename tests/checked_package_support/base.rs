@@ -29,11 +29,17 @@ fn base_enum_declaration_preimage() -> serde_json::Value {
     })
 }
 
-fn base_enum_member_preimage(enum_type: &str) -> serde_json::Value {
-    serde_json::json!({
-        "version": "quire.enum-member-node/v1",
-        "declaration_node_id": base_node_ref(enum_type), "case": "OPEN",
-    })
+fn base_enum_member_preimage(
+    enum_type: &str,
+    case: &str,
+) -> quire_contract_model::NominalIdentityPreimage {
+    quire_contract_model::NominalIdentityPreimage::EnumMember(
+        quire_contract_model::EnumMemberPreimage {
+            declaration_node_id: serde_json::from_value(base_node_ref(enum_type))
+                .expect("base enum declaration id"),
+            case: case.into(),
+        },
+    )
 }
 
 fn base_dimension_preimage() -> serde_json::Value {
@@ -65,7 +71,9 @@ fn base_node_ids() -> BaseNodeIds {
     let enum_type = base_preimage_digest(base_enum_declaration_preimage());
     let dimension = base_preimage_digest(base_dimension_preimage());
     BaseNodeIds {
-        enum_member: base_preimage_digest(base_enum_member_preimage(&enum_type)),
+        enum_member: base_enum_member_preimage(&enum_type, "OPEN")
+            .digest(quire_contract_model::CheckedPackageReadLimits::bounded().bytes)
+            .expect("base enum member identity"),
         unit: base_preimage_digest(base_unit_preimage(&dimension)),
         enum_type,
         dimension,
@@ -108,7 +116,7 @@ fn base_package() -> serde_json::Value {
             "node_tag": "value", "semantic_form": "enum_value",
             "semantic_type": node_ref(&ids.enum_type), "dependencies": [node_ref(&ids.enum_type)],
             "occurrences": declared,
-            "nominal_identity_preimage": base_enum_member_preimage(&ids.enum_type),
+            "nominal_identity_preimage": base_enum_member_preimage(&ids.enum_type, "OPEN"),
             "body": {"term": "literal", "type": node_ref(&ids.enum_type), "value_kind": "enum", "value": "OPEN"},
         }),
         serde_json::json!({
