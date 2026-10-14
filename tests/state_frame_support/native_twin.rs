@@ -123,7 +123,7 @@ fn domain_document(granted: &[&str]) -> Vec<u8> {
         json!({
             "identity": format!("{range}/constraints/{keyword}"),
             "keyword": keyword,
-            "operands": {"value": value},
+            "operands": {"value": value.to_string()},
             "appliesTo": "ix://quire/native/Integer",
             "diagnosticCode": format!("bound.{keyword}"),
             "origin": generated(&range),
@@ -550,7 +550,7 @@ impl Twin {
                     .iter_mut()
                     .find(|constraint| constraint["keyword"] == keyword)
                     .expect("bound");
-                bound["operands"]["value"] = json!(value);
+                bound["operands"]["value"] = json!(value.to_string());
             }
         }
         twin.domain = document.to_string().into_bytes();
@@ -637,13 +637,12 @@ impl Twin {
         clause: &str,
     ) -> (CheckedPackageV2, CheckedNodeId) {
         let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        let mut variant = construct("variant_type", "quire.meaning.model.variant-type/v1");
+        variant["construct"]["shape"] = json!("enumeration");
         document["constructs"]
             .as_array_mut()
             .expect("constructs")
-            .push(construct(
-                "variant_type",
-                "quire.meaning.model.variant-type/v1",
-            ));
+            .push(variant);
         let audit = document["types"]
             .as_array_mut()
             .expect("types")
@@ -656,17 +655,28 @@ impl Twin {
             .expect("audit declaration")
             .remove("scalar");
         audit["constraints"] = json!([]);
-        audit["variants"] = json!([
-            {
-                "identity": format!("{}/Clear", range_type("audit")), "name": "Clear",
-                "origin": generated(&format!("{}/Clear", range_type("audit"))),
-            },
-            {
-                "identity": format!("{}/Flagged", range_type("audit")), "name": "Flagged",
-                "origin": generated(&format!("{}/Flagged", range_type("audit"))),
-            },
-        ]);
-        self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
+        audit["variants"] = json!(["Clear", "Flagged"].map(|name| {
+            json!({
+                "identity": format!("ix://{PACKAGE}/variant/audit_range-{name}"),
+                "name": name,
+                "origin": {"source": {
+                    "sourceIdentity": format!("ix://{PACKAGE}/spec"),
+                    "path": file!(),
+                    "startLine": line!(),
+                    "startColumn": column!(),
+                }},
+            })
+        }));
+        let domain = document.to_string().into_bytes();
+        let previous = hex(&jcs_digest(&self.domain));
+        let selected = hex(&jcs_digest(&domain));
+        let source = String::from_utf8(self.unit.clone()).expect("native unit");
+        assert_eq!(source.matches(&previous).count(), 1, "one model selection");
+        let twin = Self {
+            unit: source.replacen(&previous, &selected, 1).into_bytes(),
+            domain,
+        };
+        twin.emitted_package(clause)
     }
 
     fn emitted_package_with_model(
