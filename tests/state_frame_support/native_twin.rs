@@ -180,6 +180,7 @@ fn domain_document(granted: &[&str]) -> Vec<u8> {
     }));
     json!({
         "contractVersion": "2.0.0",
+        "canonicalization": {"algorithm": "rfc8785-v1", "digest": "sha256-jcs"},
         "source": {
             "identity": format!("ix://{PACKAGE}/spec"),
             "version": "1.0.0",
@@ -656,8 +657,14 @@ impl Twin {
             .remove("scalar");
         audit["constraints"] = json!([]);
         audit["variants"] = json!([
-            {"identity": format!("{}/Clear", range_type("audit")), "name": "Clear"},
-            {"identity": format!("{}/Flagged", range_type("audit")), "name": "Flagged"},
+            {
+                "identity": format!("{}/Clear", range_type("audit")), "name": "Clear",
+                "origin": generated(&format!("{}/Clear", range_type("audit"))),
+            },
+            {
+                "identity": format!("{}/Flagged", range_type("audit")), "name": "Flagged",
+                "origin": generated(&format!("{}/Flagged", range_type("audit"))),
+            },
         ]);
         self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
     }
