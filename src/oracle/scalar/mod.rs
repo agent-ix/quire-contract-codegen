@@ -4647,6 +4647,15 @@ fn derive_operation_from_view<'g>(
     let identity = node.body["operation"]["identity"]
         .as_str()
         .ok_or_else(|| ClaimDerivationRefusal::MissingOperationIdentity.refusal())?;
+    // `numeric.convert` remains a known selector: the result form decides whether it is a
+    // supported numeric rounding conversion. Text conversion is still refused as
+    // `OperandFormsNotDerivable`; it is not part of the exact-scalar identity catalogue.
+    if identity == "quire.op.numeric.convert" {
+        return Err(ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: identity.to_owned(),
+        }
+        .refusal());
+    }
     let derivation = Derivation {
         graph,
         node,

@@ -6,7 +6,7 @@ touches_kani() {
     local path=$1
     case "$path" in
         src/kani/*|src/oracle/*|src/routed/*|src/replay/*|src/core/*|src/publication/*|\
-        tests/it/kani_*.rs|tests/it/skeleton_spine.rs|tests/it/bounded_kani_corpus.rs|\
+        tests/it/kani_*.rs|tests/it/caller_text_admission.rs|tests/it/skeleton_spine.rs|tests/it/bounded_kani_corpus.rs|\
         tests/it/scratch_crate.rs|tests/exact_scalar_support/package.rs|\
         tests/checked_package_support/base.rs|tests/checked_package_support/rekey.rs|\
         tests/state_frame_support/*|\

@@ -594,6 +594,9 @@ fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
         "kani_witness_join",
         "bounded_kani_corpus",
         "kani_generation",
+        // TC-050 is declared under kani_generation with a #[path] module, so Cargo's selected
+        // test name contains this nested component even though its source file is separate.
+        "caller_text_admission",
         "kani_batching",
     ];
     let mut pending = Vec::new();

@@ -259,10 +259,9 @@ impl<'a> KaniExecutableHarness<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kani::{generate::caller_text::CallerTextKaniRequest, identity::ProofCeilings};
+    use crate::kani::identity::{CallerTextObligationIdentity, ProofCeilings};
     use crate::kani::{identity::StateComparison, test_support::state_frame_harness};
     use ix_trace_rs::trace;
-    use quire_contract_runtime::exact::{TextProfile, TextType};
     use std::{num::NonZeroU64, time::Duration};
 
     /// A state-clause harness reports the contract role of what it proves, so execution
@@ -293,19 +292,34 @@ mod tests {
     /// Trace: FR-017-AC-26, TC-050.
     #[test]
     fn caller_text_execution_view_carries_claim_identity_without_contract_kind() {
-        let harness = crate::kani::generate::caller_text::generate_caller_text_kani_harness(
-            CallerTextKaniRequest {
-                text_type: TextType::new(1, 1, TextProfile::Nfc).expect("valid type"),
-                payload_class: crate::oracle::caller_text::CALLER_TEXT_PAYLOAD_CLASS.to_owned(),
+        let harness = KaniCallerTextObligationHarness {
+            identity: CallerTextObligationIdentity {
+                caller_claim: CallerTextProofIdentity {
+                    profile: crate::oracle::caller_text::CallerTextProfile::Nfc,
+                    min: 1,
+                    max: 1,
+                    payload_class: crate::oracle::caller_text::CALLER_TEXT_PAYLOAD_CLASS,
+                },
                 ceilings: ProofCeilings {
                     memory_bytes: NonZeroU64::new(1_073_741_824).expect("nonzero"),
                     wall_clock: Duration::from_secs(120),
                 },
+                module_symbol: crate::core::identity::ModuleSymbol::try_from("caller_text_nfc_1_1")
+                    .expect("valid module symbol"),
+                harness_symbol: crate::core::identity::HarnessSymbol::try_from(
+                    "caller_text_admission_agrees",
+                )
+                .expect("valid harness symbol"),
                 solver: crate::kani::abi::KaniSolver::Cadical,
                 unwind: 8,
+                options: Vec::new(),
             },
-        )
-        .expect("supported request");
+            rust: Artifact::new("src/lib.rs", String::new()),
+            record: Artifact::new(
+                "kani-obligations/caller_text_admission_agrees.json",
+                String::new(),
+            ),
+        };
         let executable = KaniExecutableHarness::from(&harness);
         let view = executable.view();
         assert_eq!(view.kind, None);
