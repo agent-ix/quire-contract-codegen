@@ -969,12 +969,6 @@ mod tests {
     };
     use super::{CheckedArithmeticRequest, CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
-    use std::{
-        fs,
-        path::PathBuf,
-        process::Command,
-        time::{SystemTime, UNIX_EPOCH},
-    };
 
     type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
 
@@ -984,7 +978,7 @@ mod tests {
         quire_contract_ir::kani::ValidatedFiniteInput,
     );
 
-    fn false_cases() -> Vec<super::BoundedCorpusCase> {
+    pub(crate) fn false_cases() -> Vec<super::BoundedCorpusCase> {
         let fixture = fixture();
         vec![
             emit(
@@ -1013,86 +1007,6 @@ mod tests {
             )
             .unwrap(),
         ]
-    }
-
-    struct KaniTemp(PathBuf);
-
-    impl KaniTemp {
-        fn new(case: &super::BoundedCorpusCase) -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock is after Unix epoch")
-                .as_nanos();
-            let path = std::env::temp_dir().join(format!("ir-453-{}-{nonce}", std::process::id()));
-            fs::create_dir_all(path.join("src")).expect("temp crate source directory exists");
-            fs::write(
-                path.join("src/lib.rs"),
-                format!(
-                    "{}\n{}",
-                    case.artifacts.oracle.contents, case.artifacts.kani_harness.contents
-                ),
-            )
-            .expect("corpus Rust sources are writable");
-            fs::write(
-                path.join("Cargo.toml"),
-                "[package]\nname = \"ir453-corpus-playback\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
-            )
-            .expect("temporary manifest is writable");
-            fs::write(
-                path.join("build.rs"),
-                "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-            )
-            .expect("temporary build script is writable");
-            Self(path)
-        }
-
-        fn run(&self, case: &super::BoundedCorpusCase) -> crate::kani::classify::KaniRunOutcome {
-            let report_path = self.0.join("report.json");
-            let output = Command::new("cargo")
-                .args([
-                    "kani",
-                    "-Z",
-                    "concrete-playback",
-                    "-Z",
-                    "unstable-options",
-                    "--export-json",
-                ])
-                .arg(&report_path)
-                .args([
-                    "--harness",
-                    case.harness_symbol.as_str(),
-                    "--concrete-playback",
-                    "print",
-                ])
-                .env(
-                    "CARGO_TARGET_DIR",
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("target/ir-453-bounded-corpus-replay-kani"),
-                )
-                .current_dir(&self.0)
-                .output()
-                .expect("cargo kani launches");
-            let text = format!(
-                "{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            let report = fs::read(report_path).ok();
-            crate::kani::classify::classify_kani_run(
-                output.status.success(),
-                report.as_deref(),
-                &text,
-                None,
-            )
-            .unwrap_or_else(|refusal| panic!("Kani run refused as {refusal:?}: {text}"))
-            .outcome
-        }
-    }
-
-    impl Drop for KaniTemp {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
     }
 
     /// Each supported family retains source bytes that QSL compiles into the selected function
@@ -1181,33 +1095,28 @@ mod tests {
         );
     }
 
-    /// The two false corpus families require real Kani playback and a reproduced typed QSL
-    /// violation. These are deliberately serial, ignored Kani-lane tests.
+    /// A source-bound typed identity rejects a different case package and a transcript naming
+    /// another harness before any replay verdict is produced.
     ///
-    /// Trace: TC-023, FR-015-AC-57.
+    /// Trace: TC-023.
     #[test]
-    #[ignore = "kani lane: run serially after the IR-453 focused checks"]
-    fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
-        use crate::kani::classify::KaniRunOutcome;
-
+    fn tc_023_source_replay_rejects_wrong_package_and_harness() {
         let cases = false_cases();
-        for case in &cases {
-            let KaniRunOutcome::Falsified { counterexample } = KaniTemp::new(case).run(case) else {
-                panic!("the generated false case must be falsified by Kani")
-            };
-            assert!(case
-                .replay_counterexample_reproduces(&counterexample)
-                .unwrap());
-
-            let other_case = cases
-                .iter()
-                .find(|other| other.artifacts.qsl_source != case.artifacts.qsl_source)
-                .expect("the graph and collection cases retain different QSL sources");
-            assert!(case
-                .replay_rejects_other_case_package(&counterexample, other_case)
-                .unwrap());
-            assert!(case.replay_rejects_wrong_harness(&counterexample).unwrap());
-        }
+        let case = &cases[0];
+        let transcript = format!(
+            "/// Test generated for harness `{}`\n\
+             /// Check for `assertion`: \"synthetic assertion\"\n\
+             #[test]\n\
+             fn kani_concrete_playback_synthetic() {{\n\
+                 let concrete_vals: Vec<Vec<u8>> = vec![];\n\
+                 kani::concrete_playback_run(concrete_vals, synthetic);\n\
+             }}\n",
+            case.harness_symbol.as_str()
+        );
+        assert!(case
+            .replay_rejects_other_case_package(&transcript, &cases[1])
+            .unwrap());
+        assert!(case.replay_rejects_wrong_harness(&transcript).unwrap());
     }
 
     /// Trace: TC-023. Owner serializers supply each value; the input projection

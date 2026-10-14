@@ -752,15 +752,6 @@ impl BoundedCorpusCase {
     }
 
     #[cfg(test)]
-    pub(crate) fn replay_counterexample_reproduces(
-        &self,
-        transcript: &str,
-    ) -> Result<bool, BoundedCorpusReplayError> {
-        self.replay_counterexample(transcript)
-            .map(|verdict| verdict == ReplayVerdict::Reproduced)
-    }
-
-    #[cfg(test)]
     pub(crate) fn replay_rejects_other_case_package(
         &self,
         transcript: &str,

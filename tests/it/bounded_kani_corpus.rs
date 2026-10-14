@@ -20,7 +20,7 @@ use quire_contract_codegen::{
     BoundedCorpusRequest, CheckedArithmeticRequest, CollectionQuery, CorpusProofDependencyGraph,
     EmittedCorpusIdentities, GraphRequest, KaniInconclusiveReason, KaniRunOutcome,
     ProofDependencyKind, ProofDependencyRequest, ProofDependencyState, ProofReadiness, QueryKind,
-    CORPUS_PROOF_GRAPH_SCHEMA,
+    ReplayVerdict, CORPUS_PROOF_GRAPH_SCHEMA,
 };
 use quire_contract_ir::kani::{
     CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
@@ -436,7 +436,12 @@ fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() 
     )
     .unwrap();
     assert_eq!(false_graph.outcome.boolean_claim(), Some(false));
-    assert_empty_valued_falsification(classify_corpus(&false_graph, "corpus_case_graph"));
+    let playback =
+        assert_empty_valued_falsification(classify_corpus(&false_graph, "corpus_case_graph"));
+    assert_eq!(
+        false_graph.replay_counterexample(&playback).unwrap(),
+        ReplayVerdict::Reproduced
+    );
 }
 
 /// Without its cover a corpus harness carries no cover summary, so the cover is what lets a
@@ -500,7 +505,12 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    assert_empty_valued_falsification(classify_corpus(&generated, "corpus_case_collection"));
+    let playback =
+        assert_empty_valued_falsification(classify_corpus(&generated, "corpus_case_collection"));
+    assert_eq!(
+        generated.replay_counterexample(&playback).unwrap(),
+        ReplayVerdict::Reproduced
+    );
 }
 
 /// Runs the corpus case's oracle and harness as one crate under the installed backend and
@@ -568,7 +578,7 @@ fn classify_corpus(
 }
 
 /// A corpus case draws no input, so a falsification's playback carries no value.
-fn assert_empty_valued_falsification(outcome: KaniRunOutcome) {
+fn assert_empty_valued_falsification(outcome: KaniRunOutcome) -> String {
     let KaniRunOutcome::Falsified { counterexample } = outcome else {
         panic!("expected a falsified corpus case, got {outcome:?}");
     };
@@ -577,6 +587,7 @@ fn assert_empty_valued_falsification(outcome: KaniRunOutcome) {
             || counterexample.contains("let concrete_vals: Vec<Vec<u8>> = vec![\n    ];"),
         "the playback of a case that draws no input must be empty-valued:\n{counterexample}"
     );
+    counterexample
 }
 
 /// Every corpus family's harness ends with exactly one cover, after the oracle's assertion.
