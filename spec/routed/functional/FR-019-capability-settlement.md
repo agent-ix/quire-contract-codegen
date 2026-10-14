@@ -52,6 +52,15 @@ by this arm come from the one admitted ContractPackage under
 The original checked graph cannot override a package refusal or represented
 form.
 
+For a V2 scalar claim, form preflight is per driver item and per selected
+result occurrence. Its typed input shall identify the admitted ContractPackage,
+the requested scalar node, that node's exact `expression` application occurrence,
+and its optional direct `numeric.narrow` conversion occurrence with the
+conversion's context root. The ContractPackage's source package identity shall
+match the admitted checked source; the selected occurrences shall be in its
+source correspondence. This selection is the same one FR-022 later passes to
+FR-049 result-context generation, not a package-wide search for a bound.
+
 AD-016 places the single negotiation point here so that language admission
 stays language-only and the IR stays target-neutral. That boundary holds only
 when adding a backend kind is a compile error everywhere the new kind must be
@@ -144,6 +153,17 @@ For an unsupported IR profile entry, IR FR-029 owns the absence of an artifact,
   form, never display or debug text. This form check follows request and
   candidate/manifest validation and precedes extent and advertised-mode
   settlement.
+- For `V2ScalarClaim`, the Kani arm shall authenticate the typed selected
+  application and optional direct conversion against the admitted source and
+  ContractPackage before classifying the form. A missing, foreign, mismatched
+  or unrepresented occurrence or conversion context root shall settle
+  `invalid-request` with a typed form/context cause and no artifact. The Kani
+  arm shall classify the selected result context used by generation. The Kani
+  arm shall not classify only `[node_id]`, search the package for a narrow,
+  infer a result bound from another occurrence or accept a caller-provided
+  numeric maximum.
+  This check follows request and candidate/manifest validation and precedes
+  extent and advertised-mode settlement.
 - CG shall expose `BackendKind::from_descriptor(&BackendDescriptor) ->
   Option<BackendKind>` as its public descriptor-to-kind conversion. It shall
   return `Some(Kani)` for a linked descriptor whose identity is the built-in
@@ -410,6 +430,8 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-39 | PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with the selection preserved in the routed request. Symmetry declarations and POR enter the obligation identity, so their reduced and unreduced requests for one claim have distinct obligation identities; a state constraint changes request identity but leaves obligation identity unchanged. An unadvertised selection or POR on a subject with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction. | Test (TC-030) |
 | FR-019-AC-40 | PLANNED (IR-516). For an item over a weak `parallel`, a candidate advertising the subject's resolved `tso` or `ra` model receives that exact model; a candidate lacking it settles `unsupported` with no artifact, and no arm weakens the resolved model. An `sc` subject is a separate strong-model control and does not take the weak-memory branch. | Test (TC-030) |
 | FR-019-AC-41 | PLANNED (IR-516). With otherwise equal form and kind advertisement, model and protocol subject classes are read separately; an arm that discharges only one class settles the other `unsupported`, while a supported protocol item retains its protocol transition-system subject identity through routing. | Test (TC-030) |
+| FR-019-AC-42 | PLANNED/UNRUN (IR-790). Two driver items selecting distinct `expression` occurrences of one checked `integer.add` node and different direct `numeric.narrow` occurrences in one admitted ContractPackage settle independently under the same Kani descriptor. Each preflight result is classified from its own selected result context; changing the selected narrow changes that item's typed result identity or refusal without changing the other. A node-only classifier or package-wide choice of either bound fails this control. | Test (TC-030) |
+| FR-019-AC-43 | PLANNED/UNRUN (IR-790). For a V2 scalar claim, an absent `OwnResult`, an application occurrence absent from the admitted source, a conversion occurrence from another source or unrelated to the application, a missing conversion context root, or a ContractPackage source identity different from the checked source settles `invalid-request` with a typed form/context cause and no artifact or harness. Request and candidate/manifest defects retain their earlier precedence; for a valid candidate this selected-form refusal precedes extent and advertised-mode refusal. Neither a source message nor a caller maximum repairs the selection. | Test (TC-030) |
 
 ## Dependencies
 

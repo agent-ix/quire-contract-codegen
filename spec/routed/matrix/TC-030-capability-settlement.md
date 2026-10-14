@@ -46,6 +46,16 @@ Settle the two-candidate item again under the reverse registration order and
 compare the disposition, the cause and the order of the named candidates.
 
 Use the public negotiation API with typed IR forms and one Kani descriptor.
+For FR-019-AC-42 and AC-43, build an admitted checked source and its matching
+ContractPackage with one `integer.add` node used by two driver positions.
+Select distinct `expression` application occurrences and different direct
+`numeric.narrow` conversions through typed `OwnResult` selections and
+context roots. Settle both against the same Kani advertisement, then change
+only one selection. Separately remove `OwnResult`, mispair the application,
+substitute a foreign or unrelated conversion, omit its context root, and
+mismatch the ContractPackage source identity. Check each typed cause and
+absence of artifact. Pair one selection defect with an extent/mode defect,
+then with an earlier candidate defect, to establish the stated precedence.
 For every FR-019-AC-25 row, construct requests for each named family and
 obligation role: Boolean, integer, rational, decimal, IEEE float, text, enum,
 quantity, record/tuple equality, function application, precondition,
