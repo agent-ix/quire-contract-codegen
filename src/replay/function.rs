@@ -14,20 +14,56 @@ use qsl_replay::{
     call_site, replay, ByteDigest, CallSite, CallSiteRefusal, Category, DeclaredDomain,
     DependencyEntryWire, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
     DisagreementCause, FunctionSite, Identifier, MalformedTranscript, ObligationIdentity,
-    QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult, ReplaySource,
-    ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, Witness, WitnessArmResult,
-    WitnessSettlement, WitnessValue,
+    OccurrenceKey, QualifiedName, ReplayLimits, ReplayRefusal, ReplayRequestWire, ReplayResult,
+    ReplaySource, ScalarLimits, SourceIdentity, StateEnvironment, SuppliedLibrary, WireNodeId,
+    Witness, WitnessArmResult, WitnessSettlement, WitnessValue,
 };
 
 use crate::{
+    kani::generate::corpus::bounded_kani_corpus::BoundedCorpusCase,
     kani::identity::KaniObligationIdentity,
     kani::output::playback::DecodeFailure,
     kani::terminal::ReplaySettlement,
     replay::{
         obligation::{contract_arguments, function_contract_identity, ObligationIdentityError},
-        witness::{decode_falsification, first_out_of_domain},
+        witness::{decode_falsification, decode_playback, first_out_of_domain},
     },
 };
+
+/// The Kani identity of a harness whose claim is a selected QSL function's Boolean result.
+///
+/// Unlike [`KaniObligationIdentity`], this carries no clause or source-span fields: QSL's
+/// [`call_site`] supplies the function node and declaration occurrence used for the typed replay
+/// identity. `module_symbol` is absent for a top-level harness, as the bounded corpus emits.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ReplayHarnessIdentity {
+    /// Optional Rust module containing the harness.
+    pub module_symbol: Option<crate::core::identity::ModuleSymbol>,
+    /// Kani harness function symbol.
+    pub harness_symbol: crate::core::identity::HarnessSymbol,
+    /// Argument bindings in the order Kani's harness draws them.
+    pub arguments: Vec<crate::kani::identity::ObligationBinding>,
+    package_id: DigestRecord,
+    source_identity: SourceIdentity,
+    function: WireNodeId,
+    declaration: OccurrenceKey,
+}
+
+impl ReplayHarnessIdentity {
+    fn qualified_harness(&self) -> String {
+        self.module_symbol.as_ref().map_or_else(
+            || self.harness_symbol.to_string(),
+            |module| format!("{module}::{}", self.harness_symbol),
+        )
+    }
+
+    pub(crate) fn matches_package(&self, package: &ReplayPackage) -> bool {
+        self.package_id == package.site.package_id
+            && self.source_identity == package.inputs.source.source_identity()
+            && self.function == package.site.site.function
+            && self.declaration == package.site.site.declaration
+    }
+}
 
 /// The request's `backend` member: the identity of the backend that found the counterexample.
 /// QSL records it and does not interpret it (AD-002); the only backend this crate runs is Kani.
@@ -64,6 +100,12 @@ pub enum SpineReplayError {
     Refused(Box<ReplayRefusal>),
     /// A witness-sourced request settled on the input arm.
     WrongArm,
+    /// An input-sourced function evaluation returned no Boolean value.
+    #[cfg(test)]
+    NoInputValue,
+    /// The typed harness identity was created from a different QSL package/site.
+    #[cfg(test)]
+    PackageIdentity,
     /// The harness has no function-contract obligation identity.
     Identity(ObligationIdentityError),
 }
@@ -89,6 +131,12 @@ impl fmt::Display for SpineReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Refused(refusal) => write!(f, "the replay was refused: {refusal}"),
             Self::WrongArm => f.write_str("a witness-sourced request settled on the input arm"),
+            #[cfg(test)]
+            Self::NoInputValue => f.write_str("the QSL input evaluation returned no Boolean value"),
+            #[cfg(test)]
+            Self::PackageIdentity => {
+                f.write_str("the harness identity belongs to another QSL package")
+            }
             Self::Identity(cause) => write!(f, "the obligation identity was not built: {cause}"),
         }
     }
@@ -503,6 +551,68 @@ impl ReplayPackage {
             .collect()
     }
 
+    /// Binds one real Kani harness identity to this package's QSL-selected function site.
+    ///
+    /// The returned identity retains QSL's package, function and declaration identities. Passing
+    /// it to a different package is rejected by [`replay_harness_counterexample`].
+    pub(crate) fn harness_identity(
+        &self,
+        module_symbol: Option<crate::core::identity::ModuleSymbol>,
+        harness_symbol: crate::core::identity::HarnessSymbol,
+        arguments: Vec<crate::kani::identity::ObligationBinding>,
+    ) -> Result<ReplayHarnessIdentity, ObligationIdentityError> {
+        self.obligation_identity_for(
+            crate::kani::identity::ObligationKind::Postcondition,
+            &arguments,
+        )?;
+        Ok(ReplayHarnessIdentity {
+            module_symbol,
+            harness_symbol,
+            arguments,
+            package_id: self.site.package_id,
+            source_identity: self.inputs.source.source_identity(),
+            function: self.site.site.function,
+            declaration: self.site.site.declaration.clone(),
+        })
+    }
+
+    pub(crate) fn source_matches(&self, source: &[u8]) -> bool {
+        self.inputs.source.bytes.as_slice() == source
+    }
+
+    /// Evaluates this selected Boolean function as a QSL semantic oracle.
+    ///
+    /// This uses the `Input` arm only to check the renderer's function result. It is not backend
+    /// or counterexample evidence; corpus counterexamples must use
+    /// [`replay_harness_counterexample`] and its `Witness` arm.
+    #[cfg(test)]
+    pub(crate) fn evaluate_boolean_function(
+        &self,
+        identity: &ReplayHarnessIdentity,
+    ) -> Result<bool, SpineReplayError> {
+        if !identity.matches_package(self) {
+            return Err(SpineReplayError::PackageIdentity);
+        }
+        let obligation = self
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &identity.arguments,
+            )
+            .map_err(SpineReplayError::Identity)?;
+        match replay(
+            self.request_for(obligation, ReplaySource::Input(Vec::new())),
+            self.inputs.replay_limits,
+        )
+        .map_err(|refusal| SpineReplayError::Refused(Box::new(refusal)))?
+        {
+            ReplayResult::Input(result) => match result.value() {
+                Some(qsl_replay::EvaluatedValue::Boolean(value)) => Ok(value),
+                None => Err(SpineReplayError::NoInputValue),
+            },
+            ReplayResult::Witness(_) => Err(SpineReplayError::WrongArm),
+        }
+    }
+
     /// The complete replay request for `counterexample`, replaying `source`.
     ///
     /// The package reference's `dependencies` are the lock's dependency selections, one entry
@@ -549,14 +659,213 @@ impl ReplayPackage {
         &self,
         identity: &KaniObligationIdentity,
     ) -> Result<ObligationIdentity, ObligationIdentityError> {
-        let arguments = contract_arguments(&self.site.site.parameters, &identity.arguments)?;
+        self.obligation_identity_for(identity.kind, &identity.arguments)
+    }
+
+    /// The typed identity of this selected function result for one non-clause Kani harness.
+    ///
+    /// The selected function and declaration occurrence come from QSL's [`call_site`]; each
+    /// argument is joined by identifier to that site's parameter node. Corpus harnesses prove a
+    /// generated Boolean case predicate, so their QSL result is replayed as a postcondition.
+    ///
+    /// # Errors
+    ///
+    /// [`ObligationIdentityError`] when a harness argument names no parameter, a parameter has no
+    /// harness binding, or an argument has no finite domain.
+    pub(crate) fn obligation_identity_for(
+        &self,
+        kind: crate::kani::identity::ObligationKind,
+        bindings: &[crate::kani::identity::ObligationBinding],
+    ) -> Result<ObligationIdentity, ObligationIdentityError> {
+        let arguments = contract_arguments(&self.site.site.parameters, bindings)?;
         function_contract_identity(
             self.site.site.function,
             &self.site.site.declaration,
-            identity.kind,
+            kind,
             &arguments,
         )
     }
+}
+
+/// Why a retained corpus case could not be replayed against its QSL source.
+#[derive(Debug)]
+pub enum BoundedCorpusReplayError {
+    /// The retained unit/dependency package did not compile or select the corpus function.
+    Package(ReplayPackageError),
+    /// The package source did not match the case's retained source bytes.
+    SourceMismatch,
+    /// Kani playback could not be decoded or QSL refused the witness request.
+    Replay(SpineReplayError),
+}
+
+impl BoundedCorpusCase {
+    /// Replays actual Kani counterexample playback against this case's retained QSL package.
+    ///
+    /// The package is compiled from the generated unit and imported dependency source each time;
+    /// the harness identity is then tied to QSL's selected function site.
+    pub fn replay_counterexample(
+        &self,
+        transcript: &str,
+    ) -> Result<ReplayVerdict, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
+            return Err(BoundedCorpusReplayError::SourceMismatch);
+        }
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        replay_harness_counterexample(&identity, transcript, &package)
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn qsl_source_matches_case_claim(&self) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        if !package.source_matches(self.artifacts.qsl_source.contents.as_bytes()) {
+            return Err(BoundedCorpusReplayError::SourceMismatch);
+        }
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        let claim = self.outcome.boolean_claim();
+        Ok(package.parameters().is_empty()
+            && identity.matches_package(&package)
+            && claim.is_some_and(|claim| {
+                package.evaluate_boolean_function(&identity).ok() == Some(claim)
+            }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn qsl_identity_rejects_case(
+        &self,
+        other: &Self,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        let other = compile_corpus_qsl_package(other).map_err(BoundedCorpusReplayError::Package)?;
+        Ok(!identity.matches_package(&other))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replay_rejects_other_case_package(
+        &self,
+        transcript: &str,
+        other: &Self,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        let identity = package
+            .harness_identity(None, self.harness_symbol.clone(), Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        let other = compile_corpus_qsl_package(other).map_err(BoundedCorpusReplayError::Package)?;
+        replay_harness_counterexample(&identity, transcript, &other)
+            .map(|verdict| {
+                verdict == ReplayVerdict::EvidenceFailure(EvidenceFailureCause::PackageIdentity)
+            })
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replay_rejects_wrong_harness(
+        &self,
+        transcript: &str,
+    ) -> Result<bool, BoundedCorpusReplayError> {
+        let package =
+            compile_corpus_qsl_package(self).map_err(BoundedCorpusReplayError::Package)?;
+        let Ok(harness) = crate::core::identity::HarnessSymbol::try_from("another_harness") else {
+            return Ok(false);
+        };
+        let identity = package
+            .harness_identity(None, harness, Vec::new())
+            .map_err(|error| BoundedCorpusReplayError::Replay(SpineReplayError::Identity(error)))?;
+        replay_harness_counterexample(&identity, transcript, &package)
+            .map(|verdict| {
+                matches!(
+                    verdict,
+                    ReplayVerdict::EvidenceFailure(EvidenceFailureCause::Decode(_))
+                )
+            })
+            .map_err(BoundedCorpusReplayError::Replay)
+    }
+}
+
+fn compile_corpus_qsl_package(
+    case: &BoundedCorpusCase,
+) -> Result<ReplayPackage, ReplayPackageError> {
+    use qsl_replay::{
+        call_site, DependencyInput, Identifier, QualifiedName, ReplayLimits, ScalarLimits,
+        SourceIdentity,
+    };
+    use std::collections::BTreeMap;
+
+    let maximum = u64::MAX;
+    let dependency_source = LockedSource {
+        authority: "agent-ix".to_owned(),
+        identity: "ir-453/corpus-dependency".to_owned(),
+        namespace: "generated".to_owned(),
+        revision: "ir-453".to_owned(),
+        bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
+    };
+    let function = "corpus_case";
+    let invalid_function = || ReplayPackageError::InvalidFunction {
+        function: function.to_owned(),
+    };
+    let dependency_function = QualifiedName::new(vec![
+        Identifier::new(function).map_err(|_| invalid_function())?
+    ])
+    .map_err(|_| invalid_function())?;
+    let dependency_package_id = call_site(
+        SourceIdentity::new(
+            &dependency_source.authority,
+            &dependency_source.identity,
+            &dependency_source.namespace,
+            &dependency_source.revision,
+        ),
+        &dependency_source.identity,
+        &dependency_source.bytes,
+        [],
+        &DependencyInput::default(),
+        &dependency_function,
+    )
+    .map_err(ReplayPackageError::CallSite)?
+    .package_id;
+    ReplayPackage::new(
+        ReplayInputs {
+            source: LockedSource {
+                authority: "agent-ix".to_owned(),
+                identity: case.artifacts.qsl_source.path.clone(),
+                namespace: "generated".to_owned(),
+                revision: "ir-453".to_owned(),
+                bytes: case.artifacts.qsl_source.contents.as_bytes().to_vec(),
+            },
+            dependencies: vec![DependencyLock {
+                identity: dependency_source.identity.clone(),
+                package_id: dependency_package_id,
+                source: dependency_source,
+            }],
+            accounting_limits: ScalarLimits {
+                integer_bits: maximum,
+                decimal_digits: maximum,
+                scale_expansion: maximum,
+                text_input_bytes: maximum,
+                text_scalars: maximum,
+                normalized_scalars: maximum,
+                unit_edges: maximum,
+                value_occurrences: maximum,
+                work_units: maximum,
+                result_units: maximum,
+            },
+            stage_limits: BTreeMap::new(),
+            declared_domains: Vec::new(),
+            replay_limits: ReplayLimits::default(),
+        },
+        function,
+    )
 }
 
 /// Why a counterexample is evidence failure: the backend's evidence and the native replay do not
@@ -570,6 +879,8 @@ pub enum EvidenceFailureCause {
         /// The argument the value is bound to.
         argument: String,
     },
+    /// The selected QSL package/site differs from the one that created this Kani identity.
+    PackageIdentity,
     /// Native replay ran and did not settle a reproduced violation.
     Verdict {
         /// The settlement QSL reached.
@@ -639,6 +950,8 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm
             | SpineReplayError::Identity(_) => Self::CgDefect,
+            #[cfg(test)]
+            SpineReplayError::NoInputValue | SpineReplayError::PackageIdentity => Self::CgDefect,
             SpineReplayError::Refused(refusal) => Self::Refused(refusal),
         }
     }
@@ -649,7 +962,9 @@ impl<'a> From<&'a EvidenceFailureCause> for ReplaySettlement<'a> {
         match cause {
             // A playback that does not type against the persisted bindings, and a value outside
             // the harness proof bound, are this repository's defects.
-            EvidenceFailureCause::Decode(_) | EvidenceFailureCause::Domain { .. } => Self::CgDefect,
+            EvidenceFailureCause::Decode(_)
+            | EvidenceFailureCause::Domain { .. }
+            | EvidenceFailureCause::PackageIdentity => Self::CgDefect,
             EvidenceFailureCause::Verdict {
                 disagreement: Some(cause),
                 ..
@@ -689,6 +1004,81 @@ pub fn replay_counterexample(
     replay_counterexample_through(identity, transcript, package, |wire| {
         replay(wire, package.inputs.replay_limits)
     })
+}
+
+/// Replays a corpus harness's real Kani playback against the exact QSL function source retained
+/// by that case. The QSL obligation identity is derived from the package's selected `FunctionSite`,
+/// not from a fabricated clause identity.
+///
+/// # Errors
+///
+/// [`SpineReplayError`] when the playback cannot be decoded or QSL refuses the replay request.
+pub(crate) fn replay_harness_counterexample(
+    identity: &ReplayHarnessIdentity,
+    transcript: &str,
+    package: &ReplayPackage,
+) -> Result<ReplayVerdict, SpineReplayError> {
+    replay_harness_counterexample_through(identity, transcript, package, |wire| {
+        replay(wire, package.inputs.replay_limits)
+    })
+}
+
+/// [`replay_harness_counterexample`] with an injected executor, for recording the exact typed
+/// request QSL receives in focused tests.
+pub(crate) fn replay_harness_counterexample_through(
+    identity: &ReplayHarnessIdentity,
+    transcript: &str,
+    package: &ReplayPackage,
+    mut execute: impl FnMut(ReplayRequestWire) -> Result<ReplayResult, ReplayRefusal>,
+) -> Result<ReplayVerdict, SpineReplayError> {
+    if !identity.matches_package(package) {
+        return Ok(ReplayVerdict::EvidenceFailure(
+            EvidenceFailureCause::PackageIdentity,
+        ));
+    }
+    let module = identity
+        .module_symbol
+        .as_ref()
+        .map_or("", crate::core::identity::ModuleSymbol::as_str);
+    let decoded = match decode_playback(
+        identity.harness_symbol.as_str(),
+        module,
+        &identity.arguments,
+        transcript,
+    ) {
+        Ok(decoded) => decoded,
+        Err(cause) => {
+            return Ok(ReplayVerdict::EvidenceFailure(
+                EvidenceFailureCause::Decode(cause),
+            ))
+        }
+    };
+    if let Some(argument) = first_out_of_domain(&identity.arguments, &decoded.values) {
+        return Ok(ReplayVerdict::EvidenceFailure(
+            EvidenceFailureCause::Domain {
+                argument: argument.to_owned(),
+            },
+        ));
+    }
+    let obligation = package
+        .obligation_identity_for(
+            crate::kani::identity::ObligationKind::Postcondition,
+            &identity.arguments,
+        )
+        .map_err(SpineReplayError::Identity)?;
+    let result = replay_falsification_through(
+        &identity.qualified_harness(),
+        &decoded.check_text,
+        &decoded.values,
+        &package.parameters(),
+        |source| package.request_for(obligation, source),
+        &mut execute,
+    )?;
+    Ok(verdict_of(
+        result.settlement(),
+        result.category(),
+        result.disagreement(),
+    ))
 }
 
 /// [`replay_counterexample`] with the request handed to `execute` instead of straight to

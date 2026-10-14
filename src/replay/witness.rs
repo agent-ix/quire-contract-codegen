@@ -169,7 +169,11 @@ pub(crate) fn decode_playback<'a>(
     }
     let block = select_assertion_block(transcript, harness_symbol, module_symbol)?;
     let playback = read_block(block, harness_symbol, module_symbol)?;
-    let declared = format!("{module_symbol}::{harness_symbol}");
+    let declared = if module_symbol.is_empty() {
+        harness_symbol.to_owned()
+    } else {
+        format!("{module_symbol}::{harness_symbol}")
+    };
     if playback.harness != declared {
         return Err(DecodeFailure::new(
             "cg_witness_harness_identity_mismatch",
