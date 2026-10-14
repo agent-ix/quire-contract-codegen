@@ -1079,6 +1079,162 @@ fn route_qsl_shaped_in(
     (record.clone(), harness.cloned())
 }
 
+fn qsl_shaped_routing_input_in(
+    package: &CheckedPackageV2,
+    ids: &package::FixtureIds,
+    requests: &[(usize, u32)],
+) -> (Vec<RoutedGenerationItem>, AdmittedRoutingInput) {
+    let routed = requests
+        .iter()
+        .map(|(index, code)| route(*index, &ids.resolve(&package::code_id(*code))))
+        .collect::<Vec<_>>();
+    let input = admitted_routing_input(package, &routed);
+    (routed, input)
+}
+
+/// Routed operand refusals produce no harness and leave an independently supported sibling's
+/// record, harness and claim unchanged. InvalidBody is covered at the inference/lowering seam:
+/// the checked V2 reader rejects malformed bodies before a package can enter routed generation.
+///
+/// Trace: FR-014-AC-46, FR-015-AC-104, TC-033.
+#[test]
+fn tc_033_routed_operand_refusals_leave_healthy_sibling_unchanged() {
+    const DIVISION: u32 = 9_300_001;
+    const NESTED: u32 = 9_300_002;
+    const NESTED_NARROW: u32 = 9_300_003;
+
+    let mut builder = package::qsl_shaped_package();
+    let integer = package::key(package::T_INTEGER);
+    let division_law = package::integer_division_definition(
+        quire_contract_runtime::exact::DivisionProfile::Truncating,
+    );
+    builder.select_definition(division_law.clone());
+    let division = package::application(
+        "binary",
+        package::op_full(
+            "quire.op.integer.div",
+            vec![package::law("integer_division", division_law)],
+            None,
+            None,
+        ),
+        &integer,
+        vec![
+            package::reference(&package::key(package::QSL_PARAM_X)),
+            package::reference(&package::key(package::QSL_LITERAL_TWO)),
+        ],
+    );
+    builder.application_bounded(DIVISION, "expression", "binary", &integer, division, &[]);
+    let nested = package::application(
+        "binary",
+        package::op("quire.op.integer.add"),
+        &integer,
+        vec![
+            package::reference(&package::code_id(DIVISION).digest),
+            package::reference(&package::key(package::QSL_LITERAL_TWO)),
+        ],
+    );
+    builder.application_bounded(NESTED, "expression", "binary", &integer, nested, &[]);
+    let division_bound = builder.bound(&package::Bound::Integer(0, 10));
+    builder.narrow(
+        NESTED_NARROW,
+        &package::code_id(NESTED).digest,
+        &division_bound,
+    );
+    builder.expression_occurrences();
+    let (checked, ids) = builder.admit_resolved();
+
+    let (routed, input) = qsl_shaped_routing_input_in(
+        &checked,
+        &ids,
+        &[
+            (0, NESTED),
+            (1, package::QSL_PLUS_TEXT),
+            (2, package::QSL_SHARED),
+        ],
+    );
+    let combined = generate_routed(
+        &input.package,
+        &input.positions,
+        &routed,
+        &kani_context("crate::subject", 1),
+    )
+    .expect("the routed QSL-shaped batch is admitted");
+    let (division_record, division_harness) = kani_parts(&combined.items[0].output);
+    assert!(
+        matches!(
+            division_record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::OracleRefused {
+                    refusal: ExactScalarRefusal::OperandUnsupported { .. }
+                }
+            }
+        ),
+        "division operand refusal: {division_record:#?}"
+    );
+    assert!(
+        division_harness.is_none(),
+        "unsupported operand emits no harness"
+    );
+
+    let (type_record, type_harness) = kani_parts(&combined.items[1].output);
+    assert!(
+        matches!(
+            type_record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::OracleRefused {
+                    refusal: ExactScalarRefusal::OperandTypeMismatch { .. }
+                }
+            }
+        ),
+        "operand type mismatch: {type_record:#?}"
+    );
+    assert!(type_harness.is_none(), "type mismatch emits no harness");
+
+    let sibling_node = ids.resolve(&package::code_id(package::QSL_SHARED));
+    let (sibling_record, sibling_harness) = kani_parts(&combined.items[2].output);
+    assert!(matches!(
+        sibling_record.disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    let sibling_harness = sibling_harness.expect("healthy sibling has its harness");
+
+    let isolated = generate_routed(
+        &input.package,
+        &input.positions,
+        &[routed[2].clone()],
+        &kani_context("crate::subject", 1),
+    )
+    .expect("the supported sibling generates alone against the same admitted package");
+    let (isolated_record, isolated_harness) = kani_parts(&isolated.items[0].output);
+    let isolated_harness = isolated_harness.expect("isolated healthy sibling has its harness");
+    assert_eq!(
+        sibling_record, isolated_record,
+        "sibling record is unchanged"
+    );
+    assert_eq!(
+        sibling_harness, isolated_harness,
+        "sibling harness is unchanged"
+    );
+    let claim = |generation: &RoutedGeneration| {
+        generation
+            .claim_map
+            .as_ref()
+            .and_then(|claims| {
+                claims
+                    .items
+                    .iter()
+                    .find(|item| item.node_id == sibling_node)
+            })
+            .expect("healthy sibling claim is present")
+            .clone()
+    };
+    assert_eq!(
+        claim(&combined),
+        claim(&isolated),
+        "sibling claim is unchanged"
+    );
+}
+
 /// The three functions the driver compiles through real QSL, in the shape QSL emits them (a
 /// literal as a reference to its own `value` node, the declared bounded result on a narrowing
 /// `conversion` that consumes the plain-typed arithmetic node), each route to Kani and are
