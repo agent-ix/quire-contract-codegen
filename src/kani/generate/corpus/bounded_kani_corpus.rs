@@ -666,10 +666,17 @@ pub fn generate_bounded_kani_corpus_case(
         }
         BoundedCorpusRequest::Graph(request) => {
             let lowered = prepare_finite_graph_reaches(profile, dispatch, input, request)?;
+            let qsl_body = render_graph_qsl(&lowered, input).ok_or_else(|| {
+                CorpusRefusal::Refused.raise(
+                    std001_code!("kani_corpus_serialization_failed"),
+                    request_source_id.clone(),
+                    revision.clone(),
+                )
+            })?;
             (
                 lowered.reachable,
                 render_graph_oracle(&lowered, input),
-                render_graph_qsl(&lowered, input),
+                qsl_body,
             )
         }
         BoundedCorpusRequest::Collection(request) => {
@@ -807,7 +814,7 @@ fn render_collection_qsl(values: &[i128], kind: QueryKind) -> String {
     }
 }
 
-fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> String {
+fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> Option<String> {
     let mut objects = input
         .input()
         .objects
@@ -815,19 +822,23 @@ fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> St
         .map(|object| object.identity.as_str())
         .collect::<Vec<_>>();
     objects.sort_unstable();
-    let index_of = |identity: &str| {
-        objects
-            .iter()
-            .position(|candidate| *candidate == identity)
-            .expect("validated graph request identities name input objects")
-    };
+    let indices = objects
+        .iter()
+        .enumerate()
+        .map(|(index, identity)| (*identity, index))
+        .collect::<std::collections::BTreeMap<_, _>>();
     let edges = input
         .input()
         .references
         .iter()
         .filter(|edge| edge.field_id == lowered.request.field_id)
-        .map(|edge| (index_of(&edge.source_id), index_of(&edge.target_id)))
-        .collect::<BTreeSet<_>>();
+        .map(|edge| {
+            Some((
+                *indices.get(edge.source_id.as_str())?,
+                *indices.get(edge.target_id.as_str())?,
+            ))
+        })
+        .collect::<Option<BTreeSet<_>>>()?;
     let vertices = objects.len();
     let adjacency = default_if_empty(
         edges
@@ -837,21 +848,26 @@ fn render_graph_qsl(lowered: &GraphLowering, input: &ValidatedFiniteInput) -> St
             .join(" or "),
         "false",
     );
-    let target = index_of(&lowered.request.target_id);
+    let target = *indices.get(lowered.request.target_id.as_str())?;
     let reachability = default_if_empty(
         lowered
             .expanded
             .iter()
-            .map(|identity| format!("edge({}, {target})", index_of(identity)))
-            .collect::<Vec<_>>()
+            .map(|identity| {
+                Some(format!(
+                    "edge({}, {target})",
+                    indices.get(identity.as_str())?
+                ))
+            })
+            .collect::<Option<Vec<_>>>()?
             .join(" or "),
         "false",
     );
-    format!(
+    Some(format!(
         "function edge using v(source: Int[0, {last}], target: Int[0, {last}]): Boolean pure {{ {adjacency} }}\n\
          function corpus_case using v(enabled: Boolean): Boolean pure {{ enabled and ({reachability}) }}",
         last = vertices.saturating_sub(1),
-    )
+    ))
 }
 
 fn default_if_empty(expression: String, fallback: &str) -> String {
@@ -992,8 +1008,14 @@ fn compile_qsl_package(
         revision: "ir-453".to_owned(),
         bytes: case.artifacts.qsl_dependency.contents.as_bytes().to_vec(),
     };
-    let dependency_function = QualifiedName::new(vec![Identifier::new("corpus_case").unwrap()])
-        .expect("static function name is a QSL identifier");
+    let function = "corpus_case";
+    let invalid_function = || crate::replay::function::ReplayPackageError::InvalidFunction {
+        function: function.to_owned(),
+    };
+    let dependency_function = QualifiedName::new(vec![
+        Identifier::new(function).map_err(|_| invalid_function())?
+    ])
+    .map_err(|_| invalid_function())?;
     let dependency_package_id = call_site(
         SourceIdentity::new(
             &dependency_source.authority,
@@ -1273,6 +1295,13 @@ mod tests {
             assert!(package.source_matches(case.artifacts.qsl_source.contents.as_bytes()));
             assert!(identity.matches_package(&package));
             assert!(package.parameters().is_empty());
+            assert_eq!(
+                package.evaluate_boolean_function(&identity).unwrap(),
+                case.outcome
+                    .boolean_claim()
+                    .expect("admitted case has a Boolean claim"),
+                "QSL evaluates the retained source to the case's semantic result"
+            );
         }
         let first = qsl_package(&cases[0]);
         let tied_identity = first

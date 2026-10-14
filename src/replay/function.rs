@@ -99,6 +99,10 @@ pub enum SpineReplayError {
     Refused(Box<ReplayRefusal>),
     /// A witness-sourced request settled on the input arm.
     WrongArm,
+    /// An input-sourced function evaluation returned no Boolean value.
+    NoInputValue,
+    /// The typed harness identity was created from a different QSL package/site.
+    PackageIdentity,
     /// The harness has no function-contract obligation identity.
     Identity(ObligationIdentityError),
 }
@@ -124,6 +128,10 @@ impl fmt::Display for SpineReplayError {
             Self::Transcript(cause) => write!(f, "the witness transcript is not admitted: {cause}"),
             Self::Refused(refusal) => write!(f, "the replay was refused: {refusal}"),
             Self::WrongArm => f.write_str("a witness-sourced request settled on the input arm"),
+            Self::NoInputValue => f.write_str("the QSL input evaluation returned no Boolean value"),
+            Self::PackageIdentity => {
+                f.write_str("the harness identity belongs to another QSL package")
+            }
             Self::Identity(cause) => write!(f, "the obligation identity was not built: {cause}"),
         }
     }
@@ -565,6 +573,38 @@ impl ReplayPackage {
 
     pub(crate) fn source_matches(&self, source: &[u8]) -> bool {
         self.inputs.source.bytes.as_slice() == source
+    }
+
+    /// Evaluates this selected Boolean function as a QSL semantic oracle.
+    ///
+    /// This uses the `Input` arm only to check the renderer's function result. It is not backend
+    /// or counterexample evidence; corpus counterexamples must use
+    /// [`replay_harness_counterexample`] and its `Witness` arm.
+    pub(crate) fn evaluate_boolean_function(
+        &self,
+        identity: &ReplayHarnessIdentity,
+    ) -> Result<bool, SpineReplayError> {
+        if !identity.matches_package(self) {
+            return Err(SpineReplayError::PackageIdentity);
+        }
+        let obligation = self
+            .obligation_identity_for(
+                crate::kani::identity::ObligationKind::Postcondition,
+                &identity.arguments,
+            )
+            .map_err(SpineReplayError::Identity)?;
+        match replay(
+            self.request_for(obligation, ReplaySource::Input(Vec::new())),
+            self.inputs.replay_limits,
+        )
+        .map_err(|refusal| SpineReplayError::Refused(Box::new(refusal)))?
+        {
+            ReplayResult::Input(result) => match result.value() {
+                Some(qsl_replay::EvaluatedValue::Boolean(value)) => Ok(value),
+                None => Err(SpineReplayError::NoInputValue),
+            },
+            ReplayResult::Witness(_) => Err(SpineReplayError::WrongArm),
+        }
     }
 
     /// The complete replay request for `counterexample`, replaying `source`.
