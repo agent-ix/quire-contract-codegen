@@ -20,6 +20,9 @@ use super::{
     namespace::{BackendCommand, NamespaceOwner},
 };
 
+use quire_contract_ir::kani::KaniCancellationSource;
+use quire_exact::{Cancel, CancelCause};
+
 use rustix::{
     event::{poll, PollFd, PollFlags},
     io::Errno,
@@ -46,6 +49,8 @@ pub(super) enum LaunchOutcome {
     /// killed and the launcher reaped. Production bounded execution confirms teardown of
     /// the entire owned PID namespace, including unobserved and escaped descendants.
     TimedOut,
+    /// The caller-owned handle stopped the run with this retained source.
+    Cancelled { source: KaniCancellationSource },
     /// Observed aggregate resident memory exceeded the identity ceiling; the tree was killed.
     MemoryExhausted,
     /// The tree could no longer be observed, so the run was stopped without classifying it.
@@ -166,7 +171,15 @@ pub(super) fn run_launcher(
     timeout: Duration,
     harnesses: NonZeroUsize,
 ) -> io::Result<LaunchOutcome> {
-    run_monitored(command, timeout, harnesses, None, None, None)
+    run_monitored(
+        command,
+        timeout,
+        harnesses,
+        None,
+        None,
+        None,
+        &Cancel::new(),
+    )
 }
 
 /// A bounded launch together with the observations made by its enforcement mechanism.
@@ -187,6 +200,7 @@ pub(super) fn run_bounded_launcher(
     ceilings: crate::kani::identity::ProofCeilings,
     harnesses: NonZeroUsize,
     deadline: Option<Instant>,
+    cancel: &Cancel,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
     run_bounded_launcher_at(
         command,
@@ -194,6 +208,7 @@ pub(super) fn run_bounded_launcher(
         harnesses,
         std::path::Path::new("/proc"),
         deadline,
+        cancel,
     )
 }
 
@@ -203,11 +218,18 @@ fn run_bounded_launcher_at(
     harnesses: NonZeroUsize,
     procfs: &std::path::Path,
     deadline: Option<Instant>,
+    cancel: &Cancel,
 ) -> Result<BoundedLaunch, BoundedLaunchError> {
     let mut observer = MemoryObserver::prepare(procfs).map_err(BoundedLaunchError::Unavailable)?;
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         return Ok(BoundedLaunch {
             outcome: LaunchOutcome::TimedOut,
+            memory: observer.observation(),
+        });
+    }
+    if let Some(source) = observed_cancellation(cancel) {
+        return Ok(BoundedLaunch {
+            outcome: LaunchOutcome::Cancelled { source },
             memory: observer.observation(),
         });
     }
@@ -220,6 +242,7 @@ fn run_bounded_launcher_at(
         Some((&mut observer, ceilings.memory_bytes.get())),
         Some(owner),
         deadline,
+        cancel,
     )
     .map_err(|error| {
         if error.kind() == io::ErrorKind::Unsupported || error.kind() == io::ErrorKind::NotFound {
@@ -241,6 +264,7 @@ fn run_monitored(
     mut memory: Option<(&mut MemoryObserver, u64)>,
     mut namespace: Option<NamespaceOwner>,
     supplied_deadline: Option<Instant>,
+    cancel: &Cancel,
 ) -> io::Result<LaunchOutcome> {
     command
         .stdout(Stdio::piped())
@@ -249,6 +273,9 @@ fn run_monitored(
     let deadline = supplied_deadline.or_else(|| Instant::now().checked_add(timeout));
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
         return Ok(LaunchOutcome::TimedOut);
+    }
+    if let Some(source) = observed_cancellation(cancel) {
+        return Ok(LaunchOutcome::Cancelled { source });
     }
     let mut child = command.spawn()?;
     drop(command); // Close the parent copies of child-only control descriptors before reading EOF.
@@ -280,7 +307,7 @@ fn run_monitored(
         None => Ok(None),
     };
     let exited = match &startup {
-        Ok(root) => wait_until_at(&child, deadline, &flags.failed, &mut memory, *root),
+        Ok(root) => wait_until_at(&child, deadline, &flags.failed, &mut memory, *root, cancel),
         Err(error) if error.kind() == io::ErrorKind::TimedOut => Ok(WaitConclusion::TimedOut),
         Err(_) => Err(io::Error::other("namespace startup refused")), // Refusal is returned after owned cleanup.
     };
@@ -318,7 +345,8 @@ fn run_monitored(
         WaitConclusion::MemoryUnobserved { detail } => {
             return Ok(LaunchOutcome::MemoryUnobserved { detail })
         }
-        WaitConclusion::Completed | WaitConclusion::TimedOut => {}
+        WaitConclusion::Completed | WaitConclusion::TimedOut | WaitConclusion::Cancelled { .. } => {
+        }
     }
 
     let stdout_bytes = match stream_bytes(CaptureStream::Stdout, stdout_bytes, limit, harnesses) {
@@ -341,6 +369,7 @@ fn run_monitored(
             ),
         },
         WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
+        WaitConclusion::Cancelled { source } => LaunchOutcome::Cancelled { source },
         WaitConclusion::MemoryExhausted => LaunchOutcome::MemoryExhausted,
         WaitConclusion::MemoryUnobserved { detail } => LaunchOutcome::MemoryUnobserved { detail },
     };
@@ -401,6 +430,7 @@ struct CaptureFlags {
 enum WaitConclusion {
     Completed,
     TimedOut,
+    Cancelled { source: KaniCancellationSource },
     MemoryExhausted,
     MemoryUnobserved { detail: String },
 }
@@ -415,7 +445,7 @@ fn wait_until(
     failed: &AtomicBool,
     memory: &mut Option<(&mut MemoryObserver, u64)>,
 ) -> io::Result<WaitConclusion> {
-    wait_until_at(child, deadline, failed, memory, None)
+    wait_until_at(child, deadline, failed, memory, None, &Cancel::new())
 }
 
 fn wait_until_at(
@@ -424,6 +454,7 @@ fn wait_until_at(
     failed: &AtomicBool,
     memory: &mut Option<(&mut MemoryObserver, u64)>,
     namespace_root: Option<u32>,
+    cancel: &Cancel,
 ) -> io::Result<WaitConclusion> {
     let pid = i32::try_from(child.id())
         .ok()
@@ -448,6 +479,9 @@ fn wait_until_at(
             || deadline.is_some_and(|deadline| Instant::now() >= deadline)
         {
             return Ok(WaitConclusion::TimedOut);
+        }
+        if let Some(source) = observed_cancellation(cancel) {
+            return Ok(WaitConclusion::Cancelled { source });
         }
         match waitid(
             WaitId::Pid(pid),
@@ -642,6 +676,7 @@ mod tests {
             None,
             None,
             Some(Instant::now()),
+            &Cancel::new(),
         )
         .unwrap();
         assert!(matches!(outcome, LaunchOutcome::TimedOut));
@@ -668,6 +703,7 @@ mod tests {
             NonZeroUsize::MIN,
             &directory.join("unavailable-procfs"),
             Instant::now().checked_add(Duration::from_secs(5)),
+            &Cancel::new(),
         );
         assert!(matches!(result, Err(BoundedLaunchError::Unavailable(_))));
         assert!(
@@ -1368,6 +1404,7 @@ mod tests {
             Some((&mut observer, u64::MAX)),
             None,
             None,
+            &Cancel::new(),
         )
         .unwrap();
         assert!(
@@ -1392,4 +1429,12 @@ mod tests {
         );
         fs::remove_dir_all(root).unwrap();
     }
+}
+
+/// Observe the caller's retained first event, not a clock or a meter charge.
+fn observed_cancellation(cancel: &Cancel) -> Option<KaniCancellationSource> {
+    cancel.cause().map(|cause| match cause {
+        CancelCause::Requested => KaniCancellationSource::Requested,
+        CancelCause::Deadline => KaniCancellationSource::Deadline,
+    })
 }

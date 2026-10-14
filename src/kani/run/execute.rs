@@ -17,6 +17,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use quire_contract_ir::kani::KaniCancellationSource;
+use quire_exact::Cancel;
 use serde::Serialize;
 
 use crate::kani::{
@@ -51,6 +53,8 @@ pub const OUTPUT_UNREAD_CODE: &str = "kani_output_unread";
 
 /// One execution of one harness in a crate the caller wrote.
 pub struct KaniExecutionRequest<'a> {
+    /// Caller-owned cancellation handle, shared only within one execution group.
+    pub cancel: &'a Cancel,
     /// Backend to invoke.
     pub installation: &'a KaniInstallation,
     /// The generated harness.
@@ -64,6 +68,13 @@ pub struct KaniExecutionRequest<'a> {
 /// Why a harness was not run.
 #[derive(Debug)]
 pub enum KaniExecutionRefusal {
+    /// A multi-harness launcher stopped on its retained cancellation source.
+    BatchCancelled {
+        /// The source observed before owned teardown.
+        source: KaniCancellationSource,
+        /// Number of members that have no execution evidence.
+        members: usize,
+    },
     /// The installed backend could not be located or started.
     Tool(KaniToolError),
     /// No memory-enforcement mechanism is available; the backend was never spawned.
@@ -139,7 +150,8 @@ impl KaniExecutionRefusal {
         match self {
             Self::OutputOverLimit { .. } => Some(OUTPUT_OVER_LIMIT_CODE),
             Self::OutputUnread { .. } => Some(OUTPUT_UNREAD_CODE),
-            Self::Tool(_)
+            Self::BatchCancelled { .. }
+            | Self::Tool(_)
             | Self::HarnessNotInCrate { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
@@ -154,6 +166,10 @@ impl KaniExecutionRefusal {
 impl fmt::Display for KaniExecutionRefusal {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::BatchCancelled { source, members } => write!(
+                formatter,
+                "the {members}-harness group was cancelled by {source:?}"
+            ),
             Self::Tool(error) => write!(formatter, "{error}"),
             Self::MemoryMechanismUnavailable { cause } => write!(
                 formatter,
@@ -358,15 +374,17 @@ fn start(
     }
     let mut ceilings = request.harness.view().ceilings;
     ceilings.wall_clock = timeout;
-    run_bounded_launcher(command, ceilings, harnesses, deadline).map_err(|error| match error {
-        BoundedLaunchError::Unavailable(cause) => {
-            KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
+    run_bounded_launcher(command, ceilings, harnesses, deadline, request.cancel).map_err(|error| {
+        match error {
+            BoundedLaunchError::Unavailable(cause) => {
+                KaniExecutionRefusal::MemoryMechanismUnavailable { cause }
+            }
+            BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
+                tool: KaniTool::Launcher,
+                path: request.installation.launcher.clone(),
+                error,
+            }),
         }
-        BoundedLaunchError::Io(error) => KaniExecutionRefusal::Tool(KaniToolError::Io {
-            tool: KaniTool::Launcher,
-            path: request.installation.launcher.clone(),
-            error,
-        }),
     })
 }
 
@@ -378,7 +396,8 @@ fn take_report(
 ) -> Result<Option<Vec<u8>>, KaniReportRefusal> {
     let report = match launch {
         LaunchOutcome::Completed { .. } => read_report(report_path),
-        LaunchOutcome::TimedOut
+        LaunchOutcome::Cancelled { .. }
+        | LaunchOutcome::TimedOut
         | LaunchOutcome::MemoryExhausted
         | LaunchOutcome::MemoryUnobserved { .. }
         | LaunchOutcome::OutputOverLimit { .. }
@@ -462,7 +481,8 @@ pub struct KaniGroupRun {
 ///
 /// Harnesses are grouped by equal option vector (their `--harness <path> --exact` selection
 /// removed) and equal identity ceilings; a process also has one launcher, one crate directory and
-/// one target directory, so those must be equal as well. A group of one is the single run of
+/// one target directory and one caller-owned cancellation handle identity, so those must be
+/// equal as well. A group of one is the single run of
 /// [`execute_kani_obligation`], with its argument vector. A larger group is one process given one
 /// `--harness <module::harness> --exact` pair per member in request order, then
 /// `--harness-timeout <T>` in whole seconds rounded up (omitted when Kani 0.68 would refuse the
@@ -518,9 +538,10 @@ fn plan_groups<'a, 'b>(
 
 /// Whether two requests can be run by one launcher process: the same option vector once the
 /// harness selection is removed, the same identity ceilings, and the same launcher, crate and target
-/// directory.
+/// directory, plus identical caller-owned cancellation handles.
 fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest<'_>) -> bool {
-    first.harness.view().ceilings == other.harness.view().ceilings
+    first.cancel == other.cancel
+        && first.harness.view().ceilings == other.harness.view().ceilings
         && first.installation.launcher == other.installation.launcher
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
@@ -623,6 +644,12 @@ fn run_group(
             exit_code,
             text,
         } => (exited_successfully, exit_code, text),
+        Concluded::Cancelled { source } => {
+            return Err(KaniExecutionRefusal::BatchCancelled {
+                source,
+                members: group.len(),
+            });
+        }
         Concluded::MemoryExhausted => {
             return Err(KaniExecutionRefusal::BatchMemoryExhausted {
                 members: group.len(),
@@ -757,6 +784,9 @@ enum Concluded {
     },
     /// The budget elapsed and the group was killed.
     TimedOut,
+    Cancelled {
+        source: KaniCancellationSource,
+    },
     MemoryExhausted,
 }
 
@@ -774,6 +804,7 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
             text,
         }),
         LaunchOutcome::TimedOut => Ok(Concluded::TimedOut),
+        LaunchOutcome::Cancelled { source } => Ok(Concluded::Cancelled { source }),
         LaunchOutcome::MemoryExhausted => Ok(Concluded::MemoryExhausted),
         LaunchOutcome::MemoryUnobserved { detail } => {
             Err(KaniExecutionRefusal::MemoryObservationFailed { detail })
@@ -861,6 +892,14 @@ pub(super) fn launch_evidence(
         } => Ok((
             classify_kani_run(exited_successfully, report, &text, kind)?,
             exit_code,
+        )),
+        Concluded::Cancelled { source } => Ok((
+            ClassifiedRun {
+                outcome: KaniRunOutcome::Cancelled { source },
+                success_checks: 0,
+                checks: Vec::new(),
+            },
+            None,
         )),
         Concluded::TimedOut => Ok(stopped(KaniInconclusiveReason::TimedOut)),
         Concluded::MemoryExhausted => Ok(stopped(KaniInconclusiveReason::MemoryExhausted)),
@@ -1084,6 +1123,7 @@ mod tests {
         stale: Option<&str>,
         shared_target: Option<&Path>,
     ) -> Result<report_fixture::FixtureExecution, KaniExecutionRefusal> {
+        let cancel = quire_exact::Cancel::new();
         let directory = discover_scratch(name);
         let crate_directory = directory.join("crate");
         let target_directory =
@@ -1127,6 +1167,7 @@ mod tests {
             Vec::new(),
         );
         let result = report_fixture::single(&KaniExecutionRequest {
+            cancel: &cancel,
             installation: &KaniInstallation { launcher },
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: &crate_directory,
@@ -1188,6 +1229,7 @@ mod tests {
     /// Trace: FR-017-AC-6, TC-027
     #[test]
     fn tc_027_the_launch_exports_the_report_after_the_harness_options() {
+        let cancel = quire_exact::Cancel::new();
         let harness = state_frame_harness(
             StateFrameProperty::Frame {
                 granted: Vec::new(),
@@ -1203,6 +1245,7 @@ mod tests {
             launcher: PathBuf::from("cargo-kani"),
         };
         let request = KaniExecutionRequest {
+            cancel: &cancel,
             installation: &installation,
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: Path::new("/crate"),
@@ -1334,6 +1377,7 @@ mod tests {
 
 #[cfg(test)]
 mod batch_tests {
+    use quire_contract_ir::kani::KaniOutcomeKind;
     use std::path::PathBuf;
 
     use super::*;
@@ -1439,7 +1483,7 @@ wait
         harness
     }
 
-    /// Trace: FR-028-AC-3, FR-028-AC-21.
+    /// Trace: FR-028-AC-3, FR-028-AC-21, FR-040-AC-3, FR-040-AC-4.
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[cfg(target_os = "linux")]
     #[test]
@@ -1460,6 +1504,8 @@ wait
             crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
         );
         assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
+        stand_in.cancel.cancel(quire_exact::CancelCause::Deadline);
+        assert_eq!(evidence.cancellation_terminal_value().unwrap(), None);
         let parent_kib: u64 = fs::read_to_string(stand_in.directory.join("calls.parent-rss"))
             .unwrap()
             .parse()
@@ -1696,6 +1742,7 @@ exit 0
         crate_directory: PathBuf,
         target_directory: PathBuf,
         installation: KaniInstallation,
+        cancel: Cancel,
     }
 
     impl StandIn {
@@ -1713,6 +1760,7 @@ exit 0
                 crate_directory,
                 target_directory,
                 installation: KaniInstallation { launcher },
+                cancel: Cancel::new(),
             }
         }
 
@@ -1725,6 +1773,17 @@ exit 0
                     self.directory.join("calls").display()
                 ),
             );
+        }
+
+        /// Persist the actual harness source that the public execution entry authenticates.
+        #[cfg(target_os = "linux")]
+        fn containing(&self, harnesses: &[&StateFrameHarness]) {
+            let source = harnesses
+                .iter()
+                .map(|harness| harness.rust.contents.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(self.crate_directory.join("src/lib.rs"), source).unwrap();
         }
 
         /// A stand-in running `body` after its prologue.
@@ -1763,6 +1822,7 @@ exit 0
         ) -> KaniExecutionRequest<'a> {
             assert_eq!(harness.identity.ceilings.wall_clock, timeout);
             KaniExecutionRequest {
+                cancel: &self.cancel,
                 installation: &self.installation,
                 harness: harness.into(),
                 crate_directory: &self.crate_directory,
@@ -1832,6 +1892,309 @@ exit 0
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.directory);
         }
+    }
+
+    /// Incomplete capture refuses the real public run even when a cancellation follows its bytes.
+    /// Trace: FR-040-AC-3, FR-040-AC-4
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn output_over_limit_is_not_relabelled_as_cancellation() {
+        let harness = member("capture_cancel", "check", 4);
+        let body = format!(
+            r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
+printf '%s' "$$" > "$CALLS.child"
+head -c {} /dev/zero
+printf 'ready' > "$CALLS.ready"
+exec sleep 45
+"#,
+            CAPTURE_LIMIT + 1,
+        );
+        let stand_in = StandIn::running("capture-cancel-precedence", &body);
+        stand_in.containing(&[&harness]);
+        let result = std::thread::scope(|scope| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let owner = &stand_in;
+            let harness = &harness;
+            let worker = scope.spawn(move || {
+                sender
+                    .send(execute_kani_obligation(&owner.request(harness, T)))
+                    .unwrap();
+            });
+            let deadline = Instant::now() + T;
+            let result = loop {
+                match receiver.try_recv() {
+                    Ok(result) => break result,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        panic!("execution worker disconnected")
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                if stand_in.directory.join("calls.ready").is_file() {
+                    stand_in.cancel.cancel(quire_exact::CancelCause::Requested);
+                    break receiver.recv_timeout(T).expect("the capture stop returns");
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "capture or backend readiness was not observed"
+                );
+                std::thread::yield_now();
+            };
+            stand_in.cancel.cancel(quire_exact::CancelCause::Deadline);
+            worker.join().unwrap();
+            result
+        });
+        assert!(matches!(
+            result,
+            Err(KaniExecutionRefusal::OutputOverLimit {
+                stream: CaptureStream::Stdout,
+                limit: CAPTURE_LIMIT,
+                harnesses: 1,
+            })
+        ));
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
+    }
+
+    /// The public pre-spawn path retains the caller's source and starts no backend.
+    /// Trace: FR-040-AC-1, FR-040-AC-6, FR-040-AC-7
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cancellation_before_spawn_has_no_backend_or_report() {
+        for (cause, source) in [
+            (
+                quire_exact::CancelCause::Requested,
+                KaniCancellationSource::Requested,
+            ),
+            (
+                quire_exact::CancelCause::Deadline,
+                KaniCancellationSource::Deadline,
+            ),
+        ] {
+            let harness = member("pre_cancel", "check", 4);
+            let stand_in = StandIn::running("pre-cancel", VERIFY_EVERY_HARNESS);
+            stand_in.containing(&[&harness]);
+            stand_in.cancel.cancel(cause);
+            for _ in 0..2 {
+                let evidence = execute_kani_obligation(&stand_in.request(&harness, T)).unwrap();
+                assert_eq!(evidence.outcome, KaniRunOutcome::Cancelled { source });
+                assert!(evidence.checks.is_empty());
+                assert_eq!(evidence.success_checks, 0);
+                assert_eq!(evidence.exit_code, None);
+                assert!(stand_in.calls().is_empty());
+                let (ir, terminal) = evidence.cancellation_terminal_value().unwrap().unwrap();
+                assert_eq!(ir.kind, KaniOutcomeKind::Cancelled { source });
+                assert_eq!(
+                    terminal,
+                    qsl_replay::TerminalValue::Incomplete(qsl_replay::IncompleteCause::Cancelled {
+                        source: cause
+                    })
+                );
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    const CANCELLATION_BARRIER: &str = r#"printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
+printf '%s' "$$" > "$CALLS.child"
+printf 'ready' > "$CALLS.ready"
+exec sleep 45
+"#;
+
+    /// Wait for positive backend readiness or its actual early return, never for a guessed delay.
+    #[cfg(target_os = "linux")]
+    fn cancel_running<R: Send + std::fmt::Debug>(
+        stand_in: &StandIn,
+        cancel: &Cancel,
+        causes: [quire_exact::CancelCause; 2],
+        run: impl FnOnce() -> R + Send,
+    ) -> R {
+        std::thread::scope(|scope| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let worker = scope.spawn(move || sender.send(run()).unwrap());
+            let ready = stand_in.directory.join("calls.ready");
+            let deadline = Instant::now() + T;
+            while !ready.is_file() {
+                match receiver.try_recv() {
+                    Ok(result) => {
+                        panic!("the public execution returned before backend readiness: {result:?}")
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        panic!("execution worker disconnected")
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "backend readiness was not observed"
+                );
+                std::thread::yield_now();
+            }
+            cancel.cancel(causes[0]);
+            cancel.cancel(causes[1]);
+            let result = receiver
+                .recv_timeout(T)
+                .expect("execution returns after owned teardown");
+            worker.join().unwrap();
+            recorded_process_gone(&stand_in.directory.join("calls.child"));
+            result
+        })
+    }
+
+    /// Reversing real caller events reverses the launch/evidence/IR/QSL cause; no report exists.
+    /// Trace: FR-040-AC-1, FR-040-AC-2, FR-040-AC-6
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn live_cancellation_preserves_first_event_through_ir_and_qsl() {
+        use quire_exact::CancelCause::{Deadline, Requested};
+        for (causes, expected) in [
+            ([Requested, Deadline], KaniCancellationSource::Requested),
+            ([Deadline, Requested], KaniCancellationSource::Deadline),
+        ] {
+            let harness = member("live_cancel", "check", 4);
+            let stand_in = StandIn::running("live-first-cancellation", CANCELLATION_BARRIER);
+            stand_in.containing(&[&harness]);
+            let caller = stand_in.cancel.clone();
+            let evidence = cancel_running(&stand_in, &caller, causes, || {
+                execute_kani_obligation(&stand_in.request(&harness, T))
+            })
+            .unwrap();
+            assert_eq!(stand_in.calls().len(), 1);
+            assert_eq!(
+                evidence.outcome,
+                KaniRunOutcome::Cancelled { source: expected }
+            );
+            assert_eq!(evidence.exit_code, None);
+            assert_eq!(evidence.success_checks, 0);
+            assert!(evidence.checks.is_empty());
+            assert!(evidence.memory.peak_resident_bytes.is_some());
+            let (ir, terminal) = evidence.cancellation_terminal_value().unwrap().unwrap();
+            assert_eq!(ir.kind, KaniOutcomeKind::Cancelled { source: expected });
+            assert_eq!(ir.boolean_claim(), None);
+            assert_eq!(
+                terminal,
+                qsl_replay::TerminalValue::Incomplete(qsl_replay::IncompleteCause::Cancelled {
+                    source: causes[0]
+                })
+            );
+            caller.cancel(causes[1]);
+            assert_eq!(
+                evidence.cancellation_terminal_value().unwrap().unwrap(),
+                (ir, terminal)
+            );
+        }
+    }
+
+    /// One cancelled group has no member evidence; an independent handle's group still completes.
+    /// Trace: FR-040-AC-5
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cancelled_batch_retains_first_source_and_independent_group() {
+        use quire_exact::CancelCause::{Deadline, Requested};
+        for (causes, expected) in [
+            ([Requested, Deadline], KaniCancellationSource::Requested),
+            ([Deadline, Requested], KaniCancellationSource::Deadline),
+        ] {
+            let harnesses = [
+                member("a", "check", 4),
+                member("b", "check", 4),
+                member("c", "check", 4),
+            ];
+            let body = format!("case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}");
+            let stand_in = StandIn::running("cancel-shared-batch", &body);
+            stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
+            let independent = Cancel::new();
+            let clone = stand_in.cancel.clone();
+            let requests = [
+                stand_in.request(&harnesses[0], T),
+                KaniExecutionRequest {
+                    cancel: &clone,
+                    ..stand_in.request(&harnesses[1], T)
+                },
+                KaniExecutionRequest {
+                    cancel: &independent,
+                    ..stand_in.request(&harnesses[2], T)
+                },
+            ];
+            let groups = cancel_running(&stand_in, &stand_in.cancel, causes, || {
+                execute_kani_obligations(&requests)
+            })
+            .unwrap();
+            assert_eq!(groups.len(), 2);
+            assert_eq!(groups[0].members, [0, 1]);
+            assert!(
+                matches!(groups[0].evidence, Err(KaniExecutionRefusal::BatchCancelled { source, members: 2 }) if source == expected)
+            );
+            assert_eq!(groups[1].members, [2]);
+            let evidence = groups[1].evidence.as_ref().unwrap();
+            assert_eq!(evidence.len(), 1);
+            assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
+            assert_eq!(evidence[0].cancellation_terminal_value().unwrap(), None);
+            let calls = stand_in.calls();
+            assert_eq!(calls.len(), 2);
+            for member in ["a::check", "b::check"] {
+                assert!(calls[0]
+                    .windows(3)
+                    .any(|args| args == ["--harness", member, "--exact"]));
+            }
+        }
+    }
+
+    /// Otherwise groupable requests with distinct handles run in separate real processes.
+    /// Trace: FR-040-AC-5
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn distinct_cancellation_handles_have_distinct_launchers() {
+        let harnesses = [member("a", "check", 4), member("b", "check", 4)];
+        let stand_in = StandIn::running("distinct-cancel-handles", VERIFY_EVERY_HARNESS);
+        stand_in.containing(&[&harnesses[0], &harnesses[1]]);
+        let other = Cancel::new();
+        let requests = [
+            stand_in.request(&harnesses[0], T),
+            KaniExecutionRequest {
+                cancel: &other,
+                ..stand_in.request(&harnesses[1], T)
+            },
+        ];
+        let groups = execute_kani_obligations(&requests).unwrap();
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.members.clone())
+                .collect::<Vec<_>>(),
+            [vec![0], vec![1]]
+        );
+        assert!(groups
+            .iter()
+            .all(|group| group.evidence.as_ref().unwrap()[0].outcome == KaniRunOutcome::Verified));
+        assert_eq!(stand_in.calls().len(), 2);
+    }
+
+    /// A late timer event cannot relabel either a completed report or a no-event execution ceiling.
+    /// Trace: FR-040-AC-3, FR-040-AC-4
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn completed_and_elapsed_runs_do_not_acquire_late_cancellation() {
+        let harness = member("late", "check", 4);
+        let completed = StandIn::running("cancel-after-completion", VERIFY_EVERY_HARNESS);
+        completed.containing(&[&harness]);
+        let evidence = execute_kani_obligation(&completed.request(&harness, T)).unwrap();
+        completed.cancel.cancel(quire_exact::CancelCause::Deadline);
+        assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+        assert_eq!(evidence.cancellation_terminal_value().unwrap(), None);
+        let mut timed_harness = harness.clone();
+        timed_harness.identity.ceilings.wall_clock = Duration::ZERO;
+        let timed = StandIn::running("cancel-after-ceiling", VERIFY_EVERY_HARNESS);
+        timed.containing(&[&timed_harness]);
+        let evidence =
+            execute_kani_obligation(&timed.request(&timed_harness, Duration::ZERO)).unwrap();
+        timed.cancel.cancel(quire_exact::CancelCause::Deadline);
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::TimedOut
+            }
+        );
+        assert_eq!(evidence.cancellation_terminal_value().unwrap(), None);
+        assert!(timed.calls().is_empty());
     }
 
     /// The evidence of the one process of a batch that ran as one group, or its refusal.
@@ -2066,6 +2429,7 @@ exit 0
     /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
     #[test]
     fn tc_043_the_member_timeout_is_whole_seconds_rounded_up_and_omitted_above_kani_maximum() {
+        let cancel = quire_exact::Cancel::new();
         let installation = KaniInstallation {
             launcher: PathBuf::from("cargo-kani"),
         };
@@ -2074,6 +2438,7 @@ exit 0
             let mut harness = harness.clone();
             harness.identity.ceilings.wall_clock = timeout;
             let request = KaniExecutionRequest {
+                cancel: &cancel,
                 installation: &installation,
                 harness: (&harness).into(),
                 crate_directory: Path::new("/crate"),
@@ -2111,6 +2476,7 @@ exit 0
     /// Trace: FR-017-AC-21, TC-043
     #[test]
     fn tc_043_requests_naming_another_launcher_crate_or_target_directory_are_not_grouped() {
+        let cancel = quire_exact::Cancel::new();
         let (a, b) = (member("a", "check", 4), member("b", "check", 4));
 
         // Another launcher: each launcher runs one harness.
@@ -2118,6 +2484,7 @@ exit 0
         let requests = [
             first.request(&a, T),
             KaniExecutionRequest {
+                cancel: &cancel,
                 installation: &second.installation,
                 ..first.request(&b, T)
             },
@@ -2131,6 +2498,7 @@ exit 0
         let requests = [
             first.request(&a, T),
             KaniExecutionRequest {
+                cancel: &cancel,
                 crate_directory: &second.crate_directory,
                 ..first.request(&b, T)
             },
@@ -2144,6 +2512,7 @@ exit 0
         let requests = [
             first.request(&a, T),
             KaniExecutionRequest {
+                cancel: &cancel,
                 target_directory: &second.target_directory,
                 ..first.request(&b, T)
             },

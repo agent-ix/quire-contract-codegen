@@ -3656,6 +3656,7 @@ fn scratch(name: &str) -> PathBuf {
 
 /// Runs `harness` with the real prover over the subject module every generated harness names.
 pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
+    let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = scratch("crate");
     fs::write(
@@ -3677,6 +3678,7 @@ pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
     )
     .expect("build script");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
         crate_directory: &directory,

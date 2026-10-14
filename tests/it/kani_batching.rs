@@ -104,6 +104,7 @@ struct Lane {
     crate_directory: PathBuf,
     installation: KaniInstallation,
     counts: PathBuf,
+    cancel: quire_exact::Cancel,
 }
 
 impl Lane {
@@ -147,6 +148,7 @@ impl Lane {
             directory,
             installation: KaniInstallation { launcher },
             counts,
+            cancel: quire_exact::Cancel::new(),
         }
     }
 
@@ -164,6 +166,7 @@ impl Lane {
     ) -> KaniExecutionRequest<'a> {
         assert_eq!(harness.identity.ceilings.wall_clock, timeout);
         KaniExecutionRequest {
+            cancel: &self.cancel,
             installation: &self.installation,
             harness: harness.into(),
             crate_directory: &self.crate_directory,

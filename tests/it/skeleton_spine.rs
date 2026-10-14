@@ -1229,9 +1229,11 @@ fn printed_values(transcript: &str) -> (Vec<i64>, Vec<i64>) {
 
 /// Runs `subject` under the installed prover with `harness`, returning the classified outcome.
 fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
+    let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = write_crate(harness, subject);
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
         crate_directory: &directory,

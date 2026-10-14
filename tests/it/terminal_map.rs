@@ -24,7 +24,8 @@ use quire_contract_codegen::{
     ReplaySettlement, ReplayVerdict, ScopeMember, SpineReplayError, StateClauseReplay,
     StateClauseReplayError, StateFrameRefusal, TerminalPairError,
 };
-use quire_contract_ir::kani::{KaniOutcome, KaniOutcomeKind};
+use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
+use quire_exact::CancelCause;
 
 use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
 
@@ -60,6 +61,28 @@ fn settlement_free_outcomes() -> Vec<KaniRunOutcome> {
     ];
     outcomes.extend(REASONS.map(inconclusive));
     outcomes
+}
+
+/// Both direct run-map cancellation sources preserve their exact cause and refuse replay pairs.
+/// Trace: FR-029-AC-15, FR-029-AC-29, FR-040-AC-7
+#[test]
+fn direct_cancelled_run_maps_exact_source_and_rejects_settlement() {
+    for (source, exact) in [
+        (KaniCancellationSource::Requested, CancelCause::Requested),
+        (KaniCancellationSource::Deadline, CancelCause::Deadline),
+    ] {
+        let outcome = KaniRunOutcome::Cancelled { source };
+        assert_eq!(
+            run_terminal_value(&outcome, 0, None),
+            Ok(TerminalValue::Incomplete(IncompleteCause::Cancelled {
+                source: exact
+            }))
+        );
+        assert_eq!(
+            run_terminal_value(&outcome, 0, Some(ReplaySettlement::Reproduced)),
+            Err(TerminalPairError::UnexpectedSettlement)
+        );
+    }
 }
 
 fn map_run(outcome: &KaniRunOutcome, settlement: Option<ReplaySettlement<'_>>) -> TerminalValue {
@@ -828,7 +851,18 @@ fn ir_outcomes() -> Vec<KaniOutcome> {
         ir(Kind::Unavailable, Std001Code::KANI_SOLVER_ABSENT),
         ir(Kind::TimedOut, Std001Code::KANI_BOUND_EXHAUSTED),
         ir(Kind::ResourceExhausted, Std001Code::KANI_BOUND_EXHAUSTED),
-        ir(Kind::Cancelled, Std001Code::KANI_BOUND_EXHAUSTED),
+        ir(
+            Kind::Cancelled {
+                source: KaniCancellationSource::Requested,
+            },
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
+        ir(
+            Kind::Cancelled {
+                source: KaniCancellationSource::Deadline,
+            },
+            Std001Code::KANI_BOUND_EXHAUSTED,
+        ),
         ir(Kind::Inconclusive, Std001Code::KANI_VACUOUS_PROOF),
     ]
 }
@@ -865,8 +899,8 @@ fn tc_041_every_expressible_pair_maps_to_one_value() {
         }
     }
     with_settlements(|settlement| values.push(map_ir_settled(settlement)));
-    // Nine kinds with no settlement and the counterexample with each of the six readings.
-    assert_eq!(values.len(), 9 + 6);
+    // Ten source-bearing outcomes with no settlement and six counterexample readings.
+    assert_eq!(values.len(), 10 + 6);
 }
 
 /// A pair outside the map's input is a typed refusal, not a value: a counterexample needs its
@@ -941,7 +975,22 @@ fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
     for (kind, cause) in [
         (Kind::TimedOut, IncompleteCause::TimedOut),
         (Kind::ResourceExhausted, IncompleteCause::ResourceExhausted),
-        (Kind::Cancelled, IncompleteCause::Cancelled),
+        (
+            Kind::Cancelled {
+                source: KaniCancellationSource::Requested,
+            },
+            IncompleteCause::Cancelled {
+                source: CancelCause::Requested,
+            },
+        ),
+        (
+            Kind::Cancelled {
+                source: KaniCancellationSource::Deadline,
+            },
+            IncompleteCause::Cancelled {
+                source: CancelCause::Deadline,
+            },
+        ),
     ] {
         assert_eq!(
             map_ir(&ir(kind, Std001Code::KANI_BOUND_EXHAUSTED)),
@@ -1011,7 +1060,7 @@ fn tc_041_no_outcome_maps_to_tested() {
         .collect();
     values.push(map_ir_settled(ReplaySettlement::Reproduced));
     with_settlements(|settlement| values.push(map_ir_settled(settlement)));
-    assert_eq!(values.len(), 9 + 1 + 5);
+    assert_eq!(values.len(), 10 + 1 + 5);
     assert!(
         values.iter().all(|value| *value != TerminalValue::Tested),
         "{values:?}"
@@ -1061,6 +1110,18 @@ fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
                     .map(|segment| segment.ident.to_string())
                     .collect();
                 let [kind, variant] = segments.as_slice() else {
+                    return None;
+                };
+                (kind == "Kind").then(|| out.push(variant.clone()))
+            }
+            Pat::Struct(structure) => {
+                let names: Vec<_> = structure
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect();
+                let [kind, variant] = names.as_slice() else {
                     return None;
                 };
                 (kind == "Kind").then(|| out.push(variant.clone()))
