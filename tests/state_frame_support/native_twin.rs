@@ -662,7 +662,7 @@ impl Twin {
                 "name": name,
                 "origin": {"source": {
                     "sourceIdentity": format!("ix://{PACKAGE}/spec"),
-                    "path": file!(),
+                    "path": "tests/state_frame_support/native_twin.rs",
                     "startLine": line!(),
                     "startColumn": column!(),
                 }},
