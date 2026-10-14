@@ -17,13 +17,13 @@
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
-use quire_contract_model::{CheckedNodeId, ContractPackageV1};
+use quire_contract_model::{CheckedNodeId, CheckedSemanticId, ContractPackageV1};
 
 use crate::{
     core::artifact::Artifact,
     core::contract_package::{
-        AdmittedItemAccounting, ContractRequestPosition, PackageItem, PackageItems,
-        PackageRequestError,
+        AdmittedItemAccounting, ContractDriverResultSelection, ContractRequestPosition,
+        PackageItem, PackageItems, PackageRequestError,
     },
     core::identity::{HarnessPath, HarnessSymbol},
     kani::generate::negotiate::negotiate_kani_obligations,
@@ -53,6 +53,8 @@ pub struct RoutedGenerationItem {
     backend: Candidate,
     /// The routed backend's kind.
     kind: BackendKind,
+    /// The selection authenticated during scalar capability preflight.
+    scalar_selection: Option<(CheckedSemanticId, ContractDriverResultSelection)>,
 }
 
 /// A routed item cannot be constructed from a contradictory descriptor.
@@ -96,7 +98,19 @@ impl RoutedGenerationItem {
             node_id,
             backend,
             kind,
+            scalar_selection: None,
         })
+    }
+
+    /// Bind the exact scalar result selection authenticated during settlement.
+    #[must_use]
+    pub fn with_scalar_selection(
+        mut self,
+        package: &ContractPackageV1,
+        selection: ContractDriverResultSelection,
+    ) -> Self {
+        self.scalar_selection = Some((package.identity().clone(), selection));
+        self
     }
 }
 
@@ -180,6 +194,11 @@ pub struct RoutedGeneration {
 /// A whole-call refusal; nothing is generated.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RoutedGenerationError {
+    /// The routed scalar selection is absent or differs from the admitted driver position.
+    ScalarSelectionMismatch {
+        /// The offending driver request index.
+        request_index: usize,
+    },
     /// Request positions or keys disagree with admitted FR-330 accounting.
     Package(PackageRequestError),
     /// Direct generation from the admitted package failed as a whole.
@@ -290,6 +309,36 @@ pub fn generate_routed(
     refuse_inconsistent_routing(&ordered, contexts)?;
     let package_items =
         PackageItems::new(package, positions).map_err(RoutedGenerationError::Package)?;
+
+    for item in &ordered {
+        if item.kind == BackendKind::Kani {
+            let selected = package_items.result_selection(item.request_index);
+            if selected
+                != item
+                    .scalar_selection
+                    .as_ref()
+                    .map(|(_, selection)| selection)
+                || item
+                    .scalar_selection
+                    .as_ref()
+                    .is_some_and(|(identity, _)| identity != package.identity())
+                || selected.is_some_and(|selection| {
+                    matches!(selection, ContractDriverResultSelection::OwnResult { .. })
+                        && !crate::oracle::scalar::valid_selected_scalar_result(
+                            package,
+                            &package_items,
+                            item.request_index,
+                            &item.node_id,
+                            selection,
+                        )
+                })
+            {
+                return Err(RoutedGenerationError::ScalarSelectionMismatch {
+                    request_index: item.request_index,
+                });
+            }
+        }
+    }
 
     let mut items = Vec::with_capacity(ordered.len());
     let mut admitted_by_index = BTreeMap::new();
@@ -608,6 +657,7 @@ mod tests {
                 identity: "kani".to_owned(),
             },
             kind: BackendKind::Kani,
+            scalar_selection: None,
         }
     }
 

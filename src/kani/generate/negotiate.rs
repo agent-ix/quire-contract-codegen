@@ -52,14 +52,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use quire_contract_model::{
-    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageReadLimits,
-    CheckedPackageV2, CheckedSemanticNodeV2, ClauseKind, ClauseRef, ContractDependencies,
-    ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ExecutionPoint,
+    BoundClause, BoundPackage, CheckedNodeId, CheckedNodeTag, CheckedPackageV2,
+    CheckedSemanticNodeV2, ClauseKind, ClauseRef, ContractPackageV1, ExecutionPoint,
 };
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
-    core::contract_package::routed_contract_lowering_profile,
     core::contract_package::ContractDriverResultSelection,
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
@@ -597,50 +595,45 @@ fn classify_node<'a>(
 /// that its generator refuses.
 pub(crate) fn classify_scalar_form(
     package: &CheckedPackageV2,
+    contract: &ContractPackageV1,
+    positions: &[crate::core::contract_package::ContractRequestPosition],
+    request_index: usize,
     node_id: &CheckedNodeId,
 ) -> ScalarFormAssessment {
-    let requested = [node_id.clone()];
-    let lowered = package.lower(&requested, &routed_contract_lowering_profile());
-    let Some(bytes) = lowered.package.canonical_bytes() else {
-        return ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode);
+    if contract.wire().package.source.package_id != *package.package_id() {
+        return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarSourceMismatch);
+    }
+    let items = match crate::core::contract_package::PackageItems::new(contract, positions) {
+        Ok(items) => items,
+        Err(_) => {
+            return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarPositionMismatch)
+        }
     };
-    let contract = match ContractPackageWireV1::read(
-        bytes,
-        CheckedPackageReadLimits::bounded(),
-        &ContractDependencies::new(),
+    if items.driver_node(request_index) != Some(node_id) {
+        return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarPositionMismatch);
+    }
+    let Some(selection) = items.result_selection(request_index) else {
+        return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarPositionMismatch);
+    };
+    if !matches!(selection, ContractDriverResultSelection::OwnResult { .. }) {
+        return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarResultMissing);
+    }
+    if !crate::oracle::scalar::valid_selected_scalar_result(
+        contract,
+        &items,
+        request_index,
+        node_id,
+        selection,
     ) {
-        ContractPackageReadResult::Admitted(package) => *package,
-        _ => return ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode),
-    };
-    let outcome = match crate::oracle::scalar::derive_exact_scalar_items(
-        package,
-        std::slice::from_ref(node_id),
-    )
-    .into_iter()
-    .next()
-    {
-        None => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-        Some(Ok(item)) => {
-            match crate::oracle::scalar::plan_exact_scalar_oracles(package, &[item]) {
-                Ok(plan) => plan
-                    .claims()
-                    .first()
-                    .map(|claim| classify_claim(&contract, claim))
-                    .unwrap_or(Outcome::Invalid(InvalidObligationItem::UnknownNode)),
-                Err(_) => Outcome::Invalid(InvalidObligationItem::UnknownNode),
-            }
-        }
-        Some(Err(refusal)) => {
-            let claim = ExactScalarClaim {
-                node_id: node_id.clone(),
-                operation: crate::oracle::scalar::OperationClaim {
-                    identity: String::new(),
-                    provenance: crate::oracle::scalar::OperationProvenance::Underived,
-                },
-                result: ClaimDisposition::Refused { refusal },
-            };
-            classify_claim(&contract, &claim)
-        }
+        return ScalarFormAssessment::Invalid(InvalidObligationItem::ScalarContextMismatch);
+    }
+    let outcome = match crate::oracle::scalar::preflight_contract_scalar_claim(
+        contract,
+        positions,
+        request_index,
+    ) {
+        Ok(claim) => classify_claim(contract, &claim),
+        Err(_) => Outcome::Invalid(InvalidObligationItem::ScalarDerivationFailed),
     };
     let graph_node = package
         .graph()

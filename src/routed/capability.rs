@@ -264,13 +264,19 @@ pub enum KaniForm {
         /// The admitted typed clause.
         clause: Box<quire_contract_model::BoundClause>,
     },
-    /// A claim-map entry and the checked package it was lowered from.
+    /// A checked claim and its exact admitted result occurrence.
     ///
     /// The operation identity, family, and provenance are read from the typed
     /// claim entry and checked graph; callers cannot assert them independently.
     V2ScalarClaim {
-        /// The admitted package containing the source node.
+        /// The checked source package containing the source node.
         package: Box<quire_contract_model::CheckedPackageV2>,
+        /// The admitted lowering of the full driver request.
+        contract: Box<ContractPackageV1>,
+        /// The full typed lowering positions, including context-only roots.
+        positions: Vec<ContractRequestPosition>,
+        /// This claim's index among driver positions.
+        request_index: usize,
         /// The requested checked node.
         node_id: quire_contract_model::CheckedNodeId,
     },
@@ -630,7 +636,9 @@ impl KaniForm {
                 },
                 state_frame_role: None,
             },
-            Self::V2ScalarClaim { package, node_id } => {
+            Self::V2ScalarClaim {
+                package, node_id, ..
+            } => {
                 let operation_identity = package
                     .graph()
                     .nodes
@@ -745,9 +753,21 @@ impl KaniForm {
                     None => Ok(KaniFormReadiness::Ready),
                 }
             }
-            Self::V2ScalarClaim { package, node_id } => {
+            Self::V2ScalarClaim {
+                package,
+                contract,
+                positions,
+                request_index,
+                node_id,
+            } => {
                 use crate::kani::generate::negotiate::ScalarFormAssessment;
-                match crate::kani::generate::negotiate::classify_scalar_form(package, node_id) {
+                match crate::kani::generate::negotiate::classify_scalar_form(
+                    package,
+                    contract,
+                    positions,
+                    *request_index,
+                    node_id,
+                ) {
                     ScalarFormAssessment::Supported => Ok(KaniFormReadiness::Ready),
                     ScalarFormAssessment::RequiresBound => Ok(KaniFormReadiness::RequiresBound),
                     ScalarFormAssessment::Unsupported(refusal) => {

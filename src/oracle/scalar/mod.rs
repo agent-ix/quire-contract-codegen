@@ -937,6 +937,42 @@ pub(crate) fn generate_contract_scalar_oracles(
     requested: &[ContractRequestPosition],
     positions: &[usize],
 ) -> Result<(ExactScalarOracles, Vec<usize>), ContractScalarError> {
+    build_contract_scalar_oracles(package, requested, positions, ScalarBuildMode::Render)
+}
+
+/// Derive a selected scalar claim for capability preflight without rendering artifacts.
+pub(crate) fn preflight_contract_scalar_claim(
+    package: &ContractPackageV1,
+    requested: &[ContractRequestPosition],
+    request_index: usize,
+) -> Result<ExactScalarClaim, ContractScalarError> {
+    let (oracles, indexes) = build_contract_scalar_oracles(
+        package,
+        requested,
+        &[request_index],
+        ScalarBuildMode::Preflight,
+    )?;
+    indexes
+        .first()
+        .and_then(|index| oracles.claim_map.items.get(*index))
+        .cloned()
+        .ok_or(ContractScalarError::Request(
+            PackageRequestError::Position { request_index },
+        ))
+}
+
+#[derive(Clone, Copy)]
+enum ScalarBuildMode {
+    Preflight,
+    Render,
+}
+
+fn build_contract_scalar_oracles(
+    package: &ContractPackageV1,
+    requested: &[ContractRequestPosition],
+    positions: &[usize],
+    mode: ScalarBuildMode,
+) -> Result<(ExactScalarOracles, Vec<usize>), ContractScalarError> {
     let items = PackageItems::new(package, requested).map_err(ContractScalarError::Request)?;
     let graph: Graph<'_> = package
         .wire()
@@ -1113,6 +1149,9 @@ pub(crate) fn generate_contract_scalar_oracles(
             .map_err(ContractScalarError::Oracle)?,
     );
     for ((claim, operation), symbol) in pending.iter().zip(names) {
+        if matches!(mode, ScalarBuildMode::Preflight) {
+            continue;
+        }
         let claim_entry = &mut claims[*claim];
         let identity = &claim_entry.operation.identity;
         source
@@ -1151,6 +1190,15 @@ pub(crate) fn generate_contract_scalar_oracles(
         blocked: Vec::new(),
         items: claims,
     };
+    if matches!(mode, ScalarBuildMode::Preflight) {
+        return Ok((
+            ExactScalarOracles {
+                artifacts: Vec::new(),
+                claim_map,
+            },
+            claim_indexes,
+        ));
+    }
     let lib = source.finish();
     if lib.len() > MAX_GENERATED_SOURCE_BYTES {
         return Err(ContractScalarError::Oracle(
@@ -1187,6 +1235,17 @@ enum SelectedScalarKey {
         application_ordinal: u64,
         conversion: Option<(CheckedNodeId, u64)>,
     },
+}
+
+pub(crate) fn valid_selected_scalar_result(
+    package: &ContractPackageV1,
+    items: &PackageItems<'_>,
+    request_index: usize,
+    node_id: &CheckedNodeId,
+    selection: &ContractDriverResultSelection,
+) -> bool {
+    matches!(selection, ContractDriverResultSelection::OwnResult { .. })
+        && selected_scalar_key(package, items, request_index, node_id, selection).is_some()
 }
 
 fn selected_scalar_key(

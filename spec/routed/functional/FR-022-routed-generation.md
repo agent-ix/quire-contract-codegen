@@ -143,6 +143,12 @@ output belong to IR-629; they do not change this crate boundary.
     `BackendKind::from_descriptor` (FR-019). The driver passes the same CG
     descriptor it projected for negotiation and cannot supply a hand-built
     `Process(id)` as an item's kind.
+  - `scalar_selection` (private): for a Kani scalar route, the driver binds the
+    authenticated `ContractDriverResultSelection` with
+    `with_scalar_selection(&contract_package, selection)`. Generation compares
+    the package identity and selection with the admitted driver
+    position and validates the selected occurrence/context before producing
+    any oracle or harness artifact.
   The constructor refuses a backend identity different from
   `descriptor.identity` as typed
   `RoutedItemConstructionError::DescriptorBackendMismatch { backend,
@@ -320,8 +326,8 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-20 | PLANNED (IR-629). `RoutedGenerationItem.backend` and `.kind` are private while `request_index` and `node_id` remain public; external callers cannot create an item with a hand-built `Process(id)` or reassign its backend after `from_descriptor` construction. | Analysis |
 | FR-022-AC-21 | PLANNED (IR-629). `from_descriptor` constructs Kani for a linked `kani` descriptor and `Process(id)` for a process descriptor with the same identity text. An unknown linked identity never produces Process. | Test (TC-046) |
 | FR-022-AC-22 | PLANNED (IR-629). `from_descriptor` rejects a backend identity different from the descriptor identity as `DescriptorBackendMismatch`, naming both; it rejects an unknown linked identity as `UnknownLinkedBackend`, naming the backend. Neither refusal produces a routed item. | Test (TC-046) |
-| FR-022-AC-23 | PLANNED/UNRUN (IR-790). After FR-019 authenticates two `integer.add` driver items on one admitted ContractPackage with distinct selected application/direct-`numeric.narrow` pairs, routed generation retains the pair for each item in its claim and harness identity and asserts against its own selected result bound. The two generated harnesses have distinct identities and expected ranges; a fresh settlement of a changed selection changes or refuses only that item, without borrowing the other bound. | Test (TC-033) |
-| FR-022-AC-24 | PLANNED/UNRUN (IR-790). A routed scalar item's retained authenticated selection and its driver lowering position must name the same application/conversion pair in the same admitted ContractPackage. A changed pair, missing conversion context root or occurrence absent from that package refuses the whole call with a typed selection error before any harness. No package-wide bound search, source-text reparse or copied QSL context supplies a replacement. | Test (TC-033) |
+| FR-022-AC-23 | After FR-019 authenticates two `integer.add` driver items on one admitted ContractPackage with distinct selected application/direct-`numeric.narrow` pairs, routed generation retains the pair for each item in its claim and harness identity and asserts against its own selected result bound. The two generated harnesses have distinct identities and expected ranges; a fresh settlement of a changed selection changes or refuses only that item, without borrowing the other bound. | Test (TC-033) |
+| FR-022-AC-24 | A routed scalar item's retained authenticated selection and its driver lowering position must name the same application/conversion pair in the same admitted ContractPackage. A changed pair, missing conversion context root or occurrence absent from that package refuses the whole call with a typed selection error before any harness. No package-wide bound search, source-text reparse or copied QSL context supplies a replacement. | Test (TC-033) |
 
 ## Dependencies
 

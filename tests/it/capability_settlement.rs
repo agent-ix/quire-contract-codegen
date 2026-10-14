@@ -2,13 +2,22 @@
 //!
 //! Each test walks one row of FR-290's ordered rules.
 
-use qsl_replay::{DomainKey, DomainKind, FiniteBound, Integer, ProofBound, WireNodeId};
+use qsl_replay::{
+    compile_package, DependencyInput, DomainKey, DomainKind, FiniteBound, Integer, ProofBound,
+    ReplayLimits, SourceIdentity, StageLimits, WireNodeId,
+};
 use quire_contract_codegen::{
-    negotiate_backend_provider, BackendDescriptor, BackendKind, BackendProviderEnvelope, Candidate,
-    Candidates, CapabilityKind, Cause, Disposition, EnvelopeRefusal, ExtentClassification,
-    ExtentDomain, InvalidObligationItem, ItemSettlement, KaniForm, Mode, ProviderOrigin,
-    RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
+    negotiate_backend_provider, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
+    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause,
+    ContractDriverResultSelection, ContractRequestPosition, Disposition, EnvelopeRefusal,
+    ExtentClassification, ExtentDomain, InvalidObligationItem, ItemSettlement, KaniForm, Mode,
+    ProviderOrigin, RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
+};
+use quire_contract_model::{
+    CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
+    CheckedPackageV2, CheckedPackageV2ReadResult, ContractDependencies, ContractOccurrenceKeyV1,
+    ContractPackageReadResult, ContractPackageWireV1,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -141,7 +150,121 @@ fn oversized_bound_clause() -> quire_contract_model::BoundClause {
         .clone()
 }
 
+fn selected_scalar_form(package: CheckedPackageV2, node_id: CheckedNodeId) -> KaniForm {
+    let application = package
+        .source_map()
+        .iter()
+        .find(|entry| entry.node_id == node_id && entry.role == CheckedOccurrenceRole::Expression);
+    let conversion = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.body
+                .pointer("/operation/identity")
+                .and_then(serde_json::Value::as_str)
+                == Some("quire.op.numeric.narrow")
+                && node.body.pointer("/arguments/0/target")
+                    == Some(&serde_json::to_value(&node_id).expect("typed key"))
+        })
+        .map(|node| node.node_id.clone());
+    let selection = application.map_or(ContractDriverResultSelection::NotApplicable, |entry| {
+        ContractDriverResultSelection::OwnResult {
+            application: ContractOccurrenceKeyV1 {
+                node_id: node_id.clone(),
+                role: entry.role.clone(),
+                ordinal: entry.ordinal,
+            },
+            conversion: conversion.as_ref().map(|node_id| {
+                let source = package
+                    .source_map()
+                    .iter()
+                    .find(|source| {
+                        source.node_id == *node_id
+                            && source.role == CheckedOccurrenceRole::Expression
+                    })
+                    .expect("checked conversion occurrence");
+                ContractOccurrenceKeyV1 {
+                    node_id: node_id.clone(),
+                    role: source.role.clone(),
+                    ordinal: source.ordinal,
+                }
+            }),
+        }
+    });
+    let mut roots = vec![node_id.clone()];
+    if let Some(conversion) = &conversion {
+        roots.push(conversion.clone());
+    }
+    let lowered = package.lower(&roots, &routed_contract_lowering_profile());
+    let contract = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().expect("FR-330 bytes"),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(contract) => contract,
+        other => panic!("scalar selection package must admit: {other:?}"),
+    };
+    KaniForm::V2ScalarClaim {
+        package: Box::new(package),
+        contract,
+        positions: {
+            let mut positions = vec![ContractRequestPosition::DriverItem {
+                node_id: node_id.clone(),
+                result_selection: selection,
+            }];
+            if let Some(conversion) = conversion {
+                positions.push(ContractRequestPosition::ContextRoot {
+                    node_id: conversion,
+                });
+            }
+            positions
+        },
+        request_index: 0,
+        node_id,
+    }
+}
+
 fn integer_scalar(operation_identity: &str) -> KaniForm {
+    if operation_identity == "quire.op.integer.add" {
+        let source = "language \"ix:native\" edition \"1-draft\";\n\
+             profile v = \"quire.value.complete/v1\";\n\
+             function f using v(a: Int[0, 9]): Int[0, 18] pure { a + a }\n";
+        let compiled = compile_package(
+            SourceIdentity::new("test", "selected-add.native", "git", "fixture"),
+            "selected-add.native",
+            source.as_bytes(),
+            [],
+            &DependencyInput::default(),
+            StageLimits::default(),
+            ReplayLimits::default(),
+        )
+        .expect("QSL emits bounded integer add");
+        let mut evidence = CheckedPackageEvidence::new();
+        evidence.support_feature("quire.value.complete/v1");
+        let package = match CheckedPackageV2::read(
+            compiled.bytes(),
+            CheckedPackageReadLimits::bounded(),
+            &evidence,
+        ) {
+            CheckedPackageV2ReadResult::Admitted(package) => *package,
+            other => panic!("IR admits QSL add: {other:?}"),
+        };
+        let node_id = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.body
+                    .pointer("/operation/identity")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(operation_identity)
+            })
+            .expect("QSL add node")
+            .node_id
+            .clone();
+        return selected_scalar_form(package, node_id);
+    }
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let node_id = package
         .graph()
@@ -157,10 +280,7 @@ fn integer_scalar(operation_identity: &str) -> KaniForm {
         .expect("checked scalar fixture carries the selected operation")
         .node_id
         .clone();
-    KaniForm::V2ScalarClaim {
-        package: Box::new(package),
-        node_id,
-    }
+    selected_scalar_form(package, node_id)
 }
 
 fn outside_form() -> KaniForm {
@@ -282,10 +402,7 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
         }],
         bounds: vec![source_bound.clone()],
     });
-    request.kani_form = KaniForm::V2ScalarClaim {
-        package: Box::new(package),
-        node_id,
-    };
+    request.kani_form = integer_scalar("quire.op.integer.add");
     let envelope = envelope(
         vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
         vec![request],
@@ -1039,7 +1156,7 @@ fn tc_030_the_advertised_mode_table_settles_each_row() {
 
 /// The Kani arm checks typed form support before extent and advertised mode.
 ///
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-27, FR-019-AC-29, FR-019-AC-31.
+/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-27, FR-019-AC-29, FR-019-AC-31, FR-019-AC-44.
 #[test]
 fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
     let candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity())]);
@@ -1079,17 +1196,75 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
         vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)])],
         request,
     );
-    assert_eq!(
+    assert!(matches!(
         refused.disposition,
-        Disposition::Unsupported {
-            cause: Cause::KaniFormRefused {
-                form: refused_form_identity("quire.op.integer.div"),
-                refusal: source_derived_division_refusal(),
-                backend,
+        Disposition::InvalidRequest {
+            cause: Cause::KaniFormInvalid {
+                refusal: InvalidObligationItem::ScalarResultMissing,
+                ..
             }
-        },
-        "a form the scalar generator does not render cannot settle supported"
+        }
+    ));
+}
+
+/// Selected-result defects follow request/candidate validation and precede
+/// the advertised-mode and extent settlement branches.
+/// Trace: FR-019-AC-44, TC-030.
+#[test]
+fn selected_scalar_context_refusal_keeps_validation_precedence() {
+    let mut form = integer_scalar("quire.op.integer.add");
+    let KaniForm::V2ScalarClaim { positions, .. } = &mut form else {
+        unreachable!("bounded add is a selected scalar")
+    };
+    let ContractRequestPosition::DriverItem {
+        result_selection, ..
+    } = &mut positions[0]
+    else {
+        unreachable!("first position is a driver")
+    };
+    *result_selection = ContractDriverResultSelection::NotApplicable;
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("kani")]),
     );
+    request.kani_form = form;
+    request.extent = unbounded(false);
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request.clone()
+        )
+        .disposition,
+        Disposition::InvalidRequest {
+            cause: Cause::KaniFormInvalid {
+                refusal: InvalidObligationItem::ScalarResultMissing,
+                ..
+            }
+        }
+    ));
+    request.candidates = Candidates::Set(Vec::new());
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request.clone()
+        )
+        .disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedRequestedCapability { .. }
+        }
+    ));
+    request.candidates = Candidates::Set(vec![candidate("kani")]);
+    request.extent = None;
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+            request
+        )
+        .disposition,
+        Disposition::InvalidRequest {
+            cause: Cause::AbsentExtent
+        }
+    ));
 }
 
 /// A checked integer function call settles only when the FR-021 lowering plan
@@ -1276,6 +1451,16 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
         }
         other => panic!("integer division must be unsupported by Kani: {other:?}"),
     }
+}
+
+/// Direct FR-015 classification remains available for checked-source callers.
+/// Trace: TC-025.
+#[test]
+fn direct_fr015_division_keeps_renderer_refusal() {
+    assert!(matches!(
+        source_derived_division_refusal(),
+        UnsupportedObligation::OperationNotRendered { .. }
+    ));
 }
 
 /// The classifier measures the same rendered source lines as generation and refuses before
@@ -1571,15 +1756,14 @@ fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
     }
 }
 
-/// Every claim-map form from the admitted scalar corpus has the same typed outcome at the
-/// public settlement seam as the Kani obligation classifier, including each exact refusal.
+/// Checked scalar nodes without source occurrences are invalid at the routed preflight seam,
+/// even when the direct FR-015 classifier has a result for the same nodes.
 ///
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-27, FR-019-AC-33, TC-030.
+/// Trace: FR-019-AC-44, TC-030.
 #[test]
-fn kani_settlement_matches_the_complete_checked_scalar_claim_map() {
+fn kani_routed_preflight_requires_selected_result_occurrences() {
     use quire_contract_codegen::{
-        negotiate_kani_obligations, KaniObligationOutcome, KaniObligationRequest,
-        ObligationDisposition, ObligationItem,
+        negotiate_kani_obligations, KaniObligationOutcome, KaniObligationRequest, ObligationItem,
     };
     use std::time::Duration;
 
@@ -1631,59 +1815,36 @@ fn kani_settlement_matches_the_complete_checked_scalar_claim_map() {
         "one FR-015 classification per typed claim"
     );
 
-    for (claim, record) in claim_map.items.iter().zip(records) {
+    for claim in &claim_map.items {
         let mut request = item(
             RequestedKind::Known(CapabilityKind::ValueValidity),
             Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
         );
-        request.kani_form = KaniForm::V2ScalarClaim {
-            package: Box::new(package.clone()),
-            node_id: claim.node_id.clone(),
-        };
+        request.kani_form = selected_scalar_form(package.clone(), claim.node_id.clone());
         let settlement = settle_one(
             vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
             request,
         );
-        match record.disposition {
-            ObligationDisposition::Supported { .. } => assert!(
-                matches!(settlement.disposition, Disposition::Supported { .. }),
-                "{}: supported FR-015 form was refused as {:?}",
-                claim.operation.identity,
-                settlement.disposition
-            ),
-            ObligationDisposition::RequiresBound { .. } => assert!(
-                matches!(settlement.disposition, Disposition::RequiresBound { .. }),
-                "{}: finite-bound requirement changed to {:?}",
-                claim.operation.identity,
-                settlement.disposition
-            ),
-            ObligationDisposition::Unsupported { reason } => match settlement.disposition {
-                Disposition::Unsupported {
-                    cause: Cause::KaniFormRefused { refusal, .. },
-                } if refusal == reason => {}
-                other => panic!(
-                    "{}: FR-015 refusal {reason:?} changed to {other:?}",
-                    claim.operation.identity
-                ),
-            },
-            ObligationDisposition::InvalidRequest { reason } => match settlement.disposition {
+        assert!(
+            matches!(
+                settlement.disposition,
                 Disposition::InvalidRequest {
-                    cause: Cause::KaniFormInvalid { refusal, .. },
-                } if refusal == reason => {}
-                other => panic!(
-                    "{}: FR-015 invalid-item refusal {reason:?} changed to {other:?}",
-                    claim.operation.identity
-                ),
-            },
-        }
+                    cause: Cause::KaniFormInvalid {
+                        refusal: InvalidObligationItem::ScalarResultMissing,
+                        ..
+                    }
+                }
+            ),
+            "{} has no checked source occurrence",
+            claim.operation.identity
+        );
     }
 }
 
-/// Every scalar family reaches the public form selector through checked IR derivation, with the
-/// renderer's exact typed refusal preserved for families outside the current scalar harness.
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-33
+/// Every scalar family retains its typed identity when a source occurrence is missing.
+/// Trace: FR-019-AC-44, TC-030.
 #[test]
-fn kani_scalar_family_selectors_preserve_each_exact_refusal() {
+fn kani_scalar_family_selectors_require_selected_result() {
     use quire_contract_codegen::KaniFormFamily;
 
     let (package, claim_map, _) = crate::kani_obligations::scalar_package();
@@ -1700,16 +1861,13 @@ fn kani_scalar_family_selectors_preserve_each_exact_refusal() {
         ("quire.op.enum.eq", KaniFormFamily::Enum, false),
         ("quire.op.quantity.add", KaniFormFamily::Quantity, false),
     ];
-    for (operation, expected_family, no_derivable_claim) in selectors {
+    for (operation, expected_family, _) in selectors {
         let source_claim = claim_map
             .items
             .iter()
             .find(|claim| claim.operation.identity == operation)
             .unwrap_or_else(|| panic!("scalar fixture lacks {operation}"));
-        let form = KaniForm::V2ScalarClaim {
-            package: Box::new(package.clone()),
-            node_id: source_claim.node_id.clone(),
-        };
+        let form = selected_scalar_form(package.clone(), source_claim.node_id.clone());
         let settled = settle_one(
             vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
             RequestItem {
@@ -1721,30 +1879,22 @@ fn kani_scalar_family_selectors_preserve_each_exact_refusal() {
             },
         );
         match settled.disposition {
-            Disposition::Unsupported {
-                cause: Cause::KaniFormRefused { form, refusal, .. },
-            } => {
-                assert_eq!(form.family, expected_family, "{operation}");
-                if no_derivable_claim {
-                    assert!(
-                        matches!(refusal, UnsupportedObligation::NoDerivableClaim { .. }),
-                        "{operation} lost its exact FR-015 derivation refusal: {refusal:?}"
-                    );
-                } else {
-                    assert!(
-                        matches!(refusal, UnsupportedObligation::OperationNotRendered { .. }),
-                        "{operation} lost its exact FR-015 renderer refusal: {refusal:?}"
-                    );
-                }
-            }
+            Disposition::InvalidRequest {
+                cause:
+                    Cause::KaniFormInvalid {
+                        form,
+                        refusal: InvalidObligationItem::ScalarResultMissing,
+                        ..
+                    },
+            } => assert_eq!(form.family, expected_family, "{operation}"),
             other => panic!("{operation} selector settled unexpectedly: {other:?}"),
         }
     }
 }
 
-/// Trace: FR-019-AC-25, FR-019-AC-33
+/// Trace: FR-019-AC-44, TC-030.
 #[test]
-fn kani_boolean_operator_selector_has_exact_derivation_refusal() {
+fn kani_boolean_operator_selector_requires_selected_result() {
     let (package, node_id) = crate::kani_obligations::boolean_operation_package();
     let settled = settle_one(
         vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
@@ -1753,33 +1903,28 @@ fn kani_boolean_operator_selector_has_exact_derivation_refusal() {
             extent: bounded(),
             named_backend: None,
             candidates: Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
-            kani_form: KaniForm::V2ScalarClaim {
-                package: Box::new(package),
-                node_id,
-            },
+            kani_form: selected_scalar_form(package, node_id),
         },
     );
     assert!(matches!(
         settled.disposition,
-        Disposition::Unsupported {
-            cause: Cause::KaniFormRefused {
+        Disposition::InvalidRequest {
+            cause: Cause::KaniFormInvalid {
                 form: quire_contract_codegen::KaniFormIdentity {
                     family: quire_contract_codegen::KaniFormFamily::Boolean,
                     ..
                 },
-                refusal: UnsupportedObligation::NoDerivableClaim { .. },
+                refusal: InvalidObligationItem::ScalarResultMissing,
                 ..
             }
         }
     ));
 }
 
-/// Nodes outside the scalar claim family preserve distinct source-derived refusals: a checked
-/// value has no derivable claim, while a state clause is rejected by the scalar path's finite
-/// encoding classifier.
-/// Trace: FR-019-AC-25, FR-019-AC-27, FR-019-AC-33
+/// Nonexpression checked nodes cannot furnish a selected scalar result.
+/// Trace: FR-019-AC-44, TC-030.
 #[test]
-fn kani_scalar_path_refuses_nonderivable_and_state_nodes_exactly() {
+fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
     let (package, _, _) = crate::kani_obligations::scalar_package();
     let value = package
         .graph()
@@ -1794,17 +1939,14 @@ fn kani_scalar_path_refuses_nonderivable_and_state_nodes_exactly() {
             extent: bounded(),
             named_backend: None,
             candidates: Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
-            kani_form: KaniForm::V2ScalarClaim {
-                package: Box::new(package.clone()),
-                node_id: value.node_id.clone(),
-            },
+            kani_form: selected_scalar_form(package.clone(), value.node_id.clone()),
         },
     );
     assert!(matches!(
         value_settlement.disposition,
-        Disposition::Unsupported {
-            cause: Cause::KaniFormRefused {
-                refusal: UnsupportedObligation::NoDerivableClaim { .. },
+        Disposition::InvalidRequest {
+            cause: Cause::KaniFormInvalid {
+                refusal: InvalidObligationItem::ScalarResultMissing,
                 ..
             }
         }
@@ -1830,22 +1972,16 @@ fn kani_scalar_path_refuses_nonderivable_and_state_nodes_exactly() {
             extent: bounded(),
             named_backend: None,
             candidates: Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
-            kani_form: KaniForm::V2ScalarClaim {
-                package: Box::new(state.package),
-                node_id: state.clause,
-            },
+            kani_form: selected_scalar_form(state.package, state.clause),
         },
     );
-    let Disposition::Unsupported {
-        cause: Cause::KaniFormRefused { form, refusal, .. },
+    let Disposition::InvalidRequest {
+        cause: Cause::KaniFormInvalid { form, refusal, .. },
     } = state_settlement.disposition
     else {
         panic!("state clause did not retain its scalar-path refusal: {state_settlement:?}");
     };
-    assert!(matches!(
-        refusal,
-        UnsupportedObligation::NoFiniteEncoding { .. }
-    ));
+    assert_eq!(refusal, InvalidObligationItem::ScalarResultMissing);
     assert_eq!(
         form.operation_identity.as_deref(),
         Some(expected_operation.as_str())
@@ -1854,16 +1990,6 @@ fn kani_scalar_path_refuses_nonderivable_and_state_nodes_exactly() {
         form.role,
         Some(quire_contract_codegen::KaniObligationRole::Postcondition)
     );
-}
-
-fn refused_form_identity(operation_identity: &str) -> quire_contract_codegen::KaniFormIdentity {
-    quire_contract_codegen::KaniFormIdentity {
-        family: quire_contract_codegen::KaniFormFamily::Integer,
-        form: quire_contract_codegen::KaniFormName::V2ScalarClaim,
-        operation_identity: Some(operation_identity.to_owned()),
-        role: None,
-        state_frame_role: None,
-    }
 }
 
 /// Form refusal follows candidate validation and precedes mode settlement.
@@ -1890,7 +2016,10 @@ fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
     ));
 
     let in_set = integer_scalar("quire.op.integer.add");
-    let KaniForm::V2ScalarClaim { package, node_id } = in_set else {
+    let KaniForm::V2ScalarClaim {
+        package, node_id, ..
+    } = in_set
+    else {
         unreachable!("integer scalar helper returns a V2 scalar form")
     };
     one.kani_form = KaniForm::OutsideSet { package, node_id };

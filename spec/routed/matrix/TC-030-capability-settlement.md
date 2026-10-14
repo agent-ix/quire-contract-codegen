@@ -46,7 +46,7 @@ Settle the two-candidate item again under the reverse registration order and
 compare the disposition, the cause and the order of the named candidates.
 
 Use the public negotiation API with typed IR forms and one Kani descriptor.
-For FR-019-AC-42 and AC-43, build an admitted checked source and its matching
+For FR-019-AC-43 and AC-44, build an admitted checked source and its matching
 ContractPackage with one `integer.add` node used by two driver positions.
 Select distinct `expression` application occurrences and different direct
 `numeric.narrow` conversions through typed `OwnResult` selections and
