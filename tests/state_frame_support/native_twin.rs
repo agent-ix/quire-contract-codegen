@@ -630,6 +630,38 @@ impl Twin {
         self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
     }
 
+    /// Admit QSL's emitted graph with an unread field declared as a selected model variant.
+    pub fn emitted_package_with_unread_variant_audit(
+        &self,
+        clause: &str,
+    ) -> (CheckedPackageV2, CheckedNodeId) {
+        let mut document: Value = serde_json::from_slice(&self.domain).expect("domain document");
+        document["constructs"]
+            .as_array_mut()
+            .expect("constructs")
+            .push(construct(
+                "variant_type",
+                "quire.meaning.model.variant-type/v1",
+            ));
+        let audit = document["types"]
+            .as_array_mut()
+            .expect("types")
+            .iter_mut()
+            .find(|ty| ty["identity"] == range_type("audit"))
+            .expect("audit value type");
+        audit["kind"]["name"] = json!("variant_type");
+        audit
+            .as_object_mut()
+            .expect("audit declaration")
+            .remove("scalar");
+        audit["constraints"] = json!([]);
+        audit["variants"] = json!([
+            {"identity": format!("{}/Clear", range_type("audit")), "name": "Clear"},
+            {"identity": format!("{}/Flagged", range_type("audit")), "name": "Flagged"},
+        ]);
+        self.emitted_package_with_model(clause, Some(document.to_string().into_bytes()))
+    }
+
     fn emitted_package_with_model(
         &self,
         clause: &str,

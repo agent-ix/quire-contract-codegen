@@ -2711,6 +2711,68 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
     }
 }
 
+/// An unread selected-model variant has a typed member but no integer range. The bounded
+/// balance control still generates, while the variant stays unranged in the persisted identity.
+///
+/// Trace: FR-015-AC-78, FR-015-AC-81
+#[test]
+fn selected_model_variant_field_is_unranged_in_generated_frame_identity() {
+    let (package, clause) = Twin::build(&["balance"], &[CLAUSES[0]], 0)
+        .emitted_package_with_unread_variant_audit("BalanceNeverDrops");
+    let object = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &*node.semantic_form == "object_type")
+        .expect("object declaration");
+    let fields = package
+        .model_object_fields(&object.node_id)
+        .expect("selected model fields");
+    assert!(matches!(
+        fields.field("audit").expect("present audit").member_type(),
+        Some(CheckedMemberType::Variant(_))
+    ));
+    assert_eq!(
+        fields
+            .field("balance")
+            .expect("present balance")
+            .member_type(),
+        Some(&CheckedMemberType::IntRange {
+            lower: 0,
+            upper: 1000,
+        })
+    );
+    let generated = generate_state_frame_obligations(&StateFrameRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(KANI_TIMEOUT),
+        package: &package,
+        clause: &clause,
+        state_path: STATE_PATH,
+        state_fields: &STATE_FIELDS,
+        subject_path: SUBJECT_PATH,
+        unwind: 4,
+    })
+    .expect("the balance clause still generates");
+    assert_eq!(
+        generated.frame.identity.domains,
+        vec![StateFieldDomain {
+            field: "balance".to_owned(),
+            minimum: 0,
+            maximum: 1000,
+        }]
+    );
+    assert_eq!(generated.frame.identity.unranged.len(), 1);
+    assert_eq!(generated.frame.identity.unranged[0].field, "audit");
+    assert_eq!(
+        generated.frame.identity.unranged[0].reason,
+        quire_contract_codegen::StateUnrangedReason::TypeNotRange
+    );
+    assert_eq!(
+        StateFrameIdentity::from_record(&generated.frame.record.contents)
+            .expect("the frame record decodes"),
+        generated.frame.identity
+    );
+}
+
 /// The playback is decoded against the harness's draw order, not the order of its ranges or its
 /// grants: a harness that draws `audit` first reads the first playback value as `audit`, and the
 /// pre snapshot tie sees that.
