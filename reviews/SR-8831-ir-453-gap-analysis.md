@@ -25,3 +25,10 @@ FAIL. NFR-005-AC-1's executable source scan detects new `expect` and `unwrap` ca
 ## Coverage
 
 Plan completion: not assessed. `quoin matrix --repo . --json` reports FR-015-AC-57 as `tagged-by-ignored-test`; AC-82 through AC-93 and AC-95 are untagged; AC-94 is tagged. These rows were not changed in this PR. The new Kani replay behavior is exercised only by `tc_023_real_corpus_playback_replays_through_its_qsl_source`, marked ignored for the Kani lane. `KaniTemp::run` combines that process's exported report and output; `classify_kani_run` takes a transcript only after the report has a failed property, and `decode_playback` checks the transcript harness. Replay behavior is limited to the changed corpus path. Its explicit run passed. The compile-only test includes reachable graph and true collection cases but never evaluates their QSL predicate. The real-Kani test only replays unreachable graph and false collection inputs; replacing both QSL renderers with constant `false` preserves those test outcomes while breaking every true case. No reverse-gap inventory of unrelated repository modules was made; this review's reverse-gap scope was limited to the changed replay behavior.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Production graph rendering and dependency-name construction now propagate errors instead of panicking. |
+| FND-002 | fixed | The focused test evaluates retained QSL for every corpus case and compares it with the case's Boolean claim. |

@@ -32,3 +32,10 @@ FAIL. The new production source adds `expect` and `unwrap` calls in `src/kani/ge
 ## Coverage
 
 `cargo test tc_042_ac1_src_holds_no_panic_token -- --nocapture` failed and reported `src/kani/generate/corpus/bounded_kani_corpus.rs: ["expect", "unwrap"]`. `cargo test tc_023_real_corpus_playback_replays_through_its_qsl_source -- --ignored --nocapture` passed (1 test). The latter invokes `cargo kani -Z concrete-playback -Z unstable-options --export-json ... --harness <case symbol> --concrete-playback print`; `classify_kani_run` requires the exported report to show a failed property and obtains the transcript from console output. The decoder then checks the playback's generated harness symbol before QSL replay. Oracle check: `false_cases()` supplies only unreachable graph and false collection cases; `tc_023_each_corpus_case_compiles_its_retained_qsl_source` compiles true cases but does not evaluate them, so a constant-false QSL graph/collection mutant survives both tests. No full suite was run.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Production graph rendering and dependency-name construction now propagate errors instead of panicking. |
+| FND-002 | fixed | The focused test evaluates retained QSL for every corpus case and compares it with the case's Boolean claim. |
