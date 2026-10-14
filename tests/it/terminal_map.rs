@@ -1002,7 +1002,7 @@ fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
 /// `Proved` carries the transcript's SUCCESS check count, zero included, and a `Counterexample`
 /// with a reproduced replay is `Refuted`.
 ///
-/// Trace: FR-030-AC-4, TC-041
+/// Trace: FR-030-AC-4, FR-030-AC-18, TC-041
 #[test]
 fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refutes() {
     let proved = ir(KaniOutcomeKind::Proved, Std001Code::KANI_PROVED);
@@ -1029,7 +1029,7 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
 /// `Inconclusive` with `kani_vacuous_proof` is a certified `Proved` with zero checks whatever
 /// count the caller passes; with any other code it is `Failed`.
 ///
-/// Trace: FR-030-AC-5, TC-041
+/// Trace: FR-030-AC-5, FR-030-AC-18, TC-041
 #[test]
 fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_failed() {
     let outcome = |code| ir(KaniOutcomeKind::Inconclusive, code);

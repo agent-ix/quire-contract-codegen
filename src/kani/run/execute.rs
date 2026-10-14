@@ -1539,6 +1539,62 @@ wait
         );
     }
 
+    /// A live cancellation recorded before accepting a measured overage cannot replace it.
+    /// Trace: FR-040-AC-4
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn measured_memory_overage_competing_with_cancellation_keeps_resource_outcome() {
+        use super::super::owners::{LaunchOwners, SystemPoll};
+
+        let ceiling = 32 * 1024 * 1024;
+        let harness = memory_member("overage_cancel", ceiling);
+        let mut stand_in = StandIn::running("cancel-measured-overage", CHILD_MEMORY_OVERAGE);
+        let (memory, observation) = OwnerGate::new();
+        stand_in.installation = KaniInstallation::with_owners(
+            stand_in.installation.launcher.clone(),
+            std::sync::Arc::new(LaunchOwners {
+                memory: std::sync::Arc::new(ControlledOverage {
+                    ceiling,
+                    gate: memory.clone(),
+                }),
+                stdout: std::sync::Arc::new(SystemPoll),
+                stderr: std::sync::Arc::new(SystemPoll),
+                confirmation: std::sync::Arc::new(SystemPoll),
+            }),
+        );
+        let evidence = std::thread::scope(|scope| {
+            let worker = scope.spawn(|| execute_kani_obligation(&stand_in.request(&harness, T)));
+            observation.entered();
+            stand_in.cancel.cancel(quire_exact::CancelCause::Deadline);
+            assert_eq!(
+                stand_in.cancel.cause(),
+                Some(quire_exact::CancelCause::Deadline)
+            );
+            observation.release();
+            worker.join().unwrap().unwrap()
+        });
+        assert!(memory.claimed.load(std::sync::atomic::Ordering::Acquire));
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::MemoryExhausted
+            }
+        );
+        assert_eq!(evidence.ceilings, harness.identity.ceilings);
+        assert_eq!(
+            evidence.memory.mechanism,
+            crate::kani::run::memory::MemoryMechanism::LinuxPidNamespaceProcfsTreeRss
+        );
+        assert!(evidence.memory.peak_resident_bytes.unwrap() > ceiling);
+        assert_eq!(evidence.cancellation_terminal_value().unwrap(), None);
+        assert_eq!(evidence.exit_code, None);
+        assert_eq!(evidence.success_checks, 0);
+        assert!(evidence.checks.is_empty());
+        assert_eq!(stand_in.calls().len(), 1);
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
+        recorded_process_gone(&stand_in.directory.join("calls.sibling"));
+    }
+
     /// Trace: FR-028-AC-21.
     // Exercises the real Linux namespace/procfs bounded execution API.
     #[cfg(target_os = "linux")]
@@ -2133,6 +2189,29 @@ exec sleep 45
     struct FailingMemory {
         ready: PathBuf,
         gate: std::sync::Arc<OwnerGate>,
+    }
+
+    /// Pause only after the real observer has measured overage; return its exact sample.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct ControlledOverage {
+        ceiling: u64,
+        gate: std::sync::Arc<OwnerGate>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::MemorySampling for ControlledOverage {
+        fn observe(
+            &self,
+            observer: &mut super::super::memory::MemoryObserver,
+            root: u32,
+        ) -> std::io::Result<u64> {
+            let measured = observer.observe(root)?;
+            if measured > self.ceiling {
+                self.gate.enter();
+            }
+            Ok(measured)
+        }
     }
 
     #[cfg(target_os = "linux")]
