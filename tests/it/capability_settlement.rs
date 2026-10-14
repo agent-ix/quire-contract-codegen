@@ -454,7 +454,7 @@ fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
     );
 }
 
-/// Trace: FR-019-AC-20, FR-019-AC-18, FR-019-AC-8, TC-046
+/// Trace: FR-019-AC-42, FR-019-AC-18, FR-019-AC-8, TC-046
 #[test]
 fn process_manifest_bounds_keep_absence_distinct_from_present_empty() {
     let absent = process("solver", &[Mode::Bounded], &[DomainKind::Integer]);
