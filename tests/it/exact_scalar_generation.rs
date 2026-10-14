@@ -3388,10 +3388,10 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
 /// The non-test code of the three oracle generators reads no `failed` record's limit kind: it
 /// names no `CheckedPackageLimit`, accesses no `.limit_kind`, and meets a `Failed` record only at
 /// an arm that binds nothing (`Failed { .. }`) and hands the record to
-/// `classify_lowering_failure`. Refusal variants may carry a `limit_kind` field. The scalar
-/// generator may name that field only inside its operand-range refusal, or inside the
-/// unrecognised-lowering refusal and its conversion. It still cannot read a failed lowering
-/// record's kind: the shared module names `CheckedPackageLimit`.
+/// `classify_lowering_failure`. The scalar generator may name `limit_kind` only inside the
+/// unrecognised-lowering refusal and its conversion; operand-range resource refusals use their
+/// distinct `resource_kind` field. The shared module names `CheckedPackageLimit` and is the only
+/// generator module that reads a failed lowering record's limit kind.
 #[test]
 fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -3427,8 +3427,7 @@ fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
                 let permitted_variant = lines[..at]
                     .iter()
                     .rposition(|earlier| {
-                        earlier.contains("OperandRangeLimitExceeded")
-                            || earlier.contains("LoweringLimitUnrecognised")
+                        earlier.contains("LoweringLimitUnrecognised")
                             || earlier.contains("LimitUnrecognised")
                     })
                     .is_some_and(|variant_at| at - variant_at <= 12);

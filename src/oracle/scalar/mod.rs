@@ -502,7 +502,7 @@ pub enum ExactScalarRefusal {
         /// The expression whose visit exceeded the ceiling.
         node_id: CheckedNodeId,
         /// The finite limit that was reached.
-        limit_kind: OperandRangeLimitKind,
+        resource_kind: OperandRangeLimitKind,
         /// The configured limit.
         limit: u64,
         /// The first denied count or endpoint width.
@@ -1846,7 +1846,7 @@ fn infer_integer_range(
         if is_application && application_depth > OPERAND_RANGE_MAX_DEPTH {
             return Err(ExactScalarRefusal::OperandRangeLimitExceeded {
                 node_id: node_id.clone(),
-                limit_kind: OperandRangeLimitKind::Depth,
+                resource_kind: OperandRangeLimitKind::Depth,
                 limit: OPERAND_RANGE_MAX_DEPTH,
                 consumed: application_depth,
             });
@@ -1858,7 +1858,7 @@ fn infer_integer_range(
         if *work > OPERAND_RANGE_MAX_WORK {
             return Err(ExactScalarRefusal::OperandRangeLimitExceeded {
                 node_id: node_id.clone(),
-                limit_kind: OperandRangeLimitKind::Nodes,
+                resource_kind: OperandRangeLimitKind::Nodes,
                 limit: OPERAND_RANGE_MAX_WORK,
                 consumed: *work,
             });
@@ -2059,7 +2059,7 @@ fn check_operand_endpoint_bits(
         if consumed > OPERAND_RANGE_MAX_ENDPOINT_BITS {
             return Err(ExactScalarRefusal::OperandRangeLimitExceeded {
                 node_id: node_id.clone(),
-                limit_kind: OperandRangeLimitKind::EndpointBits,
+                resource_kind: OperandRangeLimitKind::EndpointBits,
                 limit: OPERAND_RANGE_MAX_ENDPOINT_BITS,
                 consumed,
             });
@@ -4628,7 +4628,7 @@ mod tests {
             infer_integer_range(&graph, &root, 0),
             Err(ExactScalarRefusal::OperandRangeLimitExceeded {
                 node_id: shared,
-                limit_kind: OperandRangeLimitKind::Depth,
+                resource_kind: OperandRangeLimitKind::Depth,
                 limit: 64,
                 consumed: 65,
             })

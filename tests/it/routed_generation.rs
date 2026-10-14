@@ -1662,7 +1662,7 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
         ObligationDisposition::Unsupported {
             reason: UnsupportedObligation::OracleRefused {
                 refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
-                    limit_kind: quire_contract_codegen::OperandRangeLimitKind::Depth,
+                    resource_kind: quire_contract_codegen::OperandRangeLimitKind::Depth,
                     limit: 64,
                     consumed: 65,
                     ..
@@ -1680,7 +1680,7 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
             ObligationDisposition::Unsupported {
                 reason: UnsupportedObligation::OracleRefused {
                     refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
-                        limit_kind: quire_contract_codegen::OperandRangeLimitKind::EndpointBits,
+                        resource_kind: quire_contract_codegen::OperandRangeLimitKind::EndpointBits,
                         limit: 4096,
                         consumed: 5050,
                         ..
@@ -1711,7 +1711,7 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
             ObligationDisposition::Unsupported {
                 reason: UnsupportedObligation::OracleRefused {
                     refusal: ExactScalarRefusal::OperandRangeLimitExceeded {
-                        limit_kind: quire_contract_codegen::OperandRangeLimitKind::Nodes,
+                        resource_kind: quire_contract_codegen::OperandRangeLimitKind::Nodes,
                         limit: 4096,
                         consumed: 4097,
                         ..
