@@ -436,12 +436,7 @@ fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() 
     )
     .unwrap();
     assert_eq!(false_graph.outcome.boolean_claim(), Some(false));
-    let playback =
-        assert_empty_valued_falsification(classify_corpus(&false_graph, "corpus_case_graph"));
-    assert_eq!(
-        false_graph.replay_counterexample(&playback).unwrap(),
-        ReplayVerdict::Reproduced
-    );
+    assert_empty_valued_falsification(classify_corpus(&false_graph, "corpus_case_graph"));
 }
 
 /// Without its cover a corpus harness carries no cover summary, so the cover is what lets a
@@ -505,12 +500,59 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
         &mut EmittedCorpusIdentities::new(),
     )
     .unwrap();
-    let playback =
-        assert_empty_valued_falsification(classify_corpus(&generated, "corpus_case_collection"));
-    assert_eq!(
-        generated.replay_counterexample(&playback).unwrap(),
-        ReplayVerdict::Reproduced
-    );
+    assert_empty_valued_falsification(classify_corpus(&generated, "corpus_case_collection"));
+}
+
+/// Captured Kani counterexamples for false corpus cases reproduce through each case's QSL source.
+///
+/// Trace: FR-015-AC-57, TC-023.
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
+    let (profile, dispatch, input) = fixture();
+    let graph = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Graph(GraphRequest {
+            source_id: "source".to_owned(),
+            start_id: "b".to_owned(),
+            target_id: "a".to_owned(),
+            field_id: "next".to_owned(),
+            max_expansions: 2,
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+    let collection = generate_bounded_kani_corpus_case(
+        crate::common::proof_ceilings::proof_ceilings(),
+        &profile,
+        &dispatch,
+        &input,
+        BoundedCorpusRequest::Collection(CollectionQuery {
+            source_id: "source".to_owned(),
+            values: vec![2, 2],
+            max_items: 2,
+            kind: QueryKind::ExistsEqual(7),
+        }),
+        &[],
+        &mut EmittedCorpusIdentities::new(),
+    )
+    .unwrap();
+
+    for (case, harness_filter) in [
+        (graph, "corpus_case_graph"),
+        (collection, "corpus_case_collection"),
+    ] {
+        let playback = falsification_playback(classify_corpus(&case, harness_filter));
+        assert_eq!(
+            case.replay_counterexample(&playback).unwrap(),
+            ReplayVerdict::Reproduced,
+            "{harness_filter} counterexample should replay through its source"
+        );
+    }
 }
 
 /// Runs the corpus case's oracle and harness as one crate under the installed backend and
@@ -578,7 +620,11 @@ fn classify_corpus(
 }
 
 /// A corpus case draws no input, so a falsification's playback carries no value.
-fn assert_empty_valued_falsification(outcome: KaniRunOutcome) -> String {
+fn assert_empty_valued_falsification(outcome: KaniRunOutcome) {
+    let _ = falsification_playback(outcome);
+}
+
+fn falsification_playback(outcome: KaniRunOutcome) -> String {
     let KaniRunOutcome::Falsified { counterexample } = outcome else {
         panic!("expected a falsified corpus case, got {outcome:?}");
     };
