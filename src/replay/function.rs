@@ -762,6 +762,8 @@ impl<'a> From<&'a SpineReplayError> for ReplaySettlement<'a> {
             | SpineReplayError::FieldDelimiter
             | SpineReplayError::Transcript(_)
             | SpineReplayError::WrongArm
+            | SpineReplayError::NoInputValue
+            | SpineReplayError::PackageIdentity
             | SpineReplayError::Identity(_) => Self::CgDefect,
             SpineReplayError::Refused(refusal) => Self::Refused(refusal),
         }
