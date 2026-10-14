@@ -316,7 +316,7 @@ mod tests {
             advertised: Vec::new(),
             origin: ProviderOrigin::Process,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         };
         let routes = [function.clone(), absent.clone(), function.clone()]
             .into_iter()
@@ -527,7 +527,7 @@ mod tests {
                 advertised: Vec::new(),
                 origin: ProviderOrigin::Linked,
                 domains: None,
-                bounds: Default::default(),
+                bounds: None,
             };
             let routes = [expression, absent]
                 .into_iter()
@@ -796,7 +796,7 @@ mod tests {
             advertised: Vec::new(),
             origin: ProviderOrigin::Linked,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         };
         let routes = (0..2)
             .map(|request_index| {
@@ -1353,7 +1353,7 @@ mod tests {
             advertised: Vec::new(),
             origin: ProviderOrigin::Linked,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         };
         let routed = [RoutedGenerationItem::from_descriptor(
             3,

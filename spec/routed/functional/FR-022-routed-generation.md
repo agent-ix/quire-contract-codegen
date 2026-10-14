@@ -90,9 +90,12 @@ the kind as this crate's `BackendKind`, and the node as the IR
 already does for the FR-331 envelope.
 
 For that envelope, the driver projects each descriptor from QSL `Registry::descriptors()` once
-into CG's own `BackendDescriptor`, copying identity, advertised (kind, mode) pairs
-and `origin()` without changing their meaning (FR-019-AC-15). QSL layer R owns the closed origin
-vocabulary (QSL FR-288, ADR-029 PV-1); CG's type is its local projection under ADR-013 T-7. The
+into CG's own `BackendDescriptor`, copying identity, advertised (kind, mode) pairs,
+optional manifest `bounds` and `origin()` without changing their meaning (FR-019-AC-15,
+FR-019-AC-20). In particular, absent and present-empty `bounds` remain distinct in the
+descriptor passed to routed construction; neither changes its backend-kind decision.
+QSL layer R owns the closed origin vocabulary (QSL FR-288, ADR-029 PV-1); CG's type is
+its local projection under ADR-013 T-7. The
 driver's registration conversion supplies the origin to QSL's descriptor; its registry
 holds and conflict-checks that value. Neither this routed-item conversion nor CG infers one from
 the backend identity, provider bytes or a side map. The current built-in

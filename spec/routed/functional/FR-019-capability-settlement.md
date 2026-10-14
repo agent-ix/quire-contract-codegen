@@ -66,10 +66,12 @@ nothing says so.
   items. Each CG-owned `BackendDescriptor` carries a typed `ProviderOrigin`
   (`Linked` or `Process`)
   beside its identity, advertised (kind, mode) pairs, and the FR-331 manifest's
-  advertised `domains` and `bounds`. The manifest's `bounds` are run-limit defaults, not
+  advertised `domains` and optional `bounds`. The manifest's `bounds` are run-limit defaults, not
   admission limits; the process arm does not compare their numbers with item
-  proof bounds (QSpec FR-331). The driver copies `domains` and `bounds` from the same FR-331
-  manifest descriptor as the advertised pairs; QSL's route descriptor carries
+  proof bounds (QSpec FR-331). An absent `bounds` member remains absent in the CG
+  descriptor; a present empty map remains present and empty. The driver copies
+  `domains` and `bounds` from the same FR-331 manifest descriptor as the advertised
+  pairs; QSL's route descriptor carries
   advertised pairs but no `domains` or `bounds`. QSL-654 owns the matching
   PV-4 wording update.
 - Per request item: its one required FR-290 capability kind, its extent and
@@ -382,7 +384,7 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-17 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item settles `requires-bound` exactly when `finite_bound_available` is true and every boundable `extent.domains[].kind` is in manifest `domains` (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-18 | PLANNED (IR-629). Given the same process advertisements and item extent, changing only backend identity, manifest position, manifest run-limit defaults or ambient state leaves the disposition and cause unchanged apart from the backend named in the output. | Test (TC-046) |
 | FR-019-AC-19 | PLANNED (IR-629; bounded row depends on QSL-654's producer). The process arm reads each explicit `extent.bounds[].kind` and never derives a domain kind from `DomainKey`; two otherwise equal bounded items with the same `DomainKey` and different explicit kinds can settle differently under one manifest `domains` set. | Test (TC-046) |
-| FR-019-AC-20 | PLANNED (IR-629). CG's process descriptor retains the FR-331 manifest's advertised (kind, mode) pairs, `domains` and `bounds` beside the IR-633 `id` and `origin` projection. | Test (TC-046) |
+| FR-019-AC-20 | CG's process descriptor retains the FR-331 manifest's advertised (kind, mode) pairs, `domains` and optional `bounds` beside the IR-633 `id` and `origin` projection. Otherwise equal process descriptors with absent and present-empty `bounds` remain distinct typed values, while settlement retains the same validation order and disposition for each. | Test (TC-046) |
 | FR-019-AC-21 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with any unadvertised boundable `extent.domains[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate, regardless of `finite_bound_available`; non-boundable kinds are not compared (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-22 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with every boundable `extent.domains[].kind` advertised and the item's `finite_bound_available=false` settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`. CG reads that flag from the item and does not derive it from the domain kinds (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-23 | PLANNED (IR-629; bounded row depends on QSL-654). Changing only a bounded item's proof-bound numeric maximum leaves its process-provider `supported` or `unsupported` disposition and cause unchanged. | Test (TC-046) |

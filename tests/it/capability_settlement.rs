@@ -10,7 +10,12 @@ use quire_contract_codegen::{
     RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
     CAPABILITY_VOCABULARY,
 };
-use std::{collections::BTreeSet, fs, os::unix::fs::PermissionsExt, process::Command};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    os::unix::fs::PermissionsExt,
+    process::Command,
+};
 
 #[allow(clippy::duplicate_mod)]
 #[path = "../exact_function_support/package.rs"]
@@ -22,7 +27,7 @@ fn kani(advertised: Vec<(CapabilityKind, Mode)>) -> BackendDescriptor {
         advertised,
         origin: ProviderOrigin::Linked,
         domains: None,
-        bounds: Default::default(),
+        bounds: None,
     }
 }
 
@@ -183,7 +188,7 @@ fn process(id: &str, modes: &[Mode], domains: &[DomainKind]) -> BackendDescripto
             .collect(),
         origin: ProviderOrigin::Process,
         domains: Some(domains.iter().copied().collect::<BTreeSet<_>>()),
-        bounds: Default::default(),
+        bounds: None,
     }
 }
 
@@ -413,9 +418,7 @@ fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
     );
     request.extent.as_mut().unwrap().bounds = vec![proof_bound(DomainKind::Integer, 1000)];
     let mut changed_defaults = backend.clone();
-    changed_defaults
-        .bounds
-        .insert("model_check.max_depth".to_owned(), 1);
+    changed_defaults.bounds = Some(BTreeMap::from([("model_check.max_depth".to_owned(), 1)]));
     assert_eq!(
         settle_one(vec![changed_defaults], request.clone()).disposition,
         supported
@@ -447,6 +450,44 @@ fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
                 domain: DomainKind::Population,
                 backend: "solver".to_owned(),
             }
+        }
+    );
+}
+
+/// Trace: FR-019-AC-20, FR-019-AC-18, FR-019-AC-8, TC-046
+#[test]
+fn process_manifest_bounds_keep_absence_distinct_from_present_empty() {
+    let absent = process("solver", &[Mode::Bounded], &[DomainKind::Integer]);
+    let present_empty = BackendDescriptor {
+        bounds: Some(BTreeMap::new()),
+        ..absent.clone()
+    };
+    assert_eq!(absent.bounds, None);
+    assert_eq!(present_empty.bounds, Some(BTreeMap::new()));
+    assert_ne!(absent, present_empty);
+
+    let valid = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate("solver")]),
+    );
+    assert_eq!(
+        settle_one(vec![absent.clone()], valid.clone()).disposition,
+        settle_one(vec![present_empty.clone()], valid.clone()).disposition
+    );
+
+    let mut invalid = valid;
+    invalid.kind = RequestedKind::Absent;
+    invalid.candidates = Candidates::UnknownBackend("missing".to_owned());
+    assert_eq!(
+        settle_one(vec![absent], invalid.clone()).disposition,
+        Disposition::InvalidRequest {
+            cause: Cause::AbsentKind,
+        }
+    );
+    assert_eq!(
+        settle_one(vec![present_empty], invalid).disposition,
+        Disposition::InvalidRequest {
+            cause: Cause::AbsentKind,
         }
     );
 }
@@ -773,7 +814,7 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
         origin: ProviderOrigin::Linked,
         domains: None,
-        bounds: Default::default(),
+        bounds: None,
     };
     let unarmed = settle_one(
         vec![registered_without_arm],
@@ -891,7 +932,7 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Unbounded)],
         origin: ProviderOrigin::Process,
         domains: None,
-        bounds: Default::default(),
+        bounds: None,
     };
     let first = kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]);
     // Candidate order is bytewise by identity, and is a property of the set
@@ -1882,7 +1923,7 @@ fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
         advertised: vec![(CapabilityKind::ValueValidity, Mode::Bounded)],
         origin: ProviderOrigin::Process,
         domains: None,
-        bounds: Default::default(),
+        bounds: None,
     };
     one.candidates = Candidates::Set(vec![
         candidate(BackendKind::Kani.identity()),

@@ -212,8 +212,9 @@ pub struct BackendDescriptor {
     pub origin: ProviderOrigin,
     /// Domain kinds admitted for finite proof bounds by the manifest.
     pub domains: Option<BTreeSet<DomainKind>>,
-    /// Manifest run-limit defaults; negotiation retains but never compares these values.
-    pub bounds: BTreeMap<String, u64>,
+    /// Optional manifest run-limit defaults; absence differs from a present empty map.
+    /// Negotiation retains but never compares these values.
+    pub bounds: Option<BTreeMap<String, u64>>,
 }
 
 impl BackendDescriptor {
