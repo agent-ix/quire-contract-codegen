@@ -127,6 +127,19 @@ pub fn generate_caller_text_oracle(
     })
 }
 
+/// Emit the generated public caller oracle source for embedding in a proof harness.
+///
+/// The proof harness consumes this artifact rather than reconstructing an equivalent wrapper, so
+/// agreement and mutation checks exercise the same function callers receive.
+pub(crate) fn generated_caller_text_oracle_source(
+    text_type: &TextType,
+) -> Result<String, CallerTextProofRefusal> {
+    let oracle = generate_caller_text_oracle(CallerTextAdmissionRequest {
+        text_type: *text_type,
+    })?;
+    Ok(oracle.source.contents)
+}
+
 /// Execute caller-ingress admission through Contract Runtime's exact API.
 pub fn admit_caller_text(
     payload: &quire_contract_runtime::exact::TextPayload,
@@ -173,10 +186,10 @@ pub fn generate_caller_text_proof_harness(
     let profile = profile_source(identity.profile);
     let min = identity.min;
     let max = identity.max;
-    let oracle = render_oracle_function();
+    let oracle = generated_caller_text_oracle_source(text_type)?;
     let source = format!(
         r#"pub mod caller_text {{
-use quire_contract_runtime::exact as rt;
+{oracle}
 
 fn unlimited_meter() -> rt::Meter {{
     rt::Meter::new(rt::ScalarLimits {{
@@ -206,8 +219,6 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
         _ => assert!(false, "completion/refusal disagreement"),
     }}
 }}
-
-{oracle}
 
 #[kani::proof]
 pub fn caller_text_admission_agrees() {{
@@ -256,10 +267,6 @@ pub fn caller_text_admission_agrees() {{
         solver: solver.to_owned(),
         options,
     })
-}
-
-fn render_oracle_function() -> String {
-    "pub fn admit_caller_text(operand: &rt::TextPayload, text_type: &rt::TextType, meter: &mut rt::Meter) -> rt::Outcome<rt::Text> {\n    rt::admit_text(operand, text_type, meter)\n}\n".to_owned()
 }
 
 pub(crate) fn caller_profile(

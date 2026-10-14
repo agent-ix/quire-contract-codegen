@@ -3,6 +3,7 @@
 use std::{
     env, fs,
     num::NonZeroU64,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -10,8 +11,8 @@ use std::{
 use quire_contract_codegen::{
     execute_kani_obligation, execute_kani_obligations, generate_caller_text_kani_harness,
     CallerTextKaniRequest, KaniCallerTextObligationHarness, KaniExecutableHarness,
-    KaniExecutionRefusal, KaniExecutionRequest, KaniInstallation, KaniRunOutcome, KaniSolver,
-    ProofCeilings, CALLER_TEXT_PAYLOAD_CLASS,
+    KaniExecutionRefusal, KaniExecutionRequest, KaniInstallation, KaniReportRefusal,
+    KaniRunOutcome, KaniSolver, KaniTool, KaniToolError, ProofCeilings, CALLER_TEXT_PAYLOAD_CLASS,
 };
 use quire_contract_runtime::exact::{TextProfile, TextType};
 
@@ -53,6 +54,96 @@ fn write_crate(root: &Path, harnesses: &[KaniCallerTextObligationHarness]) {
         .collect::<String>();
     fs::write(root.join("crate/src/lib.rs"), library).expect("write harness crate");
     crate::scratch_crate::write_manifest(&root.join("crate"), &manifest());
+}
+
+struct CallerExecutorLane {
+    root: PathBuf,
+    harness: KaniCallerTextObligationHarness,
+    installation: KaniInstallation,
+    crate_directory: PathBuf,
+    target_directory: PathBuf,
+}
+
+impl CallerExecutorLane {
+    fn new(label: &str, report: Option<&str>, exit: i32) -> Self {
+        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
+            .join("caller-text-executor")
+            .join(format!("{label}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let crate_directory = root.join("crate");
+        let target_directory = root.join("target");
+        fs::create_dir_all(crate_directory.join("src")).expect("create scratch crate");
+        fs::create_dir_all(&target_directory).expect("create target directory");
+        let harness = generate_caller_text_kani_harness(request(TextProfile::Nfc, 1, 1))
+            .expect("caller harness");
+        fs::write(crate_directory.join("src/lib.rs"), &harness.rust.contents)
+            .expect("write caller harness source");
+        let report_path = root.join("report.json");
+        if let Some(report) = report {
+            fs::write(&report_path, report).expect("write fake report");
+        }
+        let launcher = root.join("cargo-kani");
+        let copy_report = if report.is_some() {
+            format!("cp '{}' \"$last\"\n", report_path.display())
+        } else {
+            String::new()
+        };
+        fs::write(
+            &launcher,
+            format!(
+                "#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\nfor last; do :; done\n{copy_report}exit {exit}\n"
+            ),
+        )
+        .expect("write launcher");
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
+            .expect("make launcher executable");
+        Self {
+            root,
+            harness,
+            installation: KaniInstallation { launcher },
+            crate_directory,
+            target_directory,
+        }
+    }
+
+    fn request(&self) -> KaniExecutionRequest<'_> {
+        KaniExecutionRequest {
+            installation: &self.installation,
+            harness: KaniExecutableHarness::from(&self.harness),
+            crate_directory: &self.crate_directory,
+            target_directory: &self.target_directory,
+        }
+    }
+}
+
+impl Drop for CallerExecutorLane {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+fn caller_report(status: &str, checks: &[(&str, &str)]) -> String {
+    let checks: Vec<_> = checks
+        .iter()
+        .enumerate()
+        .map(|(index, (status, category))| {
+            serde_json::json!({
+                "id": index + 1,
+                "status": status,
+                "category": category,
+                "location": { "file": "src/lib.rs", "line": "10", "column": "5" }
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "metadata": { "version": "1.0" },
+        "verification_results": { "results": [{
+            "harness_id": "caller_text_nfc_1_1::caller_text_admission_agrees",
+            "status": status,
+            "checks": checks
+        }] }
+    })
+    .to_string()
 }
 
 /// Trace: FR-035-AC-4, FR-035-AC-5, FR-017-AC-26, TC-050.
@@ -167,4 +258,83 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
         .arguments
         .windows(selected.identity.options.len())
         .any(|options| options == selected.identity.options));
+}
+
+/// Caller Text identity remains attached to cover and inconclusive outcomes, while the same
+/// production execution path refuses a source mismatch, unavailable launcher, or malformed Kani
+/// report without producing evidence.
+///
+/// Trace: FR-017-AC-26, TC-050.
+#[test]
+fn tc_050_caller_executor_preserves_outcomes_and_refuses_untrusted_execution() {
+    let report = caller_report(
+        "Success",
+        &[("Success", "assertion"), ("Unsatisfiable", "cover")],
+    );
+    let cover = CallerExecutorLane::new("cover-unsatisfied", Some(&report), 0);
+    let evidence = execute_kani_obligation(&cover.request()).expect("classified caller report");
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::CoverUnsatisfied {
+            satisfied: 0,
+            total: 1
+        }
+    );
+    assert_eq!(evidence.kind, None);
+    assert_eq!(
+        evidence.caller_text_claim,
+        Some(cover.harness.identity.caller_claim.clone())
+    );
+    assert_eq!(
+        evidence.selected_harness_path.as_deref(),
+        Some("caller_text_nfc_1_1::caller_text_admission_agrees")
+    );
+
+    let malformed = CallerExecutorLane::new("malformed-report", Some("not json"), 1);
+    assert!(matches!(
+        execute_kani_obligation(&malformed.request()),
+        Err(KaniExecutionRefusal::Report(
+            KaniReportRefusal::Malformed { .. }
+        ))
+    ));
+
+    let failed = caller_report("Failure", &[("Failure", "assertion")]);
+    let inconclusive = CallerExecutorLane::new("no-playback", Some(&failed), 1);
+    let evidence = execute_kani_obligation(&inconclusive.request())
+        .expect("failure without playback is an inconclusive execution result");
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: quire_contract_codegen::KaniInconclusiveReason::FailedWithoutCounterexample
+        }
+    );
+    assert_eq!(
+        evidence.caller_text_claim,
+        Some(inconclusive.harness.identity.caller_claim.clone())
+    );
+    assert_eq!(
+        evidence.selected_harness_path.as_deref(),
+        Some("caller_text_nfc_1_1::caller_text_admission_agrees")
+    );
+
+    let mismatch = CallerExecutorLane::new("source-mismatch", Some(&report), 0);
+    fs::write(
+        mismatch.crate_directory.join("src/lib.rs"),
+        "pub fn unrelated() {}\n",
+    )
+    .expect("replace source with mismatched content");
+    assert!(matches!(
+        execute_kani_obligation(&mismatch.request()),
+        Err(KaniExecutionRefusal::HarnessNotInCrate { .. })
+    ));
+
+    let missing = CallerExecutorLane::new("missing-launcher", Some(&report), 0);
+    fs::remove_file(&missing.installation.launcher).expect("remove launcher");
+    assert!(matches!(
+        execute_kani_obligation(&missing.request()),
+        Err(KaniExecutionRefusal::Tool(KaniToolError::Io {
+            tool: KaniTool::Launcher,
+            ..
+        }))
+    ));
 }
