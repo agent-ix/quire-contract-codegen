@@ -1007,7 +1007,7 @@ fn compile_qsl_package(
         &DependencyInput::default(),
         &dependency_function,
     )
-    .map_err(|refusal| crate::replay::function::ReplayPackageError::CallSite(Box::new(refusal)))?
+    .map_err(crate::replay::function::ReplayPackageError::CallSite)?
     .package_id;
     ReplayPackage::new(
         ReplayInputs {
