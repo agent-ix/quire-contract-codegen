@@ -1078,7 +1078,7 @@ mod tests {
         super::compile_qsl_package(case).unwrap_or_else(|error| {
             panic!(
                 "the case's QSL source compiles and selects its generated function: {error}\n{}",
-                String::from_utf8_lossy(&source)
+                case.artifacts.qsl_source.contents
             )
         })
     }
@@ -1294,6 +1294,7 @@ mod tests {
     #[ignore = "kani lane: run serially after the IR-453 focused checks"]
     fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
         use crate::kani::classify::KaniRunOutcome;
+        use crate::replay::function::replay_harness_counterexample;
         use crate::{EvidenceFailureCause, HarnessSymbol, ReplayVerdict};
 
         let cases = false_cases();
@@ -1306,6 +1307,10 @@ mod tests {
                 .replay_counterexample(&counterexample)
                 .expect("QSL accepts the source-backed replay request");
             assert_eq!(verdict, ReplayVerdict::Reproduced);
+            let package = qsl_package(case);
+            let identity = package
+                .harness_identity(None, case.harness_symbol.clone(), Vec::new())
+                .expect("selected QSL function has a typed source identity");
 
             let other_case = cases
                 .iter()
