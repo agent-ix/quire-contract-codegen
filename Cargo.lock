@@ -1428,6 +1428,7 @@ dependencies = [
  "command-fds",
  "jsonschema 0.17.1",
  "num-bigint",
+ "proc-macro2",
  "proptest",
  "qsl-replay",
  "quire-canonical",
