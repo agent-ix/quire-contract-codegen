@@ -162,7 +162,7 @@ malformed native response or changed staged tree yields no receipt. Request-cont
 typed and occurs before either child is started; changing an otherwise valid operand produces a
 receipt for that exact ordered request, which cannot be substituted for a prior receipt.
 
-Paired routed-scalar proof/native receipt (FR-017-AC-27 to AC-30): generate a genuine routed
+Paired routed-scalar proof/native receipt (FR-017-AC-27 to AC-31): generate a genuine routed
 `x + 1` harness for an admitted integer domain, retain its complete `oracle_artifacts` and
 original scalar context, and request concrete operand `4` within the generated range. In the
 `make kani` lane, require the paired runner to stage the package and harness, run real Kani on the
@@ -172,20 +172,33 @@ that operand with the original `ScalarLimits`; the opaque receipt must contain a
 identity and Kani evidence. No result derived from the Kani verdict or supplied by the test caller
 counts.
 
+Order-sensitive binary receipt (FR-017-AC-31): generate a genuine routed subtraction operation
+with two symbolic operands over a domain admitting both concrete vectors `[4, 1]` and `[1, 4]`.
+Run each vector through the paired runner separately in the `make kani` lane. Each run must execute
+real Kani and report `Verified`, then invoke the staged public oracle with the exact ordered vector
+and original `ScalarLimits`. Require native `Outcome::Completed(3)` for `[4, 1]` and
+`Outcome::Completed(-3)` for `[1, 4]`; each opaque receipt must carry its own exact ordered vector
+and actual typed result. The receipts share the same canonical proof-content identity because the
+proved and executed staged bytes are unchanged. Both runs and both receipt assertions are
+mandatory; neither the unary `x + 1` case nor an optional binary case substitutes for them.
+
 Request-boundary controls (FR-017-AC-28): before either child starts, separately change the
 generated library bytes, generated artifact path, selected scalar identity, selected oracle symbol,
 operand count, operand value outside its retained range, and request limits relative to the original
 retained scalar context. Each inconsistent request must return a typed mismatch/refusal, produce no
 receipt, and leave a launch marker absent. For a two-operand scalar identity, change only the
 operand order and confirm the receipt retains the exact changed order; it must not be possible to
-reuse an earlier receipt as evidence for the reordered request. A different in-range operand vector
-may be run as a distinct request, but its receipt must bind that vector separately from the
+reuse an earlier receipt as evidence for the reordered request. The mandatory AC-31 binary runs
+must demonstrate this with the distinct subtraction results above. A different in-range operand
+vector may be run as a distinct request, but its receipt must bind that vector separately from the
 unchanged proof-content identity. A caller-selected digest must not make any inconsistent request
 acceptable.
 
-Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set, attempt a source-tree
-write from each child execution boundary, and require that neither child can change it. Inject a
-changed byte, replaced path and unexpected file after staging and across the Kani/native boundary;
+Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
+generated package, retained harness, native invocation adapter and resolved dependency lock;
+attempt a source-tree write from each child execution boundary, and require that neither child can
+change it. Inject a changed byte in each execution-relevant staged item, a replaced path and an
+unexpected file after staging and across the Kani/native boundary;
 each must produce a typed failure and no receipt carrying the earlier identity. Check that changes
 to the concrete operand vector, its order, original limits or scalar identity cannot be represented
 by reusing an earlier receipt. Inspect the public receipt surface to verify that it has read-only access to
@@ -239,7 +252,7 @@ at a time.
 
 The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
 not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No current
-main executable test covers FR-017-AC-27 to AC-30; those paired-run and mutation-control tests are
+main executable test covers FR-017-AC-27 to AC-31; those paired-run and mutation-control tests are
 required as part of the IR-791 implementation, not credited by this specification amendment.
 
 
