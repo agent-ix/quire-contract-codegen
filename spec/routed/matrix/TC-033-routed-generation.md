@@ -59,9 +59,11 @@ else claim requires `p=false`, and an unguarded item has no guard. Evaluate a
 counterexample with `p=false` against the then item and with `p=true` against
 the else item to verify neither counts as a proof of the opposite claim.
 Remove one record, then separately replace its result bound, conversion
-occurrence, application node and guard sequence with the other occurrence's
-values. Assert the typed refusal identifies the affected request index and
-occurrence and that no oracle, harness or obligation identity is emitted for
+occurrence and guard sequence with the other occurrence's values. Mismatch
+the item's occurrence-key node with the authenticated application selection
+in a separate case; the record has no application-node field. Assert that the
+typed refusal identifies the affected request index and occurrence and that
+no oracle, harness or obligation identity is emitted for
 that request. Keep the shared application node and the other record present
 so a node-id fallback would fail this test.
 
