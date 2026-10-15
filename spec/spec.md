@@ -49,8 +49,8 @@ results. A human release owner alone decides source release suitability.
 
 StR-001 is the one stakeholder requirement. Every functional requirement satisfies it. NFR-001 and
 NFR-002 constrain it, NFR-004 constrains FR-008 to FR-013, and NFR-005 constrains the panic-free
-generation of FR-014, FR-015, FR-019, FR-021 and FR-022. NFR-006 constrains FR-015, FR-017 and
-FR-031 by gating a change that can alter what real Kani proves on the real-Kani lane.
+generation of FR-014, FR-015, FR-019, FR-021 and FR-022. NFR-006 constrains FR-015, FR-017,
+FR-031 and FR-041 by gating a change that can alter what real Kani proves on the real-Kani lane.
 `interface-001` defines the serialized input, the library and CLI operations, the artifact bundle,
 the diagnostics and the evidence contract. AD-001 describes the architecture and its seams to
 Contract IR, Contract Runtime and QSL. ADR-001 to ADR-004 record the owner's decisions on the
@@ -72,7 +72,7 @@ input decision to expression and contract claims.
 | Caller Text admission | [FR-035](oracle/functional/FR-035-caller-text-admission.md) proposed generated admission oracle and bounded proof; [FR-017](kani/functional/FR-017-kani-execution-evidence.md) planned caller-harness execution evidence | [TC-050](oracle/matrix/TC-050-caller-text-admission.md) planned runtime and real-Kani checks |
 | Boolean oracle integer arithmetic and comparison | FR-031 | TC-044 |
 | Kani obligations and execution | FR-015 generation, FR-017 execution, FR-025 subject ABI, FR-028 bounds and ceilings, [FR-034](kani/functional/FR-034-caller-death-ownership.md) planned original-caller lifecycle ownership, [FR-040](kani/functional/FR-040-cancellation-producer.md) planned caller cancellation producer | TC-025, TC-027, TC-036, TC-039, [TC-049](kani/matrix/TC-049-caller-death-ownership.md) planned production guardian verification, [TC-055](kani/matrix/TC-055-cancellation-producer.md) planned cancellation path |
-| Real-Kani lane gating | NFR-006 | TC-045 |
+| Real-Kani lane gating | NFR-006 and [FR-041](kani/functional/FR-041-claimed-module-proof-gate.md) planned claimed-module discharge | TC-045 and [TC-056](kani/matrix/TC-056-claimed-module-proof-gate.md) planned proof-claim controls |
 | Typed obligation inventories, criterion-keyed candidate tuples and separate producer facts | [FR-036](evidence/functional/FR-036-source-obligation-census.md) | [TC-051](evidence/matrix/TC-051-source-obligation-census.md) planned; Gated on IR-759 |
 | Backend adapter (routed) | FR-026 adapter trait and registration | TC-037 |
 | Terminal-value maps (kani) | FR-029 and FR-030 terminal-value maps | TC-040, TC-041 |
