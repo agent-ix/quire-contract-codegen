@@ -240,21 +240,52 @@ fn base_names() -> BTreeSet<String> {
         .expect("git merge-base must launch");
     assert!(base.status.success(), "{}", output_text(&base));
     let base = String::from_utf8(base.stdout).expect("UTF-8 commit");
-    let object = format!("{}:{}", base.trim(), DECLARATION);
+    base_names_at(Path::new(env!("CARGO_MANIFEST_DIR")), base.trim())
+        .unwrap_or_else(|error| panic!("{error}"))
+}
+
+fn base_names_at(directory: &Path, base: &str) -> Result<BTreeSet<String>, String> {
+    let tree = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args(["ls-tree", "-z", "--name-only", base, "--", DECLARATION])
+        .output()
+        .map_err(|error| format!("cannot inspect base claim tree: {error}"))?;
+    if !tree.status.success() {
+        return Err(format!(
+            "cannot inspect base claim tree: {}",
+            output_text(&tree)
+        ));
+    }
+    if tree.stdout.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    if tree.stdout != format!("{DECLARATION}\0").as_bytes() {
+        return Err(format!(
+            "unexpected base claim tree entry: {:?}",
+            tree.stdout
+        ));
+    }
+    let object = format!("{base}:{DECLARATION}");
     let previous = Command::new("git")
+        .arg("-C")
+        .arg(directory)
         .args(["show", &object])
         .output()
-        .expect("git show must launch");
+        .map_err(|error| format!("cannot read base claim declaration: {error}"))?;
     if !previous.status.success() {
-        return BTreeSet::new();
+        return Err(format!(
+            "cannot read base claim declaration: {}",
+            output_text(&previous)
+        ));
     }
-    let declaration: Declaration =
-        serde_json::from_slice(&previous.stdout).expect("base claim declaration must parse");
-    declaration
+    let declaration: Declaration = serde_json::from_slice(&previous.stdout)
+        .map_err(|error| format!("base claim declaration must parse: {error}"))?;
+    Ok(declaration
         .modules
         .into_iter()
         .map(|claim| claim.name)
-        .collect()
+        .collect())
 }
 
 fn graph_for(
@@ -728,6 +759,75 @@ fn empty_removed_and_absent_compiled_claims_fail() {
         claim_census(&declaration, &base, &empty, &extents, &[]),
         Err("removed claimed module(s): claimed".to_owned())
     );
+}
+
+/// Trace: FR-041-AC-1. An absent base declaration differs from an unreadable blob.
+#[test]
+fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
+    let directory = std::env::temp_dir().join(format!("cg-ir19-base-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir_all(&directory).expect("scratch Git directory");
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&directory)
+            .args(args)
+            .output()
+            .expect("scratch Git must launch");
+        assert!(output.status.success(), "{}", output_text(&output));
+        String::from_utf8(output.stdout).expect("UTF-8 Git output")
+    };
+    git(&["init", "-q"]);
+    git(&[
+        "-c",
+        "user.name=IR-19",
+        "-c",
+        "user.email=ir19@example.invalid",
+        "commit",
+        "--allow-empty",
+        "-qm",
+        "empty base",
+    ]);
+    let absent_base = git(&["rev-parse", "HEAD"]);
+    assert_eq!(
+        base_names_at(&directory, absent_base.trim()),
+        Ok(BTreeSet::new())
+    );
+
+    fs::create_dir_all(directory.join("scripts")).expect("scratch declaration directory");
+    fs::write(
+        directory.join(DECLARATION),
+        r#"{"modules":[{"name":"claimed","harness":"claimed::proof","subject":"subject","expectation":"oracle","mutation":{"from":"a","to":"b"}}],"helper_mutations":{}}"#,
+    )
+    .expect("scratch declaration");
+    git(&["add", DECLARATION]);
+    git(&[
+        "-c",
+        "user.name=IR-19",
+        "-c",
+        "user.email=ir19@example.invalid",
+        "commit",
+        "-qm",
+        "declaration base",
+    ]);
+    let declared_base = git(&["rev-parse", "HEAD"]);
+    assert_eq!(
+        base_names_at(&directory, declared_base.trim()),
+        Ok(BTreeSet::from(["claimed".to_owned()]))
+    );
+    let blob = git(&["rev-parse", &format!("HEAD:{DECLARATION}")]);
+    let blob = blob.trim();
+    fs::remove_file(
+        directory
+            .join(".git/objects")
+            .join(&blob[..2])
+            .join(&blob[2..]),
+    )
+    .expect("remove own loose blob to simulate a failed object read");
+    assert!(base_names_at(&directory, declared_base.trim())
+        .expect_err("unreadable declared blob must fail closed")
+        .contains("cannot read base claim declaration"));
+    fs::remove_dir_all(directory).expect("remove own scratch Git repository");
 }
 
 /// Trace: FR-041-AC-3.
