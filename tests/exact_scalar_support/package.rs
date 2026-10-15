@@ -3278,6 +3278,8 @@ pub fn bounded_binary_subtraction_package() -> PackageBuilder {
     let mut builder = corpus_package();
     let operand_bound = Bound::Integer(0, 9);
     let operand_bound_key = builder.bound(&operand_bound);
+    let minuend_key = key(V_PARAM_X);
+    let subtrahend_key = key(V_PARAM_SUBTRAHEND);
     builder.code(
         V_PARAM_X,
         "value",
@@ -3301,12 +3303,10 @@ pub fn bounded_binary_subtraction_package() -> PackageBuilder {
             "binary",
             op("quire.op.integer.sub"),
             &key(T_INTEGER),
-            vec![
-                reference(&key(V_PARAM_X)),
-                reference(&key(V_PARAM_SUBTRAHEND)),
-            ],
+            vec![reference(&minuend_key), reference(&subtrahend_key)],
         ),
         &[Bound::Integer(-9, 9)],
+        Some(&minuend_key),
     );
     builder
 }
