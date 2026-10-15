@@ -44,3 +44,19 @@ Ticket: IR-19. Planless repository matrix and focused reverse-gap audit of the f
 - Reverse gap: changed gate and test behavior is owned by FR-041 and NFR-006-AC-19. No new production API, vendored file or obvious source stub was found. The new tests and shell control are partially ineffective as described above.
 - Plan completion: not assessed
 - Semantic review: skipped; not requested as a separate opt-in.
+
+## Dispositions
+
+| FND | Outcome | Evidence at 8c5a1c7b1cee6991b7e5156e56640039345faa7e |
+| --- | --- | --- |
+| FND-001 | fixed | New ignored real-Kani two-module test exports one selected report per harness. The retained reports show SUCCESS at `src/lib.rs:3` for first, UNREACHABLE at `src/lib.rs:7` for second, and SUCCESS at `src/lib.rs:7` after making second reachable. Its census requires `unreached claimed module: second` before the fix and success after it. |
+| FND-002 | fixed | The real-Kani control now exercises a verifying mutant, a compile-error mutant and an actual command timeout; it rejects each, plus an Inconclusive classification of the real failing report without playback and a skipped-execution missing report. Positive proof-failing mutants still run for every declared claim and computed helper. |
+| FND-003 | fixed | A new gate test uses a fake Cargo symlink and Kani executable with spoofed environment, printed success lines and nonempty fake report files; the gate exits nonzero. |
+
+## Current-head assessment
+
+**PASS for the changed acceptance-evidence slice.** The original three changed-scope gaps are closed. The repository-wide 296 untagged criteria remain a separate matrix FAIL and are not attributed to this fix. Plan completion: not assessed. No full gate was run by this reviewer.
+
+## Final current-head assessment
+
+At 6a2f05dbe861827ed8795815d10caa38af9ec3b0, the only additional source change is the fail-closed merge-base declaration read and its scratch Git regression test, tagged FR-041-AC-1. The changed acceptance-evidence slice remains **PASS**. The repository-wide matrix FAIL remains unrelated to this delta. Plan completion: not assessed.

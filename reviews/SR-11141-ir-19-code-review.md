@@ -41,3 +41,32 @@ Ticket: IR-19. Reviewed the frozen seven-file diff against merged FR-041, TC-056
 ## Coverage
 
 The declaration is nonempty and compared with the merge-base list; SUCCESS attribution uses exact source file and module line extent, excluding UNREACHABLE and SATISFIED. The checked-in helper map is compared with the current graph intersection, and the one current module receives a real mutation in the author's focused run. The Cargo.lock delta adds only the declared proc-macro2 dev dependency; no generated artifact or copied file was added. Existing lock, freshness and six-filter count logic remains in place. IR-494's open branch overlaps only `tests/it/main.rs` and does not change this review's Kani runner path. No CI or full Kani lane was run in this review.
+
+## Dispositions
+
+| FND | Outcome | Evidence at 8c5a1c7b1cee6991b7e5156e56640039345faa7e |
+| --- | --- | --- |
+| FND-001 | fixed | The claim loop now passes each declared `--harness ... --exact` to real Kani, requires exactly one result with that harness id, and accumulates each selected report's checks for the module census. The new two-module real-Kani control records first-module SUCCESS, second-module UNREACHABLE, then second-module SUCCESS in the same source file. |
+| FND-002 | fixed | `falsifying_mutant` now requires the typed `Falsified` outcome with concrete playback plus a previously successful proposition check that became FAILURE. The real mutant is reclassified with playback removed and its Inconclusive outcome is rejected. |
+| FND-003 | fixed | `mapped_graph` marks missing and null pretty-name entries `#unresolved`; `reachable` refuses those on a reached path. A unit control checks an unmapped edge. |
+| FND-004 | fixed | The gate requires the trusted absolute Cargo launcher, resets PATH/HOME and Kani/Rustup/Cargo homes, and refuses a caller-supplied executable even when it prints the expected test output and writes fake nonempty reports. The new spoofed environment/symlink control exercises this path. |
+
+## New findings in disposition round
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | Any `git show` failure is interpreted as no merge-base claim declaration, so a transient read/object error can silently disable the non-shrinking-claim check | tests/it/kani_generation_claims.rs:248 |
+
+## Current-head assessment
+
+**CONDITIONAL for the changed code** — the four original findings are fixed, while FND-005 remains. The repository-wide matrix result is recorded in SR-11142. The author reported focused normal, gate and real-Kani controls passing; this reviewer inspected their real two-module report evidence and did not rerun the full lane. The worktree remained clean.
+
+## Second disposition round
+
+| FND | Outcome | Evidence at 6a2f05dbe861827ed8795815d10caa38af9ec3b0 |
+| --- | --- | --- |
+| FND-005 | fixed | `base_names_at` now asks `git ls-tree` whether the declaration existed at the merge base. It accepts an empty baseline only when that tree lookup succeeds with no entry. Tree failure, an unexpected entry, `git show` failure and malformed declaration all return an error. A scratch Git test verifies absent and present declarations, then removes the declared loose blob and requires an object-read refusal. |
+
+## Final current-head assessment
+
+**PASS for the changed code at 6a2f05dbe861827ed8795815d10caa38af9ec3b0.** All five code/Rust findings have fixed dispositions. This final delta changed only the baseline declaration read. The author's focused normal claim tests, exact ignored real-Kani control, clippy and formatting passed; this reviewer inspected the one-path delta and did not rerun a broad gate. The worktree remained clean.
