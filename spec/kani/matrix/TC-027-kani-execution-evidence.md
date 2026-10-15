@@ -156,27 +156,28 @@ cover classifies identically to a contract harness's; and, in the `make kani` la
 its evidence carrying `None` for obligation kind.
 
 The paired routed-scalar run with operand `4` produces Kani `Verified` and an actual native
-`Outcome::Completed(5)`. Its receipt retains the selected scalar identity, operand vector, original
-limits, proof-content identity and Kani evidence. Any unsuccessful proof, native execution fault,
+`Outcome::Completed(5)`. Its receipt retains the selected scalar identity, operand vector, exact
+request limits used by the native meter, proof-content identity and Kani evidence. Any unsuccessful proof, native execution fault,
 malformed native response or changed staged tree yields no receipt. Request-context mismatch is
 typed and occurs before either child is started; changing an otherwise valid operand produces a
 receipt for that exact ordered request, which cannot be substituted for a prior receipt.
 
 Paired routed-scalar proof/native receipt (FR-017-AC-27 to AC-31): generate a genuine routed
 `x + 1` harness for an admitted integer domain, retain its complete `oracle_artifacts` and
-original scalar context, and request concrete operand `4` within the generated range. In the
+request `ScalarLimits` and request concrete operand `4` within the generated range. In the
 `make kani` lane, require the paired runner to stage the package and harness, run real Kani on the
 staged harness, and report `Verified`. Require the runner to execute the staged public oracle at
-that operand with the original `ScalarLimits`; the opaque receipt must contain actual typed
+that operand with those exact limits; the opaque receipt must contain actual typed
 `Outcome::Completed(5)`, the exact operand and limits, the scalar identity, measured canonical
 identity and Kani evidence. No result derived from the Kani verdict or supplied by the test caller
 counts.
 
 Order-sensitive binary receipt (FR-017-AC-31): generate a genuine routed subtraction operation
-with two symbolic operands over a domain admitting both concrete vectors `[4, 1]` and `[1, 4]`.
+with two symbolic operands over a domain admitting both concrete vectors `[4, 1]` and `[1, 4]`,
+and one exact request `ScalarLimits` value.
 Run each vector through the paired runner separately in the `make kani` lane. Each run must execute
 real Kani and report `Verified`, then invoke the staged public oracle with the exact ordered vector
-and original `ScalarLimits`. Require native `Outcome::Completed(3)` for `[4, 1]` and
+and request limits. Require native `Outcome::Completed(3)` for `[4, 1]` and
 `Outcome::Completed(-3)` for `[1, 4]`; each opaque receipt must carry its own exact ordered vector
 and actual typed result. The receipts share the same canonical proof-content identity because the
 proved and executed staged bytes are unchanged. Both runs and both receipt assertions are
@@ -184,15 +185,23 @@ mandatory; neither the unary `x + 1` case nor an optional binary case substitute
 
 Request-boundary controls (FR-017-AC-28): before either child starts, separately change the
 generated library bytes, generated artifact path, selected scalar identity, selected oracle symbol,
-operand count, operand value outside its retained range, and request limits relative to the original
-retained scalar context. Each inconsistent request must return a typed mismatch/refusal, produce no
-receipt, and leave a launch marker absent. For a two-operand scalar identity, change only the
+operand count and operand value outside its retained range. Each inconsistent request must return
+a typed mismatch/refusal, produce no receipt, and leave a launch marker absent. In a separate
+accepted paired run over the same generated artifact, set the request's `work_units` limit to
+`u64::MAX`; then vary only that supplied field to `u64::MAX - 1` in a second request. At both
+values, observe the exact
+limits delivered to the native meter at initialization and assert they equal both the request's
+`ScalarLimits` and the receipt's returned limits. The paired CG runner asserts supplied-to-used-to-
+returned equality only; it does not assert these values came from the upstream generation context.
+For a two-operand scalar identity, change only the
 operand order and confirm the receipt retains the exact changed order; it must not be possible to
 reuse an earlier receipt as evidence for the reordered request. The mandatory AC-31 binary runs
 must demonstrate this with the distinct subtraction results above. A different in-range operand
 vector may be run as a distinct request, but its receipt must bind that vector separately from the
 unchanged proof-content identity. A caller-selected digest must not make any inconsistent request
-acceptable.
+acceptable. The IR-773 consumer's comparison against its retained original limits, and its
+upstream refusal/skip behavior on mismatch, are consumer-owned checks outside this CG test; no
+driver adversarial coverage is claimed here.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
@@ -200,7 +209,7 @@ attempt a source-tree write from each child execution boundary, and require that
 change it. Inject a changed byte in each execution-relevant staged item, a replaced path and an
 unexpected file after staging and across the Kani/native boundary;
 each must produce a typed failure and no receipt carrying the earlier identity. Check that changes
-to the concrete operand vector, its order, original limits or scalar identity cannot be represented
+to the concrete operand vector, its order, request limits or scalar identity cannot be represented
 by reusing an earlier receipt. Inspect the public receipt surface to verify that it has read-only access to
 the actual Kani evidence, exact scalar invocation context, canonical identity and typed native
 outcome, and that callers cannot construct, deserialize or mutate it. The generated package is
