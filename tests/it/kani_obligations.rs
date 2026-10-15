@@ -2537,6 +2537,53 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         .any(|count| *count > 0));
 }
 
+/// A supplied zero result-unit budget is the meter limit observed by the paired native call.
+///
+/// Trace: FR-017-AC-28, FR-017-AC-30.
+#[test]
+#[ignore = "kani lane: run serially through make kani"]
+fn tc_027_attested_scalar_receipt_uses_supplied_result_limit() {
+    use quire_contract_runtime::exact::{ChargePoint, LimitKind, Outcome};
+
+    let (harness, artifacts) = routed_scalar_increment_with_artifacts();
+    let operands = [4_i64, 1_i64];
+    let mut limits = attested_scalar_limits();
+    limits.result_units = 0;
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-result-limit");
+    let receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native incomplete receipt");
+
+    assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
+    assert_eq!(receipt.operands(), operands);
+    assert_eq!(receipt.scalar_limits(), &limits);
+    let Outcome::Incomplete(incomplete) = receipt.native_outcome() else {
+        panic!("zero result_units must stop integer result retention");
+    };
+    assert_eq!(incomplete.limit_kind, LimitKind::ResultUnits);
+    assert_eq!(incomplete.limit, 0);
+    assert_eq!(incomplete.consumed, 0);
+    assert_eq!(incomplete.next_charge, 1.into());
+    assert_eq!(
+        incomplete.charge_point,
+        ChargePoint::IntegerArithmeticResultRetain
+    );
+    assert_eq!(receipt.meter_observation().consumed()[9], 0);
+    assert!(!receipt
+        .meter_observation()
+        .admitted_charges()
+        .contains(&ChargePoint::IntegerArithmeticResultRetain));
+}
+
 /// The routed subtraction fixture retains two independently bounded symbolic operands.
 ///
 /// Trace: FR-017-AC-31.
