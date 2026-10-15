@@ -1463,6 +1463,164 @@ fn direct_fr015_division_keeps_renderer_refusal() {
     ));
 }
 
+/// A source-mapped, admitted integer division reaches form classification, rather than
+/// disappearing behind the missing-result guard. The FR-015 refusal wins before mode settlement.
+/// Trace: FR-015-AC-15, FR-019-AC-25, FR-019-AC-29, FR-019-AC-44, TC-030.
+#[test]
+fn kani_selected_division_preserves_exact_renderer_refusal() {
+    use crate::kani_obligations::package;
+
+    const DIVISION: u32 = 9_301_101;
+    const DIVISION_NARROW: u32 = 9_301_102;
+    let mut builder = package::qsl_shaped_package();
+    let integer = package::key(package::T_INTEGER);
+    let division_law = package::integer_division_definition(
+        quire_contract_runtime::exact::DivisionProfile::Truncating,
+    );
+    builder.select_definition(division_law.clone());
+    builder.application_bounded(
+        DIVISION,
+        "expression",
+        "binary",
+        &integer,
+        package::application(
+            "binary",
+            package::op_full(
+                "quire.op.integer.div",
+                vec![package::law("integer_division", division_law)],
+                None,
+                None,
+            ),
+            &integer,
+            vec![
+                package::reference(&package::key(package::QSL_PARAM_X)),
+                package::reference(&package::key(package::QSL_LITERAL_TWO)),
+            ],
+        ),
+        &[],
+    );
+    let division_bound = builder.bound(&package::Bound::Integer(0, 10));
+    builder.narrow(
+        DIVISION_NARROW,
+        &package::code_id(DIVISION).digest,
+        &division_bound,
+    );
+    builder.expression_occurrences();
+    let (checked, ids) = builder.admit_resolved();
+    let form = selected_scalar_form(checked, ids.resolve(&package::code_id(DIVISION)));
+    let KaniForm::V2ScalarClaim {
+        contract,
+        positions,
+        node_id,
+        ..
+    } = &form
+    else {
+        unreachable!("selected scalar helper constructs the scalar form")
+    };
+    let ContractRequestPosition::DriverItem {
+        result_selection, ..
+    } = &positions[0]
+    else {
+        panic!("first position must be the selected division")
+    };
+    assert!(matches!(
+        result_selection,
+        ContractDriverResultSelection::OwnResult {
+            conversion: Some(_),
+            ..
+        }
+    ));
+    let mut request = RequestItem {
+        kind: RequestedKind::Known(CapabilityKind::ValueValidity),
+        extent: unbounded(false),
+        named_backend: None,
+        candidates: Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+        kani_form: form.clone(),
+    };
+    request.candidates = Candidates::Set(Vec::new());
+    assert!(matches!(
+        settle_one(
+            vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)])],
+            request.clone(),
+        )
+        .disposition,
+        Disposition::Unsupported {
+            cause: Cause::UnsupportedRequestedCapability { .. }
+        }
+    ));
+    request.candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity())]);
+    let settled = settle_one(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Unbounded)])],
+        request,
+    );
+    let Disposition::Unsupported {
+        cause:
+            Cause::KaniFormRefused {
+                form: identity,
+                refusal,
+                backend,
+            },
+    } = settled.disposition
+    else {
+        panic!("selected integer division must keep its typed FR-015 refusal: {settled:?}")
+    };
+    assert_eq!(
+        identity.family,
+        quire_contract_codegen::KaniFormFamily::Integer
+    );
+    assert_eq!(backend, BackendKind::Kani.identity());
+    assert!(
+        matches!(
+            &refusal,
+            UnsupportedObligation::OperationNotRendered {
+                operation_identity,
+                derived_domains,
+            } if operation_identity == "quire.op.integer.div"
+                && derived_domains.iter().any(|domain| matches!(
+                    domain,
+                    quire_contract_codegen::DerivedDomain::IntegerRange {
+                        lower,
+                        upper,
+                        ..
+                    } if lower == "0" && upper == "10"
+                ))
+        ),
+        "wrong division refusal: {refusal:?}"
+    );
+
+    let routed = quire_contract_codegen::RoutedGenerationItem::from_descriptor(
+        0,
+        node_id.clone(),
+        candidate(BackendKind::Kani.identity()),
+        &kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)]),
+    )
+    .expect("linked Kani route")
+    .with_scalar_selection(contract, result_selection.clone());
+    let generated = quire_contract_codegen::generate_routed(
+        contract,
+        positions,
+        &[routed],
+        &quire_contract_codegen::GenerationContexts {
+            kani: Some(quire_contract_codegen::KaniGenerationContext {
+                ceilings: crate::common::proof_ceilings::proof_ceilings(),
+                subject_path: "crate::subject",
+                unwind: 4,
+            }),
+        },
+    )
+    .expect("admitted route keeps a per-item refusal");
+    assert!(generated.rejected.is_empty());
+    let quire_contract_codegen::KindOutput::Kani { record, harness } = &generated.items[0].output
+    else {
+        panic!("selected division must reach the Kani arm")
+    };
+    assert_eq!(
+        record.disposition,
+        quire_contract_codegen::ObligationDisposition::Unsupported { reason: refusal }
+    );
+    assert!(harness.is_none(), "refused division emits no Kani harness");
+}
+
 /// The classifier measures the same rendered source lines as generation and refuses before
 /// Supported when an admitted typed expression would exceed the generated-source ceiling.
 #[test]
