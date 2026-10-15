@@ -10,6 +10,8 @@ relationships:
     type: constrains
   - target: ix://agent-ix/quire-contract-codegen/FR-031
     type: constrains
+  - target: ix://agent-ix/quire-contract-codegen/FR-041
+    type: constrains
 ---
 # NFR-006: A change that can alter what real Kani proves runs the real-Kani lane before it merges
 
@@ -35,6 +37,10 @@ relationships:
   `/tmp/agent-e-heavy-build.lock`, and shall run the lane's tests with `--test-threads=1`.
 - The `make kani-gate` target shall exit non-zero unless the lane's tests all passed, the number that
   ran equals the number the lane's filters list for `--ignored`, and that number is greater than zero.
+- The `make kani-gate` target shall include [FR-041](../functional/FR-041-claimed-module-proof-gate.md)'s
+  claimed-module census and real mutation controls in its one required lane, and shall exit
+  non-zero if any claimed module or shared helper fails that requirement. The controls shall not
+  be satisfied by a second optional target or by a stored verdict from an earlier run.
 - The `make kani-gate` target shall print one run-result line of the form `kani-gate:
   result=<passed|failed> ran=<n> expected=<n> elapsed=<s>s kani=<version> tree=<clean|dirty>`,
   with `kani` the version the launcher reports. The line describes the run; it is not a
@@ -188,6 +194,7 @@ decision (Open decisions); until the owner rules, the answer is no.
 | NFR-006-AC-16 | A pull request whose scope is `not required` has no mandatory real-Kani run under this requirement. | Inspection |
 | NFR-006-AC-17 | Before a version tag is pushed, the full gate actually passes on the clean, stable candidate to be tagged; a copied release-ticket line cannot substitute for that run. | Inspection |
 | NFR-006-AC-18 | Every `include!`, `include_str!`, `include_bytes!` and `#[path]` target named in a file of `tests/it` that holds a lane test, and in each file those name in turn, matches a pattern of the Kani-touching set. | Test (TC-045) |
+| NFR-006-AC-19 | On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero. An optional mutation target or saved earlier result cannot substitute. | Test |
 
 ## Open decisions
 
