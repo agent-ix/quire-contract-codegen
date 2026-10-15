@@ -186,13 +186,18 @@ mandatory; neither the unary `x + 1` case nor an optional binary case substitute
 Request-boundary controls (FR-017-AC-28): before either child starts, separately change the
 generated library bytes, generated artifact path, selected scalar identity, selected oracle symbol,
 operand count and operand value outside its retained range. Each inconsistent request must return
-a typed mismatch/refusal, produce no receipt, and leave a launch marker absent. In a separate
-accepted paired run over the same generated artifact, set the request's `work_units` limit to
-`u64::MAX`; then vary only that supplied field to `u64::MAX - 1` in a second request. At both
-values, observe the exact
-limits delivered to the native meter at initialization and assert they equal both the request's
-`ScalarLimits` and the receipt's returned limits. The paired CG runner asserts supplied-to-used-to-
-returned equality only; it does not assert these values came from the upstream generation context.
+a typed mismatch/refusal, produce no receipt, and leave a launch marker absent. For the limits
+control, first run the same generated harness, artifacts and operand `[4]` with the normal request
+limits; require Kani `Verified`, native `Outcome::Completed(5)`, and the exact request limits in the
+receipt and meter observation. Then change only `result_units` to `0` and repeat against the same
+generated staged bytes. Require Kani `Verified` again, the same proof-content identity as the
+`Completed(5)` receipt, and `Outcome::Incomplete` with `limit_kind = ResultUnits`, `limit = 0`,
+`consumed = 0`, `next_charge = 1`, and charge point `IntegerArithmeticResultRetain`. The meter
+observation must report zero consumed result units and no admitted result-retain charge. In both
+runs, assert that the exact supplied `ScalarLimits`, the limit value observed at meter
+initialization, and the receipt's returned limits agree. This proves supplied-to-used-to-returned
+equality while the same artifact identity is retained across distinct native outcomes; it does not
+assert that either request matches the upstream generation context.
 For a two-operand scalar identity, change only the
 operand order and confirm the receipt retains the exact changed order; it must not be possible to
 reuse an earlier receipt as evidence for the reordered request. The mandatory AC-31 binary runs
