@@ -2229,18 +2229,6 @@ fn routed_scalar_increment_with_artifacts() -> (
     )
 }
 
-fn routed_scalar_decrement_with_artifacts() -> (
-    KaniScalarObligationHarness,
-    Vec<quire_contract_codegen::Artifact>,
-) {
-    routed_scalar_with_artifacts(
-        package::bounded_decrement_package(),
-        package::BOUNDED_DECREMENT,
-        49_101,
-        Bound::Integer(-9, 9),
-    )
-}
-
 fn routed_scalar_binary_subtraction_with_artifacts() -> (
     KaniScalarObligationHarness,
     Vec<quire_contract_codegen::Artifact>,
