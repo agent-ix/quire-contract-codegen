@@ -2565,7 +2565,7 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     assert_eq!(incomplete.limit_kind, LimitKind::ResultUnits);
     assert_eq!(incomplete.limit, 0);
     assert_eq!(incomplete.consumed, 0);
-    assert_eq!(incomplete.next_charge, 1.into());
+    assert_eq!(incomplete.next_charge, 1_i64.into());
     assert_eq!(
         incomplete.charge_point,
         ChargePoint::IntegerArithmeticResultRetain

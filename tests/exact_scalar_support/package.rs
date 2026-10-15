@@ -3294,7 +3294,7 @@ pub fn bounded_binary_subtraction_package() -> PackageBuilder {
         &operand_bound_key,
         literal("integer", "1"),
     );
-    builder.application_bounded(
+    builder.application_bounded_anchored(
         BOUNDED_BINARY_SUBTRACTION,
         "expression",
         "binary",
