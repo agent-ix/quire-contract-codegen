@@ -27,16 +27,17 @@ use package::{
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
-    classify_kani_run, execute_kani_obligation, generate_exact_scalar_oracles, generate_routed,
-    negotiate_kani_obligations, routed_contract_lowering_profile, Candidate, ClaimDisposition,
-    ClaimMap, ContractRequestPosition, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
+    classify_kani_run, execute_kani_obligation, execute_kani_scalar_native,
+    generate_exact_scalar_oracles, generate_routed, negotiate_kani_obligations,
+    routed_contract_lowering_profile, Candidate, ClaimDisposition, ClaimMap,
+    ContractRequestPosition, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
     ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniExecutionRefusal,
     KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
     KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, KindOutput,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness, KaniSolver, KaniTool,
+    KaniToolError, KindOutput, ObligationDisposition, ObligationItem, ObligationKind,
+    ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
+    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
     BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
@@ -2208,18 +2209,54 @@ fn routed_scalar_increment() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
 ) {
-    const NARROW: u32 = 49_100;
-    let mut builder = package::bounded_increment_package();
+    let (harness, artifacts) = routed_scalar_increment_with_artifacts();
+    let manifest = artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("the oracle crate returns its manifest");
+    (harness, manifest)
+}
+
+fn routed_scalar_increment_with_artifacts() -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    routed_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+    )
+}
+
+fn routed_scalar_decrement_with_artifacts() -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    routed_scalar_with_artifacts(
+        package::bounded_decrement_package(),
+        package::BOUNDED_DECREMENT,
+        49_101,
+    )
+}
+
+fn routed_scalar_with_artifacts(
+    mut builder: package::PackageBuilder,
+    operation_code: u32,
+    narrow_code: u32,
+) -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
     let bound = builder.bound(&package::Bound::Integer(0, 9));
     builder.narrow(
-        NARROW,
-        package::code_id(package::BOUNDED_INCREMENT).digest.as_ref(),
+        narrow_code,
+        package::code_id(operation_code).digest.as_ref(),
         &bound,
     );
     builder.expression_occurrences();
     let (package, ids) = builder.admit_resolved();
-    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
-    let narrow_id = ids.resolve(&package::code_id(NARROW));
+    let node_id = ids.resolve(&package::code_id(operation_code));
+    let narrow_id = ids.resolve(&package::code_id(narrow_code));
     let roots = [node_id.clone(), narrow_id.clone()];
     let lowered = package.lower(&roots, &routed_contract_lowering_profile());
     let admitted = match ContractPackageWireV1::read(
@@ -2296,12 +2333,7 @@ fn routed_scalar_increment() -> (
         },
     )
     .expect("routed generation succeeds");
-    let manifest = generation
-        .oracle_artifacts
-        .expect("a Kani group ran")
-        .into_iter()
-        .find(|artifact| artifact.path == "Cargo.toml")
-        .expect("the oracle crate returns its manifest");
+    let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
     let [item] = generation.items.as_slice() else {
         panic!("one routed item, got {:?}", generation.items);
     };
@@ -2310,7 +2342,7 @@ fn routed_scalar_increment() -> (
     };
     (
         harness.as_deref().cloned().expect("the item is supported"),
-        manifest,
+        artifacts,
     )
 }
 
@@ -2452,6 +2484,136 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     ));
     assert!(!crate_directory.join("target").exists(), "nothing ran");
     let _ = fs::remove_dir_all(crate_directory);
+}
+
+/// A retained routed scalar is proved and invoked natively from one privately staged source.
+///
+/// Trace: FR-017-AC-27, FR-017-AC-28, FR-017-AC-30.
+#[test]
+#[ignore = "kani lane: run serially through make kani"]
+fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
+    use quire_contract_runtime::exact::Outcome;
+    let (harness, artifacts) = routed_scalar_decrement_with_artifacts();
+    let operands = [4_i64, 1_i64];
+    let limits = quire_contract_runtime::exact::ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: 0,
+    };
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested");
+    let receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native receipt");
+    assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
+    assert_eq!(receipt.operands(), operands);
+    assert_eq!(receipt.scalar_limits(), &limits);
+    assert!(matches!(
+        receipt.native_outcome(),
+        Outcome::Incomplete(record)
+            if record.limit_kind == quire_contract_runtime::exact::LimitKind::ResultUnits
+                && record.limit == 0
+                && record.consumed == 0
+                && record.next_charge.to_string() == "1"
+    ));
+    assert!(receipt
+        .meter_observation()
+        .consumed()
+        .iter()
+        .any(|count| *count > 0));
+}
+
+/// Source or operand changes before staging cannot be authenticated by unrelated caller data.
+///
+/// Trace: FR-017-AC-28, FR-017-AC-29.
+#[test]
+fn tc_027_attested_scalar_rejects_changed_oracle_and_out_of_bounds_operands() {
+    use quire_contract_codegen::{KaniScalarNativeError, KaniScalarNativeRequest};
+    let (harness, mut artifacts) = routed_scalar_increment_with_artifacts();
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested-controls");
+    let limits = quire_contract_runtime::exact::ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    };
+    let source = artifacts
+        .iter_mut()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .unwrap();
+    source.contents = source.contents.replacen("pub fn ", "fn ", 1);
+    let operands = [4_i64, 1_i64];
+    let changed_source = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        changed_source,
+        Err(KaniScalarNativeError::InvalidRequest(_))
+    ));
+
+    let (_, valid_artifacts) = routed_scalar_increment_with_artifacts();
+    let mut changed_harness = harness.clone();
+    changed_harness
+        .rust
+        .contents
+        .push_str("\n// caller mutation\n");
+    let mutated_harness = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &changed_harness,
+        oracle_artifacts: &valid_artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        mutated_harness,
+        Err(KaniScalarNativeError::InvalidRequest(_))
+    ));
+
+    let bad_operands = [i64::MAX, 1_i64];
+    let changed_operand = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &valid_artifacts,
+        operands: &bad_operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        changed_operand,
+        Err(KaniScalarNativeError::InvalidRequest(_))
+    ));
 }
 
 /// The same harness with its checked domain narrowed to `[0, 5]` asserts a bound the oracle does
