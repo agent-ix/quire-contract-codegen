@@ -2766,11 +2766,13 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     assert_not_launched();
 
     let mut changed_oracle_symbol = harness.clone();
-    changed_oracle_symbol.rust.contents = changed_oracle_symbol.rust.contents.replacen(
+    let renamed_harness = changed_oracle_symbol.rust.contents.replacen(
         &harness.identity.oracle_symbol,
         "wrong_oracle",
         1,
     );
+    assert_ne!(renamed_harness, changed_oracle_symbol.rust.contents);
+    changed_oracle_symbol.rust.contents = renamed_harness;
     let wrong_symbol = execute_kani_scalar_native(&KaniScalarNativeRequest {
         cancel: &cancel,
         installation: &installation,
