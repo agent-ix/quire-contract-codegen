@@ -29,3 +29,10 @@ Reviewed the full IR-791 code diff at `dca7ef47c16674d9f177987b007d4daa102f0860`
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | deferred | IR-773 owns comparing CG request and receipt limits to its private original; revised FR-017-AC-28 assigns CG only supplied-to-meter-used-to-receipt equality and defines no CG provenance mismatch outcome. At dca7ef4, execute_native passes the request limits through limits_array to the native adapter, which uses those values to initialize Meter, and receipt construction stores request.scalar_limits. TC-027's result_units=0 control observes Incomplete.limit=0 and zero result-unit consumption, confirming the meter used the supplied zero limit. |
+| FND-002 | fixed | The test now mutates artifact path and bytes, scalar identity, oracle symbol/source, operand count, and bounds; after each typed refusal it asserts the fake launcher marker is absent. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | TC-027 did not independently exercise all required preflight mismatch classes and prove refusal before launcher invocation | tests/it/kani_obligations.rs:2668-2829 |
