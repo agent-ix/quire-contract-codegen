@@ -33,6 +33,24 @@ the FR-015 generator returns for the same items.
 
 ## Test Procedure
 
+For FR-022-AC-23 and AC-24, use the same admitted ContractPackage and two
+preflighted driver positions as TC-030: one `integer.add` node, two distinct
+application occurrences and direct `numeric.narrow` selections with different
+bounds. Route both and assert per-position claim identity, harness identity and
+result assertion retain the selected occurrence and bound. In a fresh
+settlement, change only one selection and check the other's output remains
+unchanged. Then alter one lowering position's pair after preflight, remove
+its conversion context root, and mispair its occurrence in separate cases.
+Check the typed whole-call selection refusal occurs before any harness.
+Inspect the generation path for any bound search across the package or
+source-text/QSL context reconstruction.
+
+For FR-022-AC-25, compile an external consumer against CG's public exports and
+match `RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
+OracleGenerationError::SourceTooLarge { bytes, limit, setting }))`. Assert the
+typed size and limit fields remain available without a private module path or
+diagnostic-string parsing.
+
 1. **Differential with FR-015 (AC-2, AC-8).** Route the three generated nodes
    and the `Unsupported` node at the non-contiguous request indexes `7`, `2`, `11`
    and `4`, with kind `Kani`, and call `generate_routed`. Separately call

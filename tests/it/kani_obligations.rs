@@ -2270,7 +2270,16 @@ fn routed_scalar_increment() -> (
                 bounds: Default::default(),
             },
         )
-        .expect("linked Kani descriptor")],
+        .expect("linked Kani descriptor")
+        .with_scalar_selection(
+            &admitted,
+            match &positions[0] {
+                ContractRequestPosition::DriverItem {
+                    result_selection, ..
+                } => result_selection.clone(),
+                ContractRequestPosition::ContextRoot { .. } => unreachable!("driver position"),
+            },
+        )],
         &GenerationContexts {
             kani: Some(KaniGenerationContext {
                 ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(

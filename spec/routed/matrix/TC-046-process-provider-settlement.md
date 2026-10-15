@@ -60,7 +60,11 @@ PV-4).
 3. Repeat representative rows with the same advertisements and item extent but
    different backend identity text, manifest position, manifest `bounds` run
    defaults and ambient state. Check that CG's process descriptor retains
-   the manifest's advertised pairs, `domains` and `bounds`. Vary the numeric maximum of a bounded item's
+   the manifest's advertised pairs, `domains` and `bounds`. Compare otherwise
+   equal CG descriptors with absent and present-empty manifest `bounds`; verify
+   that the typed descriptors differ, while valid settlement agrees and an
+   absent kind still refuses before an unknown candidate in both cases.
+   Vary the numeric maximum of a bounded item's
    proof bound while keeping its explicit `kind`; leave the domain coverage
    decision unchanged. Give the same `DomainKey` two distinct explicit domain
    kinds and verify that the explicit kind controls coverage.
@@ -94,7 +98,10 @@ PV-4).
 3. Identity, position, run defaults and ambient state do not alter a
    disposition or cause apart from the backend named. Numeric maximum and
    `DomainKey` do not determine domain coverage; explicit extent kinds do
-   (FR-019-AC-18, FR-019-AC-19, FR-019-AC-20, FR-019-AC-23).
+   Absent and present-empty run defaults remain distinct typed descriptor
+   values without changing settlement or validation order (FR-019-AC-42).
+   The other controls cover FR-019-AC-18, FR-019-AC-19, FR-019-AC-20 and
+   FR-019-AC-23.
 4. No plugin starts or is resolved during settlement; the process item has
    one empty `KindOutput::Process` and no CG artifact or terminal record.
    Results are invariant under input permutation; an internal identity

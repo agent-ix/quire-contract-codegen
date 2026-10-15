@@ -52,6 +52,15 @@ by this arm come from the one admitted ContractPackage under
 The original checked graph cannot override a package refusal or represented
 form.
 
+For a V2 scalar claim, form preflight is per driver item and per selected
+result occurrence. Its typed input shall identify the admitted ContractPackage,
+the requested scalar node, that node's exact `expression` application occurrence,
+and its optional direct `numeric.narrow` conversion occurrence with the
+conversion's context root. The ContractPackage's source package identity shall
+match the admitted checked source; the selected occurrences shall be in its
+source correspondence. This selection is the same one FR-022 later passes to
+FR-049 result-context generation, not a package-wide search for a bound.
+
 AD-016 places the single negotiation point here so that language admission
 stays language-only and the IR stays target-neutral. That boundary holds only
 when adding a backend kind is a compile error everywhere the new kind must be
@@ -66,10 +75,12 @@ nothing says so.
   items. Each CG-owned `BackendDescriptor` carries a typed `ProviderOrigin`
   (`Linked` or `Process`)
   beside its identity, advertised (kind, mode) pairs, and the FR-331 manifest's
-  advertised `domains` and `bounds`. The manifest's `bounds` are run-limit defaults, not
+  advertised `domains` and optional `bounds`. The manifest's `bounds` are run-limit defaults, not
   admission limits; the process arm does not compare their numbers with item
-  proof bounds (QSpec FR-331). The driver copies `domains` and `bounds` from the same FR-331
-  manifest descriptor as the advertised pairs; QSL's route descriptor carries
+  proof bounds (QSpec FR-331). An absent `bounds` member remains absent in the CG
+  descriptor; a present empty map remains present and empty. The driver copies
+  `domains` and `bounds` from the same FR-331 manifest descriptor as the advertised
+  pairs; QSL's route descriptor carries
   advertised pairs but no `domains` or `bounds`. QSL-654 owns the matching
   PV-4 wording update.
 - Per request item: its one required FR-290 capability kind, its extent and
@@ -142,6 +153,17 @@ For an unsupported IR profile entry, IR FR-029 owns the absence of an artifact,
   form, never display or debug text. This form check follows request and
   candidate/manifest validation and precedes extent and advertised-mode
   settlement.
+- For `V2ScalarClaim`, the Kani arm shall authenticate the typed selected
+  application and optional direct conversion against the admitted source and
+  ContractPackage before classifying the form. A missing, foreign, mismatched
+  or unrepresented occurrence or conversion context root shall settle
+  `invalid-request` with a typed form/context cause and no artifact. The Kani
+  arm shall classify the selected result context used by generation. The Kani
+  arm shall not classify only `[node_id]`, search the package for a narrow,
+  infer a result bound from another occurrence or accept a caller-provided
+  numeric maximum.
+  This check follows request and candidate/manifest validation and precedes
+  extent and advertised-mode settlement.
 - CG shall expose `BackendKind::from_descriptor(&BackendDescriptor) ->
   Option<BackendKind>` as its public descriptor-to-kind conversion. It shall
   return `Some(Kani)` for a linked descriptor whose identity is the built-in
@@ -382,7 +404,8 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-17 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item settles `requires-bound` exactly when `finite_bound_available` is true and every boundable `extent.domains[].kind` is in manifest `domains` (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-18 | PLANNED (IR-629). Given the same process advertisements and item extent, changing only backend identity, manifest position, manifest run-limit defaults or ambient state leaves the disposition and cause unchanged apart from the backend named in the output. | Test (TC-046) |
 | FR-019-AC-19 | PLANNED (IR-629; bounded row depends on QSL-654's producer). The process arm reads each explicit `extent.bounds[].kind` and never derives a domain kind from `DomainKey`; two otherwise equal bounded items with the same `DomainKey` and different explicit kinds can settle differently under one manifest `domains` set. | Test (TC-046) |
-| FR-019-AC-20 | PLANNED (IR-629). CG's process descriptor retains the FR-331 manifest's advertised (kind, mode) pairs, `domains` and `bounds` beside the IR-633 `id` and `origin` projection. | Test (TC-046) |
+| FR-019-AC-20 | PLANNED (IR-629; driver projection remains paired work). CG's process descriptor retains the FR-331 manifest's advertised (kind, mode) pairs, `domains` and optional `bounds` beside the IR-633 `id` and `origin` projection. | Test (TC-046) |
+| FR-019-AC-42 | Two otherwise equal CG Process descriptors with absent and present-empty manifest `bounds` remain distinct typed values. Changing only between those forms leaves process settlement's disposition and request-validation precedence unchanged; run-limit defaults are not proof bounds. | Test (TC-046) |
 | FR-019-AC-21 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with any unadvertised boundable `extent.domains[].kind` settles `unsupported`, warned, with `unsupported_projection`/`unsupported-requested-capability` naming the offending domain kind and candidate, regardless of `finite_bound_available`; non-boundable kinds are not compared (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-22 | PLANNED (IR-629). On a `bounded`-only process descriptor, an unbounded item with every boundable `extent.domains[].kind` advertised and the item's `finite_bound_available=false` settles `unsupported`, warned, with `unsupported_projection`/`unbounded-extent`. CG reads that flag from the item and does not derive it from the domain kinds (QSpec FR-290-AC-13). | Test (TC-046) |
 | FR-019-AC-23 | PLANNED (IR-629; bounded row depends on QSL-654). Changing only a bounded item's proof-bound numeric maximum leaves its process-provider `supported` or `unsupported` disposition and cause unchanged. | Test (TC-046) |
@@ -407,6 +430,8 @@ requires its exhaustive arms to compile. FR-019-AC-14 is a property of the retur
 | FR-019-AC-39 | PLANNED (IR-516). A selected reduction reaches only a candidate advertising that exact reduction, with the selection preserved in the routed request. Symmetry declarations and POR enter the obligation identity, so their reduced and unreduced requests for one claim have distinct obligation identities; a state constraint changes request identity but leaves obligation identity unchanged. An unadvertised selection or POR on a subject with no footprints settles `unsupported` without an artifact, and no arm drops or adds a reduction. | Test (TC-030) |
 | FR-019-AC-40 | PLANNED (IR-516). For an item over a weak `parallel`, a candidate advertising the subject's resolved `tso` or `ra` model receives that exact model; a candidate lacking it settles `unsupported` with no artifact, and no arm weakens the resolved model. An `sc` subject is a separate strong-model control and does not take the weak-memory branch. | Test (TC-030) |
 | FR-019-AC-41 | PLANNED (IR-516). With otherwise equal form and kind advertisement, model and protocol subject classes are read separately; an arm that discharges only one class settles the other `unsupported`, while a supported protocol item retains its protocol transition-system subject identity through routing. | Test (TC-030) |
+| FR-019-AC-43 | Two driver items selecting distinct `expression` occurrences of one checked `integer.add` node and different direct `numeric.narrow` occurrences in one admitted ContractPackage settle independently under the same Kani descriptor. Each preflight result is classified from its own selected result context; changing the selected narrow changes that item's typed result identity or refusal without changing the other. A node-only classifier or package-wide choice of either bound fails this control. | Test (TC-030) |
+| FR-019-AC-44 | For a V2 scalar claim, an absent `OwnResult`, an application occurrence absent from the admitted source, a conversion occurrence from another source or unrelated to the application, a missing conversion context root, or a ContractPackage source identity different from the checked source settles `invalid-request` with a typed form/context cause and no artifact or harness. Request and candidate/manifest defects retain their earlier precedence; for a valid candidate this selected-form refusal precedes extent and advertised-mode refusal. Neither a source message nor a caller maximum repairs the selection. | Test (TC-030) |
 
 ## Dependencies
 

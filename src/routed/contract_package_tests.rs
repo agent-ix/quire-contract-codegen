@@ -316,7 +316,7 @@ mod tests {
             advertised: Vec::new(),
             origin: ProviderOrigin::Process,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         };
         let routes = [function.clone(), absent.clone(), function.clone()]
             .into_iter()
@@ -527,7 +527,7 @@ mod tests {
                 advertised: Vec::new(),
                 origin: ProviderOrigin::Linked,
                 domains: None,
-                bounds: Default::default(),
+                bounds: None,
             };
             let routes = [expression, absent]
                 .into_iter()
@@ -560,6 +560,19 @@ mod tests {
                 node_id: requested[0].clone(),
                 result_selection: own_result(&checked, &requested[0], None),
             };
+            let routes = routes
+                .into_iter()
+                .enumerate()
+                .map(|(index, route)| {
+                    let ContractRequestPosition::DriverItem {
+                        result_selection, ..
+                    } = &positions[index]
+                    else {
+                        unreachable!("driver position")
+                    };
+                    route.with_scalar_selection(&admitted, result_selection.clone())
+                })
+                .collect::<Vec<_>>();
             let generated = generate_routed(&admitted, &positions, &routes, &contexts)
                 .expect("routed generation consumes admitted package");
             assert_eq!(generated.items[0].request_index, 0);
@@ -657,7 +670,7 @@ mod tests {
     }
 
     /// RR-16 supplies two result contexts for one semantic add key.
-    /// Trace: FR-039-AC-2, FR-049-AC-1, FR-049-AC-5, TC-053.
+    /// Trace: FR-039-AC-2, FR-049-AC-1, FR-049-AC-5, FR-019-AC-43, FR-019-AC-44, FR-022-AC-23, FR-022-AC-24, TC-030, TC-033, TC-053.
     #[test]
     fn duplicate_expression_uses_each_selected_conversion_context() {
         use crate::oracle::claim::ClaimDisposition;
@@ -791,12 +804,177 @@ mod tests {
             };
             assert_eq!(claim.checked_bounds.first(), Some(expected));
         }
+        // The same admitted source and node must settle each selected result
+        // occurrence independently before a generation artifact exists.
+        // Trace: FR-019-AC-43, FR-019-AC-44, TC-030.
+        let settle = |source: &CheckedPackageV2,
+                      positions: Vec<ContractRequestPosition>,
+                      request_index: usize| {
+            crate::routed::capability::negotiate_backend_provider(&BackendProviderEnvelope {
+                contract_version: BACKEND_PROVIDER_CONTRACT.to_owned(),
+                capability_vocabulary: CAPABILITY_VOCABULARY.to_owned(),
+                manifest: vec![BackendDescriptor {
+                    identity: "kani".to_owned(),
+                    advertised: vec![(
+                        crate::routed::capability::CapabilityKind::ValueValidity,
+                        crate::routed::capability::Mode::Bounded,
+                    )],
+                    origin: ProviderOrigin::Linked,
+                    domains: None,
+                    bounds: None,
+                }],
+                items: vec![RequestItem {
+                    kind: RequestedKind::Known(
+                        crate::routed::capability::CapabilityKind::ValueValidity,
+                    ),
+                    extent: Some(crate::routed::capability::ExtentClassification {
+                        extent: crate::routed::capability::Mode::Bounded,
+                        finite_bound_available: true,
+                        domains: Vec::new(),
+                        bounds: Vec::new(),
+                    }),
+                    named_backend: None,
+                    candidates: Candidates::Set(vec![Candidate {
+                        identity: "kani".to_owned(),
+                    }]),
+                    kani_form: crate::routed::capability::KaniForm::V2ScalarClaim {
+                        package: Box::new(source.clone()),
+                        contract: admitted.clone(),
+                        positions,
+                        request_index,
+                        node_id: add.clone(),
+                    },
+                }],
+            })
+            .expect("valid capability envelope")
+            .remove(0)
+            .disposition
+        };
+        for request_index in 0..2 {
+            assert!(
+                matches!(
+                    settle(&checked, positions.to_vec(), request_index),
+                    crate::routed::capability::Disposition::Supported { .. }
+                ),
+                "selected occurrence {request_index} must settle"
+            );
+        }
+        let mut missing = positions.to_vec();
+        if let ContractRequestPosition::DriverItem {
+            result_selection, ..
+        } = &mut missing[2]
+        {
+            *result_selection = ContractDriverResultSelection::NotApplicable;
+        }
+        assert!(matches!(
+            settle(&checked, missing, 1),
+            crate::routed::capability::Disposition::InvalidRequest {
+                cause: crate::routed::capability::Cause::KaniFormInvalid {
+                    refusal:
+                        crate::kani::generate::outcome::InvalidObligationItem::ScalarResultMissing,
+                    ..
+                }
+            }
+        ));
+        let mut cross_context = positions.to_vec();
+        if let ContractRequestPosition::DriverItem {
+            result_selection, ..
+        } = &mut cross_context[2]
+        {
+            *result_selection = ContractDriverResultSelection::OwnResult {
+                application: second.clone(),
+                conversion: Some(occurrence(&checked, first_conversion)),
+            };
+        }
+        assert!(matches!(
+            settle(&checked, cross_context.clone(), 1),
+            crate::routed::capability::Disposition::InvalidRequest {
+                cause: crate::routed::capability::Cause::KaniFormInvalid {
+                    refusal:
+                        crate::kani::generate::outcome::InvalidObligationItem::ScalarContextMismatch,
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            settle(&checked, cross_context.clone(), 0),
+            crate::routed::capability::Disposition::Supported { .. }
+        ));
+        let foreign_checked = admitted_source(SOURCE);
+        assert!(matches!(
+            settle(&foreign_checked, positions.to_vec(), 0),
+            crate::routed::capability::Disposition::InvalidRequest {
+                cause: crate::routed::capability::Cause::KaniFormInvalid {
+                    refusal:
+                        crate::kani::generate::outcome::InvalidObligationItem::ScalarSourceMismatch,
+                    ..
+                }
+            }
+        ));
+        let mut absent_application = positions.to_vec();
+        if let ContractRequestPosition::DriverItem {
+            result_selection: ContractDriverResultSelection::OwnResult { application, .. },
+            ..
+        } = &mut absent_application[0]
+        {
+            application.ordinal = u64::MAX;
+        }
+        assert!(matches!(
+            settle(&checked, absent_application, 0),
+            crate::routed::capability::Disposition::InvalidRequest {
+                cause: crate::routed::capability::Cause::KaniFormInvalid {
+                    refusal:
+                        crate::kani::generate::outcome::InvalidObligationItem::ScalarContextMismatch,
+                    ..
+                }
+            }
+        ));
+        let mut foreign_conversion = positions.to_vec();
+        if let ContractRequestPosition::DriverItem {
+            result_selection:
+                ContractDriverResultSelection::OwnResult {
+                    conversion: Some(conversion),
+                    ..
+                },
+            ..
+        } = &mut foreign_conversion[0]
+        {
+            conversion.node_id = foreign_checked
+                .graph()
+                .nodes
+                .iter()
+                .find(|node| &*node.node_tag == "expression")
+                .expect("foreign expression")
+                .node_id
+                .clone();
+        }
+        assert!(matches!(
+            settle(&checked, foreign_conversion, 0),
+            crate::routed::capability::Disposition::InvalidRequest {
+                cause: crate::routed::capability::Cause::KaniFormInvalid {
+                    refusal:
+                        crate::kani::generate::outcome::InvalidObligationItem::ScalarContextMismatch,
+                    ..
+                }
+            }
+        ));
+        let mut missing_root = positions.to_vec();
+        missing_root.remove(1);
+        assert!(matches!(
+            settle(&checked, missing_root, 0),
+            crate::routed::capability::Disposition::InvalidRequest {
+                cause: crate::routed::capability::Cause::KaniFormInvalid {
+                    refusal: crate::kani::generate::outcome::InvalidObligationItem::ScalarPositionMismatch,
+                    ..
+                }
+            }
+        ));
         let descriptor = BackendDescriptor {
             identity: "kani".to_owned(),
             advertised: Vec::new(),
             origin: ProviderOrigin::Linked,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         };
         let routes = (0..2)
             .map(|request_index| {
@@ -809,8 +987,54 @@ mod tests {
                     &descriptor,
                 )
                 .expect("linked Kani route")
+                .with_scalar_selection(
+                    &admitted,
+                    match &positions[request_index * 2] {
+                        ContractRequestPosition::DriverItem {
+                            result_selection, ..
+                        } => result_selection.clone(),
+                        ContractRequestPosition::ContextRoot { .. } => {
+                            unreachable!("driver position")
+                        }
+                    },
+                )
             })
             .collect::<Vec<_>>();
+        let changed_selection = match &cross_context[2] {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => result_selection.clone(),
+            ContractRequestPosition::ContextRoot { .. } => unreachable!("second driver"),
+        };
+        let changed_routes = [
+            routes[0].clone(),
+            routes[1]
+                .clone()
+                .with_scalar_selection(&admitted, changed_selection),
+        ];
+        assert!(matches!(
+            generate_routed(
+                &admitted,
+                &cross_context,
+                &changed_routes,
+                &GenerationContexts {
+                    kani: Some(KaniGenerationContext {
+                        ceilings: crate::kani::identity::ProofCeilings {
+                            memory_bytes: std::num::NonZeroU64::new(64 * 1024 * 1024)
+                                .expect("nonzero"),
+                            wall_clock: std::time::Duration::from_secs(10),
+                        },
+                        subject_path: "crate::subject",
+                        unwind: 1,
+                    }),
+                },
+            ),
+            Err(
+                crate::routed::generate::RoutedGenerationError::ScalarSelectionMismatch {
+                    request_index: 1
+                }
+            )
+        ));
         let routed = generate_routed(
             &admitted,
             &positions,
@@ -1353,7 +1577,7 @@ mod tests {
             advertised: Vec::new(),
             origin: ProviderOrigin::Linked,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         };
         let routed = [RoutedGenerationItem::from_descriptor(
             3,
@@ -1363,7 +1587,15 @@ mod tests {
             },
             &kani,
         )
-        .expect("linked Kani route")];
+        .expect("linked Kani route")
+        .with_scalar_selection(
+            &admitted,
+            PackageItems::new(&admitted, &positions)
+                .expect("admitted positions")
+                .result_selection(3)
+                .expect("fourth driver selection")
+                .clone(),
+        )];
         let contexts = GenerationContexts {
             kani: Some(KaniGenerationContext {
                 ceilings: crate::kani::identity::ProofCeilings {

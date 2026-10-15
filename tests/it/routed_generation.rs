@@ -4,14 +4,14 @@
 //! The fixtures are TC-024/TC-025's: `kani_obligations::scalar_package` and its claim map.
 
 use quire_contract_codegen::{
-    generate_exact_scalar_oracles, generate_routed, negotiate_kani_obligations,
-    routed_contract_lowering_profile, BackendDescriptor, BackendKind, Candidate,
-    ClaimDerivationRefusal, ClaimDisposition, ContractDriverResultSelection,
-    ContractRequestPosition, ExactScalarRefusal, GenerationContexts, InvalidObligationItem,
-    KaniGenerationContext, KaniObligationError, KaniObligationOutcome, KaniObligationRequest,
-    KaniScalarObligationHarness, KindOutput, ObligationDisposition, ObligationItem,
-    ObligationRecord, ProviderOrigin, RoutedGeneration, RoutedGenerationError,
-    RoutedGenerationItem, UnsupportedObligation,
+    generate_exact_scalar_oracles, generate_routed as generate_routed_impl,
+    negotiate_kani_obligations, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
+    Candidate, ClaimDerivationRefusal, ClaimDisposition, ContractDriverResultSelection,
+    ContractRequestPosition, ContractScalarError, ExactScalarRefusal, GenerationContexts,
+    InvalidObligationItem, KaniGenerationContext, KaniObligationError, KaniObligationOutcome,
+    KaniObligationRequest, KaniScalarObligationHarness, KindOutput, ObligationDisposition,
+    ObligationItem, ObligationRecord, OracleGenerationError, ProviderOrigin, RoutedGeneration,
+    RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -31,6 +31,37 @@ const RENDERED: [&str; 3] = [
     "quire.op.integer.negate",
 ];
 
+/// An external driver can name the scalar rendering envelope's typed source
+/// ceiling without reaching through a private module.
+/// Trace: FR-022-AC-25, TC-033.
+#[test]
+fn routed_scalar_source_ceiling_is_publicly_matchable() {
+    fn source_ceiling(error: &RoutedGenerationError) -> Option<(usize, usize, &'static str)> {
+        match error {
+            RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
+                OracleGenerationError::SourceTooLarge {
+                    bytes,
+                    limit,
+                    setting,
+                },
+            )) => Some((*bytes, *limit, setting)),
+            _ => None,
+        }
+    }
+
+    let error = RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
+        OracleGenerationError::SourceTooLarge {
+            bytes: 1025,
+            limit: 1024,
+            setting: "cg.scalar.source_bytes",
+        },
+    ));
+    assert_eq!(
+        source_ceiling(&error),
+        Some((1025, 1024, "cg.scalar.source_bytes"))
+    );
+}
+
 struct Fixture {
     package: CheckedPackageV2,
     ids: package::FixtureIds,
@@ -43,6 +74,32 @@ struct Fixture {
 struct AdmittedRoutingInput {
     package: ContractPackageV1,
     positions: Vec<ContractRequestPosition>,
+}
+
+fn generate_routed(
+    package: &ContractPackageV1,
+    positions: &[ContractRequestPosition],
+    routed: &[RoutedGenerationItem],
+    contexts: &GenerationContexts<'_>,
+) -> Result<RoutedGeneration, RoutedGenerationError> {
+    let selections = positions
+        .iter()
+        .filter_map(|position| match position {
+            ContractRequestPosition::DriverItem {
+                result_selection, ..
+            } => Some(result_selection),
+            ContractRequestPosition::ContextRoot { .. } => None,
+        })
+        .collect::<Vec<_>>();
+    let bound = routed
+        .iter()
+        .cloned()
+        .map(|item| match selections.get(item.request_index) {
+            Some(selection) => item.with_scalar_selection(package, (*selection).clone()),
+            None => item,
+        })
+        .collect::<Vec<_>>();
+    generate_routed_impl(package, positions, &bound, contexts)
 }
 
 /// Lower the complete indexed driver request once and read its FR-330 package.
@@ -270,7 +327,7 @@ fn route(request_index: usize, node_id: &CheckedNodeId) -> RoutedGenerationItem 
             advertised: Vec::new(),
             origin: ProviderOrigin::Linked,
             domains: None,
-            bounds: Default::default(),
+            bounds: None,
         },
     )
     .expect("linked Kani descriptor")
@@ -286,7 +343,7 @@ fn process_route(
         advertised: Vec::new(),
         origin: ProviderOrigin::Process,
         domains: None,
-        bounds: Default::default(),
+        bounds: None,
     };
     RoutedGenerationItem::from_descriptor(
         request_index,
@@ -297,6 +354,36 @@ fn process_route(
         &descriptor,
     )
     .expect("matching process descriptor")
+}
+
+/// Trace: FR-022-AC-21, TC-046
+#[test]
+fn routed_process_construction_preserves_optional_manifest_bounds() {
+    let fixture = fixture();
+    let absent = BackendDescriptor {
+        identity: "solver".to_owned(),
+        advertised: Vec::new(),
+        origin: ProviderOrigin::Process,
+        domains: None,
+        bounds: None,
+    };
+    let present_empty = BackendDescriptor {
+        bounds: Some(Default::default()),
+        ..absent.clone()
+    };
+    assert_ne!(absent, present_empty);
+    let construct = |descriptor: &BackendDescriptor| {
+        RoutedGenerationItem::from_descriptor(
+            0,
+            fixture.rendered[0].clone(),
+            Candidate {
+                identity: "solver".to_owned(),
+            },
+            descriptor,
+        )
+        .expect("matching process descriptor")
+    };
+    assert_eq!(construct(&absent), construct(&present_empty));
 }
 
 /// Trace: FR-022-AC-17, FR-022-AC-19, FR-022-AC-21, TC-046.
@@ -351,7 +438,7 @@ fn routed_item_constructor_refuses_mismatched_and_unknown_linked_descriptors() {
         advertised: Vec::new(),
         origin: ProviderOrigin::Process,
         domains: None,
-        bounds: Default::default(),
+        bounds: None,
     };
     let mismatch = RoutedGenerationItem::from_descriptor(
         0,
@@ -399,6 +486,68 @@ fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
             unwind,
         }),
     }
+}
+
+/// A Kani route must carry the exact selected result used at preflight.
+/// Trace: FR-022-AC-23, FR-022-AC-24, TC-033.
+#[test]
+fn routed_scalar_selection_must_match_admitted_driver_position() {
+    let fixture = fixture();
+    let routed_item = route(0, &fixture.rendered[0]);
+    let input = admitted_routing_input(&fixture.package, std::slice::from_ref(&routed_item));
+    let context = kani_context("crate::subject", 1);
+    assert_eq!(
+        generate_routed_impl(
+            &input.package,
+            &input.positions,
+            std::slice::from_ref(&routed_item),
+            &context
+        ),
+        Err(RoutedGenerationError::ScalarSelectionMismatch { request_index: 0 }),
+    );
+    let selection = match &input.positions[0] {
+        ContractRequestPosition::DriverItem {
+            result_selection, ..
+        } => result_selection.clone(),
+        ContractRequestPosition::ContextRoot { .. } => unreachable!("first position is a driver"),
+    };
+    let changed = if selection == ContractDriverResultSelection::NotApplicable {
+        ContractDriverResultSelection::OwnResult {
+            application: ContractOccurrenceKeyV1 {
+                node_id: routed_item.node_id.clone(),
+                role: CheckedOccurrenceRole::Expression,
+                ordinal: 0,
+            },
+            conversion: None,
+        }
+    } else {
+        ContractDriverResultSelection::NotApplicable
+    };
+    let wrong = routed_item.with_scalar_selection(&input.package, changed);
+    assert_eq!(
+        generate_routed_impl(
+            &input.package,
+            &input.positions,
+            std::slice::from_ref(&wrong),
+            &context
+        ),
+        Err(RoutedGenerationError::ScalarSelectionMismatch { request_index: 0 }),
+    );
+    let other_route = route(0, &fixture.rendered[1]);
+    let other_package =
+        admitted_routing_input(&fixture.package, std::slice::from_ref(&other_route));
+    assert_ne!(input.package.identity(), other_package.package.identity());
+    let bound_elsewhere =
+        route(0, &fixture.rendered[0]).with_scalar_selection(&other_package.package, selection);
+    assert_eq!(
+        generate_routed_impl(
+            &input.package,
+            &input.positions,
+            std::slice::from_ref(&bound_elsewhere),
+            &context,
+        ),
+        Err(RoutedGenerationError::ScalarSelectionMismatch { request_index: 0 }),
+    );
 }
 
 /// Trace: FR-028-AC-1.

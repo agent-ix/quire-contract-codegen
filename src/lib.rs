@@ -63,11 +63,12 @@ pub use kani::generate::lower::FamilyLoweringError;
 pub use oracle::claim::{ClaimDisposition, ClaimMap, OracleGenerationError, UpstreamBlocker};
 pub use oracle::scalar::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles,
-    render_exact_scalar_plan, BoundForm, ClaimDerivationRefusal, DecimalOperator, ExactScalarClaim,
-    ExactScalarItem, ExactScalarOperation, ExactScalarOracles, ExactScalarPlan, ExactScalarRefusal,
-    GeneratedScalarClaim, IeeeArithmeticOperator, OperandRangeLimitKind, OperationClaim,
-    OperationProvenance, OrderingOperandKind, QuantityOperator, RationalOperator, ScalarForm,
-    EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    render_exact_scalar_plan, BoundForm, ClaimDerivationRefusal, ContractScalarError,
+    DecimalOperator, ExactScalarClaim, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
+    ExactScalarPlan, ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator,
+    OperandRangeLimitKind, OperationClaim, OperationProvenance, OrderingOperandKind,
+    QuantityOperator, RationalOperator, ScalarForm, EXACT_SCALAR_CRATE_NAME,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::equality::{

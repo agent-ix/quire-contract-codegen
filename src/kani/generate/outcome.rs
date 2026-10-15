@@ -365,6 +365,16 @@ pub enum UnsupportedObligation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum InvalidObligationItem {
+    /// The admitted ContractPackage names a different checked source.
+    ScalarSourceMismatch,
+    /// The selected scalar driver position does not match admitted accounting.
+    ScalarPositionMismatch,
+    /// A scalar claim has no selected own-result occurrence.
+    ScalarResultMissing,
+    /// The selected application, conversion, or context root is not represented together.
+    ScalarContextMismatch,
+    /// The admitted selected scalar claim could not be derived.
+    ScalarDerivationFailed,
     /// The item repeats an earlier item.
     DuplicateItem {
         /// Index of the first occurrence.
