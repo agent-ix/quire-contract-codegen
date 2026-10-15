@@ -45,3 +45,7 @@ Audited the changed routed-scalar proof/native path against FR-017-AC-27 through
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-002 | medium | TC-027 did not independently exercise all required preflight mismatch classes and prove refusal before launcher invocation | tests/it/kani_obligations.rs:2668-2829 |
+
+## Delta disposition pass 3
+
+Rechecked the public PR delta at `0fcbd23e74427d341b185b228cb0c595b29636cf` against main `2928df58a46928c2a84a225d2891914fc8f08caa`. No new requirement-to-implementation gap. The canonical helper keeps `quire_canonical::sha256` behind `core::canonical` while allowing the proof-content preimage its explicit 256 MiB limit. Package identity remains validated separately from per-harness equality before either child runs. Existing FND-001 remains deferred to IR-773; FND-002's separate TC-027 preflight controls remain fixed by source inspection. No Cargo/Kani or other build/gate evidence was produced in this pass.
