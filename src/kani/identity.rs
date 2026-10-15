@@ -199,7 +199,7 @@ pub struct ScalarObligationIdentity {
 }
 
 /// One generated V2 exact-scalar obligation harness.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct KaniScalarObligationHarness {
     /// Identity.
     pub identity: ScalarObligationIdentity,
@@ -208,6 +208,70 @@ pub struct KaniScalarObligationHarness {
     /// JSON record of the identity and the Rust source path: the persisted obligation schema a
     /// witness is decoded against.
     pub record: Artifact,
+    generated_identity: ScalarObligationIdentity,
+    generated_rust: Artifact,
+    generated_record: Artifact,
+    generated_artifacts: Option<Vec<Artifact>>,
+}
+
+// This value compares the per-harness public output and its origin seal. The routed package seal
+// is whole-call execution context; including it would make equality depend on unrelated siblings.
+impl PartialEq for KaniScalarObligationHarness {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity == other.identity
+            && self.rust == other.rust
+            && self.record == other.record
+            && self.generated_identity == other.generated_identity
+            && self.generated_rust == other.generated_rust
+            && self.generated_record == other.generated_record
+    }
+}
+
+impl Eq for KaniScalarObligationHarness {}
+
+impl KaniScalarObligationHarness {
+    /// Construct the immutable generator-origin seal for one scalar harness.
+    pub(crate) fn generated(
+        identity: ScalarObligationIdentity,
+        rust: Artifact,
+        record: Artifact,
+    ) -> Self {
+        Self {
+            generated_identity: identity.clone(),
+            generated_rust: rust.clone(),
+            generated_record: record.clone(),
+            identity,
+            rust,
+            record,
+            generated_artifacts: None,
+        }
+    }
+
+    /// Whether the public retained fields still match the generator-origin seal.
+    #[must_use]
+    pub(crate) fn has_valid_provenance(&self) -> bool {
+        self.identity == self.generated_identity
+            && self.rust == self.generated_rust
+            && self.record == self.generated_record
+    }
+
+    /// Bind the package generated in the same routed call to this private retained harness.
+    pub(crate) fn bind_artifact_package(&mut self, artifacts: &[Artifact]) {
+        let mut artifacts = artifacts.to_vec();
+        artifacts.sort_by(|left, right| left.path.cmp(&right.path));
+        self.generated_artifacts = Some(artifacts);
+    }
+
+    /// Whether the caller-supplied artifacts still match the package captured during routing.
+    #[must_use]
+    pub(crate) fn matches_artifact_package(&self, artifacts: &[Artifact]) -> bool {
+        self.has_valid_provenance()
+            && self.generated_artifacts.as_ref().is_some_and(|expected| {
+                let mut actual = artifacts.to_vec();
+                actual.sort_by(|left, right| left.path.cmp(&right.path));
+                &actual == expected
+            })
+    }
 }
 
 impl KaniObligationIdentity {

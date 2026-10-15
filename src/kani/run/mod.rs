@@ -6,6 +6,8 @@ pub(crate) mod harness;
 pub(crate) mod launch;
 // The unique report path, stale removal and bounded read.
 pub(crate) mod report_file;
+// Private staging and paired Kani/native execution for routed scalar obligations.
+pub(crate) mod scalar;
 // The backend and its location.
 pub(crate) mod tool;
 

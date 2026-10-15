@@ -27,16 +27,17 @@ use package::{
 };
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
-    classify_kani_run, execute_kani_obligation, generate_exact_scalar_oracles, generate_routed,
-    negotiate_kani_obligations, routed_contract_lowering_profile, Candidate, ClaimDisposition,
-    ClaimMap, ContractRequestPosition, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
+    classify_kani_run, execute_kani_obligation, execute_kani_scalar_native,
+    generate_exact_scalar_oracles, generate_routed, negotiate_kani_obligations,
+    routed_contract_lowering_profile, Candidate, ClaimDisposition, ClaimMap,
+    ContractRequestPosition, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
     ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniExecutionRefusal,
     KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
     KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniScalarObligationHarness, KaniSolver, KaniTool, KaniToolError, KindOutput,
-    ObligationDisposition, ObligationItem, ObligationKind, ObligationRecord, ObligationSubject,
-    OperationProvenance, RoutedGenerationItem, UnsupportedObligation, UpstreamBlocker,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness, KaniSolver, KaniTool,
+    KaniToolError, KindOutput, ObligationDisposition, ObligationItem, ObligationKind,
+    ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
+    UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
     BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
@@ -2208,18 +2209,57 @@ fn routed_scalar_increment() -> (
     KaniScalarObligationHarness,
     quire_contract_codegen::Artifact,
 ) {
-    const NARROW: u32 = 49_100;
-    let mut builder = package::bounded_increment_package();
-    let bound = builder.bound(&package::Bound::Integer(0, 9));
+    let (harness, artifacts) = routed_scalar_increment_with_artifacts();
+    let manifest = artifacts
+        .into_iter()
+        .find(|artifact| artifact.path == "Cargo.toml")
+        .expect("the oracle crate returns its manifest");
+    (harness, manifest)
+}
+
+fn routed_scalar_increment_with_artifacts() -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    routed_scalar_with_artifacts(
+        package::bounded_increment_package(),
+        package::BOUNDED_INCREMENT,
+        49_100,
+        Bound::Integer(0, 9),
+    )
+}
+
+fn routed_scalar_binary_subtraction_with_artifacts() -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    routed_scalar_with_artifacts(
+        package::bounded_binary_subtraction_package(),
+        package::BOUNDED_BINARY_SUBTRACTION,
+        49_102,
+        Bound::Integer(-9, 9),
+    )
+}
+
+fn routed_scalar_with_artifacts(
+    mut builder: package::PackageBuilder,
+    operation_code: u32,
+    narrow_code: u32,
+    result_bound: Bound,
+) -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    let bound = builder.bound(&result_bound);
     builder.narrow(
-        NARROW,
-        package::code_id(package::BOUNDED_INCREMENT).digest.as_ref(),
+        narrow_code,
+        package::code_id(operation_code).digest.as_ref(),
         &bound,
     );
     builder.expression_occurrences();
     let (package, ids) = builder.admit_resolved();
-    let node_id = ids.resolve(&package::code_id(package::BOUNDED_INCREMENT));
-    let narrow_id = ids.resolve(&package::code_id(NARROW));
+    let node_id = ids.resolve(&package::code_id(operation_code));
+    let narrow_id = ids.resolve(&package::code_id(narrow_code));
     let roots = [node_id.clone(), narrow_id.clone()];
     let lowered = package.lower(&roots, &routed_contract_lowering_profile());
     let admitted = match ContractPackageWireV1::read(
@@ -2296,12 +2336,7 @@ fn routed_scalar_increment() -> (
         },
     )
     .expect("routed generation succeeds");
-    let manifest = generation
-        .oracle_artifacts
-        .expect("a Kani group ran")
-        .into_iter()
-        .find(|artifact| artifact.path == "Cargo.toml")
-        .expect("the oracle crate returns its manifest");
+    let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
     let [item] = generation.items.as_slice() else {
         panic!("one routed item, got {:?}", generation.items);
     };
@@ -2310,7 +2345,7 @@ fn routed_scalar_increment() -> (
     };
     (
         harness.as_deref().cloned().expect("the item is supported"),
-        manifest,
+        artifacts,
     )
 }
 
@@ -2452,6 +2487,346 @@ fn tc_027_a_routed_scalar_harness_verifies() {
     ));
     assert!(!crate_directory.join("target").exists(), "nothing ran");
     let _ = fs::remove_dir_all(crate_directory);
+}
+
+/// A retained routed scalar is proved and invoked with normal and constrained native limits.
+///
+/// Trace: FR-017-AC-27, FR-017-AC-28, FR-017-AC-29, FR-017-AC-30.
+#[test]
+#[ignore = "kani lane: run serially through make kani"]
+fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
+    use quire_contract_runtime::exact::{ChargePoint, LimitKind, Outcome};
+    let (harness, artifacts) = routed_scalar_increment_with_artifacts();
+    let operands = [4_i64, 1_i64];
+    let limits = attested_scalar_limits();
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested");
+    let receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native receipt");
+    assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
+    assert_eq!(receipt.operands(), operands);
+    assert_eq!(receipt.scalar_limits(), &limits);
+    assert!(
+        matches!(receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "5")
+    );
+    assert!(receipt
+        .meter_observation()
+        .consumed()
+        .iter()
+        .any(|count| *count > 0));
+    let mut constrained_limits = limits;
+    constrained_limits.result_units = 0;
+    let constrained_receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &operands,
+        scalar_limits: constrained_limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native incomplete receipt at zero result budget");
+
+    assert_eq!(
+        constrained_receipt.proof_evidence().outcome,
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(constrained_receipt.operands(), operands);
+    assert_eq!(constrained_receipt.scalar_limits(), &constrained_limits);
+    assert_eq!(
+        receipt.proof_content_identity(),
+        constrained_receipt.proof_content_identity(),
+        "native request limits do not change the staged proof content"
+    );
+    let Outcome::Incomplete(incomplete) = constrained_receipt.native_outcome() else {
+        panic!("zero result_units must stop integer result retention");
+    };
+    assert_eq!(incomplete.limit_kind, LimitKind::ResultUnits);
+    assert_eq!(incomplete.limit, 0);
+    assert_eq!(incomplete.consumed, 0);
+    assert_eq!(incomplete.next_charge, 1_i64.into());
+    assert_eq!(
+        incomplete.charge_point,
+        ChargePoint::IntegerArithmeticResultRetain
+    );
+    assert_eq!(constrained_receipt.meter_observation().consumed()[9], 0);
+    assert!(!constrained_receipt
+        .meter_observation()
+        .admitted_charges()
+        .contains(&ChargePoint::IntegerArithmeticResultRetain));
+}
+
+/// The routed subtraction fixture retains two independently bounded symbolic operands.
+///
+/// Trace: FR-017-AC-31.
+#[test]
+fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
+    let (harness, _) = routed_scalar_binary_subtraction_with_artifacts();
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness
+        .identity
+        .arguments
+        .iter()
+        .all(|argument| argument.minimum == 0 && argument.maximum == 9));
+}
+
+/// Trace: FR-017-AC-31.
+#[test]
+#[ignore = "kani lane: run serially through make kani"]
+fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
+    use quire_contract_runtime::exact::Outcome;
+
+    let (harness, artifacts) = routed_scalar_binary_subtraction_with_artifacts();
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness
+        .identity
+        .arguments
+        .iter()
+        .all(|argument| argument.minimum == 0 && argument.maximum == 9));
+    let limits = attested_scalar_limits();
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested-orders");
+
+    let left_first = [4_i64, 1_i64];
+    let left_first_receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &left_first,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native receipt for [4, 1]");
+
+    let right_first = [1_i64, 4_i64];
+    let right_first_receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &right_first,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native receipt for [1, 4]");
+
+    assert_eq!(
+        left_first_receipt.proof_evidence().outcome,
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(
+        right_first_receipt.proof_evidence().outcome,
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(left_first_receipt.operands(), left_first);
+    assert_eq!(right_first_receipt.operands(), right_first);
+    assert_eq!(left_first_receipt.scalar_limits(), &limits);
+    assert_eq!(right_first_receipt.scalar_limits(), &limits);
+    assert_eq!(
+        left_first_receipt.proof_content_identity(),
+        right_first_receipt.proof_content_identity(),
+        "request operands are retained in each receipt but are not staged proof content"
+    );
+    assert!(
+        matches!(left_first_receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "3")
+    );
+    assert!(
+        matches!(right_first_receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "-3")
+    );
+}
+
+fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
+    quire_contract_runtime::exact::ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    }
+}
+
+/// Mismatched staged paths, retained scalar identity and operands refuse before either child starts.
+///
+/// Trace: FR-017-AC-28, FR-017-AC-29.
+#[test]
+fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
+    use quire_contract_codegen::{KaniScalarNativeError, KaniScalarNativeRequest};
+
+    let (harness, valid_artifacts) = routed_scalar_increment_with_artifacts();
+    let cancel = quire_exact::Cancel::new();
+    let control_directory = env::temp_dir().join(format!(
+        "ir791-preflight-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&control_directory).unwrap();
+    let launcher = control_directory.join("fake-cargo-kani");
+    let marker = control_directory.join("launched");
+    fs::write(
+        &launcher,
+        format!("#!/bin/sh\n: > '{}'\nexit 97\n", marker.display()),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let installation = KaniInstallation::new(launcher);
+    let target = control_directory.join("target");
+    let limits = attested_scalar_limits();
+    let operands = [4_i64, 1_i64];
+    let assert_not_launched = || assert!(!marker.exists(), "preflight failure launched a child");
+
+    let mut changed_path_artifacts = valid_artifacts.clone();
+    changed_path_artifacts
+        .iter_mut()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("generated oracle library")
+        .path = "src/renamed.rs".to_owned();
+    let changed_path = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &changed_path_artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        changed_path,
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar package changed after routed generation"
+        ))
+    ));
+    assert_not_launched();
+
+    let mut changed_bytes_artifacts = valid_artifacts.clone();
+    let source = changed_bytes_artifacts
+        .iter_mut()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("generated oracle library");
+    source.contents = source.contents.replacen("pub fn ", "fn ", 1);
+    let changed_bytes = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &changed_bytes_artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        changed_bytes,
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar package changed after routed generation"
+        ))
+    ));
+    assert_not_launched();
+
+    let mut changed_scalar_identity = harness.clone();
+    changed_scalar_identity
+        .identity
+        .operation_identity
+        .push_str(".changed");
+    let changed_identity = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &changed_scalar_identity,
+        oracle_artifacts: &valid_artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        changed_identity,
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar harness changed after generation"
+        ))
+    ));
+    assert_not_launched();
+
+    let mut changed_oracle_symbol = harness.clone();
+    let renamed_harness = changed_oracle_symbol.rust.contents.replacen(
+        &harness.identity.oracle_symbol,
+        "wrong_oracle",
+        1,
+    );
+    assert_ne!(renamed_harness, changed_oracle_symbol.rust.contents);
+    changed_oracle_symbol.rust.contents = renamed_harness;
+    let wrong_symbol = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &changed_oracle_symbol,
+        oracle_artifacts: &valid_artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        wrong_symbol,
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar harness changed after generation"
+        ))
+    ));
+    assert_not_launched();
+
+    let one_operand = [4_i64];
+    let wrong_operand_count = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &valid_artifacts,
+        operands: &one_operand,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        wrong_operand_count,
+        Err(KaniScalarNativeError::InvalidRequest(
+            "operand count differs from harness identity"
+        ))
+    ));
+    assert_not_launched();
+
+    let out_of_bounds_operands = [i64::MAX, 1_i64];
+    let out_of_bounds = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &valid_artifacts,
+        operands: &out_of_bounds_operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        out_of_bounds,
+        Err(KaniScalarNativeError::InvalidRequest(
+            "operand lies outside its retained bounds"
+        ))
+    ));
+    assert_not_launched();
+    assert!(!target.exists(), "preflight refusal created a build target");
+    fs::remove_dir_all(control_directory).unwrap();
 }
 
 /// The same harness with its checked domain narrowed to `[0, 5]` asserts a bound the oracle does

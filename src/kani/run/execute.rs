@@ -338,7 +338,16 @@ pub fn execute_kani_obligation(
     request: &KaniExecutionRequest<'_>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     require_in_crate(request)?;
-    run_single(request)
+    run_single(request, None)
+}
+
+/// Runs a harness from a prepared source tree that must remain read-only for the backend.
+pub(crate) fn execute_kani_obligation_readonly(
+    request: &KaniExecutionRequest<'_>,
+    source_directory: &Path,
+) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
+    require_in_crate(request)?;
+    run_single(request, Some(source_directory))
 }
 
 /// Refuses a request whose crate's library source does not contain its harness's generated
@@ -442,10 +451,14 @@ fn evidence_of(
 /// The run of one harness whose presence in the crate has been checked.
 fn run_single(
     request: &KaniExecutionRequest<'_>,
+    read_only_source: Option<&Path>,
 ) -> Result<KaniExecutionEvidence, KaniExecutionRefusal> {
     let report_path = fresh_report_path(request.target_directory);
     remove_stale_report(&report_path)?;
-    let (arguments, command) = launch_command(request, &report_path);
+    let (arguments, mut command) = launch_command(request, &report_path);
+    if let Some(source) = read_only_source {
+        command.read_only_bind(source);
+    }
     let launch = start(
         request,
         command,
@@ -517,7 +530,7 @@ pub fn execute_kani_obligations(
         .map(|group| KaniGroupRun {
             members: group.iter().map(|(position, _)| *position).collect(),
             evidence: match group.as_slice() {
-                [(_, only)] => run_single(only).map(|evidence| vec![evidence]),
+                [(_, only)] => run_single(only, None).map(|evidence| vec![evidence]),
                 _ => run_group(&group),
             },
         })

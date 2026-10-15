@@ -147,6 +147,11 @@ pub use kani::run::execute::{
 };
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::CaptureStream;
+pub use kani::run::scalar::{
+    execute_kani_scalar_native, KaniScalarNativeError, KaniScalarNativeReceipt,
+    KaniScalarNativeRequest, NativeMeterObservation, ScalarOracleStopKind,
+    ScalarProofContentIdentity,
+};
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
     ir_outcome_terminal_value, run_terminal_value, ReplaySettlement, TerminalPairError,

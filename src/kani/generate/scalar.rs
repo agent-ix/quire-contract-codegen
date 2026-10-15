@@ -483,11 +483,9 @@ mod {module} {{\n\
         source,
     );
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniScalarObligationHarness {
-        identity,
-        rust,
-        record,
-    })
+    Ok(KaniScalarObligationHarness::generated(
+        identity, rust, record,
+    ))
 }
 
 #[cfg(test)]

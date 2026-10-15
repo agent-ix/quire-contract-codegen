@@ -50,6 +50,7 @@ pub(super) struct BackendCommand {
     arguments: Vec<OsString>,
     directory: Option<PathBuf>,
     environment: Vec<(OsString, OsString)>,
+    read_only_binds: Vec<PathBuf>,
 }
 
 impl BackendCommand {
@@ -59,6 +60,7 @@ impl BackendCommand {
             arguments: Vec::new(),
             directory: None,
             environment: Vec::new(),
+            read_only_binds: Vec::new(),
         }
     }
     #[cfg(test)]
@@ -77,6 +79,11 @@ impl BackendCommand {
     }
     pub(super) fn current_dir(&mut self, directory: impl AsRef<Path>) -> &mut Self {
         self.directory = Some(directory.as_ref().to_owned());
+        self
+    }
+    /// Re-bind a prepared input tree read-only inside the backend's mount namespace.
+    pub(super) fn read_only_bind(&mut self, directory: impl AsRef<Path>) -> &mut Self {
+        self.read_only_binds.push(directory.as_ref().to_owned());
         self
     }
     /// Apply the same argv, working directory and inherited-environment additions to a command.
@@ -149,9 +156,16 @@ impl NamespaceOwner {
             ])
             .arg("3")
             .arg("--block-fd")
-            .arg("4")
-            .arg("--")
-            .arg(&recipe.program);
+            .arg("4");
+        for path in &recipe.read_only_binds {
+            command.args(["--ro-bind"]).arg(path).arg(path);
+        }
+        if !recipe.read_only_binds.is_empty() {
+            if let Some(directory) = &recipe.directory {
+                command.args(["--chdir"]).arg(directory);
+            }
+        }
+        command.arg("--").arg(&recipe.program);
         recipe.configure(&mut command);
         #[cfg(target_os = "linux")]
         {
@@ -466,6 +480,10 @@ fn valid_pid(pid: u32) -> io::Result<Pid> {
 mod tests {
     use super::*;
     use crate::kani::test_support::discover_scratch;
+    use crate::kani::{
+        identity::ProofCeilings,
+        run::{launch::run_bounded_launcher, owners::LaunchOwners},
+    };
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
 
@@ -518,6 +536,47 @@ mod tests {
             }
         }
         (found, observed)
+    }
+
+    /// Trace: FR-017-AC-28.
+    #[test]
+    fn prepared_source_bind_is_read_only_to_the_backend() {
+        let directory = discover_scratch("readonly-source-bind");
+        let marker = directory.join("unexpected-write");
+        let mut command = BackendCommand::new("sh");
+        command
+            .args(&[
+                "-c".to_owned(),
+                "touch \"$1\"".to_owned(),
+                "sh".to_owned(),
+                marker.display().to_string(),
+            ])
+            .current_dir(&directory)
+            .read_only_bind(&directory);
+        let result = run_bounded_launcher(
+            command,
+            ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(512 * 1024 * 1024).unwrap(),
+                wall_clock: Duration::from_secs(5),
+            },
+            std::num::NonZeroUsize::MIN,
+            Instant::now().checked_add(Duration::from_secs(5)),
+            &quire_exact::Cancel::new(),
+            &LaunchOwners::real(),
+        )
+        .unwrap_or_else(|_| panic!("read-only bound launch is available"));
+        assert!(
+            !marker.exists(),
+            "the backend cannot add files to its source tree"
+        );
+        assert!(matches!(
+            result.outcome,
+            super::super::launch::LaunchOutcome::Completed {
+                exited_successfully: false,
+                ..
+            }
+        ));
+        fs::remove_dir_all(directory).unwrap();
     }
 
     /// Trace: FR-028-AC-2, FR-028-AC-21.

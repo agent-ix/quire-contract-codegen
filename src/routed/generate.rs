@@ -535,6 +535,9 @@ fn generate_kani(
         } => (records, index_harnesses(scalar_harnesses)?, false),
         KaniObligationOutcome::Rejected { records } => (records, BTreeMap::new(), true),
     };
+    for harness in harnesses.values_mut() {
+        harness.bind_artifact_package(&artifacts);
+    }
     let outputs = route_records(records, group, &mut harnesses)?;
     Ok((ArmOutput { outputs, rejected }, claim_map, artifacts))
 }
@@ -819,8 +822,8 @@ mod tests {
             "digest": "1".repeat(64),
         }))
         .expect("a checked node id");
-        KaniScalarObligationHarness {
-            identity: ScalarObligationIdentity {
+        KaniScalarObligationHarness::generated(
+            ScalarObligationIdentity {
                 ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
                 node_id,
                 operation_identity: "quire.op.integer.add".to_owned(),
@@ -833,9 +836,9 @@ mod tests {
                 unwind: 1,
                 options: Vec::new(),
             },
-            rust: Artifact::new(format!("src/generated/{module}.rs"), String::new()),
-            record: Artifact::new(format!("kani-obligations/{module}.json"), String::new()),
-        }
+            Artifact::new(format!("src/generated/{module}.rs"), String::new()),
+            Artifact::new(format!("kani-obligations/{module}.json"), String::new()),
+        )
     }
 
     /// Trace: TC-033, FR-022-AC-16.

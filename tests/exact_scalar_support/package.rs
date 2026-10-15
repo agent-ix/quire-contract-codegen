@@ -3205,9 +3205,16 @@ pub fn mode_mismatch_package() -> PackageBuilder {
 
 /// The QSL parameter `x: Int[0, 9]` of [`bounded_increment_package`].
 pub const V_PARAM_X: u32 = 111;
+/// The second bounded operand for [`BOUNDED_BINARY_SUBTRACTION`].
+pub const V_PARAM_SUBTRAHEND: u32 = 121;
 /// `x + 1` over `Int[0, 9]`, with `x` typed by a `bounded_domain` and `[0, 9]` the one
 /// `integer_range` over Integer.
 pub const BOUNDED_INCREMENT: u32 = 2035;
+/// `x - 1` over the `Int[0, 9]` domain, with the same single-parameter shape as the increment
+/// fixture so native execution can distinguish operand order.
+pub const BOUNDED_DECREMENT: u32 = 2036;
+/// `x - y` over independently bounded `Int[0, 9]` operands.
+pub const BOUNDED_BINARY_SUBTRACTION: u32 = 2037;
 
 /// A package holding only `x + 1` over `Int[0, 9]` in QSL's shape: `x` is typed by an
 /// `integer_range` `bounded_domain` over Integer whose members are `min`/`max` bindings.
@@ -3234,6 +3241,72 @@ pub fn bounded_increment_package() -> PackageBuilder {
             vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
         ),
         &[bound],
+    );
+    builder
+}
+
+/// A package holding `x - 1` over `Int[0, 9]`, parallel to [`bounded_increment_package`].
+pub fn bounded_decrement_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let bound = Bound::Integer(0, 9);
+    let bound_key = builder.bound(&bound);
+    builder.code(
+        V_PARAM_X,
+        "value",
+        "literal",
+        &bound_key,
+        literal("integer", "3"),
+    );
+    builder.application_bounded(
+        BOUNDED_DECREMENT,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        application(
+            "binary",
+            op("quire.op.integer.sub"),
+            &key(T_INTEGER),
+            vec![reference(&key(V_PARAM_X)), literal("integer", "1")],
+        ),
+        &[bound],
+    );
+    builder
+}
+
+/// A package holding `x - y` where both symbolic operands independently admit `[0, 9]`.
+pub fn bounded_binary_subtraction_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let operand_bound = Bound::Integer(0, 9);
+    let operand_bound_key = builder.bound(&operand_bound);
+    let minuend_key = key(V_PARAM_X);
+    let subtrahend_key = key(V_PARAM_SUBTRAHEND);
+    builder.code(
+        V_PARAM_X,
+        "value",
+        "literal",
+        &operand_bound_key,
+        literal("integer", "3"),
+    );
+    builder.code(
+        V_PARAM_SUBTRAHEND,
+        "value",
+        "literal",
+        &operand_bound_key,
+        literal("integer", "1"),
+    );
+    builder.application_bounded_anchored(
+        BOUNDED_BINARY_SUBTRACTION,
+        "expression",
+        "binary",
+        &key(T_INTEGER),
+        application(
+            "binary",
+            op("quire.op.integer.sub"),
+            &key(T_INTEGER),
+            vec![reference(&minuend_key), reference(&subtrahend_key)],
+        ),
+        &[Bound::Integer(-9, 9)],
+        Some(&minuend_key),
     );
     builder
 }
