@@ -63,6 +63,10 @@ Text-admission identity rather than claiming a checked node or contract role.
   caller passes the list to the batch entry `execute_kani_obligations` in `kani/run/execute.rs`;
   that entry, not the caller, forms the groups.
 - A Kani installation: the `cargo-kani` launcher to invoke.
+- For a paired routed-scalar proof/native run, the retained scalar harness, its complete routed
+  oracle artifact package, the concrete integer operands in call order, and the original
+  `ScalarLimits` retained with the scalar generation/proving context. The caller supplies no
+  crate directory, proof-content identity or native outcome for this operation.
 - The harness identity's `ProofCeilings`: `wall_clock` bounds one harness's run and
   `memory_bytes` bounds aggregate resident memory of its backend process tree (FR-028).
   `KaniExecutionRequest` carries the harness, installation and crate/target directories;
@@ -81,11 +85,45 @@ Text-admission identity rather than claiming a checked node or contract role.
   cannot be attributed to a checked-package scalar claim.
 - A typed refusal, and no run, when the launcher is absent or when the crate
   does not contain the harness.
+- For a paired routed-scalar run, an opaque receipt containing the measured proof-content
+  identity, the retained scalar identity, the ordered concrete operands and original limits,
+  verified Kani execution evidence, and the actual typed outcome returned by invoking the
+  staged oracle, or a typed failure with no receipt.
 
 ## Behavior
 
 - If the launcher is absent, then the generator shall refuse with a typed
   reason naming its path, and shall run nothing.
+- When a caller requests a paired routed-scalar proof/native receipt, the runner shall bind the
+  retained scalar harness to its complete generated oracle package and validate the selected
+  public oracle, its arity and argument order, the concrete operands against their retained
+  ranges, and the original `ScalarLimits` context before starting either child process.
+- The scalar runner shall stage one private snapshot containing the complete routed package, the
+  retained scalar harness, the native invocation adapter and the resolved dependency lock.
+- The scalar runner shall measure one canonical proof-content identity over the exact paths and
+  bytes of every staged execution input: the complete generated package, retained harness, native
+  invocation adapter and resolved dependency lock. This identity names the content actually
+  proved and executed; it does not track tool versions or add a separate file/version identity.
+- The scalar receipt shall retain the selected scalar identity, oracle symbol, ordered concrete
+  operands and original `ScalarLimits` that bind the native observation to its request.
+- While either child executes, the runner shall prevent that child from modifying the staged source
+  tree.
+- When the runner constructs a receipt, it shall verify that the staged tree has its expected path
+  set and contents and that all execution-relevant staged paths and bytes still match the measured
+  proof-content identity; a changed, replaced or additional staged file shall produce a typed
+  failure and no receipt.
+- The runner shall execute Kani against the staged harness.
+- The runner shall invoke the public oracle from that same staged library source at the retained
+  ordered operands with a meter initialized from the original `ScalarLimits`.
+- The runner shall take the native outcome from the runtime invocation's typed result, never infer
+  it from the Kani verdict or caller-supplied text.
+- When Kani reports `Verified`, the staged native call produces one supported typed runtime
+  outcome, and the measured snapshot remains unchanged, the runner shall return a receipt.
+- If proof execution is failed or inconclusive, native launch or decoding fails, or the snapshot
+  changes, then the runner shall return a typed failure with no receipt.
+- The public receipt shall expose read-only access to its measured identity, scalar identity,
+  ordered operands, original limits, Kani evidence and actual typed native outcome, and shall have
+  no caller-accessible constructor, deserializer or setters for its identity or native outcome.
 - If the crate's library source does not contain the harness's generated source
   byte for byte, then the generator shall refuse, because evidence about a
   harness the crate does not contain is evidence about nothing.
@@ -315,6 +353,11 @@ Text-admission identity rather than claiming a checked node or contract role.
 | FR-017-AC-24 | A launcher that exits on its own after leaving a real grandchild in its process group has that grandchild killed by the time the run returns, the same as on a timeout. | Test (TC-043) |
 | FR-017-AC-25 | A capture thread that panics, or whose poll or read of the stream errs, refuses the run with `kani_output_unread`; the run is never classified from empty text. | Test (TC-043) |
 | FR-017-AC-26 | A generated FR-035 caller Text-admission harness enters the same production execution path in single and compatible batch runs; its evidence carries the exact typed caller identity (profile, bounds and finite payload class) supplied with that harness and `None` for contract obligation kind. A matching successful report with a satisfied cover and successful agreement assertion classifies `Verified`; an unsatisfied cover classifies `CoverUnsatisfied` with counts; a failed agreement assertion with its own concrete playback classifies `Falsified` with that playback. A source-mismatched harness, missing launcher or malformed report retains the existing typed refusal and yields no verified caller claim; a report with no cover or a failed assertion with no playback is inconclusive under the existing rules. The outcome and playback remain bound to the caller identity and selected harness path, never to a checked node or another batch member. PLANNED (IR-494). | Test (TC-027, TC-050) |
+| FR-017-AC-27 | A genuine routed `x + 1` scalar harness from `generate_routed`, its complete emitted oracle package and one in-range concrete operand are passed to the paired runner. One real Kani run reports `Verified`, and the runner invokes the public oracle from the same staged library source at that operand with the original `ScalarLimits`; the receipt contains the Kani evidence and the actual typed runtime result of that invocation. A Kani verdict alone or a result reconstructed by the caller is insufficient. | Test (TC-027) |
+| FR-017-AC-28 | Before either child starts, a package or harness whose path or bytes differ from the retained routed output, a selected oracle symbol or argument order that differs from the retained scalar identity, an operand count/value outside the retained ordered ranges, or limits that do not match the retained original scalar context is refused with a typed cause and no receipt. A caller-provided content identity cannot make such a mismatch acceptable. | Test (TC-027) |
+| FR-017-AC-29 | The runner measures one canonical proof-content identity over the exact paths and bytes of every staged execution input: the complete generated package, retained harness, native invocation adapter and resolved dependency lock. This identity binds the content actually proved and executed; it is not a tool-version or file-version tracking identity, and no separate identity is added for any staged item. The Kani and native invocations cannot write the staged source tree. A changed, replaced or additional staged file before or after either invocation yields a typed failure and no receipt. The receipt separately binds the scalar identity, oracle symbol, ordered concrete operands and original `ScalarLimits`; none of these request fields may be substituted after measurement or inferred from the proof-content identity. | Test (TC-027) |
+| FR-017-AC-30 | The public receipt exposes the measured identity, scalar identity, ordered operands, original `ScalarLimits`, verified Kani evidence and actual typed native outcome through read-only access. Callers cannot construct, deserialize or mutate a receipt, set its identity or outcome, or turn any non-verified, refused, inconclusive, faulted or malformed run into a receipt. | Test (TC-027) |
+| FR-017-AC-31 | The paired runner executes an order-sensitive routed scalar operation with two symbolic operands in two concrete operand orders. Each real Kani run is verified; the native invocation returns the result for that order; and each receipt binds its exact ordered operand vector and typed native result. Swapping the operands changes the observed result and receipt context while retaining the same generated proof-content identity. | Test (TC-027) |
 
 ## Dependencies
 
