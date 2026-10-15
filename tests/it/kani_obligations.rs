@@ -2714,7 +2714,9 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     });
     assert!(matches!(
         changed_path,
-        Err(KaniScalarNativeError::InvalidRequest(_))
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar package changed after routed generation"
+        ))
     ));
     assert_not_launched();
 
@@ -2735,7 +2737,9 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     });
     assert!(matches!(
         changed_bytes,
-        Err(KaniScalarNativeError::InvalidRequest(_))
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar package changed after routed generation"
+        ))
     ));
     assert_not_launched();
 
@@ -2755,12 +2759,18 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     });
     assert!(matches!(
         changed_identity,
-        Err(KaniScalarNativeError::InvalidRequest(_))
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar harness changed after generation"
+        ))
     ));
     assert_not_launched();
 
     let mut changed_oracle_symbol = harness.clone();
-    changed_oracle_symbol.identity.oracle_symbol = "wrong_oracle".to_owned();
+    changed_oracle_symbol.rust.contents = changed_oracle_symbol.rust.contents.replacen(
+        &harness.identity.oracle_symbol,
+        "wrong_oracle",
+        1,
+    );
     let wrong_symbol = execute_kani_scalar_native(&KaniScalarNativeRequest {
         cancel: &cancel,
         installation: &installation,
@@ -2772,7 +2782,9 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     });
     assert!(matches!(
         wrong_symbol,
-        Err(KaniScalarNativeError::InvalidRequest(_))
+        Err(KaniScalarNativeError::InvalidRequest(
+            "retained scalar harness changed after generation"
+        ))
     ));
     assert_not_launched();
 
@@ -2788,7 +2800,9 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     });
     assert!(matches!(
         wrong_operand_count,
-        Err(KaniScalarNativeError::InvalidRequest(_))
+        Err(KaniScalarNativeError::InvalidRequest(
+            "operand count differs from harness identity"
+        ))
     ));
     assert_not_launched();
 
@@ -2804,7 +2818,9 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     });
     assert!(matches!(
         out_of_bounds,
-        Err(KaniScalarNativeError::InvalidRequest(_))
+        Err(KaniScalarNativeError::InvalidRequest(
+            "operand lies outside its retained bounds"
+        ))
     ));
     assert_not_launched();
     assert!(!target.exists(), "preflight refusal created a build target");
