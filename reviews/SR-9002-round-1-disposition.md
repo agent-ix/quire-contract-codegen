@@ -1,3 +1,9 @@
+---
+id: RV-9002
+title: "IR-494 SR-9002 round 1 disposition comment"
+type: Review
+---
+
 <!-- reviewer-dispositions repo=agent-ix/quire-contract-codegen visibility=public quoin=0.28.3 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-9002 round=1 model=gpt-6 run=c1c38c1b-d503-4e95-ab13-33e7aceb11ce -->
 
 | FND | Outcome | Reason |
