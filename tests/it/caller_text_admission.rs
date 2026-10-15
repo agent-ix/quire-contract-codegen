@@ -15,6 +15,7 @@ use quire_contract_codegen::{
     KaniRunOutcome, KaniSolver, KaniTool, KaniToolError, ProofCeilings, CALLER_TEXT_PAYLOAD_CLASS,
 };
 use quire_contract_runtime::exact::{TextProfile, TextType};
+use quire_exact::Cancel;
 
 const PROOF_CEILING: Duration = Duration::from_secs(600);
 
@@ -59,6 +60,7 @@ fn write_crate(root: &Path, harnesses: &[KaniCallerTextObligationHarness]) {
 struct CallerExecutorLane {
     root: PathBuf,
     harness: KaniCallerTextObligationHarness,
+    cancel: Cancel,
     installation: KaniInstallation,
     crate_directory: PathBuf,
     target_directory: PathBuf,
@@ -100,7 +102,8 @@ impl CallerExecutorLane {
         Self {
             root,
             harness,
-            installation: KaniInstallation { launcher },
+            cancel: Cancel::new(),
+            installation: KaniInstallation::new(launcher),
             crate_directory,
             target_directory,
         }
@@ -108,6 +111,7 @@ impl CallerExecutorLane {
 
     fn request(&self) -> KaniExecutionRequest<'_> {
         KaniExecutionRequest {
+            cancel: &self.cancel,
             installation: &self.installation,
             harness: KaniExecutableHarness::from(&self.harness),
             crate_directory: &self.crate_directory,
@@ -181,11 +185,13 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     let root = scratch_root("all-profiles");
     write_crate(&root, &harnesses);
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let cancel = Cancel::new();
     let crate_directory = root.join("crate");
     let target_directory = root.join("target");
     let requests: Vec<_> = harnesses
         .iter()
         .map(|harness| KaniExecutionRequest {
+            cancel: &cancel,
             installation: &installation,
             harness: KaniExecutableHarness::from(harness),
             crate_directory: &crate_directory,
@@ -236,6 +242,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     mutated_group[selected_position] = mutated.clone();
     write_crate(&root, &mutated_group);
     let mutation = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: KaniExecutableHarness::from(&mutated),
         crate_directory: &crate_directory,
@@ -260,6 +267,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
 
     write_crate(&root, &harnesses);
     let restored = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
         installation: &installation,
         harness: KaniExecutableHarness::from(selected),
         crate_directory: &crate_directory,
@@ -420,12 +428,14 @@ fn tc_050_caller_executor_preserves_no_cover_and_mixed_batch_member_identity() {
 
     let requests = [
         KaniExecutionRequest {
+            cancel: &batch.cancel,
             installation: &batch.installation,
             harness: (&first).into(),
             crate_directory: &batch.crate_directory,
             target_directory: &batch.target_directory,
         },
         KaniExecutionRequest {
+            cancel: &batch.cancel,
             installation: &batch.installation,
             harness: (&second).into(),
             crate_directory: &batch.crate_directory,
