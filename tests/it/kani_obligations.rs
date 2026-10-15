@@ -2225,6 +2225,7 @@ fn routed_scalar_increment_with_artifacts() -> (
         package::bounded_increment_package(),
         package::BOUNDED_INCREMENT,
         49_100,
+        Bound::Integer(0, 9),
     )
 }
 
@@ -2236,6 +2237,7 @@ fn routed_scalar_decrement_with_artifacts() -> (
         package::bounded_decrement_package(),
         package::BOUNDED_DECREMENT,
         49_101,
+        Bound::Integer(-9, 9),
     )
 }
 
@@ -2243,11 +2245,12 @@ fn routed_scalar_with_artifacts(
     mut builder: package::PackageBuilder,
     operation_code: u32,
     narrow_code: u32,
+    result_bound: Bound,
 ) -> (
     KaniScalarObligationHarness,
     Vec<quire_contract_codegen::Artifact>,
 ) {
-    let bound = builder.bound(&package::Bound::Integer(0, 9));
+    let bound = builder.bound(&result_bound);
     builder.narrow(
         narrow_code,
         package::code_id(operation_code).digest.as_ref(),
@@ -2488,25 +2491,14 @@ fn tc_027_a_routed_scalar_harness_verifies() {
 
 /// A retained routed scalar is proved and invoked natively from one privately staged source.
 ///
-/// Trace: FR-017-AC-27, FR-017-AC-28, FR-017-AC-30.
+/// Trace: FR-017-AC-27, FR-017-AC-29, FR-017-AC-30.
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     use quire_contract_runtime::exact::Outcome;
-    let (harness, artifacts) = routed_scalar_decrement_with_artifacts();
+    let (harness, artifacts) = routed_scalar_increment_with_artifacts();
     let operands = [4_i64, 1_i64];
-    let limits = quire_contract_runtime::exact::ScalarLimits {
-        integer_bits: u64::MAX,
-        decimal_digits: u64::MAX,
-        scale_expansion: u64::MAX,
-        text_input_bytes: u64::MAX,
-        text_scalars: u64::MAX,
-        normalized_scalars: u64::MAX,
-        unit_edges: u64::MAX,
-        value_occurrences: u64::MAX,
-        work_units: u64::MAX,
-        result_units: 0,
-    };
+    let limits = attested_scalar_limits();
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested");
@@ -2523,19 +2515,92 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
     assert_eq!(receipt.operands(), operands);
     assert_eq!(receipt.scalar_limits(), &limits);
-    assert!(matches!(
-        receipt.native_outcome(),
-        Outcome::Incomplete(record)
-            if record.limit_kind == quire_contract_runtime::exact::LimitKind::ResultUnits
-                && record.limit == 0
-                && record.consumed == 0
-                && record.next_charge.to_string() == "1"
-    ));
+    assert!(
+        matches!(receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "5")
+    );
     assert!(receipt
         .meter_observation()
         .consumed()
         .iter()
         .any(|count| *count > 0));
+}
+
+/// Both operand orders are proved and invoked with one generated subtraction artifact.
+///
+/// Trace: FR-017-AC-31.
+#[test]
+#[ignore = "kani lane: run serially through make kani"]
+fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
+    use quire_contract_runtime::exact::Outcome;
+
+    let (harness, artifacts) = routed_scalar_decrement_with_artifacts();
+    let limits = attested_scalar_limits();
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested-orders");
+
+    let left_first = [4_i64, 1_i64];
+    let left_first_receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &left_first,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native receipt for [4, 1]");
+
+    let right_first = [1_i64, 4_i64];
+    let right_first_receipt = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &right_first,
+        scalar_limits: limits,
+        target_directory: &target,
+    })
+    .expect("verified proof and typed native receipt for [1, 4]");
+
+    assert_eq!(
+        left_first_receipt.proof_evidence().outcome,
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(
+        right_first_receipt.proof_evidence().outcome,
+        KaniRunOutcome::Verified
+    );
+    assert_eq!(left_first_receipt.operands(), left_first);
+    assert_eq!(right_first_receipt.operands(), right_first);
+    assert_eq!(left_first_receipt.scalar_limits(), &limits);
+    assert_eq!(right_first_receipt.scalar_limits(), &limits);
+    assert_eq!(
+        left_first_receipt.proof_content_identity(),
+        right_first_receipt.proof_content_identity(),
+        "request operands are retained in each receipt but are not staged proof content"
+    );
+    assert!(
+        matches!(left_first_receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "3")
+    );
+    assert!(
+        matches!(right_first_receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "-3")
+    );
+}
+
+fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
+    quire_contract_runtime::exact::ScalarLimits {
+        integer_bits: u64::MAX,
+        decimal_digits: u64::MAX,
+        scale_expansion: u64::MAX,
+        text_input_bytes: u64::MAX,
+        text_scalars: u64::MAX,
+        normalized_scalars: u64::MAX,
+        unit_edges: u64::MAX,
+        value_occurrences: u64::MAX,
+        work_units: u64::MAX,
+        result_units: u64::MAX,
+    }
 }
 
 /// Source or operand changes before staging cannot be authenticated by unrelated caller data.

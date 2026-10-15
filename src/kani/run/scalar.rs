@@ -47,9 +47,6 @@ struct CanonicalArtifact {
 struct ScalarProofPreimage {
     schema: String,
     artifacts: Vec<CanonicalArtifact>,
-    oracle_symbol: String,
-    operands: Vec<String>,
-    scalar_limits: Vec<String>,
 }
 
 /// Input retained by a caller that already admitted the routed scalar occurrence.
@@ -72,7 +69,7 @@ pub struct KaniScalarNativeRequest<'a> {
     pub target_directory: &'a Path,
 }
 
-/// A measured identity of the exact package, harness and execution context staged by this call.
+/// A measured identity of the exact staged package, harness, adapter and dependency lock.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScalarProofContentIdentity([u8; 32]);
 
@@ -216,10 +213,10 @@ pub fn execute_kani_scalar_native(
     validate_request(request)?;
     let snapshot = PrivateSnapshot::create()?;
     let package = stage_package(request, snapshot.path())?;
-    write_observer(request, snapshot.path())?;
+    write_observer(&request.harness.identity, snapshot.path())?;
     generate_lockfile(request, snapshot.path())?;
     seal_snapshot(snapshot.path())?;
-    let identity = measure(request, &package, snapshot.path())?;
+    let identity = measure(&package, snapshot.path())?;
     let proof_target = request.target_directory.join("kani-scalar-proof");
     let evidence = execute_kani_obligation_readonly(
         &KaniExecutionRequest {
@@ -235,12 +232,12 @@ pub fn execute_kani_scalar_native(
     if evidence.outcome != KaniRunOutcome::Verified {
         return Err(KaniScalarNativeError::ProofNotVerified(Box::new(evidence)));
     }
-    if measure(request, &package, snapshot.path())? != identity {
+    if measure(&package, snapshot.path())? != identity {
         return Err(KaniScalarNativeError::SnapshotChanged);
     }
 
     let (native, meter) = execute_native(request, snapshot.path())?;
-    if measure(request, &package, snapshot.path())? != identity {
+    if measure(&package, snapshot.path())? != identity {
         return Err(KaniScalarNativeError::SnapshotChanged);
     }
 
@@ -474,7 +471,6 @@ fn stage_package(
 }
 
 fn measure(
-    request: &KaniScalarNativeRequest<'_>,
     staged: &[(String, Vec<u8>)],
     root: &Path,
 ) -> Result<ScalarProofContentIdentity, KaniScalarNativeError> {
@@ -495,29 +491,15 @@ fn measure(
             .map_err(|_| KaniScalarNativeError::InvalidRequest("staged artifact is not UTF-8"))?;
         canonical_artifacts.push(CanonicalArtifact { path, contents });
     }
-    canonical_identity(
-        canonical_artifacts,
-        request.harness.identity.oracle_symbol.clone(),
-        request.operands.iter().map(ToString::to_string).collect(),
-        request.scalar_limits,
-    )
+    canonical_identity(canonical_artifacts)
 }
 
 fn canonical_identity(
     artifacts: Vec<CanonicalArtifact>,
-    oracle_symbol: String,
-    operands: Vec<String>,
-    scalar_limits: ScalarLimits,
 ) -> Result<ScalarProofContentIdentity, KaniScalarNativeError> {
     let preimage = ScalarProofPreimage {
-        schema: "agent-ix/cg-kani-scalar-proof-content/v1".to_owned(),
+        schema: "agent-ix/cg-kani-scalar-proof-content/v2".to_owned(),
         artifacts,
-        oracle_symbol,
-        operands,
-        scalar_limits: limits_array(scalar_limits)
-            .into_iter()
-            .map(|value| value.to_string())
-            .collect(),
     };
     let digest =
         quire_canonical::sha256(&preimage, Limits::new(256 * 1024 * 1024)).map_err(|error| {
@@ -542,22 +524,52 @@ fn limits_array(limits: ScalarLimits) -> [u64; 10] {
 }
 
 fn write_observer(
-    request: &KaniScalarNativeRequest<'_>,
+    identity: &crate::kani::identity::ScalarObligationIdentity,
     root: &Path,
 ) -> Result<(), KaniScalarNativeError> {
-    let parameters = request
-        .operands
-        .iter()
-        .map(|value| format!("&rt::Integer::from({value}_i64)"))
+    let operand_bindings = (0..identity.arguments.len())
+        .map(|index| format!(" let operand_{index} = next_i64(&mut arguments)?;"))
+        .collect::<String>();
+    let parameters = (0..identity.arguments.len())
+        .map(|index| format!("&rt::Integer::from(operand_{index})"))
         .collect::<Vec<_>>()
         .join(", ");
-    let limits = limits_array(request.scalar_limits);
+    let limits = [
+        "integer_bits",
+        "decimal_digits",
+        "scale_expansion",
+        "text_input_bytes",
+        "text_scalars",
+        "normalized_scalars",
+        "unit_edges",
+        "value_occurrences",
+        "work_units",
+        "result_units",
+    ]
+    .into_iter()
+    .map(|field| format!(" {field}: next_u64(&mut arguments)?,"))
+    .collect::<String>();
     let helper = format!(
         r#"
 #[path = "../lib.rs"] mod generated;
 use quire_contract_runtime::exact as rt;
-fn main() {{
- let mut meter = rt::Meter::new(rt::ScalarLimits {{ integer_bits:{}, decimal_digits:{}, scale_expansion:{}, text_input_bytes:{}, text_scalars:{}, normalized_scalars:{}, unit_edges:{}, value_occurrences:{}, work_units:{}, result_units:{} }});
+fn next_argument(arguments: &mut impl Iterator<Item = String>) -> Result<String, std::io::Error> {{
+ arguments.next().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing native request argument"))
+}}
+fn next_i64(arguments: &mut impl Iterator<Item = String>) -> Result<i64, Box<dyn std::error::Error>> {{
+ Ok(next_argument(arguments)?.parse()?)
+}}
+fn next_u64(arguments: &mut impl Iterator<Item = String>) -> Result<u64, Box<dyn std::error::Error>> {{
+ Ok(next_argument(arguments)?.parse()?)
+}}
+fn main() -> Result<(), Box<dyn std::error::Error>> {{
+ let mut arguments = std::env::args().skip(1);
+{operand_bindings}
+ let limits = rt::ScalarLimits {{
+{limits}
+ }};
+ if arguments.next().is_some() {{ return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "extra native request argument").into()); }}
+ let mut meter = rt::Meter::new(limits);
  let result = generated::{}({}, &mut meter);
  match result {{
    Ok(rt::Outcome::Completed(value)) => println!("IR791_NATIVE_V1\tcompleted\t{{}}", value),
@@ -576,20 +588,10 @@ fn main() {{
  for kind in rt::LimitKind::ALL {{ print!("\t{{}}", meter.consumed(kind)); }}
  for point in meter.admitted_charges() {{ print!("\t{{}}", point.as_str()); }}
  println!();
+ Ok(())
 }}
 "#,
-        limits[0],
-        limits[1],
-        limits[2],
-        limits[3],
-        limits[4],
-        limits[5],
-        limits[6],
-        limits[7],
-        limits[8],
-        limits[9],
-        request.harness.identity.oracle_symbol,
-        parameters
+        identity.oracle_symbol, parameters,
     );
     write_private(&root.join("src/bin/ir791_native.rs"), helper.as_bytes())?;
     Ok(())
@@ -600,13 +602,17 @@ fn execute_native(
     root: &Path,
 ) -> Result<(Outcome<Integer>, NativeMeterObservation), KaniScalarNativeError> {
     let mut command = BackendCommand::new("cargo");
-    command.args(&[
-        "run".into(),
-        "--quiet".into(),
-        "--locked".into(),
-        "--bin".into(),
-        "ir791_native".into(),
-    ]);
+    let mut arguments = vec![
+        "run".to_owned(),
+        "--quiet".to_owned(),
+        "--locked".to_owned(),
+        "--bin".to_owned(),
+        "ir791_native".to_owned(),
+        "--".to_owned(),
+    ];
+    arguments.extend(request.operands.iter().map(ToString::to_string));
+    arguments.extend(limits_array(request.scalar_limits).map(|value| value.to_string()));
+    command.args(&arguments);
     command.current_dir(root);
     command.read_only_bind(root);
     command.env(
@@ -1061,47 +1067,21 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    /// Trace: FR-017-AC-28, FR-017-AC-29.
+    /// Trace: FR-017-AC-29.
     #[test]
-    fn tc_027_scalar_identity_changes_with_operands_and_limits() {
+    fn tc_027_scalar_proof_content_identity_tracks_staged_bytes_only() {
         let make_artifact = || CanonicalArtifact {
             path: "src/lib.rs".into(),
             contents: "pub fn oracle() {}".into(),
         };
-        let make_limits = |result_units| ScalarLimits {
-            integer_bits: 8,
-            decimal_digits: 9,
-            scale_expansion: 10,
-            text_input_bytes: 11,
-            text_scalars: 12,
-            normalized_scalars: 13,
-            unit_edges: 14,
-            value_occurrences: 15,
-            work_units: 16,
-            result_units,
-        };
-        let baseline = canonical_identity(
-            vec![make_artifact()],
-            "oracle".into(),
-            vec!["1".into()],
-            make_limits(17),
-        )
+        let baseline = canonical_identity(vec![make_artifact()]).unwrap();
+        let same_staged_bytes = canonical_identity(vec![make_artifact()]).unwrap();
+        let changed_bytes = canonical_identity(vec![CanonicalArtifact {
+            path: "src/lib.rs".into(),
+            contents: "pub fn changed_oracle() {}".into(),
+        }])
         .unwrap();
-        let changed_limits = canonical_identity(
-            vec![make_artifact()],
-            "oracle".into(),
-            vec!["1".into()],
-            make_limits(18),
-        )
-        .unwrap();
-        let changed_operands = canonical_identity(
-            vec![make_artifact()],
-            "oracle".into(),
-            vec!["2".into()],
-            make_limits(17),
-        )
-        .unwrap();
-        assert_ne!(baseline, changed_limits);
-        assert_ne!(baseline, changed_operands);
+        assert_eq!(baseline, same_staged_bytes);
+        assert_ne!(baseline, changed_bytes);
     }
 }
