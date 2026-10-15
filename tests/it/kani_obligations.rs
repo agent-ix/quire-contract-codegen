@@ -41,7 +41,7 @@ use quire_contract_codegen::{
 use quire_contract_model::{
     BoundPackage, CheckedNodeId, CheckedPackageReadLimits, CheckedPackageV2, ClauseId, ClauseKind,
     ClauseRef, ContractDependencies, ContractPackageReadResult, ContractPackageV1,
-    ContractPackageWireV1, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
+    ContractPackageWireV1, DiagnosticCode, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
 
@@ -1608,8 +1608,13 @@ fn tc_025_unsatisfiable_bounds_are_refused() {
         }
     );
     // V1 integer types cannot carry an inverted range: IR refuses the projection itself.
+    let valid = serde_json::to_vec(&projection(1000)).unwrap();
+    BoundPackage::from_json_bytes(&valid).expect("valid projection must bind");
     let inverted = serde_json::to_vec(&projection(-1)).unwrap();
-    assert!(BoundPackage::from_json_bytes(&inverted).is_err());
+    let diagnostics = BoundPackage::from_json_bytes(&inverted).unwrap_err();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, DiagnosticCode::InvalidNumericBounds);
+    assert_eq!(diagnostics[0].path, "type.integer.bounds");
 }
 
 /// Every V2 scalar claim FR-014 generates has an IR-confirmed operation. The four
