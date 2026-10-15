@@ -200,8 +200,9 @@ must demonstrate this with the distinct subtraction results above. A different i
 vector may be run as a distinct request, but its receipt must bind that vector separately from the
 unchanged proof-content identity. A caller-selected digest must not make any inconsistent request
 acceptable. The IR-773 consumer's comparison against its retained original limits, and its
-upstream refusal/skip behavior on mismatch, are consumer-owned checks outside this CG test; no
-driver adversarial coverage is claimed here.
+local refusal/skip behavior on mismatch, are consumer-owned checks outside this CG test. If the
+driver has no defined typed outcome for a mismatch, its owner must specify and plan that outcome
+before implementation. No driver adversarial coverage is claimed here.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
