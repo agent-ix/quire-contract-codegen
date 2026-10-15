@@ -199,7 +199,7 @@ pub struct ScalarObligationIdentity {
 }
 
 /// One generated V2 exact-scalar obligation harness.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct KaniScalarObligationHarness {
     /// Identity.
     pub identity: ScalarObligationIdentity,
@@ -213,6 +213,21 @@ pub struct KaniScalarObligationHarness {
     generated_record: Artifact,
     generated_artifacts: Option<Vec<Artifact>>,
 }
+
+// This value compares the per-harness public output and its origin seal. The routed package seal
+// is whole-call execution context; including it would make equality depend on unrelated siblings.
+impl PartialEq for KaniScalarObligationHarness {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity == other.identity
+            && self.rust == other.rust
+            && self.record == other.record
+            && self.generated_identity == other.generated_identity
+            && self.generated_rust == other.generated_rust
+            && self.generated_record == other.generated_record
+    }
+}
+
+impl Eq for KaniScalarObligationHarness {}
 
 impl KaniScalarObligationHarness {
     /// Construct the immutable generator-origin seal for one scalar harness.

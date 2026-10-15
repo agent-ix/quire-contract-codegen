@@ -57,7 +57,18 @@ impl std::error::Error for DigestError {}
 ///
 /// [`DigestError`] when `preimage` has no RFC 8785 encoding within the ceilings.
 pub(crate) fn content_digest<T: Encode + ?Sized>(preimage: &T) -> Result<[u8; 32], DigestError> {
-    quire_canonical::sha256(preimage, PREIMAGE_LIMITS)
+    content_digest_with_limits(preimage, PREIMAGE_LIMITS)
+}
+
+/// The SHA-256 digest of an RFC 8785 encoding with a caller-selected bounded ceiling.
+///
+/// This stays in the canonical boundary so specialized identities can retain a larger documented
+/// bound without introducing another direct encoder call elsewhere in the crate.
+pub(crate) fn content_digest_with_limits<T: Encode + ?Sized>(
+    preimage: &T,
+    limits: Limits,
+) -> Result<[u8; 32], DigestError> {
+    quire_canonical::sha256(preimage, limits)
         .map(|digest| *digest.as_bytes())
         .map_err(|error| DigestError(DigestErrorKind::Encode(error)))
 }

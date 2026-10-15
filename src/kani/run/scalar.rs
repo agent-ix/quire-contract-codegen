@@ -17,6 +17,7 @@ use serde::Serialize;
 use crate::{
     core::{
         artifact::{Artifact, ArtifactBundle, PublicationDiagnostic},
+        canonical::content_digest_with_limits,
         profile::oracle_crate_manifest,
     },
     kani::{
@@ -388,11 +389,15 @@ fn validate_request(request: &KaniScalarNativeRequest<'_>) -> Result<(), KaniSca
             "emitted scalar package must contain exactly its generated manifest, library and claim map",
         ));
     }
-    let manifest = request
+    let Some(manifest) = request
         .oracle_artifacts
         .iter()
         .find(|artifact| artifact.path == "Cargo.toml")
-        .unwrap();
+    else {
+        return Err(KaniScalarNativeError::InvalidRequest(
+            "emitted scalar package is missing Cargo.toml",
+        ));
+    };
     if manifest.contents != oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME) {
         return Err(KaniScalarNativeError::InvalidRequest(
             "emitted scalar manifest differs from the canonical generated manifest",
@@ -502,10 +507,10 @@ fn canonical_identity(
         artifacts,
     };
     let digest =
-        quire_canonical::sha256(&preimage, Limits::new(256 * 1024 * 1024)).map_err(|error| {
+        content_digest_with_limits(&preimage, Limits::new(256 * 1024 * 1024)).map_err(|error| {
             KaniScalarNativeError::NativeResult(format!("canonical identity failed: {error}"))
         })?;
-    Ok(ScalarProofContentIdentity(*digest.as_bytes()))
+    Ok(ScalarProofContentIdentity(digest))
 }
 
 fn limits_array(limits: ScalarLimits) -> [u64; 10] {
