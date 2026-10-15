@@ -72,3 +72,24 @@ restored call verifies. The production evidence retains the caller identity;
 unsatisfied covers and infrastructure failures cannot become verified caller
 claims. Unsupported proof requests produce no harness. This
 test does not count refused checked-package conversions as admission proofs.
+
+## Proof Boundary and Current Disposition
+
+A `MemoryExhausted` Kani result is inconclusive and gives no proof credit for
+FR-035-AC-4 or FR-035-AC-5. TC-050 remains open until all twelve harnesses
+verify over the full symbolic 21-sequence class through the public
+`TextPayload::from_utf8` constructor, with generated-versus-direct runtime
+agreement and a satisfied final cover, and the changed-call control is
+falsified with concrete playback before the restored call verifies over that
+same class. A fixed literal, a static enumeration, a branch-local control or
+a higher resource ceiling does not discharge these criteria. IR-796 owns the
+next source-backed proof design or a separately reviewed spec disposition;
+neither an inconclusive run nor this status note establishes impossibility.
+
+Non-normative observation: IR-796 records that the original NFC `Text[1,1]`
+candidate from PR #381 reached CBMC and ended `MemoryExhausted` under the
+published 1 GiB ceiling after 72.021 seconds, at a measured peak of
+1,089,802,240 bytes and with zero successful checks. Its phase diagnostics
+place the observed cost in symbolic UTF-8 validation and scalar-count
+unwinding before SAT. This one run does not settle the other eleven harnesses
+or prove that a sound design cannot complete within the ceiling.
