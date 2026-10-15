@@ -11,6 +11,31 @@ use crate::core::artifact::Artifact;
 /// The finite symbolic source class supported by the caller admission proof.
 pub const CALLER_TEXT_PAYLOAD_CLASS: &str = "zero-to-two-scalars:e,u+0301,u+00e9,u+1f600";
 
+/// Exact UTF-8 members of the finite proof class in length/lexicographic order.
+const CALLER_TEXT_PROOF_INPUTS: [&str; 21] = [
+    "",
+    "e",
+    "\u{301}",
+    "\u{e9}",
+    "\u{1f600}",
+    "ee",
+    "e\u{301}",
+    "e\u{e9}",
+    "e\u{1f600}",
+    "\u{301}e",
+    "\u{301}\u{301}",
+    "\u{301}\u{e9}",
+    "\u{301}\u{1f600}",
+    "\u{e9}e",
+    "\u{e9}\u{301}",
+    "\u{e9}\u{e9}",
+    "\u{e9}\u{1f600}",
+    "\u{1f600}e",
+    "\u{1f600}\u{301}",
+    "\u{1f600}\u{e9}",
+    "\u{1f600}\u{1f600}",
+];
+
 /// Request for one caller-ingress admission oracle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CallerTextAdmissionRequest {
@@ -172,7 +197,7 @@ pub fn validate_caller_text_proof(
     })
 }
 
-/// Generate a finite two-scalar caller admission harness for one supported profile and bound.
+/// Generate a finite caller admission harness for one supported profile and bound.
 ///
 /// The returned harness is deliberately not an `ir_confirmed` scalar obligation. The production
 /// executor adapter is maintained in the shared FR-017 lane.
@@ -187,6 +212,7 @@ pub fn generate_caller_text_proof_harness(
     let min = identity.min;
     let max = identity.max;
     let oracle = generated_caller_text_oracle_source(text_type)?;
+    let inputs = format!("{CALLER_TEXT_PROOF_INPUTS:?}");
     let source = format!(
         r#"pub mod caller_text {{
 {oracle}
@@ -198,10 +224,6 @@ fn unlimited_meter() -> rt::Meter {{
         unit_edges: u64::MAX, value_occurrences: u64::MAX, work_units: u64::MAX,
         result_units: u64::MAX,
     }})
-}}
-
-fn selected_scalar(index: u8) -> char {{
-    match index {{ 0 => 'e', 1 => '\u{{0301}}', 2 => '\u{{00e9}}', _ => '\u{{1f600}}' }}
 }}
 
 fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {{
@@ -222,29 +244,11 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
 
 #[kani::proof]
 pub fn caller_text_admission_agrees() {{
-    let length: u8 = kani::any();
-    let first: u8 = kani::any();
-    let second: u8 = kani::any();
-    kani::assume(length <= 2);
-    kani::assume(first <= 3);
-    kani::assume(second <= 3);
-    let mut bytes = [0_u8; 8];
-    let mut byte_len = 0_usize;
-    if length >= 1 {{
-        let mut encoded = [0_u8; 4];
-        let scalar = selected_scalar(first).encode_utf8(&mut encoded);
-        let end = byte_len + scalar.len();
-        bytes[byte_len..end].copy_from_slice(scalar.as_bytes());
-        byte_len = end;
-    }}
-    if length >= 2 {{
-        let mut encoded = [0_u8; 4];
-        let scalar = selected_scalar(second).encode_utf8(&mut encoded);
-        let end = byte_len + scalar.len();
-        bytes[byte_len..end].copy_from_slice(scalar.as_bytes());
-        byte_len = end;
-    }}
-    let payload = match rt::TextPayload::from_utf8(&bytes[..byte_len]) {{
+    const INPUTS: [&str; 21] = {inputs};
+    let selector: u8 = kani::any();
+    kani::assume(selector < 21);
+    let input = INPUTS[usize::from(selector)];
+    let payload = match rt::TextPayload::from_utf8(input.as_bytes()) {{
         Ok(payload) => payload,
         Err(_) => {{ assert!(false, "constructed scalar sequence is valid UTF-8"); return; }}
     }};
@@ -260,6 +264,7 @@ pub fn caller_text_admission_agrees() {{
 }}
 "#,
         oracle = oracle,
+        inputs = inputs,
     );
     Ok(CallerTextProofHarness {
         identity,
@@ -488,10 +493,12 @@ mod tests {
                 assert_eq!(harness.options, ["--unwind", "8"]);
                 assert_eq!(source.matches("kani::cover!(").count(), 1);
                 assert!(source.ends_with("}\n"));
-                assert!(source.contains("let length: u8 = kani::any();"));
-                assert!(source.contains("let first: u8 = kani::any();"));
-                assert!(source.contains("let second: u8 = kani::any();"));
-                assert!(source.contains("TextPayload::from_utf8(&bytes[..byte_len])"));
+                assert!(source.contains("let selector: u8 = kani::any();"));
+                assert!(source.contains("kani::assume(selector < 21);"));
+                assert!(source.contains("INPUTS[usize::from(selector)]"));
+                assert!(source.contains("TextPayload::from_utf8(input.as_bytes())"));
+                assert_eq!(source.matches("kani::any()").count(), 1);
+                assert!(!source.contains("encode_utf8"));
                 assert!(source.contains("let generated = admit_caller_text("));
                 assert!(source.contains("let direct = rt::admit_text("));
                 assert!(source.contains("assert_eq!(generated_meter, direct_meter);"));
@@ -503,5 +510,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Trace: FR-035-AC-4.
+    #[test]
+    fn symbolic_selector_table_is_a_bijection_to_the_twenty_one_scalar_sequences() {
+        let alphabet = ['e', '\u{301}', '\u{e9}', '\u{1f600}'];
+        let mut expected = vec![String::new()];
+        expected.extend(alphabet.iter().map(char::to_string));
+        for first in alphabet {
+            for second in alphabet {
+                expected.push([first, second].iter().collect());
+            }
+        }
+        assert_eq!(CALLER_TEXT_PROOF_INPUTS.len(), 21);
+        assert_eq!(
+            CALLER_TEXT_PROOF_INPUTS.as_slice(),
+            expected.iter().map(String::as_str).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            CALLER_TEXT_PROOF_INPUTS
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            21
+        );
     }
 }
