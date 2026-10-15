@@ -54,6 +54,18 @@ generation shall refuse the whole call with a typed selection error before
 emitting any harness. It shall not find a replacement narrow elsewhere in the
 package.
 
+For a routed scalar claim, the driver also hands CG the originating QSL
+`RequirementItem`'s occurrence key, result-bound type node and ordered path
+condition, together with the checked package's requirement records keyed by
+occurrence. CG shall bind the item to the record at that exact key and compare
+the record's application node, result bound, direct conversion occurrence and
+path condition with the values retained for the same request index. A missing
+record or disagreement is a typed refusal naming the request index and
+occurrence before an oracle, harness or obligation identity is produced. The
+generator shall not choose a record by node id or infer a guard or result bound
+from another occurrence. The driver projects QSL's checked values into CG's typed
+input at this boundary; CG does not acquire a new QSL library dependency.
+
 ### What "without re-negotiating" means
 
 The router's results are inputs and are taken as given:
@@ -130,6 +142,11 @@ output belong to IR-629; they do not change this crate boundary.
   caller-authored `ContractDriverResultSelection`; a `ContextRoot` carries a
   context-only key and belongs to the preceding driver's contiguous context
   span. Driver indexes count `DriverItem` entries only (FR-039).
+- For every routed scalar item, the driver's typed projection of QSL's
+  `RequirementItem::{occurrence, result_bound, conversion_context,
+  path_condition}` at that request index, and the originating checked
+  package's requirement records keyed by occurrence. The record map is
+  in-process E7 input (QSL ADR-011), not a member of v2 package bytes.
 - The routed items, each a `RoutedGenerationItem` made by the CG-owned public
   constructor `RoutedGenerationItem::from_descriptor(request_index, node_id,
   backend, descriptor) -> Result<RoutedGenerationItem,
@@ -329,6 +346,9 @@ output belong to IR-629; they do not change this crate boundary.
 | FR-022-AC-23 | After FR-019 authenticates two `integer.add` driver items on one admitted ContractPackage with distinct selected application/direct-`numeric.narrow` pairs, routed generation retains the pair for each item in its claim and harness identity and asserts against its own selected result bound. The two generated harnesses have distinct identities and expected ranges; a fresh settlement of a changed selection changes or refuses only that item, without borrowing the other bound. | Test (TC-033) |
 | FR-022-AC-24 | A routed scalar item's retained authenticated selection and its driver lowering position must name the same application/conversion pair in the same admitted ContractPackage. A changed pair, missing conversion context root or occurrence absent from that package refuses the whole call with a typed selection error before any harness. No package-wide bound search, source-text reparse or copied QSL context supplies a replacement. | Test (TC-033) |
 | FR-022-AC-25 | The public CG API exposes the concrete `ContractScalarError` carried by `RoutedGenerationError::ContractScalar`, so an external driver can match `ContractScalarError::Oracle(OracleGenerationError::SourceTooLarge { bytes, limit, setting })` and distinguish the scalar source ceiling from request-accounting and other oracle failures without parsing text or naming a private module. | Test (TC-033) |
+| FR-022-AC-26 | Given the checked QSL RR-16 package with two `x + 1` occurrences of one application node, directly narrowed to `Int[0, 10]` and `Int[0, 20]`, the driver supplies two distinct request indexes and occurrence keys. CG matches each to its own requirement record and selected narrow; both supported scalar outputs use the shared application operation and their respective result bounds, and their obligation and harness identities differ by application occurrence. Reversing routed-item order leaves these pairings unchanged. | Test (TC-033) |
+| FR-022-AC-27 | For `if p then x + 1 else x + 1`, each occurrence's generated scalar claim is conditional on its own QSL path guard: the same guard occurrence with `holds=true` for the then item and `holds=false` for the else item. CG preserves the full outermost-first guard sequence and uses it when forming the proof obligation; a result under `p=false` cannot prove the then claim and one under `p=true` cannot prove the else claim. An empty path condition remains unguarded. | Test (TC-033) |
+| FR-022-AC-28 | If a routed scalar item's occurrence has no entry in the supplied requirement records, or the keyed record disagrees with its result bound, direct conversion occurrence, application node or ordered path condition, CG returns a typed refusal identifying the request index and occurrence before emitting an oracle, harness or obligation identity for that request; it does not use another record with the same node or reconstruct missing values from the IR graph or source text. | Test (TC-033) |
 
 ## Dependencies
 

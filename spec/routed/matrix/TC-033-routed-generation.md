@@ -30,6 +30,10 @@ the FR-015 generator returns for the same items.
   package (`x + 1` over a parameter `Int[0, 9]`).
 - A `KaniGenerationContext` with a valid subject path and unwind `1`.
 - The routed backend `Candidate { identity: "kani" }`.
+- QSL RR-16's checked package and its occurrence-keyed requirement records:
+  two occurrences of one `x + 1` application, with direct narrows to
+  `Int[0, 10]` and `Int[0, 20]`. A second checked function has
+  `if p then x + 1 else x + 1` and opposite guards on the two occurrences.
 
 ## Test Procedure
 
@@ -44,6 +48,22 @@ its conversion context root, and mispair its occurrence in separate cases.
 Check the typed whole-call selection refusal occurs before any harness.
 Inspect the generation path for any bound search across the package or
 source-text/QSL context reconstruction.
+
+For FR-022-AC-26 through AC-28, project both QSL `RequirementItem`s and
+their keyed records through the driver's typed CG input. Route both RR-16
+items together, then reverse their input order. Compare each output's
+selected conversion, result assertion, application occurrence in the
+obligation identity and harness identity by request index. Route the guarded
+pair and inspect each proof condition: the then claim requires `p=true`, the
+else claim requires `p=false`, and an unguarded item has no guard. Evaluate a
+counterexample with `p=false` against the then item and with `p=true` against
+the else item to verify neither counts as a proof of the opposite claim.
+Remove one record, then separately replace its result bound, conversion
+occurrence, application node and guard sequence with the other occurrence's
+values. Assert the typed refusal identifies the affected request index and
+occurrence and that no oracle, harness or obligation identity is emitted for
+that request. Keep the shared application node and the other record present
+so a node-id fallback would fail this test.
 
 For FR-022-AC-25, compile an external consumer against CG's public exports and
 match `RoutedGenerationError::ContractScalar(ContractScalarError::Oracle(
@@ -204,3 +224,15 @@ diagnostic-string parsing.
     `oracle_refused` carrying the exact FR-014 variant and its node, position
     or limit fields, and no harness. The supported item's claim and harness
     are unchanged.
+20. The RR-16 items retain separate `[0, 10]` and `[0, 20]` result
+    assertions, separate conversion occurrences, and distinct obligation and
+    harness identities despite sharing the add node. Reordering the routed
+    input changes none of those per-index values (FR-022-AC-26).
+21. The guarded pair's proof conditions include their own ordered QSL guard
+    sequences with opposite required outcomes; wrong-branch assignments do
+    not establish either claim. The unguarded item has no added guard
+    (FR-022-AC-27).
+22. Each missing or mismatched keyed record yields a typed refusal naming
+    the request index and occurrence, with no generated artifact or identity
+    for that request. No other record of the shared node is substituted
+    (FR-022-AC-28).
