@@ -72,6 +72,10 @@ list_command=("${test_command[@]:0:delimiter+1}" --list --ignored "${test_comman
 list_log=$(mktemp)
 run_log=$(mktemp)
 trap 'rm -f "$list_log" "$run_log"' EXIT
+# This directory belongs to the claim control. Clear old reports so a stand-in
+# test command or a skipped control cannot inherit an earlier proof.
+claim_evidence=target-codex-backends/ir19-claim-crate
+rm -rf -- "$claim_evidence"
 if ! "${list_command[@]}" >"$list_log" 2>&1; then
     cat "$list_log" >&2
     result failed 0 0 "$version" clean
@@ -95,7 +99,11 @@ if [[ -n $after_tree ]]; then
     tree=dirty
 fi
 if [[ $run_ok == true && $ran =~ ^[0-9]+$ && $ran -eq $expected &&
-      $before_head == "$after_head" && $tree == clean ]]; then
+      $before_head == "$after_head" && $tree == clean &&
+      $(grep -Fxc 'kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test' "$list_log") == 1 &&
+      $(grep -Fxc 'test kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations ... ok' "$run_log") == 1 &&
+      -s "$claim_evidence/original-report.json" &&
+      -s "$claim_evidence/mutation-0-report.json" ]]; then
     result passed "$ran" "$expected" "$version" "$tree"
     exit 0
 fi

@@ -228,15 +228,18 @@ fn scope_classifies_changed_paths_and_both_rename_directions() {
 #[test]
 fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
     let sandbox = Sandbox::new();
-    let output = sandbox.gate().output().expect("passing gate");
-    assert!(output.status.success(), "{}", stdout(&output));
+    let output = sandbox.gate().output().expect("stand-in gate");
+    assert!(
+        !output.status.success(),
+        "a stand-in cannot discharge a claim"
+    );
     let result = stdout(&output)
         .lines()
         .find(|line| line.starts_with("kani-gate: result="))
         .expect("one gate result")
         .to_owned();
     let elapsed = result
-        .strip_prefix("kani-gate: result=passed ran=2 expected=2 elapsed=")
+        .strip_prefix("kani-gate: result=failed ran=2 expected=2 elapsed=")
         .and_then(|rest| rest.strip_suffix("s kani=Kani 1.0 tree=clean"))
         .expect("result field order, version and tree");
     assert!(
@@ -328,7 +331,10 @@ fn gate_waits_for_the_existing_lock_holder() {
     drop(holder.stdin.take());
     assert!(holder.wait().expect("release holder").success());
     let output = gate.wait_with_output().expect("gate after lock release");
-    assert!(output.status.success(), "{}", stdout(&output));
+    assert!(
+        !output.status.success(),
+        "a stand-in cannot discharge a claim"
+    );
     assert!(sandbox.marker(), "lane must start after lock release");
 }
 
@@ -381,7 +387,10 @@ fn gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main() {
         .env("FAKE_MAIN_ANCESTOR", "no")
         .output()
         .expect("unrelated main change");
-    assert!(output.status.success(), "{}", stdout(&output));
+    assert!(
+        !output.status.success(),
+        "a stand-in cannot discharge a claim"
+    );
 }
 
 /// Trace: NFR-006-AC-4, NFR-006-AC-12, TC-045.

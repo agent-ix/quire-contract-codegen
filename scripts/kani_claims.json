@@ -1,0 +1,14 @@
+{
+  "modules": [
+    {
+      "name": "kani_fr_003_4_proof_boolean_transition_module",
+      "subject": "subject",
+      "expectation": "oracle_fr_003_4_postcondition",
+      "mutation": {
+        "from": "crate::subject(input_current, state_pre)",
+        "to": "false"
+      }
+    }
+  ],
+  "helper_mutations": {}
+}
