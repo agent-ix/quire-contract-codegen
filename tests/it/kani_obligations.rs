@@ -2241,6 +2241,18 @@ fn routed_scalar_decrement_with_artifacts() -> (
     )
 }
 
+fn routed_scalar_binary_subtraction_with_artifacts() -> (
+    KaniScalarObligationHarness,
+    Vec<quire_contract_codegen::Artifact>,
+) {
+    routed_scalar_with_artifacts(
+        package::bounded_binary_subtraction_package(),
+        package::BOUNDED_BINARY_SUBTRACTION,
+        49_102,
+        Bound::Integer(-9, 9),
+    )
+}
+
 fn routed_scalar_with_artifacts(
     mut builder: package::PackageBuilder,
     operation_code: u32,
@@ -2525,15 +2537,33 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         .any(|count| *count > 0));
 }
 
-/// Both operand orders are proved and invoked with one generated subtraction artifact.
+/// The routed subtraction fixture retains two independently bounded symbolic operands.
 ///
+/// Trace: FR-017-AC-31.
+#[test]
+fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
+    let (harness, _) = routed_scalar_binary_subtraction_with_artifacts();
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness
+        .identity
+        .arguments
+        .iter()
+        .all(|argument| argument.minimum == 0 && argument.maximum == 9));
+}
+
 /// Trace: FR-017-AC-31.
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
     use quire_contract_runtime::exact::Outcome;
 
-    let (harness, artifacts) = routed_scalar_decrement_with_artifacts();
+    let (harness, artifacts) = routed_scalar_binary_subtraction_with_artifacts();
+    assert_eq!(harness.identity.arguments.len(), 2);
+    assert!(harness
+        .identity
+        .arguments
+        .iter()
+        .all(|argument| argument.minimum == 0 && argument.maximum == 9));
     let limits = attested_scalar_limits();
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
