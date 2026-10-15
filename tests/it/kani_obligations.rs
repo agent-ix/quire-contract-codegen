@@ -2661,82 +2661,154 @@ fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
     }
 }
 
-/// Source or operand changes before staging cannot be authenticated by unrelated caller data.
+/// Mismatched staged paths, retained scalar identity and operands refuse before either child starts.
 ///
 /// Trace: FR-017-AC-28, FR-017-AC-29.
 #[test]
-fn tc_027_attested_scalar_rejects_changed_oracle_and_out_of_bounds_operands() {
+fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     use quire_contract_codegen::{KaniScalarNativeError, KaniScalarNativeRequest};
-    let (harness, mut artifacts) = routed_scalar_increment_with_artifacts();
+
+    let (harness, valid_artifacts) = routed_scalar_increment_with_artifacts();
     let cancel = quire_exact::Cancel::new();
-    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar-attested-controls");
-    let limits = quire_contract_runtime::exact::ScalarLimits {
-        integer_bits: u64::MAX,
-        decimal_digits: u64::MAX,
-        scale_expansion: u64::MAX,
-        text_input_bytes: u64::MAX,
-        text_scalars: u64::MAX,
-        normalized_scalars: u64::MAX,
-        unit_edges: u64::MAX,
-        value_occurrences: u64::MAX,
-        work_units: u64::MAX,
-        result_units: u64::MAX,
-    };
-    let source = artifacts
+    let control_directory = env::temp_dir().join(format!(
+        "ir791-preflight-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&control_directory).unwrap();
+    let launcher = control_directory.join("fake-cargo-kani");
+    let marker = control_directory.join("launched");
+    fs::write(
+        &launcher,
+        format!("#!/bin/sh\n: > '{}'\nexit 97\n", marker.display()),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let installation = KaniInstallation::new(launcher);
+    let target = control_directory.join("target");
+    let limits = attested_scalar_limits();
+    let operands = [4_i64, 1_i64];
+    let assert_not_launched = || assert!(!marker.exists(), "preflight failure launched a child");
+
+    let mut changed_path_artifacts = valid_artifacts.clone();
+    changed_path_artifacts
         .iter_mut()
         .find(|artifact| artifact.path == "src/lib.rs")
-        .unwrap();
+        .expect("generated oracle library")
+        .path = "src/renamed.rs".to_owned();
+    let changed_path = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &changed_path_artifacts,
+        operands: &operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        changed_path,
+        Err(KaniScalarNativeError::InvalidRequest(_))
+    ));
+    assert_not_launched();
+
+    let mut changed_bytes_artifacts = valid_artifacts.clone();
+    let source = changed_bytes_artifacts
+        .iter_mut()
+        .find(|artifact| artifact.path == "src/lib.rs")
+        .expect("generated oracle library");
     source.contents = source.contents.replacen("pub fn ", "fn ", 1);
-    let operands = [4_i64, 1_i64];
-    let changed_source = execute_kani_scalar_native(&KaniScalarNativeRequest {
+    let changed_bytes = execute_kani_scalar_native(&KaniScalarNativeRequest {
         cancel: &cancel,
         installation: &installation,
         harness: &harness,
-        oracle_artifacts: &artifacts,
+        oracle_artifacts: &changed_bytes_artifacts,
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
     });
     assert!(matches!(
-        changed_source,
+        changed_bytes,
         Err(KaniScalarNativeError::InvalidRequest(_))
     ));
+    assert_not_launched();
 
-    let (_, valid_artifacts) = routed_scalar_increment_with_artifacts();
-    let mut changed_harness = harness.clone();
-    changed_harness
-        .rust
-        .contents
-        .push_str("\n// caller mutation\n");
-    let mutated_harness = execute_kani_scalar_native(&KaniScalarNativeRequest {
+    let mut changed_scalar_identity = harness.clone();
+    changed_scalar_identity
+        .identity
+        .operation_identity
+        .push_str(".changed");
+    let changed_identity = execute_kani_scalar_native(&KaniScalarNativeRequest {
         cancel: &cancel,
         installation: &installation,
-        harness: &changed_harness,
+        harness: &changed_scalar_identity,
         oracle_artifacts: &valid_artifacts,
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
     });
     assert!(matches!(
-        mutated_harness,
+        changed_identity,
         Err(KaniScalarNativeError::InvalidRequest(_))
     ));
+    assert_not_launched();
 
-    let bad_operands = [i64::MAX, 1_i64];
-    let changed_operand = execute_kani_scalar_native(&KaniScalarNativeRequest {
+    let mut changed_oracle_symbol = harness.clone();
+    changed_oracle_symbol.identity.oracle_symbol = "wrong_oracle".to_owned();
+    let wrong_symbol = execute_kani_scalar_native(&KaniScalarNativeRequest {
         cancel: &cancel,
         installation: &installation,
-        harness: &harness,
+        harness: &changed_oracle_symbol,
         oracle_artifacts: &valid_artifacts,
-        operands: &bad_operands,
+        operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
     });
     assert!(matches!(
-        changed_operand,
+        wrong_symbol,
         Err(KaniScalarNativeError::InvalidRequest(_))
     ));
+    assert_not_launched();
+
+    let one_operand = [4_i64];
+    let wrong_operand_count = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &valid_artifacts,
+        operands: &one_operand,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        wrong_operand_count,
+        Err(KaniScalarNativeError::InvalidRequest(_))
+    ));
+    assert_not_launched();
+
+    let out_of_bounds_operands = [i64::MAX, 1_i64];
+    let out_of_bounds = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &valid_artifacts,
+        operands: &out_of_bounds_operands,
+        scalar_limits: limits,
+        target_directory: &target,
+    });
+    assert!(matches!(
+        out_of_bounds,
+        Err(KaniScalarNativeError::InvalidRequest(_))
+    ));
+    assert_not_launched();
+    assert!(!target.exists(), "preflight refusal created a build target");
+    fs::remove_dir_all(control_directory).unwrap();
 }
 
 /// The same harness with its checked domain narrowed to `[0, 5]` asserts a bound the oracle does
