@@ -7,7 +7,9 @@ use std::{
     process::{Command, Output},
 };
 
-use quire_contract_codegen::{classify_kani_run, KaniCheckResult, KaniCheckStatus, KaniRunOutcome};
+use quire_contract_codegen::{
+    classify_kani_run, ClassifiedRun, KaniCheckResult, KaniCheckStatus, KaniRunOutcome,
+};
 use serde::Deserialize;
 use syn::{spanned::Spanned, Item};
 
@@ -24,6 +26,7 @@ struct Mutation {
 #[serde(deny_unknown_fields)]
 struct Claim {
     name: String,
+    harness: String,
     subject: String,
     expectation: String,
     mutation: Mutation,
@@ -166,19 +169,46 @@ fn output_text(output: &Output) -> String {
     )
 }
 
-fn run_kani(directory: &Path, target: &Path, report: &Path) -> (Output, Vec<u8>) {
+fn trusted_launcher() -> PathBuf {
+    let launcher = std::env::var_os("KANI_GATE_LAUNCHER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").expect("Kani home"))
+                .join(".cargo/bin/cargo-kani")
+        });
+    assert!(
+        launcher.is_absolute() && launcher.is_file(),
+        "installed real Kani launcher is required at {}",
+        launcher.display()
+    );
+    launcher
+}
+
+fn execute_kani(
+    directory: &Path,
+    target: &Path,
+    report: &Path,
+    harness: &str,
+    timeout: &str,
+) -> (Output, Option<Vec<u8>>) {
     let _ = fs::remove_file(report);
     let output = Command::new("/usr/bin/timeout")
+        .arg(timeout)
+        .arg(trusted_launcher())
         .args([
-            "180s",
-            "cargo",
-            "kani",
             "-Z",
             "function-contracts",
             "-Z",
             "unstable-options",
+            "-Z",
+            "concrete-playback",
+            "--concrete-playback",
+            "print",
             "--harness-timeout",
             "120s",
+            "--harness",
+            harness,
+            "--exact",
             "--force-build",
             "--export-json",
         ])
@@ -187,12 +217,19 @@ fn run_kani(directory: &Path, target: &Path, report: &Path) -> (Output, Vec<u8>)
         .current_dir(directory)
         .output()
         .expect("real cargo kani must launch");
-    let bytes = fs::read(report).unwrap_or_else(|error| {
-        panic!(
-            "Kani produced no report ({error}): {}",
-            output_text(&output)
-        )
-    });
+    let bytes = fs::read(report).ok();
+    (output, bytes)
+}
+
+fn run_kani(directory: &Path, target: &Path, report: &Path, harness: &str) -> (Output, Vec<u8>) {
+    let (output, bytes) = execute_kani(directory, target, report, harness, "180s");
+    assert!(
+        !matches!(output.status.code(), Some(124 | 137)),
+        "Kani launcher timed out or was killed: {}",
+        output_text(&output)
+    );
+    let bytes =
+        bytes.unwrap_or_else(|| panic!("Kani produced no report: {}", output_text(&output)));
     (output, bytes)
 }
 
@@ -220,8 +257,16 @@ fn base_names() -> BTreeSet<String> {
         .collect()
 }
 
-fn graph_for(report: &Report, target: &Path) -> BTreeMap<String, BTreeSet<String>> {
-    let harness = report.harness_metadata.first().expect("compiled harness");
+fn graph_for(
+    report: &Report,
+    target: &Path,
+    harness_name: &str,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let harness = report
+        .harness_metadata
+        .iter()
+        .find(|harness| harness.pretty_name == harness_name)
+        .expect("selected compiled harness");
     let goto = harness.goto_file.to_string_lossy();
     let linked = goto
         .strip_suffix(".symtab.out")
@@ -235,7 +280,7 @@ fn graph_for(report: &Report, target: &Path) -> BTreeMap<String, BTreeSet<String
     let names: BTreeMap<String, Option<String>> =
         serde_json::from_slice(&fs::read(map_file).expect("current pretty-name map"))
             .expect("Kani pretty-name map must parse");
-    let version = Command::new("cargo-kani")
+    let version = Command::new(trusted_launcher())
         .arg("--version")
         .output()
         .expect("cargo-kani version must launch");
@@ -260,31 +305,36 @@ fn graph_for(report: &Report, target: &Path) -> BTreeMap<String, BTreeSet<String
         .expect("installed goto-instrument must launch");
     assert!(call_graph.status.success(), "{}", output_text(&call_graph));
     let raw = String::from_utf8(call_graph.stdout).expect("UTF-8 call graph");
-    fs::write(target.join("ir19-call-graph.txt"), &raw).expect("retain graph evidence");
+    fs::write(
+        target.join(format!("ir19-call-graph-{harness_name}.txt")),
+        &raw,
+    )
+    .expect("retain graph evidence");
+    mapped_graph(&raw, &names)
+}
+
+fn mapped_graph(
+    raw: &str,
+    names: &BTreeMap<String, Option<String>>,
+) -> BTreeMap<String, BTreeSet<String>> {
     let mut graph = BTreeMap::<String, BTreeSet<String>>::new();
+    let mapped = |symbol: &str| {
+        names
+            .get(symbol)
+            .and_then(Clone::clone)
+            .unwrap_or_else(|| format!("#unresolved:{symbol}"))
+    };
     for line in raw.lines() {
         let Some((caller, callee)) = line.split_once(" -> ") else {
             continue;
         };
-        let caller = names
-            .get(caller)
-            .map(|name| {
-                name.clone()
-                    .unwrap_or_else(|| format!("#unresolved:{caller}"))
-            })
-            .unwrap_or_else(|| caller.to_owned());
-        let callee = names
-            .get(callee)
-            .map(|name| {
-                name.clone()
-                    .unwrap_or_else(|| format!("#unresolved:{callee}"))
-            })
-            .unwrap_or_else(|| callee.to_owned());
+        let caller = mapped(caller);
+        let callee = mapped(callee);
         graph.entry(callee.clone()).or_default();
         graph.entry(caller).or_default().insert(callee);
     }
-    for name in names.into_values().flatten() {
-        graph.entry(name).or_default();
+    for name in names.values().flatten() {
+        graph.entry(name.clone()).or_default();
     }
     graph
 }
@@ -318,6 +368,37 @@ fn replace_exactly_once(source: &str, mutation: &Mutation) -> String {
 fn mutation_line(source: &str, mutation: &Mutation) -> usize {
     let at = source.find(&mutation.from).expect("mutation site exists");
     source[..at].bytes().filter(|byte| *byte == b'\n').count() + 1
+}
+
+fn falsifying_mutant<'a>(
+    original: &ClassifiedRun,
+    mutant: &'a ClassifiedRun,
+) -> Result<Vec<&'a KaniCheckResult>, String> {
+    match &mutant.outcome {
+        KaniRunOutcome::Falsified { counterexample }
+            if counterexample.contains("kani::concrete_playback_run(") => {}
+        outcome => {
+            return Err(format!(
+                "mutant did not yield concrete falsification: {outcome:?}"
+            ))
+        }
+    }
+    let failures: Vec<_> = mutant
+        .checks
+        .iter()
+        .filter(|check| {
+            check.status == KaniCheckStatus::Failure
+                && original.checks.iter().any(|prior| {
+                    prior.status == KaniCheckStatus::Success
+                        && prior.location == check.location
+                        && prior.class == check.class
+                })
+        })
+        .collect();
+    if failures.is_empty() {
+        return Err("no newly failed proposition check".to_owned());
+    }
+    Ok(failures)
 }
 
 /// Trace: FR-041-AC-1, FR-041-AC-2, FR-041-AC-3, FR-041-AC-4, FR-041-AC-5, NFR-006-AC-19.
@@ -354,25 +435,26 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("Kani check-cfg declaration");
-    let original_report = directory.join("original-report.json");
-    let (original_output, original_bytes) = run_kani(&directory, &target, &original_report);
-    assert!(
-        original_output.status.success(),
-        "{}",
-        output_text(&original_output)
-    );
-    let original = classify_kani_run(
-        true,
-        Some(&original_bytes),
-        &output_text(&original_output),
-        None,
-    )
-    .expect("typed unmodified Kani report");
-    assert!(matches!(original.outcome, KaniRunOutcome::Verified));
-    let report: Report = serde_json::from_slice(&original_bytes).expect("Kani harness metadata");
-    let compiled: BTreeSet<_> = report
-        .harness_metadata
+    let mut originals = Vec::new();
+    for (index, claim) in declaration.modules.iter().enumerate() {
+        let original_report = directory.join(format!("original-{index}-report.json"));
+        let (output, bytes) = run_kani(&directory, &target, &original_report, &claim.harness);
+        assert!(output.status.success(), "{}", output_text(&output));
+        let classified = classify_kani_run(true, Some(&bytes), &output_text(&output), None)
+            .expect("typed unmodified Kani report");
+        assert!(matches!(classified.outcome, KaniRunOutcome::Verified));
+        let report: Report = serde_json::from_slice(&bytes).expect("Kani harness metadata");
+        assert_eq!(report.verification_results.summary.executed, 1);
+        assert_eq!(report.verification_results.results.len(), 1);
+        assert_eq!(
+            report.verification_results.results[0].harness_id,
+            claim.harness
+        );
+        originals.push((claim, classified, report));
+    }
+    let compiled: BTreeSet<_> = originals
         .iter()
+        .flat_map(|(_, _, report)| &report.harness_metadata)
         .map(|harness| {
             assert_eq!(harness.source.file, "src/lib.rs");
             assert!(harness.source.start_line <= harness.source.end_line);
@@ -384,16 +466,15 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
                 .to_owned()
         })
         .collect();
-    claim_census(
-        &declaration,
-        &base_names(),
-        &compiled,
-        &modules,
-        &original.checks,
-    )
-    .unwrap_or_else(|error| panic!("{error}"));
-    let graph = graph_for(&report, &target);
-    for claim in &declaration.modules {
+    let checks: Vec<_> = originals
+        .iter()
+        .flat_map(|(_, classified, _)| classified.checks.iter().cloned())
+        .collect();
+    claim_census(&declaration, &base_names(), &compiled, &modules, &checks)
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut observed_shared = BTreeSet::new();
+    for (claim, original, report) in originals {
+        let graph = graph_for(&report, &target, &claim.harness);
         let subject = reachable(&graph, &claim.subject);
         let expectation = reachable(&graph, &claim.expectation);
         assert!(
@@ -405,16 +486,17 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
         );
         let shared: BTreeSet<_> = subject.intersection(&expectation).cloned().collect();
         fs::write(
-            target.join("ir19-shared-helpers.json"),
+            target.join(format!("ir19-shared-helpers-{}.json", claim.name)),
             serde_json::to_vec_pretty(&shared).expect("shared helper evidence"),
         )
         .expect("retain computed helper evidence");
-        let expected_mutations: BTreeSet<_> =
-            declaration.helper_mutations.keys().cloned().collect();
-        assert_eq!(
-            shared, expected_mutations,
-            "missing or stale helper mutation recipe"
-        );
+        for name in &shared {
+            assert!(
+                declaration.helper_mutations.contains_key(name),
+                "missing shared-helper mutation recipe: {name}"
+            );
+        }
+        observed_shared.extend(shared.iter().cloned());
         let mut controls = vec![(claim.name.as_str(), &claim.mutation)];
         controls.extend(
             shared
@@ -440,10 +522,11 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
                 .arg(&source_file)
                 .output()
                 .expect("mutation diff must launch");
-            let evidence = directory.join(format!("mutation-{index}-{name}.txt"));
+            let evidence = directory.join(format!("mutation-{}-{index}-{name}.txt", claim.name));
             fs::write(&evidence, output_text(&diff)).expect("retain exact mutant source");
-            let report_path = directory.join(format!("mutation-{index}-report.json"));
-            let (output, bytes) = run_kani(&directory, &target, &report_path);
+            let report_path =
+                directory.join(format!("mutation-{}-{index}-report.json", claim.name));
+            let (output, bytes) = run_kani(&directory, &target, &report_path, &claim.harness);
             let classified = classify_kani_run(
                 output.status.success(),
                 Some(&bytes),
@@ -461,34 +544,79 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
             assert_eq!(mutant_report.verification_results.results.len(), 1);
             assert_eq!(
                 mutant_report.verification_results.results[0].harness_id,
-                report.harness_metadata[0].pretty_name
+                claim.harness
             );
             assert_eq!(
                 mutant_report.verification_results.results[0].status,
                 "Failure"
             );
-            let failures: Vec<_> = classified
-                .checks
-                .iter()
-                .filter(|check| {
-                    check.status == KaniCheckStatus::Failure
-                        && original.checks.iter().any(|prior| {
-                            prior.status == KaniCheckStatus::Success
-                                && prior.location == check.location
-                                && prior.class == check.class
-                        })
-                })
-                .collect();
-            assert!(
-                !failures.is_empty(),
-                "{name}: no newly failed proposition check"
-            );
-            fs::write(directory.join(format!("mutation-{index}-command.txt")),
-                format!("cwd={} CARGO_TARGET_DIR={} /usr/bin/timeout 180s cargo kani -Z function-contracts -Z unstable-options --harness-timeout 120s --force-build --export-json {}\n{}\n{failures:#?}\n", directory.display(), target.display(), report_path.display(), output_text(&output)))
+            let failures = falsifying_mutant(&original, &classified)
+                .unwrap_or_else(|error| panic!("{name}: {error}"));
+            let inconclusive = classify_kani_run(output.status.success(), Some(&bytes), "", None)
+                .expect("same report without concrete playback");
+            assert!(matches!(
+                inconclusive.outcome,
+                KaniRunOutcome::Inconclusive { .. }
+            ));
+            assert!(falsifying_mutant(&original, &inconclusive).is_err());
+            fs::write(directory.join(format!("mutation-{}-{index}-command.txt", claim.name)),
+                format!("cwd={} CARGO_TARGET_DIR={} /usr/bin/timeout 180s {} -Z function-contracts -Z unstable-options -Z concrete-playback --concrete-playback print --harness-timeout 120s --harness {} --exact --force-build --export-json {}\n{}\n{failures:#?}\n", directory.display(), target.display(), trusted_launcher().display(), claim.harness, report_path.display(), output_text(&output)))
                 .expect("retain invocation and failing checks");
             fs::write(&source_file, &source).expect("restore source before next mutant");
         }
+        let verifying = replace_exactly_once(
+            &source,
+            &Mutation {
+                from: claim.mutation.from.clone(),
+                to: format!("({}) || false", claim.mutation.from),
+            },
+        );
+        fs::write(&source_file, verifying).expect("write verifying mutant");
+        let verifying_report = directory.join(format!("negative-{}-verifying.json", claim.name));
+        let (output, bytes) = run_kani(&directory, &target, &verifying_report, &claim.harness);
+        assert!(output.status.success(), "{}", output_text(&output));
+        let classified = classify_kani_run(true, Some(&bytes), &output_text(&output), None)
+            .expect("typed verifying mutant");
+        assert!(matches!(classified.outcome, KaniRunOutcome::Verified));
+        assert!(falsifying_mutant(&original, &classified).is_err());
+
+        fs::write(
+            &source_file,
+            format!("compile_error!(\"IR-19 negative control\");\n{source}"),
+        )
+        .expect("write compile-failing mutant");
+        let compile_report = directory.join(format!("negative-{}-compile.json", claim.name));
+        let (output, bytes) =
+            execute_kani(&directory, &target, &compile_report, &claim.harness, "180s");
+        assert!(
+            !output.status.success() && bytes.is_none(),
+            "compile-failing mutant acquired a report"
+        );
+        let classified = classify_kani_run(false, bytes.as_deref(), &output_text(&output), None)
+            .expect("compile failure is inconclusive");
+        assert!(falsifying_mutant(&original, &classified).is_err());
+
+        fs::write(&source_file, &source).expect("restore source before timeout control");
+        let timeout_report = directory.join(format!("negative-{}-timeout.json", claim.name));
+        let (output, bytes) = execute_kani(
+            &directory,
+            &target,
+            &timeout_report,
+            &claim.harness,
+            "0.01s",
+        );
+        assert!(
+            output.status.code() == Some(124) && bytes.is_none(),
+            "timed-out mutant acquired a verdict: {}",
+            output_text(&output)
+        );
+        let classified = classify_kani_run(false, bytes.as_deref(), &output_text(&output), None)
+            .expect("timeout is inconclusive");
+        assert!(falsifying_mutant(&original, &classified).is_err());
+        assert!(classify_kani_run(true, None, "skipped execution", None).is_err());
     }
+    let catalog: BTreeSet<_> = declaration.helper_mutations.keys().cloned().collect();
+    assert_eq!(observed_shared, catalog, "stale helper mutation recipe");
     println!("Kani claim evidence: {}", directory.display());
 }
 
@@ -501,6 +629,7 @@ fn a_success_in_one_module_does_not_discharge_an_unreachable_neighbor() {
             .into_iter()
             .map(|name| Claim {
                 name: name.to_owned(),
+                harness: String::new(),
                 subject: String::new(),
                 expectation: String::new(),
                 mutation: Mutation {
@@ -570,6 +699,7 @@ fn a_success_in_one_module_does_not_discharge_an_unreachable_neighbor() {
 fn empty_removed_and_absent_compiled_claims_fail() {
     let claim = || Claim {
         name: "claimed".to_owned(),
+        harness: String::new(),
         subject: String::new(),
         expectation: String::new(),
         mutation: Mutation {
@@ -622,4 +752,111 @@ fn transitive_graph_intersection_finds_shared_helper() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from(["helper".to_owned()])
     );
+}
+
+/// Trace: FR-041-AC-3. A reachable GOTO edge without a pretty name is opaque.
+#[test]
+fn current_graph_refuses_unmapped_reachable_call() {
+    let names = BTreeMap::from([("root-id".to_owned(), Some("root".to_owned()))]);
+    let graph = mapped_graph("root-id -> missing-id\n", &names);
+    assert_eq!(
+        graph["root"],
+        BTreeSet::from(["#unresolved:missing-id".to_owned()])
+    );
+    assert!(std::panic::catch_unwind(|| reachable(&graph, "root")).is_err());
+}
+
+/// Trace: FR-041-AC-2, TC-056. Separate real harnesses share one source file.
+#[test]
+#[ignore = "kani lane: run serially through make kani-gate"]
+fn real_kani_two_module_check_attribution() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let target = root.join("target-codex-backends");
+    let directory = target.join("ir19-two-module-crate");
+    fs::create_dir_all(directory.join("src")).expect("two-module crate directory");
+    let source = "mod first {\n  #[kani::proof]\n  fn proof() { let x: bool = kani::any(); assert!(x || !x); }\n}\nmod second {\n  #[kani::proof]\n  fn proof() { kani::assume(false); assert!(true); }\n}\n";
+    fs::write(directory.join("src/lib.rs"), source).expect("two-module source");
+    fs::write(
+        directory.join("Cargo.toml"),
+        "[package]\nname = \"ir19-two-module-control\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[workspace]\n",
+    )
+    .expect("two-module manifest");
+    let declaration = Declaration {
+        modules: ["first", "second"]
+            .into_iter()
+            .map(|name| Claim {
+                name: name.to_owned(),
+                harness: format!("{name}::proof"),
+                subject: String::new(),
+                expectation: String::new(),
+                mutation: Mutation {
+                    from: String::new(),
+                    to: String::new(),
+                },
+            })
+            .collect(),
+        helper_mutations: BTreeMap::new(),
+    };
+    let mut checks = Vec::new();
+    let mut compiled = BTreeSet::new();
+    for claim in &declaration.modules {
+        let report_path = directory.join(format!("{}-report.json", claim.name));
+        let (output, bytes) = run_kani(&directory, &target, &report_path, &claim.harness);
+        let classified = classify_kani_run(
+            output.status.success(),
+            Some(&bytes),
+            &output_text(&output),
+            None,
+        )
+        .expect("typed two-module report");
+        let report: Report = serde_json::from_slice(&bytes).expect("two-module metadata");
+        assert_eq!(report.verification_results.summary.executed, 1);
+        assert_eq!(
+            report.verification_results.results[0].harness_id,
+            claim.harness
+        );
+        compiled.extend(report.harness_metadata.iter().map(|harness| {
+            assert_eq!(harness.source.file, "src/lib.rs");
+            harness
+                .pretty_name
+                .split_once("::")
+                .expect("module harness")
+                .0
+                .to_owned()
+        }));
+        checks.extend(classified.checks);
+    }
+    assert_eq!(
+        claim_census(
+            &declaration,
+            &BTreeSet::new(),
+            &compiled,
+            &module_extents(source),
+            &checks
+        ),
+        Err("unreached claimed module: second".to_owned())
+    );
+    let corrected = source.replace(
+        "kani::assume(false); assert!(true);",
+        "let x: bool = kani::any(); assert!(x || !x);",
+    );
+    fs::write(directory.join("src/lib.rs"), &corrected).expect("reachable second module");
+    let report_path = directory.join("second-reachable-report.json");
+    let (output, bytes) = run_kani(&directory, &target, &report_path, "second::proof");
+    assert!(output.status.success(), "{}", output_text(&output));
+    let classified = classify_kani_run(true, Some(&bytes), &output_text(&output), None)
+        .expect("reachable second report");
+    let first_checks: Vec<_> = checks
+        .into_iter()
+        .filter(|check| check.location.line == Some(3))
+        .collect();
+    let all_checks: Vec<_> = first_checks.into_iter().chain(classified.checks).collect();
+    assert!(claim_census(
+        &declaration,
+        &BTreeSet::new(),
+        &compiled,
+        &module_extents(&corrected),
+        &all_checks
+    )
+    .is_ok());
 }

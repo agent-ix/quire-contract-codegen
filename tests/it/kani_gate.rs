@@ -73,11 +73,20 @@ esac
             r##"#!/usr/bin/env bash
 set -euo pipefail
 if [[ " $* " == *" --list "* ]]; then
+  if [[ "${FAKE_CLAIM_REPORTS:-no}" == yes ]]; then
+    printf 'kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations: test\n'
+  fi
   for ((i=0; i<${FAKE_LIST_COUNT:-2}; i++)); do
     printf 'kani_obligations::proof_%s: test\n' "$i"
   done
 else
   printf 'started\n' >> "$FAKE_MARKER"
+  if [[ "${FAKE_CLAIM_REPORTS:-no}" == yes ]]; then
+    mkdir -p target-codex-backends/ir19-claim-crate
+    printf '{"fake":"original"}\n' > target-codex-backends/ir19-claim-crate/original-0-report.json
+    printf '{"fake":"mutation"}\n' > target-codex-backends/ir19-claim-crate/mutation-fake-0-report.json
+    printf 'test kani_generation_claims::real_kani_claims_have_discharge_and_falsifying_mutations ... ok\n'
+  fi
   if ! flock -n "$FAKE_LOCK" true; then
     printf 'held\n' >> "$FAKE_LOCK_MARKER"
   fi
@@ -120,6 +129,10 @@ fi
     }
 
     fn gate(&self) -> Command {
+        self.gate_with_cargo("cargo")
+    }
+
+    fn gate_with_cargo(&self, cargo: &str) -> Command {
         let mut command = self.command("scripts/kani_gate.sh");
         command.args([
             self.root
@@ -127,7 +140,7 @@ fi
                 .to_str()
                 .expect("UTF-8 scratch path"),
             "--",
-            "cargo",
+            cargo,
             "+1.98.1",
             "test",
             "--locked",
@@ -274,6 +287,35 @@ fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
             assert!(!sandbox.marker());
         }
     }
+}
+
+/// Trace: FR-041-AC-5, NFR-006-AC-19, TC-056.
+#[test]
+fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
+    let sandbox = Sandbox::new();
+    let alias = sandbox.bin.join("caller-cargo");
+    std::os::unix::fs::symlink(sandbox.bin.join("cargo"), &alias)
+        .expect("mutable caller cargo symlink");
+    let output = sandbox
+        .gate_with_cargo(alias.to_str().expect("UTF-8 caller cargo path"))
+        .env("HOME", &sandbox.root)
+        .env("CARGO_HOME", &sandbox.bin)
+        .env("RUSTUP_HOME", &sandbox.root)
+        .env("KANI_HOME", &sandbox.root)
+        .env("FAKE_CLAIM_REPORTS", "yes")
+        .env("FAKE_LIST_COUNT", "2")
+        .env("FAKE_RUN_COUNT", "3")
+        .output()
+        .expect("stand-in proof attempt");
+    assert!(!output.status.success(), "{}", stdout(&output));
+    assert!(sandbox.marker(), "fake executable reached run phase");
+    assert!(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target-codex-backends/ir19-claim-crate/original-0-report.json")
+            .exists(),
+        "stand-in wrote a nonempty report before rejection"
+    );
+    assert!(stdout(&output).contains("result=failed ran=3 expected=3"));
 }
 
 /// Trace: NFR-006-AC-5, TC-045. A positive observed waiter precedes the
