@@ -811,6 +811,11 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         );
         assert!(format!("{module}::{harness_name}").len() < 255);
         assert_eq!(harness.identity.subject_path, "crate::unused");
+        assert_eq!(
+            harness.identity.solver,
+            quire_contract_codegen::KaniSolver::Cadical
+        );
+        assert_eq!(harness.identity.unwind, 8);
         assert_eq!(harness.identity.field_name, "items");
         assert_eq!(harness.identity.minimum_length, 0);
         assert_eq!(harness.identity.maximum_length, 3);
@@ -860,6 +865,38 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         assert!(
             !harness.rust.contents.contains("sort(") && !harness.rust.contents.contains("dedup(")
         );
+        assert!(
+            !harness
+                .rust
+                .contents
+                .contains("selected_items[0] != selected_items[1]"),
+            "a Sequence with unique=false must allow duplicate adjacent elements"
+        );
+        let exact_harness = format!(
+            "{}::{}",
+            harness.identity.module_symbol, harness.identity.harness_symbol
+        );
+        let expected_options: Vec<String> = [
+            "-Z",
+            "function-contracts",
+            "-Z",
+            "concrete-playback",
+            "--harness",
+            exact_harness.as_str(),
+            "--exact",
+            "--unwind",
+            "8",
+            "--solver",
+            "cadical",
+            "--output-format",
+            "regular",
+            "--concrete-playback",
+            "print",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        assert_eq!(harness.identity.options, expected_options);
         assert!(harness.rust.contents.contains(assertion));
         assert!(
             harness.rust.contents.find("assert!(claim").unwrap()
@@ -965,6 +1002,57 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
         .contains("let selected_flags: [bool; 2] = kani::any();"));
     assert!(harness.rust.contents.contains("item != false"));
     assert!(harness.rust.contents.contains("index as usize"));
+}
+
+/// Trace: FR-015-AC-96, FR-015-AC-100, TC-025.
+#[test]
+fn nonzero_sequence_bounds_are_inclusive_in_the_symbolic_domain() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["lower"] = json!(1);
+    let small_int = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(SMALL_ID))
+        .unwrap();
+    small_int["constraints"][0]["operands"]["value"] = json!("1");
+
+    let fixture =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: item >= 1)");
+    let harness = collection_harness(&fixture, "quire.op.collection.forall");
+    assert_eq!(harness.identity.minimum_length, 1);
+    assert_eq!(harness.identity.maximum_length, 3);
+    assert_eq!(
+        harness.identity.element,
+        CollectionElementIdentity::Integer {
+            minimum: 1,
+            maximum: 3,
+        }
+    );
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::assume(selected_items_len >= 1 && selected_items_len <= 3);"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::assume(item >= 1 && item <= 3);"));
+    assert!(harness
+        .rust
+        .contents
+        .contains("kani::cover!(selected_items_len == 1 || selected_items_len == 3"));
 }
 
 /// Trace: FR-015-AC-100, TC-025.
@@ -1107,6 +1195,70 @@ fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
         ObligationDisposition::Unsupported {
             reason: UnsupportedObligation::CollectionClaimNotRendered {
                 reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedFieldType,
+                ..
+            }
+        }
+    ));
+    assert!(collection_harnesses.is_empty());
+}
+
+/// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
+#[test]
+fn unsupported_collection_predicate_is_refused_without_harness() {
+    let fixture = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item > 0)",
+    );
+    let function_id = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .unwrap()
+        .node_id
+        .clone();
+    let quantifier = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.body
+                .get("operation")
+                .and_then(|value| value.get("identity"))
+                .and_then(Value::as_str)
+                == Some("quire.op.collection.forall")
+        })
+        .unwrap()
+        .node_id
+        .clone();
+    let item = ObligationItem::CollectionClaim {
+        package: &fixture.package,
+        function_id: &function_id,
+        node_id: &quantifier,
+    };
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+            Duration::from_secs(600),
+        ),
+        items: std::slice::from_ref(&item),
+        subject_path: "crate::unsupported_predicate",
+        unwind: 8,
+    })
+    .unwrap()
+    else {
+        panic!("an unsupported predicate is an item disposition");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedClaimShape,
                 ..
             }
         }
