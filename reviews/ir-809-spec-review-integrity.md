@@ -44,3 +44,4 @@ One medium finding; otherwise structurally consistent.
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Round 1 (fe3a4e1): home_directory is an optional request input, never read from the environment; AC-35 runs under two process HOME values and asserts equal records. |
+| FND-002 | fixed | Round 2 (d2784f0): home_directory is now a grouping key (FR-017 batch rule, AC-21, interface-001 :131), and a group's excerpts are redacted with the group's one crate, target and home directory; AC-36 and TC-043 step 11 add the /h/u vs /h/v vs absent process-count case. |
