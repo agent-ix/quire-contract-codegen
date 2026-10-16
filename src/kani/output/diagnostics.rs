@@ -109,7 +109,7 @@ impl ProcessOutput<'_> {
         ProcessDiagnostics {
             stdout: excerpt(self.stdout, &self.directories),
             stderr: excerpt(self.stderr, &self.directories),
-            stages: Stages::of(&stdout, self.selections),
+            stages: Stages::read(&stdout, self.selections),
             report_exported: self.report_exported,
             parallel: runs_in_parallel(self.arguments),
             cargo_failed: has_line_starting(
@@ -150,7 +150,7 @@ impl ProcessDiagnostics {
         if self.report_exported {
             return KaniFailurePhase::Unknown;
         }
-        let by_segment = match self.stages.of(member) {
+        let by_segment = match self.stages.stage_of(member) {
             Some(Stage { solving: true }) => Some(KaniFailurePhase::Solver),
             Some(Stage { solving: false }) => Some(KaniFailurePhase::Backend),
             None if self.stages.any() => Some(KaniFailurePhase::Unknown),
@@ -204,7 +204,7 @@ struct Stage {
 struct Stages(std::collections::BTreeMap<String, Stage>);
 
 impl Stages {
-    fn of(stdout: &str, selections: &[String]) -> Self {
+    fn read(stdout: &str, selections: &[String]) -> Self {
         let mut stages = std::collections::BTreeMap::new();
         let mut open: Option<&str> = None;
         for line in stdout.lines() {
@@ -230,7 +230,7 @@ impl Stages {
         !self.0.is_empty()
     }
 
-    fn of(&self, member: &str) -> Option<Stage> {
+    fn stage_of(&self, member: &str) -> Option<Stage> {
         self.0.get(member).copied()
     }
 }
