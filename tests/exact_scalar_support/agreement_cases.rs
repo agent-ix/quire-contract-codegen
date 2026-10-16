@@ -27,64 +27,17 @@ mod generated {
 }
 
 use generated::{
-    decimal_multiply,
-    integer_multiply,
-    binary32_add,
-    text_not_equal,
-    quantity_at_least,
-    integer_at_least,
-    narrow_to_binary32,
-    quantity_add,
-    integer_less,
-    rational_divide,
-    binary32_numeric_equal,
-    enum_equal,
-    enum_less,
-    enum_at_most,
-    enum_greater,
-    enum_at_least,
-    integer_at_most,
-    quantity_power,
-    text_greater,
-    quantity_greater,
-    rational_multiply,
-    modulo_bounded,
-    binary64_bit_identical,
-    quantity_equal,
-    quantity_at_most,
-    integer_subtract,
-    decimal_subtract,
-    integer_add,
-    integer_negate,
-    text_at_least,
-    text_less,
-    decimal_add,
-    divide_euclidean,
-    rational_add,
-    decimal_round,
-    text_equal,
-    quantity_multiply,
-    binary64_multiply,
-    divide_bounded,
-    text_at_most,
-    binary64_divide,
-    binary64_total_order,
-    binary32_subtract,
-    enum_not_equal,
-    quantity_less,
-    divide_floor,
-    quantity_subtract,
-    rational_negate,
-    quantity_divide,
-    divide_truncating,
-    decimal_negate,
-    rational_greater,
-    quantity_not_equal,
-    integer_divide,
-    decimal_at_most,
-    rational_subtract,
-    decimal_divide,
-    OracleStop,
+    binary32_add, binary32_numeric_equal, binary32_subtract, binary64_bit_identical,
+    binary64_divide, binary64_multiply, binary64_total_order, decimal_add, decimal_at_most,
+    decimal_divide, decimal_multiply, decimal_negate, decimal_round, decimal_subtract,
+    divide_bounded, divide_euclidean, divide_floor, divide_truncating, enum_at_least, enum_at_most,
+    enum_equal, enum_greater, enum_less, enum_not_equal, integer_add, integer_at_least,
+    integer_at_most, integer_divide, integer_less, integer_multiply, integer_negate,
+    integer_subtract, modulo_bounded, narrow_to_binary32, quantity_add, quantity_at_least,
+    quantity_at_most, quantity_divide, quantity_equal, quantity_greater, quantity_less,
+    quantity_multiply, quantity_not_equal, quantity_power, quantity_subtract, rational_add,
+    rational_divide, rational_greater, rational_multiply, rational_negate, rational_subtract,
+    text_at_least, text_at_most, text_equal, text_greater, text_less, text_not_equal, OracleStop,
 };
 use quire_contract_runtime::exact::{
     EnumValue, IllTyped, Integer, Meter, Outcome, Quantity, ScalarLimits, Text,
@@ -544,25 +497,52 @@ fn tc_024_tc187_quantity_oracles_agree() {
     // The tabled TC-187 vectors run QSpec's own limit tuples and assert QSpec's disposition,
     // including the whole incomplete record: U03 and U19/U24 sums, U28 compound product,
     // U13/U21 powers, U23 comparison tuples.
-    let (mut sums, mut products, mut named_powers, mut tuple_comparisons) = (0_usize, 0_usize, 0_usize, 0_usize);
     let add = Arithmetic::Add;
+    let mark = vectors_run();
 
     let run = agree_arithmetic(rt::unit_tuple([0; 6]), add, (1, "m"), (1, "s"));
     assert_ill_typed_without_charge("U03", &run);
     let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 5, 1]), add, (2, "m"), (3, "m"));
     assert_eq!(*completed(&run, "U19").value(), rt::ratio(5, 1));
     let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 4, 1]), add, (2, "m"), (3, "m"));
-    assert_incomplete(&run.0, rt::LimitKind::WorkUnits, 4, 4, "1", rt::ChargePoint::UnitResultRetain);
-    let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 5, 1]), add, (1, "cm"), (2, "cm"));
+    assert_incomplete(
+        &run.0,
+        rt::LimitKind::WorkUnits,
+        4,
+        4,
+        "1",
+        rt::ChargePoint::UnitResultRetain,
+    );
+    let run = agree_arithmetic(
+        rt::unit_tuple([4, 0, 0, 2, 5, 1]),
+        add,
+        (1, "cm"),
+        (2, "cm"),
+    );
     assert_eq!(*completed(&run, "U24").value(), rt::ratio(3, 1));
-    assert!(!run.1.contains(&rt::ChargePoint::UnitEdge), "U24 charges no edge");
-    sums += 4;
+    assert!(
+        !run.1.contains(&rt::ChargePoint::UnitEdge),
+        "U24 charges no edge"
+    );
+    assert_vectors_since("TC-187 U03/U19/U24 sums", mark, 4);
+
+    let mark = vectors_run();
 
     let multiply = Arithmetic::Multiply;
-    let run = agree_arithmetic(rt::unit_tuple([20, 0, 2, 2, 11, 1]), multiply, (1, "cm"), (1, "in"));
+    let run = agree_arithmetic(
+        rt::unit_tuple([20, 0, 2, 2, 11, 1]),
+        multiply,
+        (1, "cm"),
+        (1, "in"),
+    );
     assert_eq!(*completed(&run, "U28").value(), rt::ratio(127, 500_000));
     for (bits, consumed, next) in [(13, 9, "14"), (19, 15, "20")] {
-        let run = agree_arithmetic(rt::unit_tuple([bits, 0, 2, 2, 11, 1]), multiply, (1, "cm"), (1, "in"));
+        let run = agree_arithmetic(
+            rt::unit_tuple([bits, 0, 2, 2, 11, 1]),
+            multiply,
+            (1, "cm"),
+            (1, "in"),
+        );
         assert_incomplete(
             &run.0,
             rt::LimitKind::IntegerBits,
@@ -571,11 +551,16 @@ fn tc_024_tc187_quantity_oracles_agree() {
             next,
             rt::ChargePoint::UnitRationalArithmetic,
         );
-        products += 1;
     }
-    products += 1;
+    assert_vectors_since("TC-187 U28 products", mark, 3);
 
-    let run = agree_power(rt::unit_tuple([64, 0, 0, 1, 5, 1]), (2, "m"), "18446744073709551616");
+    let mark = vectors_run();
+
+    let run = agree_power(
+        rt::unit_tuple([64, 0, 0, 1, 5, 1]),
+        (2, "m"),
+        "18446744073709551616",
+    );
     assert_incomplete(
         &run.0,
         rt::LimitKind::IntegerBits,
@@ -589,42 +574,65 @@ fn tc_024_tc187_quantity_oracles_agree() {
     assert_eq!(*one.value(), rt::ratio(1, 1));
     assert!(one.unit().dimension().is_dimensionless());
     let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 1, 0]), (0, "m"), "-1");
-    assert!(matches!(run.0, Ok(Outcome::Undefined(rt::Undefined::DivisionByZero))));
+    assert!(matches!(
+        run.0,
+        Ok(Outcome::Undefined(rt::Undefined::DivisionByZero))
+    ));
     assert_eq!(run.1, vec![rt::ChargePoint::UnitIdentityRead]);
     let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 0, 0]), (0, "m"), "-1");
-    assert_incomplete(&run.0, rt::LimitKind::WorkUnits, 0, 0, "1", rt::ChargePoint::UnitIdentityRead);
-    named_powers += 4;
+    assert_incomplete(
+        &run.0,
+        rt::LimitKind::WorkUnits,
+        0,
+        0,
+        "1",
+        rt::ChargePoint::UnitIdentityRead,
+    );
+    assert_vectors_since("TC-187 U13/U21 powers", mark, 4);
 
-    for (work, left, right, truth) in [(9, (1, "degC"), (2, "degC"), true)] {
-        let run = agree_comparison(rt::unit_tuple([15, 0, 2, 2, work, 1]), rt::ComparisonOperator::Less, left, right);
-        assert!(matches!(run.0, Ok(Outcome::Completed(value)) if value == truth));
-        tuple_comparisons += 1;
-    }
+    let mark = vectors_run();
+
+    let run = agree_comparison(
+        rt::unit_tuple([15, 0, 2, 2, 9, 1]),
+        rt::ComparisonOperator::Less,
+        (1, "degC"),
+        (2, "degC"),
+    );
+    assert!(matches!(run.0, Ok(Outcome::Completed(true))));
     let run = agree_comparison(
         rt::unit_tuple([15, 0, 2, 2, 8, 1]),
         rt::ComparisonOperator::Less,
         (1, "degC"),
         (2, "degC"),
     );
-    assert_incomplete(&run.0, rt::LimitKind::WorkUnits, 8, 8, "1", rt::ChargePoint::UnitResultRetain);
-    let run = agree_comparison(rt::UNLIMITED, rt::ComparisonOperator::Less, (1, "rev"), (2, "rev"));
+    assert_incomplete(
+        &run.0,
+        rt::LimitKind::WorkUnits,
+        8,
+        8,
+        "1",
+        rt::ChargePoint::UnitResultRetain,
+    );
+    let run = agree_comparison(
+        rt::UNLIMITED,
+        rt::ComparisonOperator::Less,
+        (1, "rev"),
+        (2, "rev"),
+    );
     assert!(matches!(run.0, Ok(Outcome::Completed(false))));
-    let run = agree_comparison(rt::UNLIMITED, rt::ComparisonOperator::Equal, (1, "degC"), (1, "degC"));
+    let run = agree_comparison(
+        rt::UNLIMITED,
+        rt::ComparisonOperator::Equal,
+        (1, "degC"),
+        (1, "degC"),
+    );
     assert!(matches!(run.0, Ok(Outcome::Completed(true))));
     for operator in [rt::ComparisonOperator::Less, rt::ComparisonOperator::Equal] {
         let run = agree_comparison(rt::unit_tuple([0; 6]), operator, (0, "degC"), (32, "degF"));
         assert!(matches!(run.0, Err(IllTyped { .. })) && run.1.is_empty());
     }
-    tuple_comparisons += 5;
-    assert_rows_agreed(&[
-        ("TC-187 U03/U19/U24 sums", sums),
-        ("TC-187 U28 products", products),
-        ("TC-187 U13/U21 powers", named_powers),
-        ("TC-187 U23 comparison tuples", tuple_comparisons),
-    ]);
-    let named = sums + products + named_powers + tuple_comparisons;
-    assert_eq!(named, 4 + 3 + 4 + 6);
-    println!("TC-187 runtime and generated-oracle agreement: {operations} operations, {named} tabled tuples");
+    assert_vectors_since("TC-187 U23 comparison tuples", mark, 6);
+    println!("TC-187 runtime and generated-oracle agreement: {operations} grid operations, 17 tabled tuples");
 }
 
 /// Runs one comparison vector on both sides (see [`agree_arithmetic`]).
@@ -634,6 +642,7 @@ fn agree_comparison(
     left: (i64, &str),
     right: (i64, &str),
 ) -> QuantityRun<bool> {
+    note_vector();
     let index = rt::ComparisonOperator::ALL
         .iter()
         .position(|candidate| *candidate == operator)
@@ -670,11 +679,28 @@ fn assert_incomplete<T: std::fmt::Debug>(
 
 use support::rt_side as rt;
 
-type QuantityRun<T> = (
-    Result<Outcome<T>, IllTyped>,
-    Vec<rt::ChargePoint>,
-    Vec<u64>,
-);
+thread_local! {
+    /// Vectors the agreement helpers have run on this test's thread. A test measures the vectors it
+    /// ran against the count its row list names, so deleting a vector call fails the test.
+    static VECTORS_RUN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn note_vector() {
+    VECTORS_RUN.with(|ran| ran.set(ran.get() + 1));
+}
+
+fn vectors_run() -> usize {
+    VECTORS_RUN.with(std::cell::Cell::get)
+}
+
+/// The vectors run since `mark`, which must equal the rows the criterion names for `row`.
+fn assert_vectors_since(row: &str, mark: usize, expected: usize) {
+    let ran = vectors_run() - mark;
+    assert_rows_agreed(&[(row, ran)]);
+    assert_eq!(ran, expected, "{row}: every named vector must run");
+}
+
+type QuantityRun<T> = (Result<Outcome<T>, IllTyped>, Vec<rt::ChargePoint>, Vec<u64>);
 
 #[derive(Clone, Copy)]
 enum Arithmetic {
@@ -728,6 +754,7 @@ fn agree_arithmetic(
     left: (i64, &str),
     right: (i64, &str),
 ) -> QuantityRun<Quantity> {
+    note_vector();
     agree2! {
         limits: bounds,
         setup: { let f = fixture(); let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1)); },
@@ -742,6 +769,7 @@ fn agree_arithmetic(
 
 /// The power counterpart of [`agree_arithmetic`].
 fn agree_power(bounds: ScalarLimits, base: (i64, &str), exponent: &str) -> QuantityRun<Quantity> {
+    note_vector();
     agree2! {
         limits: bounds,
         setup: { let f = fixture(); let (a, n) = (f.qi(base.0, base.1), big(exponent)); },
@@ -763,13 +791,18 @@ fn assert_ill_typed_without_charge(row: &str, run: &QuantityRun<Quantity>) {
         "{row}: expected refused ill_typed, got {:?}",
         run.0
     );
-    assert!(run.1.is_empty(), "{row}: a refusal before arithmetic admits no charge");
-    assert!(run.2.iter().all(|consumed| *consumed == 0), "{row}: nothing is consumed");
+    assert!(
+        run.1.is_empty(),
+        "{row}: a refusal before arithmetic admits no charge"
+    );
+    assert!(
+        run.2.iter().all(|consumed| *consumed == 0),
+        "{row}: nothing is consumed"
+    );
 }
 
 /// The ascending compound-unit terms of a quantity, by base-unit name.
-fn compound_terms(f: &rt::Fixture, quantity: &Quantity) -> Vec<(rt::NodeKey, Integer)> {
-    let _ = f;
+fn compound_terms(quantity: &Quantity) -> Vec<(rt::NodeKey, Integer)> {
     match quantity.unit() {
         rt::QuantityUnit::Compound(unit) => unit
             .terms()
@@ -803,30 +836,35 @@ fn completed(run: &QuantityRun<Quantity>, row: &str) -> Quantity {
 fn tc_024_tc187_u12_compound_unit_products_agree() {
     let f = rt::fixture();
     let unlimited = rt::UNLIMITED;
-    let mut agreements = 0_usize;
+    let mark = vectors_run();
 
     let product = agree_arithmetic(unlimited, Arithmetic::Multiply, (2, "m"), (3, "s"));
     let quantity = completed(&product, "2 m * 3 s");
     assert_eq!(*quantity.value(), rt::ratio(6, 1));
-    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 1), ("s", 1)]));
+    assert_eq!(
+        compound_terms(&quantity),
+        expected_terms(&f, &[("m", 1), ("s", 1)])
+    );
 
     let quotient = agree_arithmetic(unlimited, Arithmetic::Divide, (6, "m"), (2, "s"));
     let quantity = completed(&quotient, "6 m / 2 s");
     assert_eq!(*quantity.value(), rt::ratio(3, 1));
-    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 1), ("s", -1)]));
+    assert_eq!(
+        compound_terms(&quantity),
+        expected_terms(&f, &[("m", 1), ("s", -1)])
+    );
 
     let square = agree_power(unlimited, (2, "m"), "2");
     let quantity = completed(&square, "(2 m)^2");
     assert_eq!(*quantity.value(), rt::ratio(4, 1));
-    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 2)]));
+    assert_eq!(compound_terms(&quantity), expected_terms(&f, &[("m", 2)]));
 
     let cancelled = agree_arithmetic(unlimited, Arithmetic::Divide, (5, "m"), (5, "m"));
     let quantity = completed(&cancelled, "5 m / 5 m");
     assert_eq!(*quantity.value(), rt::ratio(1, 1));
     assert!(quantity.unit().dimension().is_dimensionless());
-    assert!(compound_terms(&f, &quantity).is_empty());
-    agreements += 4;
-    assert_rows_agreed(&[("TC-187 U12 products", agreements)]);
+    assert!(compound_terms(&quantity).is_empty());
+    assert_vectors_since("TC-187 U12 products", mark, 4);
 }
 
 /// TC-187 U02: the normalized dimension map drops zero exponents; `(L*T)/T` is `L` and `L^0` is
@@ -843,7 +881,10 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
     let normalized = l.multiply(t).divide(t);
     assert_eq!(&normalized, l);
     assert_eq!(
-        normalized.exponents().map(|(k, e)| (k, e.clone())).collect::<Vec<_>>(),
+        normalized
+            .exponents()
+            .map(|(k, e)| (k, e.clone()))
+            .collect::<Vec<_>>(),
         vec![(f.key("L"), Integer::from(1_i64))]
     );
     let zeroth = l.power(&rt::int(0));
@@ -851,7 +892,8 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
     assert_eq!(zeroth.exponents().count(), 0);
 
     // The same normalization through the operators both sides execute: (1 m * 1 s) / 1 s.
-    let mut agreements = 0_usize;
+    let mark = vectors_run();
+    note_vector();
     agree2! {
         limits: UNLIMITED,
         setup: { let f = fixture(); let (a, b) = (f.qi(1, "m"), f.qi(1, "s")); },
@@ -872,14 +914,14 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
             (product, quotient)
         },
     };
-    agreements += 1;
     let (a, b) = (f.qi(1, "m"), f.qi(1, "s"));
     let ((product, quotient), _, _) = rt::metered(rt::UNLIMITED, |m| {
         let product = rt::evaluate_quantity(rt::QuantityOperation::Multiply(&a, &b), m);
         let quotient = match &product {
-            Ok(Outcome::Completed(p)) => {
-                Some(rt::evaluate_quantity(rt::QuantityOperation::Divide(p, &b), m))
-            }
+            Ok(Outcome::Completed(p)) => Some(rt::evaluate_quantity(
+                rt::QuantityOperation::Divide(p, &b),
+                m,
+            )),
             _ => None,
         };
         (product, quotient)
@@ -889,13 +931,12 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
         panic!("(1 m * 1 s) / 1 s must complete");
     };
     assert_eq!(quantity.unit().dimension(), l);
-    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 1)]));
+    assert_eq!(compound_terms(&quantity), expected_terms(&f, &[("m", 1)]));
 
     let power = agree_power(rt::UNLIMITED, (1, "m"), "0");
-    agreements += 1;
     let quantity = completed(&power, "(1 m)^0");
     assert!(quantity.unit().dimension().is_dimensionless());
-    assert_rows_agreed(&[("TC-187 U02 normalization", agreements)]);
+    assert_vectors_since("TC-187 U02 normalization", mark, 2);
 }
 
 /// TC-187 U05: arithmetic, comparison-free operators and a power on a nonzero-offset point
@@ -904,7 +945,7 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
 /// Trace: FR-014-AC-6, TC-024.
 #[test]
 fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
-    let mut agreements = 0_usize;
+    let mark = vectors_run();
     for (left, right) in [
         ((1, "degC"), (2, "degC")),
         ((1, "degF"), (2, "degF")),
@@ -913,18 +954,15 @@ fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
         for operation in Arithmetic::ALL {
             let run = agree_arithmetic(rt::UNLIMITED, operation, left, right);
             assert_ill_typed_without_charge("U05 binary", &run);
-            agreements += 1;
         }
     }
     for unit in ["degC", "degF"] {
         for exponent in ["-1", "0", "2"] {
             let run = agree_power(rt::UNLIMITED, (3, unit), exponent);
             assert_ill_typed_without_charge("U05 power", &run);
-            agreements += 1;
         }
     }
-    assert_rows_agreed(&[("TC-187 U05 affine points", agreements)]);
-    assert_eq!(agreements, 3 * 4 + 2 * 3);
+    assert_vectors_since("TC-187 U05 affine points", mark, 3 * 4 + 2 * 3);
 }
 
 /// TC-187 U09: a base dimension with the same declaration name and shape as `L` but a different
@@ -933,14 +971,18 @@ fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
 /// Trace: FR-014-AC-6, TC-024.
 #[test]
 fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
+    let mark = vectors_run();
     let run = agree_arithmetic(rt::UNLIMITED, Arithmetic::Add, (1, "m"), (1, "m_foreign"));
     assert_ill_typed_without_charge("U09", &run);
-    let Err(refusal) = run.0 else { unreachable!("asserted above") };
+    let Err(refusal) = run.0 else {
+        unreachable!("asserted above")
+    };
     assert_eq!(refusal.cause, rt::IllTypedCause::IncompatibleDimensions);
     assert_eq!(IllTyped::CODE, "ill_typed");
     // The control: the same shape under the one `L` key is accepted.
     let control = agree_arithmetic(rt::UNLIMITED, Arithmetic::Add, (1, "m"), (1, "m"));
     assert!(matches!(control.0, Ok(Outcome::Completed(_))));
+    assert_vectors_since("TC-187 U09 foreign dimension key", mark, 2);
 }
 
 /// TC-187 U14: under `L(0,0,0,0,0,0)` each incompatible, affine or distinct-unit operation is
@@ -950,7 +992,7 @@ fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
 #[test]
 fn tc_024_tc187_u14_static_refusals_charge_nothing() {
     let zero = rt::unit_tuple([0; 6]);
-    let mut agreements = 0_usize;
+    let mark = vectors_run();
     for (operation, left, right) in [
         (Arithmetic::Add, (1, "m"), (1, "s")),
         (Arithmetic::Add, (1, "degC"), (1, "s")),
@@ -960,10 +1002,8 @@ fn tc_024_tc187_u14_static_refusals_charge_nothing() {
     ] {
         let run = agree_arithmetic(zero, operation, left, right);
         assert_ill_typed_without_charge("U14", &run);
-        agreements += 1;
     }
-    assert_rows_agreed(&[("TC-187 U14 static refusals", agreements)]);
-    assert_eq!(agreements, 5);
+    assert_vectors_since("TC-187 U14 static refusals", mark, 5);
 }
 
 /// TC-187 U20: the affine-by-composed-offset units `u1` and `u3` refuse arithmetic with no
@@ -973,6 +1013,7 @@ fn tc_024_tc187_u14_static_refusals_charge_nothing() {
 #[test]
 fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
     let zero = rt::unit_tuple([0; 6]);
+    let mark = vectors_run();
     let sum = agree_arithmetic(zero, Arithmetic::Add, (1, "u1"), (2, "u1"));
     assert_ill_typed_without_charge("U20 u1 sum", &sum);
     let product = agree_arithmetic(zero, Arithmetic::Multiply, (1, "u3"), (1, "m"));
@@ -988,8 +1029,11 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
     assert_eq!(*quantity.value(), rt::ratio(3, 1));
     let f = rt::fixture();
     assert_eq!(quantity.unit(), &f.unit("u2"));
-    assert!(!exact.1.contains(&rt::ChargePoint::UnitEdge), "u2 is not affine: no edge is charged");
-    assert_rows_agreed(&[("TC-187 U20 affinity", 3)]);
+    assert!(
+        !exact.1.contains(&rt::ChargePoint::UnitEdge),
+        "u2 is not affine: no edge is charged"
+    );
+    assert_vectors_since("TC-187 U20 affinity", mark, 3);
 }
 
 /// TC-187 U27: `1 cm / 0 cm` is undefined after both identity reads and before any edge; one work
@@ -998,6 +1042,7 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
 /// Trace: FR-014-AC-6, TC-024.
 #[test]
 fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
+    let mark = vectors_run();
     let undefined = agree_arithmetic(
         rt::unit_tuple([1, 0, 0, 2, 2, 0]),
         Arithmetic::Divide,
@@ -1010,7 +1055,10 @@ fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
     ));
     assert_eq!(
         undefined.1,
-        vec![rt::ChargePoint::UnitIdentityRead, rt::ChargePoint::UnitIdentityRead]
+        vec![
+            rt::ChargePoint::UnitIdentityRead,
+            rt::ChargePoint::UnitIdentityRead
+        ]
     );
 
     let stopped = agree_arithmetic(
@@ -1020,17 +1068,22 @@ fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
         (0, "cm"),
     );
     let Ok(Outcome::Incomplete(incomplete)) = &stopped.0 else {
-        panic!("U27 under one work unit must be incomplete, got {:?}", stopped.0);
+        panic!(
+            "U27 under one work unit must be incomplete, got {:?}",
+            stopped.0
+        );
     };
     assert_eq!(incomplete.limit_kind, rt::LimitKind::WorkUnits);
     assert_eq!((incomplete.limit, incomplete.consumed), (1, 1));
     assert_eq!(incomplete.next_charge, Integer::from(1_i64));
     assert_eq!(incomplete.charge_point, rt::ChargePoint::UnitIdentityRead);
-    assert_rows_agreed(&[("TC-187 U27 division by zero", 2)]);
+    assert_vectors_since("TC-187 U27 division by zero", mark, 2);
 }
 
 /// The refusal cause of a graph admission that must fail.
-fn admission_refusal(result: Result<rt::UnitGraph, rt::InvalidSemanticGraph>) -> rt::SemanticGraphCause {
+fn admission_refusal(
+    result: Result<rt::UnitGraph, rt::InvalidSemanticGraph>,
+) -> rt::SemanticGraphCause {
     match result {
         Ok(_) => panic!("the unit graph was admitted"),
         Err(refusal) => {
@@ -1070,7 +1123,9 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
 
     // U06: a unit with zero scale.
     let mut zero_scale = support::GraphSpec::tc187();
-    zero_scale.units.push(support::unit("zero", "L", Some("m"), (0, 1), (0, 1)));
+    zero_scale
+        .units
+        .push(support::unit("zero", "L", Some("m"), (0, 1), (0, 1)));
     let cause = admission_refusal(rt::admit_graph(&zero_scale).map(|fixture| fixture.graph));
     assert_eq!(cause, rt::SemanticGraphCause::ZeroScale);
 
@@ -1089,25 +1144,38 @@ fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
 
     let cause = admission_refusal(rt::UnitGraph::admit(
         dimensions(),
-        [(a, declaration(length, Some(b), one())), (b, declaration(length, Some(a), one()))],
+        [
+            (a, declaration(length, Some(b), one())),
+            (b, declaration(length, Some(a), one())),
+        ],
     ));
     assert_eq!(cause, rt::SemanticGraphCause::MissingRoot);
 
     let cause = admission_refusal(rt::UnitGraph::admit(
         dimensions(),
-        [(root, declaration(length, None, one())), (a, declaration(length, Some(b), one()))],
+        [
+            (root, declaration(length, None, one())),
+            (a, declaration(length, Some(b), one())),
+        ],
     ));
     assert_eq!(cause, rt::SemanticGraphCause::UnknownTarget);
 
     let cause = admission_refusal(rt::UnitGraph::admit(
         dimensions(),
-        [(root, declaration(time, None, one())), (a, declaration(length, Some(root), one()))],
+        [
+            (root, declaration(time, None, one())),
+            (b, declaration(length, None, one())),
+            (a, declaration(length, Some(root), one())),
+        ],
     ));
     assert_eq!(cause, rt::SemanticGraphCause::CrossDimensionTarget);
 
     let cause = admission_refusal(rt::UnitGraph::admit(
         dimensions(),
-        [(root, declaration(length, None, one())), (a, declaration(length, Some(a), one()))],
+        [
+            (root, declaration(length, None, one())),
+            (a, declaration(length, Some(a), one())),
+        ],
     ));
     assert_eq!(cause, rt::SemanticGraphCause::TargetCycle);
 }
