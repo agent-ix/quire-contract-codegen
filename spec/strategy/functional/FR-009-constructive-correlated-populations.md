@@ -14,15 +14,18 @@ relationships:
 
 ## Description
 
-When a bound clause is admitted by [FR-008](./FR-008-bound-domain-strategy-admission.md), the
-generator shall emit proptest populations that construct every case directly inside the shared domain
-and on the requested side of the relation. A case is a complete valuation of the clause's reads,
-including any `Post` read, and its tag is the value the clause's generated oracle returns for that
-valuation. The generator never draws a candidate and then filters it out.
+When a selected claim of an admitted `CheckedPackageV2` is admitted by
+[FR-008](./FR-008-bound-domain-strategy-admission.md), the generator shall emit proptest populations
+that construct every case directly inside the shared domain and on the requested side of the
+relation. A case is a complete valuation of the claim's reads, including any `Post` read, and its tag
+is the value the selected claim's V2 comparison oracle (FR-008) returns for that valuation. The
+generator never draws a candidate and then filters it out.
 
 ## Inputs
 
-- An admitted relation `left op right` and the shared domain from the FR-008 census.
+- The ordered relation `left op right` (operator and authored operand positions) and the shared
+  domain from the FR-008 census of the selected claim; no `BoundPackage`, `ClauseRef` or
+  caller-supplied range is an input.
 - A requested population: `Satisfying`, `Violating`, or `Broad`.
 
 ## Outputs
@@ -33,6 +36,9 @@ valuation. The generator never draws a candidate and then filters it out.
 ## Behavior
 
 - The generator shall place every generated read value within the shared inclusive domain.
+- The generator shall compute the satisfying and violating sets from the admitted ordered relation
+  with each operand in its authored position, so a read-versus-literal comparison written with the
+  literal first yields the sets of its mirrored read-first form.
 - For a primary read compared with a literal, the generator shall compute the satisfying and
   violating value sets as at most two inclusive intervals intersected with the domain.
 - The generator shall draw a primary read compared with a literal directly from those intervals.
@@ -62,12 +68,13 @@ valuation. The generator never draws a candidate and then filters it out.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-009-AC-1 | For `VersionUnchanged` over 0..=1000, every `Satisfying` case has post = pre, every `Violating` case has post ≠ pre, and every value lies in 0..=1000. | Test (TC-018) |
-| FR-009-AC-2 | For every comparison operator, every domain of 1, 2, 3, and 4 members, and both a two-read relation and a read-versus-literal relation with the literal at each domain member, the generatable set of each population equals the independently enumerated satisfying or violating set: none missing, none extra. An empty side is refused with `EmptyPopulation` and never produces an empty strategy. | Test (TC-018) |
+| FR-009-AC-1 | For the QSL-produced, IR-admitted V2 `VersionUnchanged` selected claim (FR-008-AC-1) over 0..=1000, every `Satisfying` case has post = pre, every `Violating` case has post ≠ pre, and every value lies in 0..=1000. | Test (TC-018) |
+| FR-009-AC-2 | For every comparison operator of the V2 selected claim, every domain of 1, 2, 3, and 4 members, and both a two-read relation and a read-versus-literal relation with the literal at each domain member, the generatable set of each population equals the independently enumerated satisfying or violating set: none missing, none extra. An empty side is refused with `EmptyPopulation` and never produces an empty strategy. | Test (TC-018) |
 | FR-009-AC-3 | Generated population source contains no filter, assume, reject, or discard call, and a seeded 10,000-case run of each population records zero discards and zero proptest global rejects. | Test (TC-018) |
 | FR-009-AC-4 | For `amount < 0` over 0..=1000, `Satisfying` and `Broad` are refused with `EmptyPopulation` naming `Satisfying`, and `Violating` generates; for `amount >= 0`, `Violating` and `Broad` are refused naming `Violating`; no refused request emits an artifact. | Test (TC-018) |
 | FR-009-AC-5 | A domain of `i64::MIN..=i64::MAX` with `NotEqual`, `Less`, and `Equal` compiles as generated Rust and generates 10,000 seeded cases without overflow or panic, every case in domain and on its side. | Test (TC-018) |
-| FR-009-AC-6 | Repeated generation for the same package, clause, and population is byte-identical. | Test (TC-018) |
+| FR-009-AC-6 | Repeated generation for the same `CheckedPackageV2`, selected clause id, authentic claim occurrence, and population is byte-identical. | Test (TC-018) |
+| FR-009-AC-7 | PLANNED. For each noncommutative operator, a comparison written with the literal in the first position produces the same satisfying and violating sets as its mirrored read-first form, enumerated independently. | Test (TC-018) |
 
 ## Dependencies
 

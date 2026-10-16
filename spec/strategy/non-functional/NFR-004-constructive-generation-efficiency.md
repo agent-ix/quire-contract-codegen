@@ -15,13 +15,13 @@ relationships:
 
 ## Statement
 
-The generated bound strategies and conformance runner shall produce every requested case without
+The generated strategies and conformance runner for a selected V2 claim shall produce every requested case without
 discards, proptest global rejects, or framework exhaustion, and the boundary census shall stay small
 enough to evaluate exhaustively.
 
 ## Scope
 
-- Applies to: `Satisfying`, `Violating`, and `Broad` populations under
+- Applies to: selected claims of an admitted `CheckedPackageV2` ([FR-008](../functional/FR-008-bound-domain-strategy-admission.md)); `Satisfying`, `Violating`, and `Broad` populations under
   [FR-009](../functional/FR-009-constructive-correlated-populations.md), the census under
   [FR-010](../functional/FR-010-domain-boundary-campaigns.md), and the runner under
   [FR-011](../functional/FR-011-numeric-harness-campaigns.md).
@@ -49,7 +49,7 @@ returning them as global rejects, remove that failure mode and make the discard 
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| NFR-004-AC-1 | Fresh 10,000-case and 256-case campaigns of every population over `VersionUnchanged`, `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted` conclusion. | Test (TC-020) |
+| NFR-004-AC-1 | Fresh 10,000-case and 256-case campaigns of every population over the V2 selected claims `VersionUnchanged`, `amount < 7`, and a `Precondition` fixture record zero discards, zero proptest global rejects, and no `Exhausted` conclusion. | Test (TC-020) |
 | NFR-004-AC-2 | For every admitted fixture in TC-019, the in-domain census plus out-of-domain array holds at most 20 cases. | Test (TC-019) |
 
 ## Verification

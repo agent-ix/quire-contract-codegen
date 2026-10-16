@@ -12,7 +12,8 @@ relationships:
 
 Verify selected-claim V2 strategy admission through IR's public clause-context comparison accessor,
 exact domain checks, first-defect diagnostics and atomic bundle output. This case is planned until
-IR-703's public accessor and a real QSL ConfigVersion V2 producer fixture are available.
+CG's V2 strategy implementation, V2 comparison oracle and a CG-side real QSL ConfigVersion V2
+producer fixture exist; IR-703's public accessor is implemented in Contract IR.
 
 ## Test Procedure
 
@@ -38,6 +39,17 @@ IR-703's public accessor and a real QSL ConfigVersion V2 producer fixture are av
    i128::MAX. Exercise two reads whose ranges are separately i64-representable but unequal, then
    equal. Check all refusal paths and the complete-bundle/zero-artifact boundary.
 
+6. For each of integer.eq, ne, lt, le, gt and ge, build a selected claim over a 1- to 4-member
+   domain (read-versus-read, and read-versus-literal with the literal at each member and in either
+   authored position), evaluate the V2 comparison oracle for every valuation, and compare each
+   result with an independently evaluated ordered relation. Inspect that the eq and ne oracles come
+   from the V2 comparison-oracle path and not from `generate_exact_scalar_oracles` or the V1 bound
+   oracle.
+7. In a CG integration test, obtain the comparison from IR's public accessor through its public API
+   only, for each closed operator, provenance and observation variant and each refusal, and compare
+   the operator, ordinals, provenance, observation, bounds and refusal fields with CG's census,
+   relation and diagnostic. Assert no `CheckedSemanticNodeV2.body` read.
+
 ## Expected Results
 
 - The real ConfigVersion direct form admits two `State` entries in authored `Post`, `Pre` order,
@@ -51,3 +63,7 @@ IR-703's public accessor and a real QSL ConfigVersion V2 producer fixture are av
   as a unique source occurrence. No refusal emits part of a bundle.
 - Out-of-i64 endpoints and literals never narrow, wrap or clamp. Unequal read ranges refuse at
   operand one even when both fit i64; equal ranges may admit.
+- Every operator's V2 oracle result equals the independent evaluation for every valuation and
+  literal position (FR-008-AC-7); eq and ne come from the V2 comparison-oracle path (FR-008-AC-8).
+- Every CG census, relation and diagnostic field equals the accessor's value, and no body JSON is
+  read (FR-008-AC-9).

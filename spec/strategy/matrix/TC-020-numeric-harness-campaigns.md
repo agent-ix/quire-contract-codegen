@@ -18,11 +18,12 @@ exact rates.
 
 ## Test Procedure
 
-1. In a generated-crate fixture, run `Satisfying`, `Violating`, and `Broad` campaigns through the
+1. In a generated-crate fixture built from IR-admitted `CheckedPackageV2` selected claims, run `Satisfying`, `Violating`, and `Broad` campaigns through the
    generated population runner for `VersionUnchanged` (`Postcondition`), `amount < 7` (`Invariant`),
    and a `Precondition` fixture `amount <= 500`, each with a fresh report, at 256 cases under the
    deterministic configuration with `max_global_rejects: 0` and at 10,000 cases.
-2. Repeat step 1's 256-case `Broad` campaigns with each generated oracle replaced by its negation.
+2. Repeat step 1's 256-case `Broad` campaigns with each selected claim's V2 comparison oracle
+   replaced by its negation.
 3. Run the census runner for `VersionUnchanged` with an instrumented oracle that records every
    valuation it receives.
 4. Run a campaign over a report seeded with fixed prior accepted, rejected, and discarded counts,

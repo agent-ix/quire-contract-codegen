@@ -10,13 +10,17 @@ relationships:
 
 ## Description
 
-Verify that bound populations are constructed rather than filtered, generate exactly the true value
-sets, refuse empty sides explicitly, and handle `i64` extremes without overflow.
+Verify that populations for a selected V2 claim (FR-008) are constructed rather than filtered,
+generate exactly the true value sets, refuse empty sides explicitly, and handle `i64` extremes
+without overflow. Every fixture is an IR-admitted `CheckedPackageV2` with a selected clause id and
+authentic claim occurrence; synthetic topology fixtures are labelled and do not stand in for the
+QSL-produced ConfigVersion control.
 
 ## Test Procedure
 
-1. Generate `Satisfying`, `Violating`, and `Broad` populations for `VersionUnchanged` and draw 10,000
-   seeded cases from each.
+1. From the QSL-produced, IR-admitted ConfigVersion V2 package, select the direct
+   `self.versionNumber = pre(self.versionNumber)` claim (`VersionUnchanged`), generate `Satisfying`,
+   `Violating`, and `Broad` populations, and draw 10,000 seeded cases from each.
 2. Scan each generated population source for `prop_filter`, `prop_filter_map`, `prop_assume`,
    `TestCaseError::reject`, and discard constructors.
 3. For each of the six operators, each domain of 1, 2, 3, and 4 members, and each relation shape (two
@@ -26,7 +30,10 @@ sets, refuse empty sides explicitly, and handle `i64` extremes without overflow.
 4. Request all three populations for `amount < 0` and for `amount >= 0` over 0..=1000.
 5. Generate, compile, and draw 10,000 seeded cases for `NotEqual`, `Less`, and `Equal` over
    `i64::MIN..=i64::MAX`.
-6. Generate each population twice and compare bytes.
+6. Generate each population twice for the same package, selected clause id, claim occurrence and
+   population, and compare bytes.
+7. For each noncommutative operator, generate a read-first comparison and its literal-first mirror,
+   and compare the generatable sets of each population with an independent enumeration.
 
 ## Expected Results
 
@@ -41,3 +48,4 @@ sets, refuse empty sides explicitly, and handle `i64` extremes without overflow.
 - The extreme-domain runs complete without overflow or panic, with every case in domain and on its
   side.
 - Repeated generation is byte-identical.
+- The literal-first form yields the same sets as its mirrored read-first form (FR-009-AC-7).

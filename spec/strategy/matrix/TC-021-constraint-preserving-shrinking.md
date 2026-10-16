@@ -10,7 +10,8 @@ relationships:
 
 ## Description
 
-Verify that every candidate proptest visits while shrinking a bound population stays in domain and
+Verify that every candidate proptest visits while shrinking a population of a selected V2 claim
+(FR-008) stays in domain and
 keeps its original tag, that `Broad` never shrinks across sides, and that shrink replays are counted.
 
 ## Test Procedure
@@ -23,7 +24,7 @@ keeps its original tag, that `Broad` never shrinks across sides, and that shrink
 2. For 1,000 seeded `VersionUnchanged` value trees of each population over 0..=1000, follow the greedy
    shrink path: call `simplify` until it returns false, calling `complicate` after each failing
    candidate.
-3. Run a `Violating` `VersionUnchanged` campaign whose oracle is replaced by
+3. Run a `Violating` V2 `VersionUnchanged` campaign whose comparison oracle is replaced by
    `post == pre || post == pre + 1`, so only `Violated` cases with post = pre + 1 mismatch, and
    capture the minimal counterexample.
 4. In step 3's campaign, count the replaced oracle's evaluations and read `attempted`.
