@@ -593,11 +593,17 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
         .unwrap(),
     ] {
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
-        let outcome = generated::oracle_e_record_equal(
-            // E_RECORD Equal
-            &empty, &left, &right, &mut meter,
-        );
-        assert_eq!(outcome, rt::Outcome::Refused(rt::Refusal::CheckedInvariant));
+        let outcome =
+            generated::oracle_e_record_equal(
+                // E_RECORD Equal
+                &empty, &left, &right, &mut meter,
+            );
+        assert!(matches!(
+            outcome,
+            rt::Outcome::Refused(rt::Refusal::CheckedInvariant {
+                cause: quire_exact::CheckedInvariantCause::GeneratedTypeCheckRejected { .. },
+            })
+        ));
         assert!(
             meter.admitted_charges().is_empty(),
             "check_type guard must admit no charge before refusing"
