@@ -2727,7 +2727,6 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     })
     .expect("verified proof and typed native receipt");
     assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
@@ -2751,7 +2750,6 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         operands: &operands,
         scalar_limits: constrained_limits,
         target_directory: &target,
-        home_directory: None,
     })
     .expect("verified proof and typed native incomplete receipt at zero result budget");
 
@@ -2824,7 +2822,6 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
         operands: &left_first,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     })
     .expect("verified proof and typed native receipt for [4, 1]");
 
@@ -2837,7 +2834,6 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
         operands: &right_first,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     })
     .expect("verified proof and typed native receipt for [1, 4]");
 
@@ -2930,7 +2926,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     });
     assert!(matches!(
         changed_path,
@@ -2954,7 +2949,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     });
     assert!(matches!(
         changed_bytes,
@@ -2977,7 +2971,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     });
     assert!(matches!(
         changed_identity,
@@ -3003,7 +2996,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     });
     assert!(matches!(
         wrong_symbol,
@@ -3022,7 +3014,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &one_operand,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     });
     assert!(matches!(
         wrong_operand_count,
@@ -3041,7 +3032,6 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &out_of_bounds_operands,
         scalar_limits: limits,
         target_directory: &target,
-        home_directory: None,
     });
     assert!(matches!(
         out_of_bounds,
