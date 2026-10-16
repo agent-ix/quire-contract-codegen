@@ -154,6 +154,8 @@ impl OriginalCompositeEqContext {
     /// Returns a typed source, package identity, dependency or function-selection refusal. These
     /// prechecks create neither a parity report nor a terminal value. Recompile/read/context
     /// refusals are returned later by [`Self::request`].
+    // IR f16d0fd's 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     pub fn new(
         original: CheckedPackageV2,
         inputs: ReplayInputs,
@@ -240,6 +242,8 @@ impl OriginalCompositeEqContext {
     /// # Errors
     /// Returns a typed original node/occurrence, operand, encoder, request decode, recompile or
     /// original-context refusal, with no report.
+    // IR f16d0fd's 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     pub fn request(
         &self,
         node: &CheckedNodeId,
@@ -273,6 +277,8 @@ impl OriginalCompositeEqContext {
                 actual,
             });
         }
+        // Keep the public PackageRead error inline; IR f16d0fd's refusal payload is 192 bytes.
+        #[allow(clippy::result_large_err)]
         let arguments = operands.operands.iter().map(|operand| {
             let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                 return Err(CompositeBuildError::OperandShape);
@@ -331,6 +337,8 @@ impl OriginalCompositeEqContext {
         })
     }
 
+    // IR f16d0fd's 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     fn check_recompiled_context(
         &self,
         wire: &ReplayRequestWire,
@@ -371,6 +379,8 @@ impl OriginalCompositeEqContext {
     }
 }
 
+// IR f16d0fd's 192-byte refusal is retained inline to preserve the public PackageRead payload.
+#[allow(clippy::result_large_err)]
 fn wire_node(node: &CheckedNodeId) -> Result<WireNodeId, CompositeBuildError> {
     WireNodeId::from_hex(&node.digest).ok_or(CompositeBuildError::NodeIdentity)
 }
@@ -425,6 +435,8 @@ impl OriginalCompositeEqRequest {
     ///
     /// # Errors
     /// Returns a binding refusal without a terminal value if QSL's report does not match what was sent.
+    // IR f16d0fd's 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     pub fn settle_verified(
         self,
         verified: VerifiedShadow,
