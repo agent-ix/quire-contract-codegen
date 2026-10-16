@@ -1,8 +1,7 @@
 //! Agreement support: direct Contract Runtime execution and generated
 //! oracles.
 //!
-//! Adapted from Contract Runtime
-//! `conformance/qsl-agreement/tests/support/mod.rs`.
+//! Adapted from the Contract Runtime agreement harness.
 //! A vector body is written once. [`agree2!`] evaluates the direct call with
 //! `quire_contract_runtime::exact` in scope and evaluates the generated
 //! oracle with the runtime in scope. Every evaluation is run under the same
@@ -10,8 +9,10 @@
 //! `Debug` renderings, which include every value, typed refusal, incomplete
 //! record, admitted charge and consumed counter, must be identical.
 //!
-//! The RT==QSL authority check lives in RT's `conformance/qsl-agreement` lane;
-//! this crate only checks generated==RT. QSL arch-lint T12-A confines this
+//! This crate checks generated==RT only and claims no agreement with the QSL
+//! value authority (FR-014-AC-47); that comparison for the quantity vectors is
+//! owned by the quire-integration lane (Contract Runtime FR-007-AC-5, TC-022).
+//! QSL arch-lint T12-A confines this
 //! crate to `qsl_replay`'s public API, and none of this file's vectors are
 //! shaped as compiled source plus a witness -- they call value-level
 //! operators directly (`Meter`, `Integer`, `IeeeValue`, unit conversion,

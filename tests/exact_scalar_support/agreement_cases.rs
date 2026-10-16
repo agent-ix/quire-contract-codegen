@@ -261,7 +261,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
     }
     assert_rows_agreed(&[("TC-192 tabled tuples", named)]);
     assert_eq!(named, 11);
-    println!("TC-192 three-way agreement: {vectors} generated vectors, {named} tabled tuples");
+    println!("TC-192 agreement: {vectors} generated vectors, {named} tabled tuples");
 }
 
 const COEFFICIENTS: [i64; 10] = [-25, -10, -7, -5, -1, 0, 1, 3, 8, 10];
@@ -353,7 +353,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
     assert_eq!(named, 9);
 
     // Decimal ordering: runtime vs. generated oracle only (`agree2!`); see
-    // this file's module doc for why the QSL authority leg is gone.
+    // FR-014-AC-47 for why this file has no QSL authority leg.
     let mut ordering = 0_usize;
     for (ca, sa) in &operands {
         for (cb, sb) in &operands {
@@ -381,7 +381,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
     assert_rows_agreed(&[("TC-185 ordering", ordering)]);
     assert_eq!(ordering, 30 * 30 + 2);
     println!(
-        "TC-185 agreement: {vectors} generated and {named} tabled three-way, {ordering} ordering runtime-only"
+        "TC-185 agreement: {vectors} generated and {named} tabled, {ordering} ordering runtime-only"
     );
 }
 
@@ -541,72 +541,131 @@ fn tc_024_tc187_quantity_oracles_agree() {
     let operations = arithmetic + comparisons + powers;
     assert_eq!(operations, UNIT_GRID.len() * (5 * 5 * (4 + 6) + 5 * 6));
 
-    // U19/U24 same-unit sums, U28 compound product, U13/U21 powers, U23
-    // comparison tuples, and the U03 dimension mismatch.
+    // The tabled TC-187 vectors run QSpec's own limit tuples and assert QSpec's disposition,
+    // including the whole incomplete record: U03 and U19/U24 sums, U28 compound product,
+    // U13/U21 powers, U23 comparison tuples.
     let (mut sums, mut products, mut named_powers, mut tuple_comparisons) = (0_usize, 0_usize, 0_usize, 0_usize);
-    for (a, b, tuple) in [
-        ((2, "m"), (3, "m"), [3, 0, 0, 2, 5, 1]),
-        ((2, "m"), (3, "m"), [3, 0, 0, 2, 4, 1]),
-        ((1, "cm"), (2, "cm"), [2, 0, 0, 2, 5, 1]),
-        ((1, "m"), (1, "s"), [0; 6]),
-    ] {
-        agree2! {
-            limits: unit_tuple(tuple),
-            setup: { let f = fixture(); let (a, b) = (f.qi(a.0, a.1), f.qi(b.0, b.1)); },
-            direct: |m| evaluate_quantity(QuantityOperation::Add(&a, &b), m),
-            generated: |m| typed(quantity_add(&a, &b, m)),
-        };
-        sums += 1;
-    }
-    for tuple in [
-        [19, 0, 2, 2, 11, 1],
-        [12, 0, 2, 2, 11, 1],
-        [18, 0, 2, 2, 11, 1],
-    ] {
-        agree2! {
-            limits: unit_tuple(tuple),
-            setup: { let f = fixture(); let (a, b) = (f.qi(1, "cm"), f.qi(1, "in")); },
-            direct: |m| evaluate_quantity(QuantityOperation::Multiply(&a, &b), m),
-            generated: |m| typed(quantity_multiply(&a, &b, m)),
-        };
+    let add = Arithmetic::Add;
+
+    let run = agree_arithmetic(rt::unit_tuple([0; 6]), add, (1, "m"), (1, "s"));
+    assert_ill_typed_without_charge("U03", &run);
+    let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 5, 1]), add, (2, "m"), (3, "m"));
+    assert_eq!(*completed(&run, "U19").value(), rt::ratio(5, 1));
+    let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 4, 1]), add, (2, "m"), (3, "m"));
+    assert_incomplete(&run.0, rt::LimitKind::WorkUnits, 4, 4, "1", rt::ChargePoint::UnitResultRetain);
+    let run = agree_arithmetic(rt::unit_tuple([4, 0, 0, 2, 5, 1]), add, (1, "cm"), (2, "cm"));
+    assert_eq!(*completed(&run, "U24").value(), rt::ratio(3, 1));
+    assert!(!run.1.contains(&rt::ChargePoint::UnitEdge), "U24 charges no edge");
+    sums += 4;
+
+    let multiply = Arithmetic::Multiply;
+    let run = agree_arithmetic(rt::unit_tuple([20, 0, 2, 2, 11, 1]), multiply, (1, "cm"), (1, "in"));
+    assert_eq!(*completed(&run, "U28").value(), rt::ratio(127, 500_000));
+    for (bits, consumed, next) in [(13, 9, "14"), (19, 15, "20")] {
+        let run = agree_arithmetic(rt::unit_tuple([bits, 0, 2, 2, 11, 1]), multiply, (1, "cm"), (1, "in"));
+        assert_incomplete(
+            &run.0,
+            rt::LimitKind::IntegerBits,
+            bits,
+            consumed,
+            next,
+            rt::ChargePoint::UnitRationalArithmetic,
+        );
         products += 1;
     }
-    for (value, exponent, tuple) in [
-        (2, "18446744073709551616", [64, 0, 0, 1, 5, 1]),
-        (0, "0", [1, 0, 0, 1, 4, 1]),
-        (0, "-1", [1, 0, 0, 1, 1, 0]),
-        (0, "-1", [1, 0, 0, 1, 0, 0]),
-    ] {
-        agree2! {
-            limits: unit_tuple(tuple),
-            setup: { let f = fixture(); let (a, n) = (f.qi(value, "m"), big(exponent)); },
-            direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
-            generated: |m| typed(quantity_power(&a, &n, m)),
-        };
-        named_powers += 1;
-    }
-    for (a, b, tuple) in [
-        ((1, "degC"), (2, "degC"), [13, 0, 2, 2, 9, 1]),
-        ((1, "degC"), (2, "degC"), [13, 0, 2, 2, 8, 1]),
-        ((0, "degC"), (32, "degF"), [0; 6]),
-    ] {
-        agree2! {
-            limits: unit_tuple(tuple),
-            setup: { let f = fixture(); let (a, b) = (f.qi(a.0, a.1), f.qi(b.0, b.1)); },
-            direct: |m| compare_quantity(ComparisonOperator::Less, &a, &b, m),
-            generated: |m| typed(quantity_less(&a, &b, m)),
-        };
+    products += 1;
+
+    let run = agree_power(rt::unit_tuple([64, 0, 0, 1, 5, 1]), (2, "m"), "18446744073709551616");
+    assert_incomplete(
+        &run.0,
+        rt::LimitKind::IntegerBits,
+        64,
+        2,
+        "36893488147419103232",
+        rt::ChargePoint::UnitRationalArithmetic,
+    );
+    let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 4, 1]), (0, "m"), "0");
+    let one = completed(&run, "U21 0^0");
+    assert_eq!(*one.value(), rt::ratio(1, 1));
+    assert!(one.unit().dimension().is_dimensionless());
+    let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 1, 0]), (0, "m"), "-1");
+    assert!(matches!(run.0, Ok(Outcome::Undefined(rt::Undefined::DivisionByZero))));
+    assert_eq!(run.1, vec![rt::ChargePoint::UnitIdentityRead]);
+    let run = agree_power(rt::unit_tuple([1, 0, 0, 1, 0, 0]), (0, "m"), "-1");
+    assert_incomplete(&run.0, rt::LimitKind::WorkUnits, 0, 0, "1", rt::ChargePoint::UnitIdentityRead);
+    named_powers += 4;
+
+    for (work, left, right, truth) in [(9, (1, "degC"), (2, "degC"), true)] {
+        let run = agree_comparison(rt::unit_tuple([15, 0, 2, 2, work, 1]), rt::ComparisonOperator::Less, left, right);
+        assert!(matches!(run.0, Ok(Outcome::Completed(value)) if value == truth));
         tuple_comparisons += 1;
     }
+    let run = agree_comparison(
+        rt::unit_tuple([15, 0, 2, 2, 8, 1]),
+        rt::ComparisonOperator::Less,
+        (1, "degC"),
+        (2, "degC"),
+    );
+    assert_incomplete(&run.0, rt::LimitKind::WorkUnits, 8, 8, "1", rt::ChargePoint::UnitResultRetain);
+    let run = agree_comparison(rt::UNLIMITED, rt::ComparisonOperator::Less, (1, "rev"), (2, "rev"));
+    assert!(matches!(run.0, Ok(Outcome::Completed(false))));
+    let run = agree_comparison(rt::UNLIMITED, rt::ComparisonOperator::Equal, (1, "degC"), (1, "degC"));
+    assert!(matches!(run.0, Ok(Outcome::Completed(true))));
+    for operator in [rt::ComparisonOperator::Less, rt::ComparisonOperator::Equal] {
+        let run = agree_comparison(rt::unit_tuple([0; 6]), operator, (0, "degC"), (32, "degF"));
+        assert!(matches!(run.0, Err(IllTyped { .. })) && run.1.is_empty());
+    }
+    tuple_comparisons += 5;
     assert_rows_agreed(&[
-        ("TC-187 U19/U24 sums and U03 mismatch", sums),
+        ("TC-187 U03/U19/U24 sums", sums),
         ("TC-187 U28 products", products),
         ("TC-187 U13/U21 powers", named_powers),
         ("TC-187 U23 comparison tuples", tuple_comparisons),
     ]);
     let named = sums + products + named_powers + tuple_comparisons;
-    assert_eq!(named, 14);
-    println!("TC-187 three-way agreement: {operations} operations, {named} tabled tuples");
+    assert_eq!(named, 4 + 3 + 4 + 6);
+    println!("TC-187 runtime and generated-oracle agreement: {operations} operations, {named} tabled tuples");
+}
+
+/// Runs one comparison vector on both sides (see [`agree_arithmetic`]).
+fn agree_comparison(
+    bounds: ScalarLimits,
+    operator: rt::ComparisonOperator,
+    left: (i64, &str),
+    right: (i64, &str),
+) -> QuantityRun<bool> {
+    let index = rt::ComparisonOperator::ALL
+        .iter()
+        .position(|candidate| *candidate == operator)
+        .expect("a comparison operator");
+    let compare = QUANTITY_COMPARISONS[index];
+    agree2! {
+        limits: bounds,
+        setup: { let f = fixture(); let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1)); },
+        direct: |m| compare_quantity(operator, &a, &b, m),
+        generated: |m| typed(compare(&a, &b, m)),
+    };
+    let f = rt::fixture();
+    let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1));
+    rt::metered(bounds, |m| rt::compare_quantity(operator, &a, &b, m))
+}
+
+/// The run stopped incomplete with exactly QSpec's record.
+fn assert_incomplete<T: std::fmt::Debug>(
+    result: &Result<Outcome<T>, IllTyped>,
+    limit_kind: rt::LimitKind,
+    limit: u64,
+    consumed: u64,
+    next_charge: &str,
+    charge_point: rt::ChargePoint,
+) {
+    let Ok(Outcome::Incomplete(record)) = result else {
+        panic!("expected an incomplete record, got {result:?}");
+    };
+    assert_eq!(record.limit_kind, limit_kind);
+    assert_eq!((record.limit, record.consumed), (limit, consumed));
+    assert_eq!(record.next_charge, rt::big(next_charge));
+    assert_eq!(record.charge_point, charge_point);
 }
 
 use support::rt_side as rt;
@@ -1175,7 +1234,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
     }
     assert_rows_agreed(&[("TC-193 tabled tuples", named)]);
     assert_eq!(named, 12);
-    println!("TC-193 three-way agreement: {vectors} class-matrix vectors, {named} tabled tuples");
+    println!("TC-193 agreement: {vectors} class-matrix vectors, {named} tabled tuples");
 }
 
 /// Trace: FR-014-AC-9, TC-024.

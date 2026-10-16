@@ -14,7 +14,7 @@ relationships:
 
 Verify that scalar oracles generated from an admitted CheckedPackage V2 cover
 every scalar family, refuse every non-generated item with a typed reason, are
-byte-deterministic, and agree with the runtime and the QSL value authority.
+byte-deterministic, and agree with direct runtime execution (the QSL value authority is not a leg of this case; FR-014-AC-47).
 
 ## Test Procedure
 
@@ -34,10 +34,11 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    generated source ceiling; construct invalid and incomplete body records.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute its oracles on vectors
-   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U02, U03, U05, U09, U12, U13, U14, U19, U20, U21, U23, U24, U27 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); assert U06 and U11 against the runtime's unit-graph admission, since they have no generated oracle; compare each
+   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U02, U03, U05, U09, U12, U13, U14, U19, U20, U21, U23, U24, U27 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); run each at QSpec's own limit tuple and assert QSpec's disposition, with the whole incomplete record; assert U06 and U11 against the runtime's unit-graph admission, since they have no generated oracle; compare each
    outcome, admitted charges and consumed counters with direct runtime
    execution, including the outcome of denying each admitted charge in turn.
-   Agreement with the QSL value authority is not asserted here.
+   No TC-187 vector is compared with the QSL value authority here (FR-014-AC-47).
+   U06 and U11 are a Contract Runtime unit-graph admission check (Contract Runtime FR-012-AC-4, TC-033), not oracle agreement.
 5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
