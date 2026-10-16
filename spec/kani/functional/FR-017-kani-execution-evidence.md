@@ -83,6 +83,9 @@ Text-admission identity rather than claiming a checked node or contract role.
   Text-admission harness, neither of which has a contract role. Caller
   Text-admission evidence carries its typed caller-ingress identity so it
   cannot be attributed to a checked-package scalar claim.
+- For a `NoVerdict` run only, a diagnostic record in that evidence: a typed failure phase and a
+  bounded, redacted tail excerpt of each of the launcher's stdout and stderr (see NoVerdict
+  diagnostics below).
 - A typed refusal, and no run, when the launcher is absent or when the crate
   does not contain the harness.
 - For a paired routed-scalar run, an opaque receipt containing the measured proof-content
@@ -338,6 +341,92 @@ Text-admission identity rather than claiming a checked node or contract role.
   through verbatim as the counterexample, which FR-016 decodes. A playback printed for a cover is
   never the counterexample.
 
+### NoVerdict diagnostics
+
+A `NoVerdict` run carries no report-derived fields that say why the backend gave no verdict, so
+its evidence carries a bounded diagnostic record taken from the launcher's two streams. The record
+is diagnostic only: it never changes an outcome, a check, a count or a playback, and it makes no
+verdict claim.
+
+- When the classified outcome of a run is `KaniRunOutcome::Inconclusive` with
+  `KaniInconclusiveReason::NoVerdict`, the generator shall retain in its evidence a diagnostic
+  record holding a typed failure phase, a stdout excerpt and a stderr excerpt. For every other
+  outcome, and for every refusal, the generator shall retain no diagnostic record, and the
+  evidence's wire form shall have no `diagnostics` member.
+- The generator shall compute the outcome, the checks, the SUCCESS-check count and the playback
+  exactly as the rules above state, before and independently of the diagnostic record. Neither
+  the phase nor an excerpt shall be an input to classification, playback attribution, group
+  refusal or the FR-029 terminal map; `NoVerdict` stays `NoVerdict`.
+- The generator shall read the phase markers and build the excerpts in `src/kani/output/`, the one
+  place Kani's output is read, and shall derive the phase from the whole captured streams, never
+  from an excerpt.
+- The generator shall keep stdout and stderr as separate streams for the diagnostic record. The
+  combined console text classification reads is unchanged.
+- The generator shall derive the failure phase `KaniFailurePhase` from the run's exported report
+  and these markers, measured on Kani 0.68 with CBMC 6.11, evaluated in this order, the first
+  that applies deciding:
+  1. `unknown` when the run exported a report (a report of success beside an unsuccessful exit):
+     the report shows the backend finished, so no stage is named as the one that failed.
+  2. `solver` when stdout holds a line beginning `Solving with ` (CBMC names the SAT solver it
+     hands the problem to, `Solving with CaDiCaL 3.0.0` for the CaDiCaL solver).
+  3. `backend` when stdout holds a line beginning `Checking harness ` (Kani prints it for each
+     harness it hands to CBMC, after the crate has compiled).
+  4. `compile` when stdout holds a line beginning `error: Failed to execute cargo (exit status: `
+     or stderr holds a line beginning `error: could not compile ` (Kani's and Cargo's report of a
+     crate that did not build).
+  5. `launcher` when stdout holds no line beginning `Kani Rust Verifier ` (the launcher ended
+     before Kani printed its banner, as on an argument error, where Kani 0.68 exits 2 with its
+     usage error on stderr and nothing on stdout).
+  6. `unknown` otherwise.
+- The phase shall name the last stage the output shows was started, and only `compile` and
+  `launcher` shall name a stage the output shows failed. A marker the generator does not read
+  (another solver's banner, a later Kani wording) leaves the phase at an earlier stage or at
+  `unknown`, never at a later one: the phase under-claims and never over-claims. A missing,
+  unparsable or contradictory marker set is `unknown`, never a refusal.
+- A CBMC failure that Kani observes is not `NoVerdict`. Measured on Kani 0.68 with CBMC 6.11: an
+  unknown CBMC option (`CBMC failed with status 64`), CBMC out of memory (`CBMC failed with
+  status 6`) and a CBMC process killed by a signal each still export a report whose harness entry
+  is `Failure` with no checks and an `error_details` exit status, which the rules above classify as
+  failed without a counterexample. A `backend` or `solver` phase therefore names a `NoVerdict` run
+  whose Kani driver ended after CBMC started and before it exported the report.
+- The generator shall form each excerpt from the stream's captured bytes by these steps, in order:
+  1. decode the bytes as UTF-8, replacing each invalid sequence with U+FFFD;
+  2. remove ANSI escape sequences, and replace every other control character except line feed and
+     tab with U+FFFD;
+  3. redact, so that the excerpt carries no host path, instant or process identity:
+     the request's crate directory becomes `<CRATE_DIR>` and its target directory `<TARGET_DIR>`
+     (the longer replaced first), the caller's home directory becomes `<HOME>`, and any other
+     absolute path (a run of non-whitespace characters that starts with `/` at the start of a word
+     and holds a second `/`) becomes `<PATH>`; an RFC 3339 date-time becomes `<TIMESTAMP>`; a
+     decimal number, with an optional fraction and exponent, followed directly by `s` or `ms` at the
+     end of a word becomes `<DURATION>`; the decimal number after `pid `, `PID ` or `process `, and
+     the parenthesized decimal thread id after a quoted thread name in a `thread '<name>' (<id>)`
+     panic line, becomes `<PID>`;
+  4. keep the tail: the longest suffix of the redacted text that is at most 8192 bytes and starts at
+     the start of a line, or, when the last line alone exceeds 8192 bytes, the longest suffix of it
+     that is at most 8192 bytes and starts at a character boundary.
+- Each excerpt shall carry its text and `omittedBytes`, the byte length of the redacted text
+  before the kept tail, so a reader knows whether the excerpt is the whole redacted stream
+  (`omittedBytes` 0). An empty stream yields an empty excerpt with `omittedBytes` 0.
+- The tail is kept because Kani and Cargo print the error that ended the run last. 8192 bytes per
+  stream holds the whole stdout and stderr of a measured failed build of one harness (each under
+  1 KiB on Kani 0.68), and bounds the record at 16 KiB per harness, so a batch of N members carries
+  at most N times 16 KiB of diagnostic text however much its streams carried.
+- The excerpt shall be a function of the captured stream bytes, the request's crate and target
+  directories and the caller's home directory alone: two runs whose streams differ only in redacted
+  content yield byte-identical diagnostic records.
+- The 8192-byte excerpt is a copy cut for reading, not a truncated stream: the generator takes it
+  only from a stream it read whole within its 8 MiB-per-harness limit. A stream over that limit
+  stays refused with `kani_output_over_limit`, and an unread stream with `kani_output_unread`, with
+  no evidence and so no diagnostic record.
+- Where a group's process exits unsuccessfully with no report, the generator shall give every
+  member, each `NoVerdict`, the same diagnostic record computed once from the group's streams.
+  Where a batch member is `NoVerdict` as a success reported by an unsuccessfully exited process, its
+  record carries the phase `unknown` and the excerpts of the group's streams.
+- The diagnostic record shall serialize as `diagnostics { phase, stdout { text, omittedBytes },
+  stderr { text, omittedBytes } }`, with `phase` one of `launcher`, `compile`, `backend`, `solver`
+  and `unknown`, and shall be serialize-only.
+
 ## Constraints
 
 | ID | Constraint | Type | Validation |
@@ -375,6 +464,11 @@ Text-admission identity rather than claiming a checked node or contract role.
 | FR-017-AC-29 | The runner measures one canonical proof-content identity over the exact paths and bytes of every staged execution input: the complete generated package, retained harness, native invocation adapter and resolved dependency lock. This identity binds the content actually proved and executed; it is not a tool-version or file-version tracking identity, and no separate identity is added for any staged item. The Kani and native invocations cannot write the staged source tree. A changed, replaced or additional staged file before or after either invocation yields a typed failure and no receipt. The receipt separately binds the scalar identity, oracle symbol, ordered concrete operands and exact supplied `ScalarLimits`; none of these request fields may be substituted after measurement or inferred from the proof-content identity. | Test (TC-027) |
 | FR-017-AC-30 | The public receipt exposes the measured identity, scalar identity, ordered operands, exact supplied and meter-used `ScalarLimits`, verified Kani evidence and actual typed native outcome through read-only access. Callers cannot construct, deserialize or mutate a receipt, set its identity or outcome, or turn any non-verified, refused, inconclusive, faulted or malformed run into a receipt. | Test (TC-027) |
 | FR-017-AC-31 | The paired runner executes an order-sensitive routed scalar operation with two symbolic operands in two concrete operand orders. Each real Kani run is verified; the native invocation returns the result for that order; and each receipt binds its exact ordered operand vector and typed native result. Swapping the operands changes the observed result and receipt context while retaining the same generated proof-content identity. | Test (TC-027) |
+| FR-017-AC-32 | PLANNED/UNRUN. In the `make kani` lane, a crate whose library source holds the generated harness byte for byte and, beside it, an item that does not compile (a reference to an undefined name) is run through `execute_kani_obligation`: the run exits unsuccessfully, exports no report and is `Inconclusive` `NoVerdict` with its exit code, and its evidence carries a diagnostic record whose phase is `compile`, whose stdout excerpt holds the rustc error code and Kani's `error: Failed to execute cargo` line and whose stderr excerpt holds Cargo's `error: could not compile` line. A launcher stand-in that exits 1 with no report and prints nothing is `NoVerdict` with phase `launcher` and two empty excerpts with `omittedBytes` 0. Evidence of a verified, cover-unsatisfied, falsified, timed-out, memory-exhausted or other inconclusive run has no `diagnostics` member on the wire, and every refusal returns no evidence and no record. | Test (TC-027) |
+| FR-017-AC-33 | PLANNED/UNRUN. Over launcher stand-ins that exit 1: a report of success beside the unsuccessful exit is `unknown` even when its stdout holds `Solving with CaDiCaL 3.0.0`; with no report, stdout holding the Kani banner, `Checking harness proofs::check...` and `Solving with CaDiCaL 3.0.0` is `solver`; the banner and the `Checking harness` line alone is `backend`; the banner and `error: Failed to execute cargo (exit status: 101). Found 1 compilation errors.` is `compile`, as is stderr `error: could not compile` alone with the banner; a usage error on stderr and nothing on stdout is `launcher`; the banner alone is `unknown`; a solver line in a wording other than `Solving with ` after the `Checking harness` line is `backend`, never `solver`. The phase is the same when the marker lies before the 8192-byte excerpt window. | Test (TC-027) |
+| FR-017-AC-34 | PLANNED/UNRUN. A redacted stream of exactly 8192 bytes is kept whole with `omittedBytes` 0; one of 8193 bytes whose last line starts within the window keeps the longest line-aligned suffix of at most 8192 bytes with `omittedBytes` the byte count before it; a stream whose last line alone exceeds 8192 bytes keeps at most 8192 bytes of it starting on a character boundary; a 4-byte character straddling the cut is never split; invalid UTF-8 is decoded with U+FFFD; ANSI escapes are removed. No excerpt exceeds 8192 bytes, and a stream at its 8 MiB limit still yields an excerpt of at most 8192 bytes. | Test (TC-027) |
+| FR-017-AC-35 | PLANNED/UNRUN. A stand-in whose streams print the request's crate and target directories, the caller's home directory, another absolute path, an RFC 3339 date-time, `Runtime Symex: 0.00331318s`, `in 0.02s`, `pid 4242` and a `thread 'main' (4242) panicked` line yields excerpts holding `<CRATE_DIR>`, `<TARGET_DIR>`, `<HOME>`, `<PATH>`, `<TIMESTAMP>`, `<DURATION>` and `<PID>` in their places and none of the original values, with the relative remainder of a path under a known directory kept; two runs whose streams differ only in those values serialize byte-identical diagnostic records. The record serializes as `diagnostics { phase, stdout { text, omittedBytes }, stderr { text, omittedBytes } }` and is not deserializable. | Test (TC-027) |
+| FR-017-AC-36 | PLANNED/UNRUN. The diagnostic record never feeds classification: the same report and exit with different stream text classify to the same outcome, checks, SUCCESS count and playback, and two `NoVerdict` runs with equal exit and no report whose streams differ have equal evidence in every field but `diagnostics`; the FR-029 terminal value of a `NoVerdict` run is unchanged. A group whose process exits 1 with no report gives every member `NoVerdict` and the same record computed from the group's streams; a Success member in a non-zero exit with no Failure entry is `NoVerdict` with phase `unknown`, while its neighbours' evidence carries no record. A stream over 8 MiB times the harness count stays refused with `kani_output_over_limit`, and an unread stream with `kani_output_unread`, with no evidence and no record. | Test (TC-043) |
 
 ## Dependencies
 

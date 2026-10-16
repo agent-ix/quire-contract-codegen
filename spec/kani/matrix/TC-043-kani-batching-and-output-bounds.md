@@ -13,7 +13,8 @@ relationships:
 Verify that several harnesses run in one launcher process with each member decided from its own
 report entry and its own console playback, that an output stream over its limit is refused and never
 truncated, that a capture failure is refused, and that no launcher descendant outlives a run
-(IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25). The batch timeout rule it exercises is
+(IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25), and that the diagnostic record of a
+`NoVerdict` group never feeds classification (FR-017-AC-36). The batch timeout rule it exercises is
 FR-028-AC-12, verified by TC-039.
 
 ## Test Procedure
@@ -42,6 +43,10 @@ FR-028-AC-12, verified by TC-039.
 9. Leave one member's source out of the crate.
 10. In the `make kani` lane record the process count and wall time before and after batching for
     N = 1, 10 and 50.
+11. (FR-017-AC-36, PLANNED/UNRUN.) Run a batch stand-in that exits 1 with no report and prints a
+    compile failure; one whose report has every member Success and exits 1, beside one with a
+    Failure entry; the same report and exit twice with different stream text; and the over-limit
+    and unread streams of steps 1 and 2. Map a `NoVerdict` run through FR-029.
 
 ## Expected Results
 
@@ -79,6 +84,13 @@ FR-028-AC-12, verified by TC-039.
 9. The whole batch is refused with `HarnessNotInCrate` and launches nothing (FR-017-AC-23).
 10. Fewer processes after than before for N > 1, and the numbers are in the code PR (they are also
     written by the lane to `process-counts.json`).
+11. Every member of the no-report group is `NoVerdict` with one identical diagnostic record of phase
+    `compile` computed from the group's streams; each Success member beside exit 1 with no Failure
+    entry is `NoVerdict` with phase `unknown`, and a member that is not `NoVerdict` carries no
+    record; the two runs with different text have the same outcome, checks, SUCCESS count and
+    playback, and differ only in `diagnostics`; the over-limit and unread streams remain refused
+    with `kani_output_over_limit` and `kani_output_unread`, with no evidence and no record; the
+    FR-029 terminal value of `NoVerdict` is unchanged (FR-017-AC-36).
 
 ## Implementation
 
@@ -115,6 +127,9 @@ build so that the outer bound never covers a cold compile), then one at 42949672
 and 7). The unit lane's batch reports are built in the shape the real batch report has
 (`harness_id`, an `error_details` entry whose `exit_status` is `timeout` for a member Kani cut off,
 results in the order Kani ran them); no real batch report is stored as a fixture.
+
+Step 11 (FR-017-AC-36) has no test yet; it belongs with the batch stand-ins in
+`src/kani/run/execute.rs` (`batch_tests`) and is PLANNED/UNRUN.
 
 ## Status
 
