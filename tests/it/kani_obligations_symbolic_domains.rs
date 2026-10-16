@@ -1940,8 +1940,8 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
         |bytes: &[u8]| i64::from_le_bytes(bytes.try_into().expect("i64 slot has eight bytes"));
     let length = decode(&slots[0]);
     assert!(
-        (0..=3).contains(&length),
-        "length is inside the admitted domain"
+        (1..=3).contains(&length),
+        "a falsified forall has at least one active in-domain slot"
     );
     assert!(slots[1..=length as usize]
         .iter()
