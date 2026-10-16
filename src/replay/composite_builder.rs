@@ -253,7 +253,7 @@ impl OriginalCompositeEqContext {
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
         // IR's operand projection validates Eq/Ne but does not return a typed operator yet.
-        // Read the selected node identity until the IR API carries that operation.
+        // Read the selected node identity until the IR API carries that operation (IR-803).
         let actual = self
             .original
             .graph()
