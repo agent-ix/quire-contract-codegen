@@ -462,6 +462,8 @@ pub enum ObligationDisposition {
 pub enum CollectionUnsupportedReason {
     /// The function, quantifier, projection, or binder shape is not a supported closed form.
     UnsupportedClaimShape,
+    /// Two distinct complete collection identities produced the same bounded Rust/Kani symbols.
+    HarnessSymbolCollision,
     /// The selected projection did not resolve in admitted model fields.
     FieldNotAdmitted,
     /// The field is not a bounded ordered sequence of Boolean or bounded integer elements.

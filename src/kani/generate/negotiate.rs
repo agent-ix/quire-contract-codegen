@@ -68,7 +68,8 @@ use crate::{
         SlotContext,
     },
     kani::generate::collection::{
-        lower_collection_claim, render_collection, CollectionDomainRefusal, LoweredCollectionClaim,
+        collection_symbols_conflict, lower_collection_claim, render_collection,
+        CollectionDomainRefusal, LoweredCollectionClaim,
     },
     kani::generate::contract::render_contract,
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
@@ -114,10 +115,11 @@ pub fn negotiate_kani_obligations(
     let mut harnesses = Vec::new();
     let mut scalar_harnesses = Vec::new();
     let mut state_frame_harnesses = Vec::new();
-    let mut collection_harnesses = Vec::new();
+    let mut collection_harnesses: Vec<crate::kani::identity::KaniCollectionObligationHarness> =
+        Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
-            state.outcome.disposition_without_harness()
+            state.outcome.disposition_without_harness(request)
         } else {
             match state.outcome {
                 Outcome::Lowered(lowered) => match render(request, &lowered) {
@@ -142,10 +144,29 @@ pub fn negotiate_kani_obligations(
                 },
                 Outcome::LoweredCollection(lowered) => match render_collection(request, &lowered) {
                     Ok(harness) => {
-                        let symbol = harness.identity.harness_symbol.clone();
-                        collection_harnesses.push(harness);
-                        ObligationDisposition::Supported {
-                            harness_symbol: symbol,
+                        let collides = collection_harnesses.iter().any(|existing| {
+                            collection_symbols_conflict(
+                                existing.identity.module_symbol.as_str(),
+                                existing.identity.harness_symbol.as_str(),
+                                &existing.identity,
+                                harness.identity.module_symbol.as_str(),
+                                harness.identity.harness_symbol.as_str(),
+                                &harness.identity,
+                            )
+                        });
+                        if collides {
+                            ObligationDisposition::Unsupported {
+                                reason: UnsupportedObligation::CollectionClaimNotRendered {
+                                    node_id: harness.identity.quantifier_id.clone(),
+                                    reason: CollectionUnsupportedReason::HarnessSymbolCollision,
+                                },
+                            }
+                        } else {
+                            let symbol = harness.identity.harness_symbol.clone();
+                            collection_harnesses.push(harness);
+                            ObligationDisposition::Supported {
+                                harness_symbol: symbol,
+                            }
                         }
                     }
                     Err(reason) => ObligationDisposition::Unsupported { reason },
@@ -157,7 +178,7 @@ pub fn negotiate_kani_obligations(
                         harness_symbol: symbol,
                     }
                 }
-                other => other.disposition_without_harness(),
+                other => other.disposition_without_harness(request),
             }
         };
         records.push(ObligationRecord {
@@ -267,15 +288,18 @@ impl Outcome<'_> {
         }
     }
 
-    fn disposition_without_harness(self) -> ObligationDisposition {
+    fn disposition_without_harness(
+        self,
+        request: &KaniObligationRequest<'_>,
+    ) -> ObligationDisposition {
         match self {
             // A lowered item in a rejected request is accounted but not emitted.
             Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
-            Self::LoweredCollection(lowered) => supported_without_harness(&format!(
-                "prove_collection_{}",
-                lowered.field.quantifier.digest
-            )),
+            Self::LoweredCollection(lowered) => match render_collection(request, &lowered) {
+                Ok(harness) => supported_without_harness(harness.identity.harness_symbol.as_str()),
+                Err(reason) => ObligationDisposition::Unsupported { reason },
+            },
             Self::StateFrame(harness) => ObligationDisposition::Supported {
                 harness_symbol: harness.identity.harness_symbol,
             },

@@ -9,6 +9,7 @@ use quire_contract_model::{
     CheckedSemanticNodeV2,
 };
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
@@ -82,6 +83,39 @@ pub(crate) enum CollectionDomainRefusal {
 pub(super) struct LoweredCollectionClaim {
     pub(super) package_digest: String,
     pub(super) field: CollectionFieldDomain,
+}
+
+/// Compact, stable generated identifier material. The full package and quantifier identities
+/// remain in the persisted proof identity; the short symbol is only a Rust/Kani path component.
+fn collection_symbol_digest(identity_preimage: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"quire.codegen.collection-harness/v1\0");
+    hasher.update(identity_preimage);
+    format!("{:x}", hasher.finalize())
+}
+
+fn collection_harness_symbols(digest: &str) -> (String, String) {
+    const SYMBOL_DIGEST_HEX_LEN: usize = 24;
+    let symbol_digest = &digest[..SYMBOL_DIGEST_HEX_LEN];
+    (
+        format!("kob_collection_{symbol_digest}"),
+        format!("prove_collection_{symbol_digest}"),
+    )
+}
+
+/// Whether two generated collection harnesses would occupy the same Rust/Kani path while
+/// representing different complete semantic identities.
+pub(super) fn collection_symbols_conflict<I: PartialEq>(
+    existing_module: &str,
+    existing_harness: &str,
+    existing_identity: &I,
+    candidate_module: &str,
+    candidate_harness: &str,
+    candidate_identity: &I,
+) -> bool {
+    existing_module == candidate_module
+        && existing_harness == candidate_harness
+        && existing_identity != candidate_identity
 }
 
 /// Resolve one selected claim before rendering; no caller-provided field or domain is accepted.
@@ -195,9 +229,35 @@ pub(super) fn render_collection(
         CollectionPredicateIdentity::IntegerEqual { value } => format!("item == {value}"),
         CollectionPredicateIdentity::BooleanNotEqual { value } => format!("item != {value}"),
     };
-    let digest = field.quantifier.digest.as_ref();
-    let module = format!("kob_collection_{digest}");
-    let harness = format!("prove_collection_{digest}");
+    let symbol_material = serde_json::to_vec(&(
+        (
+            lowered.package_digest.as_str(),
+            request.subject_path,
+            &field.function,
+            &field.quantifier,
+            &field.projection,
+            &field.declaration,
+            &field.field_name,
+            minimum_length,
+            maximum_length,
+        ),
+        (
+            &element_domain,
+            &field.element_type,
+            &field.quantifier_operation,
+            &field.predicate_id,
+            &field.predicate,
+            KaniSolver::Cadical,
+            request.unwind,
+            request.ceilings,
+        ),
+    ))
+    .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let digest = collection_symbol_digest(&symbol_material);
+    // Keep both Rust identifiers short enough for Kani's internal generated filenames. A
+    // collision after truncation is detected during request negotiation before artifacts leave
+    // this module; the full semantic identity remains in the proof record and artifact identity.
+    let (module, harness) = collection_harness_symbols(&digest);
     let path = harness_path(&module, &harness)?;
     let options = adapter_options(
         &path.to_string(),
@@ -271,6 +331,77 @@ pub(super) fn render_collection(
         return Err(UnsupportedObligation::RenderFailed);
     }
     Ok(harness)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collection_symbols_are_bounded_and_stable_per_full_identity() {
+        let first = collection_symbol_digest(b"package-a/function-a/quantifier-a/domain-a");
+        let same = collection_symbol_digest(b"package-a/function-a/quantifier-a/domain-a");
+        let changed_package =
+            collection_symbol_digest(b"package-b/function-a/quantifier-a/domain-a");
+        let changed_subject =
+            collection_symbol_digest(b"package-a/function-b/quantifier-a/domain-a");
+        let changed_domain =
+            collection_symbol_digest(b"package-a/function-a/quantifier-a/domain-b");
+        assert_eq!(first, same);
+        assert_ne!(first, changed_package);
+        assert_ne!(first, changed_subject);
+        assert_ne!(first, changed_domain);
+        assert_ne!(
+            collection_harness_symbols(&first),
+            collection_harness_symbols(&changed_package)
+        );
+        assert_ne!(
+            collection_harness_symbols(&first),
+            collection_harness_symbols(&changed_subject)
+        );
+        assert_ne!(
+            collection_harness_symbols(&first),
+            collection_harness_symbols(&changed_domain)
+        );
+
+        let (module, harness) = collection_harness_symbols(&first);
+        assert!(module.len() <= 255, "module filename component: {module}");
+        assert!(
+            harness.len() <= 255,
+            "harness filename component: {harness}"
+        );
+        assert!(format!("{module}::{harness}").len() <= 255);
+    }
+
+    #[test]
+    fn truncated_symbol_collision_is_detected_against_full_identity() {
+        let shared_module = "kob_collection_0123456789abcdef0123";
+        let shared_harness = "prove_collection_0123456789abcdef0123";
+        assert!(collection_symbols_conflict(
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+            shared_module,
+            shared_harness,
+            &("package-a", "function-b", "quantifier-a"),
+        ));
+        assert!(!collection_symbols_conflict(
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+        ));
+        assert!(!collection_symbols_conflict(
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+            "kob_collection_other",
+            "prove_collection_other",
+            &("package-a", "function-b", "quantifier-a"),
+        ));
+    }
 }
 
 /// Resolve the first (collection) operand of an admitted quantifier to its exact model field.

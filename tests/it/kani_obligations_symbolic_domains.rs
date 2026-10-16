@@ -740,6 +740,19 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         let harness = &harnesses[0];
         assert_eq!(harness.identity.function_id, function_id);
         assert_eq!(harness.identity.quantifier_id, quantifier);
+        assert_eq!(
+            harness.identity.package_digest,
+            fixture.package.package_id().digest.to_string()
+        );
+        assert_eq!(harness.identity.quantifier_id.digest.len(), 64);
+        let module = harness.identity.module_symbol.as_str();
+        let harness_name = harness.identity.harness_symbol.as_str();
+        assert!(module.len() < 255, "module filename component: {module}");
+        assert!(
+            harness_name.len() < 255,
+            "harness filename component: {harness_name}"
+        );
+        assert!(format!("{module}::{harness_name}").len() < 255);
         assert_eq!(harness.identity.subject_path, "crate::unused");
         assert_eq!(harness.identity.field_name, "items");
         assert_eq!(harness.identity.minimum_length, 0);
@@ -817,6 +830,14 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             other => panic!("changed subject request was rejected: {other:#?}"),
         };
         assert_ne!(harness.identity, changed_subject_harness[0].identity);
+        assert_ne!(
+            harness.identity.module_symbol,
+            changed_subject_harness[0].identity.module_symbol
+        );
+        assert_ne!(
+            harness.identity.harness_symbol,
+            changed_subject_harness[0].identity.harness_symbol
+        );
     }
 }
 
