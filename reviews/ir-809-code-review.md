@@ -36,3 +36,12 @@ Two medium findings and two low. The diagnostics are correct on the main path. T
 holds, classification text and the refusals are unchanged, the public API additions follow AD-004
 L-2, and every construction site compiles. FND-001 must be fixed before merge. FND-002 is a
 cross-repo routing item and does not block the CG merge, but it needs a quire-driver ticket.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (818d8c6): d5c6bd6: ProcessOutput::analyse reads both streams once; finish_group memoises it in a OnceCell shared by all members, finish_single calls it once. |
+| FND-002 | deferred | Routed downstream by the team leader (IR-809 comment 8ac125de): quire-driver src/provider.rs:308/:395 literals handed via the Kani planner to the quire-driver owner; #[non_exhaustive] rejected because it would also break CG integration-test literals. |
+| FND-003 | fixed | Round 1 (818d8c6): d5c6bd6: LaunchOutcome::Completed keeps only CapturedStreams; the merged text is rebuilt transiently by merged_text() at its three readers (launch_evidence, finish_group playback, scalar.rs), byte-identical format. |
+| FND-004 | fixed | Round 1 (818d8c6): d5c6bd6: AD-004 output/ tree names diagnostics.rs. |

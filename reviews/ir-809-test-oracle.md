@@ -31,3 +31,11 @@ marker-table stand-ins, which assert `NoVerdict` before the phase.
 ## Verdict
 
 Low findings only. The other new tests have oracles that a no-op or a setup error would fail.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (818d8c6): d5c6bd6: the tautological with/without comparison is removed; the test keeps the Failed assertion, which has power (red7). |
+| FND-002 | fixed | Round 1 (818d8c6): d5c6bd6: fixture is HEALTHY_SUBJECT plus BROKEN_ITEM; test asserts exactly one E0425, the undefined_name error, and no withdraw error. Re-ran under real Kani 0.68 in the 16G scope: passes. |
+| FND-003 | fixed | Round 1 (818d8c6): d5c6bd6/8923356: opener and closer tests over every listed character plus non-listed controls; reviewer re-ran the reduced-set mutation and both tests go red. |
