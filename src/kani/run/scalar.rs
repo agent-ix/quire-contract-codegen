@@ -646,7 +646,7 @@ fn execute_native(
     })?;
     let LaunchOutcome::Completed {
         exited_successfully: true,
-        text,
+        streams,
         ..
     } = result.outcome
     else {
@@ -655,6 +655,7 @@ fn execute_native(
             result.outcome
         )));
     };
+    let text = streams.merged_text();
     let result_lines = text
         .lines()
         .filter(|line| line.starts_with("IR791_NATIVE_V1\t"));

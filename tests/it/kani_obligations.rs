@@ -2146,8 +2146,9 @@ fn run(
     evidence
 }
 
-/// A subject that does not compile: it reads a name nothing defines.
-const NON_COMPILING_SUBJECT: &str = "pub fn broken() -> i64 {\n    undefined_name\n}\n";
+/// One item that does not compile: it reads a name nothing defines. It follows the healthy
+/// subject, so the subject the harness calls resolves and this is the only compile error.
+const BROKEN_ITEM: &str = "pub fn broken() -> i64 {\n    undefined_name\n}\n";
 
 /// A launcher that exits 1 with a usage error on stderr, exports no report and prints nothing on
 /// stdout, installed at `path` once it can be started.
@@ -2171,8 +2172,8 @@ fn write_failing_launcher(path: &Path) {
     }
 }
 
-/// The FR-029 terminal value of a `NoVerdict` evidence is `Failed` whether or not the evidence
-/// carries a diagnostic record, and the record rides the public evidence and its wire form.
+/// The FR-029 terminal value of a `NoVerdict` evidence that carries a diagnostic record is
+/// `Failed`, and the record rides the public evidence and its wire form.
 ///
 /// Trace: FR-017-AC-32, FR-017-AC-36, TC-027, TC-043
 #[cfg(unix)]
@@ -2207,14 +2208,12 @@ fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
         .expect("a NoVerdict run has a record");
     assert_eq!(record.stderr.text, "error: unexpected argument\n");
     assert_eq!(record.phase, KaniFailurePhase::Launcher);
-    let with = run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
-    assert_eq!(format!("{with:?}"), "Failed");
+    let terminal = run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
+    assert_eq!(format!("{terminal:?}"), "Failed");
     evidence.diagnostics = Some(record);
     let wire = serde_json::to_value(&evidence).unwrap();
     assert_eq!(wire["diagnostics"]["phase"], "launcher");
     assert_eq!(wire["diagnostics"]["stderr"]["omittedBytes"], 0);
-    let without = run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
-    assert_eq!(format!("{without:?}"), format!("{with:?}"));
 }
 
 /// Real Kani on a crate that holds the generated harness byte for byte beside an item that does
@@ -2231,7 +2230,8 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
-    let crate_directory = write_crate(&harness, NON_COMPILING_SUBJECT);
+    let subject = format!("{HEALTHY_SUBJECT}\n{BROKEN_ITEM}");
+    let crate_directory = write_crate(&harness, &subject);
     let target = crate_directory.join("target");
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
@@ -2253,11 +2253,27 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     assert!(evidence.checks.is_empty());
     let record = evidence.diagnostics.expect("a NoVerdict run has a record");
     assert_eq!(record.phase, KaniFailurePhase::Compile, "{record:?}");
-    assert!(
-        record.stdout.text.contains("error[E0425]"),
+    assert_eq!(
+        record.stdout.text.matches("error[E0425]").count(),
+        1,
         "{}",
         record.stdout.text
     );
+    assert!(
+        record
+            .stdout
+            .text
+            .contains("cannot find value `undefined_name`"),
+        "{}",
+        record.stdout.text
+    );
+    for text in [&record.stdout.text, &record.stderr.text] {
+        assert!(
+            !text.contains("cannot find function `withdraw`")
+                && !text.contains("cannot find function withdraw"),
+            "the healthy subject resolves, so the only error is the broken item: {text}"
+        );
+    }
     assert!(
         record
             .stdout

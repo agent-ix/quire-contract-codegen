@@ -516,6 +516,7 @@ fn finish_single(
             &arguments,
             report.is_some(),
         )
+        .analyse()
         .diagnostics_of(&harness.selection)
     });
     Ok(evidence_of(
@@ -740,13 +741,12 @@ fn run_group(
         count,
     )?;
     let report = take_report(&launch.outcome, &report_path);
-    let (exited_successfully, exit_code, text, streams) = match settle(launch.outcome)? {
+    let (exited_successfully, exit_code, streams) = match settle(launch.outcome)? {
         Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
             streams,
-        } => (exited_successfully, exit_code, text, streams),
+        } => (exited_successfully, exit_code, streams),
         Concluded::Cancelled { source } => {
             return Err(KaniExecutionRefusal::BatchCancelled {
                 source,
@@ -772,7 +772,6 @@ fn run_group(
         arguments,
         exited_successfully,
         exit_code,
-        &text,
         &streams,
         report?,
     )
@@ -790,7 +789,6 @@ fn finish_group(
     arguments: Vec<String>,
     exited_successfully: bool,
     exit_code: Option<i32>,
-    text: &str,
     streams: &CapturedStreams,
     report: Option<Vec<u8>>,
 ) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
@@ -808,14 +806,19 @@ fn finish_group(
     };
     let report_exported = report.is_some();
     let output = process_output(first, streams, &selections, &arguments, report_exported);
+    // Read once for the whole group, and only when some member has a record to carry.
+    let shared = std::cell::OnceCell::new();
     let evidence = |run: Vec<ClassifiedRun>| -> Vec<ReportedExecution> {
         group
             .iter()
             .zip(&views)
             .zip(run)
             .map(|(((_, request), view), run)| {
-                let diagnostics = no_verdict_streams(&run, Some(streams))
-                    .map(|_| output.diagnostics_of(&view.selection));
+                let diagnostics = no_verdict_streams(&run, Some(streams)).map(|_| {
+                    shared
+                        .get_or_init(|| output.analyse())
+                        .diagnostics_of(&view.selection)
+                });
                 evidence_of(
                     request,
                     view,
@@ -848,7 +851,8 @@ fn finish_group(
         };
     };
     let members = members_in_request_order(&selections, &KaniHarnessReport::parse_batch(&report)?)?;
-    let blocks = playback_blocks(text);
+    let text = streams.merged_text();
+    let blocks = playback_blocks(&text);
     if let Some(block) = blocks
         .iter()
         .find(|block| !selections.contains(&block.harness.to_owned()))
@@ -875,7 +879,7 @@ fn finish_group(
                 classify_member(
                     process_succeeded,
                     member,
-                    || counterexample_playback(text, Some(&view.selection)),
+                    || counterexample_playback(&text, Some(&view.selection)),
                     view.kind,
                 )
             })
@@ -890,7 +894,6 @@ enum Concluded {
     Completed {
         exited_successfully: bool,
         exit_code: Option<i32>,
-        text: String,
         streams: CapturedStreams,
     },
     /// The budget elapsed and the group was killed.
@@ -908,12 +911,10 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
         LaunchOutcome::Completed {
             exited_successfully,
             exit_code,
-            text,
             streams,
         } => Ok(Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
             streams,
         }),
         LaunchOutcome::TimedOut => Ok(Concluded::TimedOut),
@@ -1002,10 +1003,9 @@ pub(super) fn launch_evidence(
         Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
             streams,
         } => Ok((
-            classify_kani_run(exited_successfully, report, &text, kind)?,
+            classify_kani_run(exited_successfully, report, &streams.merged_text(), kind)?,
             exit_code,
             Some(streams),
         )),
@@ -1144,7 +1144,6 @@ mod report_fixture {
         let Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
             streams,
         } = settle(outcome)?
         else {
@@ -1155,7 +1154,6 @@ mod report_fixture {
             arguments,
             exited_successfully,
             exit_code,
-            &text,
             &streams,
             report?,
         )
@@ -1187,7 +1185,6 @@ mod tests {
                 LaunchOutcome::Completed {
                     exited_successfully: true,
                     exit_code: Some(0),
-                    text: String::new(),
                     streams: CapturedStreams::default(),
                 },
                 Some(&report("Success", checks)),
@@ -4265,18 +4262,36 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
             let silent = printing("diag-no-report", None, "first run\n", "", 1);
             let first = run(&silent, &harness);
-            let first_memory = first.memory.clone();
             silent.set_streams(&format!("{BANNER}{SOLVING}"), "something else\n");
             let second = run(&silent, &harness);
             assert_ne!(first.diagnostics, second.diagnostics);
-            // The last argument is the run's own report path, unique to each call by design.
-            let strip = |mut evidence: KaniExecutionEvidence| {
+
+            // The one argument that may differ is the run's own report path, the last one,
+            // which each run gave the launcher.
+            let received = silent.calls();
+            assert_eq!(received.len(), 2);
+            let mut paths = Vec::new();
+            let mut stripped = Vec::new();
+            for (evidence, argv) in [first, second].into_iter().zip(received) {
+                assert_eq!(
+                    evidence.arguments, argv,
+                    "the evidence names the launch's vector"
+                );
+                let mut evidence = evidence;
+                paths.push(evidence.arguments.pop().expect("a report path"));
                 evidence.diagnostics = None;
-                evidence.memory = first_memory.clone();
-                evidence.arguments.pop();
-                evidence
-            };
-            assert_eq!(strip(first), strip(second));
+                evidence.memory = stripped.first().map_or_else(
+                    || evidence.memory.clone(),
+                    |first: &KaniExecutionEvidence| first.memory.clone(),
+                );
+                stripped.push(evidence);
+            }
+            assert!(paths.iter().all(|path| path.contains("quire-kani-report-")));
+            assert_ne!(
+                paths[0], paths[1],
+                "each run exports to its own report path"
+            );
+            assert_eq!(stripped[0], stripped[1]);
         }
 
         fn three() -> Vec<StateFrameHarness> {
