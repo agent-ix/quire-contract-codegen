@@ -4207,7 +4207,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 &format!("head -c {} /dev/zero\nexit 1\n", CAPTURE_LIMIT + 1),
             );
             let refusal = execute_kani_obligation(&flood.request(&proofs(), T)).unwrap_err();
-            assert_eq!(refusal.code(), Some(OUTPUT_OVER_LIMIT_CODE));
+            assert_eq!(refusal.code(), Some("kani_output_over_limit"));
 
             let refusal = launch_evidence(
                 LaunchOutcome::OutputUnread {
@@ -4218,7 +4218,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 None,
             )
             .unwrap_err();
-            assert_eq!(refusal.code(), Some(OUTPUT_UNREAD_CODE));
+            assert_eq!(refusal.code(), Some("kani_output_unread"));
         }
 
         /// The record never feeds classification: the same report and exit with other stream text
