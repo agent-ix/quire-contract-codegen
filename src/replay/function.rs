@@ -236,6 +236,8 @@ fn replay_falsification_through(
                 WitnessValue::ExactInteger(_)
                 | WitnessValue::Enum { .. }
                 | WitnessValue::Text(_)
+                | WitnessValue::Uuid(_)
+                | WitnessValue::Timestamp(_)
                 | WitnessValue::Rational { .. }
                 | WitnessValue::Decimal { .. }
                 | WitnessValue::Float32(_)
@@ -485,6 +487,8 @@ impl ReplayInputs {
             state_environment: StateEnvironment::new(Vec::new()),
             accounting_limits: self.accounting_limits,
             stage_limits: self.stage_limits.clone(),
+            // This path has no caller-supplied helper ceilings; QSL resolves `None` to its published defaults.
+            supplied_limits: None,
             declared_domains: self.declared_domains.clone(),
             byte_provision,
         }

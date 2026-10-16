@@ -286,22 +286,25 @@ fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
     );
     assert!(matches!(delimiter, Err(SpineReplayError::FieldDelimiter)));
 
-    let unsupported = replay_falsification(
-        "h",
-        "c",
-        &[(
-            "amount_current".to_owned(),
-            WitnessValue::Text("x".to_owned()),
-        )],
-        &parameters,
-        build,
-        ReplayLimits::default(),
-    );
-    assert!(matches!(
-        unsupported,
-        Err(SpineReplayError::UnsupportedWitnessValue { argument })
-            if argument == "amount_current"
-    ));
+    for value in [
+        WitnessValue::Text("x".to_owned()),
+        WitnessValue::Uuid("550e8400-e29b-41d4-a716-446655440000".to_owned()),
+        WitnessValue::Timestamp("0".to_owned()),
+    ] {
+        let unsupported = replay_falsification(
+            "h",
+            "c",
+            &[("amount_current".to_owned(), value)],
+            &parameters,
+            build,
+            ReplayLimits::default(),
+        );
+        assert!(matches!(
+            unsupported,
+            Err(SpineReplayError::UnsupportedWitnessValue { argument })
+                if argument == "amount_current"
+        ));
+    }
 
     let bad_node = [ReplayParameter {
         argument: "amount_current",

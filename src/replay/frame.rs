@@ -377,6 +377,8 @@ fn decoded_state(
                 WitnessValue::ExactInteger(_)
                 | WitnessValue::Enum { .. }
                 | WitnessValue::Text(_)
+                | WitnessValue::Uuid(_)
+                | WitnessValue::Timestamp(_)
                 | WitnessValue::Rational { .. }
                 | WitnessValue::Decimal { .. }
                 | WitnessValue::Float32(_)
