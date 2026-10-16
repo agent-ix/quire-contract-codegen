@@ -47,6 +47,8 @@ pub struct KaniStreamExcerpt {
 /// The record serializes as `{ phase, stdout { text, omittedBytes }, stderr { text,
 /// omittedBytes } }` and is never read back, so it implements no deserialization:
 ///
+/// Trace: FR-017-AC-35, TC-027
+///
 /// ```compile_fail
 /// let _: quire_contract_codegen::KaniNoVerdictDiagnostics = serde_json::from_str("{}").unwrap();
 /// ```
@@ -99,46 +101,73 @@ pub(crate) struct ProcessOutput<'a> {
 }
 
 impl ProcessOutput<'_> {
+    /// Reads the streams once: the two excerpts and the stage each member reached. The
+    /// result serves every member of the group, so the work does not grow with the member count.
+    pub(crate) fn analyse(&self) -> ProcessDiagnostics {
+        let stdout = String::from_utf8_lossy(self.stdout);
+        let stderr = String::from_utf8_lossy(self.stderr);
+        ProcessDiagnostics {
+            stdout: excerpt(self.stdout, &self.directories),
+            stderr: excerpt(self.stderr, &self.directories),
+            stages: Stages::of(&stdout, self.selections),
+            report_exported: self.report_exported,
+            parallel: runs_in_parallel(self.arguments),
+            cargo_failed: has_line_starting(
+                &stdout,
+                "error: Failed to execute cargo (exit status: ",
+            ) || has_line_starting(&stderr, "error: could not compile "),
+            banner: has_line_starting(&stdout, "Kani Rust Verifier "),
+        }
+    }
+}
+
+/// What a launcher process printed, read once for all of its members.
+#[derive(Clone, Debug)]
+pub(crate) struct ProcessDiagnostics {
+    stdout: KaniStreamExcerpt,
+    stderr: KaniStreamExcerpt,
+    stages: Stages,
+    report_exported: bool,
+    parallel: bool,
+    /// Whether the output reports a crate that did not build.
+    cargo_failed: bool,
+    /// Whether stdout holds Kani's banner line.
+    banner: bool,
+}
+
+impl ProcessDiagnostics {
     /// The record of the member whose path is `member`.
     pub(crate) fn diagnostics_of(&self, member: &str) -> KaniNoVerdictDiagnostics {
         KaniNoVerdictDiagnostics {
             phase: self.phase_of(member),
-            stdout: excerpt(self.stdout, &self.directories),
-            stderr: excerpt(self.stderr, &self.directories),
+            stdout: self.stdout.clone(),
+            stderr: self.stderr.clone(),
         }
     }
 
-    /// The first of the phase rules that applies to `member`, read from the whole streams.
+    /// The first of the phase rules that applies to `member`.
     fn phase_of(&self, member: &str) -> KaniFailurePhase {
         if self.report_exported {
             return KaniFailurePhase::Unknown;
         }
-        let stdout = String::from_utf8_lossy(self.stdout);
-        let stderr = String::from_utf8_lossy(self.stderr);
-        let segments = Segments::of(&stdout, self.selections);
-        let by_segment = if segments.of_member(member).is_some_and(|own| own.solving) {
-            Some(KaniFailurePhase::Solver)
-        } else if segments.of_member(member).is_some() {
-            Some(KaniFailurePhase::Backend)
-        } else if segments.any() {
-            Some(KaniFailurePhase::Unknown)
-        } else {
-            None
+        let by_segment = match self.stages.of(member) {
+            Some(Stage { solving: true }) => Some(KaniFailurePhase::Solver),
+            Some(Stage { solving: false }) => Some(KaniFailurePhase::Backend),
+            None if self.stages.any() => Some(KaniFailurePhase::Unknown),
+            None => None,
         };
         if let Some(phase) = by_segment {
             // Harnesses checked in parallel interleave their lines, so no segment is one
             // member's output.
-            return if runs_in_parallel(self.arguments) {
+            return if self.parallel {
                 KaniFailurePhase::Unknown
             } else {
                 phase
             };
         }
-        if has_line_starting(&stdout, "error: Failed to execute cargo (exit status: ")
-            || has_line_starting(&stderr, "error: could not compile ")
-        {
+        if self.cargo_failed {
             KaniFailurePhase::Compile
-        } else if !has_line_starting(&stdout, "Kani Rust Verifier ") {
+        } else if !self.banner {
             KaniFailurePhase::Launcher
         } else {
             KaniFailurePhase::Unknown
@@ -146,11 +175,16 @@ impl ProcessOutput<'_> {
     }
 }
 
-/// Whether `arguments` ask Kani to check harnesses in parallel.
+/// Whether `arguments` ask Kani to check harnesses in parallel: `-j`, `--jobs`, `--jobs=<n>`,
+/// `-j<digits>` or `-j=<digits>`.
 fn runs_in_parallel(arguments: &[String]) -> bool {
-    arguments
-        .iter()
-        .any(|argument| argument == "-j" || argument == "--jobs" || argument.starts_with("--jobs="))
+    arguments.iter().any(|argument| {
+        let attached = argument.strip_prefix("-j").is_some_and(|rest| {
+            let count = rest.strip_prefix('=').unwrap_or(rest);
+            !count.is_empty() && count.bytes().all(|byte| byte.is_ascii_digit())
+        });
+        argument == "-j" || argument == "--jobs" || argument.starts_with("--jobs=") || attached
+    })
 }
 
 fn has_line_starting(text: &str, prefix: &str) -> bool {
@@ -158,50 +192,46 @@ fn has_line_starting(text: &str, prefix: &str) -> bool {
 }
 
 /// What stdout shows of one member's `Checking harness <path>...` segment.
-struct Segment<'a> {
-    member: &'a str,
-    /// Whether the segment holds a line beginning `Solving with `.
+#[derive(Clone, Copy, Debug)]
+struct Stage {
+    /// Whether a segment headed by the member holds a line beginning `Solving with `.
     solving: bool,
 }
 
-/// The harness segments of a stdout: each starts at a line that is exactly
+/// The members that have a segment in a stdout: a segment starts at a line that is exactly
 /// `Checking harness <path>...` for a path the launch passed, and runs to the next such line.
-struct Segments<'a>(Vec<Segment<'a>>);
+#[derive(Clone, Debug)]
+struct Stages(std::collections::BTreeMap<String, Stage>);
 
-impl<'a> Segments<'a> {
-    fn of(stdout: &str, selections: &'a [String]) -> Self {
-        let mut segments: Vec<Segment<'a>> = Vec::new();
+impl Stages {
+    fn of(stdout: &str, selections: &[String]) -> Self {
+        let mut stages = std::collections::BTreeMap::new();
+        let mut open: Option<&str> = None;
         for line in stdout.lines() {
             let heading = line
                 .strip_prefix("Checking harness ")
                 .and_then(|rest| rest.strip_suffix("..."))
                 .and_then(|path| selections.iter().find(|selection| *selection == path));
             if let Some(member) = heading {
-                segments.push(Segment {
-                    member,
-                    solving: false,
-                });
+                stages
+                    .entry(member.clone())
+                    .or_insert(Stage { solving: false });
+                open = Some(member);
             } else if line.starts_with("Solving with ") {
-                if let Some(open) = segments.last_mut() {
-                    open.solving = true;
+                if let Some(stage) = open.and_then(|member| stages.get_mut(member)) {
+                    stage.solving = true;
                 }
             }
         }
-        Self(segments)
+        Self(stages)
     }
 
     fn any(&self) -> bool {
         !self.0.is_empty()
     }
 
-    /// The segment of `member`, its `solving` true when any segment headed by it holds a solver
-    /// line.
-    fn of_member(&self, member: &str) -> Option<Segment<'a>> {
-        let own = || self.0.iter().filter(|segment| segment.member == member);
-        own().next().map(|first| Segment {
-            member: first.member,
-            solving: own().any(|segment| segment.solving),
-        })
+    fn of(&self, member: &str) -> Option<Stage> {
+        self.0.get(member).copied()
     }
 }
 
@@ -399,7 +429,7 @@ fn timestamp_length(bytes: &[u8]) -> Option<usize> {
     number(5, 2, 1, 12)?;
     at(7, b"-")?;
     number(8, 2, 1, 31)?;
-    at(10, b"Tt")?;
+    at(10, b"Tt ")?;
     number(11, 2, 0, 23)?;
     at(13, b":")?;
     number(14, 2, 0, 59)?;
@@ -416,11 +446,10 @@ fn timestamp_length(bytes: &[u8]) -> Option<usize> {
     match bytes.get(end)? {
         b'Z' | b'z' => Some(end + 1),
         b'+' | b'-' => {
-            let offset = &bytes[end + 1..];
-            let well_formed = digits(offset) >= 2
-                && offset.get(2) == Some(&b':')
-                && offset.get(3..).is_some_and(|minutes| digits(minutes) >= 2);
-            well_formed.then_some(end + 6)
+            number(end + 1, 2, 0, 23)?;
+            at(end + 3, b":")?;
+            number(end + 4, 2, 0, 59)?;
+            Some(end + 6)
         }
         _ => None,
     }
@@ -459,7 +488,7 @@ fn redact_timestamps(text: &str) -> String {
     replace_matches(
         text,
         "<TIMESTAMP>",
-        |_| true,
+        |previous| previous.is_none_or(|p| !(p.is_alphanumeric() || p == '_' || p == '.')),
         |rest| timestamp_length(rest.as_bytes()),
     )
 }
@@ -661,6 +690,56 @@ mod tests {
         );
     }
 
+    /// Every character the spec lists as opening a path token opens one, and any other
+    /// preceding character does not.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_every_listed_path_opener_starts_a_token_and_no_other_character_does() {
+        for opener in ['\n', ' ', '\t', '(', '[', '{', '\'', '"', '`', '='] {
+            let text = format!("x{opener}/h/u/ws/crate/src/lib.rs");
+            assert_eq!(
+                redacted(&text, Some(HOME)),
+                format!("x{opener}<CRATE_DIR>/src/lib.rs"),
+                "{opener:?}"
+            );
+        }
+        for other in [
+            'a', '0', ',', ';', ':', ')', ']', '}', '<', '>', '-', '.', '!',
+        ] {
+            let text = format!("x{other}/h/u/ws/crate/src/lib.rs");
+            assert_eq!(redacted(&text, Some(HOME)), text, "{other:?}");
+        }
+        assert_eq!(redacted("/h/u/.kani/bin", Some(HOME)), "<HOME>/.kani/bin");
+    }
+
+    /// Every character the spec lists as ending a path token ends it, and any other character
+    /// stays inside it.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_every_listed_path_closer_ends_a_token_and_no_other_character_does() {
+        for closer in [
+            ' ', '\t', '\n', ')', ']', '}', '\'', '"', '`', ',', ';', ':',
+        ] {
+            let text = format!("/h/u/ws/crate/src/lib.rs{closer}rest");
+            assert_eq!(
+                redacted(&text, Some(HOME)),
+                format!("<CRATE_DIR>/src/lib.rs{closer}rest"),
+                "{closer:?}"
+            );
+        }
+        for inside in ['.', '-', '_', '<', '>', '!', '0', '|'] {
+            let text = format!("/h/u/ws/crate/src/lib.rs{inside}rest");
+            assert_eq!(
+                redacted(&text, Some(HOME)),
+                format!("<CRATE_DIR>/src/lib.rs{inside}rest"),
+                "{inside:?}"
+            );
+        }
+        assert_eq!(redacted("/opt/a.b|c d", None), "<PATH> d");
+    }
+
     /// Redaction rules that are about boundaries: durations, process identities and timestamps.
     ///
     /// Trace: FR-017-AC-35, TC-027
@@ -687,6 +766,17 @@ mod tests {
             ("2026-10-16T22:27:04+02:00 up", "<TIMESTAMP> up"),
             ("2026-10-16T22:27:04 no zone", "2026-10-16T22:27:04 no zone"),
             ("2026-13-16T22:27:04Z", "2026-13-16T22:27:04Z"),
+            ("x2026-10-16T22:27:04Z", "x2026-10-16T22:27:04Z"),
+            ("12026-10-16T22:27:04Z", "12026-10-16T22:27:04Z"),
+            ("_2026-10-16T22:27:04Z", "_2026-10-16T22:27:04Z"),
+            (".2026-10-16T22:27:04Z", ".2026-10-16T22:27:04Z"),
+            ("at 2026-10-16 22:27:04Z up", "at <TIMESTAMP> up"),
+            ("2026-10-16t22:27:04z", "<TIMESTAMP>"),
+            ("2026-10-16T22:27:04+24:00", "2026-10-16T22:27:04+24:00"),
+            ("2026-10-16T22:27:04+02:60", "2026-10-16T22:27:04+02:60"),
+            ("2026-10-16T22:27:04+0200", "2026-10-16T22:27:04+0200"),
+            ("2026-10-16T22:27:04-02:00:00", "<TIMESTAMP>:00"),
+            ("2026-10-16T22:27:04.Z", "2026-10-16T22:27:04.Z"),
         ] {
             assert_eq!(redacted(input, None), output, "{input}");
         }
@@ -801,7 +891,7 @@ mod tests {
         selections: &'a [String],
         arguments: &'a [String],
         report_exported: bool,
-    ) -> ProcessOutput<'a> {
+    ) -> ProcessDiagnostics {
         ProcessOutput {
             stdout: stdout.as_bytes(),
             stderr: stderr.as_bytes(),
@@ -810,6 +900,7 @@ mod tests {
             report_exported,
             directories: directories(None),
         }
+        .analyse()
     }
 
     const BANNER: &str = "Kani Rust Verifier 0.68.0 (cargo plugin)\n";
@@ -871,6 +962,9 @@ mod tests {
             names(&["-j", "2"]),
             names(&["--jobs", "2"]),
             names(&["--jobs=2"]),
+            names(&["-j2"]),
+            names(&["-j=2"]),
+            names(&["-j16"]),
         ] {
             let process = output(&stdout, "", &members, &arguments, false);
             assert_eq!(
@@ -879,7 +973,7 @@ mod tests {
                 "{arguments:?}"
             );
         }
-        let lookalikes = names(&["--jobsx=2", "-jx"]);
+        let lookalikes = names(&["--jobsx=2", "-jx", "-j=", "-j=x", "-j2x", "-junk"]);
         let process = output(&stdout, "", &members, &lookalikes, false);
         assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Solver);
         let compile = format!("{BANNER}error: Failed to execute cargo (exit status: 1)\n");
