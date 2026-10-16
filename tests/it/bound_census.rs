@@ -1,37 +1,12 @@
-use std::{
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, process::Command};
 
+use crate::scratch_crate::TemporaryDirectory;
 use quire_contract_codegen::{
     compute_census, render_boundary_constants, render_edge_constants, BoundaryCensus, CensusEdge,
     CensusNames, CensusRead, CensusTag, ComparisonOperator, Domain, EdgeDirection,
     GenerationErrorCode, GenerationTerminalState, OperandPosition, OutOfDomainCase, Partner,
     Relation, StrategyErrorCode, UnrepresentableEdge,
 };
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(path.join("src")).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 const VERSION_DOMAIN: Domain = Domain {
     minimum: 0,
@@ -392,16 +367,16 @@ mod generated_tests {
 
     let temporary = TemporaryDirectory::new("quire-generated-bound-census");
     fs::write(
-        temporary.0.join("Cargo.toml"),
+        temporary.path.join("Cargo.toml"),
         "[package]\nname = \"generated-bound-census\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\n",
     )
     .unwrap();
-    fs::write(temporary.0.join("src/lib.rs"), source).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), source).unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(

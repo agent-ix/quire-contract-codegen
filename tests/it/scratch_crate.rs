@@ -5,7 +5,11 @@
 //! repository's own `Cargo.lock`, so the runtime it compiles against is the commit CG's lock
 //! records and not whatever `main` the machine's shared git cache last fetched.
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 use quire_contract_codegen::RUNTIME_DEPENDENCY_SOURCE;
 
@@ -37,11 +41,94 @@ pub(crate) fn write_manifest(directory: &Path, manifest: &str) {
     seed_lock(directory);
 }
 
+/// Scratch crate directory at a stable path under the Cargo target directory.
+///
+/// A run killed before `Drop` leaves its directory behind; the next run claims the same
+/// path and clears it, and `cargo clean` removes it with the rest of the target directory.
+/// An exclusive advisory lock on a sibling file is held for the value's lifetime, so a
+/// concurrent run waits instead of clearing a live directory, and the kernel releases the
+/// lock when a run dies, which marks its directory as reclaimable.
+pub(crate) struct TemporaryDirectory {
+    pub(crate) path: PathBuf,
+    _lock: fs::File,
+}
+
+impl TemporaryDirectory {
+    pub(crate) fn new(prefix: &str) -> Self {
+        Self::in_directory(Path::new(env!("CARGO_TARGET_TMPDIR")), prefix)
+    }
+
+    fn in_directory(base: &Path, prefix: &str) -> Self {
+        fs::create_dir_all(base).unwrap();
+        let lock = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(base.join(format!("{prefix}.lock")))
+            .unwrap();
+        lock.lock().unwrap();
+        let path = base.join(prefix);
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => panic!(
+                "clearing stale scratch directory {}: {error}",
+                path.display()
+            ),
+        }
+        fs::create_dir_all(path.join("src")).unwrap();
+        Self { path, _lock: lock }
+    }
+}
+
+impl Drop for TemporaryDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::process::Command;
 
     use super::{runtime_dependency, write_manifest};
+
+    #[test]
+    fn scratch_directory_lives_under_target_tmpdir() {
+        let scratch = super::TemporaryDirectory::new("quire-bound-populations-location");
+        assert!(
+            scratch.path.starts_with(env!("CARGO_TARGET_TMPDIR")),
+            "{} is outside the target directory",
+            scratch.path.display()
+        );
+        assert!(!scratch.path.starts_with(std::env::temp_dir()));
+    }
+
+    #[test]
+    fn scratch_directory_reclaims_leftover_from_dead_run() {
+        let base = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"));
+        let leftover = base.join("quire-bound-populations-reclaim");
+        std::fs::create_dir_all(leftover.join("target")).unwrap();
+        std::fs::write(leftover.join("target/stale"), "x").unwrap();
+        let scratch =
+            super::TemporaryDirectory::in_directory(base, "quire-bound-populations-reclaim");
+        assert_eq!(scratch.path, leftover);
+        assert!(!leftover.join("target/stale").exists());
+        assert!(leftover.join("src").is_dir());
+    }
+
+    #[test]
+    fn scratch_directory_is_locked_while_live() {
+        let base = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"));
+        let scratch = super::TemporaryDirectory::in_directory(base, "quire-bound-populations-live");
+        let probe = std::fs::File::open(base.join("quire-bound-populations-live.lock")).unwrap();
+        assert!(matches!(
+            probe.try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        drop(scratch);
+        probe.try_lock().unwrap();
+    }
 
     /// The `source` of the `quire-contract-runtime` entry in `lock`.
     fn locked_runtime_source(lock: &str) -> String {

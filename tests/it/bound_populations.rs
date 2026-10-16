@@ -1,63 +1,11 @@
-use std::{
-    collections::BTreeSet,
-    fmt::Write as _,
-    fs,
-    io::ErrorKind,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{collections::BTreeSet, fmt::Write as _, fs, process::Command};
 
+use crate::scratch_crate::TemporaryDirectory;
 use quire_contract_codegen::{
     render_population, side_values, ComparisonOperator, Domain, GenerationTerminalState,
     OperandPosition, Partner, Population, PopulationRequest, PopulationSide, Relation,
     RenderedPopulation, SideValues, StrategyErrorCode, ValueSet,
 };
-
-/// Scratch crate directory at a stable path under the Cargo target directory.
-///
-/// A run killed before `Drop` leaves its directory behind; the next run claims the same
-/// path and clears it, and `cargo clean` removes it with the rest of the target directory.
-/// An exclusive advisory lock on a sibling file is held for the value's lifetime, so a
-/// concurrent run waits instead of clearing a live directory, and the kernel releases the
-/// lock when a run dies, which marks its directory as reclaimable.
-struct TemporaryDirectory {
-    path: PathBuf,
-    _lock: fs::File,
-}
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        Self::in_directory(Path::new(env!("CARGO_TARGET_TMPDIR")), prefix)
-    }
-
-    fn in_directory(base: &Path, prefix: &str) -> Self {
-        fs::create_dir_all(base).unwrap();
-        let lock = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(base.join(format!("{prefix}.lock")))
-            .unwrap();
-        lock.lock().unwrap();
-        let path = base.join(prefix);
-        match fs::remove_dir_all(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(error) => panic!(
-                "clearing stale scratch directory {}: {error}",
-                path.display()
-            ),
-        }
-        fs::create_dir_all(path.join("src")).unwrap();
-        Self { path, _lock: lock }
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
 
 /// One valuation: primary value and, for a two-read relation, partner value.
 type Valuation = (i64, Option<i64>);
@@ -246,42 +194,6 @@ fn assert_empty_population(
 }
 
 /// Trace: TC-018, FR-009-AC-2
-#[test]
-fn scratch_directory_lives_under_target_tmpdir() {
-    let scratch = TemporaryDirectory::new("quire-bound-populations-location");
-    assert!(
-        scratch.path.starts_with(env!("CARGO_TARGET_TMPDIR")),
-        "{} is outside the target directory",
-        scratch.path.display()
-    );
-    assert!(!scratch.path.starts_with(std::env::temp_dir()));
-}
-
-#[test]
-fn scratch_directory_reclaims_leftover_from_dead_run() {
-    let base = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    let leftover = base.join("quire-bound-populations-reclaim");
-    fs::create_dir_all(leftover.join("target")).unwrap();
-    fs::write(leftover.join("target/stale"), "x").unwrap();
-    let scratch = TemporaryDirectory::in_directory(base, "quire-bound-populations-reclaim");
-    assert_eq!(scratch.path, leftover);
-    assert!(!leftover.join("target/stale").exists());
-    assert!(leftover.join("src").is_dir());
-}
-
-#[test]
-fn scratch_directory_is_locked_while_live() {
-    let base = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    let scratch = TemporaryDirectory::in_directory(base, "quire-bound-populations-live");
-    let probe = fs::File::open(base.join("quire-bound-populations-live.lock")).unwrap();
-    assert!(matches!(
-        probe.try_lock(),
-        Err(fs::TryLockError::WouldBlock)
-    ));
-    drop(scratch);
-    probe.try_lock().unwrap();
-}
-
 #[test]
 fn tc_018_value_sets_equal_independent_enumeration_and_empty_sides_refuse() {
     let mut checked_sides = 0;
