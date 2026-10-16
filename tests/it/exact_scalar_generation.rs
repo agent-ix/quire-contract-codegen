@@ -18,7 +18,7 @@ use quire_contract_codegen::{
     ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
     ExactScalarRefusal, GeneratedScalarClaim, OperationProvenance, OracleGenerationError,
     RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
-    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    QUANTITY_CONVERSION_CAPABILITY, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
@@ -27,8 +27,7 @@ use quire_contract_model::{
     StructuralCandidateError,
 };
 use quire_contract_runtime::exact::{
-    ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval, QuantityTarget,
-    RoundingMode,
+    ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval,
 };
 use serde_json::{json, Value};
 
@@ -674,8 +673,6 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             1083,
             "rt::evaluate_quantity(rt::QuantityOperation::Power(".to_owned(),
         ),
-        (1086, "rt::QuantityTarget::Decimal(".to_owned()),
-        (1087, "rt::QuantityTarget::Integer {".to_owned()),
         (
             1088,
             "rt::evaluate_quantity(rt::QuantityOperation::Subtract(".to_owned(),
@@ -824,13 +821,6 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
             ExactScalarRefusal::BoundMismatch {
                 bound: ids.resolve(&id(&INT5.key())),
                 form: BoundForm::IntegerRange,
-            },
-        ),
-        (
-            QUANTITY_EXACT,
-            ExactScalarRefusal::BoundMismatch {
-                bound: ids.resolve(&id(&RAT.key())),
-                form: BoundForm::RationalRange,
             },
         ),
         (
@@ -1388,7 +1378,7 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
 /// Trace: FR-038-AC-3, FR-014-AC-8, FR-014-AC-13, FR-014-AC-18, TC-024.
 #[test]
 fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order_and_target() {
-    let (package, fixture_ids) = corpus_package().admit_resolved();
+    let (package, _) = corpus_package().admit_resolved();
 
     let subtraction = generate(
         &package,
@@ -1434,46 +1424,6 @@ fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order
     let golden_source = contents(&golden, "src/lib.rs");
     assert!(!golden_source.contains(code_id(WRONG_ARITY).digest.as_ref()));
     assert!(!golden_source.contains(code_id(WRONG_RESULT).digest.as_ref()));
-
-    let conversion_node_id = fixture_ids.resolve(&code_id(1086));
-    let wrong_conversion_target = generate(
-        &package,
-        &[ExactScalarItem {
-            node_id: conversion_node_id.clone(),
-            operation: ExactScalarOperation::QuantityConversion {
-                target: QuantityTarget::Decimal(decimal_type(
-                    -5,
-                    5,
-                    0,
-                    2,
-                    RoundingMode::NearestEven,
-                )),
-            },
-        }],
-    );
-    let ClaimDisposition::Refused { refusal } = &wrong_conversion_target.claim_map.items[0].result
-    else {
-        panic!(
-            "wrong conversion target was not refused: {:?}",
-            wrong_conversion_target.claim_map.items[0]
-        );
-    };
-    assert_eq!(
-        refusal,
-        &ExactScalarRefusal::BoundMismatch {
-            bound: fixture_ids.resolve(&id(&Bound::Decimal(
-                -100_000,
-                100_000,
-                0,
-                2,
-                "nearest-even"
-            )
-            .key(),)),
-            form: BoundForm::DecimalRange,
-        }
-    );
-    assert!(!contents(&wrong_conversion_target, "src/lib.rs")
-        .contains(conversion_node_id.digest.as_ref()));
 }
 
 /// The scalar nodes shared by the admitted work-exhaustion fixture and its
@@ -3127,7 +3077,7 @@ fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
 
 /// The operations with more than one descriptor for one identity are told apart by what the node
 /// carries: the operand forms (`rational.div`), the result form (`numeric.convert`,
-/// `numeric.convert_rounding`, `quantity.convert`) and the laws (`integer.div`).
+/// `numeric.convert_rounding`) and the laws (`integer.div`).
 ///
 /// Trace: FR-014-AC-18, TC-024
 #[test]
@@ -3172,29 +3122,6 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
             operation_identity: "quire.op.numeric.convert".to_owned()
         }))
     );
-    // quantity.convert takes its target from the result form; an integer target takes its
-    // rounding from the node's mode, a rational result is an exact conversion.
-    assert!(matches!(
-        operation(1086),
-        Ok(ExactScalarOperation::QuantityConversion {
-            target: QuantityTarget::Decimal(_)
-        })
-    ));
-    assert!(matches!(
-        operation(1087),
-        Ok(ExactScalarOperation::QuantityConversion {
-            target: QuantityTarget::Integer {
-                rounding: RoundingMode::TowardZero,
-                ..
-            }
-        })
-    ));
-    assert!(matches!(
-        operation(QUANTITY_EXACT),
-        Ok(ExactScalarOperation::QuantityConversion {
-            target: QuantityTarget::Exact
-        })
-    ));
     // integer.div takes its profile from the laws: the three corpus nodes differ only by it.
     let profiles = [1011, 1012, 1013].map(|code| match operation(code) {
         Ok(ExactScalarOperation::IntegerDivision { profile, .. }) => profile,
@@ -3552,4 +3479,26 @@ fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
     assert!(whole.lines().any(invokes_panicking_macro));
     assert_eq!(panic_tokens_in(&whole), vec!["unreachable!".to_owned()]);
     assert!(!non_test_code(source).lines().any(invokes_panicking_macro));
+}
+
+/// `quire.op.quantity.convert` is refused with its own named capability for every conversion node:
+/// the refusal carries the operation identity and the capability text, and no descriptor is built.
+///
+/// Trace: FR-014-AC-2, FR-014-AC-18, TC-024
+#[test]
+fn tc_024_quantity_conversion_is_refused_with_its_named_capability() {
+    let package = derivation_package().admit();
+    for code in QUANTITY_CONVERSIONS {
+        assert_eq!(
+            derive_one(&package, code),
+            Err(no_claim(
+                ClaimDerivationRefusal::QuantityConversionUnsupported {
+                    operation_identity: "quire.op.quantity.convert".to_owned(),
+                    capability: QUANTITY_CONVERSION_CAPABILITY,
+                }
+            )),
+            "node {code}"
+        );
+    }
+    assert!(QUANTITY_CONVERSION_CAPABILITY.contains("quantity conversion is not supported"));
 }

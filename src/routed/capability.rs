@@ -467,9 +467,7 @@ fn scalar_operation_family(
         }
         Op::TextAdmission { .. } | Op::TextComparison { .. } => KaniFormFamily::Text,
         Op::EnumComparison { .. } => KaniFormFamily::Enum,
-        Op::QuantityArithmetic { .. }
-        | Op::QuantityComparison { .. }
-        | Op::QuantityConversion { .. } => KaniFormFamily::Quantity,
+        Op::QuantityArithmetic { .. } | Op::QuantityComparison { .. } => KaniFormFamily::Quantity,
     })
 }
 

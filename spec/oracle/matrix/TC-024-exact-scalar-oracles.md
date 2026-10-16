@@ -43,8 +43,9 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
-   `numeric.convert_rounding`, `quantity.convert` to each
-   target); derive nodes that are not applications, carry no identity, name an
+   `numeric.convert_rounding`); derive every `quantity.convert` node at each
+   rounding mode and check it is refused as `QuantityConversionUnsupported`
+   with the named capability and no descriptor; derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that

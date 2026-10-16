@@ -32,8 +32,8 @@ use quire_contract_model::{
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, QuantityTarget, RationalDomain, RoundingMode,
-    TextProfile, TextType,
+    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
+    TextType,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -1442,8 +1442,11 @@ pub const AMBIGUOUS: u32 = 2024;
 pub const WRONG_BOUND_FORM: u32 = 2026;
 /// A floor division bounded `[-5, 5]`, requested over `[-1000, 1000]`.
 pub const DOMAIN_MISMATCH: u32 = 2027;
-/// A quantity conversion to a bounded rational, requested as exact.
-pub const QUANTITY_EXACT: u32 = 2028;
+/// The third quantity conversion node.
+pub const QUANTITY_CONVERT_AWAY: u32 = 2028;
+/// The quantity conversion nodes: each converts a quantity to its own unit type under the
+/// `exact` mode that unit type pins.
+pub const QUANTITY_CONVERSIONS: [u32; 3] = [1086, 1087, QUANTITY_CONVERT_AWAY];
 /// An integer addition whose left operand is itself an application.
 pub const EXPRESSION_OPERAND: u32 = 2029;
 /// A quantity addition whose right operand is a literal.
@@ -1928,35 +1931,6 @@ pub fn corpus() -> Vec<Expression> {
         quantity(1083, QTY_INT, QuantityOperator::Power),
         quantity(1088, QTY2, QuantityOperator::Subtract),
         quantity(1089, QTY2, QuantityOperator::Divide),
-        expression(
-            1086,
-            CONVERSION,
-            QTY1,
-            "decimal",
-            Op::QuantityConversion {
-                target: QuantityTarget::Decimal(decimal_type(
-                    -100_000,
-                    100_000,
-                    0,
-                    2,
-                    RoundingMode::NearestEven,
-                )),
-            },
-            vec![Bound::Decimal(-100_000, 100_000, 0, 2, "nearest-even")],
-        ),
-        expression(
-            1087,
-            CONVERSION,
-            QTY1,
-            "integer",
-            Op::QuantityConversion {
-                target: QuantityTarget::Integer {
-                    domain: interval(-1000, 1000),
-                    rounding: RoundingMode::TowardZero,
-                },
-            },
-            vec![INT],
-        ),
     ];
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
         corpus.push(expression(
@@ -2326,24 +2300,6 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
             expr.operator,
             op(text_family_identity("quantity", *operator)),
         ),
-        Op::QuantityConversion { target } => (
-            expr.operator,
-            op_full(
-                "quire.op.quantity.convert",
-                vec![],
-                match target {
-                    QuantityTarget::Exact => None,
-                    QuantityTarget::Decimal(decimal) => {
-                        Some(mode_kv("rounding", decimal.rounding().as_str()))
-                    }
-                    QuantityTarget::Integer { rounding, .. } => {
-                        Some(mode_kv("rounding", rounding.as_str()))
-                    },
-                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
-                },
-                Some(member_kind("type_argument")),
-            ),
-        ),
     }
 }
 
@@ -2399,8 +2355,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     // operands are never paired with a varying bound in this corpus
     // (every `EnumComparison` vector below declares `Vec::new()`), so
     // they keep the plain shared node unconditionally. "unit" operands
-    // *do* get bounds here (`quantity.pow`'s `INT` domain, and the two
-    // `QuantityConversion` codes' `Decimal`/`INT` targets), so they are
+    // *do* get bounds here (`quantity.pow`'s `INT` domain), so they are
     // dedicated the same way via [`PackageBuilder::dedicated_unit_operand`]
     // whenever `bound_keys` is non-empty, rather than kept on the shared
     // `V_QUANTITY` node.
@@ -2711,49 +2666,65 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             &bounds,
         );
     }
-    builder
-        .application_bounded(
-            QUANTITY_EXACT,
+    // Node ids are digests of the body, so the three conversions differ by the quantity operand
+    // they reference: the shared one, an unbounded dedicated one, and one dedicated to `INT`.
+    let int_key = builder.bound(&INT);
+    for (code, operand, bounds) in [
+        (QUANTITY_CONVERSIONS[0], key(V_QUANTITY), Vec::new()),
+        (
+            QUANTITY_CONVERSIONS[1],
+            builder.dedicated_unit_operand(&[]),
+            Vec::new(),
+        ),
+        (
+            QUANTITY_CONVERSIONS[2],
+            builder.dedicated_unit_operand(&[int_key]),
+            vec![INT],
+        ),
+    ] {
+        builder.application_bounded(
+            code,
             "expression",
             "conversion",
-            &key(T_RATIONAL),
+            &unit_type(),
             application(
                 "convert",
                 op_full(
                     "quire.op.quantity.convert",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
-                    Some(type_argument_member(&key(T_RATIONAL))),
+                    Some(mode_kv("rounding", "exact")),
+                    Some(type_argument_member(&unit_type())),
                 ),
-                &key(T_RATIONAL),
-                vec![reference(&key(V_QUANTITY))],
-            ),
-            &[RAT],
-        )
-        .application_bounded(
-            LITERAL_QUANTITY,
-            "expression",
-            "binary",
-            &unit_type(),
-            application(
-                "binary",
-                op("quire.op.quantity.add"),
                 &unit_type(),
-                // A deliberate negative fixture QSL never emits (it builds no quantity literal).
-                // A quantity literal is typed by its unit: IR resolves a literal operand
-                // through `literal.type`, and `quantity.add` takes a quantity on both sides.
-                vec![
-                    reference(&key(V_QUANTITY)),
-                    json!({
-                        "term": "literal",
-                        "type": node_ref(&unit_type()),
-                        "value_kind": "rational",
-                        "value": "1",
-                    }),
-                ],
+                vec![reference(&operand)],
             ),
-            &[],
+            &bounds,
         );
+    }
+    builder.application_bounded(
+        LITERAL_QUANTITY,
+        "expression",
+        "binary",
+        &unit_type(),
+        application(
+            "binary",
+            op("quire.op.quantity.add"),
+            &unit_type(),
+            // A deliberate negative fixture QSL never emits (it builds no quantity literal).
+            // A quantity literal is typed by its unit: IR resolves a literal operand
+            // through `literal.type`, and `quantity.add` takes a quantity on both sides.
+            vec![
+                reference(&key(V_QUANTITY)),
+                json!({
+                    "term": "literal",
+                    "type": node_ref(&unit_type()),
+                    "value_kind": "rational",
+                    "value": "1",
+                }),
+            ],
+        ),
+        &[],
+    );
     // IR-280's FR-322 join means each of these must anchor its own bound on
     // a node no other expression's differing bound also reaches (see
     // `dedicated_operand`'s doc): sharing `V_INTEGER`/`V_DECIMAL` directly
@@ -4152,12 +4123,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         ExactScalarOperation::IntegerDivision {
             profile: DivisionProfile::Floor,
             domain: bounded(-1000, 1000),
-        },
-    ));
-    items.push(item(
-        QUANTITY_EXACT,
-        ExactScalarOperation::QuantityConversion {
-            target: QuantityTarget::Exact,
         },
     ));
     items.push(item(

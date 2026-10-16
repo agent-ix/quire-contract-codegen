@@ -552,7 +552,7 @@ fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult
         dependencies: Vec::new(),
         selected_function: selection,
         source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {
-            parameter: site.site.parameters[0].1.clone(),
+            parameter: site.site.parameters[0].1,
             value: reference,
         }]),
         obligation_identity: [0; 32],

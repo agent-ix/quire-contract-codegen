@@ -53,7 +53,6 @@ use generated::{
     quantity_equal,
     quantity_at_most,
     integer_subtract,
-    convert_integer,
     decimal_subtract,
     integer_add,
     integer_negate,
@@ -72,7 +71,6 @@ use generated::{
     binary64_total_order,
     binary32_subtract,
     enum_not_equal,
-    convert_decimal,
     quantity_less,
     divide_floor,
     quantity_subtract,
@@ -466,39 +464,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
 /// Trace: FR-014-AC-6, TC-024.
 #[test]
 fn tc_024_tc187_quantity_oracles_agree() {
-    let families: [&[&str]; 2] = [
-        &["m", "cm", "in", "rev", "m_alias"],
-        &["K", "degC", "degF", "u1", "u2", "u3"],
-    ];
     let values = [(0_i64, 1_i64), (1, 1), (-7, 3), (250, 1), (5463, 20)];
-    let mut conversions = 0_usize;
-    for family in families {
-        for from in family {
-            for to in family {
-                for (n, d) in values {
-                    agree2! {
-                        limits: UNLIMITED,
-                        setup: {
-                            let f = fixture();
-                            let (quantity, unit) = (f.q(ratio(n, d), from), f.unit(to));
-                            let decimal = QuantityTarget::Decimal(decimal_type(-100_000, 100_000, 0, 2, RoundingMode::NearestEven));
-                            let integer = QuantityTarget::Integer { domain: IntegerInterval::new(int(-1000), int(1000)).unwrap(), rounding: RoundingMode::TowardZero };
-                        },
-                        direct: |m| (
-                            convert_quantity(&quantity, &unit, &decimal, m),
-                            convert_quantity(&quantity, &unit, &integer, m),
-                        ),
-                        generated: |m| (
-                            typed(convert_decimal(&quantity, &unit, m)),
-                            typed(convert_integer(&quantity, &unit, m)),
-                        ),
-                    };
-                    conversions += 2;
-                }
-            }
-        }
-    }
-    assert_eq!(conversions, 2 * (5 * 5 + 6 * 6) * 5);
 
     let mut operations = 0_usize;
     for name in ["m", "cm", "in", "rev", "u2"] {
@@ -602,7 +568,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         named += 1;
     }
     assert_eq!(named, 14);
-    println!("TC-187 three-way agreement: {conversions} conversions, {operations} operations, {named} tabled tuples");
+    println!("TC-187 three-way agreement: {operations} operations, {named} tabled tuples");
 }
 
 /// The TC-193 class matrix patterns of `IeeeWidth::ALL[width]`.

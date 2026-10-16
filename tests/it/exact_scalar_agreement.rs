@@ -152,8 +152,6 @@ const SCALAR_ORACLE_NAMES: &[(u32, &str)] = &[
     (1082, "quantity_multiply"),
     (1083, "quantity_power"),
     (1084, "quantity_less"),
-    (1086, "convert_decimal"),
-    (1087, "convert_integer"),
     (1088, "quantity_subtract"),
     (1089, "quantity_divide"),
     (1111, "text_equal"),

@@ -65,8 +65,8 @@ use quire_contract_model::{
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, QuantityTarget, RationalDomain, RoundingMode,
-    TextProfile, TextType,
+    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
+    TextType,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -277,11 +277,6 @@ pub enum ExactScalarOperation {
     QuantityComparison {
         /// Operator.
         operator: ComparisonOperator,
-    },
-    /// `convert_quantity` into an admitted unit supplied at call time.
-    QuantityConversion {
-        /// Value representation of the result.
-        target: QuantityTarget,
     },
 }
 
@@ -2187,26 +2182,6 @@ fn check_parameters_from_view(
         ExactScalarOperation::TextAdmission { text_type } => {
             bounds.equal(BoundForm::TextBounds, read_text_bounds, Some(text_type))?
         }
-        ExactScalarOperation::QuantityConversion { target } => match target {
-            QuantityTarget::Exact => bounds.equal::<RationalDomain>(
-                BoundForm::RationalRange,
-                read_rational_range,
-                None,
-            )?,
-            QuantityTarget::Decimal(decimal) => {
-                bounds.equal(BoundForm::DecimalRange, read_decimal_range, Some(decimal))?
-            }
-            // The rounding of an integer conversion has no IR bound; it stays
-            // caller-declared with the operation.
-            QuantityTarget::Integer { domain, .. } => {
-                bounds.equal(BoundForm::IntegerRange, read_integer_range, Some(domain))?
-            }
-            &_ => {
-                return Err(ItemCheckError::Generation(
-                    OracleGenerationError::unknown_variant("QuantityTarget"),
-                ));
-            }
-        },
         ExactScalarOperation::Ordering { .. }
         | ExactScalarOperation::IeeeComparison { .. }
         | ExactScalarOperation::TextComparison { .. }
@@ -2847,15 +2822,6 @@ impl Shape {
             ExactScalarOperation::QuantityComparison { .. } => {
                 Self::binary(&[F::Unit, F::Unit], F::Boolean)
             }
-            ExactScalarOperation::QuantityConversion { target } => {
-                let result = match target {
-                    QuantityTarget::Exact => F::Rational,
-                    QuantityTarget::Decimal(_) => F::Decimal,
-                    QuantityTarget::Integer { .. } => F::Integer,
-                    &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
-                };
-                Self::conversion(&[F::Unit], result)
-            }
         })
     }
 }
@@ -3063,19 +3029,6 @@ fn catalogued_operation(
         }),
         Op::QuantityComparison { operator } => {
             plain(comparison_identity(ComparisonFamily::Quantity, operator)?)
-        }
-        Op::QuantityConversion { target } => {
-            let identity = "quire.op.quantity.convert";
-            match target {
-                // A conversion to `Rational[..]` is exact; the catalog's
-                // `rounding` mode is not meaningful for it and this
-                // descriptor carries no value for it either, so it is not
-                // checked.
-                QuantityTarget::Exact => plain(identity),
-                QuantityTarget::Decimal(decimal) => with_rounding(identity, decimal.rounding()),
-                QuantityTarget::Integer { rounding, .. } => with_rounding(identity, *rounding),
-                &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
-            }
         }
     })
 }
@@ -3352,23 +3305,6 @@ fn operation_identity(operation: &ExactScalarOperation) -> Result<String, Oracle
         ExactScalarOperation::QuantityComparison { operator } => {
             format!("quantity.compare.{}", comparison_name(*operator)?)
         }
-        ExactScalarOperation::QuantityConversion { target } => match target {
-            QuantityTarget::Exact => "quantity.convert target=exact".to_owned(),
-            QuantityTarget::Decimal(decimal) => format!(
-                "quantity.convert target=decimal[{},{}] scale=[{},{}] rounding={}",
-                decimal.lower(),
-                decimal.upper(),
-                decimal.min_scale(),
-                decimal.max_scale(),
-                decimal.rounding().as_str()
-            ),
-            QuantityTarget::Integer { domain, rounding } => format!(
-                "quantity.convert target=integer{} rounding={}",
-                interval_identity(domain),
-                rounding.as_str()
-            ),
-            &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
-        },
     })
 }
 
@@ -3795,30 +3731,6 @@ impl SourceBuilder {
                     ),
                 }
             }
-            ExactScalarOperation::QuantityConversion { target } => {
-                let target = match target {
-                    QuantityTarget::Exact => "rt::QuantityTarget::Exact".to_owned(),
-                    QuantityTarget::Decimal(decimal) => {
-                        format!(
-                            "rt::QuantityTarget::Decimal({})",
-                            self.decimal_type(decimal)?
-                        )
-                    }
-                    QuantityTarget::Integer { domain, rounding } => format!(
-                        "rt::QuantityTarget::Integer {{ domain: {}, rounding: {} }}",
-                        self.interval(domain),
-                        rounding_path(*rounding)?
-                    ),
-                    &_ => return Err(OracleGenerationError::unknown_variant("QuantityTarget")),
-                };
-                Body {
-                    parameters: vec![("operand", "&rt::Quantity"), ("unit", "&rt::QuantityUnit")],
-                    output: "rt::Conversion",
-                    prelude: vec![format!("let target = {target};")],
-                    call: "rt::convert_quantity(operand, unit, &target, meter).map_err(OracleStop::IllTyped)"
-                        .to_owned(),
-                }
-            }
         })
     }
 }
@@ -3898,6 +3810,10 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 // Deriving the descriptor from the node
 // ---------------------------------------------------------------------------
 
+/// The capability a `quire.op.quantity.convert` node needs and this generator lacks.
+pub const QUANTITY_CONVERSION_CAPABILITY: &str = "quantity conversion is not supported: the \
+     runtime has no quantity conversion target (tracked as IR-818)";
+
 /// Why a node has no derivable [`ExactScalarItem`], beyond the refusals
 /// [`ExactScalarRefusal`] already names for its lowering and bounds.
 ///
@@ -3917,6 +3833,13 @@ pub enum ClaimDerivationRefusal {
     OperationNotDerivable {
         /// The node's `operation.identity`.
         operation_identity: String,
+    },
+    /// The identity is `quire.op.quantity.convert`, which this generator does not support.
+    QuantityConversionUnsupported {
+        /// The node's `operation.identity`.
+        operation_identity: String,
+        /// The capability that is absent, as [`QUANTITY_CONVERSION_CAPABILITY`] spells it.
+        capability: &'static str,
     },
     /// The operand or result scalar forms select no operator for the identity.
     OperandFormsNotDerivable {
@@ -3966,7 +3889,6 @@ enum Family {
     EnumComparison(ComparisonOperator),
     QuantityArithmetic(QuantityOperator),
     QuantityComparison(ComparisonOperator),
-    QuantityConversion,
 }
 
 /// The inverse of [`catalogued_operation`] over identities. Identities outside the derivable set,
@@ -4060,7 +3982,6 @@ fn family_of_identity(identity: &str) -> Option<Family> {
         "quire.op.quantity.le" => Family::QuantityComparison(C::LessOrEqual),
         "quire.op.quantity.gt" => Family::QuantityComparison(C::Greater),
         "quire.op.quantity.ge" => Family::QuantityComparison(C::GreaterOrEqual),
-        "quire.op.quantity.convert" => Family::QuantityConversion,
         _ => return None,
     })
 }
@@ -4272,6 +4193,13 @@ fn derive_operation_from_view<'g>(
         bounds,
         identity,
     };
+    if identity == "quire.op.quantity.convert" {
+        return Err(ClaimDerivationRefusal::QuantityConversionUnsupported {
+            operation_identity: identity.to_owned(),
+            capability: QUANTITY_CONVERSION_CAPABILITY,
+        }
+        .refusal());
+    }
     let family = family_of_identity(identity).ok_or_else(|| {
         ClaimDerivationRefusal::OperationNotDerivable {
             operation_identity: identity.to_owned(),
@@ -4356,25 +4284,6 @@ fn derive_operation_from_view<'g>(
         Family::EnumComparison(operator) => Op::EnumComparison { operator },
         Family::QuantityArithmetic(operator) => Op::QuantityArithmetic { operator },
         Family::QuantityComparison(operator) => Op::QuantityComparison { operator },
-        Family::QuantityConversion => {
-            let target = match derivation.result_form().as_deref() {
-                Some("rational") => QuantityTarget::Exact,
-                Some("decimal") => {
-                    let target = derivation.decimal_target()?;
-                    derivation.require_mode(target.rounding())?;
-                    QuantityTarget::Decimal(target)
-                }
-                Some("integer") => QuantityTarget::Integer {
-                    domain: derivation.read(BoundForm::IntegerRange, read_integer_range)?,
-                    rounding: derivation
-                        .mode_value()
-                        .and_then(RoundingMode::from_code)
-                        .ok_or_else(|| derivation.mode_not_derivable())?,
-                },
-                _ => return Err(derivation.operand_forms_not_derivable()),
-            };
-            Op::QuantityConversion { target }
-        }
     })
 }
 
@@ -5299,23 +5208,13 @@ mod tests {
         ] {
             all.push(Op::QuantityArithmetic { operator });
         }
-        for target in [
-            QuantityTarget::Exact,
-            QuantityTarget::Decimal(decimal),
-            QuantityTarget::Integer {
-                domain: interval_of("0", "9"),
-                rounding: RoundingMode::TowardZero,
-            },
-        ] {
-            all.push(Op::QuantityConversion { target });
-        }
         all
     }
 
     /// The number of `ExactScalarOperation` variants: [`expected_family`]'s match names each, and
     /// adding one fails to compile there until it has an arm. `every_operation` must then carry a
     /// descriptor of it, which the coverage assertion below checks.
-    const OPERATION_VARIANTS: usize = 15;
+    const OPERATION_VARIANTS: usize = 14;
 
     /// The family each descriptor belongs to, by an exhaustive match with no wildcard arm over
     /// `ExactScalarOperation` and, where the operator selects the identity, over the operator.
@@ -5351,7 +5250,6 @@ mod tests {
             Op::EnumComparison { operator } => Family::EnumComparison(*operator),
             Op::QuantityArithmetic { operator } => Family::QuantityArithmetic(*operator),
             Op::QuantityComparison { operator } => Family::QuantityComparison(*operator),
-            Op::QuantityConversion { .. } => Family::QuantityConversion,
         })
     }
 
