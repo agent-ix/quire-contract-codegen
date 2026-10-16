@@ -50,7 +50,8 @@ FR-028-AC-12, verified by TC-039.
     exits 1; one whose report has a Failure entry and exits 1; the same report and exit twice with
     different stream text; two no-report runs with equal exit and different stream text; and the
     over-limit and unread streams of steps 1 and 2. Map a `NoVerdict` evidence through FR-029, with
-    and without its `diagnostics`.
+    and without its `diagnostics`. Build two otherwise compatible requests with `home_directory` `/h/u` and
+    `/h/v`, a pair with one absent, and a pair with both `/h/u`, and count the processes.
 
 ## Expected Results
 
@@ -96,7 +97,8 @@ FR-028-AC-12, verified by TC-039.
     playback; the two no-report runs have equal evidence in every field but `diagnostics` and
     `memory`; the over-limit and unread streams remain refused with `kani_output_over_limit` and
     `kani_output_unread`, with no evidence and no record; the FR-029 terminal value is `Failed`
-    with and without the record (FR-017-AC-36).
+    with and without the record; the differing-home pairs start two processes and the equal-home
+    pair one, whose members' excerpts are byte-identical (FR-017-AC-21, FR-017-AC-36).
 
 ## Implementation
 
