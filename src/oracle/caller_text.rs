@@ -247,11 +247,11 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
 pub fn caller_text_admission_agrees() {{
     let selector: u8 = kani::any();
     kani::assume(selector < 21);
-    let payload = match selector {{
+    let input: &[u8] = match selector {{
 {input_arms}
         _ => {{ assert!(false, "selector is in the finite caller text class"); return; }}
     }};
-    let payload = match payload {{
+    let payload = match rt::TextPayload::from_utf8(input) {{
         Ok(payload) => payload,
         Err(_) => {{ assert!(false, "finite caller text member is valid UTF-8"); return; }}
     }};
@@ -306,9 +306,7 @@ fn caller_text_input_arms() -> String {
     CALLER_TEXT_PROOF_INPUTS
         .iter()
         .enumerate()
-        .map(|(selector, input)| {
-            format!("{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()),")
-        })
+        .map(|(selector, input)| format!("{selector} => {input:?}.as_bytes(),"))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -509,15 +507,24 @@ mod tests {
                 assert!(source.ends_with("}\n"));
                 assert!(source.contains("let selector: u8 = kani::any();"));
                 assert!(source.contains("kani::assume(selector < 21);"));
-                assert!(source.contains("let payload = match selector {"));
+                assert!(source.contains("let input: &[u8] = match selector {"));
                 assert!(source.contains(
                     "_ => { assert!(false, \"selector is in the finite caller text class\"); return; }"
                 ));
-                assert_eq!(source.matches("rt::TextPayload::from_utf8(").count(), 21);
+                assert_eq!(source.matches("rt::TextPayload::from_utf8(").count(), 1);
+                let selector_match = source
+                    .find("let input: &[u8] = match selector {")
+                    .expect("finite selector mapping");
+                let constructor = source
+                    .find("rt::TextPayload::from_utf8(input)")
+                    .expect("one public payload constructor after selector mapping");
+                let selector_mapping = &source[selector_match..constructor];
+                assert!(selector_mapping.ends_with("};\n    let payload = match "));
+                assert!(selector_mapping.contains("0 => \"\".as_bytes(),"));
                 for (selector, input) in CALLER_TEXT_PROOF_INPUTS.iter().enumerate() {
-                    assert!(source.contains(&format!(
-                        "{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()),"
-                    )));
+                    assert!(
+                        selector_mapping.contains(&format!("{selector} => {input:?}.as_bytes(),"))
+                    );
                 }
                 assert_eq!(source.matches("kani::any()").count(), 1);
                 assert!(!source.contains("encode_utf8"));
