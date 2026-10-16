@@ -251,10 +251,6 @@ pub fn caller_text_admission_agrees() {{
 {input_arms}
         _ => {{ assert!(false, "selector is in the finite caller text class"); return; }}
     }};
-    let payload = match payload {{
-        Ok(payload) => payload,
-        Err(_) => {{ assert!(false, "finite caller text member is valid UTF-8"); return; }}
-    }};
     let text_type = rt::TextType::new({min}, {max}, {profile}).expect("generated valid bounds");
     let mut generated_meter = unlimited_meter();
     let generated = admit_caller_text(&payload, &text_type, &mut generated_meter);
@@ -307,7 +303,9 @@ fn caller_text_input_arms() -> String {
         .iter()
         .enumerate()
         .map(|(selector, input)| {
-            format!("{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()),")
+            format!(
+                "{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()).expect(\"finite caller text input is valid UTF-8\"),"
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -514,9 +512,10 @@ mod tests {
                     "_ => { assert!(false, \"selector is in the finite caller text class\"); return; }"
                 ));
                 assert_eq!(source.matches("rt::TextPayload::from_utf8(").count(), 21);
+                assert!(!source.contains("let payload = match payload"));
                 for (selector, input) in CALLER_TEXT_PROOF_INPUTS.iter().enumerate() {
                     assert!(source.contains(&format!(
-                        "{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()),"
+                        "{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()).expect(\"finite caller text input is valid UTF-8\"),"
                     )));
                 }
                 assert_eq!(source.matches("kani::any()").count(), 1);
