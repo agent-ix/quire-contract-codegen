@@ -142,3 +142,23 @@ Gates at ec2e2f4:
 - FR-014/021/031 and TC-024/031/044 are untouched.
 
 The other retargets are within IR-806's scope and relabel no delivered work: FR-025-AC-9, FR-029 AC-17/19..27, FR-030 AC-15..17, FR-033 AC-7/AC-13 (the original-artifact part only), TC-036 step 9, TC-041 and the matrices. Kept IR-635 citations name only delivered constructor work, except FR-033:217 (FND-005). New findings FND-005 and FND-006 (medium) remain open.
+
+## New findings (disposition pass 2)
+
+Reviewed e6ef3b24fe965efa5da2d471742f5b43fb9c8dd0 (diff ec2e2f4..e6ef3b2).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | The new AD-003 E-1 status lists "self-comparison" in the undelivered AC-11 remainder. origin/main already has an Eq self-comparison control: `self_comparison_keeps_two_positional_arguments` (tests/it/composite_original_eq.rs:502), traced to FR-033-AC-11 and added with CG #394. Only Ne self-comparison, if anything, is still missing. Write "Ne self-comparison", or credit the Eq control to IR-635. FR-033-AC-1 and AC-11 have the same ambiguity, but that wording predates this PR. | spec/assurance/AD-003-evidence-chain.md:290 |
+
+## Disposition round 2
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
+| FND-007 | deferred | The IR-806 remainders now name IR-806: FR-033-AC-9 and AC-12, replay tests.md:24 and FR-029:309. The AC-1/AC-11 remainder (Ne literal/literal, self-comparison, inline operands) is now labelled "no ticket yet" in FR-033-AC-1, AC-11, AD-003 E-1 and TC-048. The spec is now accurate. Giving the remainder an owner means filing a Linear ticket, which is a tracker action outside this spec PR; the leader should file one and cite it in a follow-up. |
+
+## Disposition round 2 verdict
+
+**PASS for this artifact.** FND-005: FR-033:217-219 now says "IR-635's builder owns the delivered pre-invocation source, package and context refusals; IR-806 owns the planned artifact, harness and playback refusals". FND-006: AD-003 E-1 is now PARTIAL and credits IR-635 for the delivered AC-11 parts. FND-007 is deferred with its reason. New FND-008 is low and does not block.

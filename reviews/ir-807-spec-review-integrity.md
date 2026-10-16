@@ -74,3 +74,16 @@ Reviewed ec2e2f4c116bd393d2fd2e63351a2a712ee4109e (diff f9ef0f5..ec2e2f4).
 ## Disposition round 1 verdict
 
 **PASS with two new low findings.** FND-001: FR-028:312-314 no longer mentions interim refusals. FND-002: the dangling "Outcomes without retained disagreement" sentence is removed from the FR-029 Behavior paragraph. `grep -rnE 'NonProductionProof|ShadowCounterexample|ProofStrength' spec plan` (excluding reviews) is still empty.
+
+## Disposition round 2
+
+Reviewed e6ef3b24fe965efa5da2d471742f5b43fb9c8dd0.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | - |
+| FND-004 | still-open | TC-048:229 and replay tests.md:22 are fixed. replay tests.md:39 is the TC-048 summary row, which this PR edited in ec2e2f4 to add AC-30/31. It still says "The Eq constructor covers ...; Ne, native/generated-family and proof-strength integration remain planned". That contradicts FR-033-AC-1 and AC-11, which credit IR-635 with Ne parameter/parameter and parameter/literal controls (CG #394). Change "Ne" to "Ne literal/literal". |
+
+## Disposition round 2 verdict
+
+**CONDITIONAL**. FND-003: no shadow-exclusion statement is scoped with "until" any more. FR-028:312-314 and 376-378, FR-029:159-163 and TC-048 step 8 now state the exclusion as permanent. FND-004 is still open, as a one-word fix at replay tests.md:39.
