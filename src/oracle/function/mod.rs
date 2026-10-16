@@ -2472,7 +2472,11 @@ pub fn generate_exact_function_oracles(
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
-            body: Box::new(|_frame, _args| Outcome::Refused(Refusal::CheckedInvariant)),
+            body: Box::new(|_frame, _args| {
+                Outcome::Refused(Refusal::CheckedInvariant {
+                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
+                })
+            }),
         })
         .collect();
 
@@ -3037,7 +3041,7 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
             format!(
                 "|frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {{\n        \
                  let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {{\n            \
-                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);\n        }};\n        \
+                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let evaluated = frame.meter(|meter| exact::evaluate_integer_arithmetic(exact::IntegerArithmetic::{variant}(left, right), None, meter));\n        \
                  match evaluated {{\n            \
                  Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Integer(value)),\n            \
@@ -3056,19 +3060,19 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
             format!(
                 "|frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {{\n        \
                  let [left, right] = args else {{\n            \
-                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);\n        }};\n        \
+                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let operand_type = match left {{\n            \
                  rt::Value::Boolean(_) => rt::ValueType::Boolean,\n            \
                  rt::Value::Integer(_) => rt::ValueType::Integer,\n            \
-                 _ => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n        \
+                 _ => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedOperandKindUnsupported }}),\n        \
                  }};\n        \
                  let environment = match rt::TypeEnvironment::new(Vec::new(), core::iter::empty::<rt::ObjectTypeDeclaration>()) {{\n            \
                  Ok(environment) => environment,\n            \
-                 Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n        \
+                 Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEnvironmentRejected }}),\n        \
                  }};\n        \
                  let checked = match environment.check_equality({path}, rt::EqualityOperand::typed(operand_type.clone()), rt::EqualityOperand::typed(operand_type)) {{\n            \
                  Ok(checked) => checked,\n            \
-                 Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n        \
+                 Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n        \
                  }};\n        \
                  match frame.meter(|meter| checked.evaluate(left, right, meter)) {{\n            \
                  Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Boolean(value)),\n            \

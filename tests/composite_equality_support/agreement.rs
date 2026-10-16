@@ -126,7 +126,11 @@ macro_rules! shared_helpers {
                 .iter()
                 .map(|kind| meter.consumed(*kind))
                 .collect();
-            (outcome, meter.admitted_charges().to_vec(), consumed)
+            (
+                outcome,
+                meter.admitted_charges().iter().map(|charge| charge.point).collect(),
+                consumed,
+            )
         }
 
         /// Deny each admitted charge occurrence in turn, discovered
@@ -144,7 +148,7 @@ macro_rules! shared_helpers {
         ) -> Vec<(ChargePoint, u64, Outcome<bool>, Vec<u64>)> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
-            let charges = meter.admitted_charges().to_vec();
+            let charges = meter.admitted_charges().iter().map(|charge| charge.point).collect::<Vec<_>>();
             let mut seen: Vec<ChargePoint> = Vec::new();
             charges
                 .into_iter()
@@ -454,7 +458,13 @@ macro_rules! shared_helpers {
             };
             let checked = match environment.check_equality(operator, left_operand, right_operand) {
                 Ok(checked) => checked,
-                Err(_) => return Outcome::Refused(Refusal::CheckedInvariant),
+                Err(error) => {
+                    return Outcome::Refused(Refusal::CheckedInvariant {
+                        cause: quire_exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {
+                            cause: error.cause,
+                        },
+                    })
+                }
             };
             checked.evaluate(left_value, right_value, meter)
         }

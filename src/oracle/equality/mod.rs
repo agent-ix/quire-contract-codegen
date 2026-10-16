@@ -1793,26 +1793,26 @@ impl SourceBuilder {
             "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n\
              \x20   let left_source = match left_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }}),\n\x20   }};\n\
              \x20   let left_target = match left_target_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }}),\n\x20   }};\n\
              \x20   let left_comparison = match &left_target {{\n\
              \x20       Some(target) => target.clone(),\n\
              \x20       None => left_source.clone(),\n\x20   }};\n\
-             \x20   if environment.check_type(&left_comparison).is_err() {{\n\
-             \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);\n\x20   }}\n\
+             \x20   if let Err(error) = environment.check_type(&left_comparison) {{\n\
+             \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n\x20   }}\n\
              \x20   let right_source = match right_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }}),\n\x20   }};\n\
              \x20   let right_target = match right_target_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed }}),\n\x20   }};\n\
              \x20   let right_comparison = match &right_target {{\n\
              \x20       Some(target) => target.clone(),\n\
              \x20       None => right_source.clone(),\n\x20   }};\n\
-             \x20   if environment.check_type(&right_comparison).is_err() {{\n\
-             \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);\n\x20   }}\n\
+             \x20   if let Err(error) = environment.check_type(&right_comparison) {{\n\
+             \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedTypeCheckRejected {{ cause: error.cause }} }});\n\x20   }}\n\
              \x20   let left_operand = match left_target {{\n\
              \x20       Some(target) => rt::EqualityOperand::converted(left_source, target),\n\
              \x20       None => rt::EqualityOperand::typed(left_source),\n\x20   }};\n\
@@ -1821,7 +1821,7 @@ impl SourceBuilder {
              \x20       None => rt::EqualityOperand::typed(right_source),\n\x20   }};\n\
              \x20   let checked = match environment.check_equality({}, left_operand, right_operand) {{\n\
              \x20       Ok(checked) => checked,\n\
-             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n\x20   }};\n\
              \x20   checked.evaluate(left, right, meter)\n}}\n",
             item.operator.identity(),
             item.operator.path()
