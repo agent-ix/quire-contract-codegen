@@ -29,14 +29,14 @@ use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     classify_kani_run, execute_kani_obligation, execute_kani_scalar_native,
     generate_exact_scalar_oracles, generate_routed, negotiate_kani_obligations,
-    routed_contract_lowering_profile, Candidate, ClaimDisposition, ClaimMap,
+    routed_contract_lowering_profile, run_terminal_value, Candidate, ClaimDisposition, ClaimMap,
     ContractRequestPosition, ExactScalarClaim, ExactScalarItem, ExactScalarOperation,
     ExactScalarRefusal, GenerationContexts, InvalidObligationItem, KaniExecutionRefusal,
-    KaniExecutionRequest, KaniGenerationContext, KaniInconclusiveReason, KaniInstallation,
-    KaniObligationError, KaniObligationHarness, KaniObligationOutcome, KaniObligationRequest,
-    KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness, KaniSolver, KaniTool,
-    KaniToolError, KindOutput, ObligationDisposition, ObligationItem, ObligationKind,
-    ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
+    KaniExecutionRequest, KaniFailurePhase, KaniGenerationContext, KaniInconclusiveReason,
+    KaniInstallation, KaniObligationError, KaniObligationHarness, KaniObligationOutcome,
+    KaniObligationRequest, KaniRunOutcome, KaniScalarNativeRequest, KaniScalarObligationHarness,
+    KaniSolver, KaniTool, KaniToolError, KindOutput, ObligationDisposition, ObligationItem,
+    ObligationKind, ObligationRecord, ObligationSubject, OperationProvenance, RoutedGenerationItem,
     UnsupportedObligation, UpstreamBlocker, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 use quire_contract_model::{
@@ -2028,6 +2028,7 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
         harness: (&harness).into(),
         crate_directory: &directory,
         target_directory: &directory.join("target"),
+        home_directory: None,
     })
     .unwrap_err();
     assert!(matches!(
@@ -2068,6 +2069,7 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
             harness: (&harness).into(),
             crate_directory: &directory,
             target_directory: &directory.join("target"),
+            home_directory: None,
         })
         .unwrap_err();
         match refusal {
@@ -2145,6 +2147,7 @@ fn run(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
     fs::write(
@@ -2159,6 +2162,158 @@ fn run(
     .unwrap();
     let _ = fs::remove_dir_all(crate_directory);
     evidence
+}
+
+/// One item that does not compile: it reads a name nothing defines. It follows the healthy
+/// subject, so the subject the harness calls resolves and this is the only compile error.
+const BROKEN_ITEM: &str = "pub fn broken() -> i64 {\n    undefined_name\n}\n";
+
+/// A launcher that exits 1 with a usage error on stderr, exports no report and prints nothing on
+/// stdout, installed at `path` once it can be started.
+#[cfg(unix)]
+fn write_failing_launcher(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::write(
+        path,
+        "#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\nprintf 'error: unexpected argument\\n' >&2\nexit 1\n",
+    )
+    .unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    for _ in 0..500 {
+        match std::process::Command::new(path).arg("--probe").status() {
+            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => break,
+        }
+    }
+}
+
+/// The FR-029 terminal value of a `NoVerdict` evidence that carries a diagnostic record is
+/// `Failed`, and the record rides the public evidence and its wire form.
+///
+/// Trace: FR-017-AC-32, FR-017-AC-36, TC-027, TC-043
+#[cfg(unix)]
+#[test]
+fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
+    let cancel = quire_exact::Cancel::new();
+    let package = bound_package(1000);
+    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    let directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let launcher = directory.join("cargo-kani");
+    write_failing_launcher(&launcher);
+    let installation = KaniInstallation::new(launcher);
+    let mut evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: (&harness).into(),
+        crate_directory: &directory,
+        target_directory: &directory.join("target"),
+        home_directory: None,
+    })
+    .unwrap();
+    let _ = fs::remove_dir_all(&directory);
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict
+        }
+    );
+    let record = evidence
+        .diagnostics
+        .take()
+        .expect("a NoVerdict run has a record");
+    assert_eq!(record.stderr.text, "error: unexpected argument\n");
+    assert_eq!(record.phase, KaniFailurePhase::Launcher);
+    let terminal = run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
+    assert_eq!(format!("{terminal:?}"), "Failed");
+    evidence.diagnostics = Some(record);
+    let wire = serde_json::to_value(&evidence).unwrap();
+    assert_eq!(wire["diagnostics"]["phase"], "launcher");
+    assert_eq!(wire["diagnostics"]["stderr"]["omittedBytes"], 0);
+}
+
+/// Real Kani on a crate that holds the generated harness byte for byte beside an item that does
+/// not compile (the `make kani` shape of a non-compiling harness): the run exits unsuccessfully,
+/// exports no report and is `NoVerdict` with phase `compile`, the rustc error code and Kani's
+/// `Failed to execute cargo` line in the stdout excerpt, and Cargo's `could not compile` line,
+/// with the crate path redacted, in the stderr excerpt.
+///
+/// Trace: FR-017-AC-32, TC-027
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let package = bound_package(1000);
+    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    let subject = format!("{HEALTHY_SUBJECT}\n{BROKEN_ITEM}");
+    let crate_directory = write_crate(&harness, &subject);
+    let target = crate_directory.join("target");
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: (&harness).into(),
+        crate_directory: &crate_directory,
+        target_directory: &target,
+        home_directory: None,
+    })
+    .unwrap_or_else(|refusal| panic!("a run that started is not refused: {refusal}"));
+    let _ = fs::remove_dir_all(&crate_directory);
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict
+        }
+    );
+    assert_ne!(evidence.exit_code, Some(0));
+    assert!(evidence.checks.is_empty());
+    let record = evidence.diagnostics.expect("a NoVerdict run has a record");
+    assert_eq!(record.phase, KaniFailurePhase::Compile, "{record:?}");
+    assert_eq!(
+        record.stdout.text.matches("error[E0425]").count(),
+        1,
+        "{}",
+        record.stdout.text
+    );
+    assert!(
+        record
+            .stdout
+            .text
+            .contains("cannot find value `undefined_name`"),
+        "{}",
+        record.stdout.text
+    );
+    for text in [&record.stdout.text, &record.stderr.text] {
+        assert!(
+            !text.contains("cannot find function `withdraw`")
+                && !text.contains("cannot find function withdraw"),
+            "the healthy subject resolves, so the only error is the broken item: {text}"
+        );
+    }
+    assert!(
+        record
+            .stdout
+            .text
+            .contains("error: Failed to execute cargo"),
+        "{}",
+        record.stdout.text
+    );
+    assert!(
+        record.stderr.text.contains("error: could not compile"),
+        "{}",
+        record.stderr.text
+    );
+    let crate_text = crate_directory.display().to_string();
+    assert!(
+        record.stderr.text.contains("<CRATE_DIR>"),
+        "{}",
+        record.stderr.text
+    );
+    for text in [&record.stdout.text, &record.stderr.text] {
+        assert!(!text.contains(&crate_text), "{text}");
+    }
 }
 
 /// Real Kani runs: the precondition, postcondition and invariant of a healthy subject verify
@@ -2252,6 +2407,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| {
         panic!("a run that started must not surface as a refusal: {refusal}")
@@ -2279,6 +2435,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        home_directory: None,
     })
     .unwrap_err();
     assert!(matches!(
@@ -2530,6 +2687,7 @@ fn run_scalar_under_real_kani(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(&crate_directory);
@@ -2565,6 +2723,7 @@ fn tc_027_a_routed_scalar_harness_verifies() {
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        home_directory: None,
     })
     .unwrap_err();
     assert!(matches!(

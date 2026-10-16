@@ -282,6 +282,7 @@ fn run_falsifying(installation: &KaniInstallation, harness: &KaniObligationHarne
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &target_directory,
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("real run must not refuse: {refusal}"));
     let counterexample = match evidence.outcome {

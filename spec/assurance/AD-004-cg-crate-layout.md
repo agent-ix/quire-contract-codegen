@@ -238,6 +238,8 @@ src/
       corpus/                 corpus family (at 2f: bounded_kani_corpus.rs, old name kept, unsplit);
                               renders through render.rs from step 4g
     output/                   the one reader of Kani output
+      diagnostics.rs          the bounded NoVerdict record: failure phase from the console markers and
+                              the redacted stream tails (FR-017-AC-32 to AC-36)
       report.rs               typed report parse (--export-json)
       playback.rs             the concrete-playback block: the console-text extraction
                               (`counterexample_playback`) and, from step 2f, the block scan

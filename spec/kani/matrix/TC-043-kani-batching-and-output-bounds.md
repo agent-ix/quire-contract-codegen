@@ -43,7 +43,7 @@ FR-028-AC-12, verified by TC-039.
 9. Leave one member's source out of the crate.
 10. In the `make kani` lane record the process count and wall time before and after batching for
     N = 1, 10 and 50.
-11. (FR-017-AC-36, PLANNED/UNRUN.) Run a batch stand-in of members `a::check`, `b::check` and
+11. (FR-017-AC-36.) Run a batch stand-in of members `a::check`, `b::check` and
     `c::check` that exits 1 with no report and prints `Checking harness a::check...`,
     `Solving with CaDiCaL 3.0.0` and `Checking harness b::check...`; the same group printing a
     compile failure and no `Checking harness` line; one whose report has every member Success and
@@ -136,8 +136,15 @@ and 7). The unit lane's batch reports are built in the shape the real batch repo
 (`harness_id`, an `error_details` entry whose `exit_status` is `timeout` for a member Kani cut off,
 results in the order Kani ran them); no real batch report is stored as a fixture.
 
-Step 11 (FR-017-AC-36) has no test yet; it belongs with the batch stand-ins in
-`src/kani/run/execute.rs` (`batch_tests`) and is PLANNED/UNRUN.
+Step 11 (FR-017-AC-36) is covered by the tests of `batch_tests::no_verdict_diagnostics` in
+`src/kani/run/execute.rs` (`tc_043_group_members_take_their_own_phase_and_share_the_groups_excerpts`,
+`tc_043_a_group_report_decides_between_unknown_and_no_record`,
+`tc_043_stream_text_never_changes_the_classification`,
+`tc_043_over_limit_and_unread_streams_stay_refused_with_no_record` and
+`tc_043_requests_with_different_home_directories_are_not_grouped`), by the phase tests in
+`src/kani/output/diagnostics.rs`, and, for the FR-029 terminal value,
+`tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics` in
+`tests/it/kani_obligations.rs`.
 
 ## Status
 

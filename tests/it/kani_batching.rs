@@ -171,6 +171,7 @@ impl Lane {
             harness: harness.into(),
             crate_directory: &self.crate_directory,
             target_directory: target,
+            home_directory: None,
         }
     }
 }

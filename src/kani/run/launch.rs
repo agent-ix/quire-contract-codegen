@@ -31,6 +31,27 @@ use rustix::{
     time::Timespec,
 };
 
+/// The launcher's two output streams, each whole, as the process wrote them.
+#[derive(Debug, Default)]
+pub(super) struct CapturedStreams {
+    /// Everything the process wrote to stdout.
+    pub(super) stdout: Vec<u8>,
+    /// Everything the process wrote to stderr.
+    pub(super) stderr: Vec<u8>,
+}
+
+impl CapturedStreams {
+    /// Stdout and stderr, each decoded lossily and joined by one line feed: the console text
+    /// `classify_kani_run` reads.
+    pub(super) fn merged_text(&self) -> String {
+        format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&self.stdout),
+            String::from_utf8_lossy(&self.stderr)
+        )
+    }
+}
+
 /// How the launcher's run within its caller-declared budget
 /// (the wall-clock ceiling of its identity for a bounded backend launch)
 /// concluded.
@@ -43,8 +64,9 @@ pub(super) enum LaunchOutcome {
         exited_successfully: bool,
         /// `ExitStatus::code()`.
         exit_code: Option<i32>,
-        /// Combined stdout and stderr, newline-joined, matching `classify_kani_run`'s input shape.
-        text: String,
+        /// The two streams, each whole. The only copy: the merged text classification reads
+        /// is built from it by [`CapturedStreams::merged_text`].
+        streams: CapturedStreams,
     },
     /// The budget elapsed before the process exited. The launcher's whole process group has been
     /// killed and the launcher reaped. Production bounded execution confirms teardown of
@@ -373,11 +395,10 @@ fn run_monitored(
         WaitConclusion::Completed => LaunchOutcome::Completed {
             exited_successfully: reaped.success(),
             exit_code: reaped.code(),
-            text: format!(
-                "{}\n{}",
-                String::from_utf8_lossy(&stdout_bytes),
-                String::from_utf8_lossy(&stderr_bytes)
-            ),
+            streams: CapturedStreams {
+                stdout: stdout_bytes,
+                stderr: stderr_bytes,
+            },
         },
         WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
         WaitConclusion::Cancelled { source } => LaunchOutcome::Cancelled { source },
@@ -970,15 +991,36 @@ mod tests {
             LaunchOutcome::Completed {
                 exited_successfully,
                 exit_code,
-                text,
+                streams,
             } => {
                 assert!(!exited_successfully);
                 assert_eq!(exit_code, Some(3));
-                assert!(text.contains("out"));
-                assert!(text.contains("err"));
+                assert_eq!(streams.stdout, b"out");
+                assert_eq!(streams.stderr, b"err");
+                assert_eq!(streams.merged_text(), "out\nerr");
             }
             other => panic!("a fast process must complete, not end as {other:?}"),
         }
+    }
+
+    /// The merged text classification reads is built from the kept streams alone, byte for byte
+    /// as the launch used to join them: lossy stdout, one line feed, lossy stderr.
+    ///
+    /// Trace: FR-017-AC-36, TC-043
+    #[test]
+    fn the_merged_text_is_the_lossy_streams_joined_by_one_line_feed() {
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg("printf 'a\\377b'; printf 'c\\n' 1>&2; exit 1");
+        let LaunchOutcome::Completed { streams, .. } =
+            run_launcher_with_timeout(command, Duration::from_secs(5)).unwrap()
+        else {
+            panic!("a fast process completes");
+        };
+        assert_eq!(streams.stdout, b"a\xffb");
+        assert_eq!(streams.stderr, b"c\n");
+        assert_eq!(streams.merged_text(), "a\u{fffd}b\nc\n");
     }
 
     /// A stream of more than the limit is refused whole, never truncated to a tail and returned;
@@ -1152,7 +1194,7 @@ mod tests {
                 "{stream}: one byte over the limit is refused"
             );
             let LaunchOutcome::Completed {
-                exit_code, text, ..
+                exit_code, streams, ..
             } = run_launcher_with_timeout(
                 printer(stream, CAPTURE_LIMIT, "exit 3"),
                 Duration::from_secs(60),
@@ -1162,7 +1204,11 @@ mod tests {
                 panic!("{stream}: exactly the limit completes");
             };
             assert_eq!(exit_code, Some(3));
-            assert_eq!(text.len(), CAPTURE_LIMIT + 1, "{stream}: the whole stream");
+            assert_eq!(
+                streams.merged_text().len(),
+                CAPTURE_LIMIT + 1,
+                "{stream}: the whole stream"
+            );
         }
     }
 
@@ -1419,7 +1465,7 @@ mod tests {
         let outcome = run_launcher_with_timeout(command, Duration::MAX).unwrap();
         assert!(matches!(
             outcome,
-            LaunchOutcome::Completed { exit_code: Some(0), ref text, .. } if text.contains("done")
+            LaunchOutcome::Completed { exit_code: Some(0), ref streams, .. } if streams.merged_text().contains("done")
         ));
     }
     /// Trace: FR-028-AC-21.
