@@ -92,8 +92,9 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 16. TC-048 owns the planned closed strength projection, disagreement across backend outcomes,
     F-2 native GeneratedFault before F-3 RefusedInput, distinct F-4 Admission/F-5 ExactEvaluation/
     F-6 RefinementCeiling stages, F-7 comparison, ordinary shadow-inconclusive rows, vacuous record
-    category and completed parity Proved/Tested outcomes. Until CG consumes the delivered QSL facade, no bounded-shadow
-    outcome reaches the map (FR-029-AC-21). CG prechecks and
+    category and completed parity Proved/Tested outcomes. TC-048 step 8 checks that the map has no
+    proof-subject or proof-strength input and `TerminalPairError` has no bounded-shadow variant
+    (FR-029-AC-21); the production routing of shadow outcomes (FR-029-AC-30) is planned. CG prechecks and
     wrong-claim reports yield no terminal value; binding-valid QSL `prepare` non-fault `Refused`
     yields Inconclusive(ReplayRefused) with QSL code. Inspection establishes that an actual bound
     `Fault` or `Admission(Fault)` report yields Failed, without fabricating one. Changing one
@@ -110,5 +111,5 @@ by `tc_040_a_fault_in_any_replay_wrapper_is_failed`, which builds each fault wra
 constructible `InternalFault` (QSL bcca433) and asserts `Failed`. Step 15 (FR-029-AC-16, IR-460)
 is covered: the reproduced and the inconclusive results are real `StateClauseReplayResult`s of the
 QSL twin. The state-clause fault readings are step 9's (FR-029-AC-10). Step 16 remains planned
-(IR-635 parity in TC-048). Step 17 is covered by the normal replay control and real-Kani
+(IR-806 parity in TC-048). Step 17 is covered by the normal replay control and real-Kani
 `deposit_debiting` test.

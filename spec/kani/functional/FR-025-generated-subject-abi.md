@@ -69,7 +69,7 @@ gets a row in the table only when its witness decodes into the complete-V1 value
 - If an obligation is a frame obligation, then the generator shall account it `unsupported` with a
   typed reason and emit no harness.
 
-### Composite leaf bindings (planned IR-635)
+### Composite leaf bindings (planned IR-806)
 
 For a composite shadow, the drawn primitive leaves are arguments; the composite is not itself a
 machine argument. This preserves AC-7 and FR-015 AC-70. When such a harness is emitted, the
@@ -99,7 +99,7 @@ adds no unsupported-family machine ABI or implicit integer narrowing.
 | FR-025-AC-6 | A binding that names no parameter of the selected function, and a parameter of that function with no binding, are each refused at generation with a typed reason and no harness. | Test (TC-036) |
 | FR-025-AC-7 | An argument of a family with no row in the Rust-type table (rational, decimal, IEEE, text, enum, composite, collection or function) is accounted `unsupported` with a typed reason naming the family, and no harness is emitted. | Test (TC-036) |
 | FR-025-AC-8 | A harness over a state-reading obligation passes each state value to the subject as `&mut` to a harness-owned value and copies it before the call; the pre-state the harness asserts over is the copy, and the post-state is the value after the call. | Test (TC-036) |
-| FR-025-AC-9 | PLANNED (IR-635). Every emitted composite shadow leaf binding retains its original operand/parameter node, typed path, declared domain and primitive draw type in symbolic call order; controls distinguish absent/null/present slots and option/union members. A missing, duplicate, unknown or domain/type-conflicting leaf refuses with a typed reason and no harness; parameter/literal and literal/literal operands retain their literal singleton identity/value with no unconstrained draw. Public reconstruction preserves these facts through FR-033. | Test |
+| FR-025-AC-9 | PLANNED (IR-806). Every emitted composite shadow leaf binding retains its original operand/parameter node, typed path, declared domain and primitive draw type in symbolic call order; controls distinguish absent/null/present slots and option/union members. A missing, duplicate, unknown or domain/type-conflicting leaf refuses with a typed reason and no harness; parameter/literal and literal/literal operands retain their literal singleton identity/value with no unconstrained draw. Public reconstruction preserves these facts through FR-033. | Test |
 
 ## Dependencies
 

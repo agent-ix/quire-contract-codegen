@@ -151,12 +151,12 @@ operations:
     semantics: >-
       the ordinary source-predicate match has no wildcard arm; falsified is Refuted only with
       reproduced replay, and this ReplaySettlement accompanies falsified only (FR-029 AC-15).
-      Planned IR-635 composite parity takes a distinct typed same-claim settlement input: FR-029
+      Planned IR-806 composite parity takes a distinct typed same-claim settlement input: FR-029
       AC-17 and AC-19 to AC-27 own closed strength projection, cross-outcome disagreement priority,
       ordinary shadow-inconclusive/resource rows, vacuous category and completed Proved/Tested
       outcomes; TC-048 owns its scenarios. UNVERIFIED SOURCE and gated on actual QSL-640 API
       delivery. The function takes no proof-subject or proof-strength input and TerminalPairError
-      has no bounded-shadow variant; IR-635 owns those inputs and the parity route.
+      has no bounded-shadow variant; IR-806 owns those inputs and the parity route.
   - name: ir_outcome_terminal_value
     inputs: [Contract IR KaniOutcome, the SUCCESS-check count, an optional ReplaySettlement as run_terminal_value takes it]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)

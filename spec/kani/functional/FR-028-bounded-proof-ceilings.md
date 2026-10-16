@@ -186,7 +186,7 @@ Criterion-level implementation order is FR-017 launcher, AC-21's preceding conta
 slice (PR #295), FR-034 ownership, then AC-24 native refinement. The FR-034 specification may
 merge before containment code; completing all parent IR-241 is not a prerequisite.
 
-### Parity settlement projection (planned IR-635)
+### Parity settlement projection (planned IR-806)
 
 The strength names, independent comparison, domain-containment checks and native resource
 classification above remain authoritative. [FR-029](./FR-029-run-outcome-terminal-record.md) AC-17
@@ -310,8 +310,8 @@ None of these is decided here, and none is guessed.
   state (ADR-003 Q2 says an item with no finite bound gets no harness). The strengths are reported
   as they are and the owner's answer decides which of them closes a row.
 - **Delivery of QSL composite parity settlement.** FR-029 AC-17 specifies the planned QSL-640-gated
-  parity settlement; until actual API delivery the interim shadow refusals still yield no terminal
-  value.
+  parity settlement; until the production path invokes the delivered parity API, no bounded-shadow
+  outcome is passed to `run_terminal_value` (FR-029-AC-30).
 - **The refinement subject after the evaluation seam moves (QSL, IR-583; Contract Runtime and
   `quire-exact`, IR-349).** The refinement obligation targets the generated oracle's signature and
   isolates the abstraction function in one module (FR-028-AC-14), so only that module changes if the
@@ -374,8 +374,8 @@ change.
   and AC-9 are planned and FR-018-AC-2 is partly covered, so FR-015-AC-76 records each as unbacked
   until the matrix lists it covered.
 - A terminal value for a verified shadow result: FR-029-AC-17 specifies the planned QSL-640-gated
-  parity map; no CG function maps a shadow result to a terminal value until the production path
-  invokes QSL's delivered parity API.
+  parity map; until the production path invokes QSL's delivered parity API, `run_terminal_value`
+  and `TerminalPairError` carry no shadow result (FR-029-AC-21, AC-30).
 - A replay path for a shadow counterexample, which needs FR-025's binding for a composite leaf;
   until then a falsified shadow harness has no terminal value (FR-029-AC-17).
 - Renaming ADR-003's Q1 sentence on co-ownership once the question above is answered.

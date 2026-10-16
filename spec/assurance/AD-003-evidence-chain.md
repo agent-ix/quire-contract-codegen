@@ -287,7 +287,7 @@ authored).
   and applies on every outcome, including refusal, exact `Incomplete`,
   generated fault and divergence. Report `claim()` on every outcome is measured in merged
   change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
-- E-1 composite extension (PLANNED / UNRUN CG CONSUMER, IR-635/QSL-640). CG's
+- E-1 composite extension (PLANNED / UNRUN CG CONSUMER, IR-806/QSL-640). CG's
   composite O-09 preimage contains only the exact claimed equality/inequality application
   node, its authentic occurrence key from the recompiled original package, the obligation
   kind and one argument per operand position in operand order. A self-comparison contributes
