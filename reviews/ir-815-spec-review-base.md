@@ -135,7 +135,12 @@ bindings: []
 | FND-003 | fixed | - |
 | FND-004 | fixed | - |
 | FND-005 | fixed | - |
+| FND-006 | fixed | - |
 
 ## Disposition round 1 verdict
 
 **Round 1: PASS for FND-001 to FND-005, but one new medium finding (FND-006) keeps the PR not mergeable.** Reviewed 55c3347 against origin/main fe20ecc. FR-002-AC-13 to AC-16 cover every completion combination: both true, precondition false, precondition true with postcondition false, and either one not completing. They do not overlap. FR-004-AC-19 to AC-22 restate FR-004's four per-clause rules exactly. AC-9 now names `TypedExpression` and `oracle::boolean_v1`, so the V1 harness fails it. FR-002 OQ-2 leaves the verdict kind open and only fixes 'not a pass, keeps its cause', so it decides nothing. No existing id is renumbered. FR-002-AC-1 to AC-6 and FR-004-AC-1 to AC-15 are unchanged.
+
+## Disposition round 2 verdict
+
+**Round 2: PASS. FND-006 is fixed and SR-11855 has no open finding.** Reviewed f066aca against origin/main fe20ecc. A new unwanted-behaviour statement (FR-002 line 68-69) and FR-002-AC-17 and AC-18 now forbid both subject invocation and postcondition evaluation when the precondition does not complete. Each new criterion states one response. AC-16 was narrowed to keep its cause and not count as a pass. No id is renumbered. TC-004's expected results, the strategy matrix row, TC-004's Traces To, the AD-004 range and the FR-002 OQ-1 range all name AC-17 and AC-18. `quire validate` exits 0 and `quire matrix` shows AC-16 to AC-18 `untagged` and planned. Optional wording nits, not blocking: AC-16 lacks an 'and' before 'is not counted as a pass'. TC-004's expected-results list now has an 'and' in the middle of the list.
