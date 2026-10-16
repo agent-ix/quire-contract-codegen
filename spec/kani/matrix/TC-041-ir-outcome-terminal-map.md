@@ -148,7 +148,7 @@ FR-127/FR-314 and the registered SMT backend are available. The current Kani tes
 the earlier count-only payload and do not yet satisfy the amended criteria. IR-666's public converter tests
 exercise steps 14 to 16 against genuine QSL F-1 to F-7 reports, including native causes, limit
 stages, complete identity binding and the `prepare` refusal. The original-artifact builder,
-same-artifact native execution and production invocation remain planned under IR-635. Step 7's
+same-artifact native execution and production invocation remain planned under IR-806. Step 7's
 inspection is a `syn`
 test over `kani/terminal.rs`. Step 9 maps a `Counterexample` with `ReplaySettlement::Fault`, with
 each fault wrapper FR-029-AC-10 lists (built from QSL's constructible `InternalFault`, QSL

@@ -113,13 +113,11 @@ and never replace positive QSL evaluation with a verdict double.
 8. Feed each QSL result/record through the public converter and terminal map. Read actual record
    category/cause for Proved0. Cross-bind another run/result and alter node, operation, operand,
    domain, limits or proof-content identity; each CG precheck or failed report binding returns no
-   report terminal value. Keep QSL refusal codes, executor faults and CG defect causes typed. Until
-   production CG invokes the delivered QSL parity facade, also exercise inconclusive
-   and cover-unsatisfied shadows with retained refinement_failed: each takes typed interim
-   NonProductionProof carrying that strength and returns no terminal value. IR-241 owns the refusal
-   variant and verified-strength input; IR-635 owns the widened interim case. Cases without
-   disagreement take ordinary inconclusive rows. The IR-666 direct report converter already preserves
-   the disagreement-first Failed/CgDefect rule. IR-635 owns original-artifact setup, prechecks and
+   report terminal value. Keep QSL refusal codes, executor faults and CG defect causes typed. Assert that `run_terminal_value` has no
+   proof-subject or proof-strength input and `TerminalPairError` has no bounded-shadow variant
+   (FR-029-AC-21); the permanent exclusion of shadow outcomes from `run_terminal_value` and their routing
+   only to the parity route (FR-029-AC-30 and AC-31) is planned and has no test yet. The IR-666 direct report converter already preserves
+   the disagreement-first Failed/CgDefect rule. IR-806 owns original-artifact setup, prechecks and
    production invocation. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.
 
@@ -228,7 +226,7 @@ delivered API must establish their actual Rust representation before positive te
 IR-666 directly tests the public facade's claim shape, complete report identity, F rows and V
 rows through the CG converter. IR-635 adds the Eq-only verified constructor controls described
 above. Falsified construction, same-artifact native observation, backend/refinement strength
-production and generated-family controls remain planned under IR-635; Ne awaits IR-690. Real Text-leaf profile
+production and generated-family controls remain planned under IR-806; Ne literal/literal remains the FR-033-AC-1 remainder. Real Text-leaf profile
 selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
 remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
 as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact

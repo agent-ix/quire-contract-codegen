@@ -147,18 +147,16 @@ operations:
     semantics: the classifier execute_kani_obligation uses, so a test asserting falsification routes through production classification and an inconclusive run is never read as a decided failure; the verdict is read from the report only and the console text is read only for the falsifying playback; a report it cannot read exactly is a refusal, never an outcome (FR-017)
   - name: run_terminal_value
     inputs: [KaniRunOutcome, the SUCCESS-check count, an optional ReplaySettlement (reproduced | disagreement carrying QSL's DisagreementCause | refused carrying a ReplayRefusal | setup refusal carrying a QSL Code | fault | CG defect), which the From impls of SpineReplayError, ReplayPackageError, FrameReplayError, StateClauseReplayError, DependencyLockError, EvidenceFailureCause, ReplayVerdict and the QSL CallSiteRefusal build; the EvidenceFailureCause impl reads a decode failure and a value outside the proof bound as a CG defect, a disagreement as its QSL cause, and a reproduction in a category other than violation as a CG defect]
-    output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement; planned, IR-241: NonProductionProof | ShadowCounterexample)
+    output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
     semantics: >-
       the ordinary source-predicate match has no wildcard arm; falsified is Refuted only with
       reproduced replay, and this ReplaySettlement accompanies falsified only (FR-029 AC-15).
-      Planned IR-635 composite parity takes a distinct typed same-claim settlement input: FR-029
+      Planned IR-806 composite parity takes a distinct typed same-claim settlement input: FR-029
       AC-17 and AC-19 to AC-27 own closed strength projection, cross-outcome disagreement priority,
       ordinary shadow-inconclusive/resource rows, vacuous category and completed Proved/Tested
       outcomes; TC-048 owns its scenarios. UNVERIFIED SOURCE and gated on actual QSL-640 API
-      delivery. IR-241 owns the proof-subject/verified-strength inputs and interim
-      NonProductionProof / ShadowCounterexample variants; IR-635 widens NonProductionProof to
-      bounded-shadow inconclusive/cover-unsatisfied outcomes retaining refinement_failed. These
-      refusals hold until delivery, not as the final map.
+      delivery. The function takes no proof-subject or proof-strength input and TerminalPairError
+      has no bounded-shadow variant; IR-806 owns those inputs and the parity route.
   - name: ir_outcome_terminal_value
     inputs: [Contract IR KaniOutcome, the SUCCESS-check count, an optional ReplaySettlement as run_terminal_value takes it]
     output: qsl-replay TerminalValue | TerminalPairError (MissingSettlement | UnexpectedSettlement)
