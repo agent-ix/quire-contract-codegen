@@ -75,3 +75,4 @@ checklist passes.
 | FND-002 | fixed | Round 1 (fe3a4e1): AC-36 now uses a separate run with a Failure entry (no member NoVerdict, no record), matching execute.rs:790-793 and TC-043 step 11. |
 | FND-003 | fixed | Round 1 (fe3a4e1): AC-36 excludes `diagnostics` and `memory` and compares the FR-029 value to `Failed` (FR-029-AC-4, terminal.rs:128-135), with and without the record. |
 | FND-004 | fixed | Round 2 (d2784f0): d2784f0 adds no_verdict_diagnostics (diagnostics, KaniFailurePhase, home_directory, serialize-only) to interface-001 :352 and names home_directory and the planned grouping key at :125, :127 and :131. |
+| FND-005 | fixed | Round 3 (04826e7): AC-21 and its grouping bullet are byte-identical to origin/main again, tests.md:43 and :100 match main, the home rule is a separate planned bullet (FR-017:225-227) citing AC-36, and TC-043 expected 11 cites only AC-36, so no Covered row credits an unrun clause. |
