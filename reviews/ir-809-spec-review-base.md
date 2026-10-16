@@ -54,3 +54,17 @@ the three-line Outputs insert (origin/main line 245).
 
 Changes requested: FND-001 (checklist-mandated) and the two AC-36 clauses. The rest of the base
 checklist passes.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | interface-001's `kani_obligation_execution_slice.evidence` enumerates the evidence fields and the optional `batch` wire member, and `execute_kani_obligation(s)` list the request inputs, but neither names the new optional `diagnostics` wire member (with `KaniFailurePhase`) or the new `KaniExecutionRequest::home_directory` input. A consumer reading the interface contract will not know the member exists. AD-004's tables are a move plan of pre-existing items (MemoryObservation and KaniGroupRun are absent too), so AD-004 needs no update; interface-001 should get one line in this PR or a tracked follow-up. | spec/core/functional/interface-001-codegen-api.md:125-131, :351; spec/kani/functional/FR-017-kani-execution-evidence.md:77-80 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (fe3a4e1): fe3a4e1 removes every Kani/CBMC version from the new subsection (phase rule, launcher rule, CBMC rationale, tail rationale); remaining Kani 0.68 mentions are pre-existing FR-017 text outside this PR. |
+| FND-002 | fixed | Round 1 (fe3a4e1): AC-36 now uses a separate run with a Failure entry (no member NoVerdict, no record), matching execute.rs:790-793 and TC-043 step 11. |
+| FND-003 | fixed | Round 1 (fe3a4e1): AC-36 excludes `diagnostics` and `memory` and compares the FR-029 value to `Failed` (FR-029-AC-4, terminal.rs:128-135), with and without the record. |

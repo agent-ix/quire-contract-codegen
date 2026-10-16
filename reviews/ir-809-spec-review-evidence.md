@@ -33,3 +33,10 @@ AC-32's non-compiling harness and silent missing-report stand-in are concrete an
 ## Verdict
 
 Evidence plan is adequate; two low gaps.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (fe3a4e1): rustdoc compile_fail example on the record type with a compiling to_string control; `make test` runs `cargo test` (doctests included) and src/core/identity.rs:96 is a working precedent. |
+| FND-002 | fixed | Round 1 (fe3a4e1): The CBMC-failure measurement is now non-normative rationale and 'retaining its cause is outside this requirement', so no AC rests on it. |
