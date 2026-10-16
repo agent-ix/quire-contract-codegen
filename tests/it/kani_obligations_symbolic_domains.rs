@@ -8,7 +8,14 @@ use crate::{
     kani_obligations::scratch,
     scratch_crate::{runtime_dependency, write_manifest},
 };
-use qsl_replay::{call_site, DependencyInput, Identifier, QualifiedName, SourceIdentity};
+use qsl_replay::{
+    call_site, object_reference_witness, replay, write_object_environment, ByteDigest, Category,
+    DeclarationKey, DependencyInput, DigestDomain, DigestRecord, DomainPackageRef,
+    EnvironmentLabels, EnvironmentModel, EnvironmentObject, EnvironmentPopulation, EvaluatedValue,
+    Identifier, ModelNormalizationLimits, QualifiedName, ReplayLimits, ReplayRequestWire,
+    ReplayResult, ReplaySource, ScalarLimits, SelectedObject, SnapshotValue, SourceIdentity,
+    StateEnvironment, WitnessValue,
+};
 use quire_contract_codegen::{
     execute_kani_obligation, negotiate_kani_obligations, CollectionElementIdentity,
     CollectionKindIdentity, CollectionPredicateIdentity, KaniCollectionObligationHarness,
@@ -21,10 +28,11 @@ use quire_contract_model::{
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult,
 };
 use serde_json::{json, Value};
-use std::{env, fs, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, env, fs, path::PathBuf, time::Duration};
 
 const NODE_ID: &str = "ix://ir268.test/domain/Node";
 const SMALL_ID: &str = "ix://ir268.test/domain/SmallInt";
+const POPULATION_ID: &str = "ix://ir268.test/domain/CollectionNodes";
 const SOURCE_ID: &str = "ix://ir268.test/spec";
 const ZERO_SHA256: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -143,7 +151,19 @@ fn model_document() -> Value {
                 ],
                 "operations": []
             }
-        ]
+        ],
+        "populations": [{
+            "identity": POPULATION_ID,
+            "displayName": "CollectionNodes",
+            "kind": {"module": "ir268.test/domain", "name": "population"},
+            "members": [NODE_ID],
+            "extent": "closed",
+            "origin": {"generated": {
+                "generatorIdentity": SOURCE_ID,
+                "generatorVersion": "1.0.0",
+                "inputIdentities": [POPULATION_ID]
+            }}
+        }]
     })
 }
 
@@ -161,6 +181,9 @@ struct Emitted {
     function_digest: String,
     object_type: CheckedNodeId,
     fields: CheckedModelObjectFields,
+    model_bytes: Vec<u8>,
+    model_digest: [u8; 32],
+    source: String,
 }
 
 fn emitted() -> Emitted {
@@ -405,6 +428,172 @@ fn i64_playback_bytes(value: i64) -> Vec<u8> {
     value.to_le_bytes().to_vec()
 }
 
+fn collection_playback_values(counterexample: &str) -> Vec<i64> {
+    let slots = collection_playback_byte_vectors(counterexample);
+    let decode =
+        |bytes: &[u8]| i64::from_le_bytes(bytes.try_into().expect("i64 slot has eight bytes"));
+    let length = usize::try_from(decode(&slots[0])).expect("the symbolic length is nonnegative");
+    assert!((1..=3).contains(&length));
+    assert_eq!(slots.len(), 4);
+    slots[1..=length].iter().map(|slot| decode(slot)).collect()
+}
+
+/// Replay the same source function used by the collection harness against an
+/// object environment whose `items` field is the supplied concrete collection.
+fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult {
+    const OBJECT_KEY: &str = "collection-subject";
+    let source_identity =
+        SourceIdentity::new("agent-ix", "ir268-symbolic.native", "git", "fixture");
+    let selection = QualifiedName::new(vec![Identifier::new("inspect").unwrap()]).unwrap();
+    let site = call_site(
+        source_identity,
+        "ir268-symbolic.native",
+        fixture.source.as_bytes(),
+        [fixture.model_bytes.as_slice()],
+        &DependencyInput::default(),
+        &selection,
+    )
+    .expect("the exact source function remains callable by QSL");
+
+    let model = EnvironmentModel {
+        identity: "ir268.test/domain".to_owned(),
+        version: "1.0.0".to_owned(),
+        digest: fixture.model_digest,
+    };
+    let type_identity = DeclarationKey {
+        package: model.identity.clone(),
+        node: NODE_ID.to_owned(),
+    };
+    let packages = BTreeMap::from([(fixture.model_digest, fixture.model_bytes.clone())]);
+    let model_selections = [DomainPackageRef {
+        identity: model.identity.clone(),
+        version: model.version.clone(),
+        digest: fixture.model_digest,
+    }];
+    let reference = object_reference_witness(
+        &model_selections,
+        &packages,
+        ModelNormalizationLimits::default(),
+        &type_identity,
+        OBJECT_KEY,
+    )
+    .unwrap_or_else(|error| panic!("the admitted object reference is constructible: {error:?}"));
+    assert!(matches!(&reference, WitnessValue::Reference { .. }));
+
+    let selected_object = || SelectedObject {
+        population: POPULATION_ID.to_owned(),
+        key: OBJECT_KEY.to_owned(),
+    };
+    let environment = write_object_environment(
+        EnvironmentLabels {
+            authority: "agent-ix".to_owned(),
+            identity: "ix://ir268.test/collection/environment".to_owned(),
+            revision_namespace: "git".to_owned(),
+            revision: "fixture".to_owned(),
+        },
+        &model,
+        &[EnvironmentPopulation {
+            population: POPULATION_ID.to_owned(),
+            complete: true,
+            objects: vec![EnvironmentObject {
+                key: OBJECT_KEY.to_owned(),
+                type_identity,
+                fields: vec![
+                    (
+                        "items".to_owned(),
+                        SnapshotValue::sequence(
+                            values
+                                .iter()
+                                .map(|value| SnapshotValue::integer(value.to_string()))
+                                .collect(),
+                        ),
+                    ),
+                    ("flags".to_owned(), SnapshotValue::sequence(Vec::new())),
+                    (
+                        "next".to_owned(),
+                        SnapshotValue::reference(selected_object()),
+                    ),
+                    (
+                        "maybe".to_owned(),
+                        SnapshotValue::present(SnapshotValue::reference(selected_object())),
+                    ),
+                    ("many".to_owned(), SnapshotValue::sequence(Vec::new())),
+                ],
+            }],
+        }],
+    )
+    .expect("QSL writes the environment through its authoritative builder");
+
+    let source_digest = DigestRecord::mint(
+        DigestDomain::SourceBytesV1,
+        ByteDigest::of(fixture.source.as_bytes()).as_bytes(),
+    );
+    let model_digest = DigestRecord::mint(DigestDomain::Sha256Jcs, fixture.model_digest);
+    let request = ReplayRequestWire {
+        profile_selections: Vec::new(),
+        package_id: (
+            Some(DigestDomain::PackageSemanticV2.as_str().to_owned()),
+            site.package_id.hex(),
+        ),
+        source_digests: vec![(
+            "agent-ix".to_owned(),
+            "ir268-symbolic.native".to_owned(),
+            "git".to_owned(),
+            "fixture".to_owned(),
+            Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
+            source_digest.hex(),
+        )],
+        dependencies: Vec::new(),
+        selected_function: selection,
+        source: ReplaySource::Input(vec![qsl_replay::CanonicalAssignment {
+            parameter: site.site.parameters[0].1.clone(),
+            value: reference,
+        }]),
+        obligation_identity: [0; 32],
+        backend: "kani-backend-1".to_owned(),
+        state_environment: StateEnvironment::new(Vec::new()),
+        accounting_limits: ScalarLimits::default(),
+        stage_limits: BTreeMap::new(),
+        supplied_limits: None,
+        object_environment: Some(environment.member().clone()),
+        declared_domains: Vec::new(),
+        byte_provision: vec![
+            (
+                Some(DigestDomain::SourceBytesV1.as_str().to_owned()),
+                source_digest.hex(),
+                fixture.source.as_bytes().to_vec(),
+            ),
+            (
+                Some(DigestDomain::Sha256Jcs.as_str().to_owned()),
+                model_digest.hex(),
+                fixture.model_bytes.clone(),
+            ),
+            environment.provision_entry(),
+        ],
+    };
+    replay(request, ReplayLimits::default()).expect("QSL admits and executes the native replay")
+}
+
+fn assert_native_collection_result(fixture: &Emitted, values: &[i64], expected: bool) {
+    let replayed = replay_collection_function(fixture, values);
+    assert_eq!(
+        replayed.category(),
+        if expected {
+            Category::Success
+        } else {
+            Category::Violation
+        }
+    );
+    let ReplayResult::Input(input) = replayed else {
+        panic!("native collection replay uses the input arm");
+    };
+    assert_eq!(
+        input.value(),
+        Some(EvaluatedValue::Boolean(expected)),
+        "native replay evaluates the source-authored collection predicate"
+    );
+}
+
 #[test]
 fn collection_playback_decodes_length_then_element_slots_from_real_byte_shape() {
     let playback = r#"/// Test generated for harness `kob_collection_example::prove_collection_example`
@@ -438,9 +627,10 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     let limits = quire_canonical::Limits::new(1 << 20);
     let document_bytes = quire_canonical::to_vec(&document, limits)
         .expect("the authored model document has bounded JCS bytes");
-    let model_digest = quire_canonical::sha256(&document, limits)
-        .expect("the authored model document has a JCS digest")
-        .to_string();
+    let model_digest_value = quire_canonical::sha256(&document, limits)
+        .expect("the authored model document has a JCS digest");
+    let model_digest = model_digest_value.to_string();
+    let model_digest_bytes = *model_digest_value.as_bytes();
     let unit = source_unit_with_body(&model_digest, body);
     let selection = QualifiedName::new(vec![Identifier::new("inspect").expect("function name")])
         .expect("qualified function name");
@@ -498,6 +688,9 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
         function_digest,
         object_type: object_type.clone(),
         fields: fields.clone(),
+        model_bytes: document_bytes,
+        model_digest: model_digest_bytes,
+        source: unit,
     })
 }
 
@@ -1904,7 +2097,22 @@ fn bounded_sequences_of_string_uuid_and_timestamp_require_element_bounds() {
     }
 }
 
-/// Trace: FR-015-AC-99 (installed-Kani half only), TC-025.
+/// Trace: FR-015-AC-99, TC-025.
+#[test]
+fn native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions() {
+    let healthy = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let mutated = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 1)",
+    );
+    assert_native_collection_result(&healthy, &[1, 2], true);
+    assert_native_collection_result(&mutated, &[0], false);
+}
+
+/// Trace: FR-015-AC-99, TC-025.
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
 fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
@@ -1919,6 +2127,7 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     assert_eq!(healthy_evidence.exit_code, Some(0));
     assert_eq!(healthy_evidence.unwind, 8);
     assert_eq!(healthy_evidence.solver, healthy_harness.identity.solver);
+    assert_native_collection_result(&healthy, &[1, 2], true);
 
     // This is a source-authored claim mutation, recompiled and admitted by QSL, then passed
     // through the same generator. Its counterexample uses the selected field's in-domain 0.
@@ -1934,19 +2143,10 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
     assert!(counterexample.contains(mutated_harness.identity.harness_symbol.as_str()));
-    let slots = collection_playback_byte_vectors(counterexample);
-    assert_eq!(slots.len(), 4, "one length plus three symbolic slots");
-    let decode =
-        |bytes: &[u8]| i64::from_le_bytes(bytes.try_into().expect("i64 slot has eight bytes"));
-    let length = decode(&slots[0]);
-    assert!(
-        (1..=3).contains(&length),
-        "a falsified forall has at least one active in-domain slot"
-    );
-    assert!(slots[1..=length as usize]
-        .iter()
-        .map(|slot| decode(slot))
-        .any(|value| (0..=3).contains(&value) && value < 1));
+    let values = collection_playback_values(counterexample);
+    assert!(values.iter().all(|value| (0..=3).contains(value)));
+    assert!(values.iter().any(|value| *value < 1));
+    assert_native_collection_result(&mutated, &values, false);
     assert_ne!(mutated_evidence.exit_code, Some(0));
 }
 
