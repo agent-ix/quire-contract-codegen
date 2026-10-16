@@ -34,6 +34,18 @@ claim. Also use a bounded Boolean collection field. No copied package wire,
 hand-built package builder, concrete `Vec` input or caller semantic ceiling is
 used.
 
+Distinguish the two missing-upper-bound cases using otherwise identical
+`Sequence<IntRange>` fields. With multiplicity lower bound `0` and no `upper`,
+emit and admit the QSL V2 package, confirm the selected field is an unbounded
+collection (`bounds: None`), then submit its collection claim to IR and require
+`requires_bound` naming the selected field or its unbounded collection type,
+with no harness. With multiplicity lower bound `1` and no `upper`, require QSL
+assembly to refuse `unknown_required_feature`/`unsupported-feature` for
+`UnsupportedModelMember`; no V2 package or IR item is produced, so this case
+must not be reported as an IR `requires_bound`. Separately use an admitted,
+finite-cardinality field whose element type is unbounded `Integer`; require IR
+`requires_bound` naming the element type and no harness.
+
 For each supported collection claim, inspect the generated `kani::any()`
 draws and assumptions. Check both cardinality endpoints and every intervening
 length, both inclusive `IntRange` endpoints and intervening values, both
@@ -101,6 +113,12 @@ QSL's `replay_frame`.
 Four distinct harnesses carry their bounds; no assumption
 excludes an undefined, refused or incomplete outcome; the unbounded, the
 unsatisfiable and the caller-declared obligations are refused with no harness.
+For the collection claim, lower `0` with no finite upper bound is admitted by
+QSL and settles as IR `requires_bound`; lower greater than `0` with no finite
+upper bound is rejected by QSL assembly as `unknown_required_feature`/
+`unsupported-feature` before IR receives a package or item. A finite
+collection containing unbounded `Integer` elements reaches IR and settles as
+`requires_bound` for the element type.
 
 Each harness contains exactly one cover, and the contract harness's cover
 follows its contract call. Each contract harness carries a `requires` for every
