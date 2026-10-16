@@ -3529,6 +3529,7 @@ fn contract_request(
                 CheckedNodeTag::BoundedDomain,
                 CheckedNodeTag::Value,
                 CheckedNodeTag::Expression,
+                CheckedNodeTag::Function,
                 CheckedNodeTag::Claim,
                 CheckedNodeTag::Correspondence,
             ]
@@ -3672,14 +3673,13 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     );
 }
 
-/// Function schedules refuse a function declared over a quantity conversion body, with no
-/// schedule and no artifact. A unit-typed declared result has no scalar kind, so the whole request
-/// is `MissingNode` naming the unit type. Under an integer declared result the body itself is
-/// refused, as a refused function, with `MissingNode` naming the unit type of the conversion.
+/// Function schedules refuse a function declared over a quantity conversion body with the named
+/// capability, as a refused function, whatever result type is declared: no schedule, no module
+/// and no artifact is produced, and the request as a whole still settles.
 ///
 /// Trace: FR-014-AC-2, TC-024
 #[test]
-fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_no_schedule() {
+fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_capability() {
     use quire_contract_codegen::{
         generate_function_schedules, generate_function_schedules_with_limits,
         FunctionScheduleDeclaration, FunctionScheduleLimits, FunctionScheduleRefusal,
@@ -3689,56 +3689,169 @@ fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_no_schedule(
     let body = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
     let unit = ids.resolve(&id(&unit_type()));
     let integer = ids.resolve(&code_id(T_INTEGER));
-    let declaration = |result_type_node_id| FunctionScheduleDeclaration {
-        function_node_id: function.clone(),
-        body_node_id: body.clone(),
-        name: "converting".to_owned(),
-        parameters: Vec::new(),
-        result_type_node_id,
-    };
-
-    let work_limit = 1_000;
-    let by_unit = declaration(unit.clone());
-    assert_eq!(
-        generate_function_schedules(&package, std::slice::from_ref(&by_unit), &[], work_limit)
-            .err(),
-        Some(FunctionScheduleRefusal::MissingNode(unit.clone()))
-    );
-    assert_eq!(
-        generate_function_schedules_with_limits(
-            &package,
-            std::slice::from_ref(&by_unit),
-            &[],
-            FunctionScheduleLimits::default(),
-        )
-        .err(),
-        Some(FunctionScheduleRefusal::MissingNode(unit.clone()))
-    );
-
-    let by_integer = declaration(integer);
-    for generated in [
-        generate_function_schedules(&package, std::slice::from_ref(&by_integer), &[], work_limit),
-        generate_function_schedules_with_limits(
-            &package,
-            std::slice::from_ref(&by_integer),
-            &[],
-            FunctionScheduleLimits::default(),
-        ),
-    ] {
-        let generated = generated.unwrap_or_else(|error| {
-            panic!(
-                "{error:?}; unit {unit:?}; operand {:?}",
-                ids.resolve(&code_id(V_QUANTITY))
-            )
-        });
-        assert!(generated.functions.is_empty(), "no schedule");
-        assert!(generated.modules.is_empty(), "no module artifact");
-        assert_eq!(generated.refused_functions.len(), 1);
-        assert_eq!(
-            generated.refused_functions[0].refusal,
-            FunctionScheduleRefusal::MissingNode(unit.clone())
-        );
+    for result_type_node_id in [unit, integer] {
+        let declaration = FunctionScheduleDeclaration {
+            function_node_id: function.clone(),
+            body_node_id: body.clone(),
+            name: "converting".to_owned(),
+            parameters: Vec::new(),
+            result_type_node_id: result_type_node_id.clone(),
+        };
+        for generated in [
+            generate_function_schedules(&package, std::slice::from_ref(&declaration), &[], 1_000),
+            generate_function_schedules_with_limits(
+                &package,
+                std::slice::from_ref(&declaration),
+                &[],
+                FunctionScheduleLimits::default(),
+            ),
+        ] {
+            let generated = generated.unwrap_or_else(|error| {
+                panic!("result {result_type_node_id:?}: the request settles: {error:?}")
+            });
+            assert!(generated.functions.is_empty(), "no schedule");
+            assert!(generated.modules.is_empty(), "no module artifact");
+            assert_eq!(
+                generated.refused_functions.len(),
+                1,
+                "result {result_type_node_id:?}"
+            );
+            assert_eq!(
+                generated.refused_functions[0].refusal,
+                FunctionScheduleRefusal::QuantityConversionUnsupported {
+                    body: body.clone(),
+                    capability: QUANTITY_CONVERSION_CAPABILITY,
+                },
+                "result {result_type_node_id:?}"
+            );
+        }
     }
+}
+
+/// A call that passes a quantity conversion node as an argument to a declared function is
+/// refused with the named capability and generates no oracle, and so is the declared function
+/// over a conversion body: the conversion is found anywhere in the closure of the request.
+///
+/// Trace: FR-014-AC-2, TC-024
+#[test]
+fn tc_024_function_generator_refuses_a_conversion_reached_as_an_argument_or_a_body() {
+    use quire_contract_codegen::{
+        generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
+        ExactFunctionItem, ExactFunctionRefusal, FunctionParameter,
+    };
+    let (package, ids) = conversion_operand_package().admit_resolved();
+    let adder_body = ids.resolve(&code_id(1001));
+    let call = ids.resolve(&code_id(CALL_OVER_CONVERSION));
+    let conversion = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
+    let integer_value = ids.resolve(&code_id(V_INTEGER));
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let (contract, positions) = contract_request(&package, &[adder_body.clone(), call.clone()]);
+    let expected = |node_id| ClaimDisposition::Refused {
+        refusal: ExactFunctionRefusal::QuantityConversionUnsupported {
+            node_id,
+            capability: QUANTITY_CONVERSION_CAPABILITY,
+        },
+    };
+    let output = generate_exact_function_oracles(
+        &contract,
+        &positions,
+        &[0],
+        &[ExactFunctionDeclaration {
+            node_id: adder_body,
+            name: ADDER_NAME.to_owned(),
+            parameters: vec![
+                FunctionParameter {
+                    name: "a".to_owned(),
+                    type_node_id: integer.clone(),
+                },
+                FunctionParameter {
+                    name: "b".to_owned(),
+                    type_node_id: integer.clone(),
+                },
+            ],
+            result_type: integer,
+            body: ExactFunctionBody::Scalar {
+                operator: IntegerOperator::Add,
+            },
+            capability_requirements: Vec::new(),
+        }],
+        &[1],
+        &[ExactFunctionItem {
+            call_node_id: call,
+            function: ADDER_NAME.to_owned(),
+            argument_node_ids: vec![conversion.clone(), integer_value],
+        }],
+    )
+    .expect("generates");
+    assert_eq!(output.claim_map.items.len(), 1);
+    assert_eq!(output.claim_map.items[0].result, expected(conversion));
+    assert!(
+        !output
+            .claim_map
+            .items
+            .iter()
+            .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))),
+        "no oracle is generated"
+    );
+}
+
+/// A schedule item whose call passes a quantity conversion node as an argument is refused with
+/// the named capability, and no schedule is produced for it.
+///
+/// Trace: FR-014-AC-2, TC-024
+#[test]
+fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_named_capability() {
+    use quire_contract_codegen::{
+        generate_function_schedules, FunctionScheduleDeclaration, FunctionScheduleDisposition,
+        FunctionScheduleItem, FunctionScheduleParameter, FunctionScheduleRefusal,
+    };
+    let (package, ids) = conversion_operand_package().admit_resolved();
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let conversion = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
+    let declaration = FunctionScheduleDeclaration {
+        function_node_id: ids.resolve(&code_id(REFERENCE_FUNCTION)),
+        body_node_id: ids.resolve(&code_id(1001)),
+        name: ADDER_NAME.to_owned(),
+        parameters: vec![
+            FunctionScheduleParameter {
+                value_node_id: ids.resolve(&code_id(ADDER_LEFT)),
+                type_node_id: integer.clone(),
+            },
+            FunctionScheduleParameter {
+                value_node_id: ids.resolve(&code_id(ADDER_RIGHT)),
+                type_node_id: integer.clone(),
+            },
+        ],
+        result_type_node_id: integer,
+    };
+    let item = FunctionScheduleItem {
+        call_node_id: ids.resolve(&code_id(CALL_REFERENCE_OVER_CONVERSION)),
+        function: ADDER_NAME.to_owned(),
+    };
+    let generated = generate_function_schedules(&package, &[declaration], &[item], 1_000)
+        .expect("the request settles");
+    assert_eq!(generated.claims.len(), 1);
+    assert!(
+        matches!(
+            &generated.claims[0].result,
+            FunctionScheduleDisposition::Refused {
+                refusal: FunctionScheduleRefusal::QuantityConversionUnsupported {
+                    body,
+                    capability,
+                },
+                ..
+            } if body == &conversion && *capability == QUANTITY_CONVERSION_CAPABILITY
+        ),
+        "{:?}",
+        generated.claims[0].result
+    );
+    assert!(
+        !generated
+            .claims
+            .iter()
+            .any(|claim| matches!(claim.result, FunctionScheduleDisposition::Scheduled { .. })),
+        "no schedule"
+    );
 }
 
 /// A quantity equality that reads a conversion node as an operand is refused by the

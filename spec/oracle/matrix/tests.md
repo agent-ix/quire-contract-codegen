@@ -10,7 +10,8 @@ type: TestMatrix
 
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
-| FR-014 | FR-014-AC-1, FR-014-AC-3, FR-014-AC-5 through FR-014-AC-11 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-1, FR-014-AC-3, FR-014-AC-5, FR-014-AC-7 through FR-014-AC-11 | TC-024 | ✅ Covered |
+| FR-014 | FR-014-AC-6 | TC-024 | ⚠️ Partially covered; TC-185, TC-186, TC-192 and TC-193 vectors and the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (with the generated quantity grid) agree with direct runtime execution. Not covered: the TC-187 conversion vectors (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26, U29), which FR-014-AC-2 refuses (IR-818), and U02, U05, U06, U09, U11, U12, U14, U20 and U27, which no test runs (IR-823) |
 | FR-014 | FR-014-AC-2 | TC-024, TC-025, TC-033 | ✅ Covered for catalogued checked-package expression families, including text comparison. The `quire.op.quantity.convert` refusal clause is covered at every entry point by the tests AC-2 names, in TC-024, TC-025 and TC-033, each asserting the typed refusal and an empty artifact set. Caller `TextPayload` admission is outside this per-node claim; `tc_024_text_admission_corpus_is_refused_by_ir_today` pins the six attempted text-operand `numeric.convert` nodes as Contract IR refusals, not passing admission evidence |
 | FR-014 | FR-014-AC-4 | TC-024 | ⚠️ Partially covered; byte identity across repeated runs and request permutations and the claim-map order are asserted by regeneration; the criterion's remaining clause has no test |
 | FR-014 | FR-014-AC-12 | TC-024 | ⚠️ Partially covered; a descriptor naming a different catalogued operation is discharged, but the clause covering a descriptor naming an operation the catalogue has no entry for is a defensive branch no fixture reaches -- the only such state is a same-width IEEE conversion, which the package builder refuses to construct |

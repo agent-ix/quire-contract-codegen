@@ -383,6 +383,7 @@ pub fn generate_function_schedules_with_limits(
     };
 
     let mut bindings = BTreeMap::new();
+    let mut conversion_bodies: BTreeMap<CheckedNodeId, schedule::ScheduleRefusal> = BTreeMap::new();
     let mut ordered_declarations: Vec<&FunctionScheduleDeclaration> = declarations.iter().collect();
     ordered_declarations.sort_by(|left, right| left.function_node_id.cmp(&right.function_node_id));
     for declaration in &ordered_declarations {
@@ -403,6 +404,19 @@ pub fn generate_function_schedules_with_limits(
                 function: declaration.function_node_id.clone(),
                 expected: declaration.body_node_id.clone(),
             });
+        }
+        // A quantity conversion body is refused for the capability it needs, whatever the
+        // declared parameter and result types are.
+        if let Some(conversion) = first_conversion_reached(&source_nodes, &declaration.body_node_id)
+        {
+            conversion_bodies.insert(
+                declaration.function_node_id.clone(),
+                schedule::ScheduleRefusal::QuantityConversionUnsupported {
+                    body: conversion.clone(),
+                    capability: crate::oracle::scalar::QUANTITY_CONVERSION_CAPABILITY,
+                },
+            );
+            continue;
         }
         let parameter_kinds = declaration
             .parameters
@@ -439,6 +453,15 @@ pub fn generate_function_schedules_with_limits(
             .entry(declaration.name.as_str())
             .or_default()
             .push(declaration.function_node_id.clone());
+        if let Some(refusal) = conversion_bodies.get(&declaration.function_node_id) {
+            schedules_by_node.insert(declaration.function_node_id.clone(), Err(refusal.clone()));
+            refused_functions.push(RefusedFunctionBody {
+                function_node_id: declaration.function_node_id.clone(),
+                name: declaration.name.clone(),
+                refusal: refusal.clone(),
+            });
+            continue;
+        }
         let binding = bindings.get(&declaration.function_node_id).ok_or_else(|| {
             schedule::ScheduleRefusal::MissingNode(declaration.function_node_id.clone())
         })?;
@@ -540,9 +563,12 @@ pub fn generate_function_schedules_with_limits(
                     let binding = bindings.get(function_node_id);
                     let item_check = binding.map_or_else(
                         || {
-                            Err(schedule::ScheduleRefusal::MissingNode(
-                                function_node_id.clone(),
-                            ))
+                            Err(conversion_bodies
+                                .get(function_node_id)
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    schedule::ScheduleRefusal::MissingNode(function_node_id.clone())
+                                }))
                         },
                         |binding| {
                             validate_schedule_item(&source_nodes, &type_kinds, &item, binding)
@@ -1002,6 +1028,33 @@ fn decode_node_id(
         })
 }
 
+/// The first quantity conversion node among `root` and everything it depends on.
+fn first_conversion_reached<'a>(
+    source_nodes: &BTreeMap<CheckedNodeId, &'a CheckedSemanticNodeV2>,
+    root: &CheckedNodeId,
+) -> Option<&'a CheckedNodeId> {
+    let mut pending = vec![root];
+    let mut seen = BTreeSet::new();
+    while let Some(id) = pending.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        let Some(node) = source_nodes.get(id).copied() else {
+            continue;
+        };
+        if node
+            .body
+            .pointer("/operation/identity")
+            .and_then(serde_json::Value::as_str)
+            == Some(crate::oracle::scalar::QUANTITY_CONVERT_IDENTITY)
+        {
+            return Some(&node.node_id);
+        }
+        pending.extend(node.dependencies.iter());
+    }
+    None
+}
+
 fn validate_schedule_item(
     source_nodes: &BTreeMap<CheckedNodeId, &CheckedSemanticNodeV2>,
     type_kinds: &BTreeMap<CheckedNodeId, schedule::ValueKind>,
@@ -1028,6 +1081,12 @@ fn validate_schedule_item(
         return Err(schedule::ScheduleRefusal::MalformedTerm(
             item.call_node_id.clone(),
         ));
+    }
+    if let Some(conversion) = first_conversion_reached(source_nodes, &item.call_node_id) {
+        return Err(schedule::ScheduleRefusal::QuantityConversionUnsupported {
+            body: conversion.clone(),
+            capability: crate::oracle::scalar::QUANTITY_CONVERSION_CAPABILITY,
+        });
     }
     let arguments = source
         .body
@@ -1228,6 +1287,13 @@ pub enum ExactFunctionRefusal {
     SelectedDependencyUnsupported {
         /// Ordered `(package_id, target_node_id)` pairs from the admitted closure.
         references: Vec<(CheckedSemanticId, CheckedNodeId)>,
+    },
+    /// The root or a node it reaches is a `quire.op.quantity.convert` node, which has no oracle.
+    QuantityConversionUnsupported {
+        /// The conversion node.
+        node_id: CheckedNodeId,
+        /// The capability that is absent.
+        capability: &'static str,
     },
     /// The item's `(call node id, function, argument node ids)` triple was
     /// requested more than once. The claim map records exactly one
@@ -1900,6 +1966,24 @@ fn admitted_binary_body<'a>(
                 .iter()
                 .map(|reference| (reference.package.clone(), reference.node.clone()))
                 .collect(),
+        });
+    }
+    // A conversion anywhere in the closure, as the root or as an operand or argument it reaches,
+    // is refused for the capability it needs before any other check of the body or the call.
+    if let Some(node) = closure
+        .nodes
+        .iter()
+        .map(|reached| reached.node)
+        .find(|node| {
+            node.body
+                .pointer("/operation/identity")
+                .and_then(serde_json::Value::as_str)
+                == Some(crate::oracle::scalar::QUANTITY_CONVERT_IDENTITY)
+        })
+    {
+        return Err(ExactFunctionRefusal::QuantityConversionUnsupported {
+            node_id: node.node_id.clone(),
+            capability: crate::oracle::scalar::QUANTITY_CONVERSION_CAPABILITY,
         });
     }
     if let Some(node_tag) = direct_unsupported_form(closure.root) {
@@ -2943,108 +3027,6 @@ mod tests {
     use super::*;
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use quire_contract_model::CheckedPackageLimit;
-
-    /// A quantity conversion body is refused for every declared body kind: as `FormMismatch`
-    /// naming the form `conversion` for a Scalar body over Add, Subtract or Multiply, a
-    /// composite-equality body and a Call body, and as `UnsupportedOperator` for a Scalar
-    /// operator outside those three (Negate), which the classifier checks before the form.
-    ///
-    /// Trace: FR-014-AC-2, TC-024.
-    #[test]
-    fn a_quantity_conversion_body_is_refused_for_every_body_kind() {
-        let id = |digest: &str| {
-            serde_json::json!({
-                "domain": "quire.checked-semantic-node/v1",
-                "digest": digest.repeat(64),
-            })
-        };
-        let node: CheckedSemanticNodeV2 = serde_json::from_value(serde_json::json!({
-            "node_id": id("1"),
-            "schema_version": "quire.checked-semantic-graph/v2",
-            "node_tag": "expression",
-            "semantic_form": "conversion",
-            "semantic_type": id("2"),
-            "dependencies": [],
-            "occurrences": [],
-            "body": {
-                "term": "application",
-                "operator": "convert",
-                "operation": {
-                    "identity": "quire.op.quantity.convert",
-                    "laws": [],
-                    "mode": {"kind": "rounding", "value": "exact"},
-                    "member": null,
-                    "leaves": [],
-                },
-                "result_type": id("2"),
-                "arguments": [],
-            },
-        }))
-        .expect("a checked conversion node");
-        let mismatch = || {
-            Some(ExactFunctionRefusal::FormMismatch {
-                found: "conversion".to_owned(),
-            })
-        };
-        let unsupported_operator = || {
-            Some(ExactFunctionRefusal::UnsupportedOperator {
-                detail: "only binary IntegerOperator::{Add,Subtract,Multiply} are supported",
-            })
-        };
-        for (body, expected) in [
-            (
-                ExactFunctionBody::Scalar {
-                    operator: IntegerOperator::Add,
-                },
-                mismatch(),
-            ),
-            (
-                ExactFunctionBody::Scalar {
-                    operator: IntegerOperator::Subtract,
-                },
-                mismatch(),
-            ),
-            (
-                ExactFunctionBody::Scalar {
-                    operator: IntegerOperator::Multiply,
-                },
-                mismatch(),
-            ),
-            (
-                ExactFunctionBody::Scalar {
-                    operator: IntegerOperator::Negate,
-                },
-                unsupported_operator(),
-            ),
-            (
-                ExactFunctionBody::CompositeEquality {
-                    operator: EqualityOperatorKind::Equal,
-                },
-                mismatch(),
-            ),
-            (
-                ExactFunctionBody::Call {
-                    callee: "other".to_owned(),
-                },
-                mismatch(),
-            ),
-        ] {
-            let declaration = ExactFunctionDeclaration {
-                node_id: node.node_id.clone(),
-                name: "converting".to_owned(),
-                parameters: Vec::new(),
-                result_type: node.semantic_type.clone(),
-                body,
-                capability_requirements: Vec::new(),
-            };
-            assert_eq!(
-                classify_body_shape(&node, &declaration).err(),
-                expected,
-                "{:?}",
-                declaration.body
-            );
-        }
-    }
 
     /// Trace: FR-021-AC-27, TC-031.
     #[test]

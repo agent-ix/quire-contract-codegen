@@ -391,6 +391,13 @@ pub enum ScheduleRefusal {
     WrongType(CheckedNodeId),
     /// The V2 operation identity is outside the supported schedule subset.
     UnsupportedOperation(CheckedNodeId),
+    /// The function body is a `quire.op.quantity.convert` node, which no schedule is built for.
+    QuantityConversionUnsupported {
+        /// The conversion body node.
+        body: CheckedNodeId,
+        /// The capability that is absent.
+        capability: &'static str,
+    },
     /// The schedule's ordinal or slot counter cannot be represented.
     CounterOverflow,
     /// The graph map key differs from the node's retained identity.

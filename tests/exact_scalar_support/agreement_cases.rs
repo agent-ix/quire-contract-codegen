@@ -539,7 +539,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
     assert_eq!(operations, 5 * (5 * 5 * (4 + 6) + 5 * 6));
 
     // U19/U24 same-unit sums, U28 compound product, U13/U21 powers, U23
-    // comparison tuples, and U03/U05 dimension mismatches.
+    // comparison tuples, and the U03 dimension mismatch.
     let (mut sums, mut products, mut named_powers, mut tuple_comparisons) = (0_usize, 0_usize, 0_usize, 0_usize);
     for (a, b, tuple) in [
         ((2, "m"), (3, "m"), [3, 0, 0, 2, 5, 1]),
@@ -596,7 +596,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         tuple_comparisons += 1;
     }
     assert_rows_agreed(&[
-        ("TC-187 U19/U24 sums and U03/U05 mismatches", sums),
+        ("TC-187 U19/U24 sums and U03 mismatch", sums),
         ("TC-187 U28 products", products),
         ("TC-187 U13/U21 powers", named_powers),
         ("TC-187 U23 comparison tuples", tuple_comparisons),

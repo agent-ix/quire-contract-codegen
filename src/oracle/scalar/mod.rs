@@ -3824,7 +3824,7 @@ pub const QUANTITY_CONVERSION_CAPABILITY: &str = "quantity conversion is not sup
      quantity (tracked as IR-818)";
 
 /// The operation identity of a quantity conversion.
-const QUANTITY_CONVERT_IDENTITY: &str = "quire.op.quantity.convert";
+pub(crate) const QUANTITY_CONVERT_IDENTITY: &str = "quire.op.quantity.convert";
 
 /// The refusal for a node whose operation identity is a quantity conversion, whichever entry
 /// point received it; `None` for every other identity.

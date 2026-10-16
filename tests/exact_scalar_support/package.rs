@@ -3974,6 +3974,22 @@ pub const CONVERSION_FUNCTION: u32 = 2150;
 /// A quantity equality whose left operand references a quantity conversion node.
 pub const EQUALITY_OVER_CONVERSION: u32 = 2151;
 
+/// A pure function named [`ADDER_NAME`] whose body is the integer addition node 1001.
+pub const ADDER_FUNCTION: u32 = 2152;
+/// A call of [`ADDER_FUNCTION`] whose first argument is a quantity conversion node.
+pub const CALL_OVER_CONVERSION: u32 = 2153;
+/// The declared name of [`ADDER_FUNCTION`].
+/// A pure function whose body is a direct reference to the integer addition node 1001.
+pub const REFERENCE_FUNCTION: u32 = 2156;
+/// A call of [`REFERENCE_FUNCTION`] whose first argument is a quantity conversion node.
+pub const CALL_REFERENCE_OVER_CONVERSION: u32 = 2157;
+/// The adder's parameters.
+pub const ADDER_LEFT: u32 = 2154;
+/// The adder's parameters.
+pub const ADDER_RIGHT: u32 = 2155;
+/// The declared name of [`ADDER_FUNCTION`].
+pub const ADDER_NAME: &str = "nadder";
+
 /// [`corpus_package`] plus a function declared over a quantity conversion node and a quantity
 /// equality that reads a conversion node as an operand.
 pub fn conversion_operand_package() -> PackageBuilder {
@@ -4000,6 +4016,86 @@ pub fn conversion_operand_package() -> PackageBuilder {
         &unit_type(),
         json!({"term": "reference", "target": node_ref(&conversion)}),
         std::slice::from_ref(&conversion),
+    );
+    let addition = code_id(1001).digest.to_string();
+    let left = key(ADDER_LEFT);
+    let right = key(ADDER_RIGHT);
+    builder
+        .code(
+            ADDER_LEFT,
+            "value",
+            "parameter",
+            &unit_type(),
+            parameter_body("a", 0),
+        )
+        .code(
+            ADDER_RIGHT,
+            "value",
+            "parameter",
+            &key(T_INTEGER),
+            parameter_body("b", 0),
+        );
+    register_code(ADDER_FUNCTION, key(ADDER_FUNCTION));
+    builder.node_with_label(
+        &key(ADDER_FUNCTION),
+        "adder",
+        "function",
+        "pure_function",
+        &key(T_INTEGER),
+        json!({"term": "aggregate", "members": [
+            member(
+                "parameters",
+                json!({"term": "aggregate", "members": [reference(&left), reference(&right)]}),
+            ),
+            member("body", reference(&addition)),
+        ]}),
+        &[addition.clone(), left, right],
+    );
+    let function = key(ADDER_FUNCTION);
+    let integer = key(V_INTEGER);
+    builder.application_code_with(
+        CALL_OVER_CONVERSION,
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        application(
+            "call",
+            op("quire.op.function.call"),
+            &key(T_INTEGER),
+            vec![
+                reference(&function),
+                reference(&conversion),
+                reference(&integer),
+            ],
+        ),
+        &[function, conversion.clone(), integer.clone()],
+    );
+    register_code(REFERENCE_FUNCTION, key(REFERENCE_FUNCTION));
+    builder.node_with(
+        &key(REFERENCE_FUNCTION),
+        "function",
+        "pure_function",
+        &key(T_INTEGER),
+        json!({"term": "reference", "target": node_ref(&addition)}),
+        std::slice::from_ref(&addition),
+    );
+    let reference_function = key(REFERENCE_FUNCTION);
+    builder.application_code_with(
+        CALL_REFERENCE_OVER_CONVERSION,
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        application(
+            "call",
+            op("quire.op.function.call"),
+            &key(T_INTEGER),
+            vec![
+                reference(&reference_function),
+                reference(&conversion),
+                reference(&integer),
+            ],
+        ),
+        &[reference_function, conversion, integer],
     );
     builder
 }

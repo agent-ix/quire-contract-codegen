@@ -34,7 +34,7 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    generated source ceiling; construct invalid and incomplete body records.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute its oracles on vectors
-   adapted from QSpec TC-185, TC-186, TC-187, TC-192 and TC-193; compare each
+   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); compare each
    outcome, admitted charges and consumed counters with direct runtime
    execution and with `quire_spec_language::value`, including the outcome of
    denying each admitted charge in turn.
@@ -50,8 +50,11 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    `generate_routed`, through Kani obligation negotiation and through capability
    settlement, and check the same refusal and an empty artifact set: the
    generated crate defines no oracle function and no harness is emitted
-   (FR-014-AC-2). Check that the function-application and composite-equality
-   generators refuse a conversion node as `FormMismatch` before any artifact.
+   (FR-014-AC-2). Check that the function-application generator and the function schedules refuse a
+   conversion reached from a body, a call or a call argument with the named
+   capability, and that the composite-equality generator refuses a conversion root as
+   `FormMismatch` and a conversion operand as an unsupported quantity, each
+   before any artifact.
    The TC-187 vectors that convert a quantity have no oracle and are not
    agreement rows; check that every agreement row of step 4 compares at least
    one vector. Derive nodes that are not applications, carry no identity, name an
