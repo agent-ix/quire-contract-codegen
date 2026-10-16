@@ -7,14 +7,10 @@
 //! prefix over the whole `arithmetic`/`graph`/`collection` family: a crate containing more than one
 //! case of the same family would have every one of them selected by this same filter.
 
-use std::{
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, process::Command};
 
 use ix_trace_rs::trace;
+use crate::scratch_crate::TemporaryDirectory;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, prepare_finite_graph_reaches,
@@ -117,29 +113,6 @@ fn fixture() -> (
     .validate()
     .unwrap();
     (profile, dispatch, input)
-}
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock must follow the Unix epoch")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "quire-codegen-bounded-kani-{}-{nonce}",
-            std::process::id()
-        ));
-        fs::create_dir_all(path.join("src")).expect("temporary source directory should exist");
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
 }
 
 #[trace("TC-023")]
@@ -569,9 +542,9 @@ fn classify_corpus(
     generated: &quire_contract_codegen::BoundedCorpusCase,
     harness_filter: &str,
 ) -> KaniRunOutcome {
-    let directory = TemporaryDirectory::new();
+    let directory = TemporaryDirectory::new("quire-codegen-bounded-kani");
     fs::write(
-        directory.0.join("src/lib.rs"),
+        directory.path.join("src/lib.rs"),
         format!(
             "{}\n{}",
             generated.artifacts.oracle.contents, generated.artifacts.kani_harness.contents
@@ -579,16 +552,16 @@ fn classify_corpus(
     )
     .expect("generated corpus source should be writable");
     fs::write(
-        directory.0.join("Cargo.toml"),
+        directory.path.join("Cargo.toml"),
         "[package]\nname = \"bounded-kani-corpus-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n",
     )
     .expect("generated corpus manifest should be writable");
     fs::write(
-        directory.0.join("build.rs"),
+        directory.path.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("generated check-cfg declaration should be writable");
-    let report_path = directory.0.join("report.json");
+    let report_path = directory.path.join("report.json");
     let output = Command::new("cargo")
         .args([
             "kani",
@@ -600,8 +573,8 @@ fn classify_corpus(
         ])
         .arg(&report_path)
         .args(["--harness", harness_filter, "--concrete-playback", "print"])
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo kani should launch");
     let text = format!(

@@ -8,17 +8,10 @@
 //! outcomes) are covered by `tests/composite_equality_agreement.rs`.
 
 use ix_trace_rs::trace;
-use std::{
-    collections::BTreeSet,
-    fs,
-    ops::Deref,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::BTreeSet, fs, ops::Deref, path::PathBuf, process::Command};
 
 use crate::common::panic_scan::{non_test_code, panic_tokens_in};
-use crate::scratch_crate::{runtime_dependency, seed_lock};
+use crate::scratch_crate::{runtime_dependency, seed_lock, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_composite_equality_oracles, ClaimDisposition, CompositeEqualityClaim,
     CompositeEqualityItem, CompositeEqualityLimits, CompositeEqualityOracles,
@@ -125,27 +118,6 @@ fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
         Some(format!("/semantic_graph/nodes/{position}/node_id"))
     );
     assert_eq!(refusal.locus, Some(node_id));
-}
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
 }
 
 struct FixturePackage {
@@ -1728,17 +1700,17 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     }
 
     let directory = TemporaryDirectory::new("quire-composite-equality-oracles");
-    fs::create_dir_all(directory.0.join("src")).unwrap();
+    fs::create_dir_all(directory.path.join("src")).unwrap();
     for artifact in &oracles.artifacts {
-        fs::write(directory.0.join(&artifact.path), &artifact.contents).unwrap();
+        fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
-    seed_lock(&directory.0);
+    seed_lock(&directory.path);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
-        .current_dir(&directory.0)
+        .current_dir(&directory.path)
         .output()
         .unwrap();
     assert!(

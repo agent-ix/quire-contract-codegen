@@ -1,14 +1,7 @@
 use ix_trace_rs::trace;
-use std::{
-    collections::BTreeSet,
-    fmt::Write as _,
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::BTreeSet, fmt::Write as _, fs, path::PathBuf, process::Command};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     generate_boolean_oracle, GenerationDiagnostic, GenerationErrorCode, GenerationTerminalState,
@@ -21,27 +14,6 @@ use quire_contract_model::{
     SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
     SymbolName, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 fn name(value: &str) -> SymbolName {
     SymbolName::new(value).unwrap()
@@ -369,7 +341,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
             expression: &typed,
         })
         .unwrap();
-        let path = directory.0.join(&bundle.rust.path);
+        let path = directory.path.join(&bundle.rust.path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &bundle.rust.contents).unwrap();
         writeln!(
@@ -390,18 +362,18 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
         generated.push(bundle);
     }
     fs::write(
-        directory.0.join("src/lib.rs"),
+        directory.path.join("src/lib.rs"),
         format!("#![allow(dead_code)]\n{modules}\n#[test] fn native_run() {{ {calls} }}"),
     )
     .unwrap();
     write_manifest(
-        &directory.0,
+        &directory.path,
         &format!(
             "[package]\nname = \"native-vacuity\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\n{}\n",
             runtime_dependency(&[])
         ),
     );
-    let output_path = directory.0.join("coverage.json");
+    let output_path = directory.path.join("coverage.json");
     let toolchain = format!("+{}", env!("CARGO_PKG_RUST_VERSION"));
     let sysroot = Command::new("rustc")
         .args([&toolchain, "--print", "sysroot"])
@@ -425,8 +397,8 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
             "--output-path",
         ])
         .arg(&output_path)
-        .current_dir(&directory.0)
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
+        .current_dir(&directory.path)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
         .env("LLVM_COV", tools.join("llvm-cov"))
         .env("LLVM_PROFDATA", tools.join("llvm-profdata"))
         .env("CARGO_PROFILE_TEST_OPT_LEVEL", "0")
@@ -441,7 +413,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
         String::from_utf8_lossy(&output.stderr)
     );
     let bytes = fs::read(output_path).unwrap();
-    let coverage = parse_llvm_coverage(&bytes, directory.0.to_str().unwrap()).unwrap();
+    let coverage = parse_llvm_coverage(&bytes, directory.path.to_str().unwrap()).unwrap();
     for (index, (bundle, expected)) in generated
         .iter()
         .zip([
@@ -933,11 +905,11 @@ fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluato
 /// on the runtime, then builds and runs it with warnings denied, asserting it exits cleanly.
 fn run_generated_program(crate_name: &str, program: &str) {
     let directory = TemporaryDirectory::new(&format!("quire-codegen-{crate_name}"));
-    let source_directory = directory.0.join("src");
+    let source_directory = directory.path.join("src");
     fs::create_dir_all(&source_directory).unwrap();
     fs::write(source_directory.join("main.rs"), program).unwrap();
     write_manifest(
-        &directory.0,
+        &directory.path,
         &format!(
             "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
@@ -946,7 +918,7 @@ fn run_generated_program(crate_name: &str, program: &str) {
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&directory.0)
+        .current_dir(&directory.path)
         .output()
         .unwrap();
     assert!(
@@ -1069,11 +1041,11 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
     generated_program.push_str(&assertions);
 
     let directory = TemporaryDirectory::new("quire-codegen-numeric-differential");
-    let source_directory = directory.0.join("src");
+    let source_directory = directory.path.join("src");
     fs::create_dir_all(&source_directory).unwrap();
     fs::write(source_directory.join("main.rs"), generated_program).unwrap();
     write_manifest(
-        &directory.0,
+        &directory.path,
         &format!(
             "[package]\nname = \"generated-numeric-oracle-differential\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
@@ -1081,9 +1053,9 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
     );
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet", "--target-dir"])
-        .arg(directory.0.join("target-codex-backends"))
+        .arg(directory.path.join("target-codex-backends"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&directory.0)
+        .current_dir(&directory.path)
         .output()
         .unwrap();
     assert!(

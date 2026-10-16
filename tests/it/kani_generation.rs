@@ -1,12 +1,7 @@
-use std::{
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, process::Command};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
 use ix_trace_rs::trace;
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode,
@@ -22,26 +17,6 @@ use quire_contract_model::{
     SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation, SymbolName,
     ValueDeclaration, ValueDeclarationKind, ValueType,
 };
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock must follow the Unix epoch")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        fs::create_dir_all(&path).expect("temporary test directory should be writable");
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 fn name(value: &str) -> SymbolName {
     SymbolName::new(value).expect("fixture symbol should be valid")
@@ -328,9 +303,9 @@ fn write_generated_crate(
     subject: &str,
 ) -> TemporaryDirectory {
     let directory = TemporaryDirectory::new("quire-generated-kani");
-    fs::create_dir_all(directory.0.join("src")).expect("source directory should be writable");
+    fs::create_dir_all(directory.path.join("src")).expect("source directory should be writable");
     fs::write(
-        directory.0.join("src/lib.rs"),
+        directory.path.join("src/lib.rs"),
         format!(
             "{}\n{subject}\n\n/// Assumed dependency predicate.\npub fn dependency_predicate() -> bool {{ true }}\n\n/// Original dependency implementation.\npub fn original() -> bool {{ false }}\n\n/// Replacement dependency implementation.\npub fn replacement() -> bool {{ true }}\n",
             bundle.rust.contents,
@@ -338,14 +313,14 @@ fn write_generated_crate(
     )
     .expect("generated source should be writable");
     write_manifest(
-        &directory.0,
+        &directory.path,
         &format!(
             "[package]\nname = \"generated-kani-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n# `exact` is required here because RT's own `#[cfg(kani)] mod verification` unconditionally\n# imports `crate::exact` (verification/kani.rs), independent of whether this fixture's subject\n# uses exact-scalar types. Building this generated crate under `cargo kani` without the feature\n# fails with E0432 on RT's own module, not on anything this generator emitted.\n{}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
         ),
     );
     fs::write(
-        directory.0.join("build.rs"),
+        directory.path.join("build.rs"),
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("generated check-cfg declaration should be writable");
@@ -362,8 +337,8 @@ fn execute_kani(
     Command::new("cargo")
         .arg("kani")
         .args(&graph.options)
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo kani should launch")
 }
@@ -440,14 +415,14 @@ fn classify_bundle(
     let graph: ProofDependencyGraph =
         serde_json::from_str(&bundle.proof_graph.contents).expect("graph should deserialize");
     let directory = write_generated_crate(bundle, subject);
-    let report_path = directory.0.join("report.json");
+    let report_path = directory.path.join("report.json");
     let output = Command::new("cargo")
         .arg("kani")
         .args(&graph.options)
         .args(["-Z", "unstable-options", "--export-json"])
         .arg(&report_path)
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo kani should launch");
     let text = format!(
@@ -581,8 +556,8 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let compilation = Command::new("cargo")
         .args(["check", "--offline", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo check should launch");
     assert!(
@@ -769,8 +744,8 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     let compilation = Command::new("cargo")
         .args(["check", "--offline", "--quiet"])
         .env("RUSTFLAGS", "-Dwarnings")
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo check should launch");
     assert!(
@@ -952,12 +927,12 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     generated_program.push_str(&assertions);
 
     let directory = TemporaryDirectory::new("quire-kani-oracle-corpus");
-    fs::create_dir_all(directory.0.join("src"))
+    fs::create_dir_all(directory.path.join("src"))
         .expect("generated corpus source directory should be writable");
-    fs::write(directory.0.join("src/main.rs"), generated_program)
+    fs::write(directory.path.join("src/main.rs"), generated_program)
         .expect("generated corpus source should be writable");
     write_manifest(
-        &directory.0,
+        &directory.path,
         &format!(
             "[package]\nname = \"generated-kani-oracle-corpus\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
@@ -965,9 +940,9 @@ fn generated_numeric_oracles_execute_the_shared_inside_and_outside_corpus() {
     );
     let execution = Command::new("cargo")
         .args(["run", "--offline", "--quiet", "--target-dir"])
-        .arg(directory.0.join("target-codex-backends"))
+        .arg(directory.path.join("target-codex-backends"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&directory.0)
+        .current_dir(&directory.path)
         .output()
         .expect("generated corpus should execute");
     assert!(
@@ -1650,8 +1625,8 @@ fn kani_executes_the_generated_contract_proof() {
             "--format",
             "json",
         ])
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo kani list should launch");
     assert!(
@@ -1659,13 +1634,13 @@ fn kani_executes_the_generated_contract_proof() {
         "Kani harness listing failed: {}",
         String::from_utf8_lossy(&listing.stderr)
     );
-    let listing_json = fs::read_to_string(directory.0.join("kani-list.json"))
+    let listing_json = fs::read_to_string(directory.path.join("kani-list.json"))
         .expect("Kani JSON listing should be retained");
     let verification = Command::new("cargo")
         .arg("kani")
         .args(&graph.options)
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
-        .current_dir(&directory.0)
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
+        .current_dir(&directory.path)
         .output()
         .expect("cargo kani should launch");
     assert!(
@@ -1703,8 +1678,11 @@ fn kani_executes_the_generated_contract_proof() {
     let conditional_verification = Command::new("cargo")
         .arg("kani")
         .args(&conditional_graph.options)
-        .env("CARGO_TARGET_DIR", conditional_directory.0.join("target"))
-        .current_dir(&conditional_directory.0)
+        .env(
+            "CARGO_TARGET_DIR",
+            conditional_directory.path.join("target"),
+        )
+        .current_dir(&conditional_directory.path)
         .output()
         .expect("conditional cargo kani should launch");
     assert!(
@@ -1867,8 +1845,8 @@ fn kani_bundle_oracle_overflow_is_a_failing_check_not_a_wrapped_value() {
                 "--concrete-playback",
                 "print",
             ])
-            .env("CARGO_TARGET_DIR", directory.0.join("target"))
-            .current_dir(&directory.0)
+            .env("CARGO_TARGET_DIR", directory.path.join("target"))
+            .current_dir(&directory.path)
             .output()
             .expect("cargo kani should launch")
     };
