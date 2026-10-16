@@ -31,9 +31,9 @@ artifacts from being mistaken for a complete verification bundle.
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Byte differences between repeated generations | 0 | 0 | regeneration |
-| Partial published bundles after injected failure | 0 | 0 | fault-injection |
-| Developer-owned files modified | 0 | 0 | inspection |
+| Byte differences between repeated generations | 0 | 0 | Test (TC-001) |
+| Partial published bundles after injected failure | 0 | 0 | Test (TC-002) |
+| Developer-owned files modified | 0 | 0 | Test (TC-002) |
 
 ## Acceptance Criteria
 

@@ -814,7 +814,7 @@ mod tests {
     /// among the derived domains, are the `NoRenderer` refusal: a claim map this generator did not
     /// produce, with no panic.
     ///
-    /// Trace: NFR-005-AC-2, TC-042.
+    /// Trace: NFR-005-AC-2, NFR-005-M-2, TC-042.
     #[test]
     fn tc_042_ac2_a_claim_without_a_derivable_first_bound_has_no_renderer() {
         let bound = checked_node_id("7");

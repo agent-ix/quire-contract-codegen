@@ -626,7 +626,7 @@ mod tests {
             .collect()
     }
 
-    /// Trace: NFR-005-AC-4, TC-042. With a coverage export supplied, a map region with no probe
+    /// Trace: NFR-005-AC-4, NFR-005-M-2, TC-042. With a coverage export supplied, a map region with no probe
     /// is the `MapMismatch` diagnostic and no classification; with no export it is
     /// `UnavailableObservation`.
     #[test]
@@ -667,7 +667,7 @@ mod tests {
         }
     }
 
-    /// Trace: NFR-005-AC-7, TC-042. A map with fewer than two regions is the census `MapMismatch`
+    /// Trace: NFR-005-AC-7, NFR-005-M-2, TC-042. A map with fewer than two regions is the census `MapMismatch`
     /// with nothing observed, with or without a coverage export; two probed regions are not.
     #[test]
     fn tc_042_ac7_a_map_shorter_than_two_regions_is_a_census_mismatch_not_a_panic() {

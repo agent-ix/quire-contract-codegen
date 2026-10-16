@@ -695,7 +695,7 @@ mod tests {
         );
     }
 
-    /// Trace: NFR-005-AC-5, TC-042.
+    /// Trace: NFR-005-AC-5, NFR-005-M-2, TC-042.
     #[test]
     fn tc_042_ac5_a_record_count_other_than_the_item_count_is_a_typed_refusal() {
         let items = [item(10), item(11), item(12)];
@@ -739,7 +739,7 @@ mod tests {
         }
     }
 
-    /// Trace: NFR-005-AC-6, TC-042.
+    /// Trace: NFR-005-AC-6, NFR-005-M-2, TC-042.
     #[test]
     fn tc_042_ac6_a_duplicate_position_outside_the_group_is_a_typed_refusal() {
         let items = [item(10), item(11), item(12)];

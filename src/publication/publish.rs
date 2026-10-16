@@ -299,7 +299,7 @@ mod tests {
             .collect()
     }
 
-    /// Trace: TC-001, TC-002, FR-005-AC-1, FR-005-AC-2, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    /// Trace: TC-001, TC-002, FR-005-AC-1, FR-005-AC-2, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3, NFR-001-M-1
     #[test]
     fn publication_is_order_independent_and_replaces_only_its_destination() {
         let parent = temporary("replace");
@@ -331,7 +331,7 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3, NFR-001-M-2, NFR-001-M-3, FR-005-AC-7
     #[test]
     fn every_injected_failure_preserves_old_and_developer_owned_bytes() {
         let faults = (0..bundle("new\n").artifacts().len())
@@ -367,7 +367,7 @@ mod tests {
         }
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3, FR-005-AC-9
     #[test]
     fn failed_rollback_reports_unknown_and_preserves_complete_recovery_bundles() {
         let parent = temporary("failed-rollback");
@@ -404,7 +404,7 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3, FR-005-AC-8
     #[test]
     fn post_commit_cleanup_failure_reports_that_the_new_bundle_is_published() {
         let parent = temporary("post-commit-cleanup");
@@ -436,7 +436,7 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-3
+    /// Trace: TC-002, FR-005-AC-1, FR-005-AC-6, NFR-001-AC-3
     #[test]
     fn unsafe_and_duplicate_artifact_paths_are_refused() {
         for path in [
