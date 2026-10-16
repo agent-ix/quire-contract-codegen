@@ -4231,6 +4231,17 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             let refusal = execute_kani_obligation(&flood.request(&proofs(), T)).unwrap_err();
             assert_eq!(refusal.code(), Some("kani_output_over_limit"));
 
+            let members = StandIn::running(
+                "diag-flood-group",
+                &format!("head -c {} /dev/zero\nexit 1\n", 2 * CAPTURE_LIMIT + 1),
+            );
+            let group = only_group(members.batch(&pair(), T)).unwrap_err();
+            assert_eq!(group.code(), Some("kani_output_over_limit"));
+            assert!(matches!(
+                group,
+                KaniExecutionRefusal::OutputOverLimit { harnesses: 2, .. }
+            ));
+
             let refusal = launch_evidence(
                 LaunchOutcome::OutputUnread {
                     stream: CaptureStream::Stderr,
