@@ -83,22 +83,25 @@ remains governed by FR-017-AC-20.
 NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35), PLANNED/UNRUN. In the `make kani` lane,
 assemble a crate whose `src/lib.rs` holds a generated harness byte for byte and, beside it, a
 function that reads an undefined name, and run it through `execute_kani_obligation` (the
-deliberately non-compiling harness). With launcher stand-ins, run one that exits 1, exports no
-report and prints nothing (the missing report); ones that exit 1 with no report and print, on
-stdout, the Kani banner with `Checking harness proofs::check...` and `Solving with CaDiCaL 3.0.0`,
-the banner with the `Checking harness` line alone, the banner with
-`error: Failed to execute cargo (exit status: 101). Found 1 compilation errors.`, the banner alone
-and a solver line in another wording after `Checking harness`; one with the banner and Cargo's
-`error: could not compile` on stderr; one with a usage error on stderr and nothing on stdout; and
-one that exports a report of success and exits 1 with `Solving with CaDiCaL 3.0.0` on stdout. Put
-a marker more than 8192 bytes before the end of its stream. Feed the excerpt builder redacted
-streams of exactly 8192 and of 8193 bytes, one whose last line alone exceeds 8192 bytes, one with a
-4-byte character straddling the cut, invalid UTF-8, ANSI escapes and a stream at its 8 MiB limit.
-Print the request's crate and target directories, the caller's home directory, another absolute
-path, an RFC 3339 date-time, `Runtime Symex: 0.00331318s`, `in 0.02s`, `pid 4242` and a
-`thread 'main' (4242) panicked` line, then repeat the run with each of those values changed.
-Classify a verified, cover-unsatisfied, falsified, timed-out, memory-exhausted and other
-inconclusive run and serialize each evidence.
+deliberately non-compiling harness). With single-run launcher stand-ins, run one that exits 1,
+exports no report and prints nothing (the missing report); ones that exit 1 with no report and
+print, on stdout, the Kani banner with `Checking harness proofs::check...` and
+`Solving with CaDiCaL 3.0.0`, the banner with the `Checking harness` line alone, the banner with
+`error: Failed to execute cargo (exit status: 101). Found 1 compilation errors.`, the banner alone,
+a solver line in another wording after `Checking harness`, and a `Checking harness` line for a path
+the launch did not pass; the `solver` stdout again with `-j 2` in the option vector; one with the
+banner and Cargo's `error: could not compile` on stderr; one with a usage error on stderr and
+nothing on stdout; and one that exports a report of success and exits 1 with
+`Solving with CaDiCaL 3.0.0` on stdout. Put a marker more than 8192 bytes before the end of its
+stream. Feed the excerpt builder redacted streams of exactly 8192 and of 8193 bytes, one whose final
+line alone exceeds 8192 bytes, one 10000-byte line followed by a line feed, a 10000-byte line
+followed by `error: last` and a line feed, one with a 4-byte character straddling the cut, invalid
+UTF-8, ANSI escapes, a stream of only line feeds and a stream at its 8 MiB limit. Supply crate
+directory `/h/u/ws/crate`, target directory `/h/u/ws/crate/target` and home directory `/h/u` in the
+request and print every input of FR-017-AC-35; repeat with home directory `/`, with none, under two
+process `HOME` values, and with each redacted value changed. Classify a verified,
+cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive run and serialize
+each evidence.
 
 The output cap, capture failure, group cleanup and batching (FR-017-AC-14, FR-017-AC-21 to
 FR-017-AC-25) are verified by TC-043, not here.
@@ -172,19 +175,24 @@ cover-unsatisfied 1 of 2 and missing cover summary respectively (FR-017-AC-12).
 NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35), PLANNED/UNRUN: the non-compiling harness
 exits unsuccessfully, exports no report and is `Inconclusive` `NoVerdict`, with phase `compile`, the
 rustc error code and Kani's `error: Failed to execute cargo` line in the stdout excerpt and Cargo's
-`error: could not compile` line in the stderr excerpt; the silent missing-report stand-in is
-`NoVerdict` with phase `launcher` and two empty excerpts with `omittedBytes` 0. The phases are, in
-the order listed, `solver`, `backend`, `compile`, `unknown` and `backend`; `compile`; `launcher`;
-and `unknown` for the report of success beside exit 1. A marker outside the excerpt window still
+`error: could not compile` line, its crate path as `<CRATE_DIR>`, in the stderr excerpt; the silent
+missing-report stand-in is `NoVerdict` with phase `launcher` and two empty excerpts with
+`omittedBytes` 0. The stdout stand-ins are, in the order listed, `solver`, `backend`, `compile`,
+`unknown`, `backend` and `unknown`; the `-j 2` run is `unknown`; then `compile`; `launcher`; and
+`unknown` for the report of success beside exit 1. A marker outside the excerpt window still
 decides the phase. The 8192-byte stream is whole with `omittedBytes` 0; the 8193-byte stream keeps
 its longest line-aligned suffix of at most 8192 bytes with `omittedBytes` the bytes before it; the
-long last line keeps at most 8192 bytes from a character boundary; no character is split; invalid
-UTF-8 becomes U+FFFD; escapes are gone; no excerpt exceeds 8192 bytes. The excerpts hold
-`<CRATE_DIR>`, `<TARGET_DIR>`, `<HOME>`, `<PATH>`, `<TIMESTAMP>`, `<DURATION>` and `<PID>` and none
-of the original values, a path under a known directory keeps its relative remainder, and the two
-runs serialize byte-identical records as `diagnostics { phase, stdout { text, omittedBytes },
-stderr { text, omittedBytes } }`, which does not deserialize. No evidence of a non-`NoVerdict` run
-has a `diagnostics` member.
+long final line keeps at most 8192 bytes ending at its last byte from a character boundary; the
+10000-byte line with its line feed keeps its last 8192 bytes ending in the line feed; the line
+followed by `error: last` keeps exactly `error: last` and its line feed; no character is split;
+invalid UTF-8 becomes U+FFFD; escapes are gone; the line-feed-only stream is kept; no excerpt
+exceeds 8192 bytes. Every FR-017-AC-35 input yields its stated output; home `/` gives no `<HOME>`,
+no home leaves the `.kani` path as `<PATH>`, the two process `HOME` values give the same record,
+and the runs that differ only in redacted values serialize byte-identical records as
+`diagnostics { phase, stdout { text, omittedBytes }, stderr { text, omittedBytes } }`. The
+`compile_fail` rustdoc example that deserializes the record fails to compile while its
+`serde_json::to_string` control compiles. No evidence of a non-`NoVerdict` run has a `diagnostics`
+member.
 
 The absent launcher is a typed tool refusal naming the launcher and its path.
 
@@ -305,7 +313,9 @@ at a time.
 No current test covers FR-017-AC-32 to FR-017-AC-35. The non-compiling harness belongs in the
 `make kani` lane of `tests/it/kani_obligations.rs`; the stand-in, marker, excerpt and redaction
 cases belong beside the existing `NoVerdict` stand-ins in `src/kani/run/execute.rs` and with the
-output readers in `src/kani/output/`. They are PLANNED/UNRUN and credit nothing until they run.
+output readers in `src/kani/output/`. The serialize-only check is a rustdoc `compile_fail` example on
+the record type in `src/kani/output/`, run by `cargo test --doc`, with a compiling
+`serde_json::to_string` control beside it. They are PLANNED/UNRUN and credit nothing until they run.
 
 The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
 not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No current
