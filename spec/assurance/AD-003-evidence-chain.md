@@ -287,7 +287,7 @@ authored).
   and applies on every outcome, including refusal, exact `Incomplete`,
   generated fault and divergence. Report `claim()` on every outcome is measured in merged
   change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
-- E-1 composite extension (PARTIAL: IR-635 delivered the Eq graph-child positional O-09 and Ne parameter/parameter and parameter/literal controls of FR-033-AC-11; the AC-11 remainder (Ne self-comparison, inline literals, Ne literal/literal) has no ticket yet; UNRUN CG CONSUMER, QSL-640). CG's
+- E-1 composite extension (PARTIAL: IR-635 delivered the Eq graph-child positional O-09 and Ne parameter/parameter and parameter/literal controls of FR-033-AC-11; Ne literal/literal, Ne self-comparison and inline literals (FR-033-AC-14 to AC-17) are PLANNED under IR-814; UNRUN CG CONSUMER, QSL-640). CG's
   composite O-09 preimage contains only the exact claimed equality/inequality application
   node, its authentic occurrence key from the recompiled original package, the obligation
   kind and one argument per operand position in operand order. A self-comparison contributes

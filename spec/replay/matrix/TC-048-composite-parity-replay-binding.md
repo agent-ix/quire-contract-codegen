@@ -50,7 +50,12 @@ and never replace positive QSL evaluation with a verdict double.
    graph-child nodes and actual literal singleton values.
    Retain the actual generated harness, native refinement, original limits and canonical identity of
    the same proved artifact. Assert the original nodes, operand declarations and literal singleton
-   values. Record public builder inputs and the QSL request; change source, package, selected node,
+   values. For the Ne forms still PLANNED under IR-814 (FR-033-AC-14 literal/literal and
+   FR-033-AC-15 self-comparison), require NotEqual and two positional arguments, then
+   apply the AC-9 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. For inline operands
+   (FR-033-AC-16, FR-033-AC-17), where the owning operand projection yields one, require a
+   singleton Range argument at the application/occurrence/position for an integer literal, and a
+   typed refusal with no report for any other inline literal type. Record public builder inputs and the QSL request; change source, package, selected node,
    operation and operand declaration individually and require refusal. No hand-built source/package
    replacement or enclosing Boolean function satisfies selection.
 2. Assert FR-025 AC-9's persisted bindings against actual draw order and reconstruct the selected
@@ -209,6 +214,8 @@ and never replace positive QSL evaluation with a verdict double.
 | Authority | Planned observation | Mutation that must fail |
 |---|---|---|
 | FR-033-AC-1 | Original-package node-selected parity and actual literal singleton domains | Replace the claim with a source predicate or manufacture a Boolean function |
+| FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-9 binding and AC-1 operator refusal still apply | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator |
+| FR-033-AC-16/17 | Inline integer literal is a singleton Range argument at its application/occurrence/position; other inline types refuse with no report | Drop or reorder the inline argument, invent a domain for a non-integer inline literal |
 | FR-025-AC-9; FR-033-AC-5 | Original-node/path/domain bindings reconstruct the actual ordered draws | Swap operands/paths, omit a required leaf or unpin a literal |
 | FR-033-AC-2/3 | All canonical families preserve exact values and typed shape; malformed cases refuse | Round IEEE or quantity, collapse absence/null, lose order/multiplicity or use byte equality for set admission |
 | FR-033-AC-4 | Public encoded-byte guard and checked counts/work; iterative admitted lifecycle | Apply capture-only guard, add a depth cap, recurse during drop or allow arithmetic overflow |
@@ -226,7 +233,7 @@ delivered API must establish their actual Rust representation before positive te
 IR-666 directly tests the public facade's claim shape, complete report identity, F rows and V
 rows through the CG converter. IR-635 adds the Eq-only verified constructor controls described
 above. Falsified construction, same-artifact native observation, backend/refinement strength
-production and generated-family controls remain planned under IR-806; Ne literal/literal remains the FR-033-AC-1 remainder. Real Text-leaf profile
+production and generated-family controls remain planned under IR-806; Ne literal/literal, Ne self-comparison and inline operands (FR-033-AC-14 to AC-17) remain planned under IR-814. Real Text-leaf profile
 selection, nested set/bag single-encoding performance and source-unbounded coverage limitations
 remain explicit open checks; rational substitution or derivation/coverage-seam success cannot count
 as lawful source-function/generated-family acceptance. Use actual driver/native same-artifact
