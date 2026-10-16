@@ -49,3 +49,9 @@ Round 1, fix commits 098ec55 and c1a001b (head c1a001b6c3d7024e8b0a647bd0e08ac01
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | medium | The new adaptation rule is right, but the author's premise that the existing tuples already comply is false. For the existing rows, the runtime's size amounts equal QSpec's, so the rule adapts nothing. The current tuples are all set below those amounts. The runtime's add/sub charge is max(bits(a)+bits(d), bits(c)+bits(b))+1 and multiply is max(bits(a)+bits(c), bits(b)+bits(d)) (RT src/exact/rational.rs:201-215 at 3cc88c48; bits(1)=1, bits(2)=bits(3)=2, integer.rs:43-48), and a size is admitted only if amount <= limit (accounting.rs:616-618). That gives U19 2 m+3 m = 4, U24 1 cm+2 cm = 4, U23's offset add 1+5463/20 = 15, and U28's events 8, 9, 14, 15, 20, exactly QSpec's amounts. The tests use integer_bits 3 (U19), 2 (U24), 13 (U23) and 19/12/18 (U28) (tests/exact_scalar_support/agreement_cases.rs:545-547, 559-561, 586-587). So U19's L(4,0,0,2,5,1) row, run as [3,..], stops incomplete{integer_bits, limit 3, next_charge 4, unit.rational-arithmetic} where QSpec states `5 m`. U19's second tuple stops on integer_bits where QSpec states a work_units stop at unit.result-retain. U23's first tuple and U24 likewise stop on integer_bits instead of completing. Once the rule's outcome assertion is coded, these rows fail. Derived from source, not from a cargo run. Fix: the coder sets these rows to QSpec's own tuples (U28 tuples 2 and 3 to 13 and 19), and the tests.md AC-6 row should say the existing tuples do not comply yet, not 'whether'. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:447 |
+
+Round 2, fix commit e7fef2f (head 01ba4ead1928aa2e0cab7eaa6ea11db86fdfaa3a). No earlier fixed finding regressed.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-003 | fixed | - |
