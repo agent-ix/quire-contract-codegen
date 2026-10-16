@@ -327,11 +327,18 @@ pub fn mode_kv(kind: &str, value: &str) -> Value {
     json!({"kind": kind, "value": value})
 }
 
-/// An `operation.member` naming only a `kind`: sufficient for every member
-/// kind this module uses (`type_argument`, `profile_operator`), which IR
+/// An `operation.member` naming only a `kind`: sufficient for the member kind
+/// this module uses without a declaration (`profile_operator`), which IR
 /// checks for presence and kind only.
 pub fn member_kind(kind: &str) -> Value {
     json!({"kind": kind})
+}
+
+/// An `operation.member` of kind `type_argument`. IR closes this shape to
+/// `{kind, declaration}`, and a catalogued `member` result form requires the
+/// application's `result_type` to equal the `declaration` node.
+pub fn type_argument_member(declaration: &str) -> Value {
+    json!({"kind": "type_argument", "declaration": node_ref(declaration)})
 }
 
 /// A well-formed definition ref `{authority, identity}` for a profile-role law, which has no closed
@@ -892,7 +899,14 @@ impl PackageBuilder {
             .iter()
             .map(|bound| self.bound(bound))
             .collect::<Vec<_>>();
-        let dependencies = reference_targets(&body);
+        let references = reference_targets(&body);
+        // A `type_argument` member's declaration is a dependency of the
+        // application alongside its `reference` targets; it is never the
+        // bound anchor.
+        let mut dependencies = references.clone();
+        if let Some(declaration) = body["operation"]["member"]["declaration"]["digest"].as_str() {
+            dependencies.push(declaration.to_owned());
+        }
         // Only computed when there is a bound to anchor: a caller passing no
         // `bounds` (e.g. the isolated TextAdmission reader negative) may
         // legitimately have neither a `reference` target nor a `semantic_type`
@@ -900,7 +914,7 @@ impl PackageBuilder {
         // nothing here will use.
         if !keys.is_empty() {
             let anchor = anchor.map(str::to_owned).unwrap_or_else(|| {
-                dependencies.first().cloned().unwrap_or_else(|| {
+                references.first().cloned().unwrap_or_else(|| {
                     value_for_type(semantic_type).unwrap_or_else(|| {
                         panic!(
                             "application_bounded({code}): {} bound(s) requested, the body has no \
@@ -2491,8 +2505,13 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         };
         arguments = vec![literal("text", &format!("a{}-{profile}", expression.code))];
     }
-    let (catalog_operator, operation) = corpus_operation(&expression);
+    let (catalog_operator, mut operation) = corpus_operation(&expression);
     let node_semantic_type = pinned_type.unwrap_or_else(|| result_type(expression.result));
+    // `corpus_operation` does not know the result type, which a
+    // `type_argument` member must name as its declaration.
+    if operation["member"] == member_kind("type_argument") {
+        operation["member"] = type_argument_member(&node_semantic_type);
+    }
     let node_bounds: &[Bound] = if matches!(expression.operation, Op::TextAdmission { .. }) {
         &[]
     } else {
@@ -2704,7 +2723,7 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
                     "quire.op.quantity.convert",
                     vec![],
                     Some(mode_kv("rounding", "nearest-even")),
-                    Some(member_kind("type_argument")),
+                    Some(type_argument_member(&key(T_RATIONAL))),
                 ),
                 &key(T_RATIONAL),
                 vec![reference(&key(V_QUANTITY))],
@@ -3954,7 +3973,7 @@ impl PackageBuilder {
                 "quire.op.numeric.narrow",
                 Vec::new(),
                 None,
-                Some(json!({"kind": "type_argument", "declaration": node_ref(target)})),
+                Some(type_argument_member(target)),
             ),
             target,
             vec![reference(operand)],
@@ -4053,7 +4072,7 @@ pub fn derivation_package() -> PackageBuilder {
                 "quire.op.numeric.convert",
                 vec![],
                 None,
-                Some(member_kind("type_argument")),
+                Some(type_argument_member(&key(T_INTEGER))),
             ),
             &key(T_INTEGER),
             vec![reference(&convert_operand)],
