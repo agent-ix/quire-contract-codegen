@@ -997,6 +997,51 @@ mod tests {
         assert!(!record.stdout.text.contains("Solving with"));
     }
 
+    /// Autoref probe: `implements_deserialize` is `true` through `Yes` only for a type that is
+    /// `DeserializeOwned`, and `false` through `No` otherwise, with no dependency beyond serde.
+    struct Probe<T>(std::marker::PhantomData<T>);
+
+    trait Yes {
+        fn implements_deserialize(&self) -> bool;
+    }
+
+    impl<T: serde::de::DeserializeOwned> Yes for Probe<T> {
+        fn implements_deserialize(&self) -> bool {
+            true
+        }
+    }
+
+    trait No {
+        fn implements_deserialize(&self) -> bool;
+    }
+
+    impl<T> No for &Probe<T> {
+        fn implements_deserialize(&self) -> bool {
+            false
+        }
+    }
+
+    macro_rules! implements_deserialize {
+        ($type:ty) => {
+            (&Probe::<$type>(std::marker::PhantomData)).implements_deserialize()
+        };
+    }
+
+    /// The record and its parts implement no deserialization, so Kani output can never be
+    /// decoded into them. The probe is sound: a deserializable control type reports `true`.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_the_record_and_its_parts_implement_no_deserialize() {
+        assert!(
+            implements_deserialize!(String),
+            "the probe sees a Deserialize impl"
+        );
+        assert!(!implements_deserialize!(KaniNoVerdictDiagnostics));
+        assert!(!implements_deserialize!(KaniStreamExcerpt));
+        assert!(!implements_deserialize!(KaniFailurePhase));
+    }
+
     /// The record serializes as `diagnostics { phase, stdout { text, omittedBytes }, stderr {...} }`.
     ///
     /// Trace: FR-017-AC-35, TC-027
