@@ -34,3 +34,10 @@ captured streams, as lines beginning with literal text, and strips ANSI only for
 colored Cargo `error: could not compile` line (CARGO_TERM_COLOR=always) therefore falls through
 to `unknown`, an under-claim the spec allows. Kani 0.68's own piped output is uncolored, so no
 change. Ambiguities (2) and (3) are FND-001 and FND-002.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (818d8c6): d5c6bd6: spec and code add -j<digits> and -j=<digits>; tests add -j2, -j=2, -j16 and lookalikes -j=, -j=x, -j2x, -junk. |
+| FND-002 | fixed | Round 1 (818d8c6): d5c6bd6: FR-017 states the grammar; timestamp_length and the left-boundary predicate match it field by field (T/t/space, ranges incl. offset 00-23:00-59, no letter/digit/_/. before); 11 new boundary pairs. |

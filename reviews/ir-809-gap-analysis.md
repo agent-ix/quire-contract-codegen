@@ -29,3 +29,10 @@ tests.md, TC-027 and TC-043 flip to Covered only where a test asserts the clause
 One medium and one low finding. Coverage is otherwise real: every flipped row has a test that
 asserts the clause, and the coder's four mutation sets turned the matching tests red. FND-001 needs
 a spec or test change before the AC-36 row may stand as Covered.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (818d8c6): d5c6bd6: AC-36 now excepts the report-path argument (the last); the test asserts evidence.arguments equals the argv the launcher received, that both popped values are quire-kani-report- paths and differ, and that the rest is equal. |
+| FND-002 | still-open | The doctest now carries "Trace: FR-017-AC-35, TC-027", but quoin 0.28.4 matrix still binds no test to it: FR-017-AC-35 lists 10 test_function binders and no doctest. The serialize-only clause stays invisible to the matrix. Either a tagged #[test] that drives the compile_fail check, or accepted-no-change citing the TC-027 prose that names the doctest. |
