@@ -163,12 +163,11 @@ fn resolved_items(items: &[ExactScalarItem], ids: &FixtureIds) -> Vec<ExactScala
 }
 
 /// Trace: FR-014-AC-2, TC-024. UNBACKED today: the six text admissions (FR-014-AC-2's text
-/// admission case) are refused by Contract IR at admission, so no oracle is generated for them
-/// and no agreement or generation test can run over them. `quire.op.numeric.convert` takes
-/// `exact_numeric`, no catalogued `convert` identity takes `text`, and QSL lowers no text
-/// admission; it is unblocked by a catalogued text-admission operation. This test pins the exact
-/// refusal of each node (code, cause, pointer, locus), so the behaviour is recorded and a change
-/// in either IR or the corpus shows up here.
+/// admission case) remain refused by Contract IR at admission, so no checked-node oracle is
+/// generated for them. `quire.op.numeric.convert` takes `exact_numeric`, no catalogued `convert`
+/// identity takes `text`, and QSL lowers no text admission. Caller ingress is separately covered
+/// by FR-035 and does not alter these six checked-node refusals. This test pins each exact refusal
+/// (code, cause, pointer, locus), so changes in IR or the corpus show up here.
 #[test]
 fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
     let refused = refused_corpus();

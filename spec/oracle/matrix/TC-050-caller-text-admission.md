@@ -32,11 +32,14 @@ text comparison and the six refused text-operand conversion nodes.
    charges and counters. Check that bound refusal precedes
    `text.result-retain` (FR-035-AC-2, AC-3).
 3. Generate twelve real-Kani harnesses: every profile crossed with both
-   `Text[0,8]` and `Text[1,1]`. Draw length `0..=2` and two alphabet indices
-   `0..4` symbolically. Encode zero, one or two selected scalars from
-   `{e, U+0301, U+00E9, U+1F600}` as UTF-8, construct the public
-   `TextPayload`, and compare the generated oracle with a separate direct
-   runtime call. Check that each harness identity records its class, profile
+   `Text[0,8]` and `Text[1,1]`. Draw one selector symbolically over a 21-entry
+   table bijective with the empty string, each scalar in
+   `{e, U+0301, U+00E9, U+1F600}`, and every ordered pair from that alphabet.
+   The selected entry is a valid UTF-8 string; construct the public
+   `TextPayload` from its bytes and compare the generated oracle with a
+   separate direct runtime call. The selector must remain symbolic, so the
+   assertions cover every table member rather than a fixed test input. Check
+   that each harness identity records its class, profile
    and bound, each has exactly one final cover, and run each through the
    FR-017 production executor against the installed Kani backend. Check
    `Verified` with the cover satisfied, evidence bound to the caller identity
@@ -81,8 +84,10 @@ verify over the full symbolic 21-sequence class through the public
 `TextPayload::from_utf8` constructor, with generated-versus-direct runtime
 agreement and a satisfied final cover, and the changed-call control is
 falsified with concrete playback before the restored call verifies over that
-same class. A fixed literal, a static enumeration, a branch-local control or
-a higher resource ceiling does not discharge these criteria. IR-796 owns the
+same class. A fixed literal, a non-symbolic enumeration, a branch-local control
+or a higher resource ceiling does not discharge these criteria. The symbolic
+selector table must be bijective with the specified 21-member class, and both
+agreement assertions must remain in the selected harness. IR-796 owns the
 next source-backed proof design or a separately reviewed spec disposition;
 neither an inconclusive run nor this status note establishes impossibility.
 

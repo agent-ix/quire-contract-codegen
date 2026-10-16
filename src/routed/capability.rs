@@ -465,7 +465,7 @@ fn scalar_operation_family(
         Op::IeeeArithmetic { .. } | Op::IeeeComparison { .. } | Op::IeeeWidthConversion { .. } => {
             KaniFormFamily::IeeeFloat
         }
-        Op::TextAdmission { .. } | Op::TextComparison { .. } => KaniFormFamily::Text,
+        Op::TextComparison { .. } | Op::TextAdmission { .. } => KaniFormFamily::Text,
         Op::EnumComparison { .. } => KaniFormFamily::Enum,
         Op::QuantityArithmetic { .. }
         | Op::QuantityComparison { .. }

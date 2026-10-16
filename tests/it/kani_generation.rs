@@ -1,3 +1,6 @@
+#[path = "caller_text_admission.rs"]
+mod caller_text_admission;
+
 use std::{
     fs,
     path::PathBuf,

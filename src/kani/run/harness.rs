@@ -5,9 +5,11 @@ use crate::{
     core::artifact::Artifact,
     kani::abi::KaniSolver,
     kani::identity::{
-        KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
-        StateFrameProperty, SymbolicArgumentBounds, SymbolicBounds,
+        KaniCallerTextObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
+        ObligationKind, StateFrameHarness, StateFrameProperty, SymbolicArgumentBounds,
+        SymbolicBounds,
     },
+    oracle::caller_text::CallerTextProofIdentity,
 };
 
 /// A generated harness of either kind this module can run.
@@ -22,6 +24,8 @@ pub enum KaniExecutableHarness<'a> {
     Scalar(&'a KaniScalarObligationHarness),
     /// A V2 state-clause operation-contract or frame-effect harness (IR-412).
     StateFrame(&'a StateFrameHarness),
+    /// A caller-ingress Text admission harness (FR-035).
+    CallerText(&'a KaniCallerTextObligationHarness),
 }
 
 impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
@@ -42,6 +46,12 @@ impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
     }
 }
 
+impl<'a> From<&'a KaniCallerTextObligationHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a KaniCallerTextObligationHarness) -> Self {
+        Self::CallerText(harness)
+    }
+}
+
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
     pub(super) ceilings: crate::kani::identity::ProofCeilings,
@@ -50,6 +60,7 @@ pub(super) struct HarnessView<'a> {
     /// and finds again as the `harness_id` of the report entry.
     pub(super) selection: String,
     pub(super) kind: Option<ObligationKind>,
+    pub(super) caller_text_claim: Option<CallerTextProofIdentity>,
     pub(super) unwind: u32,
     pub(super) solver: KaniSolver,
     pub(super) options: &'a [String],
@@ -124,6 +135,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     })
                     .collect()
             }
+            Self::CallerText(_) => Vec::new(),
         }
     }
 
@@ -136,6 +148,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     rust: &harness.rust,
                     selection: identity.harness_path().to_string(),
                     kind: Some(identity.kind),
+                    caller_text_claim: None,
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
@@ -148,6 +161,7 @@ impl<'a> KaniExecutableHarness<'a> {
                     rust: &harness.rust,
                     selection: identity.harness_path().to_string(),
                     kind: None,
+                    caller_text_claim: None,
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
@@ -163,6 +177,20 @@ impl<'a> KaniExecutableHarness<'a> {
                         StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
                         StateFrameProperty::Frame { .. } => ObligationKind::Frame,
                     }),
+                    caller_text_claim: None,
+                    unwind: identity.unwind,
+                    solver: identity.solver,
+                    options: &identity.options,
+                }
+            }
+            Self::CallerText(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    ceilings: identity.ceilings,
+                    rust: &harness.rust,
+                    selection: identity.harness_path().to_string(),
+                    kind: None,
+                    caller_text_claim: Some(identity.caller_claim.clone()),
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,
@@ -175,7 +203,9 @@ impl<'a> KaniExecutableHarness<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani::identity::{CallerTextObligationIdentity, ProofCeilings};
     use crate::kani::{identity::StateComparison, test_support::state_frame_harness};
+    use std::{num::NonZeroU64, time::Duration};
 
     /// A state-clause harness reports the contract role of what it proves, so execution
     /// evidence tells an operation-contract proof from a frame-effect proof.
@@ -202,6 +232,54 @@ mod tests {
             Some(ObligationKind::Frame)
         );
     }
+
+    /// Trace: FR-017-AC-26, TC-050.
+    #[test]
+    fn caller_text_execution_view_carries_claim_identity_without_contract_kind() {
+        let harness = KaniCallerTextObligationHarness {
+            identity: CallerTextObligationIdentity {
+                caller_claim: CallerTextProofIdentity {
+                    profile: crate::oracle::caller_text::CallerTextProfile::Nfc,
+                    min: 1,
+                    max: 1,
+                    payload_class: crate::oracle::caller_text::CALLER_TEXT_PAYLOAD_CLASS,
+                },
+                ceilings: ProofCeilings {
+                    memory_bytes: NonZeroU64::new(1_073_741_824).expect("nonzero"),
+                    wall_clock: Duration::from_secs(120),
+                },
+                module_symbol: crate::core::identity::ModuleSymbol::try_from("caller_text_nfc_1_1")
+                    .expect("valid module symbol"),
+                harness_symbol: crate::core::identity::HarnessSymbol::try_from(
+                    "caller_text_admission_agrees",
+                )
+                .expect("valid harness symbol"),
+                solver: crate::kani::abi::KaniSolver::Cadical,
+                unwind: 8,
+                options: Vec::new(),
+            },
+            rust: Artifact::new("src/lib.rs", String::new()),
+            record: Artifact::new(
+                "kani-obligations/caller_text_admission_agrees.json",
+                String::new(),
+            ),
+        };
+        let executable = KaniExecutableHarness::from(&harness);
+        let view = executable.view();
+        assert_eq!(view.kind, None);
+        let claim = view.caller_text_claim.expect("caller claim retained");
+        assert_eq!(
+            claim.profile,
+            crate::oracle::caller_text::CallerTextProfile::Nfc
+        );
+        assert_eq!((claim.min, claim.max), (1, 1));
+        assert_eq!(
+            claim.payload_class,
+            crate::oracle::caller_text::CALLER_TEXT_PAYLOAD_CLASS
+        );
+        assert_eq!(executable.symbolic_arguments(), Vec::new());
+    }
+
     /// Trace: FR-028-AC-4.
     #[test]
     fn unranged_state_draws_record_the_full_i64_domain() {

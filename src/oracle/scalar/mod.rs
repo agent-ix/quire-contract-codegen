@@ -253,9 +253,9 @@ pub enum ExactScalarOperation {
         /// Rounding attribute.
         rounding: RoundingMode,
     },
-    /// `admit_text` into `text_type`.
+    /// Caller-ingress Text admission, which cannot be claimed by a checked scalar node.
     TextAdmission {
-        /// Admitted type.
+        /// Declared type retained for a typed checked-node refusal.
         text_type: TextType,
     },
     /// `compare_text`.
@@ -1434,6 +1434,13 @@ fn check_item<'r>(
     record: &'r CompleteLoweringRecordV2,
     operation: &ExactScalarOperation,
 ) -> Result<CheckedItem<'r>, ItemCheckError> {
+    if matches!(operation, ExactScalarOperation::TextAdmission { .. }) {
+        return Err(ExactScalarRefusal::Unsupported {
+            unsupported_node_id: requested_node_id.clone(),
+            node_tag: "caller_text_admission",
+        }
+        .into());
+    }
     if let Some(node) = graph.get(requested_node_id).copied() {
         if let Some(node_tag) = direct_unsupported_form(node) {
             return Err(ExactScalarRefusal::Unsupported {
@@ -2184,9 +2191,6 @@ fn check_parameters_from_view(
             read_float_rounding,
             Some(rounding),
         )?,
-        ExactScalarOperation::TextAdmission { text_type } => {
-            bounds.equal(BoundForm::TextBounds, read_text_bounds, Some(text_type))?
-        }
         ExactScalarOperation::QuantityConversion { target } => match target {
             QuantityTarget::Exact => bounds.equal::<RationalDomain>(
                 BoundForm::RationalRange,
@@ -2213,6 +2217,7 @@ fn check_parameters_from_view(
         | ExactScalarOperation::EnumComparison { .. }
         | ExactScalarOperation::QuantityArithmetic { .. }
         | ExactScalarOperation::QuantityComparison { .. } => return Ok(Vec::new()),
+        ExactScalarOperation::TextAdmission { .. } => return Ok(Vec::new()),
     };
     Ok(vec![checked])
 }
@@ -2830,7 +2835,11 @@ impl Shape {
                 };
                 Self::conversion(operand, F::of_width(*target)?)
             }
-            ExactScalarOperation::TextAdmission { .. } => Self::conversion(&[F::Text], F::Text),
+            ExactScalarOperation::TextAdmission { .. } => {
+                return Err(OracleGenerationError::unknown_variant(
+                    "caller Text admission is not a checked scalar operation",
+                ));
+            }
             ExactScalarOperation::TextComparison { .. } => {
                 Self::binary(&[F::Text, F::Text], F::Boolean)
             }
@@ -3044,7 +3053,7 @@ fn catalogued_operation(
             | (IeeeWidth::Binary64, IeeeWidth::Binary64) => None,
             (&_, _) => return Err(OracleGenerationError::unknown_variant("IeeeWidth")),
         },
-        Op::TextAdmission { .. } => plain("quire.op.numeric.convert"),
+        Op::TextAdmission { .. } => None,
         // `text.*`/`enum.*` comparisons carry a catalogued `text_profile` mode
         // (`"nfc"`), but the descriptor itself has no profile-bearing field to
         // compare it against, so only the identity is checked.
@@ -3328,7 +3337,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> Result<String, Oracle
             rounding.as_str()
         ),
         ExactScalarOperation::TextAdmission { text_type } => format!(
-            "text.admit length=[{},{}] profile={}",
+            "caller_text.admit length=[{},{}] profile={}",
             text_type.min(),
             text_type.max(),
             text_type.profile().as_str()
@@ -3751,17 +3760,11 @@ impl SourceBuilder {
                     ),
                 }
             }
-            ExactScalarOperation::TextAdmission { text_type } => Body {
-                parameters: unary("&rt::TextPayload"),
-                output: "rt::Text",
-                prelude: vec![format!(
-                    "let text_type = rt::TextType::new({}, {}, {}).map_err(|_| OracleStop::InvalidConstant)?;",
-                    text_type.min(),
-                    text_type.max(),
-                    profile_path(text_type.profile())?
-                )],
-                call: "Ok(rt::admit_text(operand, &text_type, meter))".to_owned(),
-            },
+            ExactScalarOperation::TextAdmission { .. } => {
+                return Err(OracleGenerationError::unknown_variant(
+                    "caller Text admission is not a checked scalar operation",
+                ));
+            }
             ExactScalarOperation::TextComparison { operator } => {
                 comparison_body("&rt::Text", "compare_text", *operator)?
             }
@@ -3882,18 +3885,6 @@ fn width_path(width: IeeeWidth) -> Result<&'static str, OracleGenerationError> {
     }
 }
 
-fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationError> {
-    match profile {
-        TextProfile::UnicodeScalars => Ok("rt::TextProfile::UnicodeScalars"),
-        TextProfile::Nfc => Ok("rt::TextProfile::Nfc"),
-        TextProfile::Nfd => Ok("rt::TextProfile::Nfd"),
-        TextProfile::Nfkc => Ok("rt::TextProfile::Nfkc"),
-        TextProfile::Nfkd => Ok("rt::TextProfile::Nfkd"),
-        TextProfile::BinaryUtf8 => Ok("rt::TextProfile::BinaryUtf8"),
-        _ => Err(OracleGenerationError::unknown_variant("TextProfile")),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Deriving the descriptor from the node
 // ---------------------------------------------------------------------------
@@ -3960,8 +3951,6 @@ enum Family {
     IeeeComparison(IeeeComparison),
     IeeeToFloat32,
     IeeeToFloat64,
-    /// `numeric.convert`: text admission when the result is text.
-    NumericConvert,
     TextComparison(ComparisonOperator),
     EnumComparison(ComparisonOperator),
     QuantityArithmetic(QuantityOperator),
@@ -4036,7 +4025,6 @@ fn family_of_identity(identity: &str) -> Option<Family> {
         "quire.op.ieee.bit_identical" => Family::IeeeComparison(IeeeComparison::BitIdentical),
         "quire.op.ieee.to_float32" => Family::IeeeToFloat32,
         "quire.op.ieee.to_float64" => Family::IeeeToFloat64,
-        "quire.op.numeric.convert" => Family::NumericConvert,
         "quire.op.text.eq" => Family::TextComparison(C::Equal),
         "quire.op.text.ne" => Family::TextComparison(C::NotEqual),
         "quire.op.text.lt" => Family::TextComparison(C::Less),
@@ -4266,6 +4254,15 @@ fn derive_operation_from_view<'g>(
     let identity = node.body["operation"]["identity"]
         .as_str()
         .ok_or_else(|| ClaimDerivationRefusal::MissingOperationIdentity.refusal())?;
+    // `numeric.convert` remains a known selector: the result form decides whether it is a
+    // supported numeric rounding conversion. Text conversion is still refused as
+    // `OperandFormsNotDerivable`; it is not part of the exact-scalar identity catalogue.
+    if identity == "quire.op.numeric.convert" {
+        return Err(ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: identity.to_owned(),
+        }
+        .refusal());
+    }
     let derivation = Derivation {
         graph,
         node,
@@ -4344,14 +4341,6 @@ fn derive_operation_from_view<'g>(
             target: IeeeWidth::Binary64,
             rounding: derivation.float_rounding()?,
         },
-        Family::NumericConvert => {
-            if derivation.result_form().as_deref() != Some(ScalarForm::Text.wire()) {
-                return Err(derivation.operand_forms_not_derivable());
-            }
-            Op::TextAdmission {
-                text_type: derivation.read(BoundForm::TextBounds, read_text_bounds)?,
-            }
-        }
         Family::TextComparison(operator) => Op::TextComparison { operator },
         Family::EnumComparison(operator) => Op::EnumComparison { operator },
         Family::QuantityArithmetic(operator) => Op::QuantityArithmetic { operator },
@@ -5183,14 +5172,14 @@ mod tests {
     }
     // -- Derivation (IR-294) ---------------------------------------------------------------
 
-    /// One descriptor per catalogued identity the forward map can name.
+    /// One explicit test descriptor per current `ExactScalarOperation` variant.
     fn every_operation() -> Vec<ExactScalarOperation> {
         use ExactScalarOperation as Op;
         let domain = IntegerDomain::Mathematical;
         let decimal = DecimalType::new(0_i64.into(), 9_i64.into(), 0, 0, RoundingMode::NearestEven)
             .expect("type");
-        let text = TextType::new(0, 4, TextProfile::Nfc).expect("text");
         let mut all = Vec::new();
+        let text = TextType::new(0, 4, TextProfile::Nfc).expect("text");
         for operator in [
             IntegerOperator::Add,
             IntegerOperator::Subtract,
@@ -5317,9 +5306,10 @@ mod tests {
     /// descriptor of it, which the coverage assertion below checks.
     const OPERATION_VARIANTS: usize = 15;
 
-    /// The family each descriptor belongs to, by an exhaustive match with no wildcard arm over
+    /// The family each catalogued descriptor belongs to, by an exhaustive match over
     /// `ExactScalarOperation` and, where the operator selects the identity, over the operator.
-    /// `None` for the one descriptor with no catalogued identity (same-width IEEE conversion).
+    /// `None` for same-width IEEE conversion and caller Text admission, neither of which has a
+    /// checked scalar catalogue identity.
     fn expected_family(operation: &ExactScalarOperation) -> Option<Family> {
         use ExactScalarOperation as Op;
         Some(match operation {
@@ -5346,7 +5336,7 @@ mod tests {
                 (IeeeWidth::Binary32, IeeeWidth::Binary64) => Family::IeeeToFloat64,
                 _ => return None,
             },
-            Op::TextAdmission { .. } => Family::NumericConvert,
+            Op::TextAdmission { .. } => return None,
             Op::TextComparison { operator } => Family::TextComparison(*operator),
             Op::EnumComparison { operator } => Family::EnumComparison(*operator),
             Op::QuantityArithmetic { operator } => Family::QuantityArithmetic(*operator),
@@ -5356,10 +5346,10 @@ mod tests {
     }
 
     /// The inverse identity match and the forward `catalogued_operation` are two exhaustive
-    /// matches over one vocabulary, kept aligned by this round trip: every descriptor's forward
-    /// identity inverts to the family that descriptor belongs to, no two families share an
-    /// identity, and `every_operation` covers every `ExactScalarOperation` variant. A catalogued
-    /// identity added to one map and not the other fails here.
+    /// matches over checked scalar descriptors, kept aligned by this round trip. Caller Text
+    /// admission and same-width IEEE conversion remain descriptors of their variants but have no
+    /// checked scalar identity. Every current variant is listed, and each catalogued descriptor's
+    /// identity inverts to its family with no shared identities.
     ///
     /// Trace: FR-014-AC-18, FR-014-AC-19, TC-024.
     #[test]
@@ -5376,10 +5366,15 @@ mod tests {
         );
         let mut seen = BTreeMap::new();
         for operation in &operations {
-            let family = expected_family(operation).expect("every descriptor here is catalogued");
+            let Some(family) = expected_family(operation) else {
+                assert!(catalogued_operation(operation)
+                    .expect("known operation descriptor")
+                    .is_none());
+                continue;
+            };
             let identity = catalogued_operation(operation)
                 .expect("every descriptor here is a known RT variant")
-                .expect("every descriptor here has a catalogued identity")
+                .expect("catalogued descriptor has an identity")
                 .identity;
             assert_eq!(
                 family_of_identity(identity),
@@ -5390,6 +5385,21 @@ mod tests {
                 assert_eq!(previous, family, "{identity} names two families");
             }
         }
+    }
+
+    /// Trace: FR-035-AC-6, TC-024.
+    #[test]
+    fn caller_text_admission_has_no_checked_numeric_convert_identity() {
+        let operation = ExactScalarOperation::TextAdmission {
+            text_type: TextType::new(0, 8, TextProfile::Nfc).expect("valid type"),
+        };
+        assert!(catalogued_operation(&operation)
+            .expect("known checked-operation descriptor")
+            .is_none());
+        assert_eq!(family_of_identity("quire.op.numeric.convert"), None);
+        assert!(operation_identity(&operation)
+            .expect("caller claim identity")
+            .starts_with("caller_text.admit "));
     }
 
     /// Catalogued identities derivation refuses (checked against the operation catalog): every
