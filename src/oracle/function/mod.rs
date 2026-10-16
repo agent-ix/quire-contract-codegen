@@ -2944,12 +2944,14 @@ mod tests {
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use quire_contract_model::CheckedPackageLimit;
 
-    /// A quantity conversion body is refused as `FormMismatch` naming the form `conversion`, for
-    /// every declared body kind that reads a node, before the operator or any operand is read.
+    /// A quantity conversion body is refused for every declared body kind: as `FormMismatch`
+    /// naming the form `conversion` for a Scalar body over Add, Subtract or Multiply, a
+    /// composite-equality body and a Call body, and as `UnsupportedOperator` for a Scalar
+    /// operator outside those three (Negate), which the classifier checks before the form.
     ///
     /// Trace: FR-014-AC-2, TC-024.
     #[test]
-    fn a_quantity_conversion_body_is_a_form_mismatch_for_every_body_kind() {
+    fn a_quantity_conversion_body_is_refused_for_every_body_kind() {
         let id = |digest: &str| {
             serde_json::json!({
                 "domain": "quire.checked-semantic-node/v1",
@@ -2979,13 +2981,53 @@ mod tests {
             },
         }))
         .expect("a checked conversion node");
-        for body in [
-            ExactFunctionBody::Scalar {
-                operator: IntegerOperator::Add,
-            },
-            ExactFunctionBody::CompositeEquality {
-                operator: EqualityOperatorKind::Equal,
-            },
+        let mismatch = || {
+            Some(ExactFunctionRefusal::FormMismatch {
+                found: "conversion".to_owned(),
+            })
+        };
+        let unsupported_operator = || {
+            Some(ExactFunctionRefusal::UnsupportedOperator {
+                detail: "only binary IntegerOperator::{Add,Subtract,Multiply} are supported",
+            })
+        };
+        for (body, expected) in [
+            (
+                ExactFunctionBody::Scalar {
+                    operator: IntegerOperator::Add,
+                },
+                mismatch(),
+            ),
+            (
+                ExactFunctionBody::Scalar {
+                    operator: IntegerOperator::Subtract,
+                },
+                mismatch(),
+            ),
+            (
+                ExactFunctionBody::Scalar {
+                    operator: IntegerOperator::Multiply,
+                },
+                mismatch(),
+            ),
+            (
+                ExactFunctionBody::Scalar {
+                    operator: IntegerOperator::Negate,
+                },
+                unsupported_operator(),
+            ),
+            (
+                ExactFunctionBody::CompositeEquality {
+                    operator: EqualityOperatorKind::Equal,
+                },
+                mismatch(),
+            ),
+            (
+                ExactFunctionBody::Call {
+                    callee: "other".to_owned(),
+                },
+                mismatch(),
+            ),
         ] {
             let declaration = ExactFunctionDeclaration {
                 node_id: node.node_id.clone(),
@@ -2997,9 +3039,7 @@ mod tests {
             };
             assert_eq!(
                 classify_body_shape(&node, &declaration).err(),
-                Some(ExactFunctionRefusal::FormMismatch {
-                    found: "conversion".to_owned()
-                }),
+                expected,
                 "{:?}",
                 declaration.body
             );

@@ -3969,6 +3969,41 @@ pub const DERIVE_MIXED_DIV: u32 = 2042;
 /// `numeric.convert` to an integer result: only a text result is derivable.
 pub const DERIVE_CONVERT_TO_INTEGER: u32 = 2043;
 
+/// A pure function whose body is a quantity conversion node.
+pub const CONVERSION_FUNCTION: u32 = 2150;
+/// A quantity equality whose left operand references a quantity conversion node.
+pub const EQUALITY_OVER_CONVERSION: u32 = 2151;
+
+/// [`corpus_package`] plus a function declared over a quantity conversion node and a quantity
+/// equality that reads a conversion node as an operand.
+pub fn conversion_operand_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let conversion = code_id(QUANTITY_CONVERSIONS[0]).digest.to_string();
+    builder.application_bounded(
+        EQUALITY_OVER_CONVERSION,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.quantity.eq"),
+            &key(T_BOOLEAN),
+            vec![reference(&conversion), reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
+    register_code(CONVERSION_FUNCTION, key(CONVERSION_FUNCTION));
+    builder.node_with(
+        &key(CONVERSION_FUNCTION),
+        "function",
+        "pure_function",
+        &unit_type(),
+        json!({"term": "reference", "target": node_ref(&conversion)}),
+        std::slice::from_ref(&conversion),
+    );
+    builder
+}
+
 /// [`corpus_package`] plus the nodes IR-294's derivation refuses: `integer.rem`, `integer.eq`,
 /// a mixed-operand `rational.div` and a `numeric.convert` to an integer.
 pub fn derivation_package() -> PackageBuilder {

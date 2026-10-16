@@ -3672,6 +3672,119 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
     );
 }
 
+/// Function schedules refuse a function declared over a quantity conversion body, with no
+/// schedule and no artifact. A unit-typed declared result has no scalar kind, so the whole request
+/// is `MissingNode` naming the unit type. Under an integer declared result the body itself is
+/// refused, as a refused function, with `MissingNode` naming the unit type of the conversion.
+///
+/// Trace: FR-014-AC-2, TC-024
+#[test]
+fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_no_schedule() {
+    use quire_contract_codegen::{
+        generate_function_schedules, generate_function_schedules_with_limits,
+        FunctionScheduleDeclaration, FunctionScheduleLimits, FunctionScheduleRefusal,
+    };
+    let (package, ids) = conversion_operand_package().admit_resolved();
+    let function = ids.resolve(&code_id(CONVERSION_FUNCTION));
+    let body = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
+    let unit = ids.resolve(&id(&unit_type()));
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let declaration = |result_type_node_id| FunctionScheduleDeclaration {
+        function_node_id: function.clone(),
+        body_node_id: body.clone(),
+        name: "converting".to_owned(),
+        parameters: Vec::new(),
+        result_type_node_id,
+    };
+
+    let work_limit = 1_000;
+    let by_unit = declaration(unit.clone());
+    assert_eq!(
+        generate_function_schedules(&package, std::slice::from_ref(&by_unit), &[], work_limit)
+            .err(),
+        Some(FunctionScheduleRefusal::MissingNode(unit.clone()))
+    );
+    assert_eq!(
+        generate_function_schedules_with_limits(
+            &package,
+            std::slice::from_ref(&by_unit),
+            &[],
+            FunctionScheduleLimits::default(),
+        )
+        .err(),
+        Some(FunctionScheduleRefusal::MissingNode(unit.clone()))
+    );
+
+    let by_integer = declaration(integer);
+    for generated in [
+        generate_function_schedules(&package, std::slice::from_ref(&by_integer), &[], work_limit),
+        generate_function_schedules_with_limits(
+            &package,
+            std::slice::from_ref(&by_integer),
+            &[],
+            FunctionScheduleLimits::default(),
+        ),
+    ] {
+        let generated = generated.unwrap_or_else(|error| {
+            panic!(
+                "{error:?}; unit {unit:?}; operand {:?}",
+                ids.resolve(&code_id(V_QUANTITY))
+            )
+        });
+        assert!(generated.functions.is_empty(), "no schedule");
+        assert!(generated.modules.is_empty(), "no module artifact");
+        assert_eq!(generated.refused_functions.len(), 1);
+        assert_eq!(
+            generated.refused_functions[0].refusal,
+            FunctionScheduleRefusal::MissingNode(unit.clone())
+        );
+    }
+}
+
+/// A quantity equality that reads a conversion node as an operand is refused by the
+/// composite-equality generator as an unsupported quantity, with no oracle: the operand is read
+/// through to the converted quantity type, which has no equality encoding.
+///
+/// Trace: FR-014-AC-2, FR-018-AC-15, TC-024
+#[test]
+fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quantity() {
+    use quire_contract_codegen::{
+        generate_composite_equality_oracles, CompositeEqualityItem, CompositeEqualityRefusal,
+        EqualityOperandDescriptor, EqualityOperatorKind,
+    };
+    let (package, ids) = conversion_operand_package().admit_resolved();
+    let node = ids.resolve(&code_id(EQUALITY_OVER_CONVERSION));
+    let unit = ids.resolve(&id(&unit_type()));
+    let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
+    let output = generate_composite_equality_oracles(
+        &contract,
+        &positions,
+        &[0],
+        &[CompositeEqualityItem {
+            node_id: node,
+            operator: EqualityOperatorKind::Equal,
+            left: EqualityOperandDescriptor::typed(unit.clone()),
+            right: EqualityOperandDescriptor::typed(unit),
+        }],
+        Default::default(),
+    )
+    .expect("generates");
+    assert_eq!(output.claim_map.items.len(), 1);
+    assert!(
+        matches!(
+            &output.claim_map.items[0].result,
+            ClaimDisposition::Refused {
+                refusal: CompositeEqualityRefusal::Unsupported {
+                    node_tag: "quantity",
+                    ..
+                }
+            }
+        ),
+        "{:?}",
+        output.claim_map.items[0].result
+    );
+}
+
 /// The caller-declared entry points refuse a quantity conversion node under every descriptor the
 /// caller can declare: `generate_exact_scalar_oracles` and `plan_exact_scalar_oracles` return the
 /// named refusal, the plan holds no oracle to render, and the generated crate has no oracle

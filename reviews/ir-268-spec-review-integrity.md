@@ -59,3 +59,4 @@ Round 1, checked against fix commit 7e16de1.
 | FND-001 | fixed | verified in 7e16de1 |
 | FND-002 | fixed | verified in 7e16de1 |
 | FND-003 | fixed | verified in 7e16de1 |
+| FND-004 | fixed | verified in 45f72ee (round 2) |

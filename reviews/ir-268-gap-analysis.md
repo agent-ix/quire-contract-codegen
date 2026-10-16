@@ -100,6 +100,9 @@ allowlist is enforced.
 | FND-001 | fixed | FR-014-AC-6 now excludes the TC-187 conversion rows and names FR-014-AC-2 as their owner. `assert_rows_agreed` fails any AC-6 row with 0 agreements, and every agreement test calls it. |
 | FND-002 | fixed | TC-024 step text now reads "derive every `quantity.convert` node of the corpus (each carries the `exact` mode its unit type pins)", which matches the fixtures. |
 | FND-003 | fixed | `fn declared_field` (src/kani/generate/collection.rs:339) is module-private: not pub, not pub(crate), not re-exported. It is used at :449 in place of the old `map_err`/`ok_or`, and it maps both an `Err` listing and a missing field to `FieldNotAdmitted`, exactly as before, so production behaviour is unchanged. The lib test `a_declaration_without_listable_fields_or_the_selected_field_is_field_not_admitted` drives both error branches through the combinator the production call uses. Every supported integration case exercises the Ok path. That is adequate for branches admitted packages cannot reach. |
+| FND-004 | fixed | Round 2 (45f72ee). The label-loop test is deleted. AC-2 now says the tests exercise the three corpus conversion nodes, not individual vectors. AC-6 excludes exactly U01, U04, U07, U08, U09b, U10, U15-U18, U22, U25, U26 and U29. That matches every "Convert" row of QSpec TC-187. U09 (ill_typed dimension key) is back in AC-6 scope. tests.md claims no per-row count. |
+| FND-005 | fixed | Round 2. `tc_025_a_quantity_conversion_claim_is_unsupported_...` destructures `KaniObligationOutcome::Emitted` and asserts `harnesses`, `scalar_harnesses`, `state_frame_harnesses` and `collection_harnesses` are all empty. A control over node 1001 yields one scalar harness, so the absence is measured. |
+| FND-006 | fixed | Round 2. FR-014 Behavior and AC-2 now state that the function-application and composite-equality generators are exempt: they refuse a conversion as `FormMismatch { found: "conversion" }` before any artifact. Tests: the lib test `a_quantity_conversion_body_is_a_form_mismatch_for_every_body_kind`, plus integration tests for both generators. The equality test asserts the exact `FormMismatch`. A probe mutant that panics in `classify_body_shape` for a non-fixture conversion node turned `tc_024_function_generator_refuses_...` red, so the integration test does reach the form check on the production path. |
 
 ## New findings (disposition pass 1)
 
@@ -140,3 +143,37 @@ bodies (src/oracle/function/mod.rs:1687-1691), and composite equality refuses qu
 (src/oracle/equality/mod.rs:1945-1946). Both refuse a conversion, but under their own reasons and
 without the named capability, and AC-2 does not say why they are exempt. This is low with medium
 confidence: no emission is possible, so this is a statement gap and not a behaviour gap.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | `generate_function_schedules` and `generate_function_schedules_with_limits` are public and take function bodies, but they are neither in FR-014's quantity-conversion entry-point list nor stated as exempt, and no test drives a conversion body through them | src/oracle/function/mod.rs:282-330, 386-420; src/oracle/function/schedule.rs:61-72 |
+
+### FND-007
+
+Planner steer S1 says every entry point that can receive `quire.op.quantity.convert` must either
+refuse it with `QUANTITY_CONVERSION_CAPABILITY` or be shown exempt by an earlier typed refusal.
+Either way the case must be stated in AC-2 and tested. The schedule generator is public
+(re-exported at src/lib.rs:84-85) and accepts `FunctionScheduleDeclaration`s naming any admitted
+function body.
+
+By reading the code, a conversion body is refused before any artifact, but with a generic reason:
+- Its unit result type is not in `type_kinds`, which holds only boolean and integer scalar types
+  (mod.rs:318-329), so `result_kind` fails with `ScheduleRefusal::MissingNode`.
+- Otherwise `Operation::from_identity` refuses any identity outside its seven-entry set as
+  `UnsupportedOperation` (schedule.rs:61-72).
+- The refusal is a whole-request `Err`, not a per-item disposition.
+
+Nothing tests this. FR-014's Behavior statement and AC-2 do not name the schedule generator. This
+is low with medium confidence: there is no emission, and the gap is in the statement and the
+test. The exemption was established by reading the code, not by executing it.
+
+I swept the other generators. Each has a closed operation whitelist that a conversion identity
+cannot match: Kani frame comparisons (frame.rs:1271-1276), collection quantifier predicates
+(collection.rs `resolve_predicate`), replay composite equality (`quire.op.structural.eq/ne`,
+composite_builder.rs:270-271) and the Kani scalar renderer (`ScalarOperation::of`, integer
+arithmetic only). All of them refuse before rendering. None is a V2 per-node entry point for an
+arbitrary application, so I raise no further finding. A one-line AC-2 note covering
+"closed-whitelist families" would make S1 complete.
+
