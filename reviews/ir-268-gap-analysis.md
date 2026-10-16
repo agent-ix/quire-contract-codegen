@@ -104,6 +104,7 @@ allowlist is enforced.
 | FND-005 | fixed | Round 2. `tc_025_a_quantity_conversion_claim_is_unsupported_...` destructures `KaniObligationOutcome::Emitted` and asserts `harnesses`, `scalar_harnesses`, `state_frame_harnesses` and `collection_harnesses` are all empty. A control over node 1001 yields one scalar harness, so the absence is measured. |
 | FND-006 | fixed | Round 2. FR-014 Behavior and AC-2 now state that the function-application and composite-equality generators are exempt: they refuse a conversion as `FormMismatch { found: "conversion" }` before any artifact. Tests: the lib test `a_quantity_conversion_body_is_a_form_mismatch_for_every_body_kind`, plus integration tests for both generators. The equality test asserts the exact `FormMismatch`. A probe mutant that panics in `classify_body_shape` for a non-fixture conversion node turned `tc_024_function_generator_refuses_...` red, so the integration test does reach the form check on the production path. |
 | FND-007 | fixed | Round 3 (2d3cca8, 1cce284). `generate_function_schedules(_with_limits)` refuse a body that reaches a conversion as `ScheduleRefusal::QuantityConversionUnsupported { body, capability }` on `refused_functions`. The check runs before the parameter and result-kind lookups, so neither result type gives an `Err(MissingNode)` any more. `validate_schedule_item` refuses a call that reaches one in the same way. Both tests assert the exact variant, node and capability. Mutants disabling either check turn their test red (logs/mutation.log, exit 101). FR-014 Behavior and AC-2 now list the schedules as entry points. |
+| FND-008 | fixed | Round 4 (9c5f291). `tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion` (fixtures 2158/2159) calls a pure function whose body is the 1086 conversion. Under both body kinds it asserts exactly one claim, `Refused { QuantityConversionUnsupported { node_id: conversion, capability } }`, and an empty location map. The weak test is deleted and the argument test is renamed to match what it covers. A mutant disabling the `admitted_binary_body` guard now turns both function-generator tests red (logs/mutation.log, exit 101). |
 
 ## New findings (disposition pass 1)
 
@@ -226,4 +227,29 @@ Also checked this round, with no finding:
   witness values, not graph nodes. The routed path is the derivation guard. The Kani
   frame, collection, scalar and replay composite families are closed whitelists, as AC-2 now
   states.
+
+## Disposition pass 4 notes
+
+No new findings at 9c5f291. Checked:
+
+- **`binary_predicate_operation`** (collection.rs:534) and **`node_equality_operator`**
+  (composite_builder.rs:484) are module-private `fn`s. They are not `pub` or `pub(crate)` and are
+  not re-exported, so they meet the IR-649 rule. Each is a verbatim extraction: the same checks in
+  the same order, with the same refusals (`UnsupportedShape`; `UnsupportedNodeOperation`) and the
+  same `Ok` values. The `#[allow(clippy::result_large_err)]` matches the file's existing
+  allowances.
+- **New `#[cfg(test)]` tests:**
+  - collection: the conversion is refused, with an `integer.ge` `Ok` control.
+  - composite_builder: the conversion is refused, with a `structural.eq` `Ok` control.
+  - scalar: `ScalarOperation::of` is `None` for the conversion, with an `integer.add` `Some`
+    control.
+  - frame: `from_operation` is `None` for the conversion. The control is the existing mapping
+    test in the same module.
+  - Mutants that make the collection and composite readers accept a conversion turn their tests
+    red.
+- **FR-021-AC-21:** the amended text matches the code. `admitted_binary_body` runs before the
+  classifier, so a Negate body that reaches no conversion is still `UnsupportedOperator`
+  (`tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body` passes).
+- **Cargo.toml** is byte-equal to main.
+- **Focused run** (logs/focused.log): exit 0. lib 76 passed; it 155 passed, 1 ignored.
 

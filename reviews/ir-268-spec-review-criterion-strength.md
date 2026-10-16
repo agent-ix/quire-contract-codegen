@@ -57,6 +57,8 @@ Round 1, checked against fix commit 7e16de1.
 | FND-001 | fixed | verified in 7e16de1 |
 | FND-002 | fixed | verified in 45f72ee (round 2) |
 | FND-003 | fixed | verified in 1cce284 (round 3) |
+| FND-004 | fixed | verified in 9c5f291 (round 4) |
+| FND-005 | fixed | verified in 9c5f291 (round 4) |
 
 ## New findings (disposition pass 2)
 
