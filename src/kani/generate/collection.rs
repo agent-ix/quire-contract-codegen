@@ -335,81 +335,6 @@ pub(super) fn render_collection(
     Ok(harness)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn collection_symbols_are_bounded_and_stable_per_full_identity() {
-        let identity = ("package-a", "function-a", "quantifier-a", "domain-a");
-        let first = collection_symbol_digest(&identity).expect("canonical identity digest");
-        let same = collection_symbol_digest(&identity).expect("same canonical identity");
-        let changed_package =
-            collection_symbol_digest(&("package-b", "function-a", "quantifier-a", "domain-a"))
-                .expect("changed package identity");
-        let changed_subject =
-            collection_symbol_digest(&("package-a", "function-b", "quantifier-a", "domain-a"))
-                .expect("changed subject identity");
-        let changed_domain =
-            collection_symbol_digest(&("package-a", "function-a", "quantifier-a", "domain-b"))
-                .expect("changed domain identity");
-        assert_eq!(first, same);
-        assert_ne!(first, changed_package);
-        assert_ne!(first, changed_subject);
-        assert_ne!(first, changed_domain);
-        assert_ne!(
-            collection_harness_symbols(&first),
-            collection_harness_symbols(&changed_package)
-        );
-        assert_ne!(
-            collection_harness_symbols(&first),
-            collection_harness_symbols(&changed_subject)
-        );
-        assert_ne!(
-            collection_harness_symbols(&first),
-            collection_harness_symbols(&changed_domain)
-        );
-
-        let (module, harness) = collection_harness_symbols(&first);
-        assert!(module.len() <= 255, "module filename component: {module}");
-        assert!(
-            harness.len() <= 255,
-            "harness filename component: {harness}"
-        );
-        assert!(format!("{module}::{harness}").len() <= 255);
-    }
-
-    #[test]
-    fn truncated_symbol_collision_is_detected_against_full_identity() {
-        let shared_module = "kob_collection_0123456789abcdef0123";
-        let shared_harness = "prove_collection_0123456789abcdef0123";
-        assert!(collection_symbols_conflict(
-            shared_module,
-            shared_harness,
-            &("package-a", "function-a", "quantifier-a"),
-            shared_module,
-            shared_harness,
-            &("package-a", "function-b", "quantifier-a"),
-        ));
-        assert!(!collection_symbols_conflict(
-            shared_module,
-            shared_harness,
-            &("package-a", "function-a", "quantifier-a"),
-            shared_module,
-            shared_harness,
-            &("package-a", "function-a", "quantifier-a"),
-        ));
-        assert!(!collection_symbols_conflict(
-            shared_module,
-            shared_harness,
-            &("package-a", "function-a", "quantifier-a"),
-            "kob_collection_other",
-            "prove_collection_other",
-            &("package-a", "function-b", "quantifier-a"),
-        ));
-    }
-}
-
 /// Resolve the first (collection) operand of an admitted quantifier to its exact model field.
 ///
 /// Resolution uses the graph's projection declaration identity plus `model_object_fields`; it
@@ -929,4 +854,79 @@ fn integer_member_i128(node: &CheckedSemanticNodeV2, name: &str) -> Option<i128>
         .as_str()?
         .parse()
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collection_symbols_are_bounded_and_stable_per_full_identity() {
+        let identity = ("package-a", "function-a", "quantifier-a", "domain-a");
+        let first = collection_symbol_digest(&identity).expect("canonical identity digest");
+        let same = collection_symbol_digest(&identity).expect("same canonical identity");
+        let changed_package =
+            collection_symbol_digest(&("package-b", "function-a", "quantifier-a", "domain-a"))
+                .expect("changed package identity");
+        let changed_subject =
+            collection_symbol_digest(&("package-a", "function-b", "quantifier-a", "domain-a"))
+                .expect("changed subject identity");
+        let changed_domain =
+            collection_symbol_digest(&("package-a", "function-a", "quantifier-a", "domain-b"))
+                .expect("changed domain identity");
+        assert_eq!(first, same);
+        assert_ne!(first, changed_package);
+        assert_ne!(first, changed_subject);
+        assert_ne!(first, changed_domain);
+        assert_ne!(
+            collection_harness_symbols(&first),
+            collection_harness_symbols(&changed_package)
+        );
+        assert_ne!(
+            collection_harness_symbols(&first),
+            collection_harness_symbols(&changed_subject)
+        );
+        assert_ne!(
+            collection_harness_symbols(&first),
+            collection_harness_symbols(&changed_domain)
+        );
+
+        let (module, harness) = collection_harness_symbols(&first);
+        assert!(module.len() <= 255, "module filename component: {module}");
+        assert!(
+            harness.len() <= 255,
+            "harness filename component: {harness}"
+        );
+        assert!(format!("{module}::{harness}").len() <= 255);
+    }
+
+    #[test]
+    fn truncated_symbol_collision_is_detected_against_full_identity() {
+        let shared_module = "kob_collection_0123456789abcdef0123";
+        let shared_harness = "prove_collection_0123456789abcdef0123";
+        assert!(collection_symbols_conflict(
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+            shared_module,
+            shared_harness,
+            &("package-a", "function-b", "quantifier-a"),
+        ));
+        assert!(!collection_symbols_conflict(
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+        ));
+        assert!(!collection_symbols_conflict(
+            shared_module,
+            shared_harness,
+            &("package-a", "function-a", "quantifier-a"),
+            "kob_collection_other",
+            "prove_collection_other",
+            &("package-a", "function-b", "quantifier-a"),
+        ));
+    }
 }
