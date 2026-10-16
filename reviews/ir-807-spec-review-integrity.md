@@ -54,3 +54,23 @@ scope:
   excerpt: "Planned (IR-635); no traced terminal-map strength/outcome integration yet. ... IR-635 owns the proof-subject/strength inputs, original-artifact invocation, ordinary shadow-inconclusive rows and actual record category"
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+Reviewed ec2e2f4c116bd393d2fd2e63351a2a712ee4109e (diff f9ef0f5..ec2e2f4).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | Four places scope the shadow exclusion with "until the production path invokes the delivered parity API": FR-028:312-314 ("until ..., no bounded-shadow outcome is passed to `run_terminal_value` (FR-029-AC-30)"), FR-028:376-378, the FR-029 Behavior sentence at :159-160 and TC-048 step 8. AC-30 says a bounded-shadow outcome "never" reaches `run_terminal_value`, and AC-21 has no time limit. The "until" wording implies that after IR-806 the exclusion lapses. Drop "until ..." or say "on every path, including after IR-806". | spec/kani/functional/FR-028-bounded-proof-ceilings.md:312-314,376-378, spec/kani/functional/FR-029-run-outcome-terminal-record.md:159-160, spec/replay/matrix/TC-048-composite-parity-replay-binding.md:116-118 |
+| FND-004 | low | TC-048:230, a line this PR edits, still says "Ne awaits IR-690". IR-690 is Done, CG #394 (76dca65) added structural.ne to the original builder, and FR-033-AC-1 and AC-11 credit IR-635 with the Ne parameter/parameter and parameter/literal controls. The replay tests.md:39 status ("Ne ... remain planned") has the same stale claim. This text predates the PR, but it sits on an edited line. | spec/replay/matrix/TC-048-composite-parity-replay-binding.md:230, spec/replay/matrix/tests.md:39 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS with two new low findings.** FND-001: FR-028:312-314 no longer mentions interim refusals. FND-002: the dangling "Outcomes without retained disagreement" sentence is removed from the FR-029 Behavior paragraph. `grep -rnE 'NonProductionProof|ShadowCounterexample|ProofStrength' spec plan` (excluding reviews) is still empty.

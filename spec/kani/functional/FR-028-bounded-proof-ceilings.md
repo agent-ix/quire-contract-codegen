@@ -310,8 +310,8 @@ None of these is decided here, and none is guessed.
   state (ADR-003 Q2 says an item with no finite bound gets no harness). The strengths are reported
   as they are and the owner's answer decides which of them closes a row.
 - **Delivery of QSL composite parity settlement.** FR-029 AC-17 specifies the planned QSL-640-gated
-  parity settlement; until the production path invokes the delivered parity API, no bounded-shadow
-  outcome is passed to `run_terminal_value` (FR-029-AC-30).
+  parity settlement. No bounded-shadow outcome is ever passed to `run_terminal_value`
+  (FR-029-AC-30); only the production path's invocation of the delivered parity API is pending.
 - **The refinement subject after the evaluation seam moves (QSL, IR-583; Contract Runtime and
   `quire-exact`, IR-349).** The refinement obligation targets the generated oracle's signature and
   isolates the abstraction function in one module (FR-028-AC-14), so only that module changes if the
@@ -374,8 +374,9 @@ change.
   and AC-9 are planned and FR-018-AC-2 is partly covered, so FR-015-AC-76 records each as unbacked
   until the matrix lists it covered.
 - A terminal value for a verified shadow result: FR-029-AC-17 specifies the planned QSL-640-gated
-  parity map; until the production path invokes QSL's delivered parity API, `run_terminal_value`
-  and `TerminalPairError` carry no shadow result (FR-029-AC-21, AC-30).
+  parity map. `run_terminal_value` and `TerminalPairError` carry no shadow result
+  (FR-029-AC-21, AC-30); only the production path's invocation of QSL's delivered parity API is
+  pending.
 - A replay path for a shadow counterexample, which needs FR-025's binding for a composite leaf;
   until then a falsified shadow harness has no terminal value (FR-029-AC-17).
 - Renaming ADR-003's Q1 sentence on co-ownership once the question above is answered.

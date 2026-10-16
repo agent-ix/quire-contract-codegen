@@ -39,3 +39,18 @@ scope:
   excerpt: "Planned (IR-635): for the composite parity route, the proof subject (`production` or `bounded_shadow`, FR-028), the verified outcome's proof strength (FR-028-AC-17) and retained `refinement_failed` disagreement whatever the backend outcome. `run_terminal_value` takes none of these today"
 bindings: []
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS**. Reviewed ec2e2f4. AC-21 is split into three criteria:
+- AC-21: the map has no input or variant for a bounded-shadow outcome.
+- AC-30: the production path routes a bounded_shadow outcome only to the parity route, with the reason given.
+- AC-31: the parity route fabricates no replay or cause.
+
+Each makes one checkable claim, apart from AC-21's trailing "deliberate, tested change" clause, which is harmless. No new EARS findings. The new Behavior sentence "The production path shall not pass a `bounded_shadow` outcome to `run_terminal_value`" is a well-formed ubiquitous shall-statement.

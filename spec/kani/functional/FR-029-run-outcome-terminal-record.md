@@ -156,11 +156,11 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 The production and source-predicate rows above retain their meaning. For a bound, node-selected
 composite parity claim, the adapter shall consume QSL's same-claim settlement/record from
 [FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md), rather than apply the
-source-predicate `reproduced` row. Until the production CG path invokes the delivered QSL parity
-facade, `run_terminal_value` receives no bounded-shadow evidence: it has no proof-subject or
-proof-strength input and `TerminalPairError` has no variant for it. The production path shall not pass a
-`bounded_shadow` outcome to `run_terminal_value` (FR-029-AC-30); the admitted route takes the rows
-below. The parity route's disagreement-first `Failed`/CG-owned `CgDefect` rule invents no available
+source-predicate `reproduced` row. `run_terminal_value` receives no bounded-shadow evidence: it has no
+proof-subject or proof-strength input and `TerminalPairError` has no variant for it. The production
+path shall never pass a `bounded_shadow` outcome to `run_terminal_value` (FR-029-AC-30); the
+admitted route takes the rows below, and only the production invocation of QSL's delivered parity
+facade is pending. The parity route's disagreement-first `Failed`/CG-owned `CgDefect` rule invents no available
 QSL cause.
 
 FR-028 AC-17 retains every source proof strength. The adapter shall project the closed strength set
@@ -306,7 +306,7 @@ AC-15 cannot reject that input as an ordinary unexpected replay settlement.
 IR-635's first Eq-only verified constructor slice preserves supplied verified evidence, original
 limits and content binding through a genuine QSL report and the IR-666 converter. It does not
 produce FR-028 proof strength/refinement or extend `run_terminal_value`. AC-17 and AC-19 to AC-27
-retain the partial/planned statuses below; falsified native/generated-family work remains planned.
+retain the partial/planned statuses below; falsified native/generated-family work remains planned (IR-806).
 
 ## Acceptance Criteria
 

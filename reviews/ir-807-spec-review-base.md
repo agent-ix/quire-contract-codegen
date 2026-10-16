@@ -105,3 +105,40 @@ scope:
   excerpt: "Until CG consumes the delivered QSL facade, no bounded-shadow outcome reaches the map (FR-029-AC-21)."
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+Reviewed ec2e2f4c116bd393d2fd2e63351a2a712ee4109e (diff f9ef0f5..ec2e2f4), including the IR-635 -> IR-806 retargets.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | FR-033:217-218 says "The separate IR-635 builder owns pre-invocation source, artifact, harness and playback refusals." IR-635 is Done. Its `CompositeBuildError` (src/replay/composite_builder.rs:30-80) delivers source, package, context, function, node, operand, operator and identity refusals, but no artifact-authentication, harness or playback refusal. Those are FR-033-AC-5/AC-6 and generated-artifact authentication, which belong to IR-806. The sentence therefore attributes planned work to a Done ticket. Split it: IR-635's builder owns the delivered source/package/context refusals, and IR-806 owns the planned artifact, harness and playback refusals. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:217-218 |
+| FND-006 | medium | AD-003 E-1 composite extension is retargeted from IR-635 to IR-806. E-1 restates FR-033-AC-11's O-09 preimage. FR-033-AC-11 credits IR-635 with delivering Eq graph-child positional O-09 and the Ne parameter/parameter and parameter/literal controls. FR-033-AC-11 is also not in IR-806's scope (FR-025-AC-9, FR-029 AC-17/19..27, FR-033 AC-2..6/8/10, the falsified route). The retarget relabels delivered IR-635 work as planned IR-806 work, and it assigns IR-806 the AC-11 remainder (self-comparison, inline literals, Ne literal/literal), which is outside IR-806's scope. Mark E-1 PARTIAL with IR-635's delivered part, and leave the remainder to whatever owns FR-033-AC-11. | spec/assurance/AD-003-evidence-chain.md:290 |
+| FND-007 | low | Several rows keep their IR-635 citation for the delivered part but name no owner for the planned remainder. FR-033-AC-9 ("generated-artifact authentication and falsified invocation planned"), FR-033-AC-12 ("falsified and cross-outcome integration planned"), replay tests.md:24 and FR-029:306-309 ("falsified native/generated-family work remains planned") all cover IR-806's falsified-route scope without naming IR-806. The FR-033-AC-1 and AC-11 remainders (Ne literal/literal, self-comparison, inline operands) have no owner anywhere. None of these kept IR-635 citations plans undelivered work; the planned remainders are simply unowned. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:360,368,370,371, spec/replay/matrix/tests.md:24, spec/kani/functional/FR-029-run-outcome-terminal-record.md:306-309 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+
+## Disposition round 1 verdict
+
+**CONDITIONAL**. All four original findings are fixed at ec2e2f4:
+
+- FND-001: AC-21 now covers only `run_terminal_value`/`TerminalPairError`. FR-028:376-378 says they "carry no shadow result".
+- FND-002: Behavior adds "The production path shall not pass a `bounded_shadow` outcome to `run_terminal_value` (FR-029-AC-30)". New AC-30 states the routing guard and why it is needed.
+- FND-003: planned rows are retargeted to IR-806, which is open (Backlog) and whose description lists FR-025-AC-9, the falsified route, FR-029 AC-17/21..27 and FR-033 AC-2..6/8/10.
+- FND-004: TC-040 step 16 now names what TC-048 step 8 checks and marks AC-30 routing as planned.
+
+Gates at ec2e2f4:
+- `quire validate --scope . "spec/**/*.md"` exits 0; the remaining warnings are pre-existing, in untouched FR-017 and FR-014.
+- `quire coverage --scope . --strict` gives 214 unbacked and 0 contradicted. The +2 over the 212 baseline are exactly FR-029-AC-30 and AC-31: new PLANNED rows with no backing symbol yet. That is expected and accepted.
+- `quire matrix` differs from f9ef0f5 only in retargeted status text and the two new untagged rows.
+- AC ids are not renumbered, and AC-30/AC-31 are appended.
+- FR-014/021/031 and TC-024/031/044 are untouched.
+
+The other retargets are within IR-806's scope and relabel no delivered work: FR-025-AC-9, FR-029 AC-17/19..27, FR-030 AC-15..17, FR-033 AC-7/AC-13 (the original-artifact part only), TC-036 step 9, TC-041 and the matrices. Kept IR-635 citations name only delivered constructor work, except FR-033:217 (FND-005). New findings FND-005 and FND-006 (medium) remain open.
