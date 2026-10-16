@@ -121,3 +121,16 @@ Gates at 437567e:
 - `quire coverage --strict` is 218 unbacked, 0 contradicted.
 - `quire matrix` differs from 216b447 only in the AC-14, AC-16 and AC-17 text cells.
 - The reviews/ copies match the reviewer's files.
+
+## Disposition round 2
+
+Reviewed 811f910ef49b50ffff0d00738bc417a4321c10af.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+
+## Disposition round 2 verdict
+
+**PASS**. FND-004: the AC-11 header cites FR-015-AC-76 for the harness identity record. Only the Population-keyed metadata is left unowned, flagged for a new FR-033 criterion under IR-806. FND-005: AC-16 is verified by Inspection of the shared `Operands` conversion that AC-17 tests, and TC-048 and the replay matrix agree. `quire validate` exits 0. `quire coverage --strict` is 218 unbacked, 0 contradicted. The reviews/ copies matched the reviewer files before this round.
