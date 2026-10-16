@@ -420,7 +420,8 @@ otherwise.
   function-entry line and one entry-token probe inside the exact source region
   of each implication consequent, and shall declare the consequent count
   derived from the node, independent of the emitted region list.
-- Planned (IR-489): where FR-015 names a V2 clause claim, the generator shall derive a
+- Planned (IR-489, IR-815): where FR-015 names a V2 clause claim, or FR-002 (IR-815) selects a V2
+  precondition or postcondition for its harness, the generator shall derive a
   descriptor and generate an oracle for the Boolean condition of that
   `state`/`state_clause` node, an inline term with no node id of its own, addressed by
   the clause node id, without admitting the `state` node itself as a claimed node

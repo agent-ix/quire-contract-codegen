@@ -72,6 +72,21 @@ Also omit or change the LLVM producer tool/version identity. The successful case
 identity and the run's requirement/revision; each mismatch or omission is a structured non-success
 result without measured classification or coverage discharge.
 
+## Planned V2 population controls (IR-815)
+
+Admit a `CheckedPackageV2` holding a vacuous implication, a never-evaluated clause, a
+partially exercised multi-implication clause and an exercised clause. Independently derive each
+clause's expected population entry and implication count from its body, then compare the analyzer's
+expectation. Remove one clause, one consequent, one evaluation probe and every clause from the
+generated artifacts, each alone. Alter one source-map implication count against its body. Repeat the
+FR-004-AC-5 malformed-input mutations. Inspect the analyzer source for any `BoundPackage` or
+`ClauseRef` use and for any body opened outside `core/ir/`. The expected population equals the
+independent derivation (FR-004-AC-16); each count mismatch yields a binding non-success naming the
+clause with no classification, and the clause is never treated as implication-free (AC-18); the
+four classifications hold (AC-19 to AC-22); each removal prevents success (AC-23); each malformed
+input gives non-success with no invented classification (AC-24); and neither `BoundPackage` nor
+`ClauseRef` is named (AC-17). These controls are planned.
+
 ## Planned native-run-result/2 consumer controls
 
 1. Obtain QSL FR-267's genuine `native-run-result/2` documents for `AllBelow` over `high`
