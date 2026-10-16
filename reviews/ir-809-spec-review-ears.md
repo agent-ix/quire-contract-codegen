@@ -23,3 +23,9 @@ warning on them. One low finding.
 ## Verdict
 
 Low wording finding only.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (fe3a4e1): Subject-less statements recast with 'the generator shall'; the two no-shall bullets are now marked 'Rationale, not a requirement' or rewritten as generator obligations. |

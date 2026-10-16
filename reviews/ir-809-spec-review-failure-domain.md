@@ -41,3 +41,14 @@ they carry no record.
 ## Verdict
 
 Changes requested on FND-001 to FND-004; FND-005 and FND-006 are wording fixes.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (fe3a4e1): Per-member segments (`Checking harness <path>...` exact), rule 4 gives a member with no segment `unknown`; AC-36 pins A solver / B backend / C unknown. Real Kani 0.68 under `-j` prints `Thread 0: Checking harness ...`, which starts no segment, so even an unlisted `-jN` spelling cannot over-claim. |
+| FND-002 | fixed | Round 1 (fe3a4e1): Line and final line defined (trailing line feeds belong to the final line); AC-34 adds the 10000-byte line + LF and the `error: last` cases. |
+| FND-003 | fixed | Round 1 (fe3a4e1): Longest-first across crate/target/home, component boundary, `/`/empty/relative never used; AC-35 pins each case. |
+| FND-004 | fixed | Round 1 (fe3a4e1): Path token start and end characters defined; URL and `and/or` left; AC-35 pins `(<CRATE_DIR>)` and `<CRATE_DIR>/src/lib.rs:6:21`. |
+| FND-005 | fixed | Round 1 (fe3a4e1): Number must not follow a letter/digit/_/.; signed exponent allowed; AC-35 pins check_ttl_30s, u32s and 1.385e-05s. |
+| FND-006 | fixed | Round 1 (fe3a4e1): Rule 3 and the rationale now say the member reached Kani's per-harness pipeline, before goto linking and CBMC start. |
