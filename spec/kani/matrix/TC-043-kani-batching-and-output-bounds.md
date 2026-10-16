@@ -43,10 +43,14 @@ FR-028-AC-12, verified by TC-039.
 9. Leave one member's source out of the crate.
 10. In the `make kani` lane record the process count and wall time before and after batching for
     N = 1, 10 and 50.
-11. (FR-017-AC-36, PLANNED/UNRUN.) Run a batch stand-in that exits 1 with no report and prints a
-    compile failure; one whose report has every member Success and exits 1, beside one with a
-    Failure entry; the same report and exit twice with different stream text; and the over-limit
-    and unread streams of steps 1 and 2. Map a `NoVerdict` run through FR-029.
+11. (FR-017-AC-36, PLANNED/UNRUN.) Run a batch stand-in of members `a::check`, `b::check` and
+    `c::check` that exits 1 with no report and prints `Checking harness a::check...`,
+    `Solving with CaDiCaL 3.0.0` and `Checking harness b::check...`; the same group printing a
+    compile failure and no `Checking harness` line; one whose report has every member Success and
+    exits 1; one whose report has a Failure entry and exits 1; the same report and exit twice with
+    different stream text; two no-report runs with equal exit and different stream text; and the
+    over-limit and unread streams of steps 1 and 2. Map a `NoVerdict` evidence through FR-029, with
+    and without its `diagnostics`.
 
 ## Expected Results
 
@@ -84,13 +88,15 @@ FR-028-AC-12, verified by TC-039.
 9. The whole batch is refused with `HarnessNotInCrate` and launches nothing (FR-017-AC-23).
 10. Fewer processes after than before for N > 1, and the numbers are in the code PR (they are also
     written by the lane to `process-counts.json`).
-11. Every member of the no-report group is `NoVerdict` with one identical diagnostic record of phase
-    `compile` computed from the group's streams; each Success member beside exit 1 with no Failure
-    entry is `NoVerdict` with phase `unknown`, and a member that is not `NoVerdict` carries no
-    record; the two runs with different text have the same outcome, checks, SUCCESS count and
-    playback, and differ only in `diagnostics`; the over-limit and unread streams remain refused
-    with `kani_output_over_limit` and `kani_output_unread`, with no evidence and no record; the
-    FR-029 terminal value of `NoVerdict` is unchanged (FR-017-AC-36).
+11. In the no-report group `a::check` is `solver`, `b::check` is `backend` and `c::check` is
+    `unknown`, all `NoVerdict` with the group's excerpts; the compile-failure group gives every
+    member `compile`; the all-Success report beside exit 1 gives every member `NoVerdict` with phase
+    `unknown`; the report with a Failure entry has no member `NoVerdict` and no member record; the
+    two runs with the same report and exit have the same outcome, checks, SUCCESS count and
+    playback; the two no-report runs have equal evidence in every field but `diagnostics` and
+    `memory`; the over-limit and unread streams remain refused with `kani_output_over_limit` and
+    `kani_output_unread`, with no evidence and no record; the FR-029 terminal value is `Failed`
+    with and without the record (FR-017-AC-36).
 
 ## Implementation
 
