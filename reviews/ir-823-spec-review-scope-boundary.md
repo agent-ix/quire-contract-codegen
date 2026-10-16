@@ -34,3 +34,18 @@ Units examined:
 ## Verdict
 
 Findings above for this lens. Verified clean: every U02/U05/U12/U14/U20/U27 operation and the units it uses exist in `GraphSpec::tc187` (U12 needs no fixture change: `m` and `s` are roots and multiply/divide/power build compound units). U09's `IncompatibleDimensions` matches runtime `type_check` and `compare_quantity` ordering, since a base dimension maps to its own key. U06/U11 are owned by RT FR-012-AC-4 (zero scale and all topology causes). The QSpec values quoted in AC-6 (U02 `L` and the empty dimension) match TC-187. The zero-agreement guard is kept. The author's dependency claims are true: `quire_spec_language` has no `value` module, the evaluator is in `qsl-eval`, `qsl-eval` is in Cargo.lock only under `qsl-replay`, and Cargo.toml names `qsl-replay` alone.
+
+## Dispositions
+
+Round 1, fix commits 098ec55 and c1a001b (head c1a001b6c3d7024e8b0a647bd0e08ac019c88b2a), checked against the current text.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | AC-47's inspection lists only test names, trace tags, test-case steps and matrix rows, so it passes while CG's TC-187 test still states QSL agreement in other places. tests/exact_scalar_support/agreement_cases.rs:606 prints 'TC-187 three-way agreement: ...'. tests/exact_scalar_support/agreement.rs:13 says 'The RT==QSL authority check lives in RT's conformance/qsl-agreement lane', but RT removed that lane in IR-430 (RT ccc722b), and IR-669 now owns it. Failure: a reader of the test log or the module doc concludes the TC-187 rows have three-way, QSL-backed agreement, which AC-47 says CG never claims. Fix: include test output and doc comments in AC-47's inspection, and have the IR-823 code PR reword the println and the doc to name IR-669. | tests/exact_scalar_support/agreement_cases.rs:606 |
