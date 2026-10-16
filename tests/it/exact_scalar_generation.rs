@@ -26,7 +26,7 @@ use quire_contract_model::{
     CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
     StructuralCandidateError,
 };
-use quire_contract_runtime::exact::{
+use quire_exact::{
     ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval,
 };
 use serde_json::{json, Value};
@@ -555,16 +555,19 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1011,
-            "rt::divide(rt::DivisionProfile::Truncating,".to_owned(),
+            "rt::divide(rt::DivisionProfile::Truncating, rt::DivisionMember::Quotient,".to_owned(),
         ),
-        (1012, "rt::divide(rt::DivisionProfile::Floor,".to_owned()),
+        (
+            1012,
+            "rt::divide(rt::DivisionProfile::Floor, rt::DivisionMember::Quotient,".to_owned(),
+        ),
         (
             1013,
-            "rt::divide(rt::DivisionProfile::Euclidean,".to_owned(),
+            "rt::divide(rt::DivisionProfile::Euclidean, rt::DivisionMember::Quotient,".to_owned(),
         ),
         (
             1014,
-            "rt::divide(rt::DivisionProfile::Truncating,".to_owned(),
+            "rt::divide(rt::DivisionProfile::Truncating, rt::DivisionMember::Quotient,".to_owned(),
         ),
         (1021, "rt::modulo(".to_owned()),
         (
@@ -665,23 +668,23 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ),
         (
             1081,
-            "rt::evaluate_quantity(rt::QuantityOperation::Add(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Add(".to_owned(),
         ),
         (
             1082,
-            "rt::evaluate_quantity(rt::QuantityOperation::Multiply(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Multiply(".to_owned(),
         ),
         (
             1083,
-            "rt::evaluate_quantity(rt::QuantityOperation::Power(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Power(".to_owned(),
         ),
         (
             1088,
-            "rt::evaluate_quantity(rt::QuantityOperation::Subtract(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Subtract(".to_owned(),
         ),
         (
             1089,
-            "rt::evaluate_quantity(rt::QuantityOperation::Divide(".to_owned(),
+            "residue::evaluate_quantity(residue::QuantityOperation::Divide(".to_owned(),
         ),
     ];
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
@@ -691,11 +694,11 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
         ));
         calls.push((
             ENUM_COMPARISONS[index],
-            format!("rt::compare_enum(rt::ComparisonOperator::{operator:?},"),
+            format!("residue::compare_enum(rt::ComparisonOperator::{operator:?},"),
         ));
         calls.push((
             QUANTITY_COMPARISONS[index],
-            format!("rt::compare_quantity(rt::ComparisonOperator::{operator:?},"),
+            format!("residue::compare_quantity(rt::ComparisonOperator::{operator:?},"),
         ));
     }
     calls.sort();
@@ -1257,7 +1260,7 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
     let floor = |lower, upper| ExactScalarOperation::IntegerDivision {
-        profile: quire_contract_runtime::exact::DivisionProfile::Floor,
+        profile: DivisionProfile::Floor,
         domain: bounded(lower, upper),
     };
     // Node 1014 is bounded [-5, 5]: a descriptor over [-1000, 1000] is refused.

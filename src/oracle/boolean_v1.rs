@@ -50,7 +50,7 @@ pub struct GeneratedArtifactBundle {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OracleShape {
     /// A native oracle, evaluated by a Rust program. Integer add, subtract and multiply are
-    /// Contract Runtime `exact` calls, and an oracle holding any returns `Outcome<bool>` and
+    /// `quire-exact` calls, and an oracle holding any returns `Outcome<bool>` and
     /// takes a trailing `&mut Meter`. An arithmetic-free oracle returns `bool`.
     Native,
     /// The oracle `generate_kani_bundle` embeds in a `proof_for_contract` harness. It is
@@ -355,7 +355,7 @@ fn generate_boolean_oracle_inner(
     }
     header.push(String::new());
     if returns_outcome {
-        header.push("use quire_contract_runtime::exact as rt;".to_owned());
+        header.push("use quire_exact as rt;".to_owned());
         header.extend(native_helper_lines(rendered.helpers));
     }
 
@@ -893,7 +893,14 @@ fn carry<T, U>(outcome: rt::Outcome<T>) -> Result<T, rt::Outcome<U>> {
         rt::Outcome::Undefined(reason) => Err(rt::Outcome::Undefined(reason)),
         rt::Outcome::Refused(reason) => Err(rt::Outcome::Refused(reason)),
         rt::Outcome::Incomplete(record) => Err(rt::Outcome::Incomplete(record)),
-        _ => Err(rt::Outcome::Refused(rt::Refusal::CheckedInvariant)),
+    }
+}
+
+/// Retains one completed connective result, or returns the exact denied charge.
+fn completed_boolean(value: bool, meter: &mut rt::Meter) -> rt::Outcome<bool> {
+    match rt::retain_boolean(value, meter) {
+        Ok(value) => rt::Outcome::Completed(value),
+        Err(incomplete) => rt::Outcome::Incomplete(incomplete),
     }
 }
 ";
@@ -907,29 +914,21 @@ fn bound<U>(minimum: i64, maximum: i64) -> Result<rt::IntegerInterval, rt::Outco
 ";
 
 const NATIVE_EQUALITY_HELPER: &str = "
-/// Type-checks then evaluates integer equality through the runtime's equality evaluation.
+/// Evaluates integer equality through the exact kernel's planned equality.
 fn equality(
-    operator: rt::EqualityOperator,
+    expect_equal: bool,
     left: rt::Integer,
     right: rt::Integer,
     meter: &mut rt::Meter,
 ) -> rt::Outcome<bool> {
-    let environment = match rt::TypeEnvironment::new(
-        core::iter::empty::<rt::CompositeDeclaration>(),
-        core::iter::empty::<rt::ObjectTypeDeclaration>(),
-    ) {
-        Ok(environment) => environment,
-        Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),
-    };
-    let checked = match environment.check_equality(
-        operator,
-        rt::EqualityOperand::typed(rt::ValueType::Integer),
-        rt::EqualityOperand::typed(rt::ValueType::Integer),
-    ) {
-        Ok(checked) => checked,
-        Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),
-    };
-    checked.evaluate(&rt::Value::Integer(left), &rt::Value::Integer(right), meter)
+    match carry(rt::planned_equality(
+        &rt::Value::Integer(left),
+        &rt::Value::Integer(right),
+        meter,
+    )) {
+        Ok(equal) => rt::Outcome::Completed(if expect_equal { equal } else { !equal }),
+        Err(stop) => stop,
+    }
 }
 ";
 
@@ -1192,7 +1191,7 @@ impl<'a> Renderer<'a> {
                 self.emit("match carry(")?;
                 self.outcome_bool(operand)?;
                 self.emit(") {")?;
-                self.emit("Ok(value) => rt::Outcome::Completed(!value),")?;
+                self.emit("Ok(value) => completed_boolean(!value, meter),")?;
                 self.emit("Err(stop) => stop,")?;
                 self.emit("}")
             }
@@ -1223,54 +1222,77 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    /// A connective with arithmetic below it. A short-circuit connective calls the runtime's
-    /// operator, so its right operand is a closure the left operand's decision never reaches. A
-    /// total connective evaluates both operands left to right and takes the first stop.
+    /// A connective with arithmetic below it. Both shapes carry the first child stop and
+    /// retain exactly one completed Boolean result through the exact kernel.
     fn outcome_connective(
         &mut self,
         operator: BooleanOperator,
         left: &Expression,
         right: &Expression,
     ) -> Rendered {
-        let (function, total) = connective_function(operator);
-        if total {
-            self.emit("match (carry(")?;
-            self.outcome_bool(left)?;
-            self.emit("), carry(")?;
-            self.outcome_bool(right)?;
-            self.emit(")) {")?;
-            self.emit(&format!(
-                "(Ok(left_value), Ok(right_value)) => rt::Outcome::Completed(quire_contract_runtime::operators::{function}(|| left_value, || right_value)),"
-            ))?;
-            self.emit("(Err(stop), _) | (_, Err(stop)) => stop,")?;
-            return self.emit("}");
+        match operator {
+            BooleanOperator::TotalAnd => {
+                self.outcome_total_connective(left, right, "left_value && right_value")
+            }
+            BooleanOperator::TotalOr => {
+                self.outcome_total_connective(left, right, "left_value || right_value")
+            }
+            BooleanOperator::ShortCircuitAnd => {
+                self.outcome_short_connective(operator, left, right, "!left_value", "false")
+            }
+            BooleanOperator::ShortCircuitOr => {
+                self.outcome_short_connective(operator, left, right, "left_value", "true")
+            }
+            BooleanOperator::Implication => {
+                self.outcome_short_connective(operator, left, right, "!left_value", "true")
+            }
         }
-        let left_stops = self.holds_arithmetic();
-        if left_stops {
-            self.emit("match carry(")?;
-            self.outcome_bool(left)?;
-            self.emit(") {")?;
-            self.emit(&format!(
-                "Ok(left_value) => quire_contract_runtime::operators::{function}(left_value, || {{"
-            ))?;
-        } else {
-            self.emit(&format!("quire_contract_runtime::operators::{function}("))?;
-            self.plain_node(left)?;
-            self.emit(",")?;
-            self.emit("|| {")?;
-        }
+    }
+
+    fn outcome_total_connective(
+        &mut self,
+        left: &Expression,
+        right: &Expression,
+        expression: &str,
+    ) -> Rendered {
+        self.emit("match (carry(")?;
+        self.outcome_bool(left)?;
+        self.emit("), carry(")?;
+        self.outcome_bool(right)?;
+        self.emit(")) {")?;
+        self.emit(&format!(
+            "(Ok(left_value), Ok(right_value)) => completed_boolean({expression}, meter),"
+        ))?;
+        self.emit("(Err(stop), _) | (_, Err(stop)) => stop,")?;
+        self.emit("}")
+    }
+
+    fn outcome_short_connective(
+        &mut self,
+        operator: BooleanOperator,
+        left: &Expression,
+        right: &Expression,
+        decides: &str,
+        decided: &str,
+    ) -> Rendered {
+        self.emit("match carry(")?;
+        self.outcome_bool(left)?;
+        self.emit(") {")?;
+        self.emit("Err(stop) => stop,")?;
+        self.emit(&format!(
+            "Ok(left_value) => if {decides} {{ completed_boolean({decided}, meter) }} else {{"
+        ))?;
+        self.emit("match carry(")?;
         let region_index = self.open_implication_region(operator);
         let start_line = self.output.next_line;
         self.outcome_bool(right)?;
         self.close_implication_region(region_index, start_line);
-        if left_stops {
-            self.emit("}),")?;
-            self.emit("Err(stop) => stop,")?;
-            self.emit("}")
-        } else {
-            self.emit("},")?;
-            self.emit(")")
-        }
+        self.emit(") {")?;
+        self.emit("Ok(right_value) => completed_boolean(right_value, meter),")?;
+        self.emit("Err(stop) => stop,")?;
+        self.emit("}")?;
+        self.emit("},")?;
+        self.emit("}")
     }
 
     /// The runtime call that orders or equates the two completed integers `left_value` and
@@ -1279,14 +1301,8 @@ impl<'a> Renderer<'a> {
         let ordering = match operator {
             ComparisonOperator::Equal | ComparisonOperator::NotEqual => {
                 self.helpers.equality = true;
-                let equality = if operator == ComparisonOperator::Equal {
-                    "Equal"
-                } else {
-                    "NotEqual"
-                };
-                return format!(
-                    "equality(rt::EqualityOperator::{equality}, left_value, right_value, meter)"
-                );
+                let expect_equal = operator == ComparisonOperator::Equal;
+                return format!("equality({expect_equal}, left_value, right_value, meter)");
             }
             ComparisonOperator::Less => "Less",
             ComparisonOperator::LessEqual => "LessOrEqual",

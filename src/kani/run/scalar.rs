@@ -9,10 +9,10 @@ use std::{
 
 use qsl_replay::{DigestDomain, DigestRecord};
 use quire_canonical::{FixedShape, Limits};
-use quire_contract_runtime::exact::{
+use quire_exact::Cancel;
+use quire_exact::{
     ChargePoint, Incomplete, Integer, LimitKind, Outcome, Refusal, ScalarLimits, Undefined,
 };
-use quire_exact::Cancel;
 use serde::Serialize;
 
 use crate::{
@@ -845,7 +845,7 @@ fn write_observer(
     let helper = format!(
         r#"
 #[path = "../lib.rs"] mod generated;
-use quire_contract_runtime::exact as rt;
+use quire_exact as rt;
 fn next_argument(arguments: &mut impl Iterator<Item = String>) -> Result<String, std::io::Error> {{
  arguments.next().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing native request argument"))
 }}

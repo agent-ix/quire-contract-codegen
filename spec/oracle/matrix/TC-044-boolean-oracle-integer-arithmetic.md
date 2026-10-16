@@ -37,11 +37,12 @@ of step 7 and the rewritten step 11 (FR-031-AC-2, AC-6, AC-16, AC-17 and AC-18),
 refused at generation with the interim code, which is the failing run those steps record first.
 The steps that call `quire_exact::divide` or migrate the native oracle (1's divide half, 4's O-3
 and O-5, 5, 7's divide and remainder half, 11's removed-code assertion (FR-031-AC-27), 14 and 16)
-are gated on a prerequisite: QSL moves to the
-single-member `divide`, and CG then bumps QSL and `quire-exact` together, because CG's one
-`quire-exact` lock entry is shared with QSL's crates. Step 14 is also contingent on the owner's
-decision OD-2. Steps 10's divide and remainder bundle shape, 15, and 11's `saturate` refusal rows
-(FR-031-AC-18) call no kernel and are buildable before the prerequisite.
+require a compatible dependency graph: QSL already uses the single-member `divide`,
+but its replay crate still passes `&Integer` to `Integer::div_mod_floor`, which now
+requires `NonZeroInteger`. Correct that QSL call and resolve one kernel source.
+Step 14 follows the settled kernel ownership in FR-031 OD-2. Steps 10's divide and
+remainder bundle shape, 15, and 11's `saturate` refusal rows (FR-031-AC-18) call no
+kernel and can be implemented before that dependency correction.
 
 ## Test Procedure
 
@@ -228,11 +229,14 @@ decision OD-2. Steps 10's divide and remainder bundle shape, 15, and 11's `satur
     names `quire-exact`, and assert the crate's resolved graph holds one `quire-exact`. Assert
     CG's `Cargo.toml` names `quire-exact` directly from `agent-ix/quire-exact`, and that `make
     deny`'s one-copy check passes over CG's lock, with `qsl-replay` and `qsl-semantics` resolving
-    that one entry. This step is contingent on the owner's decision OD-2 and gated on the lock
-    prerequisite of FR-031. Assert, for the migrated oracle (FR-031-AC-26), that no
+    that one entry. This step requires CG's coherent dependency refresh under the settled
+    ownership of FR-031 OD-2. Assert, for the migrated oracle (FR-031-AC-26), that no
     `operators::*_short_circuit` path appears, that the connectives are inline matches, that the
     outcomes of step 8's cases and of Z-3 equal their outcomes under Contract Runtime's
-    rendering, and that no connective charges a point.
+    rendering for completed Boolean values and first-stop outcomes. Assert each completed
+    connective charges `boolean.result-retain` once, including when its left operand decides
+    the result; a child stop charges no connective result-retain point. Denial at the
+    result-retain point returns `Incomplete` before applying the denied charge.
 15. Kani divide and remainder are falsifiable properties (FR-031-AC-24). Generate the bundle
     oracle of Z-1 and of Z-3, and in a Kani crate call each from a harness with unconstrained
     operands. Assert real Kani fails "attempt to divide by zero" and "attempt to divide with

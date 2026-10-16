@@ -3052,7 +3052,7 @@ fn tc_027_a_routed_scalar_harness_verifies() {
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
-    use quire_contract_runtime::exact::{ChargePoint, LimitKind, Outcome};
+    use quire_exact::{ChargePoint, LimitKind, Outcome};
     let (harness, artifacts) = routed_scalar_increment_with_artifacts();
     let operands = [4_i64, 1_i64];
     let limits = attested_scalar_limits();
@@ -3145,7 +3145,7 @@ fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
-    use quire_contract_runtime::exact::Outcome;
+    use quire_exact::Outcome;
 
     let (harness, artifacts) = routed_scalar_binary_subtraction_with_artifacts();
     assert_eq!(harness.identity.arguments.len(), 2);
@@ -3295,8 +3295,8 @@ fn assert_retained_scalar_content(
     assert!(receipt.cleanup_diagnostic().is_none());
 }
 
-fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
-    quire_contract_runtime::exact::ScalarLimits {
+fn attested_scalar_limits() -> quire_exact::ScalarLimits {
+    quire_exact::ScalarLimits {
         integer_bits: 10000,
         decimal_digits: 10001,
         scale_expansion: 10002,

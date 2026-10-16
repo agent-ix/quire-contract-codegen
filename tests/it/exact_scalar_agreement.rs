@@ -24,6 +24,7 @@ use std::{
 const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
     "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
     "ix-trace-rs = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
+    "quire-exact = { git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [\"test-support\"] }\n",
 );
 
 /// Writes `artifacts` (path, contents) as a crate at `<target tmp>/<label>`,
