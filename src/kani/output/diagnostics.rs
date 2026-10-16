@@ -722,22 +722,17 @@ mod tests {
         for closer in [
             ' ', '\t', '\n', ')', ']', '}', '\'', '"', '`', ',', ';', ':',
         ] {
-            let text = format!("/h/u/ws/crate/src/lib.rs{closer}rest");
+            let text = format!("/opt/a/b{closer}rest");
             assert_eq!(
-                redacted(&text, Some(HOME)),
-                format!("<CRATE_DIR>/src/lib.rs{closer}rest"),
+                redacted(&text, None),
+                format!("<PATH>{closer}rest"),
                 "{closer:?}"
             );
         }
-        for inside in ['.', '-', '_', '<', '>', '!', '0', '|'] {
-            let text = format!("/h/u/ws/crate/src/lib.rs{inside}rest");
-            assert_eq!(
-                redacted(&text, Some(HOME)),
-                format!("<CRATE_DIR>/src/lib.rs{inside}rest"),
-                "{inside:?}"
-            );
+        for inside in ['.', '-', '_', '<', '>', '!', '0', '|', '\\', '#'] {
+            let text = format!("/opt/a/b{inside}rest");
+            assert_eq!(redacted(&text, None), "<PATH>", "{inside:?}");
         }
-        assert_eq!(redacted("/opt/a.b|c d", None), "<PATH> d");
     }
 
     /// Redaction rules that are about boundaries: durations, process identities and timestamps.
