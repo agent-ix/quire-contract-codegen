@@ -216,6 +216,9 @@ src/
                               once its family is ported (scalar at 4b, precondition and contract at
                               4c, frame at 4d). At step 2f each holds what its family lowers and
                               renders today, moved verbatim
+      collection.rs           the symbolic collection family: lowers an admitted model-field
+                              collection claim to its typed domain and renders its harness; it
+                              imports `outcome` and `record` and no other file of generate/
       clause.rs               the V1 clause lowering that precondition.rs and contract.rs share
                               (ClauseOracle, the subject ABI, slots); interim, reshaped by step 4c
       record.rs               the validated harness path and the persisted per-harness record every
@@ -350,10 +353,13 @@ Rules, each checkable:
   record types it needs live in `kani/identity.rs` (step 2b), so a harness is run from its identity
   and its source text.
 - Inside `kani/generate/` the order is `outcome`, `record`, `census_validation`, then the families
-  (`scalar`, `clause`, then `precondition` and `contract`, `frame`, `lower`, `corpus`, `v1_bundle`),
-  then `negotiate`, which imports `outcome`, `record`, `scalar`, `clause`, `precondition`, `contract`
-  and `frame` (the `StateFrame` arm of step 4d calls the frame family's role function; none of
-  `lower`, `corpus`, `v1_bundle` or `census_validation`) and is imported by none. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
+  (`scalar` and `collection`, `clause`, then `precondition` and `contract`, `frame`, `lower`,
+  `corpus`, `v1_bundle`), then `negotiate`, which imports `outcome`, `record`, `scalar`,
+  `collection`, `clause`, `precondition`, `contract` and `frame` (the `StateFrame` arm of step 4d
+  calls the frame family's role function; none of `lower`, `corpus`, `v1_bundle` or
+  `census_validation`) and is imported by none. `collection` imports `outcome` and `record` from
+  this directory, besides `core`, `kani::abi` and `kani::identity`, and never `negotiate`, `lower`
+  or `corpus`; `scalar` and `collection` share a rank, so neither imports the other. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
   renders one item is its family's. `corpus` imports `lower` and `census_validation`; `v1_bundle`
   imports `census_validation`; `frame` imports `outcome` only. `kani/test_support.rs` is

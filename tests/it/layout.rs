@@ -58,6 +58,7 @@ const MODULE_FILES: &[&str] = &[
     "kani/test_support.rs",
     "kani/generate/census_validation.rs",
     "kani/generate/clause.rs",
+    "kani/generate/collection.rs",
     "kani/generate/contract.rs",
     "kani/generate/corpus/bounded_kani_corpus.rs",
     "kani/generate/frame.rs",
@@ -647,11 +648,13 @@ fn kani_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
 fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
     match importer {
         "outcome" => Some(&[]),
+        "collection" => Some(&["outcome", "record"]),
         "frame" => Some(&["outcome"]),
         "negotiate" => Some(&[
             "outcome",
             "record",
             "scalar",
+            "collection",
             "clause",
             "precondition",
             "contract",
@@ -668,7 +671,7 @@ fn generate_rank(name: &str) -> Option<u8> {
         "outcome" => Some(0),
         "record" => Some(1),
         "census_validation" => Some(2),
-        "scalar" => Some(3),
+        "scalar" | "collection" => Some(3),
         "clause" => Some(4),
         "precondition" | "contract" => Some(5),
         "frame" => Some(6),
