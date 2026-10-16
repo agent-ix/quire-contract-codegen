@@ -226,6 +226,7 @@ pub fn execute_kani_scalar_native(
             harness: KaniExecutableHarness::Scalar(request.harness),
             crate_directory: snapshot.path(),
             target_directory: &proof_target,
+            home_directory: None,
         },
         snapshot.path(),
     )

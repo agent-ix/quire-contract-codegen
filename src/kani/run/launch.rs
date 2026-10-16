@@ -31,6 +31,15 @@ use rustix::{
     time::Timespec,
 };
 
+/// The launcher's two output streams, each whole, as the process wrote them.
+#[derive(Debug, Default)]
+pub(super) struct CapturedStreams {
+    /// Everything the process wrote to stdout.
+    pub(super) stdout: Vec<u8>,
+    /// Everything the process wrote to stderr.
+    pub(super) stderr: Vec<u8>,
+}
+
 /// How the launcher's run within its caller-declared budget
 /// (the wall-clock ceiling of its identity for a bounded backend launch)
 /// concluded.
@@ -45,6 +54,8 @@ pub(super) enum LaunchOutcome {
         exit_code: Option<i32>,
         /// Combined stdout and stderr, newline-joined, matching `classify_kani_run`'s input shape.
         text: String,
+        /// The same two streams kept apart, each whole.
+        streams: CapturedStreams,
     },
     /// The budget elapsed before the process exited. The launcher's whole process group has been
     /// killed and the launcher reaped. Production bounded execution confirms teardown of
@@ -378,6 +389,10 @@ fn run_monitored(
                 String::from_utf8_lossy(&stdout_bytes),
                 String::from_utf8_lossy(&stderr_bytes)
             ),
+            streams: CapturedStreams {
+                stdout: stdout_bytes,
+                stderr: stderr_bytes,
+            },
         },
         WaitConclusion::TimedOut => LaunchOutcome::TimedOut,
         WaitConclusion::Cancelled { source } => LaunchOutcome::Cancelled { source },

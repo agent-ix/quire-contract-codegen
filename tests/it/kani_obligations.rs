@@ -2011,6 +2011,7 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
         harness: (&harness).into(),
         crate_directory: &directory,
         target_directory: &directory.join("target"),
+        home_directory: None,
     })
     .unwrap_err();
     assert!(matches!(
@@ -2050,6 +2051,7 @@ fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
             harness: (&harness).into(),
             crate_directory: &directory,
             target_directory: &directory.join("target"),
+            home_directory: None,
         })
         .unwrap_err();
         match refusal {
@@ -2127,6 +2129,7 @@ fn run(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-obligations"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
     fs::write(
@@ -2243,6 +2246,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| {
         panic!("a run that started must not surface as a refusal: {refusal}")
@@ -2270,6 +2274,7 @@ fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        home_directory: None,
     })
     .unwrap_err();
     assert!(matches!(
@@ -2520,6 +2525,7 @@ fn run_scalar_under_real_kani(
         harness: harness.into(),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-scalar"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(&crate_directory);
@@ -2554,6 +2560,7 @@ fn tc_027_a_routed_scalar_harness_verifies() {
         harness: (&harness).into(),
         crate_directory: &crate_directory,
         target_directory: &crate_directory.join("target"),
+        home_directory: None,
     })
     .unwrap_err();
     assert!(matches!(
@@ -2584,6 +2591,7 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     })
     .expect("verified proof and typed native receipt");
     assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
@@ -2607,6 +2615,7 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
         operands: &operands,
         scalar_limits: constrained_limits,
         target_directory: &target,
+        home_directory: None,
     })
     .expect("verified proof and typed native incomplete receipt at zero result budget");
 
@@ -2679,6 +2688,7 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
         operands: &left_first,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     })
     .expect("verified proof and typed native receipt for [4, 1]");
 
@@ -2691,6 +2701,7 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
         operands: &right_first,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     })
     .expect("verified proof and typed native receipt for [1, 4]");
 
@@ -2783,6 +2794,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     });
     assert!(matches!(
         changed_path,
@@ -2806,6 +2818,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     });
     assert!(matches!(
         changed_bytes,
@@ -2828,6 +2841,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     });
     assert!(matches!(
         changed_identity,
@@ -2853,6 +2867,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &operands,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     });
     assert!(matches!(
         wrong_symbol,
@@ -2871,6 +2886,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &one_operand,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     });
     assert!(matches!(
         wrong_operand_count,
@@ -2889,6 +2905,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         operands: &out_of_bounds_operands,
         scalar_limits: limits,
         target_directory: &target,
+        home_directory: None,
     });
     assert!(matches!(
         out_of_bounds,

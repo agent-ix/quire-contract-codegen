@@ -28,6 +28,7 @@ use crate::kani::{
     },
     identity::ObligationKind,
     output::{
+        diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
         playback::{counterexample_playback, playback_blocks},
         report::{
             members_in_request_order, KaniCheckResult, KaniHarnessReport, KaniHarnessStatus,
@@ -37,7 +38,8 @@ use crate::kani::{
     run::{
         harness::{HarnessView, KaniExecutableHarness},
         launch::{
-            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream, LaunchOutcome,
+            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream, CapturedStreams,
+            LaunchOutcome,
         },
         memory::MemoryObservation,
         report_file::{fresh_report_path, read_report, remove_stale_report},
@@ -63,6 +65,10 @@ pub struct KaniExecutionRequest<'a> {
     pub crate_directory: &'a Path,
     /// Cargo target directory for the run.
     pub target_directory: &'a Path,
+    /// The home directory of the launcher's environment, when the caller knows it. It redacts
+    /// the diagnostics of a run that gave no verdict and keeps requests with different home
+    /// directories out of one launcher process; it is never read from the process environment.
+    pub home_directory: Option<&'a Path>,
 }
 
 /// Why a harness was not run.
@@ -281,6 +287,10 @@ pub struct KaniExecutionEvidence {
     /// says so and names who shared it. Absent for a run of one harness.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub batch: Option<KaniBatchInvocation>,
+    /// Present exactly when the outcome is [`KaniInconclusiveReason::NoVerdict`]: why the
+    /// backend gave no verdict, from the launcher's streams. It is never an input to the outcome.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<KaniNoVerdictDiagnostics>,
 }
 
 /// A backend report and its invocation metadata, without an attestation of resource enforcement.
@@ -300,6 +310,7 @@ struct ReportedExecution {
     success_checks: u32,
     checks: Vec<KaniCheckResult>,
     batch: Option<KaniBatchInvocation>,
+    diagnostics: Option<KaniNoVerdictDiagnostics>,
 }
 
 impl ReportedExecution {
@@ -319,6 +330,7 @@ impl ReportedExecution {
             success_checks: self.success_checks,
             checks: self.checks,
             batch: self.batch,
+            diagnostics: self.diagnostics,
         }
     }
 }
@@ -445,6 +457,7 @@ fn evidence_of(
     exit_code: Option<i32>,
     run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
+    diagnostics: Option<KaniNoVerdictDiagnostics>,
 ) -> ReportedExecution {
     ReportedExecution {
         ceilings: harness.ceilings,
@@ -460,6 +473,7 @@ fn evidence_of(
         success_checks: run.success_checks,
         checks: run.checks,
         batch,
+        diagnostics,
     }
 }
 
@@ -493,10 +507,58 @@ fn finish_single(
     report: Option<Vec<u8>>,
 ) -> Result<ReportedExecution, KaniExecutionRefusal> {
     let harness = request.harness.view();
-    let (run, exit_code) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
+    let (run, exit_code, streams) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
+    let diagnostics = no_verdict_streams(&run, streams.as_ref()).map(|streams| {
+        process_output(
+            request,
+            streams,
+            std::slice::from_ref(&harness.selection),
+            &arguments,
+            report.is_some(),
+        )
+        .diagnostics_of(&harness.selection)
+    });
     Ok(evidence_of(
-        request, &harness, arguments, exit_code, run, None,
+        request, &harness, arguments, exit_code, run, None, diagnostics,
     ))
+}
+
+/// The streams of a run, when its outcome is `NoVerdict` and so carries a diagnostic record.
+fn no_verdict_streams<'a>(
+    run: &ClassifiedRun,
+    streams: Option<&'a CapturedStreams>,
+) -> Option<&'a CapturedStreams> {
+    matches!(
+        run.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict
+        }
+    )
+    .then_some(streams)
+    .flatten()
+}
+
+/// What one launcher process printed, with the request's directories to redact it against.
+fn process_output<'a>(
+    request: &'a KaniExecutionRequest<'_>,
+    streams: &'a CapturedStreams,
+    selections: &'a [String],
+    arguments: &'a [String],
+    report_exported: bool,
+) -> ProcessOutput<'a> {
+    ProcessOutput {
+        stdout: &streams.stdout,
+        stderr: &streams.stderr,
+        selections,
+        arguments,
+        report_exported,
+        directories: KnownDirectories {
+            crate_directory: request.crate_directory,
+            target_directory: request.target_directory,
+            home_directory: None,
+            home_directory: request.home_directory,
+        },
+    }
 }
 
 /// What one launcher process (one group) of a batch yielded: the harnesses it ran and their evidence or the
@@ -579,6 +641,7 @@ fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest
         && first.installation == other.installation
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
+        && first.home_directory == other.home_directory
         && without_selection(first.harness.view().options)
             == without_selection(other.harness.view().options)
 }
@@ -672,12 +735,13 @@ fn run_group(
         count,
     )?;
     let report = take_report(&launch.outcome, &report_path);
-    let (exited_successfully, exit_code, text) = match settle(launch.outcome)? {
+    let (exited_successfully, exit_code, text, streams) = match settle(launch.outcome)? {
         Concluded::Completed {
             exited_successfully,
             exit_code,
             text,
-        } => (exited_successfully, exit_code, text),
+            streams,
+        } => (exited_successfully, exit_code, text, streams),
         Concluded::Cancelled { source } => {
             return Err(KaniExecutionRefusal::BatchCancelled {
                 source,
@@ -704,6 +768,7 @@ fn run_group(
         exited_successfully,
         exit_code,
         &text,
+        &streams,
         report?,
     )
     .map(|reported| {
@@ -721,6 +786,7 @@ fn finish_group(
     exited_successfully: bool,
     exit_code: Option<i32>,
     text: &str,
+    streams: &CapturedStreams,
     report: Option<Vec<u8>>,
 ) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
     let Some((_, first)) = group.first() else {
@@ -735,12 +801,16 @@ fn finish_group(
         members: selections.clone(),
         timeout_seconds: whole_seconds(first.harness.view().ceilings.wall_clock),
     };
+    let report_exported = report.is_some();
+    let output = process_output(first, streams, &selections, &arguments, report_exported);
     let evidence = |run: Vec<ClassifiedRun>| -> Vec<ReportedExecution> {
         group
             .iter()
             .zip(&views)
             .zip(run)
             .map(|(((_, request), view), run)| {
+                let diagnostics = no_verdict_streams(&run, Some(streams))
+                    .map(|_| output.diagnostics_of(&view.selection));
                 evidence_of(
                     request,
                     view,
@@ -748,6 +818,7 @@ fn finish_group(
                     exit_code,
                     run,
                     Some(invocation.clone()),
+                    diagnostics,
                 )
             })
             .collect()
@@ -815,6 +886,7 @@ enum Concluded {
         exited_successfully: bool,
         exit_code: Option<i32>,
         text: String,
+        streams: CapturedStreams,
     },
     /// The budget elapsed and the group was killed.
     TimedOut,
@@ -832,10 +904,12 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
             exited_successfully,
             exit_code,
             text,
+            streams,
         } => Ok(Concluded::Completed {
             exited_successfully,
             exit_code,
             text,
+            streams,
         }),
         LaunchOutcome::TimedOut => Ok(Concluded::TimedOut),
         LaunchOutcome::Cancelled { source } => Ok(Concluded::Cancelled { source }),
@@ -907,7 +981,7 @@ pub(super) fn launch_evidence(
     launch: LaunchOutcome,
     report: Option<&[u8]>,
     kind: Option<ObligationKind>,
-) -> Result<(ClassifiedRun, Option<i32>), KaniExecutionRefusal> {
+) -> Result<(ClassifiedRun, Option<i32>, Option<CapturedStreams>), KaniExecutionRefusal> {
     let stopped = |reason| {
         (
             ClassifiedRun {
@@ -916,6 +990,7 @@ pub(super) fn launch_evidence(
                 checks: Vec::new(),
             },
             None,
+            None,
         )
     };
     match settle(launch)? {
@@ -923,9 +998,11 @@ pub(super) fn launch_evidence(
             exited_successfully,
             exit_code,
             text,
+            streams,
         } => Ok((
             classify_kani_run(exited_successfully, report, &text, kind)?,
             exit_code,
+            Some(streams),
         )),
         Concluded::Cancelled { source } => Ok((
             ClassifiedRun {
@@ -933,6 +1010,7 @@ pub(super) fn launch_evidence(
                 success_checks: 0,
                 checks: Vec::new(),
             },
+            None,
             None,
         )),
         Concluded::TimedOut => Ok(stopped(KaniInconclusiveReason::TimedOut)),
@@ -1062,6 +1140,7 @@ mod report_fixture {
             exited_successfully,
             exit_code,
             text,
+            streams,
         } = settle(outcome)?
         else {
             panic!("report fixture must complete; bounded lifecycle is tested separately");
@@ -1072,6 +1151,7 @@ mod report_fixture {
             exited_successfully,
             exit_code,
             &text,
+            &streams,
             report?,
         )
     }
@@ -1103,6 +1183,7 @@ mod tests {
                     exited_successfully: true,
                     exit_code: Some(0),
                     text: String::new(),
+                    streams: CapturedStreams::default(),
                 },
                 Some(&report("Success", checks)),
                 kind,
@@ -1206,6 +1287,7 @@ mod tests {
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: &crate_directory,
             target_directory: &target_directory,
+            home_directory: None,
         });
         if stale.is_some() {
             assert!(
@@ -1280,6 +1362,7 @@ mod tests {
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: Path::new("/crate"),
             target_directory: Path::new("/target"),
+            home_directory: None,
         };
         let (arguments, _) = kani_launch_command(&request);
         let options = request.harness.view().options;
@@ -1826,6 +1909,7 @@ exit 0
         directory: PathBuf,
         crate_directory: PathBuf,
         target_directory: PathBuf,
+        home_directory: None,
         installation: KaniInstallation,
         cancel: Cancel,
     }
@@ -1912,6 +1996,7 @@ exit 0
                 harness: harness.into(),
                 crate_directory: &self.crate_directory,
                 target_directory: &self.target_directory,
+                home_directory: None,
             }
         }
 
@@ -2894,6 +2979,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                 harness: (&harness).into(),
                 crate_directory: Path::new("/crate"),
                 target_directory: Path::new("/target"),
+                home_directory: None,
             };
             let (arguments, _) = batch_launch_command(
                 &request,
@@ -2964,6 +3050,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             KaniExecutionRequest {
                 cancel: &cancel,
                 target_directory: &second.target_directory,
+                home_directory: None,
                 ..first.request(&b, T)
             },
         ];

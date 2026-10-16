@@ -136,6 +136,9 @@ pub use kani::generate::census_validation::{KaniDiagnostic, KaniErrorCode};
 pub use kani::generate::v1_bundle::{
     generate_kani_bundle, KaniArtifactBundle, KaniRequest, KaniSubjectBinding, ProofDependencyGraph,
 };
+pub use kani::output::diagnostics::{
+    KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt,
+};
 pub use kani::output::report::{
     KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
     OtherCheckClass,
