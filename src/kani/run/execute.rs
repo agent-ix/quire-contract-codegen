@@ -561,7 +561,6 @@ fn process_output<'a>(
         directories: KnownDirectories {
             crate_directory: request.crate_directory,
             target_directory: request.target_directory,
-            home_directory: None,
             home_directory: request.home_directory,
         },
     }
@@ -3865,6 +3864,35 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             );
         }
 
+        /// One launcher stand-in of the marker table: what it prints, whether it exports a report,
+        /// the extra options of its harness and the phase expected.
+        struct Case<'a> {
+            label: &'a str,
+            stdout: String,
+            stderr: &'a str,
+            exported: Option<&'a [u8]>,
+            extra: &'a [&'a str],
+            expected: KaniFailurePhase,
+        }
+
+        fn case<'a>(
+            label: &'a str,
+            stdout: String,
+            stderr: &'a str,
+            exported: Option<&'a [u8]>,
+            extra: &'a [&'a str],
+            expected: KaniFailurePhase,
+        ) -> Case<'a> {
+            Case {
+                label,
+                stdout,
+                stderr,
+                exported,
+                extra,
+                expected,
+            }
+        }
+
         /// Single-run stand-ins that exit 1: each marker set gives its phase, and the marker
         /// need not be in the excerpt.
         ///
@@ -3878,8 +3906,8 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             let solver_stdout = format!("{BANNER}{checking}{SOLVING}");
             let long_after = format!("{solver_stdout}{filler}");
             let success = report("Success", &[PASSED, COVER_OK]);
-            let cases: [(&str, String, &str, Option<&[u8]>, &[&str], KaniFailurePhase); 11] = [
-                (
+            let cases = [
+                case(
                     "solver",
                     solver_stdout.clone(),
                     "",
@@ -3887,7 +3915,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Solver,
                 ),
-                (
+                case(
                     "backend",
                     format!("{BANNER}{checking}"),
                     "",
@@ -3895,7 +3923,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Backend,
                 ),
-                (
+                case(
                     "compile-stdout",
                     format!("{BANNER}{cargo_failed}"),
                     "",
@@ -3903,7 +3931,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Compile,
                 ),
-                (
+                case(
                     "compile-stderr",
                     BANNER.to_owned(),
                     "error: could not compile `x` (lib) due to 1 previous error\n",
@@ -3911,7 +3939,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Compile,
                 ),
-                (
+                case(
                     "launcher",
                     String::new(),
                     "error: unexpected argument\n",
@@ -3919,7 +3947,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Launcher,
                 ),
-                (
+                case(
                     "banner",
                     BANNER.to_owned(),
                     "",
@@ -3927,7 +3955,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Unknown,
                 ),
-                (
+                case(
                     "other-wording",
                     format!("{BANNER}{checking}Running the SAT solver CaDiCaL\n"),
                     "",
@@ -3935,7 +3963,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Backend,
                 ),
-                (
+                case(
                     "foreign-path",
                     format!("{BANNER}Checking harness other::path...\n{SOLVING}"),
                     "",
@@ -3943,7 +3971,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Unknown,
                 ),
-                (
+                case(
                     "parallel",
                     solver_stdout.clone(),
                     "",
@@ -3951,7 +3979,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &["-j", "2"],
                     KaniFailurePhase::Unknown,
                 ),
-                (
+                case(
                     "report",
                     solver_stdout,
                     "",
@@ -3959,7 +3987,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     &[],
                     KaniFailurePhase::Unknown,
                 ),
-                (
+                case(
                     "before-window",
                     long_after,
                     "",
@@ -3968,7 +3996,15 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     KaniFailurePhase::Solver,
                 ),
             ];
-            for (label, stdout, stderr, exported, extra, expected) in cases {
+            for Case {
+                label,
+                stdout,
+                stderr,
+                exported,
+                extra,
+                expected,
+            } in cases
+            {
                 let stand_in = printing(&format!("diag-{label}"), exported, &stdout, stderr, 1);
                 let mut harness = proofs();
                 harness

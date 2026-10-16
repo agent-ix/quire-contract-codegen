@@ -986,6 +986,7 @@ mod tests {
                 exited_successfully,
                 exit_code,
                 text,
+                ..
             } => {
                 assert!(!exited_successfully);
                 assert_eq!(exit_code, Some(3));

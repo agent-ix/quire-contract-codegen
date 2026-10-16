@@ -879,12 +879,14 @@ mod tests {
                 "{arguments:?}"
             );
         }
-        let process = output(&stdout, "", &members, &names(&["--jobsx=2", "-jx"]), false);
+        let lookalikes = names(&["--jobsx=2", "-jx"]);
+        let process = output(&stdout, "", &members, &lookalikes, false);
         assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Solver);
         let compile = format!("{BANNER}error: Failed to execute cargo (exit status: 1)\n");
-        let process = output(&compile, "", &members, &names(&["-j", "2"]), false);
+        let jobs = names(&["-j", "2"]);
+        let process = output(&compile, "", &members, &jobs, false);
         assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Compile);
-        let process = output("", "usage\n", &members, &names(&["-j", "2"]), false);
+        let process = output("", "usage\n", &members, &jobs, false);
         assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Launcher);
     }
 
