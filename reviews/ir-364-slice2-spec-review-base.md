@@ -131,3 +131,29 @@ scope:
   excerpt: "Boolean `and`, `or`, `not`, `implies`, `eq` and `ne` nodes and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` nodes each derive a descriptor and generate an `ir_confirmed` oracle ..."
 bindings: []
 ```
+
+## Dispositions
+
+Round 1 reviewed d8f2f8a6af1c791f5b0b48e5bb32eafae4474b6a (diff f30f17b..d8f2f8a).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS.**
+
+- **FND-001.** FR-008-AC-8 is now stated by input and ownership: the oracle takes only the accessor's
+  typed result, and no V1 bound oracle or `BoundPackage` is an input to it. The false descriptor
+  reason is gone. The FR-008 Description records reuse of the FR-014-AC-35 eq/ne derivation as an
+  open decision owned by the planner. It is recorded, not decided.
+- **FND-002.** FR-009-AC-2 now reads "For every V2 comparison operator", which matches FR-012-AC-1.
+- **FND-003.** FR-011 no longer claims an execution-point source. OQ-1 (execution point) and OQ-2
+  (requirement and revision identity) record the gap with the planner as owner. FR-011-AC-1 to AC-5
+  assert verdict kinds, counters and rates, not execution-point or identity values, so no AC depends
+  on either open question.
+- **Gates.** `quire validate` is clean on the changed files. `quire coverage --strict` reports 219
+  unbacked and 0 contradicted; the +1 is FR-008-AC-10.

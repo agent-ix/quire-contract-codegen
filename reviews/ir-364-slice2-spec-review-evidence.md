@@ -59,3 +59,21 @@ scope:
   excerpt: "PLANNED. For each noncommutative operator, a comparison written with the literal in the first position produces the same satisfying and violating sets as its mirrored read-first form, enumerated independently."
 bindings: []
 ```
+
+## Dispositions
+
+Round 1 reviewed d8f2f8a6af1c791f5b0b48e5bb32eafae4474b6a.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS.**
+
+- **FND-001.** FR-008-AC-9 drops the "no body read" clause. A new criterion, FR-008-AC-10, carries
+  it: "Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes
+  no body JSON". It is verified by Inspection, matching CON-1. TC-017 step 7 no longer asserts it,
+  and step 8 inspects for it.
+- **Method.** Inspection remains the right method for the restated FR-008-AC-8.

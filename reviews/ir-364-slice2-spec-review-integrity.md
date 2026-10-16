@@ -63,3 +63,23 @@ scope:
   excerpt: "7. For each noncommutative operator, generate a read-first comparison and its literal-first mirror, and compare the generatable sets of each population with an independent enumeration."
 bindings: []
 ```
+
+## Dispositions
+
+Round 1 reviewed d8f2f8a6af1c791f5b0b48e5bb32eafae4474b6a.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS.**
+
+- **FND-001.** FR-008-AC-7 now names FR-008-AC-3 as the per-operator agreement it refines. AC-7 is
+  the exhaustive 1- to 4-member sweep. AC-3 covers the tag and relation agreement and the
+  sibling-refusal behaviour.
+- **FND-002.** FR-012 now says "the populations of a selected V2 claim".
+- **New AC-10.** FR-008-AC-10 is traced to Inspection in tests.md, and TC-017 step 8 and its expected
+  result cite it.

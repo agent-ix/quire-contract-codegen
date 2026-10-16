@@ -66,3 +66,28 @@ scope:
   excerpt: "generate_bound_strategy inputs: [public BoundPackage, full ClauseRef, population Satisfying|Violating|Broad|Boundary, campaign policy]"
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+Reviewed d8f2f8a6af1c791f5b0b48e5bb32eafae4474b6a (diff f30f17b..d8f2f8a).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The new AD-004 step 6 text says FR-005 (CLI conformance) "names no `BoundPackage` input ... so it needs no V2 change of its own". FR-005's input is a "Serialized contract package". interface-001 defines `contract_package` as the "public IR BoundPackage from the public IR derived executable projection decoder" (:14), and `serialized_package_cli` says the decoder "now supplies BoundPackage" (:406). FR-005's input is therefore V1 through interface-001, even though FR-005 does not spell `BoundPackage`. The conclusion "needs no V2 change" is unsupported. The author's round note says FR-005 "follows FR-002 under IR-815", but the AD text says something different. Pick one: route FR-005's V2 input to IR-815, or tie it to the open interface-001 direction. Do not assert that no change is needed. | spec/assurance/AD-004-cg-crate-layout.md:888-890,1340, spec/core/functional/interface-001-codegen-api.md:14,406 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS on FND-001, with one new low finding (FND-002).**
+
+- **FND-001.** AD-004 (:427, step 6 and the rulings row) now assigns the FR-002 and FR-004 V2
+  criteria to IR-815, ordered before step 6. IR-815 exists in Linear ("CG spec: FR-002 and FR-004 V2
+  criteria (needed before AD-004 step 6)", Backlog). IR-364 is stated as FR-008 to FR-013 and
+  NFR-004.
+- **FND-002.** The FR-005 part of the original finding was answered with a claim that does not hold.
+  That is recorded as FND-002.
