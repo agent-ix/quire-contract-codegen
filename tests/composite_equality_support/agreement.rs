@@ -3,8 +3,8 @@
 //!
 //! Adapted from `exact_scalar_support/agreement.rs`: a vector body is
 //! written once as unqualified calls; [`agree2!`] evaluates it with
-//! `quire_contract_runtime::exact` in scope and evaluates the generated
-//! oracle with the runtime in scope. Every evaluation is run under the same
+//! the Contract Runtime composite API and the exact kernel in scope, then
+//! evaluates the generated oracle. Every evaluation is run under the same
 //! limits and then re-run with each admitted charge denied in turn. The
 //! two `Debug` renderings must be identical.
 //!
@@ -463,6 +463,11 @@ macro_rules! shared_helpers {
 
 pub mod rt_side {
     pub use quire_contract_runtime::exact::*;
+    pub use quire_exact::{
+        admit_text, CardinalityBound, ChargePoint, CollectionKind, Decimal, DecimalType,
+        InjectedDenial, Integer, IntegerInterval, LimitKind, Meter, Outcome, Rational,
+        RationalDomain, Refusal, RoundingMode, ScalarLimits, TextPayload, TextProfile, TextType,
+    };
     shared_helpers!();
 
     /// The base package's `Example.Phase` declaration, under its node key

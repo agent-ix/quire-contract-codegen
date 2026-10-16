@@ -87,7 +87,7 @@ impl ScalarOperation {
     /// The integer result as a Rust expression over the harness's native `i64` operands
     /// (`<name>_native`), evaluated in `i128` where a sum, difference, product or negation of `i64`
     /// values cannot overflow. It shares no code with the embedded oracle, which evaluates through
-    /// `quire_contract_runtime`'s `rt::Integer`; it is the independent statement of the clause that
+    /// `quire-exact`'s `rt::Integer`; it is the independent statement of the clause that
     /// [`render_scalar`] compares the oracle's result with. The implication arm is used by
     /// its separate Boolean renderer over symbolic `bool` operands.
     fn native_expression(self) -> String {

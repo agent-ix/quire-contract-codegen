@@ -1,6 +1,6 @@
 //! FR-018-AC-2, AC-8 (the `check_type` guard half), AC-9 and AC-11 (the
 //! complementary-outcomes half): generated composite-equality oracles agree
-//! with an independently assembled direct Contract Runtime call, across
+//! with an independently assembled direct Contract Runtime and exact-kernel call, across
 //! record, tuple, option and collection shapes; a malformed
 //! environment is refused with no charge; a denied charge surfaces as
 //! `Outcome::Incomplete`, never a completed Boolean; and the two operator
@@ -22,7 +22,7 @@
 mod support;
 
 /// The corpus codes and node keys, without the package builder: the scratch
-/// crate depends only on the Contract Runtime (see `codes.rs`).
+/// crate depends on Contract Runtime and the exact kernel (see `codes.rs`).
 #[path = "codes.rs"]
 mod package;
 
@@ -36,7 +36,7 @@ mod generated {
 
 use ix_trace_rs::trace;
 use package::*;
-use quire_contract_runtime::exact as rt;
+use support::rt_side as rt;
 use support::rt_side;
 
 /// Every vector below is run under `UNLIMITED` limits, which lets `agree2!`
