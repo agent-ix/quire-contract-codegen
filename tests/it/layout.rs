@@ -72,6 +72,7 @@ const MODULE_FILES: &[&str] = &[
     "kani/generate/record.rs",
     "kani/generate/scalar.rs",
     "kani/generate/v1_bundle.rs",
+    "kani/output/diagnostics.rs",
     "kani/output/playback.rs",
     "kani/output/report.rs",
     "kani/run/execute.rs",
