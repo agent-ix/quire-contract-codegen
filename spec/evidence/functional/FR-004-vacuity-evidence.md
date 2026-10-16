@@ -25,7 +25,7 @@ per-requirement vacuity report without executing a coverage producer itself.
 - The IR-owned bound executable clause population, including clause identities, typed expressions,
   clause kinds, execution anchors, and dependency/declaration context.
 - Planned (IR-815): for the V2 analyzer, the executable clauses of an admitted `CheckedPackageV2`,
-  read through Contract IR's public typed API, in place of the V1 bound population. The source of
+  read through the `core/ir/` layer of AD-004, in place of the V1 bound population. The source of
   each clause's execution anchor and of the requirement and revision identity is open (below).
 - Generated Rust/source-map bytes with entry probes and the independently derived implication census.
 - LLVM coverage JSON export bytes, its producer tool and version, and native runtime campaign
@@ -133,7 +133,9 @@ per-requirement vacuity report without executing a coverage producer itself.
   denominator nor label a successful native run or observed probe as a completed proof.
 - Planned (IR-815): when the analyzer is given an admitted `CheckedPackageV2`, it shall derive its
   expected clause population and per-clause implication counts from that package's executable
-  clause bodies through Contract IR's public typed API, and shall take no `BoundPackage` input.
+  clause bodies.
+- Planned (IR-815): the V2 analyzer shall open a `CheckedPackageV2` body only through the
+  `core/ir/` layer of AD-004, and shall not name or read a `BoundPackage` or a `ClauseRef`.
 - Planned (IR-815): if the implication count declared by a V2 clause's generated source map
   differs from the count derived from that clause's body, then the analyzer shall return a
   structured binding non-success and no classification for that clause.
@@ -159,10 +161,15 @@ per-requirement vacuity report without executing a coverage producer itself.
 | FR-004-AC-13 | PLANNED. QSL `run_clause` success and a decisive witness remain source-clause facts and do not count as generated-campaign execution or LLVM coverage; QSL violation, refusal, undefined, incomplete, cancelled, unsupported and internal failure remain distinct typed adverse/non-success facts. A matching authenticated receipt does not upgrade any QSL disposition or itself grant campaign success, measured classification, proof credit or coverage discharge. The same reader's command-error variant retains stage/code/optional cause/message/details and unavailable basis as non-success, with no campaign qualification or measured classification even when the receipt matches. | Test |
 | FR-004-AC-14 | PLANNED. A valid `/2` clause-run result with absent receipt, omitted association or only caller-declared paths, QSL `package_id` or self-declared producer metadata yields a structured absent/unauthenticated binding diagnostic while retaining the decoded outcome and available identities; no campaign qualification, measured classification or coverage discharge occurs. A fully authenticated receipt associating the exact result, producer execution, generated source, source map and LLVM export bytes from the same run admits binding and retains the unchanged QSL outcome. | Test |
 | FR-004-AC-15 | PLANNED. Independently replacing the result, producer execution, generated source, source map or LLVM export bytes after authenticated binding refuses with the mismatched association identified, even when paths, QSL `package_id`, source/map and LLVM tool/version match; the original decoded outcome remains distinct from the binding diagnostic. A valid typed command-error variant stays non-success even with a matching receipt, while an invalid `/2` or unsupported version refuses at QSL reading before receipt verification. | Test |
-| FR-004-AC-16 | PLANNED (IR-815). The expected clause population and implication counts of the V2 analyzer equal those independently derived from the admitted `CheckedPackageV2` clause bodies, and removing one clause, one consequent, one evaluation probe or every clause from the generated artifacts prevents successful analysis. | Test (TC-006) |
-| FR-004-AC-17 | PLANNED (IR-815). Source inspection shows the V2 analyzer reads clause meaning only through Contract IR's public typed API and names no `BoundPackage`, `ClauseRef` or private body decoder. | Inspection |
+| FR-004-AC-16 | PLANNED (IR-815). The expected clause population and implication counts of the V2 analyzer equal those independently derived from the admitted `CheckedPackageV2` clause bodies. | Test (TC-006) |
+| FR-004-AC-17 | PLANNED (IR-815). Source inspection shows the V2 analyzer opens a `CheckedPackageV2` body only through the `core/ir/` layer of AD-004, and names no `BoundPackage` or `ClauseRef`, both of which today's `analyze_bound_coverage` names. | Inspection |
 | FR-004-AC-18 | PLANNED (IR-815). A V2 clause whose generated source map declares an implication count unequal to the count derived from its body yields a structured binding non-success naming the clause and no classification, and is never treated as implication-free. | Test (TC-006) |
-| FR-004-AC-19 | PLANNED (IR-815). Over a V2 clause population, an evaluated implication with an unobserved consequent is `vacuous`, an unevaluated clause is `unexecuted`, a clause with some consequents observed is `partially_exercised`, a fully observed clause is `exercised`, and each malformed input class of FR-004-AC-5 yields a non-success outcome with no invented classification. | Test (TC-006) |
+| FR-004-AC-19 | PLANNED (IR-815). Over a V2 clause population, a clause whose oracle evaluation was observed, that has at least one implication and for which no expected consequent probe was observed is `vacuous`. | Test (TC-006) |
+| FR-004-AC-20 | PLANNED (IR-815). Over a V2 clause population, a mapped clause whose oracle-evaluation region has no positive execution count is `unexecuted`. | Test (TC-006) |
+| FR-004-AC-21 | PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause for which some but not all expected consequent probes were observed is `partially_exercised`. | Test (TC-006) |
+| FR-004-AC-22 | PLANNED (IR-815). Over a V2 clause population, an implication-bearing clause with every expected consequent probe observed, and an implication-free clause with its evaluation region observed, is `exercised`. | Test (TC-006) |
+| FR-004-AC-23 | PLANNED (IR-815). Over a V2 clause population, removing one clause, one consequent probe, one evaluation probe, or every clause from the generated artifacts, each alone, prevents successful analysis. | Test (TC-006) |
+| FR-004-AC-24 | PLANNED (IR-815). Over a V2 clause population, each malformed input class of FR-004-AC-5 yields a non-success outcome with no invented classification. | Test (TC-006) |
 
 ## Implementation boundary
 
@@ -180,7 +187,7 @@ obligation exist.
 
 The V2 population input is planned (IR-815); `analyze_bound_coverage` reads the V1 `BoundPackage`
 until a V2 analyzer replaces it, and the replacement deletes it. The V2 criteria FR-004-AC-16 to
-FR-004-AC-19 are vacuity and rejection evidence only: they add no proof denominator or credit.
+FR-004-AC-24 are vacuity and rejection evidence only: they add no proof denominator or credit.
 
 `native-run-result/2` consumption is also planned. QSL-520 must deliver the producer and strict
 reader. QSL-688 chose CG ownership of the separate authenticated producer/artifact receipt and
@@ -196,8 +203,10 @@ this analyzer supplies execution observations and the coverage-obligation decisi
 
 - OQ-1 (anchor and identity): the V2 source of a clause's execution anchor and of the requirement
   and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the V2 entry
-  shape follows the open interface-001 direction. No FR-004 V2 criterion depends on the answer,
-  and none invents a source.
+  shape follows the open interface-001 direction. FR-004-AC-16 to AC-24 do not depend on the
+  answer and none invents a source. The V2 analyzer must also meet FR-004-AC-10, AC-11 and AC-14,
+  which bind the run's requirement and revision, so deleting the V1 `analyze_bound_coverage` waits
+  on the FR-011 OQ-2 identity answer as well as on these criteria.
 
 ## Dependencies
 

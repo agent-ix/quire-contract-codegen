@@ -29,10 +29,12 @@ the same prior excess must retain both exhaustion and the exceeded-ceiling polic
 
 Planned V2 controls (IR-815): from an admitted `CheckedPackageV2`, select one precondition and one
 postcondition and generate the harness. Drive seeded cases that make the precondition false, the
-postcondition false, and neither, with an instrumented subject that records call order and whether
-it was invoked. Select an unknown clause identity, a clause of the wrong kind, the same clause for
+postcondition false, and neither, and cases whose precondition or postcondition oracle stops or is
+undefined (an integer operation that is undefined), with an instrumented snapshot, precondition
+oracle, subject and postcondition oracle that record call order and whether the subject was invoked. Select an unknown clause identity, a clause of the wrong kind, the same clause for
 both selections, and a body outside the FR-014-AC-38 shape. Generate twice and compare bytes.
-Inspect the generator source for any `BoundPackage`, `ClauseRef` or private body decoder.
+Inspect the generator source for any `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression`
+or `oracle::boolean_v1` use and for any body opened outside `core/ir/`.
 
 ## Expected Results
 
@@ -45,7 +47,12 @@ above the requested discard ceiling.
 An exhausted search remains a typed `Exhausted` result even when its retained policy result says
 that a floor was missed; completed searches still return the corresponding floor failure directly.
 
-The V2 controls expect a rejected case to leave the subject uninvoked, a false postcondition to be a
-failed postcondition, snapshot, precondition, invocation and postcondition to run in that order,
-each wrong selection or unsupported body to yield a typed diagnostic and no artifact with no
-filtering fallback, and identical bytes on repeat. These controls are planned.
+The V2 controls expect a case with both oracles completing true to run the subject once and pass
+(FR-002-AC-13), a rejected case to leave the subject uninvoked (AC-14), a false postcondition to be
+a failed postcondition (AC-15), a non-completed oracle outcome to be a non-completed case that
+keeps its cause, is no pass, and skips the postcondition when the precondition did not complete
+(AC-16), snapshot, precondition, invocation and postcondition to run in that order (AC-8), each
+wrong selection to yield a typed, located diagnostic naming the selection and no artifact (AC-10),
+an unsupported body to yield a structured unsupported diagnostic, no artifact and no filtering
+fallback (AC-11), and identical bytes on repeat for the same package, clauses and policy (AC-12).
+These controls are planned.

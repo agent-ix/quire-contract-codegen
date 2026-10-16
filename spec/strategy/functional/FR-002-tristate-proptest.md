@@ -59,11 +59,16 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   terminal state with no partial bundle.
 - Planned (IR-815): when a request selects one precondition and one postcondition of an admitted
   `CheckedPackageV2`, the generator shall embed in the harness the FR-014 V2 clause oracle of each
-  selected clause body (FR-014-AC-38) and shall keep the snapshot, precondition, invocation and
+  selected clause body (FR-014-AC-38).
+- Planned (IR-815): the V2 harness shall keep the snapshot, precondition, invocation and
   postcondition ordering of this requirement.
+- Planned (IR-815): if an embedded V2 clause oracle returns an outcome that does not complete, then
+  the V2 harness shall report the case as a non-completed case that retains the oracle's own cause,
+  and shall not count it as a pass.
 - Planned (IR-815): the V2 harness generator shall read clause kind, identity and body only through
-  Contract IR's public typed API for the admitted package, and shall take no `BoundPackage` or
-  `ClauseRef` input.
+  the one typed node-access layer `core/ir/` of AD-004.
+- Planned (IR-815): the V2 harness generator shall not name or read a `BoundPackage`, a `ClauseRef`,
+  a `quire_contract_model::TypedExpression`, or the `oracle::boolean_v1` module.
 - Planned (IR-815): if a selected clause identity is unknown, is not of the expected kind, or
   names the same clause as both selections, then the V2 harness generator shall return a typed,
   located diagnostic and no artifact.
@@ -81,19 +86,29 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-4 | Shrinking preserves generated constraints or records a residual rejection. | Test (TC-004) |
 | FR-002-AC-5 | The generated campaign runner owns execution, explicit-discard accounting, and conclusion, returns a typed terminal result, and rejects campaigns below either configured coverage floor or above the explicit-discard ceiling; exhausted searches retain their reason and any missed floor without becoming a completed floor failure. | Test (TC-004) |
 | FR-002-AC-6 | Integer and generated Boolean harness campaign cases bind exact values to executable accepted/rejected expectations; enum cases execute an all-admitted membership expectation. | Test (TC-004) |
-| FR-002-AC-7 | PLANNED (IR-815). For one precondition and one postcondition selected from an admitted `CheckedPackageV2`, the generated harness embeds each selected clause's FR-014 V2 clause oracle, and a seeded case on which the precondition is false is rejected with the subject not invoked, one on which the postcondition is false is a failed postcondition, and any other is a pass. | Test (TC-004) |
-| FR-002-AC-8 | PLANNED (IR-815). In the V2 harness the pre-state snapshot precedes precondition evaluation, which precedes subject invocation, which precedes postcondition evaluation, for every case, as an instrumented subject observes. | Test (TC-004) |
-| FR-002-AC-9 | PLANNED (IR-815). Source inspection shows the V2 harness generator reads clause meaning only through Contract IR's public typed API and names no `BoundPackage`, `ClauseRef` or private body decoder. | Inspection |
+| FR-002-AC-7 | PLANNED (IR-815). For one precondition and one postcondition selected from an admitted `CheckedPackageV2`, the generated harness embeds each selected clause's FR-014 V2 clause oracle. | Test (TC-004) |
+| FR-002-AC-8 | PLANNED (IR-815). In the V2 harness, an instrumented snapshot, precondition oracle, subject and postcondition oracle record that the snapshot precedes precondition evaluation, which precedes subject invocation, which precedes postcondition evaluation, for every case. | Test (TC-004) |
+| FR-002-AC-9 | PLANNED (IR-815). Source inspection shows the V2 harness generator opens a `CheckedPackageV2` body only through the `core/ir/` layer of AD-004, and names no `BoundPackage`, `ClauseRef`, `quire_contract_model::TypedExpression` or `oracle::boolean_v1` item, each of which today's V1 harness names or uses. | Inspection |
 | FR-002-AC-10 | PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for both selections yields a typed, located diagnostic naming the selection and no artifact. | Test (TC-004) |
 | FR-002-AC-11 | PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported diagnostic and no artifact, and the generator emits no filtering strategy for it. | Test (TC-004) |
-| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities and campaign policy is byte-identical. | Test (TC-004) |
+| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities and campaign policy is byte-identical. The requirement and revision identity that the generated header, `RequirementId` and symbols carry is not an input here and waits on OQ-1. | Test (TC-004) |
+| FR-002-AC-13 | PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a pass. | Test (TC-004) |
+| FR-002-AC-14 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition and the subject is not invoked. | Test (TC-004) |
+| FR-002-AC-15 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition oracle completes false is a failed postcondition. | Test (TC-004) |
+| FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass, and does not run the postcondition when the precondition did not complete. | Test (TC-004) |
 
 ## Open Questions
 
 - OQ-1 (execution point and identity): the V2 source of the harness's execution point and of the
   requirement and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the
-  V2 entry shape follows the open interface-001 direction. No FR-002 V2 criterion depends on the
-  answer, and none invents a source.
+  V2 entry shape follows the open interface-001 direction. The generated harness writes the
+  requirement and revision into its header comment, its `RequirementId` and its symbol names, so
+  the final bytes of a V2 harness, FR-002-AC-12 across different identities, and the NFR-002-AC-1
+  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-16 are stated independently of that
+  identity and none invents a source.
+- OQ-2 (non-completed verdict): which runtime verdict kind carries a non-completed oracle outcome
+  (FR-002-AC-16) is not decided here; the criterion fixes only that the case is not a pass and
+  keeps its cause.
 
 ## Dependencies
 
