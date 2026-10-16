@@ -92,8 +92,8 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 16. TC-048 owns the planned closed strength projection, disagreement across backend outcomes,
     F-2 native GeneratedFault before F-3 RefusedInput, distinct F-4 Admission/F-5 ExactEvaluation/
     F-6 RefinementCeiling stages, F-7 comparison, ordinary shadow-inconclusive rows, vacuous record
-    category and completed parity Proved/Tested outcomes. Interim nonproduction and shadow
-    counterexample refusals remain until CG consumes the delivered QSL facade. CG prechecks and
+    category and completed parity Proved/Tested outcomes. Until CG consumes the delivered QSL facade, no bounded-shadow
+    outcome reaches the map (FR-029-AC-21). CG prechecks and
     wrong-claim reports yield no terminal value; binding-valid QSL `prepare` non-fault `Refused`
     yields Inconclusive(ReplayRefused) with QSL code. Inspection establishes that an actual bound
     `Fault` or `Admission(Fault)` report yields Failed, without fabricating one. Changing one

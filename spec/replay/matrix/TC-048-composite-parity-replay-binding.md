@@ -114,11 +114,9 @@ and never replace positive QSL evaluation with a verdict double.
    category/cause for Proved0. Cross-bind another run/result and alter node, operation, operand,
    domain, limits or proof-content identity; each CG precheck or failed report binding returns no
    report terminal value. Keep QSL refusal codes, executor faults and CG defect causes typed. Until
-   production CG invokes the delivered QSL parity facade, also exercise inconclusive
-   and cover-unsatisfied shadows with retained refinement_failed: each takes typed interim
-   NonProductionProof carrying that strength and returns no terminal value. IR-241 owns the refusal
-   variant and verified-strength input; IR-635 owns the widened interim case. Cases without
-   disagreement take ordinary inconclusive rows. The IR-666 direct report converter already preserves
+   production CG invokes the delivered QSL parity facade, assert that `run_terminal_value` has no
+   proof-subject or proof-strength input and `TerminalPairError` has no bounded-shadow variant
+   (FR-029-AC-21). Cases without disagreement take ordinary inconclusive rows. The IR-666 direct report converter already preserves
    the disagreement-first Failed/CgDefect rule. IR-635 owns original-artifact setup, prechecks and
    production invocation. Executable
    tests trace the exact criteria they assert; scenario prose is not coverage.

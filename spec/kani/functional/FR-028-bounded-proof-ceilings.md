@@ -374,8 +374,8 @@ change.
   and AC-9 are planned and FR-018-AC-2 is partly covered, so FR-015-AC-76 records each as unbacked
   until the matrix lists it covered.
 - A terminal value for a verified shadow result: FR-029-AC-17 specifies the planned QSL-640-gated
-  parity map and interim-refuses it until actual API delivery (`NonProductionProof`, no terminal
-  value), which is not an end state and waits on QSL's actual parity API delivery.
+  parity map; no CG function maps a shadow result to a terminal value until the production path
+  invokes QSL's delivered parity API.
 - A replay path for a shadow counterexample, which needs FR-025's binding for a composite leaf;
   until then a falsified shadow harness has no terminal value (FR-029-AC-17).
 - Renaming ADR-003's Q1 sentence on co-ownership once the question above is answered.

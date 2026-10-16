@@ -75,11 +75,11 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   [FR-028](./FR-028-bounded-proof-ceilings.md)) and the SUCCESS check count its transcript reports.
 - For a falsified outcome, the replay settlement of its counterexample, as the Description states
   it.
-- Planned (IR-241): the proof subject (`production` or `bounded_shadow`, FR-028) and, for a
-  verified outcome, its proof strength (FR-028-AC-17). A family with no shadow carries subject
-  `production` and strength `production_proved`.
-- Planned (IR-635): retained `refinement_failed` disagreement whatever the backend outcome,
-  including the widened interim inconclusive/cover-unsatisfied refusal case in AC-21.
+- Planned (IR-635): for the composite parity route, the proof subject (`production` or
+  `bounded_shadow`, FR-028), the verified outcome's proof strength (FR-028-AC-17) and retained
+  `refinement_failed` disagreement whatever the backend outcome. `run_terminal_value` takes none of
+  these today; its input is the outcome, the SUCCESS-check count and the optional replay
+  settlement.
 
 - Delivered IR-666 direct converter; planned IR-635 production invocation: the same-claim composite
   parity settlement/record, binding, bounds and refinement evidence defined below and by
@@ -91,13 +91,10 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - For the ordinary source-predicate input, a typed refusal, `TerminalPairError`, for an invalid
   pair: a falsified outcome with no replay settlement (`MissingSettlement`), or any other outcome
   with one (`UnexpectedSettlement`).
-- Planned (IR-241): `TerminalPairError::NonProductionProof` carries the proof strength for a
-  verified outcome whose strength is not `production_proved`; `ShadowCounterexample` refuses a
-  falsified `bounded_shadow` outcome. IR-241 owns these variants and their proof-strength input.
-- Planned (IR-635): the same `NonProductionProof` variant also carries `refinement_failed` for a
-  `bounded_shadow` `inconclusive` or `cover-unsatisfied` outcome retaining that disagreement.
-  This is the widened interim case; IR-635 does not reassign ownership of the variants.
-  Neither interim refusal returns a terminal value while CG has not consumed QSL's parity facade.
+- `TerminalPairError` has exactly the variants `MissingSettlement`, `UnexpectedSettlement` and
+  `InvalidCancellation`. It has no variant for a bounded-shadow outcome, and `run_terminal_value`
+  has no input that carries one. A bounded-shadow terminal value comes from the composite parity
+  route below (QSL FR-358), never from `TerminalPairError`.
 - Planned (IR-635): the admitted composite route preserves QSL's terminal record/category/cause
   under AC-17 and AC-19 to AC-27; its typed binding refuses missing or another claim's settlement
   without a value.
@@ -159,15 +156,12 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 The production and source-predicate rows above retain their meaning. For a bound, node-selected
 composite parity claim, the adapter shall consume QSL's same-claim settlement/record from
 [FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md), rather than apply the
-source-predicate `reproduced` row. The interim `NonProductionProof` and `ShadowCounterexample`
-refusals remain the truthful unavailable-route disposition until the production CG path invokes
-the delivered QSL parity facade; they are then replaced for this admitted route by the rows below.
-
-Before the production CG path invokes QSL-640, a bounded-shadow `inconclusive` or `cover-unsatisfied` outcome with
-retained `refinement_failed` takes the typed interim `NonProductionProof` refusal carrying that
-strength and yields no terminal value. Outcomes without retained disagreement still take the
-ordinary inconclusive rows. This total interim map does not weaken the delivered parity route's
-disagreement-first `Failed`/CG-owned `CgDefect` rule or invent an available QSL cause.
+source-predicate `reproduced` row. Until the production CG path invokes the delivered QSL parity
+facade, `run_terminal_value` receives no bounded-shadow evidence: it has no proof-subject or
+proof-strength input and `TerminalPairError` has no variant for it. The admitted route takes the
+rows below. Outcomes without retained disagreement still take the ordinary inconclusive rows. The
+parity route's disagreement-first `Failed`/CG-owned `CgDefect` rule invents no available QSL
+cause.
 
 FR-028 AC-17 retains every source proof strength. The adapter shall project the closed strength set
 into the proposed QSL evidence as follows, without a wildcard or deleting a source strength:
@@ -337,7 +331,7 @@ retain the partial/planned statuses below; falsified native/generated-family wor
 | FR-029-AC-18 | For the `falsified` state-clause run of the wrapping debit subject `deposit_debiting`, whose post-state value (-1) lies outside `balance`'s declared range, this repository builds the post snapshot with that exact unclamped value and does not refuse it itself (not as `StateClauseReplayError::OutOfDomain` or any other CG defect), and the run maps to `Refuted`, the ordinary violated terminal, and not to `Inconclusive(ReplayRefused)` or `Failed`. QSL settles the exact post-state observation as a reproduced violation (QSL-634). | Test (TC-040) |
 | FR-029-AC-19 | PLANNED/GATED (IR-635/QSL-640). After the cross-outcome disagreement rule, verified shadow CeilingReached yields Incomplete(ResourceExhausted); nonzero Exhausted with QSL-derived complete coverage yields Proved n; remaining completed nonzero verification yields Tested. Tested is excluded for disagreement, ceilings and zero checks; tightening or missing coverage cannot promote it to Proved. | Test |
 | FR-029-AC-20 | PARTIAL (IR-666 direct F-1 to F-7 report consumption covered; IR-635 must reach these rows from a CG-built request over the original proving context). An identity-valid falsified composite shadow consumes the shared Refinement and ordered F-1 to F-7 result: Disagreed/Failed/CgDefect; native Incomplete or ExecutionFault as GeneratedFault/Failed with NativeCause, winning over an invalid operand and every later limit; RefusedInput/ReplayRefused with QSL code and operand index, winning over CeilingReached; admission accounting exhaustion as Incomplete(ResourceExhausted)/Admission with counter; exact-evaluation exhaustion as Incomplete(ResourceExhausted)/ExactEvaluation before CeilingReached; CeilingReached as Incomplete(ResourceExhausted)/RefinementCeiling; finally exact-versus-shadow divergence Failed/CgDefect or Inconclusive(ScalarAgrees) with CompositeEquality claim/outcome. CG asserts typed report/terminal evidence; QSL FR-358 owns skipped internal work on F-2 and F-4. No row returns Refuted; Completed/Refused native is evidence only. | Test |
-| FR-029-AC-21 | PLANNED: IR-241 owns the refusal variants and verified proof-strength input; IR-635 owns the widened inconclusive/cover-unsatisfied case. Until the production CG path invokes the delivered QSL parity facade, a verified nonproduction shadow takes NonProductionProof and a falsified shadow takes ShadowCounterexample; inconclusive and cover-unsatisfied shadows with retained refinement_failed take NonProductionProof carrying that strength. All are typed interim refusals with no terminal value, never a fabricated predicate replay or terminal cause. | Test |
+| FR-029-AC-21 | PLANNED (IR-635): `run_terminal_value` has no proof-subject or proof-strength input and `TerminalPairError` has no variant for a bounded-shadow outcome, so until the production CG path invokes the delivered QSL parity facade no CG function maps a verified, falsified, inconclusive or cover-unsatisfied bounded-shadow outcome (the last two with retained refinement_failed) to a terminal value or a typed refusal, and none fabricates a predicate replay or terminal cause. The terminal value for such an outcome is the parity route's under AC-17 and AC-19 to AC-27. | Test |
 | FR-029-AC-22 | PLANNED (IR-635). The strength set enumerated by the map equals FR-028-AC-17's closed set; adding a strength without its projection and outcome row fails the build or test rather than entering a wildcard mapping. | Test |
 | FR-029-AC-23 | PLANNED/GATED (IR-635/QSL-640). A stopped backend run retains its ordinary timeout/memory inconclusive classification; a stopped refinement retains FR-028-AC-24's CeilingReached projection and recorded ceiling. Neither stop, nor QSL settlement resource refusal, becomes completed NotExhausted evidence or Tested. | Test |
 | FR-029-AC-24 | PLANNED/GATED (IR-635/QSL-640). After common claim/source/node/bounds/O-09 validation, retained refinement_failed/Disagreed evidence for the same valid claim yields Failed/CgDefect for verified, falsified, inconclusive and cover-unsatisfied backend outcomes, including zero checks, an operand field x declared Int[0, 9] but supplied as x: 12, missing/fault native observation and a falsified replay agreeing on its retained case; no early operand/native setup refusal loses this disagreement, which precedes resource, vacuity and agreement rows. Missing observations are never fabricated. | Test |
@@ -358,7 +352,7 @@ retain the partial/planned statuses below; falsified native/generated-family wor
 QSL-640 delivered the node-selected parity facade in QSL #645, including F-1 to F-7 and
 `IncompleteStage::Admission`. IR-666's public report converter is delivered; IR-635 still owns
 the production original-artifact route. [FR-033](../../replay/functional/FR-033-composite-parity-replay-binding.md) owns the
-same-claim binding and the CG-owned CgDefect attachment before interim refusals are replaced.
+same-claim binding and the CG-owned CgDefect attachment.
 
 ## Dependencies
 
@@ -385,9 +379,8 @@ and the map's `match` fails to compile there until that arm is written. FR-029-A
 QSL's constructible `InternalFault` (re-exported by `qsl-replay`, `InternalFault::new`, QSL `main`
 bcca433, QSL #635) and asserts `Failed` through the whole error. The fault readings of
 `StateClauseReplayError::Refused` and `CallSite` are listed under FR-029-AC-10, so FR-029-AC-16
-holds only clauses a test asserts. IR-241 owns the planned proof-subject/verified-strength inputs
-and interim NonProductionProof/ShadowCounterexample variants; IR-635 owns their widened
-inconclusive/cover-unsatisfied disagreement case and the parity route. FR-029-AC-17, AC-19 and
+holds only clauses a test asserts. IR-635 owns the proof-subject/strength inputs and the parity
+route; `TerminalPairError` has no bounded-shadow variant. FR-029-AC-17, AC-19 and
 AC-21 to AC-27 (IR-635 production path) remain planned. FR-029-AC-18 is covered by the exact
 negative post-state replay tests (IR-460); AC-20 has direct report controls, and AC-28's public
 report-binding and refusal pass-through is built and tested under IR-666.
