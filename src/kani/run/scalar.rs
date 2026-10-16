@@ -1089,11 +1089,6 @@ mod tests {
         )
         .unwrap();
         write_observer("oracle", 1, root).unwrap();
-        fs::copy(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"),
-            root.join("Cargo.lock"),
-        )
-        .unwrap();
 
         let cargo = env!("CARGO");
         let run = |args: &[&str]| {
@@ -1114,7 +1109,14 @@ mod tests {
         };
         run(&["generate-lockfile", "--offline"]);
         let cg_lock = include_str!("../../../Cargo.lock");
-        for (package, repository) in LOCKED_DEPENDENCIES {
+        for (package, repository) in [
+            (
+                "quire-contract-runtime",
+                "https://github.com/agent-ix/quire-contract-runtime",
+            ),
+            ("quire-exact", "https://github.com/agent-ix/quire-exact"),
+        ] {
+            assert!(LOCKED_DEPENDENCIES.contains(&(package, repository)));
             let expected = lock_revision(cg_lock, package, repository).unwrap();
             run(&["update", "--offline", "-p", package, "--precise", &expected]);
             let staged_lock = fs::read_to_string(root.join("Cargo.lock")).unwrap();

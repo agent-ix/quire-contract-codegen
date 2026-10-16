@@ -247,7 +247,7 @@ compiling, and an artifact that records the string no longer names a code the cr
 - For an expression with no arithmetic node, the same `bool`-returning function as before.
 - For an expression with at least one arithmetic node, a native oracle is a function that returns
   `quire_exact::Outcome<bool>` and takes a trailing `&mut quire_exact::Meter`, as the FR-014
-  oracles do (the oracle IR-596 implemented uses Contract Runtime's types). A Kani bundle oracle is a function that
+  oracles do. A Kani bundle oracle is a function that
   returns `bool`, as before.
 
 ## Behavior
