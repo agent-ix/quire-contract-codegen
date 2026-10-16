@@ -190,7 +190,6 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     // Run one obligation at a time, serially, reusing this target directory. The generated
     // crate contains only the selected harness for each run, so compiler/backend work does not
     // scale with all twelve caller claims being present together.
-    let mut evidence = Vec::with_capacity(harnesses.len());
     for harness in &harnesses {
         write_crate(&root, std::slice::from_ref(harness));
         let request = KaniExecutionRequest {
@@ -200,10 +199,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
             crate_directory: &crate_directory,
             target_directory: &target_directory,
         };
-        evidence.push(execute_kani_obligation(&request).expect("caller proof executes"));
-    }
-    assert_eq!(evidence.len(), 12);
-    for (harness, evidence) in harnesses.iter().zip(evidence) {
+        let evidence = execute_kani_obligation(&request).expect("caller proof executes");
         let selected_path = harness.identity.harness_path().to_string();
         assert_eq!(
             evidence.outcome,
