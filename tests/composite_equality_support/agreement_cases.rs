@@ -600,7 +600,12 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
                 // E_RECORD Equal
                 &empty, &left, &right, &mut meter,
             );
-        assert_eq!(outcome, rt::Outcome::Refused(rt::Refusal::CheckedInvariant));
+        assert!(matches!(
+            outcome,
+            rt::Outcome::Refused(rt::Refusal::CheckedInvariant {
+                cause: quire_exact::CheckedInvariantCause::GeneratedTypeCheckRejected { .. },
+            })
+        ));
         assert!(
             meter.admitted_charges().is_empty(),
             "check_type guard must admit no charge before refusing"

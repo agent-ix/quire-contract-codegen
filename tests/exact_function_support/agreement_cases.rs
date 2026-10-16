@@ -61,7 +61,9 @@ fn direct_package() -> rt::CheckedPackage {
         Box::new(
             |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
                 let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {
-                    return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);
+                    return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
+                        cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
+                    });
                 };
                 match frame.meter(|meter| {
                     exact::evaluate_integer_arithmetic(
@@ -120,7 +122,9 @@ fn direct_package() -> rt::CheckedPackage {
             body: Box::new(
                 |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
                     let [left, right] = args else {
-                        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);
+                        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
+                            cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
+                        });
                     };
                     let environment = rt::TypeEnvironment::new(
                         Vec::new(),

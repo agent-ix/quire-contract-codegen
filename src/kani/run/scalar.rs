@@ -10,7 +10,8 @@ use std::{
 use quire_canonical::{FixedShape, Limits};
 use quire_exact::Cancel;
 use quire_exact::{
-    ChargePoint, Incomplete, Integer, LimitKind, Outcome, Refusal, ScalarLimits, Undefined,
+    ChargePoint, Incomplete, Integer, IntegerInterval, LimitKind, Outcome, Refusal, ScalarLimits,
+    Undefined,
 };
 use serde::Serialize;
 
@@ -582,7 +583,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
    Ok(rt::Outcome::Undefined(rt::Undefined::IeeeNotFinite)) => println!("IR791_NATIVE_V1\tundefined\tieee_not_finite"),
    Ok(rt::Outcome::Undefined(rt::Undefined::EmptyReduction)) => println!("IR791_NATIVE_V1\tundefined\tempty_reduction"),
    Ok(rt::Outcome::Undefined(rt::Undefined::NoneValue)) => println!("IR791_NATIVE_V1\tundefined\tnone_value"),
-   Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain)) => println!("IR791_NATIVE_V1\trefused\tinteger_out_of_domain"),
+   Ok(rt::Outcome::Refused(rt::Refusal::IntegerOutOfDomain {{ target }})) => println!("IR791_NATIVE_V1\trefused\tinteger_out_of_domain\t{{}}\t{{}}", target.lower(), target.upper()),
    Ok(rt::Outcome::Incomplete(value)) => println!("IR791_NATIVE_V1\tincomplete\t{{}}\t{{}}\t{{}}\t{{}}\t{{}}", value.limit_kind.as_str(), value.limit, value.consumed, value.next_charge, value.charge_point.as_str()),
    Ok(_) => println!("IR791_NATIVE_V1\tunsupported"),
    Err(generated::OracleStop::IllTyped(_)) => println!("IR791_NATIVE_V1\toracle_stop\till_typed"),
@@ -591,7 +592,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
  }}
  print!("IR791_METER_V1");
  for kind in rt::LimitKind::ALL {{ print!("\t{{}}", meter.consumed(kind)); }}
- for point in meter.admitted_charges() {{ print!("\t{{}}", point.as_str()); }}
+ for charge in meter.admitted_charges() {{ print!("\t{{}}", charge.point.as_str()); }}
  println!();
  Ok(())
 }}
@@ -675,8 +676,21 @@ fn execute_native(
                 ))
             })?)
         }
-        ["IR791_NATIVE_V1", "refused", "integer_out_of_domain"] => {
-            Outcome::Refused(Refusal::IntegerOutOfDomain)
+        ["IR791_NATIVE_V1", "refused", "integer_out_of_domain", lower, upper] => {
+            let parse_bound = |bound: &str| {
+                bound.parse::<Integer>().map_err(|error| {
+                    KaniScalarNativeError::NativeResult(format!(
+                        "invalid integer domain bound: {error}"
+                    ))
+                })
+            };
+            let target =
+                IntegerInterval::new(parse_bound(lower)?, parse_bound(upper)?).map_err(|_| {
+                    KaniScalarNativeError::NativeResult("empty integer target interval".into())
+                })?;
+            Outcome::Refused(Refusal::IntegerOutOfDomain {
+                target: Box::new(target),
+            })
         }
         ["IR791_NATIVE_V1", "undefined", reason] => Outcome::Undefined(parse_undefined(reason)?),
         ["IR791_NATIVE_V1", "incomplete", kind, limit, consumed, next, point] => {

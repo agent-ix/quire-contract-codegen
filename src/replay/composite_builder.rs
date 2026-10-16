@@ -55,7 +55,7 @@ pub enum CompositeBuildError {
     /// QSL's public request decoder refused the original wire before recompilation.
     RequestDecode(Box<ReplayRequestRefusal>),
     /// IR refused the recompiled checked package.
-    PackageRead(CheckedPackageRefusal),
+    PackageRead(Box<CheckedPackageRefusal>),
     /// IR reached a checked-package read ceiling.
     PackageReadLimit(CheckedPackageIncomplete),
     /// The original application has no complete admitted structural equality operand projection.
@@ -358,7 +358,7 @@ impl OriginalCompositeEqContext {
         {
             CheckedPackageV2ReadResult::Admitted(package) => package,
             CheckedPackageV2ReadResult::Refused(cause) => {
-                return Err(CompositeBuildError::PackageRead(cause))
+                return Err(CompositeBuildError::PackageRead(Box::new(cause)))
             }
             CheckedPackageV2ReadResult::Incomplete(cause) => {
                 return Err(CompositeBuildError::PackageReadLimit(cause))

@@ -175,7 +175,11 @@ macro_rules! shared_helpers {
                 .iter()
                 .map(|kind| meter.consumed(*kind))
                 .collect();
-            (outcome, meter.admitted_charges().to_vec(), consumed)
+            (
+                outcome,
+                meter.admitted_charges().iter().map(|charge| charge.point).collect(),
+                consumed,
+            )
         }
 
         /// Deny each admitted charge occurrence in turn:
@@ -186,7 +190,7 @@ macro_rules! shared_helpers {
         ) -> Vec<(ChargePoint, u64, T, u64)> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
-            let charges = meter.admitted_charges().to_vec();
+            let charges = meter.admitted_charges().iter().map(|charge| charge.point).collect::<Vec<_>>();
             let mut seen: Vec<ChargePoint> = Vec::new();
             charges
                 .into_iter()

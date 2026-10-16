@@ -3092,6 +3092,11 @@ fn ordering_identity(
         (Kind::Decimal, Op::LessOrEqual) => "quire.op.decimal.le",
         (Kind::Decimal, Op::Greater) => "quire.op.decimal.gt",
         (Kind::Decimal, Op::GreaterOrEqual) => "quire.op.decimal.ge",
+        (Kind::Integer, _) => {
+            return Err(OracleGenerationError::unknown_variant(
+                "OrderingOperandKind",
+            ))
+        }
     })
 }
 

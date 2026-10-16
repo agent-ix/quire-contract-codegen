@@ -908,7 +908,9 @@ const NATIVE_BOUND_HELPER: &str = "
 /// The inclusive result interval of a `reject` integer type.
 fn bound<U>(minimum: i64, maximum: i64) -> Result<rt::IntegerInterval, rt::Outcome<U>> {
     rt::IntegerInterval::new(rt::Integer::from(minimum), rt::Integer::from(maximum))
-        .map_err(|_| rt::Outcome::Refused(rt::Refusal::CheckedInvariant))
+        .map_err(|_| rt::Outcome::Refused(rt::Refusal::CheckedInvariant {
+            cause: rt::CheckedInvariantCause::GeneratedIntervalInvalid,
+        }))
 }
 ";
 

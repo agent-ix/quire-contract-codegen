@@ -683,7 +683,7 @@ fn assert_recursive_item_generation(
     );
     assert!(tree_block.contains("rt::FieldDeclaration::new(\"kids\", {"));
     assert!(tree_block.contains(&format!("rt::ValueType::Composite({tree_key})")));
-    assert!(tree_block.contains("rt::CollectionKind::Sequence"));
+    assert!(tree_block.contains("exact::CollectionKind::Sequence"));
     assert!(tree_block.contains("rebuild_cardinality(0, 3)?"));
     assert!(tree_block.contains("rt::Presence::Required)"));
 }
@@ -1930,7 +1930,7 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
     );
     for reconstruction in [
         "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)",
-        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, rt::RoundingMode::NearestEven)?)",
+        "rt::ValueType::Decimal(rebuild_decimal(\"-100\", \"100\", 0, 0, exact::RoundingMode::NearestEven)?)",
         "rt::ValueType::Rational(rebuild_rational(rebuild_interval(\"-10\", \"10\")?, rebuild_interval(\"1\", \"1\")?)?)",
     ] {
         assert!(through_scalars.contains(reconstruction), "scalar member: {reconstruction}");
@@ -2343,7 +2343,7 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
         .filter(|function| function.name.starts_with("oracle_"))
     {
         assert!(function.body.contains(
-            "Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant)"
+            "Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant { cause: exact::CheckedInvariantCause::GeneratedDescriptorReconstructionFailed })"
         ));
     }
 

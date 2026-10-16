@@ -246,7 +246,6 @@ impl Operator {
             OrderingOperator::LessOrEqual => Some(Self::LessOrEqual),
             OrderingOperator::Greater => Some(Self::Greater),
             OrderingOperator::GreaterOrEqual => Some(Self::GreaterOrEqual),
-            _ => None,
         }
     }
 }

@@ -222,10 +222,15 @@ fn declaration_for(tag: &str, form: &str, digest: &str) -> Option<Value> {
 /// caller of this helper has already registered.
 pub fn application(
     operator: &str,
-    operation: Value,
+    mut operation: Value,
     result_type: &str,
     arguments: Vec<Value>,
 ) -> Value {
+    if operation["member"]["kind"] == "type_argument"
+        && operation["member"].get("declaration").is_none()
+    {
+        operation["member"]["declaration"] = node_ref(result_type);
+    }
     json!({
         "term": "application",
         "operator": operator,
@@ -235,11 +240,9 @@ pub fn application(
     })
 }
 
-/// IR-280's FR-322 application-node dependency join: every `reference`
-/// term's `target` digest reachable anywhere inside `body`, deduplicated and
-/// digest-ascending. `result_type` and a `literal`'s own `type` are bare
-/// node ids, not `reference` terms, so this walk never picks them up --
-/// exactly the exclusion FR-322 states.
+/// Reference targets used to anchor bounds on operand nodes. The application
+/// dependency join also includes an operation member declaration, added after
+/// choosing the anchor. `result_type` and a literal's `type` stay excluded.
 fn reference_targets(body: &Value) -> Vec<String> {
     fn walk(value: &Value, targets: &mut BTreeSet<String>) {
         match value {
@@ -893,7 +896,7 @@ impl PackageBuilder {
             .iter()
             .map(|bound| self.bound(bound))
             .collect::<Vec<_>>();
-        let dependencies = reference_targets(&body);
+        let mut dependencies = reference_targets(&body);
         // Only computed when there is a bound to anchor: a caller passing no
         // `bounds` (e.g. the isolated TextAdmission reader negative) may
         // legitimately have neither a `reference` target nor a `semantic_type`
@@ -915,6 +918,11 @@ impl PackageBuilder {
             for key in &keys {
                 self.add_dependency(&anchor, key);
             }
+        }
+        if let Some(declaration) = body["operation"]["member"]["declaration"]["digest"].as_str() {
+            dependencies.push(declaration.to_owned());
+            dependencies.sort();
+            dependencies.dedup();
         }
         self.application_code_with(code, tag, form, semantic_type, body, &dependencies);
         self

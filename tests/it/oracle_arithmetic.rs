@@ -1713,7 +1713,7 @@ fn tc_044_native_connectives_retain_only_completed_results() {
             .collect::<Vec<_>>();
         writeln!(
             checks,
-            "#[test]\nfn retain_{index}() {{\n    let mut meter = meter();\n    let outcome = {};\n    assert_eq!(kind(outcome), {expected_kind});\n    let retains = meter.admitted_charges().iter().filter(|point| **point == rt::ChargePoint::BooleanResultRetain).count();\n    assert_eq!(retains, {expected_retains}, \"{label}\");\n}}\n",
+            "#[test]\nfn retain_{index}() {{\n    let mut meter = meter();\n    let outcome = {};\n    assert_eq!(kind(outcome), {expected_kind});\n    let retains = meter.admitted_charges().iter().filter(|charge| charge.point == rt::ChargePoint::BooleanResultRetain).count();\n    assert_eq!(retains, {expected_retains}, \"{label}\");\n}}\n",
             call(&format!("crate::{module}"), &source, &arguments, "&mut meter")
         )
         .unwrap();
