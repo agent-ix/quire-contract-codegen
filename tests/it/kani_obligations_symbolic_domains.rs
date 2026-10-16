@@ -304,6 +304,12 @@ fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionOblig
     collection_harnesses.into_iter().next().unwrap()
 }
 
+/// The symbolic collection harness source, for the cover-last guard (FR-015-AC-58).
+pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
+    let harness = collection_harness(&emitted(), "quire.op.collection.forall");
+    vec![("symbolic collection", harness.rust.contents)]
+}
+
 fn collection_item_outcome(
     fixture: &Emitted,
     operation: &str,
