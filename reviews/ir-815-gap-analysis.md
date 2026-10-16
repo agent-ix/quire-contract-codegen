@@ -81,3 +81,15 @@ scope:
   excerpt: Every generated Rust file's header names the generator and the requirement, revision and clause it was generated from.
 bindings: []
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+
+## Disposition round 1 verdict
+
+**Round 1: PASS.** `quire matrix` at 55c3347 reports FR-002-AC-7, 8, 10 to 16 and FR-004-AC-16, 18 to 24 `untagged`, and AC-9/AC-17 `method-without-symbol`. All are PLANNED with a 🚧 status, so none is overclaimed. Both Open Questions now say what waits on FR-011 OQ-2 without answering it. FR-014's IR-489 behaviour statement now admits an FR-002 consumer. FR-014-AC-38's text was already consumer-neutral.

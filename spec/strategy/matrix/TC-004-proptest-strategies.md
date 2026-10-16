@@ -50,8 +50,8 @@ that a floor was missed; completed searches still return the corresponding floor
 The V2 controls expect a case with both oracles completing true to run the subject once and pass
 (FR-002-AC-13), a rejected case to leave the subject uninvoked (AC-14), a false postcondition to be
 a failed postcondition (AC-15), a non-completed oracle outcome to be a non-completed case that
-keeps its cause, is no pass, and skips the postcondition when the precondition did not complete
-(AC-16), snapshot, precondition, invocation and postcondition to run in that order (AC-8), each
+keeps its cause and is no pass (AC-16), and a precondition that does not complete invokes neither
+the subject (AC-17) nor the postcondition oracle (AC-18), snapshot, precondition, invocation and postcondition to run in that order (AC-8), each
 wrong selection to yield a typed, located diagnostic naming the selection and no artifact (AC-10),
 an unsupported body to yield a structured unsupported diagnostic, no artifact and no filtering
 fallback (AC-11), and identical bytes on repeat for the same package, clauses and policy (AC-12).

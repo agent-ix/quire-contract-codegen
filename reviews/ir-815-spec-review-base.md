@@ -119,3 +119,23 @@ scope:
   excerpt: Every generated Rust file's header names the generator and the requirement, revision and clause it was generated from.
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | New in the fix round: FR-002-AC-16 says a precondition that does not complete skips the postcondition, but it says nothing about the subject. The harness could still invoke the subject on an input whose precondition was undefined, which AC-14 forbids for a false precondition. Neither the matching behaviour statement nor TC-004's expected results ('skips the postcondition') constrains invocation. State that the subject is not invoked when the precondition oracle does not complete. | spec/strategy/functional/FR-002-tristate-proptest.md:98, spec/strategy/functional/FR-002-tristate-proptest.md:65-67, spec/strategy/matrix/TC-004-proptest-strategies.md:53-54 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+
+## Disposition round 1 verdict
+
+**Round 1: PASS for FND-001 to FND-005, but one new medium finding (FND-006) keeps the PR not mergeable.** Reviewed 55c3347 against origin/main fe20ecc. FR-002-AC-13 to AC-16 cover every completion combination: both true, precondition false, precondition true with postcondition false, and either one not completing. They do not overlap. FR-004-AC-19 to AC-22 restate FR-004's four per-clause rules exactly. AC-9 now names `TypedExpression` and `oracle::boolean_v1`, so the V1 harness fails it. FR-002 OQ-2 leaves the verdict kind open and only fixes 'not a pass, keeps its cause', so it decides nothing. No existing id is renumbered. FR-002-AC-1 to AC-6 and FR-004-AC-1 to AC-15 are unchanged.

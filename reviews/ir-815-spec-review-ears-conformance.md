@@ -99,3 +99,17 @@ scope:
   excerpt: '- Planned (IR-815): the analyzer shall apply the classification and non-success rules above to a V2 clause population without change.'
 bindings: []
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+
+## Disposition round 1 verdict
+
+**Round 1: PASS.** All five compound items are split. New criteria FR-002-AC-13 to AC-15 and FR-004-AC-20, AC-21, AC-23 and AC-24 each state one response. FR-004-AC-22 gives one outcome (`exercised`) under the two conditions FR-004 itself states. The new non-completion statement uses the unwanted-behaviour pattern. FR-002-AC-16's invocation gap is recorded as SR-11855 FND-006, not here.

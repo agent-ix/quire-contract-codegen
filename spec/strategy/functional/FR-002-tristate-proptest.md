@@ -65,6 +65,8 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 - Planned (IR-815): if an embedded V2 clause oracle returns an outcome that does not complete, then
   the V2 harness shall report the case as a non-completed case that retains the oracle's own cause,
   and shall not count it as a pass.
+- Planned (IR-815): if the embedded precondition oracle returns an outcome that does not complete,
+  then the V2 harness shall neither invoke the subject nor evaluate the postcondition oracle.
 - Planned (IR-815): the V2 harness generator shall read clause kind, identity and body only through
   the one typed node-access layer `core/ir/` of AD-004.
 - Planned (IR-815): the V2 harness generator shall not name or read a `BoundPackage`, a `ClauseRef`,
@@ -95,7 +97,9 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-13 | PLANNED (IR-815). A seeded V2 case on which both oracles complete true runs the subject once and is a pass. | Test (TC-004) |
 | FR-002-AC-14 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes false is a rejected precondition and the subject is not invoked. | Test (TC-004) |
 | FR-002-AC-15 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle completes true and the postcondition oracle completes false is a failed postcondition. | Test (TC-004) |
-| FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass, and does not run the postcondition when the precondition did not complete. | Test (TC-004) |
+| FR-002-AC-16 | PLANNED (IR-815). A seeded V2 case on which the precondition or postcondition oracle returns an outcome that does not complete (stopped or undefined) is reported as a non-completed case retaining the oracle's cause, is not counted as a pass. | Test (TC-004) |
+| FR-002-AC-17 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not invoke the subject. | Test (TC-004) |
+| FR-002-AC-18 | PLANNED (IR-815). A seeded V2 case on which the precondition oracle returns an outcome that does not complete does not evaluate the postcondition oracle. | Test (TC-004) |
 
 ## Open Questions
 
@@ -104,7 +108,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   V2 entry shape follows the open interface-001 direction. The generated harness writes the
   requirement and revision into its header comment, its `RequirementId` and its symbol names, so
   the final bytes of a V2 harness, FR-002-AC-12 across different identities, and the NFR-002-AC-1
-  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-16 are stated independently of that
+  header requirement wait on FR-011 OQ-2; FR-002-AC-7 to AC-18 are stated independently of that
   identity and none invents a source.
 - OQ-2 (non-completed verdict): which runtime verdict kind carries a non-completed oracle outcome
   (FR-002-AC-16) is not decided here; the criterion fixes only that the case is not a pass and

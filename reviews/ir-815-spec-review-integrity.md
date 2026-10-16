@@ -85,3 +85,15 @@ scope:
   excerpt: PLANNED. Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes no body JSON (the verification of FR-008-CON-1).
 bindings: []
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+
+## Disposition round 1 verdict
+
+**Round 1: PASS.** The strategy matrix row (AC-7, AC-8, AC-10 to AC-16) and TC-004's Traces To agree. The evidence matrix row (AC-16, AC-18 to AC-24) and TC-006's Traces To agree. AC-9 and AC-17 keep their own Inspection rows, as FR-008-AC-8/AC-10 do. Both TC expected-results blocks name each traced criterion. AD-004's ranges (FR-002-AC-7 to AC-16, FR-004-AC-16 to AC-24) and FR-004's implementation-boundary range are updated. `quire validate` on every changed spec file reports no error. The only warning, FR-014 line 252, is on an untouched line.
