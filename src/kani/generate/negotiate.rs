@@ -378,26 +378,19 @@ fn classify_collection<'a>(
         Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
             Outcome::RequiresBound(unbounded_type)
         }
-        Err(refusal) => Outcome::Unsupported(UnsupportedObligation::CollectionClaimNotRendered {
-            node_id: node_id.clone(),
-            reason: match refusal {
-                CollectionDomainRefusal::UnsupportedShape => {
-                    CollectionUnsupportedReason::UnsupportedClaimShape
-                }
-                CollectionDomainRefusal::FieldNotAdmitted => {
-                    CollectionUnsupportedReason::FieldNotAdmitted
-                }
-                CollectionDomainRefusal::UnsupportedFieldType => {
-                    CollectionUnsupportedReason::UnsupportedFieldType
-                }
-                CollectionDomainRefusal::UnsatisfiableElementDomain => {
-                    CollectionUnsupportedReason::UnsatisfiableElementDomain
-                }
-                CollectionDomainRefusal::RequiresBound { .. } => {
-                    unreachable!("requires-bound refusal is mapped before the remaining reasons")
-                }
-            },
-        }),
+        Err(CollectionDomainRefusal::UnsupportedShape) => {
+            collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedClaimShape)
+        }
+        Err(CollectionDomainRefusal::FieldNotAdmitted) => {
+            collection_refusal(node_id, CollectionUnsupportedReason::FieldNotAdmitted)
+        }
+        Err(CollectionDomainRefusal::UnsupportedFieldType) => {
+            collection_refusal(node_id, CollectionUnsupportedReason::UnsupportedFieldType)
+        }
+        Err(CollectionDomainRefusal::UnsatisfiableElementDomain) => collection_refusal(
+            node_id,
+            CollectionUnsupportedReason::UnsatisfiableElementDomain,
+        ),
     };
     ItemState {
         kind: None,
@@ -417,6 +410,13 @@ fn classify_collection<'a>(
         }),
         outcome,
     }
+}
+
+fn collection_refusal(node_id: &CheckedNodeId, reason: CollectionUnsupportedReason) -> Outcome<'_> {
+    Outcome::Unsupported(UnsupportedObligation::CollectionClaimNotRendered {
+        node_id: node_id.clone(),
+        reason,
+    })
 }
 
 /// One `StateFrame` item: its harness, or the record its engine refusal maps to. The item's own

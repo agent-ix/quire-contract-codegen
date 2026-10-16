@@ -145,28 +145,17 @@ pub(super) fn render_collection(
     lowered: &LoweredCollectionClaim,
 ) -> Result<KaniCollectionObligationHarness, UnsupportedObligation> {
     let field = &lowered.field;
-    let minimum_length = i64::try_from(field.minimum_length).map_err(|_| {
-        UnsupportedObligation::CollectionClaimNotRendered {
-            node_id: field.quantifier.clone(),
-            reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
-        }
-    })?;
-    let maximum_length = i64::try_from(field.maximum_length).map_err(|_| {
-        UnsupportedObligation::CollectionClaimNotRendered {
-            node_id: field.quantifier.clone(),
-            reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
-        }
-    })?;
-    let array_len = usize::try_from(field.maximum_length).map_err(|_| {
-        UnsupportedObligation::CollectionClaimNotRendered {
-            node_id: field.quantifier.clone(),
-            reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
-        }
-    })?;
-    if array_len > isize::MAX as usize {
+    let minimum_length = collection_i64(i128::from(field.minimum_length), &field.quantifier)?;
+    let maximum_length = collection_i64(i128::from(field.maximum_length), &field.quantifier)?;
+    let array_len = collection_array_length(field.maximum_length, &field.quantifier)?;
+    let required_unwind = field.maximum_length.checked_add(1);
+    if required_unwind.is_none_or(|required| u64::from(request.unwind) < required) {
         return Err(UnsupportedObligation::CollectionClaimNotRendered {
             node_id: field.quantifier.clone(),
-            reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInHarness,
+            reason: crate::kani::generate::outcome::CollectionUnsupportedReason::UnwindBelowCollectionBound {
+                required: required_unwind.unwrap_or(u64::MAX),
+                supplied: request.unwind,
+            },
         });
     }
     let (element_type, element_domain, element_assumption) = match field.element {
@@ -174,18 +163,8 @@ pub(super) fn render_collection(
             ("bool", CollectionElementIdentity::Boolean, String::new())
         }
         CollectionElementDomain::Integer { minimum, maximum } => {
-            let minimum = i64::try_from(minimum).map_err(|_| {
-                UnsupportedObligation::CollectionClaimNotRendered {
-                    node_id: field.quantifier.clone(),
-                    reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
-                }
-            })?;
-            let maximum = i64::try_from(maximum).map_err(|_| {
-                UnsupportedObligation::CollectionClaimNotRendered {
-                    node_id: field.quantifier.clone(),
-                    reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
-                }
-            })?;
+            let minimum = collection_i64(minimum, &field.quantifier)?;
+            let maximum = collection_i64(maximum, &field.quantifier)?;
             (
                 "i64",
                 CollectionElementIdentity::Integer { minimum, maximum },
@@ -335,6 +314,33 @@ pub(super) fn render_collection(
     Ok(harness)
 }
 
+fn collection_i64(value: i128, node_id: &CheckedNodeId) -> Result<i64, UnsupportedObligation> {
+    i64::try_from(value).map_err(|_| UnsupportedObligation::CollectionClaimNotRendered {
+        node_id: node_id.clone(),
+        reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
+    })
+}
+
+fn collection_array_length(
+    value: u64,
+    node_id: &CheckedNodeId,
+) -> Result<usize, UnsupportedObligation> {
+    usize::try_from(value).map_err(|_| UnsupportedObligation::CollectionClaimNotRendered {
+        node_id: node_id.clone(),
+        reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInHarness,
+    })
+}
+
+fn find_admitted_declaration<'a>(
+    mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
+    digest: &str,
+) -> Result<CheckedNodeId, CollectionDomainRefusal> {
+    nodes
+        .find(|node| node.node_id.digest.as_ref() == digest)
+        .map(|node| node.node_id.clone())
+        .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
+}
+
 /// Resolve the first (collection) operand of an admitted quantifier to its exact model field.
 ///
 /// Resolution uses the graph's projection declaration identity plus `model_object_fields`; it
@@ -365,7 +371,7 @@ pub(crate) fn resolve_collection_field(
         .and_then(|member| member.get("value"))
         .and_then(term_target)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if !depends_on(package, &function_body, &quantifier.node_id) {
+    if !is_top_level_conjunct(package, &function_body, &quantifier.node_id) {
         return Err(CollectionDomainRefusal::UnsupportedShape);
     }
     if CheckedNodeTag::from_wire(&quantifier.node_tag) != Some(CheckedNodeTag::Expression)
@@ -422,13 +428,7 @@ pub(crate) fn resolve_collection_field(
         .and_then(|declaration| declaration.get("digest"))
         .and_then(Value::as_str)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let declaration = package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| node.node_id.digest.as_ref() == declaration_digest)
-        .map(|node| node.node_id.clone())
-        .ok_or(CollectionDomainRefusal::FieldNotAdmitted)?;
+    let declaration = find_admitted_declaration(package.graph().nodes.iter(), declaration_digest)?;
     verify_function_receiver(package, function, collection, &declaration)?;
     let fields = package
         .model_object_fields(&declaration)
@@ -436,15 +436,6 @@ pub(crate) fn resolve_collection_field(
     let field = fields
         .field(&field_name)
         .ok_or(CollectionDomainRefusal::FieldNotAdmitted)?;
-    if field.member_type().is_none() {
-        let element_type = sequence_element_type(package, collection)?;
-        if supported_element_type(package, &element_type) {
-            return Err(CollectionDomainRefusal::RequiresBound {
-                unbounded_type: collection.semantic_type.clone(),
-            });
-        }
-        return Err(CollectionDomainRefusal::UnsupportedFieldType);
-    }
     let Some(CheckedMemberType::Collection {
         kind: CheckedCollectionKind::Sequence,
         element,
@@ -452,6 +443,28 @@ pub(crate) fn resolve_collection_field(
     }) = field.member_type()
     else {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
+    };
+    let element_type = sequence_element_type(package, collection)?;
+    let element = match element.as_ref() {
+        CheckedMemberType::Boolean => CollectionElementDomain::Boolean,
+        CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
+            CollectionElementDomain::Integer {
+                minimum: *lower,
+                maximum: *upper,
+            }
+        }
+        CheckedMemberType::IntRange { .. } => {
+            return Err(CollectionDomainRefusal::UnsatisfiableElementDomain);
+        }
+        CheckedMemberType::Integer
+        | CheckedMemberType::String
+        | CheckedMemberType::Uuid
+        | CheckedMemberType::Timestamp => {
+            return Err(CollectionDomainRefusal::RequiresBound {
+                unbounded_type: element_type,
+            });
+        }
+        _ => return Err(CollectionDomainRefusal::UnsupportedFieldType),
     };
     let Some((minimum_length, maximum_length)) = bounds else {
         return Err(CollectionDomainRefusal::RequiresBound {
@@ -461,7 +474,6 @@ pub(crate) fn resolve_collection_field(
     if minimum_length > maximum_length {
         return Err(CollectionDomainRefusal::UnsupportedFieldType);
     }
-    let element_type = sequence_element_type(package, collection)?;
     let predicate_binding = arguments
         .get(1)
         .filter(|argument| argument.get("term").and_then(Value::as_str) == Some("binding"))
@@ -482,24 +494,6 @@ pub(crate) fn resolve_collection_field(
         .iter()
         .find(|node| node.node_id == predicate_id)
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    let element = match element.as_ref() {
-        CheckedMemberType::Boolean => CollectionElementDomain::Boolean,
-        CheckedMemberType::IntRange { lower, upper } if lower <= upper => {
-            CollectionElementDomain::Integer {
-                minimum: *lower,
-                maximum: *upper,
-            }
-        }
-        CheckedMemberType::IntRange { .. } => {
-            return Err(CollectionDomainRefusal::UnsatisfiableElementDomain);
-        }
-        CheckedMemberType::Integer => {
-            return Err(CollectionDomainRefusal::RequiresBound {
-                unbounded_type: element_type,
-            });
-        }
-        _ => return Err(CollectionDomainRefusal::UnsupportedFieldType),
-    };
     let predicate = resolve_predicate(
         package,
         function,
@@ -581,11 +575,11 @@ fn resolve_predicate(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     match (element, operation, selected_index) {
         (CollectionElementDomain::Integer { .. }, "quire.op.integer.ge", 0) => {
-            let threshold = integer_literal(package, literal, element_type, element)?;
+            let threshold = integer_literal(package, literal, element_type)?;
             Ok(CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold })
         }
         (CollectionElementDomain::Integer { .. }, "quire.op.integer.eq", _) => {
-            let value = integer_literal(package, literal, element_type, element)?;
+            let value = integer_literal(package, literal, element_type)?;
             Ok(CollectionPredicateIdentity::IntegerEqual { value })
         }
         (CollectionElementDomain::Boolean, "quire.op.boolean.ne", _) => {
@@ -629,23 +623,6 @@ fn sequence_element_type(
             .ok_or(CollectionDomainRefusal::UnsupportedShape)?,
     )
     .ok_or(CollectionDomainRefusal::UnsupportedShape)
-}
-
-fn supported_element_type(package: &CheckedPackageV2, element: &CheckedNodeId) -> bool {
-    package
-        .graph()
-        .nodes
-        .iter()
-        .find(|node| &node.node_id == element)
-        .is_some_and(|node| {
-            (node.node_tag.as_ref() == "scalar_type" && node.semantic_form.as_ref() == "boolean")
-                || (node.node_tag.as_ref() == "scalar_type"
-                    && node.semantic_form.as_ref() == "integer")
-                || (node.node_tag.as_ref() == "bounded_domain"
-                    && node.semantic_form.as_ref() == "integer_range"
-                    && integer_member_i128(node, "min").is_some()
-                    && integer_member_i128(node, "max").is_some())
-        })
 }
 
 fn verify_function_receiver(
@@ -735,7 +712,6 @@ fn integer_literal(
     package: &CheckedPackageV2,
     term: &Value,
     element_type: &CheckedNodeId,
-    element: CollectionElementDomain,
 ) -> Result<i64, CollectionDomainRefusal> {
     let id = term_target(term).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let node = package
@@ -777,12 +753,42 @@ fn integer_literal(
         .and_then(Value::as_str)
         .and_then(|value| value.parse().ok())
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
-    if let CollectionElementDomain::Integer { minimum, maximum } = element {
-        if i128::from(value) < minimum || i128::from(value) > maximum {
-            return Err(CollectionDomainRefusal::UnsupportedShape);
-        }
-    }
+    // Literals outside the admitted element interval remain representable in the claim. The
+    // symbolic assumptions constrain slots, while this literal may make the claim falsifiable.
     Ok(value)
+}
+
+/// The selected quantifier may be the entire body or a conjunct reached only through `and`
+/// nodes. A quantifier under negation, disjunction, implication, or another operation does not
+/// represent an independent obligation and must not be asserted on its own.
+fn is_top_level_conjunct(
+    package: &CheckedPackageV2,
+    root: &CheckedNodeId,
+    selected: &CheckedNodeId,
+) -> bool {
+    if root == selected {
+        return true;
+    }
+    let Some(node) = package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| &node.node_id == root)
+    else {
+        return false;
+    };
+    if operation_identity(node) != Some("quire.op.boolean.and") {
+        return false;
+    }
+    node.body
+        .get("arguments")
+        .and_then(Value::as_array)
+        .is_some_and(|arguments| {
+            arguments
+                .iter()
+                .filter_map(term_target)
+                .any(|child| is_top_level_conjunct(package, &child, selected))
+        })
 }
 
 fn boolean_literal(
@@ -841,19 +847,6 @@ fn term_target(term: &Value) -> Option<CheckedNodeId> {
         domain: target.get("domain")?.as_str()?.into(),
         digest: target.get("digest")?.as_str()?.into(),
     })
-}
-
-fn integer_member_i128(node: &CheckedSemanticNodeV2, name: &str) -> Option<i128> {
-    node.body
-        .get("members")?
-        .as_array()?
-        .iter()
-        .find(|member| member.get("name").and_then(Value::as_str) == Some(name))?
-        .get("value")?
-        .get("value")?
-        .as_str()?
-        .parse()
-        .ok()
 }
 
 #[cfg(test)]
@@ -928,5 +921,37 @@ mod tests {
             "prove_collection_other",
             &("package-a", "function-b", "quantifier-a"),
         ));
+    }
+
+    #[test]
+    fn domain_representability_failures_keep_the_typed_reason() {
+        let node_id = CheckedNodeId {
+            domain: "ix://test/domain".into(),
+            digest: "test-node".into(),
+        };
+        assert!(matches!(
+            collection_i64(i128::from(i64::MAX) + 1, &node_id),
+            Err(UnsupportedObligation::CollectionClaimNotRendered {
+                node_id: rejected,
+                reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInI64,
+            }) if rejected == node_id
+        ));
+        if usize::BITS < 64 {
+            assert!(matches!(
+                collection_array_length(u64::from(u32::MAX) + 1, &node_id),
+                Err(UnsupportedObligation::CollectionClaimNotRendered {
+                    node_id: rejected,
+                    reason: crate::kani::generate::outcome::CollectionUnsupportedReason::DomainNotRepresentableInHarness,
+                }) if rejected == node_id
+            ));
+        }
+    }
+
+    #[test]
+    fn unresolved_projection_declaration_is_field_not_admitted() {
+        assert_eq!(
+            find_admitted_declaration(std::iter::empty(), "missing-declaration"),
+            Err(CollectionDomainRefusal::FieldNotAdmitted)
+        );
     }
 }

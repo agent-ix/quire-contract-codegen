@@ -474,6 +474,13 @@ pub enum CollectionUnsupportedReason {
     DomainNotRepresentableInI64,
     /// A checked cardinality cannot be represented by the target Rust array ABI.
     DomainNotRepresentableInHarness,
+    /// The backend unwind is too small to execute every admitted sequence length plus loop exit.
+    UnwindBelowCollectionBound {
+        /// Required unwind count (`maximum_length + 1`).
+        required: u64,
+        /// Requested backend unwind count.
+        supplied: u32,
+    },
     /// The minimum storage for symbolic slots exceeds the request's resident-memory ceiling.
     SymbolicDomainExceedsMemoryCeiling {
         /// Element storage plus the symbolic length slot, in bytes.

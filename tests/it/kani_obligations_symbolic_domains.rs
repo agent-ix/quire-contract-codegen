@@ -281,6 +281,51 @@ fn collection_harness(fixture: &Emitted, operation: &str) -> KaniCollectionOblig
     collection_harnesses.into_iter().next().unwrap()
 }
 
+fn collection_item_outcome(
+    fixture: &Emitted,
+    operation: &str,
+    unwind: u32,
+) -> KaniObligationOutcome {
+    let function_id = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| node.node_id.digest.as_ref() == fixture.function_digest)
+        .expect("selected function exists")
+        .node_id
+        .clone();
+    let quantifier = fixture
+        .package
+        .graph()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.body
+                .get("operation")
+                .and_then(|value| value.get("identity"))
+                .and_then(Value::as_str)
+                == Some(operation)
+        })
+        .expect("selected quantifier exists")
+        .node_id
+        .clone();
+    let item = ObligationItem::CollectionClaim {
+        package: &fixture.package,
+        function_id: &function_id,
+        node_id: &quantifier,
+    };
+    negotiate_kani_obligations(&KaniObligationRequest {
+        ceilings: crate::common::proof_ceilings::proof_ceilings_with_wall_clock(
+            Duration::from_secs(600),
+        ),
+        items: std::slice::from_ref(&item),
+        subject_path: "crate::test_subject",
+        unwind,
+    })
+    .expect("valid collection request")
+}
+
 fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> PathBuf {
     let directory = scratch("collection-claim");
     fs::write(directory.join("src/lib.rs"), &harness.rust.contents)
@@ -898,6 +943,14 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
         .collect();
         assert_eq!(harness.identity.options, expected_options);
         assert!(harness.rust.contents.contains(assertion));
+        assert!(harness
+            .rust
+            .contents
+            .contains(if operation.ends_with("forall") {
+                ".all("
+            } else {
+                ".any("
+            }));
         assert!(
             harness.rust.contents.find("assert!(claim").unwrap()
                 < harness.rust.contents.find("kani::cover!").unwrap()
@@ -933,6 +986,91 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
             changed_subject_harness[0].identity.harness_symbol
         );
     }
+}
+
+/// Trace: FR-015-AC-96, FR-015-AC-101, TC-025.
+#[test]
+fn collection_claims_nested_under_not_or_disjunction_are_refused() {
+    for body in [
+        "not(forall(item in deref(input).items: item >= 0))",
+        "forall(item in deref(input).items: item >= 0) or exists(item in deref(input).items: item = 2)",
+    ] {
+        let fixture = emitted_from_document_and_body(model_document(), body);
+        let outcome = collection_item_outcome(&fixture, "quire.op.collection.forall", 8);
+        let KaniObligationOutcome::Emitted {
+            records,
+            collection_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("unsupported nested claim is an item refusal");
+        };
+        assert!(matches!(
+            records[0].disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::CollectionClaimNotRendered {
+                    reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedClaimShape,
+                    ..
+                }
+            }
+        ), "body was {body}");
+        assert!(collection_harnesses.is_empty(), "body was {body}");
+    }
+}
+
+/// Trace: FR-015-AC-101, TC-025.
+#[test]
+fn collection_unwind_must_cover_maximum_length_and_loop_exit() {
+    let fixture = emitted();
+    let outcome = collection_item_outcome(&fixture, "quire.op.collection.forall", 3);
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("insufficient unwind is a typed item refusal");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnwindBelowCollectionBound {
+                    required: 4,
+                    supplied: 3,
+                },
+                ..
+            }
+        }
+    ));
+    assert!(collection_harnesses.is_empty());
+}
+
+/// Trace: FR-015-AC-96, FR-015-AC-99, TC-025.
+#[test]
+fn out_of_range_integer_literal_is_rendered_as_a_falsifiable_claim() {
+    let fixture = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 4)",
+    );
+    let outcome = collection_item_outcome(&fixture, "quire.op.collection.forall", 4);
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("encodable out-of-range literal is supported");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Supported { .. }
+    ));
+    assert!(collection_harnesses[0].rust.contents.contains("item >= 4"));
+    assert!(collection_harnesses[0]
+        .rust
+        .contents
+        .contains("item >= 0 && item <= 3"));
 }
 
 /// Trace: FR-015-AC-96, FR-015-AC-100, TC-025.
@@ -1116,6 +1254,50 @@ fn collection_identity_tracks_domains_claim_subject_and_unwind() {
     assert_ne!(
         identity,
         collection_identity(&base, "quire.op.collection.forall", "crate::subject", 9,)
+    );
+}
+
+/// Trace: FR-015-AC-100, TC-025.
+#[test]
+fn collection_identity_fields_are_discriminating_with_constant_package_digest() {
+    let fixture = emitted_from_document_and_body(
+        model_document(),
+        "forall(item in deref(input).items: item >= 0)",
+    );
+    let base = collection_identity(&fixture, "quire.op.collection.forall", "crate::subject", 8);
+    let package_digest = base.package_digest.clone();
+    macro_rules! differs_without_package_change {
+        ($field:ident, $value:expr) => {{
+            let mut changed = base.clone();
+            changed.$field = $value;
+            assert_eq!(changed.package_digest, package_digest);
+            assert_ne!(
+                base,
+                changed,
+                "identity field {} is retained",
+                stringify!($field)
+            );
+        }};
+    }
+    differs_without_package_change!(minimum_length, 1);
+    differs_without_package_change!(maximum_length, 4);
+    differs_without_package_change!(
+        element,
+        CollectionElementIdentity::Integer {
+            minimum: 0,
+            maximum: 4,
+        }
+    );
+    differs_without_package_change!(
+        predicate,
+        CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold: 1 }
+    );
+    differs_without_package_change!(subject_path, "crate::other_subject".to_owned());
+    differs_without_package_change!(unwind, 9);
+    differs_without_package_change!(field_name, "other_field".to_owned());
+    differs_without_package_change!(
+        quantifier_operation,
+        "quire.op.collection.exists".to_owned()
     );
 }
 
@@ -1333,6 +1515,30 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
     assert!(collection_harnesses.is_empty());
 }
 
+/// Trace: FR-015-AC-101, TC-025.
+#[test]
+fn qsl_reader_rejects_cardinality_above_its_i64_wire_magnitude() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["multiplicity"]["upper"] = json!(i64::MAX as u64 + 1);
+    let error = quire_canonical::to_vec(&document, quire_canonical::Limits::new(1 << 20))
+        .expect_err("the canonical model wire admits only signed-i64 magnitudes");
+    let error = format!("{error:?}");
+    assert!(error.contains("IntegerMagnitudeAboveMaximum"), "{error}");
+    assert!(error.contains("9223372036854775808"), "{error}");
+}
+
 /// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
 #[test]
 fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness() {
@@ -1425,6 +1631,58 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
         records[0].disposition,
         ObligationDisposition::RequiresBound { ref unbounded_type }
             if unbounded_type == &projected_type
+    ));
+    assert!(collection_harnesses.is_empty());
+}
+
+/// Trace: FR-015-AC-97, TC-025.
+#[test]
+fn unbounded_sequence_of_reference_elements_is_unsupported_not_requires_bound() {
+    let mut document = model_document();
+    let node = document["types"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+        .unwrap();
+    let items = node["fields"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+        .unwrap();
+    items["typeRef"] = json!(NODE_ID);
+    items["multiplicity"]
+        .as_object_mut()
+        .unwrap()
+        .remove("upper");
+    let fixture =
+        emitted_from_document_and_body(document, "forall(item in deref(input).items: true)");
+    assert!(matches!(
+        fixture.fields.field("items").unwrap().member_type(),
+        Some(CheckedMemberType::Collection {
+            element,
+            bounds: None,
+            ..
+        }) if matches!(element.as_ref(), CheckedMemberType::Reference(_))
+    ));
+    let outcome = collection_item_outcome(&fixture, "quire.op.collection.forall", 8);
+    let KaniObligationOutcome::Emitted {
+        records,
+        collection_harnesses,
+        ..
+    } = outcome
+    else {
+        panic!("unsupported member element is an item refusal");
+    };
+    assert!(matches!(
+        records[0].disposition,
+        ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::CollectionClaimNotRendered {
+                reason: quire_contract_codegen::CollectionUnsupportedReason::UnsupportedFieldType,
+                ..
+            }
+        }
     ));
     assert!(collection_harnesses.is_empty());
 }
@@ -1574,7 +1832,79 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-99, TC-025.
+/// Trace: FR-015-AC-97, TC-025.
+#[test]
+fn bounded_sequences_of_string_uuid_and_timestamp_require_element_bounds() {
+    for (type_ref, expected, semantic_form) in [
+        ("ix://quire/native/String", "string", "string"),
+        ("ix://quire/native/UUID", "uuid", "uuid"),
+        ("ix://quire/native/Timestamp", "timestamp", "timestamp"),
+    ] {
+        let mut document = model_document();
+        let node = document["types"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|ty| ty.get("identity").and_then(Value::as_str) == Some(NODE_ID))
+            .unwrap();
+        let items = node["fields"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|field| field.get("name").and_then(Value::as_str) == Some("items"))
+            .unwrap();
+        items["typeRef"] = json!(type_ref);
+        let fixture = try_emitted_from_document_and_body(
+            document,
+            "forall(item in deref(input).items: true)",
+        )
+        .unwrap_or_else(|error| panic!("QSL admits Sequence<{expected}>: {error}"));
+        let CheckedMemberType::Collection { element, .. } = fixture
+            .fields
+            .field("items")
+            .unwrap()
+            .member_type()
+            .expect("admitted collection member")
+        else {
+            panic!("model field remains a collection");
+        };
+        assert!(matches!(
+            (expected, element.as_ref()),
+            ("string", CheckedMemberType::String)
+                | ("uuid", CheckedMemberType::Uuid)
+                | ("timestamp", CheckedMemberType::Timestamp)
+        ));
+        let outcome = collection_item_outcome(&fixture, "quire.op.collection.forall", 4);
+        let KaniObligationOutcome::Emitted {
+            records,
+            collection_harnesses,
+            ..
+        } = outcome
+        else {
+            panic!("missing element bound is an item disposition");
+        };
+        let element_type = fixture
+            .package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| {
+                node.node_tag.as_ref() == "scalar_type"
+                    && node.semantic_form.as_ref() == semantic_form
+            })
+            .expect("exact admitted element type node")
+            .node_id
+            .clone();
+        assert!(matches!(
+            records[0].disposition,
+            ObligationDisposition::RequiresBound { ref unbounded_type }
+                if unbounded_type == &element_type
+        ));
+        assert!(collection_harnesses.is_empty());
+    }
+}
+
+/// Trace: FR-015-AC-99 (installed-Kani half only), TC-025.
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
 fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
@@ -1604,15 +1934,19 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
     assert!(counterexample.contains(mutated_harness.identity.harness_symbol.as_str()));
-    assert_eq!(
-        collection_playback_byte_vectors(counterexample),
-        vec![
-            i64_playback_bytes(1), // selected_items_len == 1
-            i64_playback_bytes(0), // active selected_items[0] == 0
-            i64_playback_bytes(0),
-            i64_playback_bytes(0),
-        ]
+    let slots = collection_playback_byte_vectors(counterexample);
+    assert_eq!(slots.len(), 4, "one length plus three symbolic slots");
+    let decode =
+        |bytes: &[u8]| i64::from_le_bytes(bytes.try_into().expect("i64 slot has eight bytes"));
+    let length = decode(&slots[0]);
+    assert!(
+        (0..=3).contains(&length),
+        "length is inside the admitted domain"
     );
+    assert!(slots[1..=length as usize]
+        .iter()
+        .map(|slot| decode(slot))
+        .any(|value| (0..=3).contains(&value) && value < 1));
     assert_ne!(mutated_evidence.exit_code, Some(0));
 }
 
