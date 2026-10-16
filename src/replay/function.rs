@@ -236,6 +236,7 @@ fn replay_falsification_through(
                 WitnessValue::ExactInteger(_)
                 | WitnessValue::Enum { .. }
                 | WitnessValue::Text(_)
+                | WitnessValue::String(_)
                 | WitnessValue::Uuid(_)
                 | WitnessValue::Timestamp(_)
                 | WitnessValue::Rational { .. }
@@ -491,6 +492,8 @@ impl ReplayInputs {
             supplied_limits: None,
             declared_domains: self.declared_domains.clone(),
             byte_provision,
+            // No Reference parameter is replayed on this path, so no object environment is supplied.
+            object_environment: None,
         }
     }
 }

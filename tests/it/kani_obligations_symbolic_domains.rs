@@ -147,7 +147,7 @@ fn model_document() -> Value {
                     field("flags", "ix://quire/native/Boolean", 0, 2, true, false, false, "required"),
                     field("next", NODE_ID, 1, 1, false, true, false, "required"),
                     field("maybe", NODE_ID, 1, 1, false, true, false, "optional"),
-                    field("many", NODE_ID, 0, 2, false, true, false, "required")
+                    field("many", NODE_ID, 0, 2, true, false, false, "required")
                 ],
                 "operations": []
             }
@@ -552,7 +552,7 @@ fn replay_collection_function(fixture: &Emitted, values: &[i64]) -> ReplayResult
         obligation_identity: [0; 32],
         backend: "kani-backend-1".to_owned(),
         state_environment: StateEnvironment::new(Vec::new()),
-        accounting_limits: ScalarLimits::default(),
+        accounting_limits: replay_scalar_limits(),
         stage_limits: BTreeMap::new(),
         supplied_limits: None,
         object_environment: Some(environment.member().clone()),
@@ -2226,4 +2226,20 @@ fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
             }
         }
     ));
+}
+
+/// The replay accounting ceilings: generous, so a bounded collection witness is never refused for budget.
+fn replay_scalar_limits() -> ScalarLimits {
+    ScalarLimits {
+        integer_bits: 1_000,
+        decimal_digits: 1_000,
+        scale_expansion: 1_000,
+        text_input_bytes: 1_000,
+        text_scalars: 1_000,
+        normalized_scalars: 1_000,
+        unit_edges: 1_000,
+        value_occurrences: 1_000,
+        work_units: 1_000,
+        result_units: 1_000,
+    }
 }

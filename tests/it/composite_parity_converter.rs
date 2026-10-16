@@ -223,6 +223,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         accounting_limits: limits(),
         stage_limits: Default::default(),
         supplied_limits: None,
+        object_environment: None,
         declared_domains: Vec::new(),
         byte_provision: vec![(
             Some(digest.domain().as_str().to_owned()),
