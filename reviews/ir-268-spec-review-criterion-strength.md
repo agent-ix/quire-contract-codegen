@@ -56,9 +56,17 @@ Round 1, checked against fix commit 7e16de1.
 | --- | --- | --- |
 | FND-001 | fixed | verified in 7e16de1 |
 | FND-002 | fixed | verified in 45f72ee (round 2) |
+| FND-003 | fixed | verified in 1cce284 (round 3) |
 
 ## New findings (disposition pass 2)
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-003 | low | AC-6 now names exactly the 14 TC-187 conversion vectors it excludes. I checked that list against quire-specification TC-187 and it is right; U16 evaluates U07. So every other TC-187 vector is now, by name, inside the agreement claim, and tests.md:13 marks AC-6 Covered. tc_024_tc187_quantity_oracles_agree (tests/exact_scalar_support/agreement_cases.rs:483-602) executes the generated grid over m, cm, in, rev and u2, plus U03, U05, U13, U19, U21, U23, U24 and U28. No agreement row executes U02, U09, U12 (2 m * 3 s; the grid has no s), U14, U20 or U27. U06 and U11 are admission rows with no oracle at all. Failure: AC-6 and its Covered status claim agreement for vectors that no test runs. U09 is newly in scope after this round, so the gap is now explicit rather than implied. Fix: list the executed TC-187 vectors, or mark the unexecuted and admission-only rows outside AC-6 or Partial in tests.md. The gap predates this PR for the unconverted rows. | FR-014:440; spec/oracle/matrix/tests.md:13; tests/exact_scalar_support/agreement_cases.rs:483-602; quire-specification spec/test-cases/TC-187-quantity-and-unit-conversion.md:39-68 |
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | AC-6 now names the TC-187 vectors it covers (U03, U13, U19, U21, U23, U24, U28 and the generated grid). It says they yield results 'equal to direct runtime execution and to the QSL value authority'. Every TC-187 case in tc_024_tc187_quantity_oracles_agree goes through agree2! (tests/exact_scalar_support/agreement_cases.rs:487-605). agree2! compares the direct runtime with the generated oracle only (tests/exact_scalar_support/agreement.rs:42-44) and never calls quire_spec_language::value. The tests.md AC-6 row says only 'agree with direct runtime execution', so the matrix row and the AC disagree. Failure: a QSL value-authority divergence on a listed TC-187 vector passes every test while AC-6 claims three-way agreement. Fix: say the TC-187 vectors are compared runtime-to-oracle only, or add the QSL leg. This predates the PR, but the vector list makes it explicit now. | FR-014:447; spec/oracle/matrix/tests.md:14; tests/exact_scalar_support/agreement_cases.rs:487-605; tests/exact_scalar_support/agreement.rs:42-44 |
+| FND-005 | low | AC-2 now says four further readers each read a closed set of operation identities and refuse a conversion before rendering: StateComparison::from_operation (src/kani/generate/frame.rs:115), resolve_predicate (src/kani/generate/collection.rs:532), the replay composite builder's UnsupportedNodeOperation (src/replay/composite_builder.rs:272) and ScalarOperation::of (src/kani/generate/scalar.rs:52). AC-2's Verification is Test, and it cites no test for any of the four. No test in tests/ feeds a quantity.convert identity to them. Failure: adding a catch-all arm, or a convert arm, to one of these readers passes every cited test, so this clause of AC-2 cannot fail. Fix: cite a test per reader, or mark the clause Inspection. | FR-014:443; src/kani/generate/frame.rs:115; src/kani/generate/collection.rs:532; src/replay/composite_builder.rs:272; src/kani/generate/scalar.rs:52 |

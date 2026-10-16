@@ -49,9 +49,16 @@ Round 1, checked against fix commit 7e16de1.
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | verified in 7e16de1 |
+| FND-002 | fixed | verified in 1cce284 (round 3) |
 
 ## New findings (disposition pass 2)
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-002 | medium | The S1 exemption names the wrong earlier refusal for a reachable input. AC-2 and Behavior (FR-014:278-281) say the function-application generator 'accepts only a binary expression, so it refuses a conversion node earlier, as FormMismatch naming the form conversion'. That is not what happens: (1) classify_body_shape (src/oracle/function/mod.rs:2049-2059) checks the operator before the form, so a Scalar body with Negate, Divide or any operator other than Add, Subtract or Multiply is refused as UnsupportedOperator, which FR-021-AC-21 itself requires for Negate. (2) The Call body accepts form call, so 'accepts only a binary expression' is false for the function generator. Both tests use only Scalar{Add} and CompositeEquality{Equal}. Failure: a test written to AC-2 for a Scalar{Negate} declaration over a conversion node expects FormMismatch and gets UnsupportedOperator. FR-014 and FR-021-AC-21 then state different refusals for the same input, against S1's 'exempt only if a provably earlier typed refusal applies, stated with that refusal cited'. Fix: state that the exempt generators refuse a conversion node with a typed refusal before any artifact, namely UnsupportedOperator for a Scalar operator outside Add, Subtract and Multiply and otherwise FormMismatch naming conversion, and add an UnsupportedOperator case to the test. 'Never receive the operation' also does not cover FR-018-AC-15, where a convert node is read through as an equality operand. There the cited refusal is Unsupported quantity (tests.md:59), not FormMismatch, so cite that path or narrow the claim to a requested root. | FR-014:278-281; FR-014:436; FR-021-AC-21 (FR-021:266); FR-018-AC-15; src/oracle/function/mod.rs:2049-2059, 2952-3007; tests/it/exact_scalar_generation.rs:3560-3620 |
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | FR-014 Behavior (FR-014:278-291) now says a conversion reached from a declared function body is refused with the capability 'whatever the declared body kind'. The code does this check before classify_body_shape (src/oracle/function/mod.rs: the closure scan precedes the call at :2341). FR-021-AC-21 still reads, with no condition, 'A scalar Negate body is refused as UnsupportedOperator', and FR-021 does not mention that FR-014's quantity-conversion refusal takes precedence. Failure: for a Negate-body declaration over a conversion node, FR-021-AC-21 read alone predicts UnsupportedOperator, while FR-014 and the code give QuantityConversionUnsupported. The conflict FND-002 found is reduced to a missing precedence note. Fix: qualify FR-021-AC-21 with 'over a node that reaches no quantity conversion', or have it cite FR-014-AC-2's precedence. | FR-021:266; FR-014:278-291; src/oracle/function/mod.rs:2341 |

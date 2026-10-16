@@ -493,6 +493,17 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::*;
+
+    /// A quantity conversion has no scalar harness renderer: the operation lookup declines it, so
+    /// no harness is rendered for it.
+    ///
+    /// Trace: FR-014-AC-2, TC-024.
+    #[test]
+    fn a_quantity_conversion_has_no_scalar_harness_renderer() {
+        assert!(ScalarOperation::of("quire.op.quantity.convert").is_none());
+        assert!(ScalarOperation::of("quire.op.integer.add").is_some());
+    }
+
     use crate::oracle::{
         claim::ClaimDisposition,
         scalar::{OperationClaim, OperationProvenance},

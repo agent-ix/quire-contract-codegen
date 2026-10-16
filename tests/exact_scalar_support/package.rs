@@ -3983,6 +3983,12 @@ pub const CALL_OVER_CONVERSION: u32 = 2153;
 pub const REFERENCE_FUNCTION: u32 = 2156;
 /// A call of [`REFERENCE_FUNCTION`] whose first argument is a quantity conversion node.
 pub const CALL_REFERENCE_OVER_CONVERSION: u32 = 2157;
+/// A pure function named [`CONVERTING_NAME`] whose body is the 1086 quantity conversion node.
+pub const CONVERTING_FUNCTION: u32 = 2158;
+/// A call of [`CONVERTING_FUNCTION`] with no arguments.
+pub const CALL_CONVERTING_FUNCTION: u32 = 2159;
+/// The declared name of [`CONVERTING_FUNCTION`].
+pub const CONVERTING_NAME: &str = "nconverting";
 /// The adder's parameters.
 pub const ADDER_LEFT: u32 = 2154;
 /// The adder's parameters.
@@ -4069,6 +4075,33 @@ pub fn conversion_operand_package() -> PackageBuilder {
             ],
         ),
         &[function, conversion.clone(), integer.clone()],
+    );
+    register_code(CONVERTING_FUNCTION, key(CONVERTING_FUNCTION));
+    builder.node_with_label(
+        &key(CONVERTING_FUNCTION),
+        "converting",
+        "function",
+        "pure_function",
+        &unit_type(),
+        json!({"term": "aggregate", "members": [
+            member("parameters", json!({"term": "aggregate", "members": []})),
+            member("body", reference(&conversion)),
+        ]}),
+        std::slice::from_ref(&conversion),
+    );
+    let converting = key(CONVERTING_FUNCTION);
+    builder.application_code_with(
+        CALL_CONVERTING_FUNCTION,
+        "expression",
+        "call",
+        &unit_type(),
+        application(
+            "call",
+            op("quire.op.function.call"),
+            &unit_type(),
+            vec![reference(&converting)],
+        ),
+        std::slice::from_ref(&converting),
     );
     register_code(REFERENCE_FUNCTION, key(REFERENCE_FUNCTION));
     builder.node_with(

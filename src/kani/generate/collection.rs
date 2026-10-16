@@ -529,6 +529,19 @@ pub(crate) fn resolve_collection_field(
     })
 }
 
+/// The operation identity of a `binary` expression predicate. Any other form, a quantity
+/// conversion included, is an unsupported shape.
+fn binary_predicate_operation(
+    predicate: &CheckedSemanticNodeV2,
+) -> Result<&str, CollectionDomainRefusal> {
+    if CheckedNodeTag::from_wire(&predicate.node_tag) != Some(CheckedNodeTag::Expression)
+        || predicate.semantic_form.as_ref() != "binary"
+    {
+        return Err(CollectionDomainRefusal::UnsupportedShape);
+    }
+    operation_identity(predicate).ok_or(CollectionDomainRefusal::UnsupportedShape)
+}
+
 fn resolve_predicate(
     package: &CheckedPackageV2,
     function: &CheckedSemanticNodeV2,
@@ -537,13 +550,7 @@ fn resolve_predicate(
     element: CollectionElementDomain,
     element_type: &CheckedNodeId,
 ) -> Result<CollectionPredicateIdentity, CollectionDomainRefusal> {
-    if CheckedNodeTag::from_wire(&predicate.node_tag) != Some(CheckedNodeTag::Expression)
-        || predicate.semantic_form.as_ref() != "binary"
-    {
-        return Err(CollectionDomainRefusal::UnsupportedShape);
-    }
-    let operation =
-        operation_identity(predicate).ok_or(CollectionDomainRefusal::UnsupportedShape)?;
+    let operation = binary_predicate_operation(predicate)?;
     let arguments = predicate
         .body
         .get("arguments")
@@ -1081,6 +1088,48 @@ mod tests {
                 }) if rejected == node_id
             ));
         }
+    }
+
+    /// A quantity conversion is not a `binary` expression, so the collection predicate reader
+    /// refuses it as an unsupported shape before reading an operand.
+    ///
+    /// Trace: FR-014-AC-2, TC-024.
+    #[test]
+    fn a_quantity_conversion_predicate_is_an_unsupported_shape() {
+        let id = |digest: &str| {
+            serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": digest.repeat(64),
+            })
+        };
+        let node = |form: &str, operator: &str, identity: &str| -> CheckedSemanticNodeV2 {
+            serde_json::from_value(serde_json::json!({
+                "node_id": id("1"),
+                "schema_version": "quire.checked-semantic-graph/v2",
+                "node_tag": "expression",
+                "semantic_form": form,
+                "semantic_type": id("2"),
+                "dependencies": [],
+                "occurrences": [],
+                "body": {
+                    "term": "application",
+                    "operator": operator,
+                    "operation": {"identity": identity, "laws": [], "mode": null,
+                                  "member": null, "leaves": []},
+                    "result_type": id("2"),
+                    "arguments": [],
+                },
+            }))
+            .expect("a checked expression node")
+        };
+        assert_eq!(
+            binary_predicate_operation(&node("conversion", "convert", "quire.op.quantity.convert")),
+            Err(CollectionDomainRefusal::UnsupportedShape)
+        );
+        assert_eq!(
+            binary_predicate_operation(&node("binary", "binary", "quire.op.integer.ge")),
+            Ok("quire.op.integer.ge")
+        );
     }
 
     /// Trace: FR-015-AC-101, TC-025.

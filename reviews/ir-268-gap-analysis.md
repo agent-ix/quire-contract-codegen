@@ -103,6 +103,7 @@ allowlist is enforced.
 | FND-004 | fixed | Round 2 (45f72ee). The label-loop test is deleted. AC-2 now says the tests exercise the three corpus conversion nodes, not individual vectors. AC-6 excludes exactly U01, U04, U07, U08, U09b, U10, U15-U18, U22, U25, U26 and U29. That matches every "Convert" row of QSpec TC-187. U09 (ill_typed dimension key) is back in AC-6 scope. tests.md claims no per-row count. |
 | FND-005 | fixed | Round 2. `tc_025_a_quantity_conversion_claim_is_unsupported_...` destructures `KaniObligationOutcome::Emitted` and asserts `harnesses`, `scalar_harnesses`, `state_frame_harnesses` and `collection_harnesses` are all empty. A control over node 1001 yields one scalar harness, so the absence is measured. |
 | FND-006 | fixed | Round 2. FR-014 Behavior and AC-2 now state that the function-application and composite-equality generators are exempt: they refuse a conversion as `FormMismatch { found: "conversion" }` before any artifact. Tests: the lib test `a_quantity_conversion_body_is_a_form_mismatch_for_every_body_kind`, plus integration tests for both generators. The equality test asserts the exact `FormMismatch`. A probe mutant that panics in `classify_body_shape` for a non-fixture conversion node turned `tc_024_function_generator_refuses_...` red, so the integration test does reach the form check on the production path. |
+| FND-007 | fixed | Round 3 (2d3cca8, 1cce284). `generate_function_schedules(_with_limits)` refuse a body that reaches a conversion as `ScheduleRefusal::QuantityConversionUnsupported { body, capability }` on `refused_functions`. The check runs before the parameter and result-kind lookups, so neither result type gives an `Err(MissingNode)` any more. `validate_schedule_item` refuses a call that reaches one in the same way. Both tests assert the exact variant, node and capability. Mutants disabling either check turn their test red (logs/mutation.log, exit 101). FR-014 Behavior and AC-2 now list the schedules as entry points. |
 
 ## New findings (disposition pass 1)
 
@@ -176,4 +177,53 @@ composite_builder.rs:270-271) and the Kani scalar renderer (`ScalarOperation::of
 arithmetic only). All of them refuse before rendering. None is a V2 per-node entry point for an
 arbitrary application, so I raise no further finding. A one-line AC-2 note covering
 "closed-whitelist families" would make S1 complete.
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | medium | No test pins `generate_exact_function_oracles` refusing a conversion reached from a declared function body with `QuantityConversionUnsupported`, although AC-2 claims it. With the new `admitted_binary_body` guard disabled, the body test stays green | tests/it/exact_scalar_generation.rs:3561-3625, 3737; src/oracle/function/mod.rs:1971-1988 |
+
+### FND-008
+
+AC-2 now says: "The function-application generator and the function schedules refuse a
+conversion reached from a body, a call or a call argument with `QuantityConversionUnsupported`".
+Coverage of that clause is uneven across the three paths:
+- Call argument: `tc_024_function_generator_refuses_a_conversion_reached_as_an_argument_or_a_body`
+  asserts the exact refusal. Despite its name and doc ("and so is the declared function over a
+  conversion body"), it only covers the argument path.
+- Body: the kept `tc_024_function_generator_refuses_a_quantity_conversion_body_before_any_artifact`
+  asserts only that every claim is some `Refused { .. }` (which also holds when the claim map is
+  empty) and that the location map is empty.
+- Its doc still says the typed refusal is "`FormMismatch` with the form `conversion`, ... asserted
+  on the classifier in the generator's unit tests". That unit test was deleted in 1cce284, and
+  the refusal is no longer `FormMismatch`.
+
+Mutation run (logs/mutation.log, exit 101, reverted): I disabled the conversion check in
+`admitted_binary_body` (mod.rs:1973). The argument test went red, but the body test stayed green.
+So the named-capability refusal on the body path has no test that fails without it.
+
+No emission ships: with the guard off, the body falls through to the classifier and is still
+refused. But an AC clause is unbacked, and the test name and doc misstate what is covered.
+
+Fix: in the body test, assert
+`ExactFunctionRefusal::QuantityConversionUnsupported { node_id, capability }` on a claim whose
+item calls the conversion-bodied function, and assert the claim map is non-empty. Also update
+both docs.
+
+Also checked this round, with no finding:
+- `first_conversion_reached` terminates. It keeps a `seen` set, visits each node at most once
+  over the admitted graph (bounded by `CheckedPackageReadLimits`), and silently skips ids that
+  are not present.
+- The `admitted_binary_body` scan iterates the already-computed reached closure.
+- Making `QUANTITY_CONVERT_IDENTITY` `pub(crate)` and importing it from `oracle::function` adds
+  an intra-`oracle` edge. That matches the existing `oracle::equality -> oracle::scalar` import,
+  and AD-004 L-2 (layout tests) passes.
+- Deleting the classifier lib test lost no non-conversion coverage. FR-021-AC-21 Negate is still
+  tested at tests/it/exact_function_generation.rs:2634, and a non-binary `FormMismatch` at
+  :1851.
+- I found no other entry point that can receive a conversion node. Replay function harnesses take
+  witness values, not graph nodes. The routed path is the derivation guard. The Kani
+  frame, collection, scalar and replay composite families are closed whitelists, as AC-2 now
+  states.
 

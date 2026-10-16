@@ -3559,24 +3559,22 @@ fn contract_request(
     (contract, positions)
 }
 
-/// A function declared over a quantity conversion node survives no classification: the request
-/// yields no location entry and no generated claim. The typed refusal itself,
-/// `FormMismatch` with the form `conversion`, is asserted on the classifier in the generator's
-/// unit tests.
+/// A function whose declared body is a quantity conversion node, called by a requested call, is
+/// refused on that call's claim with the named capability and the conversion node's id, under
+/// either declared body kind, and no oracle and no location entry exists for it.
 ///
 /// Trace: FR-014-AC-2, TC-024
 #[test]
-fn tc_024_function_generator_refuses_a_quantity_conversion_body_before_any_artifact() {
+fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion() {
     use quire_contract_codegen::{
         generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
-        ExactFunctionItem, FunctionParameter,
+        ExactFunctionItem, ExactFunctionRefusal,
     };
-    let (package, ids) = derivation_package().admit_resolved();
-    let function_node = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
-    let call_node = ids.resolve(&code_id(1001));
-    let integer = ids.resolve(&code_id(T_INTEGER));
-    let (contract, positions) =
-        contract_request(&package, &[function_node.clone(), call_node.clone()]);
+    let (package, ids) = conversion_operand_package().admit_resolved();
+    let conversion = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
+    let call = ids.resolve(&code_id(CALL_CONVERTING_FUNCTION));
+    let unit = ids.resolve(&id(&unit_type()));
+    let (contract, positions) = contract_request(&package, &[conversion.clone(), call.clone()]);
     for body in [
         ExactFunctionBody::Scalar {
             operator: IntegerOperator::Add,
@@ -3590,37 +3588,31 @@ fn tc_024_function_generator_refuses_a_quantity_conversion_body_before_any_artif
             &positions,
             &[0],
             &[ExactFunctionDeclaration {
-                node_id: function_node.clone(),
-                name: "converting".to_owned(),
-                parameters: vec![
-                    FunctionParameter {
-                        name: "a".to_owned(),
-                        type_node_id: integer.clone(),
-                    },
-                    FunctionParameter {
-                        name: "b".to_owned(),
-                        type_node_id: integer.clone(),
-                    },
-                ],
-                result_type: integer.clone(),
+                node_id: conversion.clone(),
+                name: CONVERTING_NAME.to_owned(),
+                parameters: Vec::new(),
+                result_type: unit.clone(),
                 body: body.clone(),
                 capability_requirements: Vec::new(),
             }],
             &[1],
             &[ExactFunctionItem {
-                call_node_id: call_node.clone(),
-                function: "converting".to_owned(),
+                call_node_id: call.clone(),
+                function: CONVERTING_NAME.to_owned(),
                 argument_node_ids: Vec::new(),
             }],
         )
         .expect("generates");
-        assert!(
-            output
-                .claim_map
-                .items
-                .iter()
-                .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })),
-            "{body:?}: a generated claim"
+        assert_eq!(output.claim_map.items.len(), 1, "{body:?}");
+        assert_eq!(
+            output.claim_map.items[0].result,
+            ClaimDisposition::Refused {
+                refusal: ExactFunctionRefusal::QuantityConversionUnsupported {
+                    node_id: conversion.clone(),
+                    capability: QUANTITY_CONVERSION_CAPABILITY,
+                }
+            },
+            "{body:?}"
         );
         assert!(output.location_map.is_empty(), "{body:?}: a location entry");
     }
@@ -3729,12 +3721,12 @@ fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_ca
 }
 
 /// A call that passes a quantity conversion node as an argument to a declared function is
-/// refused with the named capability and generates no oracle, and so is the declared function
-/// over a conversion body: the conversion is found anywhere in the closure of the request.
+/// refused on its claim with the named capability and the conversion node's id, and generates no
+/// oracle: the conversion is found anywhere in the closure of the call.
 ///
 /// Trace: FR-014-AC-2, TC-024
 #[test]
-fn tc_024_function_generator_refuses_a_conversion_reached_as_an_argument_or_a_body() {
+fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_argument() {
     use quire_contract_codegen::{
         generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
         ExactFunctionItem, ExactFunctionRefusal, FunctionParameter,
