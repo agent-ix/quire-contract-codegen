@@ -61,6 +61,12 @@ checklist passes.
 | --- | --- | --- | --- |
 | FND-004 | low | interface-001's `kani_obligation_execution_slice.evidence` enumerates the evidence fields and the optional `batch` wire member, and `execute_kani_obligation(s)` list the request inputs, but neither names the new optional `diagnostics` wire member (with `KaniFailurePhase`) or the new `KaniExecutionRequest::home_directory` input. A consumer reading the interface contract will not know the member exists. AD-004's tables are a move plan of pre-existing items (MemoryObservation and KaniGroupRun are absent too), so AD-004 needs no update; interface-001 should get one line in this PR or a tracked follow-up. | spec/core/functional/interface-001-codegen-api.md:125-131, :351; spec/kani/functional/FR-017-kani-execution-evidence.md:77-80 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | AC-21 now asserts that requests differing in `home_directory` (absent being one value) are never grouped, a clause with no implementation and no test (the field does not exist yet), while tests.md:43 keeps AC-21 `✅ Covered` and the TC-043 row at tests.md:100 lists AC-21 as `✅ Covered` with no caveat. The prose note on row 43 disclaims the clause, but the status is what `quire matrix` and readers act on: a passing AC-21 tag now credits a clause no test exercises. The repo's own convention for this is `🚧 Partial` (FR-028, FR-029, FR-030 rows). Either drop the clause from AC-21 (AC-36 already carries the identical home-grouping case and is Planned), or mark both rows `🚧 Partial` with the note. | spec/kani/functional/FR-017-kani-execution-evidence.md:527; spec/kani/matrix/tests.md:43, :100 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -68,3 +74,4 @@ checklist passes.
 | FND-001 | fixed | Round 1 (fe3a4e1): fe3a4e1 removes every Kani/CBMC version from the new subsection (phase rule, launcher rule, CBMC rationale, tail rationale); remaining Kani 0.68 mentions are pre-existing FR-017 text outside this PR. |
 | FND-002 | fixed | Round 1 (fe3a4e1): AC-36 now uses a separate run with a Failure entry (no member NoVerdict, no record), matching execute.rs:790-793 and TC-043 step 11. |
 | FND-003 | fixed | Round 1 (fe3a4e1): AC-36 excludes `diagnostics` and `memory` and compares the FR-029 value to `Failed` (FR-029-AC-4, terminal.rs:128-135), with and without the record. |
+| FND-004 | fixed | Round 2 (d2784f0): d2784f0 adds no_verdict_diagnostics (diagnostics, KaniFailurePhase, home_directory, serialize-only) to interface-001 :352 and names home_directory and the planned grouping key at :125, :127 and :131. |
