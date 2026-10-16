@@ -538,6 +538,18 @@ fn l_2_every_import_follows_the_dependency_direction() {
                 edge.path.join("::")
             ));
         }
+        if let Some(allowed) = file_import_allowlist(&edge.file) {
+            if !allowed.iter().any(|prefix| {
+                edge.path.len() >= prefix.len()
+                    && edge.path.iter().zip(prefix.iter()).all(|(a, b)| a == b)
+            }) {
+                violations.push(format!(
+                    "{}: crate::{} is outside the file's allowed set {allowed:?}",
+                    edge.file,
+                    edge.path.join("::")
+                ));
+            }
+        }
         if let Some(resolved) = resolve(&edge.path, &modules) {
             if let Some(reason) = kani_order_violation(&from, &resolved) {
                 violations.push(format!(
@@ -633,6 +645,21 @@ fn generate_order_violation(importer: &str, imported: &str) -> Option<String> {
     (imported_rank >= importer_rank).then(|| {
         format!("`generate::{importer}` imports `generate::{imported}`, which is not earlier")
     })
+}
+
+/// The crate paths a single file may import, where AD-004 names the set: the collection family
+/// imports `core`, `kani::abi`, `kani::identity`, and `outcome` and `record` of its own directory.
+fn file_import_allowlist(file: &str) -> Option<&'static [&'static [&'static str]]> {
+    match file {
+        "kani/generate/collection.rs" => Some(&[
+            &["core"],
+            &["kani", "abi"],
+            &["kani", "identity"],
+            &["kani", "generate", "outcome"],
+            &["kani", "generate", "record"],
+        ]),
+        _ => None,
+    }
 }
 
 /// Importers inside `kani/` the AD restricts to a named set of top-level names.

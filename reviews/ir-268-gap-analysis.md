@@ -1,0 +1,83 @@
+---
+id: SR-11801
+title: "IR-268 PR #396 gap analysis at head 85c0e97"
+type: SpecReview
+scope: "agent-ix/quire-contract-codegen#396 @85c0e9747ad5ca0dad5411087c93895a9ee99050; FR-014-AC-2, FR-014-AC-6, FR-014-AC-18, FR-015-AC-96..102 (collection half); tests/it, tests/exact_scalar_support, src/kani/generate/collection.rs, src/oracle/scalar/mod.rs"
+relationships: []
+---
+
+# SR-11801: IR-268 PR #396 gap analysis at head 85c0e97
+
+## Summary
+
+Ticket: IR-268. This review is planless; plan completion was not assessed. I read the computed
+matrix (`quire matrix --scope . --format tsv`). FR-015-AC-96, -97, -99, -100, -101 and -102 and
+FR-014-AC-2 and -18 are all tagged. FR-015-AC-98, the graph half owned by IR-805, is untagged, as
+expected. For each criterion I checked whether the tagged tests can fail on the defect the
+criterion guards. Where it was cheap I ran a mutant (see SR-11800: the quantity-conversion and
+nested-quantifier mutants go red).
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | FR-014-AC-6 still requires the TC-187 vectors to agree, and QSpec TC-187 is "Quantity and unit conversion". The test traced to AC-6 no longer runs any conversion vector, and AC-6 was not amended | tests/exact_scalar_support/agreement_cases.rs:464-572; spec/oracle/functional/FR-014-exact-scalar-oracles.md:427 |
+| FND-002 | low | TC-024 says "derive every `quantity.convert` node at each rounding mode", but all three conversion fixtures use mode `exact` only | tests/exact_scalar_support/package.rs:2669-2700; tests/it/exact_scalar_generation.rs:3489 |
+| FND-003 | low | The AC-101 "missing or malformed selected declaration" refusal (`FieldNotAdmitted`) is tested only on the helper with an empty iterator. No negotiation-level test reaches it | src/kani/generate/collection.rs:951-956, 433-438 |
+
+### FND-001
+
+FR-014-AC-6 says: "Executing generated oracles on the QSpec TC-185, TC-186, TC-187, TC-192 and
+TC-193 vectors yields outcomes, charges and consumed counters equal to direct runtime execution
+and to the QSL value authority." QSpec TC-187 is titled "Quantity and unit conversion". Rows U01,
+U04, U07, U08, U09b and U10 are conversions. At main, `tc_024_tc187_quantity_oracles_agree` ran
+`2 * (5*5 + 6*6) * 5` conversion agreements. At head it runs none and still carries
+`Trace: FR-014-AC-6`. AC-6 now reads as satisfied by a test that skips the conversion half of
+TC-187. Fix: amend AC-6 (and TC-024) to exclude the TC-187 conversion rows as refused under
+`QuantityConversionUnsupported`, or assert that refusal for them. Spec wording is for the spec
+reviewer. The gap here is that a passing test claims a criterion it no longer exercises.
+
+### FND-002
+
+TC-024 step text: "derive every `quantity.convert` node at each rounding mode and check it is
+refused as `QuantityConversionUnsupported`". The three fixtures, 1086, 1087 and 2028, are built
+in one loop with `mode_kv("rounding", "exact")`. The guard is identity-only, so the verdict would
+be the same for other modes. Still, the test does not do what its TC says. Either the TC drops
+"at each rounding mode" (if IR pins `exact` for a quantity-typed conversion), or the fixtures add
+the other modes.
+
+### FND-003
+
+`find_admitted_declaration` is covered only by `unresolved_projection_declaration_is_field_not_admitted`,
+which calls it on `std::iter::empty()`. Two paths have no test: `model_object_fields(..)` failing,
+and `fields.field(&field_name)` missing (collection.rs:433-438). The stronger SR-11681 FND-003
+request, a negotiation-level `FieldNotAdmitted` record, is still open. This is low because a
+QSL-admitted package resolves these by construction.
+
+## Clean units
+
+- FR-014-AC-2 and FR-014-AC-18 (conversion refusal):
+  `tc_024_quantity_conversion_is_refused_with_its_named_capability` and
+  `tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_harness` assert the
+  exact variant, identity and capability, and that no harness is emitted. `QUANTITY_CONVERSIONS`
+  is a non-empty `[u32; 3]`, so the loop is not vacuous. The mutant run shows both tests go red.
+- FR-015-AC-96: symbolic length and elements, both endpoints inclusive, and no `max_items` input.
+  Assertions at tests/it/kani_obligations_symbolic_domains.rs:975 and 1346 pin the bounds.
+- FR-015-AC-97: there are requires-bound and unsupported controls for an ordered set, an
+  unsupported predicate, a missing upper bound, Reference elements and String/Uuid/Timestamp
+  elements.
+- FR-015-AC-99: the cover comes after the assert. The native `qsl_replay::replay` control runs in
+  the ordinary suite. The real-Kani control is `#[ignore]` and runs in the Kani lane through the
+  Makefile `KANI_FILTERS`. It was not run here.
+- FR-015-AC-100: regeneration is byte-identical, and the subject and unwind change the identity
+  (FND-004 of SR-11800 aside).
+- FR-015-AC-101: refusals for unwind, memory ceiling and nested negation/disjunction. The nested
+  test is shown discriminating by a mutant.
+- FR-015-AC-102: one disposition per item, and a refused neighbour does not reject a valid item.
+
+## Verdict
+
+Coverage of the collection half is substantive, and the new refusal tests have strong oracles.
+FND-001 is a medium trace and coverage gap: AC-6 claims the TC-187 vectors that the PR stopped
+running. It should be fixed by a spec amendment or a refusal assertion, in this PR or in a
+tracked follow-up.

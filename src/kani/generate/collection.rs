@@ -331,6 +331,21 @@ fn collection_array_length(
     })
 }
 
+/// The selected field of a declaration's effective fields. A declaration whose fields cannot be
+/// listed, and a listing without the selected field, are both `FieldNotAdmitted`: the field is
+/// never taken from another declaration. Admitted input reaches neither branch (QSL refuses an
+/// ambiguous field set at compile time and the reader validates the declaration), so the lookup is
+/// generic over the table to be exercised directly.
+fn declared_field<'a, F, E, T: ?Sized>(
+    fields: Result<&'a F, E>,
+    find: impl FnOnce(&'a F) -> Option<&'a T>,
+) -> Result<&'a T, CollectionDomainRefusal> {
+    fields
+        .ok()
+        .and_then(find)
+        .ok_or(CollectionDomainRefusal::FieldNotAdmitted)
+}
+
 fn find_admitted_declaration<'a>(
     mut nodes: impl Iterator<Item = &'a CheckedSemanticNodeV2>,
     digest: &str,
@@ -430,12 +445,8 @@ pub(crate) fn resolve_collection_field(
         .ok_or(CollectionDomainRefusal::UnsupportedShape)?;
     let declaration = find_admitted_declaration(package.graph().nodes.iter(), declaration_digest)?;
     verify_function_receiver(package, function, collection, &declaration)?;
-    let fields = package
-        .model_object_fields(&declaration)
-        .map_err(|_| CollectionDomainRefusal::FieldNotAdmitted)?;
-    let field = fields
-        .field(&field_name)
-        .ok_or(CollectionDomainRefusal::FieldNotAdmitted)?;
+    let fields = package.model_object_fields(&declaration);
+    let field = declared_field(fields.as_ref(), |fields| fields.field(&field_name))?;
     let Some(CheckedMemberType::Collection {
         kind: CheckedCollectionKind::Sequence,
         element,
@@ -893,6 +904,131 @@ mod tests {
         assert!(format!("{module}::{harness}").len() <= 255);
     }
 
+    fn node(label: &str) -> CheckedNodeId {
+        CheckedNodeId {
+            domain: "ix://test/domain".into(),
+            digest: label.into(),
+        }
+    }
+
+    fn base_claim() -> LoweredCollectionClaim {
+        LoweredCollectionClaim {
+            package_digest: "package-a".to_owned(),
+            field: CollectionFieldDomain {
+                function: node("function"),
+                quantifier: node("quantifier"),
+                declaration: node("declaration"),
+                field_name: "items".to_owned(),
+                projection: node("projection"),
+                minimum_length: 0,
+                maximum_length: 3,
+                element: CollectionElementDomain::Integer {
+                    minimum: 0,
+                    maximum: 9,
+                },
+                element_type: node("element-type"),
+                quantifier_operation: "quire.op.collection.forall".to_owned(),
+                predicate: CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold: 0 },
+                predicate_id: node("predicate"),
+            },
+        }
+    }
+
+    fn rendered_module(
+        claim: &LoweredCollectionClaim,
+        subject_path: &str,
+        unwind: u32,
+        memory_bytes: u64,
+    ) -> String {
+        let request = KaniObligationRequest {
+            ceilings: crate::kani::identity::ProofCeilings {
+                memory_bytes: std::num::NonZeroU64::new(memory_bytes).expect("nonzero"),
+                wall_clock: std::time::Duration::from_secs(60),
+            },
+            items: &[],
+            subject_path,
+            unwind,
+        };
+        render_collection(&request, claim)
+            .expect("the base collection renders")
+            .identity
+            .module_symbol
+            .to_string()
+    }
+
+    /// Every component of a collection's semantic identity changes the rendered Rust path, so two
+    /// claims that differ only in one component never share a harness. Each variant below
+    /// differs from the base in exactly one field of the digest preimage, holding the package
+    /// digest, ids and ceilings constant where the field is not the one varied: a field dropped
+    /// from the preimage makes its row fail.
+    ///
+    /// Trace: FR-015-AC-100, TC-025.
+    #[test]
+    fn every_identity_component_changes_the_rendered_harness_path() {
+        const MEMORY: u64 = 1 << 30;
+        let base = base_claim();
+        let original = rendered_module(&base, "crate::subject", 8, MEMORY);
+        assert_eq!(
+            original,
+            rendered_module(&base, "crate::subject", 8, MEMORY),
+            "the path is deterministic"
+        );
+        type Change = fn(&mut LoweredCollectionClaim);
+        let claim_changes: [(&str, Change); 13] = [
+            ("package digest", |c| c.package_digest = "package-b".into()),
+            ("function", |c| c.field.function = node("other-function")),
+            ("quantifier", |c| {
+                c.field.quantifier = node("other-quantifier")
+            }),
+            ("declaration", |c| {
+                c.field.declaration = node("other-declaration")
+            }),
+            ("field name", |c| c.field.field_name = "other".into()),
+            ("projection", |c| {
+                c.field.projection = node("other-projection")
+            }),
+            ("minimum length", |c| c.field.minimum_length = 1),
+            ("maximum length", |c| c.field.maximum_length = 4),
+            ("element domain", |c| {
+                c.field.element = CollectionElementDomain::Integer {
+                    minimum: 0,
+                    maximum: 10,
+                }
+            }),
+            ("element type", |c| {
+                c.field.element_type = node("other-element")
+            }),
+            ("quantifier operation", |c| {
+                c.field.quantifier_operation = "quire.op.collection.exists".into()
+            }),
+            ("predicate", |c| {
+                c.field.predicate =
+                    CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold: 1 }
+            }),
+            ("predicate id", |c| {
+                c.field.predicate_id = node("other-predicate")
+            }),
+        ];
+        for (name, change) in claim_changes {
+            let mut changed = base_claim();
+            change(&mut changed);
+            assert_ne!(
+                original,
+                rendered_module(&changed, "crate::subject", 8, MEMORY),
+                "{name} is part of the harness identity"
+            );
+        }
+        assert_ne!(original, rendered_module(&base, "crate::other", 8, MEMORY));
+        assert_ne!(
+            original,
+            rendered_module(&base, "crate::subject", 9, MEMORY)
+        );
+        assert_ne!(
+            original,
+            rendered_module(&base, "crate::subject", 8, MEMORY / 2)
+        );
+    }
+
     #[test]
     fn truncated_symbol_collision_is_detected_against_full_identity() {
         let shared_module = "kob_collection_0123456789abcdef0123";
@@ -945,6 +1081,36 @@ mod tests {
                 }) if rejected == node_id
             ));
         }
+    }
+
+    /// Trace: FR-015-AC-101, TC-025.
+    #[test]
+    fn a_declaration_without_listable_fields_or_the_selected_field_is_field_not_admitted() {
+        use quire_contract_model::CheckedModelFieldsError;
+        let table = vec!["items", "flags"];
+        fn lookup<'a>(
+            name: &'static str,
+        ) -> impl FnOnce(&'a Vec<&'static str>) -> Option<&'a &'static str> {
+            move |fields| fields.iter().find(|field| **field == name)
+        }
+        assert_eq!(
+            declared_field(Ok::<_, ()>(&table), lookup("flags")),
+            Ok(&"flags")
+        );
+        for error in [
+            CheckedModelFieldsError::UnknownNode,
+            CheckedModelFieldsError::NotModelObjectType,
+            CheckedModelFieldsError::AmbiguousField("items".into()),
+        ] {
+            assert_eq!(
+                declared_field(Err::<&Vec<&'static str>, _>(error), lookup("items")),
+                Err(CollectionDomainRefusal::FieldNotAdmitted)
+            );
+        }
+        assert_eq!(
+            declared_field(Ok::<_, ()>(&table), lookup("missing")),
+            Err(CollectionDomainRefusal::FieldNotAdmitted)
+        );
     }
 
     #[test]

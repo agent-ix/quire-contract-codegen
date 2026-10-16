@@ -8,11 +8,11 @@ use qsl_replay::{
 };
 use quire_contract_codegen::{
     negotiate_backend_provider, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
-    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause,
+    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause, ClaimDerivationRefusal,
     ContractDriverResultSelection, ContractRequestPosition, Disposition, EnvelopeRefusal,
     ExtentClassification, ExtentDomain, InvalidObligationItem, ItemSettlement, KaniForm, Mode,
     ProviderOrigin, RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY,
+    CAPABILITY_VOCABULARY, QUANTITY_CONVERSION_CAPABILITY,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -1205,6 +1205,50 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
             }
         }
     ));
+}
+
+/// A selected quantity conversion settles as unsupported with the named capability: the Kani
+/// arm cannot accept an operation its generator refuses.
+///
+/// Trace: FR-014-AC-2, FR-019-AC-44, TC-024.
+#[test]
+fn a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capability() {
+    let (package, _, ids) = crate::kani_obligations::routed_scalar_package();
+    let backend = BackendKind::Kani.identity().to_owned();
+    let mut request = item(
+        RequestedKind::Known(CapabilityKind::ValueValidity),
+        Candidates::Set(vec![candidate(BackendKind::Kani.identity())]),
+    );
+    let node_id = ids.resolve(&crate::kani_obligations::package::code_id(
+        crate::kani_obligations::package::QUANTITY_CONVERSIONS[0],
+    ));
+    request.kani_form = selected_scalar_form(package, node_id.clone());
+    let settled = settle_one(
+        vec![kani(vec![(CapabilityKind::ValueValidity, Mode::Bounded)])],
+        request,
+    );
+    assert!(
+        matches!(
+            &settled.disposition,
+            Disposition::Unsupported {
+                cause: Cause::KaniFormRefused {
+                    refusal: UnsupportedObligation::NoDerivableClaim {
+                        node_id: refused,
+                        reason: ClaimDerivationRefusal::QuantityConversionUnsupported {
+                            capability,
+                            ..
+                        },
+                    },
+                    backend: refusing,
+                    ..
+                }
+            } if refused == &node_id
+                && *capability == QUANTITY_CONVERSION_CAPABILITY
+                && *refusing == backend
+        ),
+        "{:?}",
+        settled.disposition
+    );
 }
 
 /// Selected-result defects follow request/candidate validation and precede

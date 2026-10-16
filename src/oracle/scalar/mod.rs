@@ -1460,6 +1460,14 @@ fn check_item<'r>(
         }
         .into());
     }
+    // The refusal precedes every check against the caller's descriptor: no descriptor can make a
+    // quantity conversion generate.
+    if let Some(refusal) = node.node.body["operation"]["identity"]
+        .as_str()
+        .and_then(quantity_conversion_refusal)
+    {
+        return Err(refusal.into());
+    }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
     if &*node.node.semantic_form != shape.form {
         return Err(ExactScalarRefusal::FormMismatch {
@@ -3812,7 +3820,23 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 
 /// The capability a `quire.op.quantity.convert` node needs and this generator lacks.
 pub const QUANTITY_CONVERSION_CAPABILITY: &str = "quantity conversion is not supported: the \
-     runtime has no quantity conversion target (tracked as IR-818)";
+     runtime converts a quantity only to a scalar target and has no conversion whose result is a \
+     quantity (tracked as IR-818)";
+
+/// The operation identity of a quantity conversion.
+const QUANTITY_CONVERT_IDENTITY: &str = "quire.op.quantity.convert";
+
+/// The refusal for a node whose operation identity is a quantity conversion, whichever entry
+/// point received it; `None` for every other identity.
+fn quantity_conversion_refusal(identity: &str) -> Option<ExactScalarRefusal> {
+    (identity == QUANTITY_CONVERT_IDENTITY).then(|| {
+        ClaimDerivationRefusal::QuantityConversionUnsupported {
+            operation_identity: identity.to_owned(),
+            capability: QUANTITY_CONVERSION_CAPABILITY,
+        }
+        .refusal()
+    })
+}
 
 /// Why a node has no derivable [`ExactScalarItem`], beyond the refusals
 /// [`ExactScalarRefusal`] already names for its lowering and bounds.
@@ -4193,12 +4217,8 @@ fn derive_operation_from_view<'g>(
         bounds,
         identity,
     };
-    if identity == "quire.op.quantity.convert" {
-        return Err(ClaimDerivationRefusal::QuantityConversionUnsupported {
-            operation_identity: identity.to_owned(),
-            capability: QUANTITY_CONVERSION_CAPABILITY,
-        }
-        .refusal());
+    if let Some(refusal) = quantity_conversion_refusal(identity) {
+        return Err(refusal);
     }
     let family = family_of_identity(identity).ok_or_else(|| {
         ClaimDerivationRefusal::OperationNotDerivable {

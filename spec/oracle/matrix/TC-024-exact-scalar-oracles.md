@@ -43,9 +43,16 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
-   `numeric.convert_rounding`); derive every `quantity.convert` node at each
-   rounding mode and check it is refused as `QuantityConversionUnsupported`
-   with the named capability and no descriptor; derive nodes that are not applications, carry no identity, name an
+   `numeric.convert_rounding`); derive every `quantity.convert` node of the corpus
+   (each carries the `exact` mode its unit type pins) and check it is refused as
+   `QuantityConversionUnsupported` with the named capability and no descriptor;
+   request each of them under caller-declared descriptors, through
+   `generate_routed`, through Kani obligation negotiation and through capability
+   settlement, and check the same refusal and an empty artifact set: the
+   generated crate defines no oracle function and no harness is emitted
+   (FR-014-AC-2). Check that each QSpec TC-187 row that converts a quantity is
+   refused, and that every agreement row of step 4 compares at least one
+   vector. Derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that

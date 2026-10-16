@@ -23,7 +23,7 @@ pub enum KaniExecutableHarness<'a> {
     Scalar(&'a KaniScalarObligationHarness),
     /// A V2 state-clause operation-contract or frame-effect harness (IR-412).
     StateFrame(&'a StateFrameHarness),
-    /// A V2 admitted symbolic collection claim (IR-268).
+    /// A V2 admitted symbolic collection claim.
     Collection(&'a KaniCollectionObligationHarness),
 }
 

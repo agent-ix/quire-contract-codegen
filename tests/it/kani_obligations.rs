@@ -1181,6 +1181,43 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
     );
 }
 
+/// A quantity conversion node declared by the caller reaches the Kani obligation engine only as
+/// a refused claim: each is accounted `unsupported` with the named capability and no harness is
+/// emitted.
+///
+/// Trace: FR-014-AC-2, FR-015-AC-15, TC-025
+#[test]
+fn tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness() {
+    let (scalar, _, ids) = scalar_package();
+    let declared = package::QUANTITY_CONVERSIONS
+        .iter()
+        .map(|code| ExactScalarItem {
+            node_id: ids.resolve(&code_id(*code)),
+            operation: ExactScalarOperation::QuantityArithmetic {
+                operator: quire_contract_codegen::QuantityOperator::Add,
+            },
+        })
+        .collect::<Vec<_>>();
+    let claim_map = generate_exact_scalar_oracles(&scalar, &declared)
+        .expect("claim map")
+        .claim_map;
+    let records = scalar_records(&scalar, &claim_map, &ids, &package::QUANTITY_CONVERSIONS);
+    assert_eq!(records.len(), package::QUANTITY_CONVERSIONS.len());
+    for (record, code) in records.iter().zip(package::QUANTITY_CONVERSIONS) {
+        assert_eq!(
+            unsupported(record),
+            &UnsupportedObligation::NoDerivableClaim {
+                node_id: ids.resolve(&code_id(code)),
+                reason:
+                    quire_contract_codegen::ClaimDerivationRefusal::QuantityConversionUnsupported {
+                        operation_identity: "quire.op.quantity.convert".to_owned(),
+                        capability: quire_contract_codegen::QUANTITY_CONVERSION_CAPABILITY,
+                    },
+            }
+        );
+    }
+}
+
 /// A rendered `Generated` claim, and the [`ClaimMap`] it came from, reused by both
 /// `UnknownNodeKind` tests below to hand-assemble a claim map entry `generate_exact_scalar_oracles`
 /// would never itself produce.

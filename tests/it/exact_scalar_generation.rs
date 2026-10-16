@@ -14,11 +14,12 @@ use crate::common::panic_scan::{comments_stripped, non_test_code, panic_tokens_i
 use crate::scratch_crate::seed_lock;
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
-    derive_exact_scalar_items, generate_exact_scalar_oracles, BoundForm, ClaimDerivationRefusal,
-    ClaimDisposition, DecimalOperator, ExactScalarItem, ExactScalarOperation, ExactScalarOracles,
-    ExactScalarRefusal, GeneratedScalarClaim, OperationProvenance, OracleGenerationError,
-    RationalOperator, ScalarForm, UpstreamBlocker, EXACT_SCALAR_CRATE_NAME,
-    QUANTITY_CONVERSION_CAPABILITY, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles, BoundForm,
+    ClaimDerivationRefusal, ClaimDisposition, DecimalOperator, ExactScalarItem,
+    ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
+    OperationProvenance, OracleGenerationError, QuantityOperator, RationalOperator, ScalarForm,
+    UpstreamBlocker, EXACT_SCALAR_CRATE_NAME, QUANTITY_CONVERSION_CAPABILITY,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
@@ -3501,4 +3502,118 @@ fn tc_024_quantity_conversion_is_refused_with_its_named_capability() {
         );
     }
     assert!(QUANTITY_CONVERSION_CAPABILITY.contains("quantity conversion is not supported"));
+}
+
+/// The QSpec TC-187 rows that convert a quantity are refusal rows, not agreement rows: for each
+/// of them every quantity conversion node of the corpus derives to the named refusal, and the
+/// generated crate for it holds no oracle. A row that produced a descriptor or an oracle fails
+/// here by name.
+///
+/// Trace: FR-014-AC-2, TC-024
+#[test]
+fn tc_024_tc187_conversion_rows_are_refused_with_the_named_capability() {
+    const CONVERSION_ROWS: [&str; 11] = [
+        "U01", "U04", "U07", "U08", "U09", "U09b", "U10", "U15", "U16", "U17", "U18",
+    ];
+    let package = derivation_package().admit();
+    let ids = fixture_ids_for(&package);
+    let mut refused = 0_usize;
+    for row in CONVERSION_ROWS {
+        for code in QUANTITY_CONVERSIONS {
+            assert_eq!(
+                derive_one(&package, code),
+                Err(no_claim(
+                    ClaimDerivationRefusal::QuantityConversionUnsupported {
+                        operation_identity: "quire.op.quantity.convert".to_owned(),
+                        capability: QUANTITY_CONVERSION_CAPABILITY,
+                    }
+                )),
+                "TC-187 {row}, node {code}"
+            );
+            let declared = resolved_items(
+                &[ExactScalarItem {
+                    node_id: code_id(code),
+                    operation: ExactScalarOperation::QuantityArithmetic {
+                        operator: QuantityOperator::Add,
+                    },
+                }],
+                &ids,
+            );
+            let oracles = generate_exact_scalar_oracles(&package, &declared).expect("generates");
+            assert_eq!(
+                refusal_of(&oracles, code),
+                no_claim(ClaimDerivationRefusal::QuantityConversionUnsupported {
+                    operation_identity: "quire.op.quantity.convert".to_owned(),
+                    capability: QUANTITY_CONVERSION_CAPABILITY,
+                }),
+                "TC-187 {row}, node {code}: generation"
+            );
+            assert!(
+                !contents(&oracles, "src/lib.rs").contains("fn "),
+                "TC-187 {row}, node {code}: an oracle was emitted"
+            );
+            refused += 1;
+        }
+    }
+    assert_eq!(refused, CONVERSION_ROWS.len() * QUANTITY_CONVERSIONS.len());
+}
+
+/// The caller-declared entry points refuse a quantity conversion node under every descriptor the
+/// caller can declare: `generate_exact_scalar_oracles` and `plan_exact_scalar_oracles` return the
+/// named refusal, the plan holds no oracle to render, and the generated crate has no oracle
+/// function and no harness.
+///
+/// Trace: FR-014-AC-2, FR-014-AC-18, TC-024
+#[test]
+fn tc_024_caller_declared_quantity_conversion_is_refused_and_generates_nothing() {
+    let package = derivation_package().admit();
+    let ids = fixture_ids_for(&package);
+    let declared = [
+        ExactScalarOperation::QuantityArithmetic {
+            operator: QuantityOperator::Add,
+        },
+        ExactScalarOperation::QuantityComparison {
+            operator: ComparisonOperator::Less,
+        },
+        ExactScalarOperation::IntegerArithmetic {
+            operator: IntegerOperator::Add,
+            domain: bounded(-1000, 1000),
+        },
+    ];
+    for code in QUANTITY_CONVERSIONS {
+        for operation in &declared {
+            let items = resolved_items(
+                &[ExactScalarItem {
+                    node_id: code_id(code),
+                    operation: operation.clone(),
+                }],
+                &ids,
+            );
+            let expected = no_claim(ClaimDerivationRefusal::QuantityConversionUnsupported {
+                operation_identity: "quire.op.quantity.convert".to_owned(),
+                capability: QUANTITY_CONVERSION_CAPABILITY,
+            });
+
+            let plan = plan_exact_scalar_oracles(&package, &items).expect("plans");
+            assert_eq!(plan.claims().len(), 1);
+            assert_eq!(
+                plan.claims()[0].result,
+                ClaimDisposition::Refused {
+                    refusal: expected.clone()
+                },
+                "plan, node {code}, {operation:?}"
+            );
+
+            let oracles = generate_exact_scalar_oracles(&package, &items).expect("generates");
+            assert_eq!(
+                refusal_of(&oracles, code),
+                expected,
+                "generate, node {code}, {operation:?}"
+            );
+            assert!(
+                !contents(&oracles, "src/lib.rs").contains("fn "),
+                "no oracle function is emitted for node {code}"
+            );
+        }
+    }
 }

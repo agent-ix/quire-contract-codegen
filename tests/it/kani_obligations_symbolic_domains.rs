@@ -1,4 +1,4 @@
-//! IR-268 source-backed symbolic collection and graph obligation fixtures.
+//! Source-backed symbolic collection and graph obligation fixtures.
 //!
 //! QSL emits every admitted package through its public `call_site` facade from
 //! native source and a test-authored domain model document. No Contract IR
@@ -1453,50 +1453,6 @@ fn collection_identity_tracks_domains_claim_subject_and_unwind() {
     assert_ne!(
         identity,
         collection_identity(&base, "quire.op.collection.forall", "crate::subject", 9,)
-    );
-}
-
-/// Trace: FR-015-AC-100, TC-025.
-#[test]
-fn collection_identity_fields_are_discriminating_with_constant_package_digest() {
-    let fixture = emitted_from_document_and_body(
-        model_document(),
-        "forall(item in deref(input).items: item >= 0)",
-    );
-    let base = collection_identity(&fixture, "quire.op.collection.forall", "crate::subject", 8);
-    let package_digest = base.package_digest.clone();
-    macro_rules! differs_without_package_change {
-        ($field:ident, $value:expr) => {{
-            let mut changed = base.clone();
-            changed.$field = $value;
-            assert_eq!(changed.package_digest, package_digest);
-            assert_ne!(
-                base,
-                changed,
-                "identity field {} is retained",
-                stringify!($field)
-            );
-        }};
-    }
-    differs_without_package_change!(minimum_length, 1);
-    differs_without_package_change!(maximum_length, 4);
-    differs_without_package_change!(
-        element,
-        CollectionElementIdentity::Integer {
-            minimum: 0,
-            maximum: 4,
-        }
-    );
-    differs_without_package_change!(
-        predicate,
-        CollectionPredicateIdentity::IntegerGreaterOrEqual { threshold: 1 }
-    );
-    differs_without_package_change!(subject_path, "crate::other_subject".to_owned());
-    differs_without_package_change!(unwind, 9);
-    differs_without_package_change!(field_name, "other_field".to_owned());
-    differs_without_package_change!(
-        quantifier_operation,
-        "quire.op.collection.exists".to_owned()
     );
 }
 

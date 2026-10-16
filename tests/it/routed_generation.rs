@@ -2154,6 +2154,22 @@ fn tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_
         assert!(generated.rejected.is_empty());
         let (record, harness) = kani_parts(&generated.items[0].output);
         assert!(harness.is_none(), "no harness is emitted");
+        // The obligation's whole artifact set is empty: the claim map holds a refusal and no
+        // generated claim, and the oracle crate defines no function.
+        let claim_map = generated.claim_map.as_ref().expect("claim map");
+        assert!(claim_map
+            .items
+            .iter()
+            .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
+        let oracle_artifacts = generated.oracle_artifacts.as_ref().expect("oracle crate");
+        let oracle_source = oracle_artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("oracle lib.rs");
+        assert!(
+            !oracle_source.contents.contains("fn "),
+            "no oracle function is emitted"
+        );
         assert_eq!(
             record.disposition,
             ObligationDisposition::Unsupported {
