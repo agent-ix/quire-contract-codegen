@@ -13,43 +13,55 @@ relationships:
 ## Description
 
 Verify that bounded contracts produce one harness per obligation kind and
-refuse non-finite obligations. IR-268 adds planned V2 symbolic collection and
-graph controls; the present finite-input corpus is not proof evidence for them.
+refuse non-finite obligations. IR-268 covers the collection half of planned V2
+symbolic obligations: the claim is an admitted QSL clause/function body over a
+selected model collection field. Graph reachability remains required by
+FR-015-AC-98, assigned to IR-805 and blocked on QSL-804; it is not IR-268
+evidence. The finite-input collection and graph corpus is not proof evidence
+for either symbolic family.
 
 ## Test Procedure
 
-For IR-268, emit a collection claim and a reference-graph claim through QSL,
-admit each as `CheckedPackageV2`, and resolve its selected model declaration
-through Contract IR's typed interfaces. For collections, use an `IntRange`
-element field with nonzero inclusive cardinality and a `Boolean` element field;
-inspect the generated `kani::any()` draws and assumptions, then check both
-cardinality endpoints, both integer endpoints and both Boolean values
-independently. For the graph, use a finite model-object population and the
-typed `Reference`, `Option` and bounded `Collection` multiplicities of the
-selected reference field; inspect draws and assumptions at each admitted
-minimum and maximum and verify that a nonselected field cannot establish
-reachability. With `start = target`, compare an isolated object with a
-self-loop on the selected optional reference field: only the self-loop is
-reachable, without expanding its target. Neither case passes a concrete
-input vector or a caller semantic ceiling. Refuse unbounded cardinality,
-unbounded element type, unbounded object population, unbounded edge
-multiplicity, absent typed model-object population, unsupported collection form,
-malformed selected declaration and an over-ceiling model domain. Assert the
-typed disposition names the failing capability or domain and exposes no
-harness. Use a mixed request to check one disposition per item.
+For IR-268, author a QSL model with a bounded `Sequence<IntRange>` field
+whose cardinality and element domains both have nonzero inclusive endpoints,
+and clauses/function bodies that apply `forall` and `exists` to that selected
+field. Emit each package through QSL's public replay path and admit the emitted
+V2 package through Contract IR. Inspect that the admitted claim is the clause /
+function body and that its `quire.op.collection.forall` or
+`quire.op.collection.exists` operation identifies the selected field path; do
+not map these operations to the finite-input `QueryKind` as if they were the
+claim. Also use a bounded Boolean collection field. No copied package wire,
+hand-built package builder, concrete `Vec` input or caller semantic ceiling is
+used.
 
-Run each emitted healthy harness with the installed backend and assert
-`Verified` and a satisfied final cover. Seed a collection query/subject defect
-and a graph reachability/subject defect, run each and require `Falsified` plus
-an in-domain concrete playback. Change one model bound, the claim, subject
-and unwind separately to check identity changes; repeat equal inputs for byte
-identity. Compare identity bounds and complete ordered options with the emitted
-source and FR-017 run evidence, including actual Kani, Rust and solver versions.
-The finite-input corpus's Boolean and generation-time outcome do not satisfy
-these controls. These tests are planned until the symbolic generation exists;
-the graph success case also awaits Contract IR's typed finite model-object
-population input; typed reference-field multiplicity is already available.
+For each supported collection claim, inspect the generated `kani::any()`
+draws and assumptions. Check both cardinality endpoints and every intervening
+length, both inclusive `IntRange` endpoints and intervening values, both
+Boolean values, and preservation of declared order and uniqueness. Replay the
+same authored function with `qsl_replay::replay` as the independent native
+oracle and compare its result with the generated claim's assertion for the
+same input. Seed a claim or subject defect and require installed Kani to report
+`Falsified` with an in-domain playback; the healthy case must be `Verified`
+with its final cover satisfied. Refuse an unbounded cardinality, unbounded
+element type, unsupported collection form or unsupported `forall`/`exists`
+body, malformed or absent selected declaration, and an over-ceiling domain.
+Check typed `requires_bound` versus `unsupported`, no emitted harness for each
+refusal, and one disposition per item in a mixed request.
 
+Change one selected field bound, claim, subject and unwind separately to check
+identity changes; repeat equal inputs for byte identity. Compare recorded
+identity domains and complete ordered options with generated source and FR-017
+run evidence, including actual Kani, Rust and solver versions. These tests are
+planned until the symbolic collection generation exists. The finite-input
+corpus's Boolean and generation-time outcome do not satisfy these controls.
+
+For the graph family retained in FR-015-AC-98, IR-805 must later supply the
+QSL-emitted graph claim and Contract IR's typed finite object population before
+its symbolic reachability controls can run. Preserve tests for selected-field
+positive-length reachability (including isolated and self-loop `start =
+target`), inclusive population/multiplicity bounds, unbounded and unsupported
+refusals, seeded counterexample, and identity changes; none is implementation
+or proof evidence for IR-268. This graph work is blocked on QSL-804.
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract
 with an unbounded domain, one with unsatisfiable bounds, and one over a
