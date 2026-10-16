@@ -2268,6 +2268,8 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     assert!(manifest.contains(&format!("name = \"{EXACT_SCALAR_CRATE_NAME}\"")));
     assert!(manifest.contains("publish = false"));
     assert!(manifest.contains("features = [\"exact\"]"));
+    assert!(!manifest.contains("test-support"));
+    assert!(!manifest.contains("[[example]]"));
 
     let lib = contents(&oracles, "src/lib.rs");
     for forbidden in [

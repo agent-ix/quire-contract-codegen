@@ -25,14 +25,33 @@ const ORACLE_KANI_METADATA: &str = "[package.metadata.kani]\nunstable = { unstab
 /// The `Cargo.toml` of a generated oracle crate named `crate_name`: a library over the runtime's
 /// `exact` feature and exact kernel that forbids unsafe code and carries the Kani metadata.
 pub(crate) fn oracle_crate_manifest(crate_name: &str) -> String {
+    oracle_crate_manifest_with_observer(crate_name, false)
+}
+
+/// The scalar oracle manifest with the native receipt observer as an example target.
+pub(crate) fn scalar_oracle_crate_manifest(crate_name: &str) -> String {
+    oracle_crate_manifest_with_observer(crate_name, true)
+}
+
+fn oracle_crate_manifest_with_observer(crate_name: &str, observer: bool) -> String {
+    let example = if observer {
+        "[[example]]\nname = \"ir791_native\"\npath = \"examples/ir791_native.rs\"\n\n"
+    } else {
+        ""
+    };
+    let dev_dependency = if observer {
+        format!("[dev-dependencies]\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE}, features = [\"test-support\"] }}\n\n")
+    } else {
+        String::new()
+    };
     format!(
-        "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\nquire-contract-runtime = {{ {RUNTIME_DEPENDENCY_SOURCE}, features = [\"exact\"] }}\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE} }}\n\n[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
+        "[package]\nname = \"{crate_name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n\n{example}[dependencies]\nquire-contract-runtime = {{ {RUNTIME_DEPENDENCY_SOURCE}, features = [\"exact\"] }}\nquire-exact = {{ {EXACT_DEPENDENCY_SOURCE} }}\n\n{dev_dependency}[lints.rust]\nunsafe_code = \"forbid\"\n\n{ORACLE_KANI_METADATA}[workspace]\n"
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::oracle_crate_manifest;
+    use super::scalar_oracle_crate_manifest;
 
     /// Trace: FR-014-AC-8, TC-024.
     #[test]
@@ -65,7 +84,7 @@ mod tests {
     /// Trace: TC-024, TC-029, TC-031.
     #[test]
     fn tc_024_oracle_manifest_names_the_runtime_by_branch_and_carries_no_pinned_revision() {
-        let manifest = oracle_crate_manifest("probe-crate");
+        let manifest = scalar_oracle_crate_manifest("probe-crate");
         assert!(manifest.contains("name = \"probe-crate\""));
         assert!(manifest.contains(
             "quire-contract-runtime = { git = \"https://github.com/agent-ix/quire-contract-runtime\", branch = \"main\", features = [\"exact\"] }"
@@ -74,6 +93,9 @@ mod tests {
         assert!(manifest.contains(
             "quire-exact = { git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\" }"
         ));
+        assert!(manifest
+            .contains("[[example]]\nname = \"ir791_native\"\npath = \"examples/ir791_native.rs\""));
+        assert!(manifest.contains("[dev-dependencies]\nquire-exact = { git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [\"test-support\"] }"));
         assert!(manifest.contains("publish = false"));
         assert!(manifest.contains("unsafe_code = \"forbid\""));
         assert!(manifest.contains("--max-field-sensitivity-array-size"));

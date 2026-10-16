@@ -37,12 +37,11 @@ of step 7 and the rewritten step 11 (FR-031-AC-2, AC-6, AC-16, AC-17 and AC-18),
 refused at generation with the interim code, which is the failing run those steps record first.
 The steps that call `quire_exact::divide` or migrate the native oracle (1's divide half, 4's O-3
 and O-5, 5, 7's divide and remainder half, 11's removed-code assertion (FR-031-AC-27), 14 and 16)
-require a compatible dependency graph: QSL already uses the single-member `divide`,
-but its replay crate still passes `&Integer` to `Integer::div_mod_floor`, which now
-requires `NonZeroInteger`. Correct that QSL call and resolve one kernel source.
+require a compatible dependency graph. At CG's locked revisions, QSL replay passes
+`NonZeroInteger` to `Integer::div_mod_floor`, and CG builds with one kernel source.
 Step 14 follows the settled kernel ownership in FR-031 OD-2. Steps 10's divide and
 remainder bundle shape, 15, and 11's `saturate` refusal rows (FR-031-AC-18) call no
-kernel and can be implemented before that dependency correction.
+kernel and can be implemented independently of those kernel calls.
 
 ## Test Procedure
 
@@ -180,8 +179,8 @@ kernel and can be implemented before that dependency correction.
     `wrapping_rem` method call and no `BinOp::Rem` for R-2, holds no `exact::` call and no other
     arithmetic method, and that its file states that the arithmetic is checked by Kani
     (FR-031-AC-23). Assert an arithmetic-free clause's bundle is unchanged.
-11. Saturate-division refusal (FR-031-AC-18, buildable before the lock prerequisite) and the
-    removed interim code (FR-031-AC-27, gated on it). For each of the
+11. Saturate-division refusal (FR-031-AC-18) and the removed interim code
+    (FR-031-AC-27). For each of the
     `saturate` rows below, in the native oracle and in the bundle, assert generation is refused
     with `UnsupportedSaturatingArithmetic` at the node's span, that its message names the missing
     saturating operation, that its terminal state is `unsupported`, and that no output holds a raw
@@ -229,8 +228,8 @@ kernel and can be implemented before that dependency correction.
     names `quire-exact`, and assert the crate's resolved graph holds one `quire-exact`. Assert
     CG's `Cargo.toml` names `quire-exact` directly from `agent-ix/quire-exact`, and that `make
     deny`'s one-copy check passes over CG's lock, with `qsl-replay` and `qsl-semantics` resolving
-    that one entry. This step requires CG's coherent dependency refresh under the settled
-    ownership of FR-031 OD-2. Assert, for the migrated oracle (FR-031-AC-26), that no
+    that one entry. CG's coherent dependency graph meets the settled ownership of
+    FR-031 OD-2. Assert, for the migrated oracle (FR-031-AC-26), that no
     `operators::*_short_circuit` path appears, that the connectives are inline matches, that the
     outcomes of step 8's cases and of Z-3 equal their outcomes under Contract Runtime's
     rendering for completed Boolean values and first-stop outcomes. Assert each completed
@@ -279,5 +278,5 @@ nowhere; the six comparisons agree with the kernel; every other consumer that ne
 refuses an arithmetic clause; and the overflow, zero-divisor, minimum-by-negative-one, `saturate`
 and differential cases each failed on the tree before the change and pass after it, with the code
 change recording both runs and the exemplar's runs. The divide and remainder rows (FR-031-AC-2,
-AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-27) are verified by the IR-602 code change, which is
-gated on the lock prerequisite as the status above states.
+AC-6, AC-16, AC-17, AC-18 and AC-22 to AC-27) are verified by the IR-602 code change;
+the lock prerequisite is already met.

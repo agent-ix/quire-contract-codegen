@@ -19,7 +19,7 @@ use crate::{
     core::{
         artifact::{Artifact, ArtifactBundle, PublicationDiagnostic},
         canonical::content_digest_with_limits,
-        profile::oracle_crate_manifest,
+        profile::{oracle_crate_manifest, scalar_oracle_crate_manifest},
     },
     kani::{
         classify::KaniRunOutcome,
@@ -38,6 +38,13 @@ use crate::{
 };
 
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(0);
+const LOCKED_DEPENDENCIES: [(&str, &str); 2] = [
+    (
+        "quire-contract-runtime",
+        "https://github.com/agent-ix/quire-contract-runtime",
+    ),
+    ("quire-exact", "https://github.com/agent-ix/quire-exact"),
+];
 
 #[derive(Serialize, FixedShape)]
 struct CanonicalArtifact {
@@ -215,7 +222,11 @@ pub fn execute_kani_scalar_native(
     validate_request(request)?;
     let snapshot = PrivateSnapshot::create()?;
     let package = stage_package(request, snapshot.path())?;
-    write_observer(&request.harness.identity, snapshot.path())?;
+    write_observer(
+        &request.harness.identity.oracle_symbol,
+        request.harness.identity.arguments.len(),
+        snapshot.path(),
+    )?;
     generate_lockfile(request, snapshot.path())?;
     seal_snapshot(snapshot.path())?;
     let identity = measure(&package, snapshot.path())?;
@@ -423,7 +434,7 @@ fn stage_package(
         || unique.len() != artifacts.len()
         || unique.contains("Cargo.lock")
         || unique.contains("src/oracle-artifacts-lib.rs")
-        || unique.contains("src/bin/ir791_native.rs")
+        || unique.contains("examples/ir791_native.rs")
     {
         return Err(KaniScalarNativeError::InvalidRequest(
             "emitted package has duplicate or runner-reserved artifact paths",
@@ -456,6 +467,10 @@ fn stage_package(
                 "src/lib.rs".to_owned(),
                 request.harness.rust.contents.as_bytes().to_vec(),
             ));
+        } else if artifact.path == "Cargo.toml" {
+            let manifest = scalar_oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME);
+            write_private(&root.join("Cargo.toml"), manifest.as_bytes())?;
+            staged.push((artifact.path, manifest.into_bytes()));
         } else {
             let full = root.join(path);
             write_private(&full, artifact.contents.as_bytes())?;
@@ -486,8 +501,8 @@ fn measure(
         fs::read(root.join("Cargo.lock")).map_err(KaniScalarNativeError::Snapshot)?,
     ));
     entries.push((
-        "src/bin/ir791_native.rs".to_owned(),
-        fs::read(root.join("src/bin/ir791_native.rs")).map_err(KaniScalarNativeError::Snapshot)?,
+        "examples/ir791_native.rs".to_owned(),
+        fs::read(root.join("examples/ir791_native.rs")).map_err(KaniScalarNativeError::Snapshot)?,
     ));
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     ensure_snapshot_matches(root, &entries)?;
@@ -530,13 +545,14 @@ fn limits_array(limits: ScalarLimits) -> [u64; 10] {
 }
 
 fn write_observer(
-    identity: &crate::kani::identity::ScalarObligationIdentity,
+    oracle_symbol: &str,
+    argument_count: usize,
     root: &Path,
 ) -> Result<(), KaniScalarNativeError> {
-    let operand_bindings = (0..identity.arguments.len())
+    let operand_bindings = (0..argument_count)
         .map(|index| format!(" let operand_{index} = next_i64(&mut arguments)?;"))
         .collect::<String>();
-    let parameters = (0..identity.arguments.len())
+    let parameters = (0..argument_count)
         .map(|index| format!("&rt::Integer::from(operand_{index})"))
         .collect::<Vec<_>>()
         .join(", ");
@@ -557,7 +573,7 @@ fn write_observer(
     .collect::<String>();
     let helper = format!(
         r#"
-#[path = "../lib.rs"] mod generated;
+#[path = "../src/lib.rs"] mod generated;
 use quire_exact as rt;
 fn next_argument(arguments: &mut impl Iterator<Item = String>) -> Result<String, std::io::Error> {{
  arguments.next().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing native request argument"))
@@ -597,9 +613,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
  Ok(())
 }}
 "#,
-        identity.oracle_symbol, parameters,
+        oracle_symbol, parameters,
     );
-    write_private(&root.join("src/bin/ir791_native.rs"), helper.as_bytes())?;
+    write_private(&root.join("examples/ir791_native.rs"), helper.as_bytes())?;
     Ok(())
 }
 
@@ -612,7 +628,7 @@ fn execute_native(
         "run".to_owned(),
         "--quiet".to_owned(),
         "--locked".to_owned(),
-        "--bin".to_owned(),
+        "--example".to_owned(),
         "ir791_native".to_owned(),
         "--".to_owned(),
     ];
@@ -839,66 +855,58 @@ fn generate_lockfile(
             )))
         }
     };
-    let expected = lock_revision(
-        include_str!("../../../Cargo.lock"),
-        "quire-contract-runtime",
-        "https://github.com/agent-ix/quire-contract-runtime",
-    )
-    .ok_or(KaniScalarNativeError::InvalidRequest(
-        "Contract Codegen lock does not name one runtime git revision",
-    ))?;
-    let mut update = BackendCommand::new("cargo");
-    update.args(&[
-        "update".into(),
-        "--offline".into(),
-        "-p".into(),
-        "quire-contract-runtime".into(),
-        "--precise".into(),
-        expected.clone(),
-    ]);
-    update.current_dir(root);
-    let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
-    let updated = run_bounded_launcher(
-        update,
-        request.harness.identity.ceilings,
-        std::num::NonZeroUsize::MIN,
-        deadline,
-        request.cancel,
-        request.installation.owners(),
-    )
-    .map_err(|error| {
-        KaniScalarNativeError::NativeLaunch(match error {
-            crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
-                format!("runtime lock memory enforcement unavailable: {cause}")
+    for (package, repository) in LOCKED_DEPENDENCIES {
+        let expected = lock_revision(include_str!("../../../Cargo.lock"), package, repository)
+            .ok_or(KaniScalarNativeError::InvalidRequest(
+                "Contract Codegen lock does not name the required git revision",
+            ))?;
+        let mut update = BackendCommand::new("cargo");
+        update.args(&[
+            "update".into(),
+            "--offline".into(),
+            "-p".into(),
+            package.into(),
+            "--precise".into(),
+            expected.clone(),
+        ]);
+        update.current_dir(root);
+        let deadline = Instant::now().checked_add(request.harness.identity.ceilings.wall_clock);
+        let updated = run_bounded_launcher(
+            update,
+            request.harness.identity.ceilings,
+            std::num::NonZeroUsize::MIN,
+            deadline,
+            request.cancel,
+            request.installation.owners(),
+        )
+        .map_err(|error| {
+            KaniScalarNativeError::NativeLaunch(match error {
+                crate::kani::run::launch::BoundedLaunchError::Unavailable(cause) => {
+                    format!("{package} lock memory enforcement unavailable: {cause}")
+                }
+                crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
+                    format!("{package} lock launcher I/O failed: {cause}")
+                }
+            })
+        })?;
+        if !matches!(
+            updated.outcome,
+            LaunchOutcome::Completed {
+                exited_successfully: true,
+                ..
             }
-            crate::kani::run::launch::BoundedLaunchError::Io(cause) => {
-                format!("runtime lock launcher I/O failed: {cause}")
-            }
-        })
-    })?;
-    if !matches!(
-        updated.outcome,
-        LaunchOutcome::Completed {
-            exited_successfully: true,
-            ..
+        ) {
+            return Err(KaniScalarNativeError::NativeLaunch(format!(
+                "{package} lock update failed: {:?}",
+                updated.outcome
+            )));
         }
-    ) {
-        return Err(KaniScalarNativeError::NativeLaunch(format!(
-            "runtime lock update failed: {:?}",
-            updated.outcome
-        )));
-    }
-    let actual = fs::read_to_string(root.join("Cargo.lock"))
-        .ok()
-        .and_then(|lock| {
-            lock_revision(
-                &lock,
-                "quire-contract-runtime",
-                "https://github.com/agent-ix/quire-contract-runtime",
-            )
-        });
-    if actual.as_deref() != Some(expected.as_str()) {
-        return Err(KaniScalarNativeError::DependencyLock { expected, actual });
+        let actual = fs::read_to_string(root.join("Cargo.lock"))
+            .ok()
+            .and_then(|lock| lock_revision(&lock, package, repository));
+        if actual.as_deref() != Some(expected.as_str()) {
+            return Err(KaniScalarNativeError::DependencyLock { expected, actual });
+        }
     }
     Ok(())
 }
@@ -936,7 +944,7 @@ impl PrivateSnapshot {
             fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
                 .map_err(KaniScalarNativeError::Snapshot)?;
         }
-        fs::create_dir_all(path.join("src/bin")).map_err(KaniScalarNativeError::Snapshot)?;
+        fs::create_dir_all(path.join("examples")).map_err(KaniScalarNativeError::Snapshot)?;
         Ok(Self(path))
     }
     fn path(&self) -> &Path {
@@ -1059,6 +1067,70 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+
+    /// Trace: FR-014-AC-8, FR-017-AC-27, FR-017-AC-30, TC-024, TC-027.
+    #[test]
+    fn tc_027_staged_native_observer_compiles_with_locked_kernel_and_charge_log() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        let root = snapshot.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            scalar_oracle_crate_manifest(EXACT_SCALAR_CRATE_NAME),
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub enum OracleStop { IllTyped(String), InvalidConstant, OperandWidth }\n\
+             pub fn oracle(value: &quire_exact::Integer, _meter: &mut quire_exact::Meter)\n\
+             -> Result<quire_exact::Outcome<quire_exact::Integer>, OracleStop> {\n\
+             Ok(quire_exact::Outcome::Completed(value.clone())) }\n",
+        )
+        .unwrap();
+        write_observer("oracle", 1, root).unwrap();
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"),
+            root.join("Cargo.lock"),
+        )
+        .unwrap();
+
+        let cargo = env!("CARGO");
+        let run = |args: &[&str]| {
+            let output = Command::new(cargo)
+                .args(args)
+                .current_dir(root)
+                .env(
+                    "CARGO_TARGET_DIR",
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join("target"),
+                )
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "cargo {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        run(&["generate-lockfile", "--offline"]);
+        let cg_lock = include_str!("../../../Cargo.lock");
+        for (package, repository) in LOCKED_DEPENDENCIES {
+            let expected = lock_revision(cg_lock, package, repository).unwrap();
+            run(&["update", "--offline", "-p", package, "--precise", &expected]);
+            let staged_lock = fs::read_to_string(root.join("Cargo.lock")).unwrap();
+            assert_eq!(
+                lock_revision(&staged_lock, package, repository),
+                Some(expected)
+            );
+        }
+        run(&[
+            "build",
+            "--offline",
+            "--locked",
+            "--example",
+            "ir791_native",
+        ]);
+    }
 
     /// Trace: FR-017-AC-28.
     #[test]
