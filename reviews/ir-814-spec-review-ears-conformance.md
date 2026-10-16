@@ -46,3 +46,14 @@ scope:
   excerpt: "If an inline literal operand has a type other than integer, then the builder refuses with a typed inline-operand refusal before any QSL invocation, with no report or terminal value."
 bindings: []
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS**. Reviewed 437567e. AC-14's scope note has moved into the status prefix. AC-16 and AC-17 both use the unwanted-behaviour pattern ("If ..., then the builder returns ..."). No new EARS findings.

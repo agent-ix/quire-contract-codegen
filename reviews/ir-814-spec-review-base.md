@@ -90,3 +90,34 @@ scope:
   excerpt: "For inline operands (FR-033-AC-16, FR-033-AC-17), where the owning operand projection yields one, require a singleton Range argument at the application/occurrence/position for an integer literal, and a typed refusal with no report for any other inline literal type."
 bindings: []
 ```
+
+## New findings (disposition pass 1)
+
+Reviewed 437567e7ac95bc690ed74c8ccf3440a7f37b2bb1 (diff 216b447..437567e).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The AC-11 header now says "no criterion yet owns the full CG proving-record evidence (Population-keyed metadata and FR-015 AC-76 evidence)". FR-015-AC-76 is itself the criterion for the composite-equality harness identity record: declaration keys with their leaves' declared domains, abstractions, unexercised behaviours and backing state. It is planned under IR-264/IR-241 (kani tests.md:36). The gap is narrower: whether Population-keyed harness metadata belongs in that record. Cite FR-015-AC-76 (IR-264/IR-241) as the owner and name only the unowned part, if any. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:371 |
+| FND-005 | low | AC-16 is now an honest refusal pass-through, labelled GATED "on a reachable fixture". By the owning IR contract (FR-038:3215-3222), reader admission refuses an integer operand of structural.eq/ne, so no fixture will ever become reachable and the `Test` row can never run. Both refusals pass through the same `.map_err(CompositeBuildError::Operands)` (composite_builder.rs:251-254), so AC-17's test plus an inspection of that single map_err would discharge AC-16. Change AC-16's verification to Inspection, or fold it into AC-17, so it does not remain permanently unbacked. | spec/replay/functional/FR-033-composite-parity-replay-binding.md:376 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+
+## Disposition round 1 verdict
+
+**PASS for this artifact; the two new findings are low and do not block.**
+
+- FND-001: AC-16 no longer claims an inline argument is built. It states the `InlineInteger` refusal pass-through and is PLANNED/GATED with the reason. The AC-11 body, the FR-033 Behavior text, AD-003 E-1 and TC-048 now say the projection refuses every top-level inline literal, matching IR composite_operands.rs:405-417.
+- FND-002: AC-17 now passes `InlineNonInteger` through `Operands` and adds no CG variant.
+- FND-003: the AC-11 header no longer claims that IR-806 owns proving-record integration. Native integration is tied to AC-6.
+
+Gates at 437567e:
+- `quire validate` exits 0; the three warnings are the existing FR-017 and FR-014 ones.
+- `quire coverage --strict` is 218 unbacked, 0 contradicted.
+- `quire matrix` differs from 216b447 only in the AC-14, AC-16 and AC-17 text cells.
+- The reviews/ copies match the reviewer's files.

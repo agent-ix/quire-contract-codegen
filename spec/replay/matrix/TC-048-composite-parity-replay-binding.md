@@ -56,7 +56,7 @@ and never replace positive QSL evaluation with a verdict double.
    admitted one-field `Integer` records; IR-691 bounded-field narrowing literals and
    collection-constructor literals stay gated. For inline operands (FR-033-AC-16, FR-033-AC-17),
    require the owning projection's `InlineInteger` or `InlineNonInteger` refusal to surface as
-   `CompositeBuildError::Operands` with no report; the integer case is gated on a reachable fixture. Record public builder inputs and the QSL request; change source, package, selected node,
+   `CompositeBuildError::Operands` with no report. Only the non-integer case is testable; the integer case (AC-16) is verified by Inspection of the shared `Operands` conversion. Record public builder inputs and the QSL request; change source, package, selected node,
    operation and operand declaration individually and require refusal. No hand-built source/package
    replacement or enclosing Boolean function satisfies selection.
 2. Assert FR-025 AC-9's persisted bindings against actual draw order and reconstruct the selected
@@ -216,7 +216,7 @@ and never replace positive QSL evaluation with a verdict double.
 |---|---|---|
 | FR-033-AC-1 | Original-package node-selected parity and actual literal singleton domains | Replace the claim with a source predicate or manufacture a Boolean function |
 | FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-9 binding and AC-1 operator refusal still apply | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator |
-| FR-033-AC-16/17 | The owning projection's inline-literal refusal reaches CG as `CompositeBuildError::Operands` with no report or terminal value | Build an inline argument, add a CG-local variant, or return a report |
+| FR-033-AC-16 (Inspection); FR-033-AC-17 (Test) | The owning projection's inline-literal refusal reaches CG as `CompositeBuildError::Operands` with no report or terminal value | Build an inline argument, add a CG-local variant, or return a report |
 | FR-025-AC-9; FR-033-AC-5 | Original-node/path/domain bindings reconstruct the actual ordered draws | Swap operands/paths, omit a required leaf or unpin a literal |
 | FR-033-AC-2/3 | All canonical families preserve exact values and typed shape; malformed cases refuse | Round IEEE or quantity, collapse absence/null, lose order/multiplicity or use byte equality for set admission |
 | FR-033-AC-4 | Public encoded-byte guard and checked counts/work; iterative admitted lifecycle | Apply capture-only guard, add a depth cap, recurse during drop or allow arithmetic overflow |
