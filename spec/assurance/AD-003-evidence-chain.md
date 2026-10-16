@@ -287,7 +287,7 @@ authored).
   and applies on every outcome, including refusal, exact `Incomplete`,
   generated fault and divergence. Report `claim()` on every outcome is measured in merged
   change #650; actual CG conformance remains CODE-gated; agreement-only claim identity and opaque obligation-digest equality are insufficient.
-- E-1 composite extension (PARTIAL: IR-635 delivered the Eq graph-child positional O-09 and Ne parameter/parameter and parameter/literal controls of FR-033-AC-11; Ne literal/literal, Ne self-comparison and inline literals (FR-033-AC-14 to AC-17) are PLANNED under IR-814; UNRUN CG CONSUMER, QSL-640). CG's
+- E-1 composite extension (PARTIAL: IR-635 delivered the Eq graph-child positional O-09 and Ne parameter/parameter and parameter/literal controls of FR-033-AC-11; Ne literal/literal, Ne self-comparison and the inline-literal refusals (FR-033-AC-14 to AC-17) are PLANNED under IR-814; UNRUN CG CONSUMER, QSL-640). CG's
   composite O-09 preimage contains only the exact claimed equality/inequality application
   node, its authentic occurrence key from the recompiled original package, the obligation
   kind and one argument per operand position in operand order. A self-comparison contributes
@@ -297,9 +297,9 @@ authored).
   carrying a Population-keyed harness bound receives typed `HarnessUnknownKey` during `prepare`,
   before identity tying; its binding-checked `Refused` report retains ReplayRefused terminal mapping.
   CG pre-invocation refusal still produces no report or terminal value. Repeated positions are not a distinct-node set.
-  A composite literal uses its own actual graph-child node with empty Bounds. An inline integer literal uses the
-  actual application/occurrence/position identity with a singleton Range; unsupported
-  inline literal forms refuse. Within each Bounds argument, keys sort by canonical encoded
+  A composite literal uses its own actual graph-child node with empty Bounds. The owning operand projection
+  refuses every top-level inline literal, so CG builds no inline argument and returns that
+  refusal without a report. Within each Bounds argument, keys sort by canonical encoded
   key bytes, not DomainKey ordering, and duplicate keys refuse within that argument.
   Repeated parameter positions retain separate argument entries with the same admitted
   bounds; they are not duplicate keys inside one Bounds argument.

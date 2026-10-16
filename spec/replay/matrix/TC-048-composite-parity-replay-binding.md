@@ -52,10 +52,11 @@ and never replace positive QSL evaluation with a verdict double.
    the same proved artifact. Assert the original nodes, operand declarations and literal singleton
    values. For the Ne forms still PLANNED under IR-814 (FR-033-AC-14 literal/literal and
    FR-033-AC-15 self-comparison), require NotEqual and two positional arguments, then
-   apply the AC-9 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. For inline operands
-   (FR-033-AC-16, FR-033-AC-17), where the owning operand projection yields one, require a
-   singleton Range argument at the application/occurrence/position for an integer literal, and a
-   typed refusal with no report for any other inline literal type. Record public builder inputs and the QSL request; change source, package, selected node,
+   apply the AC-9 report binding and the AC-1 `OperatorMismatch` refusal when Equal is requested. Literal positives are
+   admitted one-field `Integer` records; IR-691 bounded-field narrowing literals and
+   collection-constructor literals stay gated. For inline operands (FR-033-AC-16, FR-033-AC-17),
+   require the owning projection's `InlineInteger` or `InlineNonInteger` refusal to surface as
+   `CompositeBuildError::Operands` with no report; the integer case is gated on a reachable fixture. Record public builder inputs and the QSL request; change source, package, selected node,
    operation and operand declaration individually and require refusal. No hand-built source/package
    replacement or enclosing Boolean function satisfies selection.
 2. Assert FR-025 AC-9's persisted bindings against actual draw order and reconstruct the selected
@@ -150,8 +151,8 @@ and never replace positive QSL evaluation with a verdict double.
    compare two distinct parameters and require their two positional arguments. Preserve repeated
    positions rather than deduplicating nodes. Composite literal operands each contribute their own
    graph_child node with empty Bounds; literal-only comparison therefore still has two arguments,
-   with no free parameter position. Exercise inline integer singleton Range identities at their
-   application/occurrence/position and require typed refusal for an unsupported inline literal.
+   with no free parameter position. The owning projection refuses every top-level inline literal; assert that
+   refusal (FR-033-AC-16, FR-033-AC-17) rather than a built inline argument.
    Sort each argument's BoundEntries by canonical encoded key bytes: paths `[0,0]` before `[0]`
    and `[10]` before `[2]`. Duplicate keys within one argument refuse, while repeated parameter
    bounds across two positional arguments remain legal. Retain Population-keyed metadata only in
@@ -215,7 +216,7 @@ and never replace positive QSL evaluation with a verdict double.
 |---|---|---|
 | FR-033-AC-1 | Original-package node-selected parity and actual literal singleton domains | Replace the claim with a source predicate or manufacture a Boolean function |
 | FR-033-AC-14/15 | Ne literal/literal and Ne self-comparison keep NotEqual and two positional arguments; AC-9 binding and AC-1 operator refusal still apply | Deduplicate the self-comparison, give a literal a parameter bound, accept the wrong operator |
-| FR-033-AC-16/17 | Inline integer literal is a singleton Range argument at its application/occurrence/position; other inline types refuse with no report | Drop or reorder the inline argument, invent a domain for a non-integer inline literal |
+| FR-033-AC-16/17 | The owning projection's inline-literal refusal reaches CG as `CompositeBuildError::Operands` with no report or terminal value | Build an inline argument, add a CG-local variant, or return a report |
 | FR-025-AC-9; FR-033-AC-5 | Original-node/path/domain bindings reconstruct the actual ordered draws | Swap operands/paths, omit a required leaf or unpin a literal |
 | FR-033-AC-2/3 | All canonical families preserve exact values and typed shape; malformed cases refuse | Round IEEE or quantity, collapse absence/null, lose order/multiplicity or use byte equality for set admission |
 | FR-033-AC-4 | Public encoded-byte guard and checked counts/work; iterative admitted lifecycle | Apply capture-only guard, add a depth cap, recurse during drop or allow arithmetic overflow |
