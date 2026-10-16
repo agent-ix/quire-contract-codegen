@@ -15,8 +15,8 @@ relationships:
 Verify that scalar oracles generated from an admitted CheckedPackage V2 cover
 every scalar family, refuse every non-generated item with a typed reason, are
 byte-deterministic, and agree with the runtime. Agreement with the QSL
-value authority is planned (FR-014-AC-37, and FR-014-AC-47 for the TC-187
-quantity vectors).
+value authority is planned for the FR-014-AC-35 corpus (FR-014-AC-37); for
+the TC-187 quantity vectors CG claims none (FR-014-AC-47, owned by IR-669).
 
 ## Test Procedure
 
@@ -39,16 +39,19 @@ quantity vectors).
    adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); compare each
    outcome, admitted charges and consumed counters with direct runtime
    execution, including the outcome of denying each admitted charge in turn.
+   Run each TC-187 row under its QSpec tuples adapted by FR-014-AC-6's rule
+   (only `integer_bits` adapts, to the runtime's amount at the binding event)
+   and assert the outcome kind, `limit_kind` and `charge_point` QSpec states
+   for each tuple.
    PLANNED (IR-823): run the TC-187 vectors U02, U05, U12, U14, U20 and U27 as
    their own agreement rows, with the operations and tuples FR-014-AC-6 names;
    admit the second `Length` base dimension and its root unit FR-014-AC-6
-   names for U09, and check that the generated quantity add and `lt` oracles
+   names for U09 (differing from `L` only in owner), and check that the generated quantity add and `lt` oracles
    over `1 m` and that unit each return `IllTyped { cause:
    IncompatibleDimensions }` with no admitted charge, equal to direct runtime
    execution. U06 and U11 are admission vectors with no CG oracle and are not
-   run here (Contract Runtime FR-012-AC-4 owns them). Agreement with the QSL
-   value authority is not asserted for any TC-187 vector here (FR-014-AC-47,
-   IR-823).
+   run here (Contract Runtime FR-012-AC-4 owns them). No TC-187 row asserts
+   agreement with the QSL value authority.
 5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
