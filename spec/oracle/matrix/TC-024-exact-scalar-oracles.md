@@ -36,13 +36,13 @@ the TC-187 quantity vectors CG claims none (FR-014-AC-47, owned by IR-669).
    generated source ceiling; construct invalid and incomplete body records.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute its oracles on vectors
-   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); compare each
+   adapted from QSpec TC-185, TC-186, TC-192 and TC-193, and on the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); compare each
    outcome, admitted charges and consumed counters with direct runtime
    execution, including the outcome of denying each admitted charge in turn.
-   Run each TC-187 row under its QSpec tuples adapted by FR-014-AC-6's rule
-   (only `integer_bits` adapts, to the runtime's amount at the binding event)
-   and assert the outcome kind, `limit_kind` and `charge_point` QSpec states
-   for each tuple.
+   PLANNED (IR-823): run each TC-187 row under its vector's QSpec limits
+   tuples unchanged and assert the outcome QSpec states for each tuple
+   (FR-014-AC-6); the U19, U23, U24 and U28 rows are set to QSpec's own
+   tuples.
    PLANNED (IR-823): run the TC-187 vectors U02, U05, U12, U14, U20 and U27 as
    their own agreement rows, with the operations and tuples FR-014-AC-6 names;
    admit the second `Length` base dimension and its root unit FR-014-AC-6
@@ -51,7 +51,12 @@ the TC-187 quantity vectors CG claims none (FR-014-AC-47, owned by IR-669).
    IncompatibleDimensions }` with no admitted charge, equal to direct runtime
    execution. U06 and U11 are admission vectors with no CG oracle and are not
    run here (Contract Runtime FR-012-AC-4 owns them). No TC-187 row asserts
-   agreement with the QSL value authority.
+   agreement with the QSL value authority, and no test output or doc comment
+   of the agreement suite claims one (FR-014-AC-47): PLANNED (IR-823), the
+   `TC-187 three-way agreement` print of `tc_024_tc187_quantity_oracles_agree`
+   and the `tests/exact_scalar_support/agreement.rs` module doc that places
+   the RT==QSL check in Contract Runtime's removed `conformance/qsl-agreement`
+   lane are reworded to claim runtime agreement only.
 5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
