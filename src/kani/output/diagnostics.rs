@@ -223,7 +223,11 @@ fn excerpt(bytes: &[u8], directories: &KnownDirectories<'_>) -> KaniStreamExcerp
 /// The byte offset where the kept tail of `text` starts.
 fn tail_start(text: &str) -> usize {
     let bytes = text.as_bytes();
-    let Some(least) = text.len().checked_sub(EXCERPT_LIMIT).filter(|least| *least > 0) else {
+    let Some(least) = text
+        .len()
+        .checked_sub(EXCERPT_LIMIT)
+        .filter(|least| *least > 0)
+    else {
         return 0;
     };
     let content_end = text.trim_end_matches('\n').len();
@@ -285,7 +289,10 @@ fn skip_escape(characters: &mut std::iter::Peekable<std::str::Chars<'_>>) {
             }
         }
         Some(character) if ('\u{20}'..='\u{2f}').contains(&character) => {
-            while characters.next_if(|next| ('\u{20}'..='\u{2f}').contains(next)).is_some() {}
+            while characters
+                .next_if(|next| ('\u{20}'..='\u{2f}').contains(next))
+                .is_some()
+            {}
             characters.next_if(|next| ('\u{30}'..='\u{7e}').contains(next));
         }
         Some(character) if ('\u{30}'..='\u{7e}').contains(&character) => {
@@ -317,7 +324,10 @@ fn ordered_directories(directories: &KnownDirectories<'_>) -> Vec<(String, &'sta
 
 fn opens_path(previous: Option<char>) -> bool {
     previous.is_none_or(|previous| {
-        matches!(previous, '\n' | ' ' | '\t' | '(' | '[' | '{' | '\'' | '"' | '`' | '=')
+        matches!(
+            previous,
+            '\n' | ' ' | '\t' | '(' | '[' | '{' | '\'' | '"' | '`' | '='
+        )
     })
 }
 
@@ -365,7 +375,10 @@ fn redact_paths(text: &str, directories: &KnownDirectories<'_>) -> String {
 
 /// The length of the digits at the start of `bytes`.
 fn digits(bytes: &[u8]) -> usize {
-    bytes.iter().take_while(|byte| byte.is_ascii_digit()).count()
+    bytes
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count()
 }
 
 /// The length of the RFC 3339 date-time at the start of `bytes`, or `None`.
@@ -534,4 +547,379 @@ fn process_id_span(rest: &str) -> Option<(usize, usize)> {
         .strip_prefix(") panicked")
         .filter(|_| number > 0)
         .map(|_| (rest.len() - tail.len(), number))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HOME: &str = "/h/u";
+
+    fn directories(home: Option<&'static str>) -> KnownDirectories<'static> {
+        KnownDirectories {
+            crate_directory: Path::new("/h/u/ws/crate"),
+            target_directory: Path::new("/h/u/ws/crate/target"),
+            home_directory: home.map(Path::new),
+        }
+    }
+
+    fn redacted(text: &str, home: Option<&'static str>) -> String {
+        excerpt(text.as_bytes(), &directories(home)).text
+    }
+
+    /// An excerpt of `text` with nothing in it to redact.
+    fn kept(text: &str) -> KaniStreamExcerpt {
+        excerpt(text.as_bytes(), &directories(None))
+    }
+
+    /// Every input FR-017-AC-35 names yields its stated output, one per line, in order.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_every_redaction_input_yields_its_stated_output() {
+        let pairs = [
+            ("(/h/u/ws/crate)", "(<CRATE_DIR>)"),
+            (
+                "/h/u/ws/crate/src/lib.rs:6:21",
+                "<CRATE_DIR>/src/lib.rs:6:21",
+            ),
+            (
+                "/h/u/ws/crate/target/debug/x.out",
+                "<TARGET_DIR>/debug/x.out",
+            ),
+            ("/h/u/.kani/bin", "<HOME>/.kani/bin"),
+            ("/h/u/ws/crate2/src/lib.rs", "<HOME>/ws/crate2/src/lib.rs"),
+            ("/opt/tool/bin", "<PATH>"),
+            ("https://host/x/y", "https://host/x/y"),
+            ("and/or", "and/or"),
+            ("/", "/"),
+            ("2026-10-16T22:27:04.275975036Z", "<TIMESTAMP>"),
+            ("Runtime Symex: 0.00331318s", "Runtime Symex: <DURATION>"),
+            ("Runtime Solver: 1.385e-05s", "Runtime Solver: <DURATION>"),
+            ("in 0.02s", "in <DURATION>"),
+            ("check_ttl_30s", "check_ttl_30s"),
+            ("u32s", "u32s"),
+            ("pid 4242", "pid <PID>"),
+            (
+                "thread 'main' (4242) panicked",
+                "thread 'main' (<PID>) panicked",
+            ),
+        ];
+        let input: Vec<_> = pairs.iter().map(|(input, _)| *input).collect();
+        let expected: Vec<_> = pairs.iter().map(|(_, output)| *output).collect();
+        assert_eq!(
+            redacted(&input.join("\n"), Some(HOME))
+                .lines()
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    /// A path is matched at a component boundary only, a home directory of `/` redacts nothing
+    /// as `<HOME>`, and an absent one leaves a path under it as `<PATH>`.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_known_directories_match_whole_components_and_unusable_homes_redact_nothing() {
+        let sibling = KnownDirectories {
+            crate_directory: Path::new("/x/crate"),
+            target_directory: Path::new("/x/crate/target/"),
+            home_directory: Some(Path::new("/x")),
+        };
+        let text = "/x/crate2/lib.rs /x/crate/lib.rs /x/crate/target /x/other/y /x";
+        assert_eq!(
+            excerpt(text.as_bytes(), &sibling).text,
+            "<HOME>/crate2/lib.rs <CRATE_DIR>/lib.rs <TARGET_DIR> <HOME>/other/y <HOME>"
+        );
+        let stream = "/h/u/.kani/bin /h/u/ws/crate/src/lib.rs";
+        let absent = redacted(stream, None);
+        assert_eq!(absent, "<PATH> <CRATE_DIR>/src/lib.rs");
+        assert_eq!(redacted(stream, Some("/")), absent);
+        assert_eq!(redacted(stream, Some("relative/home")), absent);
+        assert_eq!(redacted(stream, Some("")), absent);
+    }
+
+    /// A directory is tried longest first and the crate wins an equal-length tie with the home.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_the_longest_known_directory_wins_and_a_tie_goes_crate_target_home() {
+        let same = KnownDirectories {
+            crate_directory: Path::new("/a/b"),
+            target_directory: Path::new("/a/b"),
+            home_directory: Some(Path::new("/a/b")),
+        };
+        assert_eq!(excerpt(b"/a/b/c", &same).text, "<CRATE_DIR>/c");
+        let nested = KnownDirectories {
+            crate_directory: Path::new("/a/b"),
+            target_directory: Path::new("/a"),
+            home_directory: Some(Path::new("/a/b/c")),
+        };
+        assert_eq!(
+            excerpt(b"/a/b/c/d /a/z", &nested).text,
+            "<HOME>/d <TARGET_DIR>/z"
+        );
+    }
+
+    /// Redaction rules that are about boundaries: durations, process identities and timestamps.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_duration_pid_and_timestamp_rules_respect_their_boundaries() {
+        for (input, output) in [
+            ("took 5ms.", "took <DURATION>."),
+            ("1.5e+3s done", "<DURATION> done"),
+            ("0.5s", "<DURATION>"),
+            ("x1.5s", "x1.5s"),
+            ("1.2.3s", "1.2.3s"),
+            ("5sec", "5sec"),
+            ("5s_x", "5s_x"),
+            ("30m", "30m"),
+            ("subprocess 12", "subprocess 12"),
+            ("PID 7 and process 8", "PID <PID> and process <PID>"),
+            ("pid  9", "pid  9"),
+            ("pidx 9", "pidx 9"),
+            (
+                "thread 'a b' (12) panicked at",
+                "thread 'a b' (<PID>) panicked at",
+            ),
+            ("thread 'main' (x) panicked", "thread 'main' (x) panicked"),
+            ("2026-10-16T22:27:04+02:00 up", "<TIMESTAMP> up"),
+            ("2026-10-16T22:27:04 no zone", "2026-10-16T22:27:04 no zone"),
+            ("2026-13-16T22:27:04Z", "2026-13-16T22:27:04Z"),
+        ] {
+            assert_eq!(redacted(input, None), output, "{input}");
+        }
+    }
+
+    /// Escapes are removed and other control characters are replaced; invalid UTF-8 is decoded
+    /// with U+FFFD.
+    ///
+    /// Trace: FR-017-AC-34, TC-027
+    #[test]
+    fn tc_027_ansi_escapes_go_and_controls_and_invalid_bytes_become_replacement_characters() {
+        let colored = "\u{1b}[1;31merror\u{1b}[0m: \u{1b}]0;title\u{7}bad\u{1b}(Bx\tz\ry\u{7}";
+        assert_eq!(kept(colored).text, "error: badx\tz\u{fffd}y\u{fffd}");
+        assert_eq!(
+            excerpt(b"a\xffb\xc3", &directories(None)).text,
+            "a\u{fffd}b\u{fffd}"
+        );
+    }
+
+    /// A stream of exactly the limit is whole; one byte more keeps the longest line-aligned
+    /// suffix and counts what it dropped.
+    ///
+    /// Trace: FR-017-AC-34, TC-027
+    #[test]
+    fn tc_027_a_stream_at_the_limit_is_whole_and_one_over_keeps_a_line_aligned_suffix() {
+        let whole = format!("{}\n", "a".repeat(8191));
+        let at_limit = kept(&whole);
+        assert_eq!((at_limit.text.len(), at_limit.omitted_bytes), (8192, 0));
+
+        let over = format!("first\n{}\n", "b".repeat(8190));
+        assert_eq!(over.len(), 8197);
+        let tail = kept(&over);
+        assert_eq!(tail.text, format!("{}\n", "b".repeat(8190)));
+        assert_eq!(tail.omitted_bytes, 6);
+
+        let at_start = format!("{}\n{}", "c".repeat(3), "d".repeat(8192 - 1));
+        let tail = kept(&at_start);
+        assert_eq!(tail.omitted_bytes, 4);
+        assert_eq!(tail.text, "d".repeat(8191));
+    }
+
+    /// A final line over the limit is cut at a character boundary and ends at the last byte; a
+    /// 4-byte character is never split.
+    ///
+    /// Trace: FR-017-AC-34, TC-027
+    #[test]
+    fn tc_027_a_final_line_over_the_limit_is_cut_on_a_character_boundary() {
+        let long = format!("x\n{}", "y".repeat(10_000));
+        let tail = kept(&long);
+        assert_eq!(tail.text, "y".repeat(8192));
+        assert_eq!(tail.omitted_bytes, 1810);
+
+        // The cut falls inside the 4-byte character at offset 3809, so the tail starts at the
+        // next character, 3813.
+        let emoji = format!("a{}b", "\u{1f980}".repeat(3000));
+        let tail = kept(&emoji);
+        assert_eq!(tail.text, format!("{}b", "\u{1f980}".repeat(2047)));
+        assert_eq!(tail.omitted_bytes, 3813);
+    }
+
+    /// One 10000-byte line and its line feed keeps the last 8192 bytes ending in the line feed,
+    /// never an empty excerpt; a long line followed by a short last line keeps only the last.
+    ///
+    /// Trace: FR-017-AC-34, TC-027
+    #[test]
+    fn tc_027_a_long_line_with_its_line_feed_is_never_an_empty_excerpt() {
+        let one = format!("{}\n", "z".repeat(10_000));
+        let tail = kept(&one);
+        assert_eq!(tail.text.len(), 8192);
+        assert!(tail.text.ends_with('\n'));
+        assert_eq!(tail.omitted_bytes, 1809);
+
+        let last = format!("{}\nerror: last\n", "z".repeat(10_000));
+        let tail = kept(&last);
+        assert_eq!(tail.text, "error: last\n");
+        assert_eq!(tail.omitted_bytes, 10_001);
+    }
+
+    /// A stream of line feeds only is kept up to the limit; an empty stream is an empty excerpt.
+    ///
+    /// Trace: FR-017-AC-34, TC-027
+    #[test]
+    fn tc_027_a_line_feed_only_stream_is_kept_and_an_empty_one_is_empty() {
+        let tail = kept(&"\n".repeat(9000));
+        assert_eq!((tail.text.len(), tail.omitted_bytes), (8192, 808));
+        let short = kept("\n\n\n");
+        assert_eq!((short.text.as_str(), short.omitted_bytes), ("\n\n\n", 0));
+        let empty = kept("");
+        assert_eq!((empty.text.as_str(), empty.omitted_bytes), ("", 0));
+    }
+
+    /// A stream of the 8 MiB limit still yields an excerpt of at most 8192 bytes, counting the
+    /// rest as omitted.
+    ///
+    /// Trace: FR-017-AC-34, TC-027
+    #[test]
+    fn tc_027_a_stream_at_the_eight_mebibyte_limit_still_yields_a_bounded_excerpt() {
+        let line = "stream line of text that Kani printed\n";
+        let stream = line.repeat(8 * 1024 * 1024 / line.len() + 1);
+        let tail = excerpt(&stream.as_bytes()[..8 * 1024 * 1024], &directories(None));
+        assert!(tail.text.len() <= 8192);
+        assert!(tail.text.starts_with("stream line"));
+        assert_eq!(
+            usize::try_from(tail.omitted_bytes).unwrap() + tail.text.len(),
+            8 * 1024 * 1024
+        );
+    }
+
+    fn output<'a>(
+        stdout: &'a str,
+        stderr: &'a str,
+        selections: &'a [String],
+        arguments: &'a [String],
+        report_exported: bool,
+    ) -> ProcessOutput<'a> {
+        ProcessOutput {
+            stdout: stdout.as_bytes(),
+            stderr: stderr.as_bytes(),
+            selections,
+            arguments,
+            report_exported,
+            directories: directories(None),
+        }
+    }
+
+    const BANNER: &str = "Kani Rust Verifier 0.68.0 (cargo plugin)\n";
+
+    fn names(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|path| (*path).to_owned()).collect()
+    }
+
+    /// Each member takes the stage of its own segment; a member that never started is `unknown`
+    /// even beside a neighbour that reached the solver.
+    ///
+    /// Trace: FR-017-AC-36, TC-043
+    #[test]
+    fn tc_043_each_member_takes_the_phase_of_its_own_segment() {
+        let members = names(&["a::check", "b::check", "c::check"]);
+        let stdout = format!(
+            "{BANNER}Checking harness a::check...\nSolving with CaDiCaL 3.0.0\nChecking harness b::check...\n"
+        );
+        let process = output(&stdout, "", &members, &[], false);
+        let phases: Vec<_> = members.iter().map(|m| process.phase_of(m)).collect();
+        assert_eq!(
+            phases,
+            [
+                KaniFailurePhase::Solver,
+                KaniFailurePhase::Backend,
+                KaniFailurePhase::Unknown
+            ]
+        );
+        let compile = format!("{BANNER}error: Failed to execute cargo (exit status: 101).\n");
+        let process = output(&compile, "", &members, &[], false);
+        assert!(members
+            .iter()
+            .all(|m| process.phase_of(m) == KaniFailurePhase::Compile));
+    }
+
+    /// A solver line before any segment, or in another member's segment, is not the member's.
+    ///
+    /// Trace: FR-017-AC-33, TC-027
+    #[test]
+    fn tc_027_a_solver_line_outside_the_members_segment_does_not_make_it_solver() {
+        let members = names(&["a::check", "b::check"]);
+        let stdout = format!(
+            "{BANNER}Solving with CaDiCaL 3.0.0\nChecking harness a::check...\nChecking harness b::check...\nSolving with CaDiCaL 3.0.0\n"
+        );
+        let process = output(&stdout, "", &members, &[], false);
+        assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Backend);
+        assert_eq!(process.phase_of("b::check"), KaniFailurePhase::Solver);
+    }
+
+    /// `-j`, `--jobs` and `--jobs=N` make every member a segment would decide `unknown`, and
+    /// leave a member decided by another rule where it was.
+    ///
+    /// Trace: FR-017-AC-33, TC-027
+    #[test]
+    fn tc_027_parallel_jobs_make_segment_phases_unknown_but_not_compile_or_launcher() {
+        let members = names(&["a::check"]);
+        let stdout = format!("{BANNER}Checking harness a::check...\nSolving with CaDiCaL 3.0.0\n");
+        for arguments in [
+            names(&["-j", "2"]),
+            names(&["--jobs", "2"]),
+            names(&["--jobs=2"]),
+        ] {
+            let process = output(&stdout, "", &members, &arguments, false);
+            assert_eq!(
+                process.phase_of("a::check"),
+                KaniFailurePhase::Unknown,
+                "{arguments:?}"
+            );
+        }
+        let process = output(&stdout, "", &members, &names(&["--jobsx=2", "-jx"]), false);
+        assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Solver);
+        let compile = format!("{BANNER}error: Failed to execute cargo (exit status: 1)\n");
+        let process = output(&compile, "", &members, &names(&["-j", "2"]), false);
+        assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Compile);
+        let process = output("", "usage\n", &members, &names(&["-j", "2"]), false);
+        assert_eq!(process.phase_of("a::check"), KaniFailurePhase::Launcher);
+    }
+
+    /// The phase comes from the whole stream, not the excerpt: a marker 20000 bytes before the
+    /// end still decides it.
+    ///
+    /// Trace: FR-017-AC-33, TC-027
+    #[test]
+    fn tc_027_a_marker_before_the_excerpt_window_still_decides_the_phase() {
+        let members = names(&["a::check"]);
+        let stdout = format!(
+            "{BANNER}Checking harness a::check...\nSolving with CaDiCaL 3.0.0\n{}",
+            "filler line\n".repeat(2000)
+        );
+        let process = output(&stdout, "", &members, &[], false);
+        let record = process.diagnostics_of("a::check");
+        assert_eq!(record.phase, KaniFailurePhase::Solver);
+        assert!(record.stdout.omitted_bytes > 0);
+        assert!(!record.stdout.text.contains("Solving with"));
+    }
+
+    /// The record serializes as `diagnostics { phase, stdout { text, omittedBytes }, stderr {...} }`.
+    ///
+    /// Trace: FR-017-AC-35, TC-027
+    #[test]
+    fn tc_027_the_record_serializes_with_the_stated_member_names() {
+        let members = names(&["a::check"]);
+        let record = output("out\n", "", &members, &[], false).diagnostics_of("a::check");
+        assert_eq!(
+            serde_json::to_value(&record).unwrap(),
+            serde_json::json!({
+                "phase": "launcher",
+                "stdout": { "text": "out\n", "omittedBytes": 0 },
+                "stderr": { "text": "", "omittedBytes": 0 },
+            })
+        );
+    }
 }
