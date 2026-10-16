@@ -58,9 +58,18 @@ pub enum CompositeBuildError {
     PackageRead(CheckedPackageRefusal),
     /// IR reached a checked-package read ceiling.
     PackageReadLimit(CheckedPackageIncomplete),
-    /// The original application has no complete admitted Eq operand projection.
+    /// The original application has no complete admitted structural equality operand projection.
     Operands(Box<CheckedCompositeOperandError>),
-    /// The accessor returned a shape outside this graph-child Eq constructor.
+    /// The requested equality operator differs from the original application's operator.
+    OperatorMismatch {
+        /// The operator the caller requested.
+        requested: EqualityOperator,
+        /// The operator carried by the original node.
+        actual: EqualityOperator,
+    },
+    /// The selected node has no supported structural equality operation.
+    UnsupportedNodeOperation,
+    /// The accessor returned a shape outside this graph-child constructor.
     OperandShape,
     /// The owning O-09 encoder refused the preimage.
     Identity(IdentityEncodeError),
@@ -101,7 +110,14 @@ impl fmt::Display for CompositeBuildError {
                 cause.limit, cause.consumed
             ),
             Self::Operands(cause) => cause.fmt(f),
-            Self::OperandShape => f.write_str("unsupported Eq operand projection"),
+            Self::OperatorMismatch { requested, actual } => {
+                write!(
+                    f,
+                    "requested operator {requested:?} differs from original {actual:?}"
+                )
+            }
+            Self::UnsupportedNodeOperation => f.write_str("unsupported original node operation"),
+            Self::OperandShape => f.write_str("unsupported structural operand projection"),
             Self::Identity(cause) => cause.fmt(f),
             Self::Report(cause) => cause.fmt(f),
         }
@@ -110,7 +126,7 @@ impl fmt::Display for CompositeBuildError {
 
 impl std::error::Error for CompositeBuildError {}
 
-/// Immutable original proving context for the admitted graph-child `structural.eq` route.
+/// Immutable original proving context for admitted graph-child structural equality routes.
 ///
 /// The caller supplies the original admitted package and retained source, dependencies, limits
 /// and canonical proof-content identity. The content identity is a binding input, not independent
@@ -209,7 +225,7 @@ impl OriginalCompositeEqContext {
         })
     }
 
-    /// Build O-09 from the original Eq application's two authentic positional operands.
+    /// Build O-09 from the original Eq or Ne application's two authentic positional operands.
     ///
     /// Parameter positions retain only their Node bounds. Population metadata is excluded from
     /// this request. Literal graph children retain empty Bounds and hence singleton source values;
@@ -218,7 +234,8 @@ impl OriginalCompositeEqContext {
     /// Projection/encoder refusals precede recompilation: public QSL stage-limit decoding requires
     /// the genuine O-09 wire, so this boundary does not authenticate context before projection.
     /// The supplied work ceiling
-    /// bounds the IR operand projection. Unsupported operations and inline operands refuse.
+    /// bounds the IR operand projection. A requested operator absent from the original node,
+    /// unsupported operations and inline operands refuse.
     ///
     /// # Errors
     /// Returns a typed original node/occurrence, operand, encoder, request decode, recompile or
@@ -227,6 +244,7 @@ impl OriginalCompositeEqContext {
         &self,
         node: &CheckedNodeId,
         occurrence: &CheckedOccurrence,
+        operator: EqualityOperator,
         harness_bounds: &[ProofBound],
         work_limit: u64,
     ) -> Result<OriginalCompositeEqRequest, CompositeBuildError> {
@@ -234,6 +252,27 @@ impl OriginalCompositeEqContext {
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
+        // IR's operand projection validates Eq/Ne but does not return a typed operator yet.
+        // Read the selected node identity until the IR API carries that operation (IR-803).
+        let actual = self
+            .original
+            .graph()
+            .nodes
+            .iter()
+            .find(|entry| entry.node_id == *node)
+            .and_then(|entry| entry.body.pointer("/operation/identity"))
+            .and_then(serde_json::Value::as_str);
+        let actual = match actual {
+            Some("quire.op.structural.eq") => EqualityOperator::Equal,
+            Some("quire.op.structural.ne") => EqualityOperator::NotEqual,
+            Some(_) | None => return Err(CompositeBuildError::UnsupportedNodeOperation),
+        };
+        if actual != operator {
+            return Err(CompositeBuildError::OperatorMismatch {
+                requested: operator,
+                actual,
+            });
+        }
         let arguments = operands.operands.iter().map(|operand| {
             let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                 return Err(CompositeBuildError::OperandShape);
@@ -265,7 +304,7 @@ impl OriginalCompositeEqContext {
         let claim = CompositeParityClaim {
             node,
             occurrence,
-            operator: EqualityOperator::Equal,
+            operator,
             obligation_kind: preimage.obligation_kind.clone(),
             harness_bounds: harness_bounds
                 .iter()
@@ -348,7 +387,7 @@ fn origin(occurrence: &CheckedOccurrence) -> Origin {
     Origin::new(Role::new(role), occurrence.ordinal)
 }
 
-/// A constructed original Eq request. Its claim and wire cannot be mutated after construction.
+/// A constructed original equality request. Its claim and wire cannot be mutated after construction.
 pub struct OriginalCompositeEqRequest {
     wire: ReplayRequestWire,
     claim: CompositeParityClaim,

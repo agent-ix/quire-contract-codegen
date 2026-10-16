@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 
 use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
-    DomainKey, DomainKind, FiniteBound, InconclusiveCause, Integer, OperandIdentity,
-    ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
+    DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
+    OperandIdentity, ParityBoundRefusal, ProofBound, Refinement, ReplayLimits, ReplayRefusal,
     ScalarIdentityMismatch, ScalarLimits, SourceIdentity, StageLimits, SuppliedLibrary,
     TerminalValue, VerifiedShadow, VerifiedShadowResult, WireNodeId,
 };
@@ -25,7 +25,9 @@ const SOURCE: &str = "language \"ix:native\" edition \"1-draft\";\n\
     profile v = \"quire.value.complete/v1\";\n\
     record Q { x: Integer; }\n\
     function f using v(a: Sequence<Int[0, 9]>[0, 3], b: Sequence<Int[0, 9]>[0, 3]): Boolean pure { a = b }\n\
+    function n using v(a: Sequence<Int[0, 9]>[0, 3], b: Sequence<Int[0, 9]>[0, 3]): Boolean pure { a != b }\n\
     function g using v(a: Q): Boolean pure { a = Q { x: 1 } }\n\
+    function m using v(a: Q): Boolean pure { a != Q { x: 1 } }\n\
     function h using v(): Boolean pure { Q { x: 1 } = Q { x: 2 } }\n\
     function same using v(a: Q): Boolean pure { a = a }\n";
 
@@ -134,6 +136,14 @@ fn context(package: CheckedPackageV2, function: &str) -> OriginalCompositeEqCont
 }
 
 fn application(package: &CheckedPackageV2, function: &str) -> (CheckedNodeId, CheckedOccurrence) {
+    application_with_operator(package, function, "quire.op.structural.eq")
+}
+
+fn application_with_operator(
+    package: &CheckedPackageV2,
+    function: &str,
+    operator: &str,
+) -> (CheckedNodeId, CheckedOccurrence) {
     let declaration = package
         .graph()
         .nodes
@@ -158,7 +168,7 @@ fn application(package: &CheckedPackageV2, function: &str) -> (CheckedNodeId, Ch
             node.body
                 .pointer("/operation/identity")
                 .and_then(serde_json::Value::as_str)
-                == Some("quire.op.structural.eq")
+                == Some(operator)
                 && package
                     .source_map()
                     .iter()
@@ -249,7 +259,13 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
         .composite_application_operands(&node, &occurrence, 100_000)
         .unwrap();
     let request = context(package, "f")
-        .request(&node, &occurrence, &supplied_bounds, 100_000)
+        .request(
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &supplied_bounds,
+            100_000,
+        )
         .unwrap();
     assert_eq!(request.operands(), &original);
     assert_eq!(request.preimage().arguments.len(), 2);
@@ -291,7 +307,9 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
         let package = checked(SOURCE);
         let (node, occurrence) = application(&package, function);
         let original = context(package, function);
-        let baseline = original.request(&node, &occurrence, &[], 100_000).unwrap();
+        let baseline = original
+            .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
+            .unwrap();
         let bounds = baseline
             .operands()
             .operands
@@ -312,7 +330,13 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
             })
             .collect::<Vec<_>>();
         let request = original
-            .request(&node, &occurrence, &bounds, 100_000)
+            .request(
+                &node,
+                &occurrence,
+                EqualityOperator::Equal,
+                &bounds,
+                100_000,
+            )
             .unwrap();
         let mut measured_literals = 0;
         for (operand, argument) in request
@@ -361,6 +385,117 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
     }
 }
 
+/// Ne keeps the original parameter order, operator and positional O-09 arguments.
+/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[test]
+fn original_ne_parameter_operands_keep_order_and_operator() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application_with_operator(&package, "n", "quire.op.structural.ne");
+    let original = package
+        .composite_application_operands(&node, &occurrence, 100_000)
+        .unwrap();
+    let bounds = parameter_bounds(&package, &node, &occurrence);
+    let request = context(package, "n")
+        .request(
+            &node,
+            &occurrence,
+            EqualityOperator::NotEqual,
+            &bounds,
+            100_000,
+        )
+        .unwrap();
+    assert_eq!(request.operands(), &original);
+    assert_eq!(request.preimage().arguments.len(), 2);
+    for (argument, operand) in request.preimage().arguments.iter().zip(&original.operands) {
+        let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
+            panic!("graph child")
+        };
+        assert_eq!(
+            argument.identity,
+            OperandIdentity::GraphChild(WireNodeId::from_hex(&child.digest).unwrap())
+        );
+    }
+    assert_ne!(
+        request.preimage().arguments[0].identity,
+        request.preimage().arguments[1].identity
+    );
+    let obligation = parity_obligation(request.preimage()).unwrap();
+    let report = request
+        .settle_verified(VerifiedShadow {
+            success_checks: 1,
+            refinement: Refinement::NotExhausted,
+        })
+        .unwrap();
+    assert_eq!(report.sent().operator, EqualityOperator::NotEqual);
+    assert_eq!(report.sent().obligation, obligation);
+    assert_eq!(report.report().claim(), report.sent());
+    assert_eq!(
+        report.settlement().unwrap().terminal_value(),
+        TerminalValue::Tested
+    );
+}
+
+/// Ne literal graph children retain their singleton source domain and the real operation.
+/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[test]
+fn original_ne_literal_operand_keeps_empty_bounds() {
+    let package = checked(SOURCE);
+    let (node, occurrence) = application_with_operator(&package, "m", "quire.op.structural.ne");
+    let request = context(package, "m")
+        .request(&node, &occurrence, EqualityOperator::NotEqual, &[], 100_000)
+        .unwrap();
+    assert_eq!(request.operands().operands.len(), 2);
+    assert_eq!(
+        request.operands().operands[1].domain,
+        CheckedCompositeOperandDomain::Literal
+    );
+    let CheckedScalarOperandChild::GraphChild(child) = &request.operands().operands[1].child else {
+        panic!("literal graph child")
+    };
+    assert_eq!(
+        request.preimage().arguments[1].identity,
+        OperandIdentity::GraphChild(WireNodeId::from_hex(&child.digest).unwrap())
+    );
+    let Domain::Bounds(entries) = &request.preimage().arguments[1].domain else {
+        panic!("literal bounds")
+    };
+    assert!(entries.entries().is_empty());
+    let report = request
+        .settle_verified(VerifiedShadow {
+            success_checks: 1,
+            refinement: Refinement::NotExhausted,
+        })
+        .unwrap();
+    assert_eq!(report.sent().operator, EqualityOperator::NotEqual);
+    assert_eq!(report.report().claim(), report.sent());
+    assert_eq!(
+        report.settlement().unwrap().terminal_value(),
+        TerminalValue::Tested
+    );
+}
+
+/// A caller cannot select Eq for a Ne node or Ne for an Eq node.
+/// Trace: FR-033-AC-1, TC-048
+#[test]
+fn original_operator_mismatch_refuses_with_typed_operators() {
+    for (function, node_operator, requested) in [
+        ("f", EqualityOperator::Equal, EqualityOperator::NotEqual),
+        ("n", EqualityOperator::NotEqual, EqualityOperator::Equal),
+    ] {
+        let package = checked(SOURCE);
+        let identity = match node_operator {
+            EqualityOperator::Equal => "quire.op.structural.eq",
+            EqualityOperator::NotEqual => "quire.op.structural.ne",
+        };
+        let (node, occurrence) = application_with_operator(&package, function, identity);
+        assert!(matches!(
+            context(package, function).request(&node, &occurrence, requested, &[], 100_000),
+            Err(CompositeBuildError::OperatorMismatch { requested: actual_requested, actual })
+                if actual_requested == requested && actual == node_operator
+        ));
+    }
+}
+
 /// Repeated parameter positions remain distinct O-09 arguments.
 /// Trace: FR-033-AC-11, TC-048
 #[test]
@@ -368,7 +503,7 @@ fn self_comparison_keeps_two_positional_arguments() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "same");
     let request = context(package, "same")
-        .request(&node, &occurrence, &[], 100_000)
+        .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
         .unwrap();
     assert_eq!(request.preimage().arguments.len(), 2);
     assert_eq!(
@@ -427,7 +562,7 @@ fn different_semantic_package_refuses_before_invocation() {
     assert_ne!(changed.package_id(), original.package_id());
     let (node, occurrence) = application(&changed, "f");
     assert!(matches!(
-        context(changed, "f").request(&node, &occurrence, &[], 100_000),
+        context(changed, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::PackageMismatch)
     ));
 }
@@ -458,7 +593,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
     assert_eq!(changed.package_id(), checked(SOURCE).package_id());
     let (node, occurrence) = application(&changed, "f");
     assert!(matches!(
-        context(changed, "f").request(&node, &occurrence, &[], 100_000),
+        context(changed, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000),
         Err(CompositeBuildError::ContextMismatch)
     ));
 }
@@ -473,12 +608,12 @@ fn wrong_node_and_occurrence_refuse_before_invocation() {
     let mut absent = node.clone();
     absent.digest = "ff".repeat(32).into_boxed_str();
     assert!(
-        matches!(context.request(&absent, &occurrence, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::UnknownNode { .. }))
+        matches!(context.request(&absent, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::UnknownNode { .. }))
     );
     let mut wrong_occurrence = occurrence.clone();
     wrong_occurrence.ordinal = u64::MAX;
     assert!(
-        matches!(context.request(&node, &wrong_occurrence, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::MissingOccurrence { .. }))
+        matches!(context.request(&node, &wrong_occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::MissingOccurrence { .. }))
     );
 }
 
@@ -489,7 +624,7 @@ fn another_functions_node_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "g");
     let request = context(package, "f")
-        .request(&node, &occurrence, &[], 100_000)
+        .request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000)
         .unwrap();
     let obligation = parity_obligation(request.preimage()).unwrap();
     let report = request
@@ -551,7 +686,13 @@ fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
         .unwrap(),
     );
     let request = context(package, "f")
-        .request(&node, &occurrence, &bounds, 100_000)
+        .request(
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &bounds,
+            100_000,
+        )
         .unwrap();
     let obligation = parity_obligation(request.preimage()).unwrap();
     let report = request
@@ -583,7 +724,7 @@ fn original_operand_projection_obeys_work_ceiling() {
     let package = checked(SOURCE);
     let (node, occurrence) = application(&package, "f");
     assert!(
-        matches!(context(package, "f").request(&node, &occurrence, &[], 0), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::WorkLimit { limit: 0, consumed } if consumed > 0))
+        matches!(context(package, "f").request(&node, &occurrence, EqualityOperator::Equal, &[], 0), Err(CompositeBuildError::Operands(cause)) if matches!(*cause, CheckedCompositeOperandError::WorkLimit { limit: 0, consumed } if consumed > 0))
     );
 }
 
@@ -604,7 +745,7 @@ fn original_stage_limit_stops_recompile_before_invocation() {
     )
     .unwrap();
     assert!(
-        matches!(context.request(&node, &occurrence, &[], 100_000), Err(CompositeBuildError::Recompile(cause)) if matches!(*cause, qsl_replay::ReplayRefusal::Recompile(_)))
+        matches!(context.request(&node, &occurrence, EqualityOperator::Equal, &[], 100_000), Err(CompositeBuildError::Recompile(cause)) if matches!(*cause, qsl_replay::ReplayRefusal::Recompile(_)))
     );
 }
 
@@ -617,7 +758,13 @@ fn duplicate_positional_bound_refuses_without_an_obligation() {
     let mut bounds = parameter_bounds(&package, &node, &occurrence);
     bounds.push(bounds[0].clone());
     assert!(matches!(
-        context(package, "f").request(&node, &occurrence, &bounds, 100_000),
+        context(package, "f").request(
+            &node,
+            &occurrence,
+            EqualityOperator::Equal,
+            &bounds,
+            100_000
+        ),
         Err(CompositeBuildError::Identity(
             qsl_replay::IdentityEncodeError::DuplicateKey { .. }
         ))

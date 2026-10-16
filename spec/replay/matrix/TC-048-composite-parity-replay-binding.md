@@ -20,17 +20,20 @@ Public-converter controls and remaining production scenarios for
 [FR-033](../functional/FR-033-composite-parity-replay-binding.md),
 [FR-025](../../kani/functional/FR-025-generated-subject-abi.md) AC-9 and
 [FR-029](../../kani/functional/FR-029-run-outcome-terminal-record.md) AC-17 and AC-19 to AC-28. All
-completed-route checks remain GATED. IR-635's first slice exercises only the public verified Eq
-constructor with supplied verified evidence: parameter/parameter, parameter/literal, literal/literal
+completed-route checks remain GATED. IR-635's constructor slices exercise the public verified Eq/Ne
+builder with supplied verified evidence: Eq parameter/parameter, parameter/literal, literal/literal
 and repeated/self graph children, retained source and exact recompiled context, positional O-09,
 changed source, semantic package and retained/recompiled context refusals, absent-node/occurrence
 and work-ceiling refusals, literal empty-Bounds and Population filtering controls, and genuine
 QSL function-membership/unknown-Node-bound Refused reports through IR-666. QSL owns membership;
-CG checks admitted node/occurrence presence. The QSL controls supply Disagreed and measure its
+CG checks admitted node/occurrence presence. Ne parameter/parameter and parameter/literal controls
+retain the original operator and positional operands, with typed refusal when the requested
+operator differs from the original node. The QSL controls supply Disagreed and measure its
 common-step precedence; CG structural refusals occur before evidence is accepted.
 Imported contexts refuse with typed `ImportedContextUnsupported`; admitting them remains PLANNED
-until CG retains the original compile's admitted dependency packages. These are partial AC-1/AC-11 Eq-only and AC-9/AC-12 constructor controls, not generated backend
-verification or same-artifact native authentication. Ne awaits IR-690's typed accessor; AC-8's
+until CG retains the original compile's admitted dependency packages. These are partial AC-1/AC-11
+Eq/Ne and AC-9/AC-12 constructor controls, not generated backend verification or same-artifact
+native authentication. AC-8's
 complete coverage/refusal matrix, AC-6/AC-7/AC-10 production controls and FR-029 strengths remain
 planned. Literal positives are one-field `Integer` records; bounded-field narrowing literals
 (IR-691) and collection-constructor literals remain gated by IR operand projection. IR-666
