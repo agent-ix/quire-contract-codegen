@@ -27,8 +27,8 @@ bundle, inject a failure before every staged artifact write and at both swap bou
 and compare the destination plus an adjacent developer-owned file before and after each run.
 Inject a replacement failure followed by failed rollback; inspect the complete backup and staged
 bundles and require `unknown`. Reject each noncanonical artifact path form (absolute, `..`, `.` segment, empty segment, trailing
-separator, backslash) and interior-dot aliases at bundle construction, including a bundle containing
-both `a/b` and `a/./b`, with `UnsafeArtifactPath` and no destination I/O.
+separator, backslash) at bundle construction with `UnsafeArtifactPath`, including `a/./b`, and reject
+a bundle containing both `a/b` and `a/b` with `DuplicateArtifactPath`, with no destination I/O.
 
 ## Expected Results
 

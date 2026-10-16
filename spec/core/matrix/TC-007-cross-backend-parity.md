@@ -26,8 +26,9 @@ The register is this table. Each case on which two backends' normalized outcomes
 one row: the case identifier, the backend pair, and the disposition, which is either a regression
 fixture that exists in the test tree or a documented profile/backend distinction. FR-005-AC-3 fails
 when a differing case has no row, when a row names a fixture that does not exist, or when a row names
-neither disposition. No row is recorded at this revision because no TC-007 corpus run has been
-executed; the first run's differences are the first rows.
+neither disposition. No row is recorded at this revision: TC-007-tagged tests run corpus slices and assert
+agreement, but no full differential run produces a list of differing cases and no check joins that
+list against this register; the first such run's differences are the first rows.
 
 | Case | Backends | Disposition | Fixture or distinction |
 |------|----------|-------------|------------------------|

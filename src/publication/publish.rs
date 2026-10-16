@@ -285,7 +285,7 @@ mod tests {
     fn bundle(version: &str) -> ArtifactBundle {
         ArtifactBundle::new(vec![
             generated("src/generated.rs", version),
-            generated("src/generated/nested.rs", "{}\n"),
+            generated("src/generated/nested.rs", &format!("nested {version}")),
         ])
         .unwrap()
     }
@@ -299,7 +299,7 @@ mod tests {
             .collect()
     }
 
-    /// Trace: TC-001, TC-002, FR-005-AC-1, FR-005-AC-2, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3, NFR-001-M-1
+    /// Trace: TC-001, TC-002, FR-005-AC-1, FR-005-AC-2, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3
     #[test]
     fn publication_is_order_independent_and_replaces_only_its_destination() {
         let parent = temporary("replace");
@@ -357,6 +357,10 @@ mod tests {
                         fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
                         "old\n"
                     );
+                    assert_eq!(
+                        fs::read_to_string(destination.join("src/generated/nested.rs")).unwrap(),
+                        "nested old\n"
+                    );
                 } else {
                     assert!(!destination.exists());
                 }
@@ -404,7 +408,7 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3, FR-005-AC-8
+    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
     #[test]
     fn post_commit_cleanup_failure_reports_that_the_new_bundle_is_published() {
         let parent = temporary("post-commit-cleanup");
@@ -436,7 +440,52 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, FR-005-AC-6, NFR-001-AC-3
+    /// Trace: TC-002, FR-005-AC-8. The real backup-cleanup failure path: the replaced bundle's
+    /// backup holds a read-only directory, so removing it fails after the swap has committed.
+    #[cfg(unix)]
+    #[test]
+    fn real_backup_cleanup_failure_reports_published_with_both_new_artifacts() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let parent = temporary("real-backup-cleanup");
+        let destination = parent.join("generated");
+        write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
+        let locked = destination.join("src/generated");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = publish(&bundle("new\n"), &destination, PublicationFault::None);
+
+        let backups = residue(&parent);
+        let backup = parent.join(backups.first().cloned().unwrap_or_default());
+        fs::set_permissions(
+            backup.join("src/generated"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        let error = result.unwrap_err();
+        assert_eq!(error.code, PublicationErrorCode::IoFailed);
+        assert_eq!(
+            error.destination_state,
+            PublicationDestinationState::Published
+        );
+        assert_eq!(
+            fs::read_to_string(destination.join("src/generated.rs")).unwrap(),
+            "new\n"
+        );
+        assert_eq!(
+            fs::read_to_string(destination.join("src/generated/nested.rs")).unwrap(),
+            "nested new\n"
+        );
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0].contains(".quire-backup-"));
+        assert_eq!(
+            fs::read_to_string(backup.join("src/generated/nested.rs")).unwrap(),
+            "nested old\n"
+        );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    /// Trace: TC-002, FR-005-AC-1, FR-005-AC-6, FR-005-AC-10, NFR-001-AC-3
     #[test]
     fn unsafe_and_duplicate_artifact_paths_are_refused() {
         for path in [
@@ -455,6 +504,7 @@ mod tests {
                 PublicationErrorCode::UnsafeArtifactPath,
                 "{path}"
             );
+            assert_eq!(error.path, "bundle.artifacts[0].path", "{path}");
         }
         let alias_pair =
             ArtifactBundle::new(vec![generated("a/b", "x"), generated("a/./b", "y")]).unwrap_err();
