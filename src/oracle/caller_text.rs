@@ -212,7 +212,7 @@ pub fn generate_caller_text_proof_harness(
     let min = identity.min;
     let max = identity.max;
     let oracle = generated_caller_text_oracle_source(text_type)?;
-    let inputs = format!("{CALLER_TEXT_PROOF_INPUTS:?}");
+    let input_arms = caller_text_input_arms();
     let source = format!(
         r#"pub mod caller_text {{
 {oracle}
@@ -245,13 +245,15 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
 
 #[kani::proof]
 pub fn caller_text_admission_agrees() {{
-    const INPUTS: [&str; 21] = {inputs};
     let selector: u8 = kani::any();
     kani::assume(selector < 21);
-    let input = INPUTS[usize::from(selector)];
-    let payload = match rt::TextPayload::from_utf8(input.as_bytes()) {{
+    let payload = match selector {{
+{input_arms}
+        _ => {{ assert!(false, "selector is in the finite caller text class"); return; }}
+    }};
+    let payload = match payload {{
         Ok(payload) => payload,
-        Err(_) => {{ assert!(false, "constructed scalar sequence is valid UTF-8"); return; }}
+        Err(_) => {{ assert!(false, "finite caller text member is valid UTF-8"); return; }}
     }};
     let text_type = rt::TextType::new({min}, {max}, {profile}).expect("generated valid bounds");
     let mut generated_meter = unlimited_meter();
@@ -265,7 +267,7 @@ pub fn caller_text_admission_agrees() {{
 }}
 "#,
         oracle = oracle,
-        inputs = inputs,
+        input_arms = input_arms,
     );
     Ok(CallerTextProofHarness {
         identity,
@@ -298,6 +300,17 @@ fn profile_source(profile: CallerTextProfile) -> &'static str {
         CallerTextProfile::Nfkd => "rt::TextProfile::Nfkd",
         CallerTextProfile::BinaryUtf8 => "rt::TextProfile::BinaryUtf8",
     }
+}
+
+fn caller_text_input_arms() -> String {
+    CALLER_TEXT_PROOF_INPUTS
+        .iter()
+        .enumerate()
+        .map(|(selector, input)| {
+            format!("{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()),")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -496,8 +509,16 @@ mod tests {
                 assert!(source.ends_with("}\n"));
                 assert!(source.contains("let selector: u8 = kani::any();"));
                 assert!(source.contains("kani::assume(selector < 21);"));
-                assert!(source.contains("INPUTS[usize::from(selector)]"));
-                assert!(source.contains("TextPayload::from_utf8(input.as_bytes())"));
+                assert!(source.contains("let payload = match selector {"));
+                assert!(source.contains(
+                    "_ => { assert!(false, \"selector is in the finite caller text class\"); return; }"
+                ));
+                assert_eq!(source.matches("rt::TextPayload::from_utf8(").count(), 21);
+                for (selector, input) in CALLER_TEXT_PROOF_INPUTS.iter().enumerate() {
+                    assert!(source.contains(&format!(
+                        "{selector} => rt::TextPayload::from_utf8({input:?}.as_bytes()),"
+                    )));
+                }
                 assert_eq!(source.matches("kani::any()").count(), 1);
                 assert!(!source.contains("encode_utf8"));
                 assert!(source.contains("let generated = admit_caller_text("));
