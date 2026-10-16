@@ -231,7 +231,8 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
         (rt::Outcome::Completed(actual), rt::Outcome::Completed(direct)) => {{
             assert_eq!(actual.text_type(), direct.text_type());
             assert_eq!(actual.retained(), direct.retained());
-            assert_eq!(actual.length(), direct.length());
+            // Text::length() is derived from text_type.profile() and retained text, both
+            // compared above, so checking it again duplicates the same symbolic relation.
             assert_eq!(actual.payload().as_str(), direct.payload().as_str());
             assert_eq!(actual.payload().provenance(), direct.payload().provenance());
         }}

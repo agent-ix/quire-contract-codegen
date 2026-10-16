@@ -169,7 +169,7 @@ fn caller_batch_report(entries: &[CallerReportEntry<'_>]) -> String {
 
 /// Trace: FR-035-AC-4, FR-035-AC-5, FR-017-AC-26, TC-050.
 #[test]
-#[ignore = "kani lane: 12 caller proofs plus a real falsifying mutation; coordinate slot before running"]
+#[ignore = "kani lane: 12 independent caller proofs plus a real falsifying mutation"]
 fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     let mut harnesses = Vec::new();
     for profile in TextProfile::ALL {
@@ -183,29 +183,37 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     assert_eq!(harnesses.len(), 12);
 
     let root = scratch_root("all-profiles");
-    write_crate(&root, &harnesses);
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let cancel = Cancel::new();
     let crate_directory = root.join("crate");
     let target_directory = root.join("target");
-    let requests: Vec<_> = harnesses
-        .iter()
-        .map(|harness| KaniExecutionRequest {
+    // Run one obligation at a time, serially, reusing this target directory. The generated
+    // crate contains only the selected harness for each run, so compiler/backend work does not
+    // scale with all twelve caller claims being present together.
+    let mut evidence = Vec::with_capacity(harnesses.len());
+    for harness in &harnesses {
+        write_crate(&root, std::slice::from_ref(harness));
+        let request = KaniExecutionRequest {
             cancel: &cancel,
             installation: &installation,
             harness: KaniExecutableHarness::from(harness),
             crate_directory: &crate_directory,
             target_directory: &target_directory,
-        })
-        .collect();
-    let groups = execute_kani_obligations(&requests).expect("caller batch executes");
-    let evidence = groups
-        .into_iter()
-        .flat_map(|group| group.evidence.expect("batch report classifies"))
-        .collect::<Vec<_>>();
+        };
+        evidence.push(execute_kani_obligation(&request).expect("caller proof executes"));
+    }
     assert_eq!(evidence.len(), 12);
     for (harness, evidence) in harnesses.iter().zip(evidence) {
-        assert_eq!(evidence.outcome, KaniRunOutcome::Verified);
+        let selected_path = harness.identity.harness_path().to_string();
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Verified,
+            "profile {:?} bounds {}..={} observed memory {:?}",
+            harness.identity.caller_claim.profile,
+            harness.identity.caller_claim.min,
+            harness.identity.caller_claim.max,
+            evidence.memory
+        );
         assert_eq!(evidence.kind, None);
         assert_eq!(
             evidence.caller_text_claim,
@@ -213,11 +221,13 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
         );
         assert_eq!(
             evidence.selected_harness_path.as_deref(),
-            Some(harness.identity.harness_path().to_string().as_str())
+            Some(selected_path.as_str())
         );
-        assert!(evidence.batch.as_ref().is_some_and(|batch| batch
-            .members
-            .contains(&harness.identity.harness_path().to_string())));
+        assert!(evidence.batch.is_none(), "each proof runs independently");
+        assert!(evidence
+            .arguments
+            .windows(2)
+            .any(|pair| pair[0] == "--harness" && pair[1] == selected_path));
         assert!(evidence.success_checks >= 2, "agreement and cover hold");
     }
 
@@ -234,13 +244,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
     let changed_call = "let widened = rt::TextType::new(0, 8, text_type.profile()).expect(\"mutation\");\n    rt::admit_text(operand, &widened, meter)";
     assert_eq!(mutated.rust.contents.matches(original_call).count(), 1);
     mutated.rust.contents = mutated.rust.contents.replace(original_call, changed_call);
-    let mut mutated_group = harnesses.clone();
-    let selected_position = mutated_group
-        .iter()
-        .position(|harness| harness.identity == selected.identity)
-        .expect("selected harness is in the batch");
-    mutated_group[selected_position] = mutated.clone();
-    write_crate(&root, &mutated_group);
+    write_crate(&root, std::slice::from_ref(&mutated));
     let mutation = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
@@ -265,7 +269,7 @@ fn tc_050_real_kani_proves_all_caller_text_profiles_and_falsifies_mutation() {
         Some(selected.identity.harness_path().to_string().as_str())
     );
 
-    write_crate(&root, &harnesses);
+    write_crate(&root, std::slice::from_ref(selected));
     let restored = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
