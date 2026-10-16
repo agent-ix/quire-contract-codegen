@@ -119,7 +119,7 @@ pub use oracle::bound_v1::{
 };
 
 pub use crate::core::identity::{HarnessPath, HarnessSymbol, ModuleSymbol, SymbolError};
-pub use crate::core::profile::RUNTIME_DEPENDENCY_SOURCE;
+pub use crate::core::profile::{EXACT_DEPENDENCY_SOURCE, RUNTIME_DEPENDENCY_SOURCE};
 pub use core::contract_package::{
     routed_contract_lowering_profile, AdmittedItemAccounting, ContractDriverResultSelection,
     ContractRequestPosition, PackageRequestError,

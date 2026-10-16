@@ -26,9 +26,10 @@ mod generated {
 }
 
 use quire_contract_runtime::exact as rt;
+use quire_exact as exact;
 use std::num::NonZeroU64;
 
-const UNLIMITED: rt::ScalarLimits = rt::ScalarLimits {
+const UNLIMITED: exact::ScalarLimits = exact::ScalarLimits {
     integer_bits: u64::MAX,
     decimal_digits: u64::MAX,
     scale_expansion: u64::MAX,
@@ -58,25 +59,26 @@ fn empty_objects() -> rt::ObjectEnvironment {
 fn direct_package() -> rt::CheckedPackage {
     fn add_body() -> rt::Body {
         Box::new(
-            |frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {
+            |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
                 let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {
-                    return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);
+                    return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
+                        cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
+                    });
                 };
                 match frame.meter(|meter| {
-                    rt::evaluate_integer_arithmetic(
-                        rt::IntegerArithmetic::Add(left, right),
+                    exact::evaluate_integer_arithmetic(
+                        exact::IntegerArithmetic::Add(left, right),
                         None,
                         meter,
                     )
                 }) {
-                    Ok(rt::Outcome::Completed(value)) => {
-                        rt::Outcome::Completed(rt::Value::Integer(value))
+                    Ok(exact::Outcome::Completed(value)) => {
+                        exact::Outcome::Completed(rt::Value::Integer(value))
                     }
-                    Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),
-                    Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),
-                    Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),
-                    Err(refusal) => rt::Outcome::Refused(refusal),
-                    Ok(_) => unreachable!("Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                    Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),
+                    Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),
+                    Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),
+                    Err(refusal) => exact::Outcome::Refused(refusal),
                 }
             },
         )
@@ -118,9 +120,11 @@ fn direct_package() -> rt::CheckedPackage {
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
             body: Box::new(
-                |frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {
+                |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
                     let [left, right] = args else {
-                        return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);
+                        return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {
+                            cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch,
+                        });
                     };
                     let environment = rt::TypeEnvironment::new(
                         Vec::new(),
@@ -135,16 +139,15 @@ fn direct_package() -> rt::CheckedPackage {
                         )
                         .expect("Integer/Integer Equal admits");
                     match frame.meter(|meter| checked.evaluate(left, right, meter)) {
-                        Ok(rt::Outcome::Completed(value)) => {
-                            rt::Outcome::Completed(rt::Value::Boolean(value))
+                        Ok(exact::Outcome::Completed(value)) => {
+                            exact::Outcome::Completed(rt::Value::Boolean(value))
                         }
-                        Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),
-                        Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),
-                        Ok(rt::Outcome::Incomplete(incomplete)) => {
-                            rt::Outcome::Incomplete(incomplete)
+                        Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),
+                        Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),
+                        Ok(exact::Outcome::Incomplete(incomplete)) => {
+                            exact::Outcome::Incomplete(incomplete)
                         }
-                        Err(refusal) => rt::Outcome::Refused(refusal),
-                        Ok(_) => unreachable!("Outcome gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
+                        Err(refusal) => exact::Outcome::Refused(refusal),
                     }
                 },
             ),
@@ -160,7 +163,7 @@ fn direct_package() -> rt::CheckedPackage {
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
             body: Box::new(
-                |frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {
+                |frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {
                     frame.call("add_fn", args)
                 },
             ),
@@ -187,7 +190,7 @@ fn direct_package() -> rt::CheckedPackage {
 /// fields alone, which is not what AC-2 is asking to compare.
 fn call_debug(package: &rt::CheckedPackage, function: &str, arguments: Vec<rt::Value>) -> String {
     let objects = empty_objects();
-    let mut meter = rt::Meter::new(UNLIMITED);
+    let mut meter = exact::Meter::new(UNLIMITED);
     let outcome = package
         .call(function, arguments, &objects, &mut meter)
         .map(|evaluation| evaluation.outcome);
@@ -212,7 +215,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
             rt::Value::Integer(3i64.into()),
         ];
         let direct_result = call_debug(&direct, "add_fn", args.clone());
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let generated_result =
             generated::oracle_add_fn(
                 &generated, args, &objects, &mut meter,
@@ -231,7 +234,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
     for (a, b) in [(5i64, 5i64), (5i64, 6i64)] {
         let args = vec![rt::Value::Integer(a.into()), rt::Value::Integer(b.into())];
         let direct_result = call_debug(&direct, "eq_fn", args.clone());
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let generated_result =
             generated::oracle_eq_fn(
                 &generated, args, &objects, &mut meter,
@@ -253,7 +256,7 @@ fn tc_031_ac2_generated_oracle_agrees_with_direct_runtime_call() {
             rt::Value::Integer(8i64.into()),
         ];
         let direct_result = call_debug(&direct, "call_fn", args.clone());
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let generated_result =
             generated::oracle_call_fn(
                 &generated, args, &objects, &mut meter,
@@ -293,7 +296,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
 
     // Arity: add_fn takes 2 arguments.
     {
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let result =
             generated::oracle_add_fn(
                 &generated,
@@ -313,7 +316,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
 
     // WrongValueKind: add_fn's first parameter is Integer, not Boolean.
     {
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let result =
             generated::oracle_add_fn(
                 &generated,
@@ -333,9 +336,9 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     // dangling reference -- see this test's own doc comment for why
     // `DanglingReference` itself is untested here.
     {
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let dangling = rt::ObjectReference::new(
-            rt::UniverseIdentity::new(b"universe").expect("universe identity"),
+            exact::UniverseId::from_digest([6; 32]),
             rt::NodeKey::from_bytes([7; 32]),
             rt::ObjectIdentity::new(b"object").expect("object identity"),
         );
@@ -359,7 +362,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
     // UnknownFunction: driven directly, since no generated oracle exists
     // for an undeclared name.
     {
-        let mut meter = rt::Meter::new(UNLIMITED);
+        let mut meter = exact::Meter::new(UNLIMITED);
         let result = generated.call("does_not_exist_anywhere", Vec::new(), &objects, &mut meter);
         assert!(
             matches!(result, Err(rt::InputRefusal::UnknownFunction(name)) if name == "does_not_exist_anywhere")
@@ -377,7 +380,7 @@ fn tc_031_ac4_input_refusal_surfaces_unchanged_before_any_charge() {
 fn tc_031_ac5_arity_is_decided_before_value_kind() {
     let generated = generated::checked_package().expect("generated package admits");
     let objects = empty_objects();
-    let mut meter = rt::Meter::new(UNLIMITED);
+    let mut meter = exact::Meter::new(UNLIMITED);
     let result =
         generated::oracle_add_fn(
             &generated,
@@ -401,11 +404,11 @@ fn tc_031_ac5_arity_is_decided_before_value_kind() {
 fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied() {
     let generated = generated::checked_package().expect("generated package admits");
     let objects = empty_objects();
-    let denial = rt::InjectedDenial {
-        point: rt::ChargePoint::FunctionCall,
+    let denial = exact::InjectedDenial {
+        point: exact::ChargePoint::FunctionCall,
         occurrence: NonZeroU64::new(1).unwrap(),
     };
-    let mut meter = rt::Meter::new(UNLIMITED).with_injected_denial(denial);
+    let mut meter = exact::Meter::new(UNLIMITED).with_injected_denial(denial);
     let result =
         generated::oracle_add_fn(
             &generated,
@@ -417,8 +420,8 @@ fn tc_031_ac9_denial_at_function_call_yields_incomplete_with_no_charge_applied()
             &mut meter,
         );
     match result {
-        Ok(rt::Outcome::Incomplete(incomplete)) => {
-            assert_eq!(incomplete.charge_point, rt::ChargePoint::FunctionCall);
+        Ok(exact::Outcome::Incomplete(incomplete)) => {
+            assert_eq!(incomplete.charge_point, exact::ChargePoint::FunctionCall);
         }
         other => panic!("expected Ok(Outcome::Incomplete(..)) naming function.call, got {other:?}"),
     }

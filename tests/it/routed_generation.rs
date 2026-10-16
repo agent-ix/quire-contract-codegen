@@ -1254,9 +1254,8 @@ fn tc_033_routed_operand_refusals_leave_healthy_sibling_unchanged() {
 
     let mut builder = package::qsl_shaped_package();
     let integer = package::key(package::T_INTEGER);
-    let division_law = package::integer_division_definition(
-        quire_contract_runtime::exact::DivisionProfile::Truncating,
-    );
+    let division_law =
+        package::integer_division_definition(quire_exact::DivisionProfile::Truncating);
     builder.select_definition(division_law.clone());
     let division = package::application(
         "binary",

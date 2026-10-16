@@ -222,6 +222,7 @@ fn public_composite_fixture() -> PublicCompositeFixture {
         state_environment: StateEnvironment::new(Vec::new()),
         accounting_limits: limits(),
         stage_limits: Default::default(),
+        supplied_limits: None,
         declared_domains: Vec::new(),
         byte_provision: vec![(
             Some(digest.domain().as_str().to_owned()),
@@ -321,10 +322,11 @@ fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
     else {
         panic!("expected F-4 admission, got {:?}", bound.result());
     };
-    assert_eq!(incomplete.limit, 0);
-    assert_eq!(incomplete.limit_kind.as_str(), "value_occurrences");
-    assert_eq!(incomplete.consumed, 0);
-    assert_eq!(incomplete.next_charge, Integer::from(2_i64));
+    let limit = incomplete.limit().expect("admission stopped at a limit");
+    assert_eq!(limit.limit, 0);
+    assert_eq!(limit.limit_kind.field(), "value_occurrences");
+    assert_eq!(incomplete.context.consumed, 0);
+    assert_eq!(limit.next_charge, 2);
     assert_eq!(
         bound.terminal_value(),
         TerminalValue::Incomplete(qsl_replay::IncompleteCause::ResourceExhausted)

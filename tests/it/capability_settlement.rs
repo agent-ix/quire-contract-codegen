@@ -1474,9 +1474,8 @@ fn kani_selected_division_preserves_exact_renderer_refusal() {
     const DIVISION_NARROW: u32 = 9_301_102;
     let mut builder = package::qsl_shaped_package();
     let integer = package::key(package::T_INTEGER);
-    let division_law = package::integer_division_definition(
-        quire_contract_runtime::exact::DivisionProfile::Truncating,
-    );
+    let division_law =
+        package::integer_division_definition(quire_exact::DivisionProfile::Truncating);
     builder.select_definition(division_law.clone());
     builder.application_bounded(
         DIVISION,

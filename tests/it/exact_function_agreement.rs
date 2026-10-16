@@ -134,7 +134,11 @@ fn tc_031_ac17_location_map_origin_confirmed_against_runtime_check_refusal() {
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: declaration.name != "add_fn",
-            body: Box::new(|_frame, _args| rt::Outcome::Refused(rt::Refusal::CheckedInvariant)),
+            body: Box::new(|_frame, _args| {
+                quire_exact::Outcome::Refused(quire_exact::Refusal::CheckedInvariant {
+                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
+                })
+            }),
         })
         .collect();
     // `CheckedPackage` carries no `Debug` impl, so `expect_err` (which

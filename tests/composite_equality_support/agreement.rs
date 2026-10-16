@@ -3,8 +3,8 @@
 //!
 //! Adapted from `exact_scalar_support/agreement.rs`: a vector body is
 //! written once as unqualified calls; [`agree2!`] evaluates it with
-//! `quire_contract_runtime::exact` in scope and evaluates the generated
-//! oracle with the runtime in scope. Every evaluation is run under the same
+//! the Contract Runtime composite API and the exact kernel in scope, then
+//! evaluates the generated oracle. Every evaluation is run under the same
 //! limits and then re-run with each admitted charge denied in turn. The
 //! two `Debug` renderings must be identical.
 //!
@@ -126,7 +126,11 @@ macro_rules! shared_helpers {
                 .iter()
                 .map(|kind| meter.consumed(*kind))
                 .collect();
-            (outcome, meter.admitted_charges().to_vec(), consumed)
+            (
+                outcome,
+                meter.admitted_charges().iter().map(|charge| charge.point).collect(),
+                consumed,
+            )
         }
 
         /// Deny each admitted charge occurrence in turn, discovered
@@ -144,7 +148,7 @@ macro_rules! shared_helpers {
         ) -> Vec<(ChargePoint, u64, Outcome<bool>, Vec<u64>)> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
-            let charges = meter.admitted_charges().to_vec();
+            let charges = meter.admitted_charges().iter().map(|charge| charge.point).collect::<Vec<_>>();
             let mut seen: Vec<ChargePoint> = Vec::new();
             charges
                 .into_iter()
@@ -454,7 +458,13 @@ macro_rules! shared_helpers {
             };
             let checked = match environment.check_equality(operator, left_operand, right_operand) {
                 Ok(checked) => checked,
-                Err(_) => return Outcome::Refused(Refusal::CheckedInvariant),
+                Err(error) => {
+                    return Outcome::Refused(Refusal::CheckedInvariant {
+                        cause: quire_exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {
+                            cause: error.cause,
+                        },
+                    })
+                }
             };
             checked.evaluate(left_value, right_value, meter)
         }
@@ -463,6 +473,11 @@ macro_rules! shared_helpers {
 
 pub mod rt_side {
     pub use quire_contract_runtime::exact::*;
+    pub use quire_exact::{
+        admit_text, CardinalityBound, ChargePoint, CollectionKind, Decimal, DecimalType,
+        InjectedDenial, Integer, IntegerInterval, LimitKind, Meter, Outcome, Rational,
+        RationalDomain, Refusal, RoundingMode, ScalarLimits, TextPayload, TextProfile, TextType,
+    };
     shared_helpers!();
 
     /// The base package's `Example.Phase` declaration, under its node key

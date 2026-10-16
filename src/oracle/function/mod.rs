@@ -149,6 +149,7 @@ use quire_contract_model::{
     ContractPackageReadResult, ContractPackageV1, ContractPackageWireV1, ContractReachedClosureV1,
 };
 use quire_contract_runtime::exact as rt;
+use quire_exact::{Outcome, Refusal};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1813,7 +1814,7 @@ impl BinaryIntegerOperator {
         }
     }
 
-    /// The `rt::IntegerArithmetic` variant this operator renders as.
+    /// The `exact::IntegerArithmetic` variant this operator renders as.
     fn variant(self) -> &'static str {
         match self {
             Self::Add => "Add",
@@ -2353,7 +2354,11 @@ pub fn generate_exact_function_oracles(
             ieee_requirements: Vec::new(),
             integer_division_consumers: Vec::new(),
             measure_discharged: true,
-            body: Box::new(|_frame, _args| rt::Outcome::Refused(rt::Refusal::CheckedInvariant)),
+            body: Box::new(|_frame, _args| {
+                Outcome::Refused(Refusal::CheckedInvariant {
+                    cause: quire_exact::CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
+                })
+            }),
         })
         .collect();
 
@@ -2803,10 +2808,12 @@ const SOURCE_HEADER: &str = "\
 // already-checked package and returns its `Outcome<Value>` unchanged; it
 // never reads `Evaluation.location` or `.losses`, since the runtime
 // never populates either field. No charge amount and no literal `Outcome`/
-// `Value` constant standing in for a runtime result appears in this source:
-// every charge and every result comes from the runtime.
+// `Value` constant standing in for an evaluated result appears in this source:
+// the runtime owns function-call charges, while `quire-exact` owns scalar
+// arithmetic charges and outcomes within function bodies.
 
 use quire_contract_runtime::exact as rt;
+use quire_exact as exact;
 ";
 
 #[derive(Default)]
@@ -2822,8 +2829,8 @@ impl SourceBuilder {
              package: &rt::CheckedPackage,\n    \
              arguments: Vec<rt::Value>,\n    \
              objects: &rt::ObjectEnvironment,\n    \
-             meter: &mut rt::Meter,\n\
-             ) -> Result<rt::Outcome<rt::Value>, rt::InputRefusal> {{\n    \
+             meter: &mut exact::Meter,\n\
+             ) -> Result<exact::Outcome<rt::Value>, rt::InputRefusal> {{\n    \
              package\n        \
              .call({:?}, arguments, objects, meter)\n        \
              .map(|evaluation| evaluation.outcome)\n}}\n",
@@ -2883,17 +2890,16 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
         ClassifiedBody::Scalar(operator) => {
             let variant = operator.variant();
             format!(
-                "|frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {{\n        \
+                "|frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {{\n        \
                  let [rt::Value::Integer(left), rt::Value::Integer(right)] = args else {{\n            \
-                 return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);\n        }};\n        \
-                 let evaluated = frame.meter(|meter| rt::evaluate_integer_arithmetic(rt::IntegerArithmetic::{variant}(left, right), None, meter));\n        \
+                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
+                 let evaluated = frame.meter(|meter| exact::evaluate_integer_arithmetic(exact::IntegerArithmetic::{variant}(left, right), None, meter));\n        \
                  match evaluated {{\n            \
-                 Ok(rt::Outcome::Completed(value)) => rt::Outcome::Completed(rt::Value::Integer(value)),\n            \
-                 Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),\n            \
-                 Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
-                 Err(refusal) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(_) => rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
+                 Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Integer(value)),\n            \
+                 Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),\n            \
+                 Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
+                 Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
+                 Err(refusal) => exact::Outcome::Refused(refusal),\n            \
                  }}\n    }}"
             )
         }
@@ -2903,35 +2909,34 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
                 EqualityOperatorKind::NotEqual => "rt::EqualityOperator::NotEqual",
             };
             format!(
-                "|frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {{\n        \
+                "|frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {{\n        \
                  let [left, right] = args else {{\n            \
-                 return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);\n        }};\n        \
+                 return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedArgumentShapeMismatch }});\n        }};\n        \
                  let operand_type = match left {{\n            \
                  rt::Value::Boolean(_) => rt::ValueType::Boolean,\n            \
                  rt::Value::Integer(_) => rt::ValueType::Integer,\n            \
-                 _ => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
+                 _ => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedOperandKindUnsupported }}),\n        \
                  }};\n        \
                  let environment = match rt::TypeEnvironment::new(Vec::new(), core::iter::empty::<rt::ObjectTypeDeclaration>()) {{\n            \
                  Ok(environment) => environment,\n            \
-                 Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
+                 Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEnvironmentRejected }}),\n        \
                  }};\n        \
                  let checked = match environment.check_equality({path}, rt::EqualityOperand::typed(operand_type.clone()), rt::EqualityOperand::typed(operand_type)) {{\n            \
                  Ok(checked) => checked,\n            \
-                 Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
+                 Err(error) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant {{ cause: exact::CheckedInvariantCause::GeneratedEqualityCheckRejected {{ cause: error.cause }} }}),\n        \
                  }};\n        \
                  match frame.meter(|meter| checked.evaluate(left, right, meter)) {{\n            \
-                 Ok(rt::Outcome::Completed(value)) => rt::Outcome::Completed(rt::Value::Boolean(value)),\n            \
-                 Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),\n            \
-                 Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),\n            \
-                 Err(refusal) => rt::Outcome::Refused(refusal),\n            \
-                 Ok(_) => rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n        \
+                 Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Boolean(value)),\n            \
+                 Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),\n            \
+                 Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),\n            \
+                 Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),\n            \
+                 Err(refusal) => exact::Outcome::Refused(refusal),\n            \
                  }}\n    }}"
             )
         }
         ClassifiedBody::Call(callee) => {
             format!(
-                "|frame: &rt::Frame, args: &[rt::Value]| -> rt::Outcome<rt::Value> {{\n        \
+                "|frame: &rt::Frame, args: &[rt::Value]| -> exact::Outcome<rt::Value> {{\n        \
                  frame.call({callee:?}, args)\n    }}"
             )
         }

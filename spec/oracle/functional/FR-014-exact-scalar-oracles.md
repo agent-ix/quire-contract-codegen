@@ -20,9 +20,9 @@ relationships:
 
 When a caller supplies an admitted `quire.checked-package/v2` package and a set
 of scalar expression nodes, the code generator shall emit a deterministic Rust
-oracle crate whose functions evaluate each node by calling the
-Contract Runtime `exact` operators and metering. It never approximates a
-scalar family through another family and never copies a resource charge.
+oracle crate whose functions evaluate each node through its owning `quire-exact`
+operator or Contract Runtime residue operator and kernel metering. It never
+approximates a scalar family through another family or copies a resource charge.
 
 FR-014 is the one oracle generator for every family it covers, the Boolean
 connectives and the bounded-integer comparisons included
@@ -30,14 +30,14 @@ connectives and the bounded-integer comparisons included
 Q2). Its composite/structural equality sibling is
 [FR-018](./FR-018-composite-equality-oracles.md).
 
-FR-014 owns the integer and Boolean `eq` and `ne` nodes. Their oracles call the
-runtime's one equality relation, `TypeEnvironment::check_equality` followed by
-`CheckedEquality::evaluate`, as FR-018's oracles do, and return its
-`Outcome<bool>` unchanged; no oracle compares two values itself. A Boolean
-connective's oracle calls `exact::evaluate_boolean` with the matching
-`BooleanConnective` when both operands are decided values, and
-`exact::evaluate_boolean_short_circuit` when its right operand is itself an
-oracle that may stop, and returns the runtime's `Outcome<bool>` unchanged.
+FR-014 owns the planned derivation of integer and Boolean `eq` and `ne` nodes
+(FR-014-AC-35 through AC-37). Their kernel-evaluated equality oracles shall
+delegate to `quire_exact::planned_equality` and return its `Outcome<bool>`.
+The existing Boolean V1 path evaluates expressions without arithmetic through
+native Boolean operators. When an expression contains arithmetic, its oracle
+evaluates children in order, carries the first stop, and calls
+`quire_exact::retain_boolean` once for a completed connective result; a stopped
+child causes no connective result-retain charge (FR-031-AC-26).
 
 The checked-package expression route includes catalogued text comparisons. Text
 admission is a separate caller-ingress operation: a caller constructs a
@@ -234,7 +234,8 @@ otherwise.
 ## Outputs
 
 - A generated crate: `Cargo.toml` (`publish = false`, the Contract Runtime
-  dependency this repository's `Cargo.toml` names, with the `exact` feature) and `src/lib.rs` with one oracle function
+  dependency this repository's `Cargo.toml` names, with the `exact` feature, and a direct
+  `quire-exact` dependency from the same kernel source as this repository) and `src/lib.rs` with one oracle function
   per supported item.
 - A coverage-probe source map for the generated crate.
 - `derive_exact_scalar_items`: one `Result<ExactScalarItem, ExactScalarRefusal>`
@@ -263,6 +264,14 @@ otherwise.
   the admission guarantees, the generator shall emit an oracle function that
   calls the runtime operator named by the descriptor with a caller-supplied
   `Meter`.
+- An `IntegerDivision` descriptor selects its law from the node's admitted
+  `operation.laws` and exposes only the quotient through
+  `quire_exact::divide(profile, DivisionMember::Quotient, ...)`. Its oracle
+  returns `Outcome<Integer>`: only that quotient is checked against the
+  declared domain and only one division call is charged. The separate
+  `IntegerModulo` descriptor remains Euclidean, and `integer.rem` derivation
+  remains refused. Recomputing both division members would change the
+  outcome and meter counters and is not this operation.
 - If a requested item fails any of the checks this requirement states, then
   the generator shall return the `ExactScalarRefusal` variant naming that
   failure — see `ExactScalarRefusal` for the closed set of checks and their
@@ -388,13 +397,13 @@ otherwise.
 - How `negotiate` reports an `ExactScalarRefusal` of either new kind is FR-015's
   (FR-015-AC-50).
 - When a node is a Boolean connective (`and`, `or`, `not`, `implies`), the
-  generator shall derive its descriptor and generate an oracle that calls
-  `exact::evaluate_boolean` or, where the right operand may stop,
-  `exact::evaluate_boolean_short_circuit`, and returns its `Outcome<bool>`.
+  generator shall derive its descriptor and generate an `Outcome<bool>` oracle.
+  The native Boolean-only V1 path uses its existing operators; an arithmetic-bearing
+  connective shall carry the first child stop and call `quire_exact::retain_boolean`
+  exactly once for a completed result, never after a child stops (FR-031-AC-26).
 - When a node is an integer or Boolean `eq` or `ne`, the generator shall derive
-  its descriptor and generate an oracle that calls
-  `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` and returns
-  its `Outcome<bool>`.
+  its descriptor and generate a kernel-evaluated oracle that calls
+  `quire_exact::planned_equality` and returns its `Outcome<bool>`.
 - The generator shall emit, for each oracle, one evaluation-entry probe on its
   function-entry line and one entry-token probe inside the exact source region
   of each implication consequent, and shall declare the consequent count
@@ -419,13 +428,13 @@ otherwise.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-014-AC-1 | Every requested item receives exactly one generated or typed-refused disposition, and a refused item contributes no generated function while its siblings are generated unchanged. | Test (TC-024) |
-| FR-014-AC-2 | Integer (add, subtract, multiply, negate, truncating/floor/Euclidean division, modulo), rational, ordering, decimal, IEEE arithmetic/comparison/width conversion, text comparison, enum comparison, and quantity arithmetic/comparison/conversion descriptors for admitted checked-package expression nodes each generate a function calling the matching runtime `exact` operator. | Test (TC-024) |
+| FR-014-AC-2 | Integer (add, subtract, multiply, negate, truncating/floor/Euclidean quotient-only division, modulo), rational, ordering, decimal, IEEE arithmetic/comparison/width conversion, text comparison, enum comparison, and quantity arithmetic/comparison/conversion descriptors for admitted checked-package expression nodes each generate a function calling the matching owning `quire-exact` or Contract Runtime residue operator. Integer division passes `DivisionMember::Quotient` once, returns `Outcome<Integer>`, and does not reconstruct a quotient/remainder pair. | Test (TC-024) |
 | FR-014-AC-3 | A descriptor whose arity, result or operand scalar type disagrees with the lowered node, a node that is not a lowered scalar expression, a node that is unbounded, has an invalid or incomplete body, or exhausts lowering work, or a node id requested more than once, is refused with a typed reason. | Test (TC-024) |
 | FR-014-AC-4 | Generated bytes are identical across repeated runs and across permutations of the request order; the generated crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`, its `claim-map.json` equals the returned claim map, every generated claim's oracle symbol is defined in `src/lib.rs`, and claim-map entries are ordered by node id. | Test (TC-024) |
 | FR-014-AC-5 | Every claim-map entry carries the node id, IR id, package id, source map, claims, bounds and operation identity of its item. | Test (TC-024) |
-| FR-014-AC-6 | Executing generated oracles on the QSpec TC-185, TC-186, TC-187, TC-192 and TC-193 vectors yields outcomes, charges and consumed counters equal to direct runtime execution and to the QSL value authority. | Test (TC-024) |
+| FR-014-AC-6 | Executing generated oracles on the QSpec TC-185, TC-186, TC-187, TC-192 and TC-193 vectors yields outcomes, charges and consumed counters equal to direct owning-kernel or Contract Runtime residue execution and to the QSL value authority. For each admitted integer division profile, the comparison uses the single quotient member with its own domain/refusal and one call's charges; a remainder outside the domain cannot refuse an in-domain quotient. | Test (TC-024) |
 | FR-014-AC-7 | Composite, collection, function, model, relation, state, temporal and protocol nodes are refused with their blocked or unsupported reason and never reported as generated. | Test (TC-024) |
-| FR-014-AC-8 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
+| FR-014-AC-8 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature and the direct authoritative `quire-exact` dependency, contains no charge amount (every charge comes from its owning implementation), resolves one exact kernel and compiles. | Test (TC-024) |
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
 | FR-014-AC-10 | A descriptor parameter whose admitted bound is missing, repeated or unequal to the reachable `bounded_domain` node, an operand that is neither a literal nor a reference, and a literal quantity operand, are each refused by CG with a typed reason. A malformed bound with a noncanonical integer endpoint such as `05` is refused by Contract IR's strict checked-package reader before CG receives an admitted item; CG retains its defensive typed `UnreadableBound` refusal for an admitted bound it cannot decode. Contract IR's FR-038 "Mode" reader rule also refuses a bare Float32 addition authored with the non-exact `nearest-even` mode and no `float_rounding` type pin as `invalid_package`/`operation-mode-type-mismatch` at `operation.mode/value`, before CG can classify a missing rounding bound. | Test (TC-024) |
 | FR-014-AC-11 | A claim whose descriptor passes every check this requirement states, and whose descriptor agrees with the node's catalogued `operation.identity`, law definition and mode value, marks its operation `ir_confirmed`. An item refused by any of those checks is `caller_declared` even where its operation agrees. | Test (TC-024) |
@@ -452,9 +461,9 @@ otherwise.
 | FR-014-AC-32 | A node that narrowing conversions narrow to two distinct bounds (`[10, 29]` and `[0, 40]`) is refused as `AmbiguousBound`, in generation and in derivation. | Test (TC-024) |
 | FR-014-AC-33 | A node narrowed to a `text_bounds` bound over Integer, or to an `integer_range` over Rational, is refused as `MissingBound` naming Integer and `integer_range`, in generation and in derivation. | Test (TC-024) |
 | FR-014-AC-34 | A node that a narrowing conversion and a node that is not a narrowing conversion both consume (`x + 2` narrowed to `Int[0, 11]` and an operand of `(x + 2) + x`) is refused as `AmbiguousBound`, in generation and in derivation, while `x + 1`, consumed only by its narrowing, generates. | Test (TC-024) |
-| FR-014-AC-35 | Boolean `and`, `or`, `not`, `implies`, `eq` and `ne` nodes and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` nodes each derive a descriptor and generate an `ir_confirmed` oracle; each connective's oracle calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and each `eq`/`ne` oracle calls `check_equality` and `CheckedEquality::evaluate`, each returning `Outcome<bool>`. | Test (TC-024) |
+| FR-014-AC-35 | PLANNED. Boolean `and`, `or`, `not`, `implies`, `eq` and `ne` nodes and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` nodes each derive a descriptor and generate an `ir_confirmed` oracle returning `Outcome<bool>`. Boolean-only V1 connectives use native operators; an arithmetic-bearing connective carries the first child stop and calls `quire_exact::retain_boolean` once on a completed result, with no connective retention after a stop. Kernel-evaluated `eq`/`ne` calls `quire_exact::planned_equality` rather than comparing values in the oracle. | Test (TC-024) |
 | FR-014-AC-36 | Every oracle's source map declares the node's implication-consequent count, one evaluation-entry probe on the function-entry line disjoint from every consequent region, and one entry-token probe inside the exact region of each consequent; a dropped or duplicated region does not change the declared count. | Test (TC-024) |
-| FR-014-AC-37 | A differential corpus covering every node FR-014-AC-35 names compiles against the runtime alone, and each oracle's outcome, admitted charges and consumed counters equal direct runtime execution and the QSL value authority. | Test (TC-024) |
+| FR-014-AC-37 | PLANNED. A differential corpus covering every node FR-014-AC-35 names compiles with direct `quire-exact` and Contract Runtime residue dependencies, and each oracle's outcome, admitted charges and consumed counters equal independently constructed execution through its owning kernel or residue operator and the QSL value authority. | Test (TC-024) |
 | FR-014-AC-38 | PLANNED (IR-489). The Boolean condition of a `state`/`state_clause` node, addressed by the clause node id, derives a descriptor and generates an `ir_confirmed` oracle over its connectives, integer comparisons and integer add, subtract, multiply and negate, returning `Outcome<bool>`. A `project(deref(self), field)` term is an operand that takes a value in the object member's `integer_range` as a state field read, and a `pre(...)` of one takes the pre-state value of that field. FR-014-AC-10 is not weakened: an operand that is neither a literal, a reference nor one of those two terms is still refused. The `state` node itself stays refused as FR-014-AC-7 states. | Test (TC-024) |
 | FR-014-AC-39 | The generated `src/lib.rs` of every crate the TC-024 corpus generates, and the non-test code of `src/oracle/scalar/mod.rs` (comments and every `#[cfg(test)]` item removed wherever the item sits, string literals the generator emits counted), contain zero panic tokens: the identifiers `unwrap`, `expect`, `unwrap_unchecked`, `unwrap_err`, `expect_err`, `unwrap_err_unchecked`, `panic_any` and `resume_unwind` however written (called, with whitespace before the paren, named on a path such as `Option::unwrap`, or imported); the macros `panic`, `unreachable`, `todo`, `unimplemented`, `assert`, `assert_eq`, `assert_ne`, `debug_assert`, `debug_assert_eq` and `debug_assert_ne` in any delimiter form, with any whitespace before the `!` and any path prefix; and the identifier `abort` anywhere except as a method call (`.abort()`), so `process::abort` and a bare `abort` after an import are both counted. | Test (TC-024) |
 | FR-014-AC-40 | A package whose lowering returns `failed` for the `bytes` limit (Contract IR FR-038-AC-95) is refused per item as `ExactScalarRefusal::LoweringByteLimitExceeded { limit, consumed }` with `limit` and `consumed` equal to the record's, never as `LoweringWorkExhausted`, and contributes no generated function. Through a whole call of `generate_exact_scalar_oracles` whose input is read under a byte ceiling that admits the checked package and is one byte below the canonical length of the lowered contract package of that call (the package `lower` returns for the call's requested nodes, not the checked package, which the fixture makes shorter), every requested item is refused so, each with `limit` equal to that ceiling and the same `consumed`, and no function is generated. A `Failed { limit_kind: Bytes }` record built by hand and given to the scalar `Failed` arm in the module's own `#[cfg(test)]` seam is refused so with the record's `limit` and `consumed` field for field (the per-node case of Contract IR FR-038-AC-95, which CG's public API cannot reach because a node preimage is shorter than any document it can read; the arm maps one record to one refusal, so it asserts no sibling isolation, which FR-014-AC-1 covers). | Test (TC-024) |

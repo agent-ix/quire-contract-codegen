@@ -3,7 +3,7 @@
 //! This is a CG-side projection of identities already admitted by Contract IR. It does not
 //! participate in admission and deliberately contains only operations with current V2 consumers.
 
-use quire_contract_runtime::exact::OrderingOperator;
+use quire_exact::OrderingOperator;
 
 /// Integer `+`, `-`, `*` and unary `-` shared by the catalog and scalar oracle API.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -246,7 +246,6 @@ impl Operator {
             OrderingOperator::LessOrEqual => Some(Self::LessOrEqual),
             OrderingOperator::Greater => Some(Self::Greater),
             OrderingOperator::GreaterOrEqual => Some(Self::GreaterOrEqual),
-            _ => None,
         }
     }
 }

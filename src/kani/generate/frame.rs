@@ -958,6 +958,9 @@ pub(crate) fn field_range(
         Some(
             CheckedMemberType::Boolean
             | CheckedMemberType::Integer
+            | CheckedMemberType::String
+            | CheckedMemberType::Uuid
+            | CheckedMemberType::Timestamp
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)
             | CheckedMemberType::Variant(_)
