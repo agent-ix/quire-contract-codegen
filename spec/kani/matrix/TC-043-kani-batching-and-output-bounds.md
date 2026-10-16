@@ -98,7 +98,7 @@ FR-028-AC-12, verified by TC-039.
     `memory`; the over-limit and unread streams remain refused with `kani_output_over_limit` and
     `kani_output_unread`, with no evidence and no record; the FR-029 terminal value is `Failed`
     with and without the record; the differing-home pairs start two processes and the equal-home
-    pair one, whose members' excerpts are byte-identical (FR-017-AC-21, FR-017-AC-36).
+    pair one, whose members' excerpts are byte-identical (FR-017-AC-36).
 
 ## Implementation
 
