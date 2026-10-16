@@ -80,6 +80,7 @@ Reviewed d8f2f8a6af1c791f5b0b48e5bb32eafae4474b6a (diff f30f17b..d8f2f8a).
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | - |
+| FND-002 | fixed | - |
 
 ## Disposition round 1 verdict
 
@@ -91,3 +92,17 @@ Reviewed d8f2f8a6af1c791f5b0b48e5bb32eafae4474b6a (diff f30f17b..d8f2f8a).
   NFR-004.
 - **FND-002.** The FR-005 part of the original finding was answered with a claim that does not hold.
   That is recorded as FND-002.
+
+## Disposition round 2 verdict
+
+Reviewed 4bca428db89af55e29e8db86eac941ba3bc97e87 (diff d8f2f8a..4bca428).
+
+**PASS.**
+
+- **FND-002.** AD-004 step 6 (:889-892) and the rulings row (:1340) no longer claim that FR-005 needs
+  no V2 change. They say FR-005 is outside the IR-364 chain, that its serialized-package input is
+  interface-001 `contract_package` (a V1 `BoundPackage`), that its V2 input follows the open
+  interface-001 direction, and that its FR-002 dependency follows IR-815. That direction stays open;
+  the text does not decide it.
+- **Gates.** `quire validate` is clean. `quire coverage --strict` reports 219 unbacked and 0
+  contradicted.
