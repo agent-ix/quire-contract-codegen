@@ -221,7 +221,6 @@ macro_rules! shared_helpers {
             match IeeeWidth::ALL[width] {
                 IeeeWidth::Binary32 => IeeeValue::binary32(u32::try_from(bits).unwrap()),
                 IeeeWidth::Binary64 => IeeeValue::binary64(bits),
-                _ => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             }
         }
 
@@ -430,7 +429,12 @@ pub fn enum_member_key(declaration_key: &str, case: &str) -> String {
 pub mod rt_side {
     use std::collections::BTreeMap;
 
-    pub use quire_contract_runtime::exact::*;
+    pub use quire_exact::*;
+    pub use quire_contract_runtime::exact::{
+        compare_enum, compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
+        Conversion, EnumDeclaration, EnumValue, InvalidSemanticGraph, NodeKey, Quantity,
+        QuantityOperation, QuantityTarget, QuantityUnit, Unit, UnitDeclaration, UnitGraph,
+    };
 
     /// The runtime's `InjectedDenial::occurrence` is `NonZeroU64`
     /// (`agent-ix/quire-contract-runtime#20`). Every caller in this crate
@@ -447,7 +451,6 @@ pub mod rt_side {
         match domain {
             IntegerDomain::Mathematical => None,
             IntegerDomain::Bounded(interval) => Some(interval),
-            &_ => unreachable!("IntegerDomain gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
         }
     }
 

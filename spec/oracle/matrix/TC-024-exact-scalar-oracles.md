@@ -35,10 +35,13 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute its oracles on vectors
    adapted from QSpec TC-185, TC-186, TC-187, TC-192 and TC-193; compare each
-   outcome, admitted charges and consumed counters with direct runtime
+   outcome, admitted charges and consumed counters with the direct owning kernel or runtime residue
    execution and with `quire_spec_language::value`, including the outcome of
-   denying each admitted charge in turn.
-5. Compile the generated crate manifest.
+   denying each admitted charge in turn. For division, select only
+   `DivisionMember::Quotient` under each admitted profile; check a vector
+   whose quotient is in domain and remainder is outside it, so a pair
+   admission or two-call implementation fails.
+5. Compile the generated crate manifest with one direct `quire-exact` entry.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
@@ -210,11 +213,13 @@ and are counted separately from the three-way vectors.
 
 1. Build a `CheckedPackageV2` with one node for each of Boolean `and`, `or`, `not`, `implies`, `eq`
    and `ne` and integer `eq`, `ne`, `lt`, `le`, `gt` and `ge` over bounded operands. Derive and
-   generate every node and read each oracle's runtime call. Every node derives, every oracle is
-   `ir_confirmed`, each connective calls `evaluate_boolean` or `evaluate_boolean_short_circuit`, and
-   each `eq`/`ne` calls `check_equality` and `CheckedEquality::evaluate`, each returning
-   `Outcome<bool>` (FR-014-AC-35). Compile the crate against the runtime alone and run each oracle
-   over the bounded domain beside direct runtime execution and the QSL value authority. Outcomes,
+   generate every node and read each oracle's owning operator path. Every node derives, every
+   oracle is `ir_confirmed` and returns `Outcome<bool>`: a Boolean-only V1 connective uses its
+   native operator, an arithmetic-bearing connective retains one completed result through
+   `quire_exact::retain_boolean` and no stopped result, and kernel-evaluated `eq`/`ne` calls
+   `quire_exact::planned_equality` (FR-014-AC-35). Compile the crate against the runtime residue
+   and exact kernel and run each oracle over the bounded domain beside independently constructed
+   owning-operator execution and the QSL value authority. Outcomes,
    charges and counters agree on every input (FR-014-AC-37).
 2. Generate an oracle over an `implies` node and read its source map. It declares the consequent
    count, one evaluation-entry probe on the function-entry line outside every consequent region and

@@ -85,10 +85,12 @@ use quire_contract_model::{
     ContractFeatureRecordV1, ContractPackageV1,
 };
 use quire_contract_runtime::exact::{
-    self as rt, CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration,
-    CompositeShape, DecimalType, EqualityOperand, EqualitySchedule, FieldDeclaration,
-    IllTypedCause, IntegerInterval, NodeKey, Presence, RoundingMode, TextProfile, TypeEnvironment,
-    ValueType,
+    self as rt, CollectionType, CompositeDeclaration, CompositeShape, EqualityOperand,
+    EqualitySchedule, FieldDeclaration, NodeKey, Presence, TypeEnvironment, ValueType,
+};
+use quire_exact::{
+    self as exact, CardinalityBound, CollectionKind, DecimalType, IllTypedCause, IntegerInterval,
+    RoundingMode, TextProfile,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -222,7 +224,7 @@ pub struct CompositeOperationClaim {
     pub provenance: CompositeOperationProvenance,
 }
 
-/// A serializable mirror of `quire_contract_runtime::exact::IllTypedCause`.
+/// A serializable mirror of `quire_exact::IllTypedCause`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IllTypedCauseKind {
@@ -272,7 +274,6 @@ impl TryFrom<IllTypedCause> for IllTypedCauseKind {
             IllTypedCause::TypeMismatch => Self::TypeMismatch,
             IllTypedCause::OperatorIneligible => Self::OperatorIneligible,
             IllTypedCause::AmbiguousLiteral => Self::AmbiguousLiteral,
-            _ => return Err(OracleGenerationError::unknown_variant("IllTypedCause")),
         })
     }
 }
@@ -1286,8 +1287,8 @@ fn resolve_scalar(
             })?;
             Ok(ValueType::Decimal(decimal))
         }
-        "float32" => Ok(ValueType::Float(rt::IeeeWidth::Binary32)),
-        "float64" => Ok(ValueType::Float(rt::IeeeWidth::Binary64)),
+        "float32" => Ok(ValueType::Float(exact::IeeeWidth::Binary32)),
+        "float64" => Ok(ValueType::Float(exact::IeeeWidth::Binary64)),
         "text" => {
             let members = bound("text_bounds")?;
             let text_type = read_text_bounds(members).ok_or_else(|| {
@@ -1331,6 +1332,7 @@ const SOURCE_HEADER: &str = "\
 // so that it can be `include!`d; the manifest forbids unsafe code instead.
 
 use quire_contract_runtime::exact as rt;
+use quire_exact as exact;
 
 /// Why an emitted bound could not be rebuilt from its generation-time spelling. Each variant
 /// names the `rebuild_*` helper that failed.
@@ -1376,7 +1378,7 @@ const RECONSTRUCTION_HELPERS: &[ReconstructionHelper] = &[
         name: "rebuild_integer",
         source: "\n\
 /// A canonical decimal integer literal, re-parsed from generation-time output.
-fn rebuild_integer(spelling: &str) -> Result<rt::Integer, ReconstructionError> {
+fn rebuild_integer(spelling: &str) -> Result<exact::Integer, ReconstructionError> {
     spelling.parse().map_err(|_| ReconstructionError::Integer)
 }
 ",
@@ -1386,8 +1388,8 @@ fn rebuild_integer(spelling: &str) -> Result<rt::Integer, ReconstructionError> {
         name: "rebuild_interval",
         source: "\n\
 /// An integer interval over two canonical integer literals.
-fn rebuild_interval(lower: &str, upper: &str) -> Result<rt::IntegerInterval, ReconstructionError> {
-    rt::IntegerInterval::new(rebuild_integer(lower)?, rebuild_integer(upper)?)
+fn rebuild_interval(lower: &str, upper: &str) -> Result<exact::IntegerInterval, ReconstructionError> {
+    exact::IntegerInterval::new(rebuild_integer(lower)?, rebuild_integer(upper)?)
         .map_err(|_| ReconstructionError::Interval)
 }
 ",
@@ -1398,10 +1400,10 @@ fn rebuild_interval(lower: &str, upper: &str) -> Result<rt::IntegerInterval, Rec
         source: "\n\
 /// A rational domain over a numerator and a denominator interval.
 fn rebuild_rational(
-    numerator: rt::IntegerInterval,
-    denominator: rt::IntegerInterval,
-) -> Result<rt::RationalDomain, ReconstructionError> {
-    rt::RationalDomain::new(numerator, denominator).map_err(|_| ReconstructionError::Rational)
+    numerator: exact::IntegerInterval,
+    denominator: exact::IntegerInterval,
+) -> Result<exact::RationalDomain, ReconstructionError> {
+    exact::RationalDomain::new(numerator, denominator).map_err(|_| ReconstructionError::Rational)
 }
 ",
         calls: &[],
@@ -1415,9 +1417,9 @@ fn rebuild_decimal(
     upper: &str,
     min_scale: u64,
     max_scale: u64,
-    rounding: rt::RoundingMode,
-) -> Result<rt::DecimalType, ReconstructionError> {
-    rt::DecimalType::new(
+    rounding: exact::RoundingMode,
+) -> Result<exact::DecimalType, ReconstructionError> {
+    exact::DecimalType::new(
         rebuild_integer(lower)?,
         rebuild_integer(upper)?,
         min_scale,
@@ -1436,9 +1438,9 @@ fn rebuild_decimal(
 fn rebuild_text(
     min: u64,
     max: u64,
-    profile: rt::TextProfile,
-) -> Result<rt::TextType, ReconstructionError> {
-    rt::TextType::new(min, max, profile).map_err(|_| ReconstructionError::Text)
+    profile: exact::TextProfile,
+) -> Result<exact::TextType, ReconstructionError> {
+    exact::TextType::new(min, max, profile).map_err(|_| ReconstructionError::Text)
 }
 ",
         calls: &[],
@@ -1450,8 +1452,8 @@ fn rebuild_text(
 fn rebuild_cardinality(
     minimum: u64,
     maximum: u64,
-) -> Result<rt::CardinalityBound, ReconstructionError> {
-    rt::CardinalityBound::new(minimum, maximum).map_err(|_| ReconstructionError::Cardinality)
+) -> Result<exact::CardinalityBound, ReconstructionError> {
+    exact::CardinalityBound::new(minimum, maximum).map_err(|_| ReconstructionError::Cardinality)
 }
 ",
         calls: &[],
@@ -1725,29 +1727,29 @@ impl SourceBuilder {
             item.operator.identity()
         ))?;
         self.append_function(format!(
-            "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut rt::Meter,\n) -> rt::Outcome<bool> {{\n\
+            "\n/// Environment-checked oracle for `{}`.\npub fn oracle_{symbol}(\n    environment: &rt::TypeEnvironment,\n    left: &rt::Value,\n    right: &rt::Value,\n    meter: &mut exact::Meter,\n) -> exact::Outcome<bool> {{\n\
              \x20   let left_source = match left_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
              \x20   let left_target = match left_target_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
              \x20   let left_comparison = match &left_target {{\n\
              \x20       Some(target) => target.clone(),\n\
              \x20       None => left_source.clone(),\n\x20   }};\n\
              \x20   if environment.check_type(&left_comparison).is_err() {{\n\
-             \x20       return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);\n\x20   }}\n\
+             \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);\n\x20   }}\n\
              \x20   let right_source = match right_source_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
              \x20   let right_target = match right_target_{symbol}() {{\n\
              \x20       Ok(value_type) => value_type,\n\
-             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
              \x20   let right_comparison = match &right_target {{\n\
              \x20       Some(target) => target.clone(),\n\
              \x20       None => right_source.clone(),\n\x20   }};\n\
              \x20   if environment.check_type(&right_comparison).is_err() {{\n\
-             \x20       return rt::Outcome::Refused(rt::Refusal::CheckedInvariant);\n\x20   }}\n\
+             \x20       return exact::Outcome::Refused(exact::Refusal::CheckedInvariant);\n\x20   }}\n\
              \x20   let left_operand = match left_target {{\n\
              \x20       Some(target) => rt::EqualityOperand::converted(left_source, target),\n\
              \x20       None => rt::EqualityOperand::typed(left_source),\n\x20   }};\n\
@@ -1756,7 +1758,7 @@ impl SourceBuilder {
              \x20       None => rt::EqualityOperand::typed(right_source),\n\x20   }};\n\
              \x20   let checked = match environment.check_equality({}, left_operand, right_operand) {{\n\
              \x20       Ok(checked) => checked,\n\
-             \x20       Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant),\n\x20   }};\n\
+             \x20       Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant),\n\x20   }};\n\
              \x20   checked.evaluate(left, right, meter)\n}}\n",
             item.operator.identity(),
             item.operator.path()
@@ -1936,11 +1938,11 @@ fn render_value_type(value_type: &ValueType) -> Result<String, RenderError> {
                 ValueType::Decimal(decimal) => {
                     format!("rt::ValueType::Decimal({})", render_decimal_type(decimal)?)
                 }
-                ValueType::Float(rt::IeeeWidth::Binary32) => {
-                    "rt::ValueType::Float(rt::IeeeWidth::Binary32)".to_owned()
+                ValueType::Float(exact::IeeeWidth::Binary32) => {
+                    "rt::ValueType::Float(exact::IeeeWidth::Binary32)".to_owned()
                 }
-                ValueType::Float(rt::IeeeWidth::Binary64) => {
-                    "rt::ValueType::Float(rt::IeeeWidth::Binary64)".to_owned()
+                ValueType::Float(exact::IeeeWidth::Binary64) => {
+                    "rt::ValueType::Float(exact::IeeeWidth::Binary64)".to_owned()
                 }
                 ValueType::Quantity(_) => {
                     return Err(RenderError::UnsupportedValueType { family: "quantity" });
@@ -2021,35 +2023,32 @@ fn render_key(key: NodeKey) -> String {
 
 fn collection_kind_path(kind: CollectionKind) -> Result<&'static str, OracleGenerationError> {
     match kind {
-        CollectionKind::Sequence => Ok("rt::CollectionKind::Sequence"),
-        CollectionKind::Set => Ok("rt::CollectionKind::Set"),
-        CollectionKind::Bag => Ok("rt::CollectionKind::Bag"),
-        CollectionKind::OrderedSet => Ok("rt::CollectionKind::OrderedSet"),
-        _ => Err(OracleGenerationError::unknown_variant("CollectionKind")),
+        CollectionKind::Sequence => Ok("exact::CollectionKind::Sequence"),
+        CollectionKind::Set => Ok("exact::CollectionKind::Set"),
+        CollectionKind::Bag => Ok("exact::CollectionKind::Bag"),
+        CollectionKind::OrderedSet => Ok("exact::CollectionKind::OrderedSet"),
     }
 }
 
 fn rounding_path(rounding: RoundingMode) -> Result<&'static str, OracleGenerationError> {
     match rounding {
-        RoundingMode::Exact => Ok("rt::RoundingMode::Exact"),
-        RoundingMode::TowardZero => Ok("rt::RoundingMode::TowardZero"),
-        RoundingMode::TowardPositive => Ok("rt::RoundingMode::TowardPositive"),
-        RoundingMode::TowardNegative => Ok("rt::RoundingMode::TowardNegative"),
-        RoundingMode::NearestEven => Ok("rt::RoundingMode::NearestEven"),
-        RoundingMode::NearestAway => Ok("rt::RoundingMode::NearestAway"),
-        _ => Err(OracleGenerationError::unknown_variant("RoundingMode")),
+        RoundingMode::Exact => Ok("exact::RoundingMode::Exact"),
+        RoundingMode::TowardZero => Ok("exact::RoundingMode::TowardZero"),
+        RoundingMode::TowardPositive => Ok("exact::RoundingMode::TowardPositive"),
+        RoundingMode::TowardNegative => Ok("exact::RoundingMode::TowardNegative"),
+        RoundingMode::NearestEven => Ok("exact::RoundingMode::NearestEven"),
+        RoundingMode::NearestAway => Ok("exact::RoundingMode::NearestAway"),
     }
 }
 
 fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationError> {
     match profile {
-        TextProfile::UnicodeScalars => Ok("rt::TextProfile::UnicodeScalars"),
-        TextProfile::Nfc => Ok("rt::TextProfile::Nfc"),
-        TextProfile::Nfd => Ok("rt::TextProfile::Nfd"),
-        TextProfile::Nfkc => Ok("rt::TextProfile::Nfkc"),
-        TextProfile::Nfkd => Ok("rt::TextProfile::Nfkd"),
-        TextProfile::BinaryUtf8 => Ok("rt::TextProfile::BinaryUtf8"),
-        _ => Err(OracleGenerationError::unknown_variant("TextProfile")),
+        TextProfile::UnicodeScalars => Ok("exact::TextProfile::UnicodeScalars"),
+        TextProfile::Nfc => Ok("exact::TextProfile::Nfc"),
+        TextProfile::Nfd => Ok("exact::TextProfile::Nfd"),
+        TextProfile::Nfkc => Ok("exact::TextProfile::Nfkc"),
+        TextProfile::Nfkd => Ok("exact::TextProfile::Nfkd"),
+        TextProfile::BinaryUtf8 => Ok("exact::TextProfile::BinaryUtf8"),
     }
 }
 
@@ -2891,6 +2890,7 @@ mod tests {
             r#"
 use quire_composite_equality_oracles::{{environment_test0, oracle_test0}};
 use quire_contract_runtime::exact as rt;
+use quire_exact as exact;
 
 #[test]
 fn deep_matches_shallow() {{
@@ -2907,21 +2907,21 @@ fn deep_matches_shallow() {{
         )]),
     )], core::iter::empty::<rt::ObjectTypeDeclaration>()).expect("shallow environment");
     let shallow_value = shallow.record(shallow_key, vec![]).expect("absent optional field");
-    let limits = rt::ScalarLimits {{
+    let limits = exact::ScalarLimits {{
         integer_bits: u64::MAX, decimal_digits: u64::MAX,
         scale_expansion: u64::MAX, text_input_bytes: u64::MAX,
         text_scalars: u64::MAX, normalized_scalars: u64::MAX,
         unit_edges: u64::MAX, value_occurrences: u64::MAX,
         work_units: u64::MAX, result_units: u64::MAX,
     }};
-    let actual = oracle_test0(&deep, &deep_value, &deep_value, &mut rt::Meter::new(limits));
+    let actual = oracle_test0(&deep, &deep_value, &deep_value, &mut exact::Meter::new(limits));
     let expected = shallow.check_equality(
         rt::EqualityOperator::Equal,
         rt::EqualityOperand::typed(rt::ValueType::Composite(shallow_key)),
         rt::EqualityOperand::typed(rt::ValueType::Composite(shallow_key)),
-    ).expect("shallow equality").evaluate(&shallow_value, &shallow_value, &mut rt::Meter::new(limits));
+    ).expect("shallow equality").evaluate(&shallow_value, &shallow_value, &mut exact::Meter::new(limits));
     assert_eq!(actual, expected);
-    assert_eq!(actual, rt::Outcome::Completed(true));
+    assert_eq!(actual, exact::Outcome::Completed(true));
     }}).expect("runtime worker starts").join().expect("runtime fits 512 KiB");
 }}
 "#,

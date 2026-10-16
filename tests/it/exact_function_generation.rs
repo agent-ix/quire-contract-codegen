@@ -3246,22 +3246,20 @@ fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
 }
 
 /// Trace: FR-021-AC-20, TC-031. In the emitted bodies of `add_fn` and `eq_fn`
-/// the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has
-/// the five arms in order and ends with a catch-all `Ok(_)` arm valued
-/// `Outcome::Refused(Refusal::CheckedInvariant)`. The unknown variant cannot
-/// be built from a test crate (`rt::Outcome` is `#[non_exhaustive]`), so the
-/// arm's text is the evidence.
+/// the `match` over the kernel operator's `Result<Outcome<_>, Refusal>` has
+/// exactly the four closed outcome cases and the error case, with no wildcard.
+/// A new kernel variant will fail compilation until it is handled explicitly.
 #[test]
-fn tc_031_ac20_unknown_outcome_variant_refuses_checked_invariant() {
+fn tc_031_ac20_closed_kernel_outcomes_are_exhaustive() {
     let lib = contents(&main_oracles(), "src/lib.rs");
     for (function, completed) in [
         (
             "add_fn",
-            "Ok(rt::Outcome::Completed(value)) => rt::Outcome::Completed(rt::Value::Integer(value)),",
+            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Integer(value)),",
         ),
         (
             "eq_fn",
-            "Ok(rt::Outcome::Completed(value)) => rt::Outcome::Completed(rt::Value::Boolean(value)),",
+            "Ok(exact::Outcome::Completed(value)) => exact::Outcome::Completed(rt::Value::Boolean(value)),",
         ),
     ] {
         let name = format!("name: {function:?}.to_owned(),");
@@ -3273,11 +3271,10 @@ fn tc_031_ac20_unknown_outcome_variant_refuses_checked_invariant() {
 
         let arms = [
             completed,
-            "Ok(rt::Outcome::Undefined(undefined)) => rt::Outcome::Undefined(undefined),",
-            "Ok(rt::Outcome::Refused(refusal)) => rt::Outcome::Refused(refusal),",
-            "Ok(rt::Outcome::Incomplete(incomplete)) => rt::Outcome::Incomplete(incomplete),",
-            "Err(refusal) => rt::Outcome::Refused(refusal),",
-            "Ok(_) => rt::Outcome::Refused(rt::Refusal::CheckedInvariant),",
+            "Ok(exact::Outcome::Undefined(undefined)) => exact::Outcome::Undefined(undefined),",
+            "Ok(exact::Outcome::Refused(refusal)) => exact::Outcome::Refused(refusal),",
+            "Ok(exact::Outcome::Incomplete(incomplete)) => exact::Outcome::Incomplete(incomplete),",
+            "Err(refusal) => exact::Outcome::Refused(refusal),",
         ];
         let mut from = 0;
         for arm in arms {
@@ -3289,7 +3286,7 @@ fn tc_031_ac20_unknown_outcome_variant_refuses_checked_invariant() {
         let tail: String = body[from..].split_whitespace().collect();
         assert!(
             tail.starts_with('}'),
-            "{function}: the catch-all must be the final arm, found `{tail}`"
+            "{function}: the exhaustive match must end after Err, found `{tail}`"
         );
     }
 }

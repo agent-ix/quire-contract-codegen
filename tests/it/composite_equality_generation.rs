@@ -33,10 +33,10 @@ use quire_contract_model::{
     ContractPackageReadResult, ContractPackageWireV1, StructuralCandidateError,
 };
 use quire_contract_runtime::exact::{
-    CardinalityBound, CollectionKind, CollectionType, CompositeDeclaration, CompositeShape,
-    FieldDeclaration, IeeeWidth, NodeKey, ObjectTypeDeclaration, Presence, TypeEnvironment,
-    ValueType,
+    CollectionType, CompositeDeclaration, CompositeShape, FieldDeclaration, NodeKey,
+    ObjectTypeDeclaration, Presence, TypeEnvironment, ValueType,
 };
+use quire_exact::{CardinalityBound, CollectionKind, IeeeWidth};
 use serde_json::json;
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
@@ -1896,7 +1896,7 @@ fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
     let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
     let int = "rt::ValueType::Int(rebuild_interval(\"-100\", \"100\")?)";
-    let text = "rt::ValueType::Text(rebuild_text(0, 16, rt::TextProfile::Nfc)?)";
+    let text = "rt::ValueType::Text(rebuild_text(0, 16, exact::TextProfile::Nfc)?)";
     let tuple = lib
         .find("rt::CompositeShape::Tuple(vec![")
         .expect("tuple declaration");
@@ -1945,11 +1945,11 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(1, 5, rt::TextProfile::Nfc)?"));
+    assert!(lib.contains("rebuild_text(1, 5, exact::TextProfile::Nfc)?"));
     assert!(!lib.contains("rebuild_text(0, 16,"));
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT]);
     let _ = generated(only_claim(&oracles, E_TUPLE));
-    assert!(lib.contains("rebuild_text(0, 16, rt::TextProfile::Nfc)?"));
+    assert!(lib.contains("rebuild_text(0, 16, exact::TextProfile::Nfc)?"));
     assert!(!lib.contains("rebuild_text(1, 5,"));
 }
 
@@ -2342,9 +2342,9 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
         .iter()
         .filter(|function| function.name.starts_with("oracle_"))
     {
-        assert!(function
-            .body
-            .contains("Err(_) => return rt::Outcome::Refused(rt::Refusal::CheckedInvariant)"));
+        assert!(function.body.contains(
+            "Err(_) => return exact::Outcome::Refused(exact::Refusal::CheckedInvariant)"
+        ));
     }
 
     let environment_error = emitted_enum(lib, "EnvironmentError");
@@ -2373,7 +2373,8 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
 /// the criterion, so the corpus test above is a check that can fail.
 #[test]
 fn tc_029_ac17_the_structural_checker_names_each_departure() {
-    let wrong_return = "fn rebuild_interval(a: &str) -> rt::IntegerInterval {\n    todo_body\n}\n";
+    let wrong_return =
+        "fn rebuild_interval(a: &str) -> exact::IntegerInterval {\n    todo_body\n}\n";
     assert!(structural_violations(wrong_return)
         .iter()
         .any(|violation| violation.contains("does not return Result")));
@@ -2412,7 +2413,7 @@ fn tc_029_ac17_the_structural_checker_names_each_departure() {
         .any(|violation| violation.contains("exactly ReconstructionError::Text")));
     let silent_widen = helper(
         "rebuild_cardinality",
-        "rt::CardinalityBound::new(a, 1).or_else(|_| rt::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
+        "exact::CardinalityBound::new(a, 1).or_else(|_| exact::CardinalityBound::new(0, u64::MAX)).map_err(|_| ReconstructionError::Cardinality)",
     );
     assert!(structural_violations(&silent_widen)
         .iter()

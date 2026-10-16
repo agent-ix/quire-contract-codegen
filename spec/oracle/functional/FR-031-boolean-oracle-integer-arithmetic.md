@@ -70,9 +70,10 @@ merged (see "Integer divide and remainder").
   (held until the division semantics were decided), the rewritten FR-031-AC-18, and the new
   FR-031-AC-22 to AC-27. It removes the interim refusal `UnsupportedIntegerDivision` and states
   what each consumer does with a divide or remainder node now.
-- **Prerequisite, not yet met.** Everything in the IR-602 change that calls `quire_exact::divide`
-  is gated on the lock reaching a `quire-exact` that has it (see "Prerequisite: the one
-  `quire-exact` lock entry"). The criteria stay planned until then.
+- **Dependency compatibility remains a gate.** QSL and `quire-exact` expose the
+  single-member divide, but current QSL replay calls `Integer::div_mod_floor`
+  with an `&Integer` where the kernel requires `NonZeroInteger`. The QSL call must
+  be corrected before CG can build with the current kernel; IR-602 remains planned.
 
 ### Scope
 
@@ -256,30 +257,21 @@ compiling, and an artifact that records the string no longer names a code the cr
 
 ### Prerequisite: the one `quire-exact` lock entry
 
-CG's `Cargo.lock` holds one `quire-exact` entry (at a270df3 when this was measured), shared with
-`qsl-replay` and `qsl-semantics`, and the one-copy rule (`make deny`) forbids a second. The merged
-single-member `divide` is in a newer `quire-exact` that deletes the pair `divide`,
-`QuotientRemainder` and `DivisionPairOutOfDomain`, and QSL's `main` still calls all three
-(`qsl-semantics/src/value/definition.rs`, `qsl-foundation/src/diagnostic.rs`, and tests in
-`qsl-replay` and `qsl-semantics`, measured on QSL `main` c5fcc438). Bumping CG's one entry now
-would break the build of CG's QSL dependency. The order is therefore: QSL moves to the
-single-member `divide`; then CG bumps its QSL dependency and `quire-exact` together. Until then,
-every criterion that needs `quire_exact::divide` is not buildable: FR-031-AC-2, AC-6, AC-16 and
-AC-17, the migration criteria AC-22 and AC-26, and the divide and remainder differential
-FR-031-AC-25 against the kernel, and the removal of the interim code, FR-031-AC-27.
-FR-031-AC-18 (the `saturate` divide and remainder refusals), AC-23 and AC-24 (the bundle's own
-operators), which call no kernel, could land first, with the native oracle still refusing a divide
-or remainder over `reject` under the interim code, because removing that code before the native
-division exists would leave the native oracle with no divide outcome at all. This requirement does
-not require that split. Nothing that
-calls `quire_exact::divide`, or that depends on the whole-oracle migration, is buildable before the
-prerequisite.
+CG's dependency graph holds one `quire-exact` entry shared with QSL and Contract
+Runtime. The kernel no longer exports the former pair `divide`,
+`QuotientRemainder` or `DivisionPairOutOfDomain`. CG declares the kernel directly,
+but current QSL replay still calls `Integer::div_mod_floor` with the old argument
+type. QSL must correct that call, and CG must resolve one compatible kernel with
+QSL and Contract Runtime, before the native division implementation can build.
+This gates FR-031-AC-2, AC-6, AC-16, AC-17, AC-22, AC-25, AC-26 and AC-27.
+FR-031-AC-18, AC-23 and AC-24 call no kernel and can be implemented independently,
+although this requirement does not require that split.
 
 ### The kernel the native oracle calls
 
-This subsection is contingent on the prerequisite above and on OD-2 (the owner and the IR-349
-owner confirming that the native oracle takes the `quire_exact` family before IR-349 removes
-Contract Runtime's copy). Until both hold it states the planned end state, not a settled rule.
+Contract Runtime has removed its exact scalar, outcome and meter re-exports. The native
+oracle therefore takes those items from `quire_exact` directly; CG's coherent dependency
+refresh above is still required before this planned rendering can compile.
 
 - The native oracle shall take every exact operation from `quire_exact`, the one exact kernel, and
   from no other path: the generated source aliases it as `rt`, and `exact::` in this requirement
@@ -289,14 +281,17 @@ Contract Runtime's copy). Until both hold it states the planned end state, not a
   Runtime's `operators::{and,or,implies}_short_circuit<R: From<bool>>`, which compile for
   `Outcome<bool>` only because Contract Runtime's `Outcome` implements `From<T>`.
   `quire_exact::Outcome` has no such impl, and the orphan rule stops a generated crate adding one.
-  `quire_exact` exports `evaluate_boolean` and `retain_boolean`, which charge `boolean.result-retain`,
-  and no short-circuit helper. The migrated oracle shall render a short-circuit connective as an
-  inline `match` over the left operand's outcome that returns the first stop, skips the right
-  operand when the left decides, and charges nothing (the runtime operators it replaces charge
-  nothing), and a total connective as an inline evaluation of both operands in order that
-  returns the first stop, with no `evaluate_boolean` call.
+  `quire_exact` exports `retain_boolean`, which charges `boolean.result-retain`, and no
+  short-circuit helper. The migrated oracle shall render a short-circuit connective as an
+  inline `match` over the left operand's outcome that returns the first stop and skips the right
+  operand when the left decides. It shall call `retain_boolean` exactly once on the completed
+  connective result, including a result decided by the left. A total connective shall evaluate
+  both operands in order, return the first stop, and retain its completed result exactly once.
+  A child stop causes no connective result-retain charge. Neither rendering calls
+  `evaluate_boolean`. Unary BooleanNot also retains its completed negated result once
+  and carries its operand stop without a result-retain charge.
 - The reason is Rust type identity. Contract Runtime carries its own `Integer`, `Meter` and
-  `Outcome` until IR-349 removes them, and they are different types from `quire_exact`'s. One
+  `Outcome` in the older dependency graph, and they differ from `quire_exact`'s. One
   oracle body that adds, divides and compares passes one integer value and one `&mut Meter`
   through every call, so it cannot call both families, and a bridge between the two would be a
   compatibility layer. `quire_exact::divide` is the only division that takes IR's member-only
@@ -523,8 +518,8 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 | FR-031-AC-19 | IMPLEMENTED (IR-596). The Kani bundle oracle of an expression whose arithmetic nodes are add, subtract and multiply renders them as the infix `+`, `-` and `*` on `i64` with one binary operator per arithmetic node, contains no `exact::` call and no `checked_`, `wrapping_`, `saturating_` or `overflowing_` method (a remainder node's `wrapping_rem` is FR-031-AC-23's, not this criterion's), takes no meter, and its file states that its arithmetic is checked by Kani and is not a native evaluator. | Test (TC-044) |
 | FR-031-AC-20 | IMPLEMENTED (IR-596). Under real Kani, a harness that calls a bundle oracle with unconstrained operands at which IR's discharge does not hold fails with Kani's arithmetic-overflow check and a counterexample: the oracle of `x < 5 && x * 2 <= 10` over `0..=10` under `reject`, called with `x` unconstrained, fails the "attempt to multiply with overflow" check, and the counterexample's playback value satisfies `x < 5` and overflows `x * 2` (any such value is valid; the assertion does not name one); a hand-written probe harness that assumes the declared domain on `x`, calls the same bundle oracle and discards its value has no failing arithmetic-overflow check, and verifies. (The bundle's own `proof_for_contract` harness is not that probe: its `ensures` asserts the clause, which is false for `x` in `5..=10`.) Overflow in the bundle oracle is a falsifiable property, never a wrapped value. | Test (TC-044) |
 | FR-031-AC-21 | IMPLEMENTED (IR-596). For each of add, subtract and multiply, the bool the Kani bundle oracle returns equals the `bool` inside `Completed` of the native oracle of the same typed expression, on every vector of a grid inside the declared domain at which the expression's guards pass and IR's discharge holds, including the domain's edges, with the bundle oracle compiled and run natively in a generated crate against `quire-contract-runtime` in plain `cargo test`, with no Kani. This is the differential that holds the two implementations of the rule in step. | Test (TC-044) |
-| FR-031-AC-22 | PLANNED (IR-602), CONTINGENT on OD-2 and on the lock prerequisite. The generated source of a native oracle with an arithmetic node aliases `quire_exact` as `rt`, takes `&mut rt::Meter`, returns `rt::Outcome<bool>`, and contains no `quire_contract_runtime::exact` path; a generated crate that compiles and runs it, with divide and remainder nodes and with add, subtract and multiply nodes in the same oracle (the construction Z-3, `y <= 0 && x % (y + 11) <= 10`, is one such oracle), resolves one `quire-exact`; CG's own `Cargo.toml` depends on `quire-exact` directly from `agent-ix/quire-exact`, and CG's lock holds one `quire-exact` entry (`make deny`'s one-copy check), at a revision that has the single-member `divide`, with `qsl-replay` and `qsl-semantics` resolving it. Once it holds, the generated crates of FR-031-AC-8, AC-21 and AC-25 depend on `quire-exact`, and AC-4's reference for equal and not-equal is `planned_equality`. | Test (TC-044) |
-| FR-031-AC-26 | PLANNED (IR-602), CONTINGENT on OD-2 and on the lock prerequisite. The generated source of a native oracle holds no `quire_contract_runtime::operators` path and no `and_short_circuit`, `or_short_circuit` or `implies_short_circuit`; a short-circuit connective is an inline `match` over the left operand's `rt::Outcome` that returns the first stop and does not evaluate the right operand when the left decides, and a total connective evaluates both operands in order and returns the first stop, none charging any point and none calling `evaluate_boolean`; in a generated crate the outcomes of FR-031-AC-9's cases (a stop in a left operand, a stop in a right operand the left decided, each operand of a total connective) and of Z-3 are unchanged from the Contract Runtime rendering. | Test (TC-044) |
+| FR-031-AC-22 | PLANNED (IR-602), requiring CG's coherent dependency refresh. The generated source of a native oracle with an arithmetic node aliases `quire_exact` as `rt`, takes `&mut rt::Meter`, returns `rt::Outcome<bool>`, and contains no `quire_contract_runtime::exact` path; a generated crate that compiles and runs it, with divide and remainder nodes and with add, subtract and multiply nodes in the same oracle (the construction Z-3, `y <= 0 && x % (y + 11) <= 10`, is one such oracle), resolves one `quire-exact`; CG's own `Cargo.toml` depends on `quire-exact` directly from `agent-ix/quire-exact`, and CG's lock holds one `quire-exact` entry (`make deny`'s one-copy check), at a revision that has the single-member `divide`, with `qsl-replay` and `qsl-semantics` resolving it. Once it holds, the generated crates of FR-031-AC-8, AC-21 and AC-25 depend on `quire-exact`, and AC-4's reference for equal and not-equal is `planned_equality`. | Test (TC-044) |
+| FR-031-AC-26 | PLANNED (IR-602), requiring CG's coherent dependency refresh. The generated source of a native oracle holds no `quire_contract_runtime::operators` path and no `and_short_circuit`, `or_short_circuit` or `implies_short_circuit`; a short-circuit connective is an inline `match` over the left operand's `rt::Outcome` that returns the first stop and does not evaluate the right operand when the left decides, and a total connective evaluates both operands in order and returns the first stop. Each completed connective, including unary BooleanNot, calls `quire_exact::retain_boolean` exactly once and charges `boolean.result-retain` once, including a result decided by the left; a child stop charges no connective result-retain point. Neither rendering calls `evaluate_boolean`. In a generated crate the completed Boolean values and first-stop outcomes of FR-031-AC-9's cases and Z-3 agree with the prior rendering, while completed connective meter counters include their new result-retain charges; denial at that point returns `Incomplete` before applying the denied charge. | Test (TC-044) |
 | FR-031-AC-23 | PLANNED (IR-602). The Kani bundle oracle renders Divide over a `reject` type as the infix `/` and Remainder as `wrapping_rem` on `i64`, one operator or call per arithmetic node, contains no `exact::` call and no `modulo`, `div_euclid`, `rem_euclid`, `checked_`, `saturating_` or `overflowing_` method, no `wrapping_` method other than `wrapping_rem` on a remainder node, takes no meter, returns `bool`, and its file states that its arithmetic is checked by Kani. `generate_kani_bundle` over a divide or a remainder over a `reject` type generates a bundle, and over a `saturate` divide or remainder it returns `ClauseGenerationFailed` retaining `UnsupportedSaturatingArithmetic` and emits no harness. | Test (TC-044) |
 | FR-031-AC-24 | PLANNED (IR-602). Under real Kani, a harness that calls the bundle oracle of the construction Z-1 (a divide) with unconstrained operands fails the checks "attempt to divide by zero" and "attempt to divide with overflow", each with a counterexample, and one that calls the bundle oracle of the construction Z-3 (a remainder) with unconstrained operands fails the check "attempt to calculate the remainder with a divisor of zero" and no other arithmetic check; a probe harness that assumes the declared domain and the guards, calls the same oracle and discards its value verifies, for the divide `10 / y <= 10` over `1..=10` and the remainder `x % -1 <= 5` over `-10..=5`; and a probe of the remainder `y != 0 && x % y <= 0` over `i64::MIN..=i64::MAX` at `x = i64::MIN`, `y = -1` verifies, where a raw `%` fails "attempt to calculate the remainder with overflow". | Test (TC-044) |
 | FR-031-AC-25 | PLANNED (IR-602), GATED on the lock prerequisite (its native side calls the kernel). For divide and for remainder, the bool the Kani bundle oracle returns equals the `bool` inside `Completed` of the native oracle of the same typed expression, on every vector of a grid inside the declared domain at which the expression's guards pass and the divisor is non-zero and IR's discharge holds, including the domain's edges and R-1 and R-2, and including the remainder `y != 0 && x % y <= 0` over `i64::MIN..=i64::MAX` at `x = i64::MIN`, `y = -1` (native `Completed(true)`, bundle `true`, where a raw `%` panics in a debug build), with the bundle oracle compiled and run natively in a generated crate against `quire-exact` in plain `cargo test`, with no Kani. | Test (TC-044) |
@@ -544,22 +539,20 @@ fixed-width and its comparison of two `i64` values has no failure mode.
 
 ## Open decisions
 
-OD-1, OD-2, OD-4 and OD-6 are not settled here. Each is stated as a position this requirement takes,
-with who decides it, so that the code change does not hide a guess. OD-3 is closed.
+OD-1 remains a design decision. OD-2, OD-3, OD-4 and OD-6 have the dispositions below;
+the pending implementation and proof gates are separate from those decisions.
 
 - **OD-1, the law.** The generator selects `DivisionProfile::Truncating`. IR's divide and
   remainder nodes name no law, IR's own arithmetic preimage computes the truncating one, and
   so did the earlier raw operators, but no ruling names it for V1. To confirm with IR and QSL. If
   the language wants floor or Euclidean division here, the constant and the bundle oracle's
   `/` and `wrapping_rem` both change, because Rust's operators are truncating.
-- **OD-2, the kernel family and its sequencing.** The planned end state is that the native oracle
-  takes the whole `quire_exact` family (see "The kernel the native oracle calls"), which moves
-  the add, subtract, multiply, comparison and connective renderings that IR-596 implemented off
-  Contract Runtime's copy before IR-349 step 1 removes that copy. The migration criteria (AC-22
-  and AC-26, and the retargeting noted in AC-8 and AC-21) are contingent on this decision and on
-  the lock prerequisite. The alternative is to hold native divide and remainder until Contract
-  Runtime's types are `quire_exact`'s, which leaves the native oracle with no division for that
-  time. For the owner and the IR-349 owner to decide.
+- **OD-2, kernel ownership (closed by the merged API).** Contract Runtime removed its
+  exact scalar, outcome and meter re-exports, so the native oracle must import those
+  types and calls from `quire_exact` directly. Contract Runtime retains distinct
+  composite, equality and function types. CG must migrate the complete native scalar
+  family and the generated crate dependency together; AC-22 and AC-26 remain unverified
+  until that code and the coherent CG lock land.
 - **OD-3, the equality route (closed by measurement).** `quire_exact` exports `planned_equality`
   and no type environment or checked equality. For two integer operands, Contract Runtime's
   `CheckedEquality::evaluate` takes `EqualitySchedule::Plan`, calls its `planned_equality` and
@@ -574,13 +567,11 @@ with who decides it, so that the code change does not hide a guess. OD-3 is clos
   CBMC; `quire-exact`'s is a `BigInt` newtype. If QSL or IR want the bundle to prove the kernel's own division, the
   kernel needs a fixed-width path CBMC can fold, and that is QSL's decision. Not verified here:
   any divide under Kani through `quire_exact`.
-- **OD-6, connective metering.** FR-031-AC-26 has the migrated oracle's connectives charge nothing,
-  which preserves the behaviour of the Contract Runtime operators they replace.
-  `quire_exact`'s documentation of `retain_boolean` says a caller's own short-circuit evaluation
-  retains its decided result through that function, which charges `boolean.result-retain`. For QSL
-  to decide whether native-oracle metering must match the kernel's, in which case the connectives
-  charge that point and AC-26 and the unchanged-outcome clause change with it. This requirement
-  does not pre-empt it.
+- **OD-6, connective metering (closed by current contracts).** QSL's evaluator,
+  `quire-exact` FR-362-AC-9, QSpec TC-191 and CG FR-014-AC-35/37 require one
+  `boolean.result-retain` charge for every completed connective, including a
+  short-circuit result decided by the left. A child stop yields no connective
+  result-retain charge. AC-26 and TC-044 require that behavior in generated code.
 
 ## Out of Scope
 

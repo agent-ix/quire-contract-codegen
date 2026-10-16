@@ -30,10 +30,11 @@ use quire_contract_model::{
     derive_application_node_id, ApplicationNodeDraft, CheckedNodeId, CheckedPackageEvidence,
     CheckedPackageReadLimits, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
 };
-use quire_contract_runtime::exact::{
+use quire_contract_runtime::exact::QuantityTarget;
+use quire_exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, QuantityTarget, RationalDomain, RoundingMode,
-    TextProfile, TextType,
+    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
+    TextType,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -2210,8 +2211,7 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 }
                 (IeeeWidth::Binary64, IeeeArithmeticOperator::Divide) => {
                     "quire.op.ieee.float64.div"
-                },
-                (&_, _) => unreachable!("IeeeWidth gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
+                }
             };
             (
                 expr.operator,
@@ -2228,7 +2228,6 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
                 IeeeComparison::NumericEqual => "quire.op.ieee.numeric_equal",
                 IeeeComparison::TotalOrder => "quire.op.ieee.total_order",
                 IeeeComparison::BitIdentical => "quire.op.ieee.bit_identical",
-                &_ => unreachable!("IeeeComparison gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
             };
             (
                 // Overrides `expr.operator` ("binary" per `corpus()`'s own
@@ -2341,7 +2340,6 @@ fn ordering_suffix(operator: OrderingOperator) -> &'static str {
         OrderingOperator::LessOrEqual => "le",
         OrderingOperator::Greater => "gt",
         OrderingOperator::GreaterOrEqual => "ge",
-        _ => unreachable!("OrderingOperator gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above"),
     }
 }
 

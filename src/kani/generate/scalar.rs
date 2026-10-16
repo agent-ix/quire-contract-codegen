@@ -23,7 +23,7 @@ use crate::{
 
 /// An IR-confirmed V2 exact-scalar claim this generator knows how to render a Kani harness for.
 /// Scoped today to `IntegerArithmetic` (`quire.op.integer.{add,sub,mul,negate}`): its operands and
-/// result are all `rt::Integer`, and `quire_contract_runtime::exact::Integer: From<i64>` gives a
+/// result are all `rt::Integer`, and `quire_exact::Integer: From<i64>` gives a
 /// direct `kani::any()` bridge with no construction of a compound runtime type. Every other
 /// confirmed family (division's `QuotientRemainder`, rational, decimal, IEEE, text, enum, quantity)
 /// has no renderer yet -- see [`lower_scalar_claim`].
@@ -71,7 +71,7 @@ impl ScalarOperation {
     /// The exact result as a Rust expression over the harness's native `i64` operands
     /// (`<name>_native`), evaluated in `i128` where a sum, difference, product or negation of `i64`
     /// values cannot overflow. It shares no code with the embedded oracle, which evaluates through
-    /// `quire_contract_runtime`'s `rt::Integer`; it is the independent statement of the clause that
+    /// `quire-exact`'s `rt::Integer`; it is the independent statement of the clause that
     /// [`render_scalar`] compares the oracle's result with.
     fn native_expression(self) -> String {
         let native = |index: usize| format!("i128::from({}_native)", self.operand_names()[index]);
