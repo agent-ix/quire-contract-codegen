@@ -479,10 +479,9 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
     println!("TC-186 agreement: {comparisons} text comparisons, {enums} enum comparisons");
 }
 
-/// The TC-187 arithmetic, comparison, power and tabled-limit rows. The rows that convert a
-/// quantity (U01, U04, U07 to U10, U09b and U15 to U18) are not agreement rows: a conversion is
-/// refused, and `tc_024_tc187_conversion_rows_are_refused_with_the_named_capability` in the
-/// generation tests asserts that refusal for each of them.
+/// The TC-187 arithmetic, comparison, power and tabled-limit vectors. The vectors that convert a
+/// quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle and
+/// are not agreement rows: a conversion is refused.
 ///
 /// Trace: FR-014-AC-6, TC-024.
 #[test]

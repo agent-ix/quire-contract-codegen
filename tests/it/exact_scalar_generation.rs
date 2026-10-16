@@ -3504,58 +3504,172 @@ fn tc_024_quantity_conversion_is_refused_with_its_named_capability() {
     assert!(QUANTITY_CONVERSION_CAPABILITY.contains("quantity conversion is not supported"));
 }
 
-/// The QSpec TC-187 rows that convert a quantity are refusal rows, not agreement rows: for each
-/// of them every quantity conversion node of the corpus derives to the named refusal, and the
-/// generated crate for it holds no oracle. A row that produced a descriptor or an oracle fails
-/// here by name.
+/// The Contract IR package of a request for `nodes`, and its driver positions in the same order.
+fn contract_request(
+    package: &CheckedPackageV2,
+    nodes: &[quire_contract_model::CheckedNodeId],
+) -> (
+    quire_contract_model::ContractPackageV1,
+    Vec<quire_contract_codegen::ContractRequestPosition>,
+) {
+    use quire_contract_model::{
+        CheckedNodeTag, CompleteLoweringProfileV2, ContractDependencies, ContractPackageReadResult,
+        ContractPackageWireV1, LoweringProfileRef,
+    };
+    let lowered = package.lower(
+        nodes,
+        &CompleteLoweringProfileV2 {
+            reference: LoweringProfileRef {
+                authority: "agent-ix".into(),
+                identity: "quire.codegen.exact-function/v1".into(),
+            },
+            supported_tags: [
+                CheckedNodeTag::ScalarType,
+                CheckedNodeTag::CompositeType,
+                CheckedNodeTag::BoundedDomain,
+                CheckedNodeTag::Value,
+                CheckedNodeTag::Expression,
+                CheckedNodeTag::Claim,
+                CheckedNodeTag::Correspondence,
+            ]
+            .into(),
+            require_bounds: false,
+            work_limit: 65_536,
+        },
+    );
+    let contract = match ContractPackageWireV1::read(
+        lowered.package.canonical_bytes().unwrap(),
+        CheckedPackageReadLimits::bounded(),
+        &ContractDependencies::new(),
+    ) {
+        ContractPackageReadResult::Admitted(package) => *package,
+        other => panic!("the conversion request should be admitted: {other:?}"),
+    };
+    let positions = nodes
+        .iter()
+        .map(
+            |node_id| quire_contract_codegen::ContractRequestPosition::DriverItem {
+                node_id: node_id.clone(),
+                result_selection:
+                    quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+            },
+        )
+        .collect();
+    (contract, positions)
+}
+
+/// A function declared over a quantity conversion node survives no classification: the request
+/// yields no location entry and no generated claim. The typed refusal itself,
+/// `FormMismatch` with the form `conversion`, is asserted on the classifier in the generator's
+/// unit tests.
 ///
 /// Trace: FR-014-AC-2, TC-024
 #[test]
-fn tc_024_tc187_conversion_rows_are_refused_with_the_named_capability() {
-    const CONVERSION_ROWS: [&str; 11] = [
-        "U01", "U04", "U07", "U08", "U09", "U09b", "U10", "U15", "U16", "U17", "U18",
-    ];
-    let package = derivation_package().admit();
-    let ids = fixture_ids_for(&package);
-    let mut refused = 0_usize;
-    for row in CONVERSION_ROWS {
-        for code in QUANTITY_CONVERSIONS {
-            assert_eq!(
-                derive_one(&package, code),
-                Err(no_claim(
-                    ClaimDerivationRefusal::QuantityConversionUnsupported {
-                        operation_identity: "quire.op.quantity.convert".to_owned(),
-                        capability: QUANTITY_CONVERSION_CAPABILITY,
-                    }
-                )),
-                "TC-187 {row}, node {code}"
-            );
-            let declared = resolved_items(
-                &[ExactScalarItem {
-                    node_id: code_id(code),
-                    operation: ExactScalarOperation::QuantityArithmetic {
-                        operator: QuantityOperator::Add,
+fn tc_024_function_generator_refuses_a_quantity_conversion_body_before_any_artifact() {
+    use quire_contract_codegen::{
+        generate_exact_function_oracles, ExactFunctionBody, ExactFunctionDeclaration,
+        ExactFunctionItem, FunctionParameter,
+    };
+    let (package, ids) = derivation_package().admit_resolved();
+    let function_node = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
+    let call_node = ids.resolve(&code_id(1001));
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let (contract, positions) =
+        contract_request(&package, &[function_node.clone(), call_node.clone()]);
+    for body in [
+        ExactFunctionBody::Scalar {
+            operator: IntegerOperator::Add,
+        },
+        ExactFunctionBody::CompositeEquality {
+            operator: quire_contract_codegen::EqualityOperatorKind::Equal,
+        },
+    ] {
+        let output = generate_exact_function_oracles(
+            &contract,
+            &positions,
+            &[0],
+            &[ExactFunctionDeclaration {
+                node_id: function_node.clone(),
+                name: "converting".to_owned(),
+                parameters: vec![
+                    FunctionParameter {
+                        name: "a".to_owned(),
+                        type_node_id: integer.clone(),
                     },
-                }],
-                &ids,
-            );
-            let oracles = generate_exact_scalar_oracles(&package, &declared).expect("generates");
-            assert_eq!(
-                refusal_of(&oracles, code),
-                no_claim(ClaimDerivationRefusal::QuantityConversionUnsupported {
-                    operation_identity: "quire.op.quantity.convert".to_owned(),
-                    capability: QUANTITY_CONVERSION_CAPABILITY,
-                }),
-                "TC-187 {row}, node {code}: generation"
-            );
-            assert!(
-                !contents(&oracles, "src/lib.rs").contains("fn "),
-                "TC-187 {row}, node {code}: an oracle was emitted"
-            );
-            refused += 1;
-        }
+                    FunctionParameter {
+                        name: "b".to_owned(),
+                        type_node_id: integer.clone(),
+                    },
+                ],
+                result_type: integer.clone(),
+                body: body.clone(),
+                capability_requirements: Vec::new(),
+            }],
+            &[1],
+            &[ExactFunctionItem {
+                call_node_id: call_node.clone(),
+                function: "converting".to_owned(),
+                argument_node_ids: Vec::new(),
+            }],
+        )
+        .expect("generates");
+        assert!(
+            output
+                .claim_map
+                .items
+                .iter()
+                .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })),
+            "{body:?}: a generated claim"
+        );
+        assert!(output.location_map.is_empty(), "{body:?}: a location entry");
     }
-    assert_eq!(refused, CONVERSION_ROWS.len() * QUANTITY_CONVERSIONS.len());
+}
+
+/// The composite-equality generator accepts only a `binary` expression, so a quantity conversion
+/// node is refused as `FormMismatch` with its `conversion` form before any descriptor is read and
+/// no oracle is produced for it.
+///
+/// Trace: FR-014-AC-2, TC-024
+#[test]
+fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artifact() {
+    use quire_contract_codegen::{
+        generate_composite_equality_oracles, CompositeEqualityItem, CompositeEqualityRefusal,
+        EqualityOperandDescriptor, EqualityOperatorKind,
+    };
+    let (package, ids) = derivation_package().admit_resolved();
+    let node = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let (contract, positions) = contract_request(&package, std::slice::from_ref(&node));
+    let output = generate_composite_equality_oracles(
+        &contract,
+        &positions,
+        &[0],
+        &[CompositeEqualityItem {
+            node_id: node,
+            operator: EqualityOperatorKind::Equal,
+            left: EqualityOperandDescriptor::typed(integer.clone()),
+            right: EqualityOperandDescriptor::typed(integer),
+        }],
+        Default::default(),
+    )
+    .expect("generates");
+    assert_eq!(output.claim_map.items.len(), 1);
+    assert_eq!(
+        output.claim_map.items[0].result,
+        ClaimDisposition::Refused {
+            refusal: CompositeEqualityRefusal::FormMismatch {
+                found: "conversion".to_owned()
+            }
+        }
+    );
+    assert!(
+        !output
+            .claim_map
+            .items
+            .iter()
+            .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))),
+        "no oracle is generated"
+    );
 }
 
 /// The caller-declared entry points refuse a quantity conversion node under every descriptor the

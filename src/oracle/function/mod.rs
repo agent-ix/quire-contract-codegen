@@ -2944,6 +2944,68 @@ mod tests {
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
     use quire_contract_model::CheckedPackageLimit;
 
+    /// A quantity conversion body is refused as `FormMismatch` naming the form `conversion`, for
+    /// every declared body kind that reads a node, before the operator or any operand is read.
+    ///
+    /// Trace: FR-014-AC-2, TC-024.
+    #[test]
+    fn a_quantity_conversion_body_is_a_form_mismatch_for_every_body_kind() {
+        let id = |digest: &str| {
+            serde_json::json!({
+                "domain": "quire.checked-semantic-node/v1",
+                "digest": digest.repeat(64),
+            })
+        };
+        let node: CheckedSemanticNodeV2 = serde_json::from_value(serde_json::json!({
+            "node_id": id("1"),
+            "schema_version": "quire.checked-semantic-graph/v2",
+            "node_tag": "expression",
+            "semantic_form": "conversion",
+            "semantic_type": id("2"),
+            "dependencies": [],
+            "occurrences": [],
+            "body": {
+                "term": "application",
+                "operator": "convert",
+                "operation": {
+                    "identity": "quire.op.quantity.convert",
+                    "laws": [],
+                    "mode": {"kind": "rounding", "value": "exact"},
+                    "member": null,
+                    "leaves": [],
+                },
+                "result_type": id("2"),
+                "arguments": [],
+            },
+        }))
+        .expect("a checked conversion node");
+        for body in [
+            ExactFunctionBody::Scalar {
+                operator: IntegerOperator::Add,
+            },
+            ExactFunctionBody::CompositeEquality {
+                operator: EqualityOperatorKind::Equal,
+            },
+        ] {
+            let declaration = ExactFunctionDeclaration {
+                node_id: node.node_id.clone(),
+                name: "converting".to_owned(),
+                parameters: Vec::new(),
+                result_type: node.semantic_type.clone(),
+                body,
+                capability_requirements: Vec::new(),
+            };
+            assert_eq!(
+                classify_body_shape(&node, &declaration).err(),
+                Some(ExactFunctionRefusal::FormMismatch {
+                    found: "conversion".to_owned()
+                }),
+                "{:?}",
+                declaration.body
+            );
+        }
+    }
+
     /// Trace: FR-021-AC-27, TC-031.
     #[test]
     fn ac27_inline_scalar_literal_is_retained_with_its_admitted_type() {

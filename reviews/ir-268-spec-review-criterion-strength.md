@@ -41,3 +41,17 @@ Ticket: IR-268. Criterion strength of the amended FR-014-AC-2 and FR-014-AC-18 a
 ## Verdict
 
 Approved intent checked and met: the FR-014 refusal names QuantityConversionUnsupported and QUANTITY_CONVERSION_CAPABILITY and cites IR-818. No quantity.convert descriptor, QuantityTarget or conversion support claim remains anywhere under spec/ (grep). FR-033:178 'Quantity conversion preserves its exact scalar and unit' concerns replay value canonicalization, not the oracle, and is not a contradiction. In AD-004, collection is ranked with scalar before negotiate, its local imports are outcome and record only, and negotiate's list gains collection, all matching tests/it/layout.rs. The new text narrates no history. The findings above are the remaining gaps.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | AC-2 says 'The QSpec TC-187 rows that convert a quantity are refusal rows under this criterion' and cites tc_024_tc187_conversion_rows_are_refused_with_the_named_capability. That test loops eleven row labels (U01 ... U18) over the same three corpus conversion nodes, and uses the label only in the assertion message (tests/it/exact_scalar_generation.rs:3514-3545). No node is built from any TC-187 row's operands or target. Failure: if a listed row did not convert a quantity, or a converting row were missing from the list, the test would still pass. The clause is satisfied by labels, not by row content. Fix: build each row's conversion node from its TC-187 operands, or reword the clause to say the rows are excluded from AC-6 because the identity is refused. | FR-014:433; FR-014-AC-6; TC-024:54-55; tests/it/exact_scalar_generation.rs:3514-3545 |
+
+## Dispositions
+
+Round 1, checked against fix commit 7e16de1.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified in 7e16de1 |

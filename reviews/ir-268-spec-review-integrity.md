@@ -43,3 +43,19 @@ Ticket: IR-268. Integrity of the AD-004 collection-family amendment and the FR-0
 ## Verdict
 
 Approved intent checked and met: the FR-014 refusal names QuantityConversionUnsupported and QUANTITY_CONVERSION_CAPABILITY and cites IR-818. No quantity.convert descriptor, QuantityTarget or conversion support claim remains anywhere under spec/ (grep). FR-033:178 'Quantity conversion preserves its exact scalar and unit' concerns replay value canonicalization, not the oracle, and is not a contradiction. In AD-004, collection is ranked with scalar before negotiate, its local imports are outcome and record only, and negotiate's list gains collection, all matching tests/it/layout.rs. The new text narrates no history. The findings above are the remaining gaps.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | FR-014-AC-2's Verification cell reads 'Test (TC-024: ...)' and tests.md:14 lists TC-024 only. But two of the six tests it names are traced to other test cases: tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness carries 'Trace: FR-014-AC-2, FR-015-AC-15, TC-025' (tests/it/kani_obligations.rs:1188), and tc_033_... carries TC-033. Failure: the computed matrix attributes AC-2 to TC-025 and TC-033 as well, while the AC cell and the matrix row say TC-024 only, so the two disagree on which test cases verify AC-2. Fix: cite TC-024, TC-025 and TC-033 in the cell and the row, or retag both tests to TC-024. | FR-014:433; spec/oracle/matrix/tests.md:14; tests/it/kani_obligations.rs:1188; tests/it/routed_generation.rs:2146 |
+
+## Dispositions
+
+Round 1, checked against fix commit 7e16de1.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified in 7e16de1 |
+| FND-002 | fixed | verified in 7e16de1 |
+| FND-003 | fixed | verified in 7e16de1 |

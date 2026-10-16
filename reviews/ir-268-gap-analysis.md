@@ -81,3 +81,62 @@ Coverage of the collection half is substantive, and the new refusal tests have s
 FND-001 is a medium trace and coverage gap: AC-6 claims the TC-187 vectors that the PR stopped
 running. It should be fixed by a spec amendment or a refusal assertion, in this PR or in a
 tracked follow-up.
+
+## Dispositions
+
+Disposition pass 1 at fix-round commit 7e16de1. The checks and the mutant run are as recorded in
+SR-11800's Dispositions. The mutant removed the `check_item` guard:
+`tc_024_caller_declared_quantity_conversion_is_refused_and_generates_nothing`,
+`tc_024_tc187_conversion_rows_are_refused_with_the_named_capability` and
+`tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness` went red.
+The derivation-path tests (`tc_033_...`, `a_selected_quantity_conversion_settles_...`) stayed green
+because the derivation guard still holds. So each of the two guards has at least one test that
+fails without it. A mutant import of `crate::oracle::claim` into collection.rs failed
+`l_2_every_import_follows_the_dependency_direction` with the allowlist message, so the AD-004
+allowlist is enforced.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-014-AC-6 now excludes the TC-187 conversion rows and names FR-014-AC-2 as their owner. `assert_rows_agreed` fails any AC-6 row with 0 agreements, and every agreement test calls it. |
+| FND-002 | fixed | TC-024 step text now reads "derive every `quantity.convert` node of the corpus (each carries the `exact` mode its unit type pins)", which matches the fixtures. |
+| FND-003 | fixed | `fn declared_field` (src/kani/generate/collection.rs:339) is module-private: not pub, not pub(crate), not re-exported. It is used at :449 in place of the old `map_err`/`ok_or`, and it maps both an `Err` listing and a missing field to `FieldNotAdmitted`, exactly as before, so production behaviour is unchanged. The lib test `a_declaration_without_listable_fields_or_the_selected_field_is_field_not_admitted` drives both error branches through the combinator the production call uses. Every supported integration case exercises the Ok path. That is adequate for branches admitted packages cannot reach. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The per-row TC-187 refusal test only labels rows. Every "row" re-asserts the same three corpus nodes, and U09, which is not a conversion row, is in the list | tests/it/exact_scalar_generation.rs:3514-3558; spec/oracle/functional/FR-014-exact-scalar-oracles.md:433 |
+| FND-005 | low | The Kani negotiation entry-point test asserts only the V1 `harnesses` vector is empty, not `scalar_harnesses`, `state_frame_harnesses` or `collection_harnesses`. S2's empty-artifact-set check is not met there | tests/it/kani_obligations.rs:663-665, 1190 |
+| FND-006 | low | The FR-014 entry-point list for the conversion refusal omits `generate_exact_function_oracles` and the composite-equality generator, and gives no stated reason they are exempt | spec/oracle/functional/FR-014-exact-scalar-oracles.md:273 |
+
+### FND-004
+
+`CONVERSION_ROWS` is an array of 11 label strings. For each label the loop runs the same
+`derive_one` and `generate_exact_scalar_oracles` over the same `QUANTITY_CONVERSIONS` nodes (1086,
+1087, 2028). None of those nodes carries a row's vector, unit or target. Adding, removing or
+renaming a row changes only the final count assertion, so the test is no per-row evidence: it is
+the three-node refusal repeated 11 times. QSpec TC-187 U09 ("Use a base-dimension name/shape equal
+to `L` but a different I04 semantic-node key", expected `ill_typed`) is not a conversion. Still,
+the list includes it, and AC-6 excludes it ("U07 to U10"). The test cannot catch this
+misclassification because it never consults the row. Fix one of two ways: tie each row to a
+fixture node built from that row's operands and target, or state in AC-2 that the conversion rows
+share one refusal and assert it once. Either way, take U09 out of the conversion list and keep it
+in AC-6.
+
+### FND-005
+
+`scalar_records` destructures the outcome with `emitted(..)`, which returns only `harnesses` (the
+V1 `KaniObligationHarness` list), and asserts that is empty. A `ScalarClaim` item that rendered
+would land in `scalar_harnesses`, which the test never reads. The `Unsupported` record assertion
+would still catch a supported disposition, so no defect ships. However, the "no harness" half of
+this test checks a vector the item can never populate, contrary to the S2 steer.
+
+### FND-006
+
+The S1 steer requires a stated reason for any entry point that is exempt. FR-014's Behavior
+statement lists derive, generate/plan, `generate_routed`, `negotiate_kani_obligations` and
+capability settlement. `generate_exact_function_oracles` accepts only `integer.add/sub/mul`
+bodies (src/oracle/function/mod.rs:1687-1691), and composite equality refuses quantity values
+(src/oracle/equality/mod.rs:1945-1946). Both refuse a conversion, but under their own reasons and
+without the named capability, and AC-2 does not say why they are exempt. This is low with medium
+confidence: no emission is possible, so this is a statement gap and not a behaviour gap.

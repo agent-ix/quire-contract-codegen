@@ -133,3 +133,21 @@ admits out-of-range literals as falsifiable, puts the cover last and seals prove
 execution. The quantity-conversion refusal is complete in src, and its tests discriminate. All
 four findings are low, with no wrong runtime behaviour. FND-001 breaks the owner's hard rule
 against Cargo.toml edits and is a one-line revert, so I would fix it before merge.
+
+## Dispositions
+
+Disposition pass 1 at fix-round commit 7e16de1 (previous head 85c0e97). The checks ran one
+cargo invocation at a time:
+
+- Focused `cargo test --lib --test it` over exact_scalar_generation, routed_generation,
+  capability_settlement, kani_obligations, layout, exact_scalar_agreement, exact_function_agreement,
+  cover_last, kani::generate::collection and oracle::scalar: exit 0 (lib 23 passed; it 289 passed,
+  14 ignored).
+- Mutant run (reverted): exit 101.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `git diff origin/main..HEAD -- Cargo.toml` is empty: Cargo.toml is byte-equal to main. |
+| FND-002 | fixed | harness.rs:26 and the test-module header no longer cite IR-268. The six composite_builder.rs comments state the reason without a commit id. 7e16de1 adds no new ticket citation to a code comment. |
+| FND-003 | fixed | The capability text now says the runtime converts a quantity only to a scalar target and has no conversion whose result is a quantity. That matches runtime 3cc88c4. |
+| FND-004 | fixed | The tautological test is deleted. The lib test `every_identity_component_changes_the_rendered_harness_path` renders through `render_collection` with one preimage field varied at a time. A mutant that drops `predicate_id` from `symbol_material` goes red. |

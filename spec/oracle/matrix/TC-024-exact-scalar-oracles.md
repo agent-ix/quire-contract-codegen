@@ -50,9 +50,11 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    `generate_routed`, through Kani obligation negotiation and through capability
    settlement, and check the same refusal and an empty artifact set: the
    generated crate defines no oracle function and no harness is emitted
-   (FR-014-AC-2). Check that each QSpec TC-187 row that converts a quantity is
-   refused, and that every agreement row of step 4 compares at least one
-   vector. Derive nodes that are not applications, carry no identity, name an
+   (FR-014-AC-2). Check that the function-application and composite-equality
+   generators refuse a conversion node as `FormMismatch` before any artifact.
+   The TC-187 vectors that convert a quantity have no oracle and are not
+   agreement rows; check that every agreement row of step 4 compares at least
+   one vector. Derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that

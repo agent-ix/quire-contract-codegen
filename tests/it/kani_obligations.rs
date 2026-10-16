@@ -1201,7 +1201,56 @@ fn tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_a
     let claim_map = generate_exact_scalar_oracles(&scalar, &declared)
         .expect("claim map")
         .claim_map;
-    let records = scalar_records(&scalar, &claim_map, &ids, &package::QUANTITY_CONVERSIONS);
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
+    let node_ids = package::QUANTITY_CONVERSIONS
+        .iter()
+        .map(|code| ids.resolve(&code_id(*code)))
+        .collect::<Vec<_>>();
+    let items = node_ids
+        .iter()
+        .map(|node_id| ObligationItem::ScalarClaim {
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id,
+            claim_index: claim_index(&claim_map, node_id),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
+        .collect::<Vec<_>>();
+    let KaniObligationOutcome::Emitted {
+        records,
+        harnesses,
+        scalar_harnesses,
+        state_frame_harnesses,
+        collection_harnesses,
+    } = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap()
+    else {
+        panic!("a refused claim settles per item");
+    };
+    // The whole artifact set is empty: no harness of any family is emitted for the obligations.
+    assert!(harnesses.is_empty(), "V1 harnesses");
+    assert!(scalar_harnesses.is_empty(), "scalar harnesses");
+    assert!(state_frame_harnesses.is_empty(), "state-frame harnesses");
+    assert!(collection_harnesses.is_empty(), "collection harnesses");
+    // Control: the same negotiation over a supported claim does populate `scalar_harnesses`, so the
+    // empty vectors above are a measured absence, not a vacuous one.
+    let (control_package, control_claims, control_ids) = scalar_package();
+    let control_admitted = admitted_scalar_claims(&control_package, &control_claims);
+    let control_node = control_ids.resolve(&code_id(1001));
+    let control_item = ObligationItem::ScalarClaim {
+        package: &control_admitted,
+        claim_map: &control_claims,
+        node_id: &control_node,
+        claim_index: claim_index(&control_claims, &control_node),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+    };
+    let (_, control_harnesses) = emitted_scalar(
+        negotiate_kani_obligations(&request(
+            std::slice::from_ref(&control_item),
+            "crate::subject",
+        ))
+        .unwrap(),
+    );
+    assert_eq!(control_harnesses.len(), 1);
     assert_eq!(records.len(), package::QUANTITY_CONVERSIONS.len());
     for (record, code) in records.iter().zip(package::QUANTITY_CONVERSIONS) {
         assert_eq!(

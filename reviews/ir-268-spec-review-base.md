@@ -41,3 +41,11 @@ Ticket: IR-268. Base checklist over the IR-268 spec diff (AD-004, FR-014, TC-024
 ## Verdict
 
 Approved intent checked and met: the FR-014 refusal names QuantityConversionUnsupported and QUANTITY_CONVERSION_CAPABILITY and cites IR-818. No quantity.convert descriptor, QuantityTarget or conversion support claim remains anywhere under spec/ (grep). FR-033:178 'Quantity conversion preserves its exact scalar and unit' concerns replay value canonicalization, not the oracle, and is not a contradiction. In AD-004, collection is ranked with scalar before negotiate, its local imports are outcome and record only, and negotiate's list gains collection, all matching tests/it/layout.rs. The new text narrates no history. The findings above are the remaining gaps.
+
+## Dispositions
+
+Round 1, checked against fix commit 7e16de1.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | accepted-no-change | Planner steers S1 and S3 (binding) make FR-014-AC-2 own the quantity.convert refusal and the TC-187 refusal rows, so it stays compound by decision. The duplication half is fixed: AC-18 now cross-references AC-2 ('FR-014-AC-2 owns the quire.op.quantity.convert refusal') instead of restating it. The matrix half is fixed: tests.md:14 now records the refusal clause separately ('covered at every entry point by the tests AC-2 names'). |
