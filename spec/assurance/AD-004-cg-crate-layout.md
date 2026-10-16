@@ -216,6 +216,11 @@ src/
                               once its family is ported (scalar at 4b, precondition and contract at
                               4c, frame at 4d). At step 2f each holds what its family lowers and
                               renders today, moved verbatim
+      collection.rs           the symbolic collection family: lowers an admitted model-field
+                              collection claim to its typed domain and, until step 4h, renders its
+                              harness in its own template; step 4h makes it return a HarnessSpec
+                              like the other families. It imports `outcome` and `record` and no
+                              other file of generate/
       clause.rs               the V1 clause lowering that precondition.rs and contract.rs share
                               (ClauseOracle, the subject ABI, slots); interim, reshaped by step 4c
       record.rs               the validated harness path and the persisted per-harness record every
@@ -350,10 +355,14 @@ Rules, each checkable:
   record types it needs live in `kani/identity.rs` (step 2b), so a harness is run from its identity
   and its source text.
 - Inside `kani/generate/` the order is `outcome`, `record`, `census_validation`, then the families
-  (`scalar`, `clause`, then `precondition` and `contract`, `frame`, `lower`, `corpus`, `v1_bundle`),
-  then `negotiate`, which imports `outcome`, `record`, `scalar`, `clause`, `precondition`, `contract`
-  and `frame` (the `StateFrame` arm of step 4d calls the frame family's role function; none of
-  `lower`, `corpus`, `v1_bundle` or `census_validation`) and is imported by none. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
+  (`scalar` and `collection`, `clause`, then `precondition` and `contract`, `frame`, `lower`,
+  `corpus`, `v1_bundle`), then `negotiate`, which imports `outcome`, `record`, `scalar`,
+  `collection`, `clause`, `precondition`, `contract` and `frame` (the `StateFrame` arm of step 4d
+  calls the frame family's role function; none of `lower`, `corpus`, `v1_bundle` or
+  `census_validation`) and is imported by none. `collection` imports `outcome` and `record` from
+  this directory, besides `core`, `kani::abi` and `kani::identity`, and imports no other crate
+  path, so never `negotiate`, `lower` or `corpus` either (the layout test lists exactly these
+  five prefixes for `collection.rs`); `scalar` and `collection` share a rank, so neither imports the other. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
   renders one item is its family's. `corpus` imports `lower` and `census_validation`; `v1_bundle`
   imports `census_validation`; `frame` imports `outcome` only. `kani/test_support.rs` is
@@ -404,8 +413,10 @@ one identity record, one cover rule and one entry, not one function:
 - `kani/generate/render.rs` is the only code that emits `#[kani::proof]`, `#[kani::proof_for_contract]`,
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
-- Four family lowerers (`scalar`, `precondition`, `contract`, `frame`) each take lowered IR claims
-  and return `HarnessSpec`s. They do not format Rust source. `generate_state_frame_obligations`
+- Five family lowerers (`scalar`, `precondition`, `contract`, `frame`, `collection`) each take
+  lowered IR claims and return `HarnessSpec`s. They do not format Rust source. Until its step
+  ports it, a family returns what it lowers and renders today: `collection` returns a typed
+  domain and a rendered harness until step 4h. `generate_state_frame_obligations`
   becomes a frame arm of `ObligationItem`, so `negotiate_kani_obligations` is the one public
   generation entry; ADR-004 owns what the frame arm asserts.
 - `ScalarObligationIdentity`, `KaniObligationIdentity` and `StateFrameIdentity` collapse into one
@@ -626,10 +637,11 @@ requirement is authored.
   pass when it lands.
 - L-3. `#[kani::proof]`, `#[kani::proof_for_contract]`, `kani::requires`, `kani::ensures`,
   `kani::any`, `kani::assume` and `kani::cover!` occur in string literals of non-test source in
-  `kani/generate/render.rs` only. Test: a literal scan that ignores comments. It lands after 4f and
-  4g. Until then the interim exceptions are the V1 arm and `generate_kani_bundle` (their own
-  templates until 4f, in `kani/generate/v1_bundle.rs`) and the corpus template (until 4g, in
-  `kani/generate/corpus/bounded_kani_corpus.rs`); the scan lists them by file and each entry is
+  `kani/generate/render.rs` only. Test: a literal scan that ignores comments. It lands after 4f, 4g and
+  4h. Until then the interim exceptions are the V1 arm and `generate_kani_bundle` (their own
+  templates until 4f, in `kani/generate/v1_bundle.rs`), the corpus template (until 4g, in
+  `kani/generate/corpus/bounded_kani_corpus.rs`) and the collection template (until 4h, in
+  `kani/generate/collection.rs`); the scan lists them by file and each entry is
   removed with its step.
 - L-4. A `HarnessSpec` has at least one cover, and `render.rs` places every cover after all
   assumptions, the subject call and every assertion, as the last statement. Test: the constructor's refusal, and a real-Kani test that a
@@ -809,8 +821,15 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      cannot replace it. The admitted symbolic cases render through `HarnessSpec` and `render.rs`
      under the cover rule; a case with no symbolic input does not render a proof. Generation
      returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
-     L-3 lands after 4f and 4g. The Kani family lowerings
+     L-3 lands after 4f, 4g and 4h. The Kani family lowerings
      are implemented in CG by IR-347; IR removal follows this consumer change.
+   - 4h: the collection family. `kani/generate/collection.rs` lowers an admitted model-field
+     collection claim to a `HarnessSpec` and `render.rs` renders it under the cover rule, so the
+     file no longer emits `#[kani::proof]`, `kani::any`, `kani::assume` or `kani::cover!` itself.
+     It keeps its typed domain and its refusals. Its template is an interim exception to L-3 and,
+     until it renders through `HarnessSpec`, outside L-4; FR-015-AC-58's inspection covers its
+     text meanwhile. Step 4h needs `HarnessSpec` and `render` from step 4b and is independent of
+     4c to 4g.
 5. **One output reader and the terminal map.** The playback scanning already sits in
    `kani/output/playback.rs` (step 2f moved it verbatim); this step changes the interface:
    `playback.rs` returns typed entries and its own typed refusal, `replay/witness.rs` takes them
@@ -1103,7 +1122,7 @@ Each is a place where the target of this AD is not yet true, stated so that no s
 | `validate_dependencies`, the V1 error type it returns and `deterministic_json` | `kani/generate/census_validation.rs` | 4g or the V2 census input for the first two; step 1a for `deterministic_json` |
 | The shared V1 clause lowering and the V1 arm (`ObligationItem::BoundClause` in `outcome.rs`, `classify_clause` in `negotiate.rs`) | `kani/generate/clause.rs`, `outcome.rs`, `negotiate.rs` | step 4c reshapes the lowering for the V2 input; 4f deletes the V1 arm |
 | The persisted-record helpers | `kani/generate/record.rs` | not scheduled; `artifact` by step 1a |
-| Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4g for the corpus |
+| Each family renders its own template; the corpus keeps its own, with its cover after the assertion (FR-015-AC-55) | `scalar.rs`, `precondition.rs`, `contract.rs`, `frame.rs`, `collection.rs`, `corpus/bounded_kani_corpus.rs` | 4b, 4c, 4d; 4h for collection; 4g for the corpus |
 | The three semantic-family forwarding modules | `kani/generate/lower/{definedness_arithmetic,bounded_collections,finite_reference_graphs}.rs` | IR-347 replaces the forwarders with CG-owned lowerings and request/result types; IR removes its former exports afterwards |
 | `generate_state_frame_obligations` is a second public entry beside `negotiate_kani_obligations` | `kani/generate/frame.rs` | step 4d |
 

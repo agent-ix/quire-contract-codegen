@@ -14,7 +14,8 @@ use crate::{
     core::diagnostic::GenerationErrorCode,
     core::identity::HarnessSymbol,
     kani::identity::{
-        KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
+        KaniCollectionObligationHarness, KaniObligationHarness, KaniScalarObligationHarness,
+        ObligationKind, StateFrameHarness,
     },
     oracle::claim::{ClaimMap, UpstreamBlocker},
     oracle::scalar::{ClaimDerivationRefusal, ExactScalarClaim, ExactScalarRefusal},
@@ -87,6 +88,15 @@ pub enum ObligationItem<'a> {
         claim_index: usize,
         /// The caller's selected result occurrence, or `NotApplicable` for a direct node claim.
         result_selection: &'a ContractDriverResultSelection,
+    },
+    /// One selected forall/exists occurrence in an admitted V2 function body.
+    CollectionClaim {
+        /// The admitted package.
+        package: &'a CheckedPackageV2,
+        /// The selected function whose body contains the claim.
+        function_id: &'a CheckedNodeId,
+        /// The exact quantifier node selected for this item.
+        node_id: &'a CheckedNodeId,
     },
 }
 
@@ -275,6 +285,13 @@ pub enum UnsupportedObligation {
         /// The domains the IR does carry.
         derived_domains: Vec<DerivedDomain>,
     },
+    /// A checked collection claim could not be lowered without changing its source semantics.
+    CollectionClaimNotRendered {
+        /// The selected quantifier.
+        node_id: CheckedNodeId,
+        /// Typed refusal ground.
+        reason: CollectionUnsupportedReason,
+    },
     /// The operation identity is IR-confirmed and its checked bound is an integer range, but one
     /// of its inclusive endpoints, or a literal operand's value (then both `lower` and `upper`),
     /// does not fit `i64`, so no `kani::any::<i64>()` argument can be constrained to it.
@@ -439,6 +456,40 @@ pub enum ObligationDisposition {
     },
 }
 
+/// Typed reasons a collection claim has no exact symbolic layout or predicate renderer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectionUnsupportedReason {
+    /// The function, quantifier, projection, or binder shape is not a supported closed form.
+    UnsupportedClaimShape,
+    /// Two distinct complete collection identities produced the same bounded Rust/Kani symbols.
+    HarnessSymbolCollision,
+    /// The selected projection did not resolve in admitted model fields.
+    FieldNotAdmitted,
+    /// The field is not a bounded ordered sequence of Boolean or bounded integer elements.
+    UnsupportedFieldType,
+    /// The element interval has no values.
+    UnsatisfiableElementDomain,
+    /// A checked endpoint cannot be represented by the runner's current i64 witness ABI.
+    DomainNotRepresentableInI64,
+    /// A checked cardinality cannot be represented by the target Rust array ABI.
+    DomainNotRepresentableInHarness,
+    /// The backend unwind is too small to execute every admitted sequence length plus loop exit.
+    UnwindBelowCollectionBound {
+        /// Required unwind count (`maximum_length + 1`).
+        required: u64,
+        /// Requested backend unwind count.
+        supplied: u32,
+    },
+    /// The minimum storage for symbolic slots exceeds the request's resident-memory ceiling.
+    SymbolicDomainExceedsMemoryCeiling {
+        /// Element storage plus the symbolic length slot, in bytes.
+        minimum_required_bytes: u64,
+        /// The request's resident-memory ceiling, in bytes.
+        ceiling_bytes: u64,
+    },
+}
+
 /// Accounting for one requested item.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ObligationRecord {
@@ -465,6 +516,8 @@ pub enum KaniObligationOutcome {
         scalar_harnesses: Vec<KaniScalarObligationHarness>,
         /// State-clause harnesses, one per `supported` `StateFrame` record, in request order.
         state_frame_harnesses: Vec<StateFrameHarness>,
+        /// Admitted V2 collection claim harnesses, in request order.
+        collection_harnesses: Vec<KaniCollectionObligationHarness>,
     },
     /// At least one item was invalid; no harness bytes are returned.
     Rejected {

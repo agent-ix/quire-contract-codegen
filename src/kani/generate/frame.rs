@@ -958,6 +958,9 @@ pub(crate) fn field_range(
         Some(
             CheckedMemberType::Boolean
             | CheckedMemberType::Integer
+            | CheckedMemberType::String
+            | CheckedMemberType::Uuid
+            | CheckedMemberType::Timestamp
             | CheckedMemberType::Reference(_)
             | CheckedMemberType::Record(_)
             | CheckedMemberType::Variant(_)
@@ -1259,6 +1262,18 @@ fn frame_body(
 mod tests {
     use super::*;
 
+    /// A quantity conversion is not a state comparison, so the frame reader declines it and the
+    /// clause is refused as unsupported.
+    ///
+    /// Trace: FR-014-AC-2, TC-024.
+    #[test]
+    fn a_quantity_conversion_is_not_a_state_comparison() {
+        assert_eq!(
+            StateComparison::from_operation("quire.op.quantity.convert"),
+            None
+        );
+    }
+
     /// Frame rendering keeps each comparison identity and its authored operand direction.
     ///
     /// Trace: FR-038-AC-1, FR-038-AC-3, FR-038-AC-6, TC-025.
@@ -1280,6 +1295,7 @@ mod tests {
             StateComparison::from_operation("quire.op.integer.add"),
             None
         );
+
         assert_eq!(
             StateComparison::from_operation("quire.op.integer.unknown"),
             None

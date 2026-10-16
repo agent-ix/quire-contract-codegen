@@ -1181,6 +1181,92 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
     );
 }
 
+/// A quantity conversion node declared by the caller reaches the Kani obligation engine only as
+/// a refused claim: each is accounted `unsupported` with the named capability and no harness is
+/// emitted.
+///
+/// Trace: FR-014-AC-2, FR-015-AC-15, TC-025
+#[test]
+fn tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness() {
+    let (scalar, _, ids) = scalar_package();
+    let declared = package::QUANTITY_CONVERSIONS
+        .iter()
+        .map(|code| ExactScalarItem {
+            node_id: ids.resolve(&code_id(*code)),
+            operation: ExactScalarOperation::QuantityArithmetic {
+                operator: quire_contract_codegen::QuantityOperator::Add,
+            },
+        })
+        .collect::<Vec<_>>();
+    let claim_map = generate_exact_scalar_oracles(&scalar, &declared)
+        .expect("claim map")
+        .claim_map;
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
+    let node_ids = package::QUANTITY_CONVERSIONS
+        .iter()
+        .map(|code| ids.resolve(&code_id(*code)))
+        .collect::<Vec<_>>();
+    let items = node_ids
+        .iter()
+        .map(|node_id| ObligationItem::ScalarClaim {
+            package: &admitted,
+            claim_map: &claim_map,
+            node_id,
+            claim_index: claim_index(&claim_map, node_id),
+            result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+        })
+        .collect::<Vec<_>>();
+    let KaniObligationOutcome::Emitted {
+        records,
+        harnesses,
+        scalar_harnesses,
+        state_frame_harnesses,
+        collection_harnesses,
+    } = negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap()
+    else {
+        panic!("a refused claim settles per item");
+    };
+    // The whole artifact set is empty: no harness of any family is emitted for the obligations.
+    assert!(harnesses.is_empty(), "V1 harnesses");
+    assert!(scalar_harnesses.is_empty(), "scalar harnesses");
+    assert!(state_frame_harnesses.is_empty(), "state-frame harnesses");
+    assert!(collection_harnesses.is_empty(), "collection harnesses");
+    // Control: the same negotiation over a supported claim does populate `scalar_harnesses`, so the
+    // empty vectors above are a measured absence, not a vacuous one.
+    let (control_package, control_claims, control_ids) = scalar_package();
+    let control_admitted = admitted_scalar_claims(&control_package, &control_claims);
+    let control_node = control_ids.resolve(&code_id(1001));
+    let control_item = ObligationItem::ScalarClaim {
+        package: &control_admitted,
+        claim_map: &control_claims,
+        node_id: &control_node,
+        claim_index: claim_index(&control_claims, &control_node),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+    };
+    let (_, control_harnesses) = emitted_scalar(
+        negotiate_kani_obligations(&request(
+            std::slice::from_ref(&control_item),
+            "crate::subject",
+        ))
+        .unwrap(),
+    );
+    assert_eq!(control_harnesses.len(), 1);
+    assert_eq!(records.len(), package::QUANTITY_CONVERSIONS.len());
+    for (record, code) in records.iter().zip(package::QUANTITY_CONVERSIONS) {
+        assert_eq!(
+            unsupported(record),
+            &UnsupportedObligation::NoDerivableClaim {
+                node_id: ids.resolve(&code_id(code)),
+                reason:
+                    quire_contract_codegen::ClaimDerivationRefusal::QuantityConversionUnsupported {
+                        operation_identity: "quire.op.quantity.convert".to_owned(),
+                        capability: quire_contract_codegen::QUANTITY_CONVERSION_CAPABILITY,
+                    },
+            }
+        );
+    }
+}
+
 /// A rendered `Generated` claim, and the [`ClaimMap`] it came from, reused by both
 /// `UnknownNodeKind` tests below to hand-assemble a claim map entry `generate_exact_scalar_oracles`
 /// would never itself produce.

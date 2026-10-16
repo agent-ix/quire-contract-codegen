@@ -58,6 +58,7 @@ const MODULE_FILES: &[&str] = &[
     "kani/test_support.rs",
     "kani/generate/census_validation.rs",
     "kani/generate/clause.rs",
+    "kani/generate/collection.rs",
     "kani/generate/contract.rs",
     "kani/generate/corpus/bounded_kani_corpus.rs",
     "kani/generate/frame.rs",
@@ -537,6 +538,18 @@ fn l_2_every_import_follows_the_dependency_direction() {
                 edge.path.join("::")
             ));
         }
+        if let Some(allowed) = file_import_allowlist(&edge.file) {
+            if !allowed.iter().any(|prefix| {
+                edge.path.len() >= prefix.len()
+                    && edge.path.iter().zip(prefix.iter()).all(|(a, b)| a == b)
+            }) {
+                violations.push(format!(
+                    "{}: crate::{} is outside the file's allowed set {allowed:?}",
+                    edge.file,
+                    edge.path.join("::")
+                ));
+            }
+        }
         if let Some(resolved) = resolve(&edge.path, &modules) {
             if let Some(reason) = kani_order_violation(&from, &resolved) {
                 violations.push(format!(
@@ -634,6 +647,21 @@ fn generate_order_violation(importer: &str, imported: &str) -> Option<String> {
     })
 }
 
+/// The crate paths a single file may import, where AD-004 names the set: the collection family
+/// imports `core`, `kani::abi`, `kani::identity`, and `outcome` and `record` of its own directory.
+fn file_import_allowlist(file: &str) -> Option<&'static [&'static [&'static str]]> {
+    match file {
+        "kani/generate/collection.rs" => Some(&[
+            &["core"],
+            &["kani", "abi"],
+            &["kani", "identity"],
+            &["kani", "generate", "outcome"],
+            &["kani", "generate", "record"],
+        ]),
+        _ => None,
+    }
+}
+
 /// Importers inside `kani/` the AD restricts to a named set of top-level names.
 fn kani_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
     match importer {
@@ -647,11 +675,13 @@ fn kani_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
 fn generate_exact_imports(importer: &str) -> Option<&'static [&'static str]> {
     match importer {
         "outcome" => Some(&[]),
+        "collection" => Some(&["outcome", "record"]),
         "frame" => Some(&["outcome"]),
         "negotiate" => Some(&[
             "outcome",
             "record",
             "scalar",
+            "collection",
             "clause",
             "precondition",
             "contract",
@@ -668,7 +698,7 @@ fn generate_rank(name: &str) -> Option<u8> {
         "outcome" => Some(0),
         "record" => Some(1),
         "census_validation" => Some(2),
-        "scalar" => Some(3),
+        "scalar" | "collection" => Some(3),
         "clause" => Some(4),
         "precondition" | "contract" => Some(5),
         "frame" => Some(6),

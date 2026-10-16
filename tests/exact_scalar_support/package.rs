@@ -32,8 +32,8 @@ use quire_contract_model::{
 };
 use quire_contract_runtime::exact::{
     ComparisonOperator, DecimalType, DivisionProfile, IeeeComparison, IeeeWidth, Integer,
-    IntegerDomain, IntegerInterval, OrderingOperator, QuantityTarget, RationalDomain, RoundingMode,
-    TextProfile, TextType,
+    IntegerDomain, IntegerInterval, OrderingOperator, RationalDomain, RoundingMode, TextProfile,
+    TextType,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -327,11 +327,18 @@ pub fn mode_kv(kind: &str, value: &str) -> Value {
     json!({"kind": kind, "value": value})
 }
 
-/// An `operation.member` naming only a `kind`: sufficient for every member
-/// kind this module uses (`type_argument`, `profile_operator`), which IR
+/// An `operation.member` naming only a `kind`: sufficient for the member kind
+/// this module uses without a declaration (`profile_operator`), which IR
 /// checks for presence and kind only.
 pub fn member_kind(kind: &str) -> Value {
     json!({"kind": kind})
+}
+
+/// An `operation.member` of kind `type_argument`. IR closes this shape to
+/// `{kind, declaration}`, and a catalogued `member` result form requires the
+/// application's `result_type` to equal the `declaration` node.
+pub fn type_argument_member(declaration: &str) -> Value {
+    json!({"kind": "type_argument", "declaration": node_ref(declaration)})
 }
 
 /// A well-formed definition ref `{authority, identity}` for a profile-role law, which has no closed
@@ -892,7 +899,14 @@ impl PackageBuilder {
             .iter()
             .map(|bound| self.bound(bound))
             .collect::<Vec<_>>();
-        let dependencies = reference_targets(&body);
+        let references = reference_targets(&body);
+        // A `type_argument` member's declaration is a dependency of the
+        // application alongside its `reference` targets; it is never the
+        // bound anchor.
+        let mut dependencies = references.clone();
+        if let Some(declaration) = body["operation"]["member"]["declaration"]["digest"].as_str() {
+            dependencies.push(declaration.to_owned());
+        }
         // Only computed when there is a bound to anchor: a caller passing no
         // `bounds` (e.g. the isolated TextAdmission reader negative) may
         // legitimately have neither a `reference` target nor a `semantic_type`
@@ -900,7 +914,7 @@ impl PackageBuilder {
         // nothing here will use.
         if !keys.is_empty() {
             let anchor = anchor.map(str::to_owned).unwrap_or_else(|| {
-                dependencies.first().cloned().unwrap_or_else(|| {
+                references.first().cloned().unwrap_or_else(|| {
                     value_for_type(semantic_type).unwrap_or_else(|| {
                         panic!(
                             "application_bounded({code}): {} bound(s) requested, the body has no \
@@ -1428,8 +1442,11 @@ pub const AMBIGUOUS: u32 = 2024;
 pub const WRONG_BOUND_FORM: u32 = 2026;
 /// A floor division bounded `[-5, 5]`, requested over `[-1000, 1000]`.
 pub const DOMAIN_MISMATCH: u32 = 2027;
-/// A quantity conversion to a bounded rational, requested as exact.
-pub const QUANTITY_EXACT: u32 = 2028;
+/// The third quantity conversion node.
+pub const QUANTITY_CONVERT_AWAY: u32 = 2028;
+/// The quantity conversion nodes: each converts a quantity to its own unit type under the
+/// `exact` mode that unit type pins.
+pub const QUANTITY_CONVERSIONS: [u32; 3] = [1086, 1087, QUANTITY_CONVERT_AWAY];
 /// An integer addition whose left operand is itself an application.
 pub const EXPRESSION_OPERAND: u32 = 2029;
 /// A quantity addition whose right operand is a literal.
@@ -1914,35 +1931,6 @@ pub fn corpus() -> Vec<Expression> {
         quantity(1083, QTY_INT, QuantityOperator::Power),
         quantity(1088, QTY2, QuantityOperator::Subtract),
         quantity(1089, QTY2, QuantityOperator::Divide),
-        expression(
-            1086,
-            CONVERSION,
-            QTY1,
-            "decimal",
-            Op::QuantityConversion {
-                target: QuantityTarget::Decimal(decimal_type(
-                    -100_000,
-                    100_000,
-                    0,
-                    2,
-                    RoundingMode::NearestEven,
-                )),
-            },
-            vec![Bound::Decimal(-100_000, 100_000, 0, 2, "nearest-even")],
-        ),
-        expression(
-            1087,
-            CONVERSION,
-            QTY1,
-            "integer",
-            Op::QuantityConversion {
-                target: QuantityTarget::Integer {
-                    domain: interval(-1000, 1000),
-                    rounding: RoundingMode::TowardZero,
-                },
-            },
-            vec![INT],
-        ),
     ];
     for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
         corpus.push(expression(
@@ -2312,24 +2300,6 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
             expr.operator,
             op(text_family_identity("quantity", *operator)),
         ),
-        Op::QuantityConversion { target } => (
-            expr.operator,
-            op_full(
-                "quire.op.quantity.convert",
-                vec![],
-                match target {
-                    QuantityTarget::Exact => None,
-                    QuantityTarget::Decimal(decimal) => {
-                        Some(mode_kv("rounding", decimal.rounding().as_str()))
-                    }
-                    QuantityTarget::Integer { rounding, .. } => {
-                        Some(mode_kv("rounding", rounding.as_str()))
-                    },
-                    &_ => unreachable!("QuantityTarget gained a variant after RT #70 (IR-77) added #[non_exhaustive]; every variant that existed then is matched above")
-                },
-                Some(member_kind("type_argument")),
-            ),
-        ),
     }
 }
 
@@ -2385,8 +2355,7 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
     // operands are never paired with a varying bound in this corpus
     // (every `EnumComparison` vector below declares `Vec::new()`), so
     // they keep the plain shared node unconditionally. "unit" operands
-    // *do* get bounds here (`quantity.pow`'s `INT` domain, and the two
-    // `QuantityConversion` codes' `Decimal`/`INT` targets), so they are
+    // *do* get bounds here (`quantity.pow`'s `INT` domain), so they are
     // dedicated the same way via [`PackageBuilder::dedicated_unit_operand`]
     // whenever `bound_keys` is non-empty, rather than kept on the shared
     // `V_QUANTITY` node.
@@ -2491,8 +2460,13 @@ fn add_corpus_expression(builder: &mut PackageBuilder, expression: Expression) {
         };
         arguments = vec![literal("text", &format!("a{}-{profile}", expression.code))];
     }
-    let (catalog_operator, operation) = corpus_operation(&expression);
+    let (catalog_operator, mut operation) = corpus_operation(&expression);
     let node_semantic_type = pinned_type.unwrap_or_else(|| result_type(expression.result));
+    // `corpus_operation` does not know the result type, which a
+    // `type_argument` member must name as its declaration.
+    if operation["member"] == member_kind("type_argument") {
+        operation["member"] = type_argument_member(&node_semantic_type);
+    }
     let node_bounds: &[Bound] = if matches!(expression.operation, Op::TextAdmission { .. }) {
         &[]
     } else {
@@ -2692,49 +2666,65 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             &bounds,
         );
     }
-    builder
-        .application_bounded(
-            QUANTITY_EXACT,
+    // Node ids are digests of the body, so the three conversions differ by the quantity operand
+    // they reference: the shared one, an unbounded dedicated one, and one dedicated to `INT`.
+    let int_key = builder.bound(&INT);
+    for (code, operand, bounds) in [
+        (QUANTITY_CONVERSIONS[0], key(V_QUANTITY), Vec::new()),
+        (
+            QUANTITY_CONVERSIONS[1],
+            builder.dedicated_unit_operand(&[]),
+            Vec::new(),
+        ),
+        (
+            QUANTITY_CONVERSIONS[2],
+            builder.dedicated_unit_operand(&[int_key]),
+            vec![INT],
+        ),
+    ] {
+        builder.application_bounded(
+            code,
             "expression",
             "conversion",
-            &key(T_RATIONAL),
+            &unit_type(),
             application(
                 "convert",
                 op_full(
                     "quire.op.quantity.convert",
                     vec![],
-                    Some(mode_kv("rounding", "nearest-even")),
-                    Some(member_kind("type_argument")),
+                    Some(mode_kv("rounding", "exact")),
+                    Some(type_argument_member(&unit_type())),
                 ),
-                &key(T_RATIONAL),
-                vec![reference(&key(V_QUANTITY))],
-            ),
-            &[RAT],
-        )
-        .application_bounded(
-            LITERAL_QUANTITY,
-            "expression",
-            "binary",
-            &unit_type(),
-            application(
-                "binary",
-                op("quire.op.quantity.add"),
                 &unit_type(),
-                // A deliberate negative fixture QSL never emits (it builds no quantity literal).
-                // A quantity literal is typed by its unit: IR resolves a literal operand
-                // through `literal.type`, and `quantity.add` takes a quantity on both sides.
-                vec![
-                    reference(&key(V_QUANTITY)),
-                    json!({
-                        "term": "literal",
-                        "type": node_ref(&unit_type()),
-                        "value_kind": "rational",
-                        "value": "1",
-                    }),
-                ],
+                vec![reference(&operand)],
             ),
-            &[],
+            &bounds,
         );
+    }
+    builder.application_bounded(
+        LITERAL_QUANTITY,
+        "expression",
+        "binary",
+        &unit_type(),
+        application(
+            "binary",
+            op("quire.op.quantity.add"),
+            &unit_type(),
+            // A deliberate negative fixture QSL never emits (it builds no quantity literal).
+            // A quantity literal is typed by its unit: IR resolves a literal operand
+            // through `literal.type`, and `quantity.add` takes a quantity on both sides.
+            vec![
+                reference(&key(V_QUANTITY)),
+                json!({
+                    "term": "literal",
+                    "type": node_ref(&unit_type()),
+                    "value_kind": "rational",
+                    "value": "1",
+                }),
+            ],
+        ),
+        &[],
+    );
     // IR-280's FR-322 join means each of these must anchor its own bound on
     // a node no other expression's differing bound also reaches (see
     // `dedicated_operand`'s doc): sharing `V_INTEGER`/`V_DECIMAL` directly
@@ -3954,7 +3944,7 @@ impl PackageBuilder {
                 "quire.op.numeric.narrow",
                 Vec::new(),
                 None,
-                Some(json!({"kind": "type_argument", "declaration": node_ref(target)})),
+                Some(type_argument_member(target)),
             ),
             target,
             vec![reference(operand)],
@@ -3978,6 +3968,170 @@ pub const DERIVE_INTEGER_EQ: u32 = 2041;
 pub const DERIVE_MIXED_DIV: u32 = 2042;
 /// `numeric.convert` to an integer result: only a text result is derivable.
 pub const DERIVE_CONVERT_TO_INTEGER: u32 = 2043;
+
+/// A pure function whose body is a quantity conversion node.
+pub const CONVERSION_FUNCTION: u32 = 2150;
+/// A quantity equality whose left operand references a quantity conversion node.
+pub const EQUALITY_OVER_CONVERSION: u32 = 2151;
+
+/// A pure function named [`ADDER_NAME`] whose body is the integer addition node 1001.
+pub const ADDER_FUNCTION: u32 = 2152;
+/// A call of [`ADDER_FUNCTION`] whose first argument is a quantity conversion node.
+pub const CALL_OVER_CONVERSION: u32 = 2153;
+/// The declared name of [`ADDER_FUNCTION`].
+/// A pure function whose body is a direct reference to the integer addition node 1001.
+pub const REFERENCE_FUNCTION: u32 = 2156;
+/// A call of [`REFERENCE_FUNCTION`] whose first argument is a quantity conversion node.
+pub const CALL_REFERENCE_OVER_CONVERSION: u32 = 2157;
+/// A pure function named [`CONVERTING_NAME`] whose body is the 1086 quantity conversion node.
+pub const CONVERTING_FUNCTION: u32 = 2158;
+/// A call of [`CONVERTING_FUNCTION`] with no arguments.
+pub const CALL_CONVERTING_FUNCTION: u32 = 2159;
+/// The declared name of [`CONVERTING_FUNCTION`].
+pub const CONVERTING_NAME: &str = "nconverting";
+/// The adder's parameters.
+pub const ADDER_LEFT: u32 = 2154;
+/// The adder's parameters.
+pub const ADDER_RIGHT: u32 = 2155;
+/// The declared name of [`ADDER_FUNCTION`].
+pub const ADDER_NAME: &str = "nadder";
+
+/// [`corpus_package`] plus a function declared over a quantity conversion node and a quantity
+/// equality that reads a conversion node as an operand.
+pub fn conversion_operand_package() -> PackageBuilder {
+    let mut builder = corpus_package();
+    let conversion = code_id(QUANTITY_CONVERSIONS[0]).digest.to_string();
+    builder.application_bounded(
+        EQUALITY_OVER_CONVERSION,
+        "expression",
+        "binary",
+        &key(T_BOOLEAN),
+        application(
+            "binary",
+            op("quire.op.quantity.eq"),
+            &key(T_BOOLEAN),
+            vec![reference(&conversion), reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
+    register_code(CONVERSION_FUNCTION, key(CONVERSION_FUNCTION));
+    builder.node_with(
+        &key(CONVERSION_FUNCTION),
+        "function",
+        "pure_function",
+        &unit_type(),
+        json!({"term": "reference", "target": node_ref(&conversion)}),
+        std::slice::from_ref(&conversion),
+    );
+    let addition = code_id(1001).digest.to_string();
+    let left = key(ADDER_LEFT);
+    let right = key(ADDER_RIGHT);
+    builder
+        .code(
+            ADDER_LEFT,
+            "value",
+            "parameter",
+            &unit_type(),
+            parameter_body("a", 0),
+        )
+        .code(
+            ADDER_RIGHT,
+            "value",
+            "parameter",
+            &key(T_INTEGER),
+            parameter_body("b", 0),
+        );
+    register_code(ADDER_FUNCTION, key(ADDER_FUNCTION));
+    builder.node_with_label(
+        &key(ADDER_FUNCTION),
+        "adder",
+        "function",
+        "pure_function",
+        &key(T_INTEGER),
+        json!({"term": "aggregate", "members": [
+            member(
+                "parameters",
+                json!({"term": "aggregate", "members": [reference(&left), reference(&right)]}),
+            ),
+            member("body", reference(&addition)),
+        ]}),
+        &[addition.clone(), left, right],
+    );
+    let function = key(ADDER_FUNCTION);
+    let integer = key(V_INTEGER);
+    builder.application_code_with(
+        CALL_OVER_CONVERSION,
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        application(
+            "call",
+            op("quire.op.function.call"),
+            &key(T_INTEGER),
+            vec![
+                reference(&function),
+                reference(&conversion),
+                reference(&integer),
+            ],
+        ),
+        &[function, conversion.clone(), integer.clone()],
+    );
+    register_code(CONVERTING_FUNCTION, key(CONVERTING_FUNCTION));
+    builder.node_with_label(
+        &key(CONVERTING_FUNCTION),
+        "converting",
+        "function",
+        "pure_function",
+        &unit_type(),
+        json!({"term": "aggregate", "members": [
+            member("parameters", json!({"term": "aggregate", "members": []})),
+            member("body", reference(&conversion)),
+        ]}),
+        std::slice::from_ref(&conversion),
+    );
+    let converting = key(CONVERTING_FUNCTION);
+    builder.application_code_with(
+        CALL_CONVERTING_FUNCTION,
+        "expression",
+        "call",
+        &unit_type(),
+        application(
+            "call",
+            op("quire.op.function.call"),
+            &unit_type(),
+            vec![reference(&converting)],
+        ),
+        std::slice::from_ref(&converting),
+    );
+    register_code(REFERENCE_FUNCTION, key(REFERENCE_FUNCTION));
+    builder.node_with(
+        &key(REFERENCE_FUNCTION),
+        "function",
+        "pure_function",
+        &key(T_INTEGER),
+        json!({"term": "reference", "target": node_ref(&addition)}),
+        std::slice::from_ref(&addition),
+    );
+    let reference_function = key(REFERENCE_FUNCTION);
+    builder.application_code_with(
+        CALL_REFERENCE_OVER_CONVERSION,
+        "expression",
+        "call",
+        &key(T_INTEGER),
+        application(
+            "call",
+            op("quire.op.function.call"),
+            &key(T_INTEGER),
+            vec![
+                reference(&reference_function),
+                reference(&conversion),
+                reference(&integer),
+            ],
+        ),
+        &[reference_function, conversion, integer],
+    );
+    builder
+}
 
 /// [`corpus_package`] plus the nodes IR-294's derivation refuses: `integer.rem`, `integer.eq`,
 /// a mixed-operand `rational.div` and a `numeric.convert` to an integer.
@@ -4053,7 +4207,7 @@ pub fn derivation_package() -> PackageBuilder {
                 "quire.op.numeric.convert",
                 vec![],
                 None,
-                Some(member_kind("type_argument")),
+                Some(type_argument_member(&key(T_INTEGER))),
             ),
             &key(T_INTEGER),
             vec![reference(&convert_operand)],
@@ -4133,12 +4287,6 @@ pub fn refused_items() -> Vec<ExactScalarItem> {
         ExactScalarOperation::IntegerDivision {
             profile: DivisionProfile::Floor,
             domain: bounded(-1000, 1000),
-        },
-    ));
-    items.push(item(
-        QUANTITY_EXACT,
-        ExactScalarOperation::QuantityConversion {
-            target: QuantityTarget::Exact,
         },
     ));
     items.push(item(

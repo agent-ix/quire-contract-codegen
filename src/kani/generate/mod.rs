@@ -5,6 +5,8 @@
 pub(crate) mod census_validation;
 // The V1 clause lowering the precondition and contract families share.
 pub(crate) mod clause;
+// Bounded collection claims over admitted V2 model fields.
+pub(crate) mod collection;
 // The contract family.
 pub(crate) mod contract;
 // The bounded-Kani corpus family.

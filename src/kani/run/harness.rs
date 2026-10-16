@@ -5,8 +5,9 @@ use crate::{
     core::artifact::Artifact,
     kani::abi::KaniSolver,
     kani::identity::{
-        KaniObligationHarness, KaniScalarObligationHarness, ObligationKind, StateFrameHarness,
-        StateFrameProperty, SymbolicArgumentBounds, SymbolicBounds,
+        CollectionElementIdentity, KaniCollectionObligationHarness, KaniObligationHarness,
+        KaniScalarObligationHarness, ObligationKind, StateFrameHarness, StateFrameProperty,
+        SymbolicArgumentBounds, SymbolicBounds,
     },
 };
 
@@ -22,6 +23,8 @@ pub enum KaniExecutableHarness<'a> {
     Scalar(&'a KaniScalarObligationHarness),
     /// A V2 state-clause operation-contract or frame-effect harness (IR-412).
     StateFrame(&'a StateFrameHarness),
+    /// A V2 admitted symbolic collection claim.
+    Collection(&'a KaniCollectionObligationHarness),
 }
 
 impl<'a> From<&'a KaniObligationHarness> for KaniExecutableHarness<'a> {
@@ -42,6 +45,12 @@ impl<'a> From<&'a StateFrameHarness> for KaniExecutableHarness<'a> {
     }
 }
 
+impl<'a> From<&'a KaniCollectionObligationHarness> for KaniExecutableHarness<'a> {
+    fn from(harness: &'a KaniCollectionObligationHarness) -> Self {
+        Self::Collection(harness)
+    }
+}
+
 /// Exactly what execution reads from a harness, whichever kind it is.
 pub(super) struct HarnessView<'a> {
     pub(super) ceilings: crate::kani::identity::ProofCeilings,
@@ -56,6 +65,13 @@ pub(super) struct HarnessView<'a> {
 }
 
 impl<'a> KaniExecutableHarness<'a> {
+    pub(super) fn has_valid_provenance(self) -> bool {
+        match self {
+            Self::Collection(harness) => harness.has_valid_provenance(),
+            Self::Contract(_) | Self::Scalar(_) | Self::StateFrame(_) => true,
+        }
+    }
+
     /// Record argument bounds only when producing execution evidence.
     pub(super) fn symbolic_arguments(self) -> Vec<SymbolicArgumentBounds> {
         match self {
@@ -124,6 +140,28 @@ impl<'a> KaniExecutableHarness<'a> {
                     })
                     .collect()
             }
+            Self::Collection(harness) => {
+                let identity = &harness.identity;
+                let element = match identity.element {
+                    CollectionElementIdentity::Boolean => SymbolicBounds::Boolean,
+                    CollectionElementIdentity::Integer { minimum, maximum } => {
+                        SymbolicBounds::Integer { minimum, maximum }
+                    }
+                };
+                vec![SymbolicArgumentBounds {
+                    identifier: format!(
+                        "{}::{}::{}",
+                        identity.declaration_id.digest,
+                        identity.function_id.digest,
+                        identity.field_name
+                    ),
+                    bounds: SymbolicBounds::Sequence {
+                        minimum_length: identity.minimum_length,
+                        maximum_length: identity.maximum_length,
+                        element: Box::new(element),
+                    },
+                }]
+            }
         }
     }
 
@@ -163,6 +201,18 @@ impl<'a> KaniExecutableHarness<'a> {
                         StateFrameProperty::Postcondition { .. } => ObligationKind::Postcondition,
                         StateFrameProperty::Frame { .. } => ObligationKind::Frame,
                     }),
+                    unwind: identity.unwind,
+                    solver: identity.solver,
+                    options: &identity.options,
+                }
+            }
+            Self::Collection(harness) => {
+                let identity = &harness.identity;
+                HarnessView {
+                    ceilings: identity.ceilings,
+                    rust: &harness.rust,
+                    selection: format!("{}::{}", identity.module_symbol, identity.harness_symbol),
+                    kind: None,
                     unwind: identity.unwind,
                     solver: identity.solver,
                     options: &identity.options,

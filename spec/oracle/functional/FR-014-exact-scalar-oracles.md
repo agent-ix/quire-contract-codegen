@@ -197,8 +197,7 @@ test that walks every descriptor through both and cannot omit an
 - `operation.laws`, whose `definition.identity` selects the division profile
   of `integer.div`;
 - `operation.mode`, whose rounding value must equal the rounding of the bound
-  the operation is read against, and which supplies the rounding of an
-  integer `quantity.convert` target;
+  the operation is read against;
 - the one reachable bound of the needed form on the node's result type, read by
   the same selector the descriptor's parameter check uses: the integer, rational
   or decimal domain, the IEEE rounding, the text bounds or the decimal target.
@@ -211,9 +210,10 @@ rationals and decimals; decimal `add`, `sub`, `mul`, `div` and `negate`;
 `numeric.convert_rounding` to a decimal; IEEE `float32` and `float64` `add`,
 `sub`, `mul` and `div`, `numeric_equal`, `total_order`, `bit_identical`,
 `to_float32` and `to_float64`; every `text` and `enum` comparison;
-`quantity` `add`, `sub`, `mul`, `div`, `pow`, every comparison and `convert`.
-Every other operation identity is
-refused as `OperationNotDerivable`. The catalogued identities refused this way
+`quantity` `add`, `sub`, `mul`, `div`, `pow` and every comparison.
+`quire.op.quantity.convert` is not derivable: it has its own refusal,
+`QuantityConversionUnsupported`, which the Behavior section and FR-014-AC-2
+state. Every other operation identity is refused as `OperationNotDerivable`. The catalogued identities refused this way
 are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
 `ieee.float32.sqrt`, `ieee.float64.sqrt`, `ieee.float32.fma`,
 `ieee.float64.fma`, `ieee.from_exact`, `ieee.to_rational`, `numeric.narrow`,
@@ -221,10 +221,7 @@ are `rational.eq`, `rational.ne`, `decimal.eq`, `decimal.ne`, `integer.rem`,
 
 On the derived path the descriptor is built from the node's own identity, laws
 and mode, so the comparison of the descriptor with the node always agrees and a
-derived claim is never `caller_declared` by disagreement. One derived descriptor
-can still fail its parameter check: `quantity.convert` to a rational result
-derives `QuantityTarget::Exact`, for which the descriptor declares no domain,
-and generation refuses it as `BoundMismatch`.
+derived claim is never `caller_declared` by disagreement.
 
 A claim for a node derivation refused has operation provenance `underived`: no
 descriptor was built, so no operation was declared or confirmed. Its identity is
@@ -242,7 +239,8 @@ otherwise.
   refusal `generate_exact_scalar_oracles` also gives, or `NoDerivableClaim`
   carrying a `ClaimDerivationRefusal`, a tagged `code` enum:
   `not_application`, `missing_operation_identity`, `operation_not_derivable`,
-  `operand_forms_not_derivable`, `law_not_derivable` and `mode_not_derivable`.
+  `operand_forms_not_derivable`, `law_not_derivable`, `mode_not_derivable` and
+  `quantity_conversion_unsupported`.
 - A typed claim map with one entry per requested item: node id, Contract IR
   semantic id, package id, semantic type, source map, claims, bounds, the
   bounds its parameters were checked against, operation identity with its
@@ -268,6 +266,29 @@ otherwise.
   failure — see `ExactScalarRefusal` for the closed set of checks and their
   reasons — and emit no code for it, without changing any other item's
   output.
+- If a requested node's `operation.identity` is `quire.op.quantity.convert`,
+  then every entry point that can receive it shall refuse it with
+  `ClaimDerivationRefusal::QuantityConversionUnsupported`, naming the operation
+  identity and `QUANTITY_CONVERSION_CAPABILITY`, and shall produce no
+  descriptor, no oracle function and no harness for it. The entry points are
+  `derive_exact_scalar_items`; `generate_exact_scalar_oracles` and
+  `plan_exact_scalar_oracles` under any descriptor the caller declares; the
+  routed contract-package path of `generate_routed`;
+  `negotiate_kani_obligations`; and backend capability settlement. The refusal
+  precedes every check against a caller's descriptor. `generate_exact_function_oracles` and the function schedules
+  (`generate_function_schedules` and `generate_function_schedules_with_limits`)
+  are entry points of this statement: a conversion node reached from a declared
+  function body, from a requested call, or as an argument of a call is refused
+  with the capability, whatever the declared body kind, parameter types or
+  result type; the function generator records it on the item's claim and the
+  schedules record it on the refused function or the refused item. The
+  composite-equality generator is the one exemption: it refuses a conversion
+  node it is asked to generate as `FormMismatch` naming `conversion`, and a
+  quantity equality that reads a conversion node as an operand (FR-018-AC-15)
+  as `Unsupported` with node tag `quantity`, each before any artifact. The capability text
+  states that quantity conversion is not supported because the runtime converts
+  a quantity only to a scalar target and has no conversion whose result is a
+  quantity, and that real support is tracked as IR-818.
 - If a node lowers, then the generator shall compare the node's own
   `operation.identity` against the catalogued identity its descriptor implies,
   and shall compare the descriptor's law definition and mode value against the
@@ -419,11 +440,11 @@ otherwise.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-014-AC-1 | Every requested item receives exactly one generated or typed-refused disposition, and a refused item contributes no generated function while its siblings are generated unchanged. | Test (TC-024) |
-| FR-014-AC-2 | Integer (add, subtract, multiply, negate, truncating/floor/Euclidean division, modulo), rational, ordering, decimal, IEEE arithmetic/comparison/width conversion, text comparison, enum comparison, and quantity arithmetic/comparison/conversion descriptors for admitted checked-package expression nodes each generate a function calling the matching runtime `exact` operator. | Test (TC-024) |
+| FR-014-AC-2 | Integer (add, subtract, multiply, negate, truncating/floor/Euclidean division, modulo), rational, ordering, decimal, IEEE arithmetic/comparison/width conversion, text comparison, enum comparison, and quantity arithmetic/comparison descriptors for admitted checked-package expression nodes each generate a function calling the matching runtime `exact` operator. Each entry point of the quantity-conversion Behavior statement refuses a `quire.op.quantity.convert` node with `QuantityConversionUnsupported` carrying `QUANTITY_CONVERSION_CAPABILITY` and produces no descriptor, oracle function or harness, so the artifact set for that node is empty (real support is tracked as IR-818). The function-application generator and the function schedules refuse a conversion reached from a body, a call or a call argument with `QuantityConversionUnsupported` carrying the capability (`ExactFunctionRefusal` on the item's claim; `ScheduleRefusal` on the refused function or item), producing no oracle, schedule or location entry. The composite-equality generator never receives the operation as a requested root or as an operand: it refuses it earlier, as `FormMismatch` naming `conversion` for a root and `Unsupported` with node tag `quantity` for an operand, before any artifact. The Kani frame comparison classifier (`StateComparison::from_operation`), the collection predicate reader (`resolve_predicate`), the replay composite-equality builder (`UnsupportedNodeOperation`) and the Kani scalar renderer (`ScalarOperation::of`) each read a closed set of operation identities and refuse a conversion before rendering (`a_quantity_conversion_is_not_a_state_comparison`, `a_quantity_conversion_predicate_is_an_unsupported_shape`, `a_quantity_conversion_is_an_unsupported_node_operation` and `a_quantity_conversion_has_no_scalar_harness_renderer`, in-module unit tests asserting `None`, `UnsupportedShape`, `UnsupportedNodeOperation` and `None`). The QSpec TC-187 vectors that convert a quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle under this criterion; the tests exercise the three corpus conversion nodes, not the individual vectors. | Test (TC-024: `tc_024_quantity_conversion_is_refused_with_its_named_capability` for `derive_exact_scalar_items`; `tc_024_caller_declared_quantity_conversion_is_refused_and_generates_nothing` for `generate_exact_scalar_oracles` and `plan_exact_scalar_oracles`; `tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion`, `tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_argument`, `tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_capability` and `tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_named_capability` for the function generator and the schedules; `tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artifact` and `tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quantity` for the exempt equality generator; `a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capability` for capability settlement. TC-033: `tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_harness` for `generate_routed`. TC-025: `tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness` for `negotiate_kani_obligations`.) |
 | FR-014-AC-3 | A descriptor whose arity, result or operand scalar type disagrees with the lowered node, a node that is not a lowered scalar expression, a node that is unbounded, has an invalid or incomplete body, or exhausts lowering work, or a node id requested more than once, is refused with a typed reason. | Test (TC-024) |
 | FR-014-AC-4 | Generated bytes are identical across repeated runs and across permutations of the request order; the generated crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`, its `claim-map.json` equals the returned claim map, every generated claim's oracle symbol is defined in `src/lib.rs`, and claim-map entries are ordered by node id. | Test (TC-024) |
 | FR-014-AC-5 | Every claim-map entry carries the node id, IR id, package id, source map, claims, bounds and operation identity of its item. | Test (TC-024) |
-| FR-014-AC-6 | Executing generated oracles on the QSpec TC-185, TC-186, TC-187, TC-192 and TC-193 vectors yields outcomes, charges and consumed counters equal to direct runtime execution and to the QSL value authority. | Test (TC-024) |
+| FR-014-AC-6 | Executing generated oracles on the QSpec TC-185, TC-186, TC-192 and TC-193 vectors, and on these QSpec TC-187 vectors, yields outcomes, charges and consumed counters equal to direct runtime execution: U03 (the dimension mismatch), U13 and U21 (powers), U19 and U24 (same-unit sums), U23 (comparison tuples) and U28 (the compound product), each adapted to the generated oracle's limits tuple, plus the generated grid of quantity arithmetic, comparisons and powers. The other TC-187 vectors are not covered by this criterion: the vectors that convert a quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle because FR-014-AC-2 refuses them (real support is tracked as IR-818), and U02, U05, U06, U09, U11, U12, U14, U20 and U27 are unrun (IR-823). Agreement with the QSL value authority is not claimed by this criterion; IR-823 adds it. A vector or row of this criterion that yields no agreement fails the test. | Test (TC-024) |
 | FR-014-AC-7 | Composite, collection, function, model, relation, state, temporal and protocol nodes are refused with their blocked or unsupported reason and never reported as generated. | Test (TC-024) |
 | FR-014-AC-8 | The generated crate declares `publish = false`, names the Contract Runtime dependency this repository's `Cargo.toml` names with the `exact` feature, contains no charge amount (every charge comes from runtime metering), and compiles. | Test (TC-024) |
 | FR-014-AC-9 | Generated oracle functions do not panic: an invalid generated constant, including a decimal target, stops as `InvalidConstant`, an operand of the wrong width stops before any charge, and generated source over its ceiling is a typed error with no output. | Test (TC-024) |
@@ -435,7 +456,7 @@ otherwise.
 | FR-014-AC-15 | A requested item whose node closure exceeds the 65,536-unit lowering work ceiling is refused as `LoweringWorkExhausted`, naming the ceiling and the consumed counter, contributes no generated function, and leaves every other item's disposition unaffected. | Test (TC-024) |
 | FR-014-AC-16 | A bound is read from `binding` members looked up by name in any order (`min`/`max`, `numerator_min` through `denominator_max`, `coefficient_min` through `rounding`, `rounding`, `min`/`max`/`text_profile`); a bare literal member, a missing, duplicate or unlisted name is refused as an unreadable bound. | Test (TC-024) |
 | FR-014-AC-17 | A `reference` operand whose target is typed by a `bounded_domain` node is classified by that domain's base scalar type, so `x + 1` over a parameter `x` of type `Int[0, 9]` generates, and a bounded text parameter is still a text operand. | Test (TC-024) |
-| FR-014-AC-18 | `derive_exact_scalar_items` returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set, has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
+| FR-014-AC-18 | `derive_exact_scalar_items` returns, per node id in input order, the descriptor determined by the node's `operation.identity`, `operation.mode`, `operation.laws`, operand forms and the one bound of the needed form on its result type; a node that is not an application, has no identity, names an identity outside the derivable set (FR-014-AC-2 owns the `quire.op.quantity.convert` refusal), has operand forms, a law or a mode that select no parameter, is refused with the matching `ClaimDerivationRefusal` and no descriptor; a node that is absent, does not lower or has a refused bound (missing, repeated or unreadable) is refused with the `ExactScalarRefusal` generation gives it. | Test (TC-024) |
 | FR-014-AC-19 | A derived item generates an oracle whose operation is `ir_confirmed`, and for every item of the corpus the derived descriptor equals the descriptor the fixture declares. | Test (TC-024) |
 | FR-014-AC-20 | An integer node over two distinct bounded parameters, `Int[0, 9]` and `Int[10, 20]`, each typed by its own `integer_range` `bounded_domain`, with its result typed by a third `integer_range` `[0, 29]`, generates an `ir_confirmed` oracle whose descriptor is compared with the result bound only; the claim's checked bounds are the result bound, then each operand's own bound; derivation returns the descriptor over `[0, 29]`. | Test (TC-024) |
 | FR-014-AC-21 | A node whose result is typed by a scalar type and whose reachable bounds are its operands' own and exactly one other takes that other as its result bound. | Test (TC-024) |

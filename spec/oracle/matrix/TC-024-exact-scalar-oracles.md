@@ -34,17 +34,30 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    generated source ceiling; construct invalid and incomplete body records.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute its oracles on vectors
-   adapted from QSpec TC-185, TC-186, TC-187, TC-192 and TC-193; compare each
+   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); compare each
    outcome, admitted charges and consumed counters with direct runtime
-   execution and with `quire_spec_language::value`, including the outcome of
-   denying each admitted charge in turn.
+   execution, including the outcome of denying each admitted charge in turn.
+   Agreement with `quire_spec_language::value` is not asserted here (IR-823).
 5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
-   `numeric.convert_rounding`, `quantity.convert` to each
-   target); derive nodes that are not applications, carry no identity, name an
+   `numeric.convert_rounding`); derive every `quantity.convert` node of the corpus
+   (each carries the `exact` mode its unit type pins) and check it is refused as
+   `QuantityConversionUnsupported` with the named capability and no descriptor;
+   request each of them under caller-declared descriptors, through
+   `generate_routed`, through Kani obligation negotiation and through capability
+   settlement, and check the same refusal and an empty artifact set: the
+   generated crate defines no oracle function and no harness is emitted
+   (FR-014-AC-2). Check that the function-application generator and the function schedules refuse a
+   conversion reached from a body, a call or a call argument with the named
+   capability, and that the composite-equality generator refuses a conversion root as
+   `FormMismatch` and a conversion operand as an unsupported quantity, each
+   before any artifact.
+   The TC-187 vectors that convert a quantity have no oracle and are not
+   agreement rows; check that every agreement row of step 4 compares at least
+   one vector. Derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that

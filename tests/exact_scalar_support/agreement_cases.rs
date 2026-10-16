@@ -53,7 +53,6 @@ use generated::{
     quantity_equal,
     quantity_at_most,
     integer_subtract,
-    convert_integer,
     decimal_subtract,
     integer_add,
     integer_negate,
@@ -72,7 +71,6 @@ use generated::{
     binary64_total_order,
     binary32_subtract,
     enum_not_equal,
-    convert_decimal,
     quantity_less,
     divide_floor,
     quantity_subtract,
@@ -131,6 +129,17 @@ fn typed<T>(result: Result<Outcome<T>, OracleStop>) -> Result<Outcome<T>, IllTyp
         OracleStop::IllTyped(ill) => ill,
         other => panic!("generated oracle stopped: {other:?}"),
     })
+}
+
+/// Fails when any named row of an agreement test compared nothing, so a row whose loop never runs
+/// cannot pass as agreement.
+fn assert_rows_agreed(rows: &[(&str, usize)]) {
+    for (row, agreements) in rows {
+        assert!(
+            *agreements > 0,
+            "row {row} yields 0 agreements; an agreement row that compares nothing is not agreement"
+        );
+    }
 }
 
 // Deliberately untraced: this exists as `render_scalar`'s (`src/kani/generate/scalar.rs`) F1
@@ -213,6 +222,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
             vectors += 5;
         }
     }
+    assert_rows_agreed(&[("TC-192 generated vectors", vectors)]);
     assert_eq!(vectors, 5 * 41 * 41);
 
     // DIV-08 exact tuple, short work, short result; DIV-11 and DIV-13.
@@ -249,6 +259,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
         };
         named += 1;
     }
+    assert_rows_agreed(&[("TC-192 tabled tuples", named)]);
     assert_eq!(named, 11);
     println!("TC-192 three-way agreement: {vectors} generated vectors, {named} tabled tuples");
 }
@@ -302,6 +313,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
             vectors += 4;
         }
     }
+    assert_rows_agreed(&[("TC-185 generated vectors", vectors)]);
     assert_eq!(vectors, 2 * 30 + 4 * 30 * 30);
 
     // D03 (both signed halves), D05, D06, D09 exact and short, D15.
@@ -337,6 +349,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         };
         named += 1;
     }
+    assert_rows_agreed(&[("TC-185 tabled tuples", named)]);
     assert_eq!(named, 9);
 
     // Decimal ordering: runtime vs. generated oracle only (`agree2!`); see
@@ -365,6 +378,7 @@ fn tc_024_tc185_decimal_oracles_agree() {
         };
         ordering += 1;
     }
+    assert_rows_agreed(&[("TC-185 ordering", ordering)]);
     assert_eq!(ordering, 30 * 30 + 2);
     println!(
         "TC-185 agreement: {vectors} generated and {named} tabled three-way, {ordering} ordering runtime-only"
@@ -427,6 +441,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
         };
         comparisons += 1;
     }
+    assert_rows_agreed(&[("TC-186 text comparisons", comparisons)]);
     assert_eq!(comparisons, 6 * 6 * 12 * 12 + 4);
 
     // T07, T08, T09 (recomputed keys) and T15 over every declaration pair.
@@ -459,48 +474,21 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
             }
         }
     }
+    assert_rows_agreed(&[("TC-186 enum comparisons", enums)]);
     assert_eq!(enums, 10 * 10 * 6 * 2);
     println!("TC-186 agreement: {comparisons} text comparisons, {enums} enum comparisons");
 }
 
+/// The TC-187 arithmetic, comparison, power and tabled-limit vectors. The vectors that convert a
+/// quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle and
+/// are not agreement rows: a conversion is refused.
+///
 /// Trace: FR-014-AC-6, TC-024.
 #[test]
 fn tc_024_tc187_quantity_oracles_agree() {
-    let families: [&[&str]; 2] = [
-        &["m", "cm", "in", "rev", "m_alias"],
-        &["K", "degC", "degF", "u1", "u2", "u3"],
-    ];
     let values = [(0_i64, 1_i64), (1, 1), (-7, 3), (250, 1), (5463, 20)];
-    let mut conversions = 0_usize;
-    for family in families {
-        for from in family {
-            for to in family {
-                for (n, d) in values {
-                    agree2! {
-                        limits: UNLIMITED,
-                        setup: {
-                            let f = fixture();
-                            let (quantity, unit) = (f.q(ratio(n, d), from), f.unit(to));
-                            let decimal = QuantityTarget::Decimal(decimal_type(-100_000, 100_000, 0, 2, RoundingMode::NearestEven));
-                            let integer = QuantityTarget::Integer { domain: IntegerInterval::new(int(-1000), int(1000)).unwrap(), rounding: RoundingMode::TowardZero };
-                        },
-                        direct: |m| (
-                            convert_quantity(&quantity, &unit, &decimal, m),
-                            convert_quantity(&quantity, &unit, &integer, m),
-                        ),
-                        generated: |m| (
-                            typed(convert_decimal(&quantity, &unit, m)),
-                            typed(convert_integer(&quantity, &unit, m)),
-                        ),
-                    };
-                    conversions += 2;
-                }
-            }
-        }
-    }
-    assert_eq!(conversions, 2 * (5 * 5 + 6 * 6) * 5);
 
-    let mut operations = 0_usize;
+    let (mut arithmetic, mut comparisons, mut powers) = (0_usize, 0_usize, 0_usize);
     for name in ["m", "cm", "in", "rev", "u2"] {
         for (ln, ld) in values {
             for (rn, rd) in values {
@@ -520,7 +508,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
                         typed(quantity_divide(&a, &b, m)),
                     ),
                 };
-                operations += 4;
+                arithmetic += 4;
                 for (o, compare) in QUANTITY_COMPARISONS.into_iter().enumerate() {
                     agree2! {
                         limits: UNLIMITED,
@@ -528,7 +516,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
                         direct: |m| compare_quantity(ComparisonOperator::ALL[o], &a, &b, m),
                         generated: |m| typed(compare(&a, &b, m)),
                     };
-                    operations += 1;
+                    comparisons += 1;
                 }
             }
             for exponent in ["-2", "-1", "0", "1", "2", "3"] {
@@ -538,15 +526,21 @@ fn tc_024_tc187_quantity_oracles_agree() {
                     direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
                     generated: |m| typed(quantity_power(&a, &n, m)),
                 };
-                operations += 1;
+                powers += 1;
             }
         }
     }
+    assert_rows_agreed(&[
+        ("TC-187 same-unit arithmetic", arithmetic),
+        ("TC-187 comparisons", comparisons),
+        ("TC-187 powers", powers),
+    ]);
+    let operations = arithmetic + comparisons + powers;
     assert_eq!(operations, 5 * (5 * 5 * (4 + 6) + 5 * 6));
 
     // U19/U24 same-unit sums, U28 compound product, U13/U21 powers, U23
-    // comparison tuples, and U03/U05 dimension mismatches.
-    let mut named = 0_usize;
+    // comparison tuples, and the U03 dimension mismatch.
+    let (mut sums, mut products, mut named_powers, mut tuple_comparisons) = (0_usize, 0_usize, 0_usize, 0_usize);
     for (a, b, tuple) in [
         ((2, "m"), (3, "m"), [3, 0, 0, 2, 5, 1]),
         ((2, "m"), (3, "m"), [3, 0, 0, 2, 4, 1]),
@@ -559,7 +553,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
             direct: |m| evaluate_quantity(QuantityOperation::Add(&a, &b), m),
             generated: |m| typed(quantity_add(&a, &b, m)),
         };
-        named += 1;
+        sums += 1;
     }
     for tuple in [
         [19, 0, 2, 2, 11, 1],
@@ -572,7 +566,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
             direct: |m| evaluate_quantity(QuantityOperation::Multiply(&a, &b), m),
             generated: |m| typed(quantity_multiply(&a, &b, m)),
         };
-        named += 1;
+        products += 1;
     }
     for (value, exponent, tuple) in [
         (2, "18446744073709551616", [64, 0, 0, 1, 5, 1]),
@@ -586,7 +580,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
             direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
             generated: |m| typed(quantity_power(&a, &n, m)),
         };
-        named += 1;
+        named_powers += 1;
     }
     for (a, b, tuple) in [
         ((1, "degC"), (2, "degC"), [13, 0, 2, 2, 9, 1]),
@@ -599,10 +593,17 @@ fn tc_024_tc187_quantity_oracles_agree() {
             direct: |m| compare_quantity(ComparisonOperator::Less, &a, &b, m),
             generated: |m| typed(quantity_less(&a, &b, m)),
         };
-        named += 1;
+        tuple_comparisons += 1;
     }
+    assert_rows_agreed(&[
+        ("TC-187 U19/U24 sums and U03 mismatch", sums),
+        ("TC-187 U28 products", products),
+        ("TC-187 U13/U21 powers", named_powers),
+        ("TC-187 U23 comparison tuples", tuple_comparisons),
+    ]);
+    let named = sums + products + named_powers + tuple_comparisons;
     assert_eq!(named, 14);
-    println!("TC-187 three-way agreement: {conversions} conversions, {operations} operations, {named} tabled tuples");
+    println!("TC-187 three-way agreement: {operations} operations, {named} tabled tuples");
 }
 
 /// The TC-193 class matrix patterns of `IeeeWidth::ALL[width]`.
@@ -688,6 +689,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
         };
         vectors += 1;
     }
+    assert_rows_agreed(&[("TC-193 class-matrix vectors", vectors)]);
     assert_eq!(vectors, 3 * 20 * 20 + 4 * 20 * 20 + 20);
 
     // F21 zero sums and F09 under NearestEven, then the F31 narrowing tuples.
@@ -724,6 +726,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
         };
         named += 1;
     }
+    assert_rows_agreed(&[("TC-193 tabled tuples", named)]);
     assert_eq!(named, 12);
     println!("TC-193 three-way agreement: {vectors} class-matrix vectors, {named} tabled tuples");
 }
@@ -845,6 +848,7 @@ fn tc_024_no_vector_here_has_an_authority_leg_and_all_agree_with_direct_runtime(
             vectors += 5;
         }
     }
+    assert_rows_agreed(&[("runtime-only vectors", vectors)]);
     assert_eq!(vectors, 41 + 7 * 41 * 41 + 39 + 5 * 39 * 39);
     println!("runtime-only agreement (no authority leg): {vectors} vectors");
 }

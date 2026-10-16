@@ -39,6 +39,15 @@ pub enum SymbolicBounds {
         /// Inclusive upper bound.
         maximum: i64,
     },
+    /// Ordered symbolic collection with inclusive cardinality and element domains.
+    Sequence {
+        /// Inclusive minimum number of active elements.
+        minimum_length: i64,
+        /// Inclusive maximum number of active elements.
+        maximum_length: i64,
+        /// Domain of every active element.
+        element: Box<Self>,
+    },
 }
 
 /// One argument's identity and the symbolic bounds the run used.
@@ -196,6 +205,139 @@ pub struct ScalarObligationIdentity {
     pub unwind: u32,
     /// Every flag passed after `cargo kani`.
     pub options: Vec<String>,
+}
+
+/// Exact predicate forms the bounded-collection Kani renderer preserves from an admitted QSL
+/// quantifier body.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "predicate", rename_all = "snake_case")]
+pub enum CollectionPredicateIdentity {
+    /// `element >= threshold` over an admitted integer range.
+    IntegerGreaterOrEqual {
+        /// The inclusive comparison threshold.
+        threshold: i64,
+    },
+    /// `element == value` over an admitted integer range.
+    IntegerEqual {
+        /// The compared integer value.
+        value: i64,
+    },
+    /// `element != value` over admitted Boolean elements.
+    BooleanNotEqual {
+        /// The compared Boolean value.
+        value: bool,
+    },
+}
+
+/// The domain of a single element in a checked collection claim.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "domain", rename_all = "snake_case")]
+pub enum CollectionElementIdentity {
+    /// Both Boolean values.
+    Boolean,
+    /// Inclusive integer range from the selected checked field.
+    Integer {
+        /// Inclusive lower element bound.
+        minimum: i64,
+        /// Inclusive upper element bound.
+        maximum: i64,
+    },
+}
+
+/// Collection ordering and duplicate semantics carried by one collection identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectionKindIdentity {
+    /// Ordered values with repeats permitted.
+    Sequence,
+}
+
+/// The exact selected V2 collection claim and execution configuration of one generated harness.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionObligationIdentity {
+    /// Backend ceilings.
+    pub ceilings: ProofCeilings,
+    /// Admitted package identity.
+    pub package_digest: String,
+    /// Caller-selected function subject whose body contains this claim.
+    pub subject_path: String,
+    /// Selected function identity.
+    pub function_id: CheckedNodeId,
+    /// Selected quantifier identity.
+    pub quantifier_id: CheckedNodeId,
+    /// The projection node resolving the exact model field.
+    pub projection_id: CheckedNodeId,
+    /// Model object declaration that owns the field.
+    pub declaration_id: CheckedNodeId,
+    /// Exact selected field name.
+    pub field_name: String,
+    /// Collection ordering and uniqueness semantics.
+    pub collection_kind: CollectionKindIdentity,
+    /// Inclusive cardinality bounds.
+    pub minimum_length: i64,
+    /// Inclusive cardinality bounds.
+    pub maximum_length: i64,
+    /// Element domain.
+    pub element: CollectionElementIdentity,
+    /// Exact admitted element type node.
+    pub element_type_id: CheckedNodeId,
+    /// Exact admitted quantifier operation identity.
+    pub quantifier_operation: String,
+    /// Exact predicate node identity.
+    pub predicate_id: CheckedNodeId,
+    /// Exact predicate form emitted by QSL.
+    pub predicate: CollectionPredicateIdentity,
+    /// Solver.
+    pub solver: KaniSolver,
+    /// Loop unwind bound.
+    pub unwind: u32,
+    /// Every Kani flag passed after `cargo kani`.
+    pub options: Vec<String>,
+    /// Harness module symbol.
+    pub module_symbol: ModuleSymbol,
+    /// Harness function symbol.
+    pub harness_symbol: HarnessSymbol,
+}
+
+/// A generated Kani harness for one admitted bounded collection claim.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KaniCollectionObligationHarness {
+    /// Persisted exact claim and run identity.
+    pub identity: CollectionObligationIdentity,
+    /// Self-contained generated Rust.
+    pub rust: Artifact,
+    /// Persisted identity/source-path record.
+    pub record: Artifact,
+    generated_identity: CollectionObligationIdentity,
+    generated_rust: Artifact,
+    generated_record: Artifact,
+}
+
+impl KaniCollectionObligationHarness {
+    /// Construct the immutable generator-origin seal for one collection harness.
+    pub(crate) fn generated(
+        identity: CollectionObligationIdentity,
+        rust: Artifact,
+        record: Artifact,
+    ) -> Self {
+        Self {
+            generated_identity: identity.clone(),
+            generated_rust: rust.clone(),
+            generated_record: record.clone(),
+            identity,
+            rust,
+            record,
+        }
+    }
+
+    /// Whether public fields still match the immutable generator-origin seal.
+    #[must_use]
+    pub(crate) fn has_valid_provenance(&self) -> bool {
+        self.identity == self.generated_identity
+            && self.rust == self.generated_rust
+            && self.record == self.generated_record
+    }
 }
 
 /// One generated V2 exact-scalar obligation harness.

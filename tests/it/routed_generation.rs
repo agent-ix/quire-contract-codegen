@@ -12,6 +12,7 @@ use quire_contract_codegen::{
     KaniObligationRequest, KaniScalarObligationHarness, KindOutput, ObligationDisposition,
     ObligationItem, ObligationRecord, OracleGenerationError, ProviderOrigin, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
+    QUANTITY_CONVERSION_CAPABILITY,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -2014,6 +2015,8 @@ struct Derived {
     generated: Vec<CheckedNodeId>,
     rem: CheckedNodeId,
     integer_eq: CheckedNodeId,
+    /// The quantity conversion nodes, one per node code.
+    quantity_conversions: Vec<CheckedNodeId>,
 }
 
 fn derived() -> Derived {
@@ -2057,6 +2060,10 @@ fn derived() -> Derived {
         generated,
         rem: ids.resolve(&package::code_id(package::DERIVE_REM)),
         integer_eq: ids.resolve(&package::code_id(package::DERIVE_INTEGER_EQ)),
+        quantity_conversions: package::QUANTITY_CONVERSIONS
+            .iter()
+            .map(|code| ids.resolve(&package::code_id(*code)))
+            .collect(),
     }
 }
 
@@ -2126,6 +2133,64 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
                 .filter(|item| kani_parts(&item.output).1.is_some())
                 .count(),
             3
+        );
+    }
+}
+
+/// A quantity conversion is unsupported with its named capability and emits no harness: the
+/// record carries `quantity_conversion_unsupported` with the operation identity and the
+/// capability text, and the group is not rejected.
+///
+/// Trace: FR-014-AC-2, FR-022-AC-11, FR-015-AC-15, TC-033
+#[test]
+fn tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_harness() {
+    let derived = derived();
+    let contexts = kani_context("crate::subject", 1);
+    for refused in &derived.quantity_conversions {
+        let routed = vec![route(0, refused)];
+        let input = admitted_routing_input(&derived.package, &routed);
+        let generated = generate_routed(&input.package, &input.positions, &routed, &contexts)
+            .expect("generates");
+        assert!(generated.rejected.is_empty());
+        let (record, harness) = kani_parts(&generated.items[0].output);
+        assert!(harness.is_none(), "no harness is emitted");
+        // The obligation's whole artifact set is empty: the claim map holds a refusal and no
+        // generated claim, and the oracle crate defines no function.
+        let claim_map = generated.claim_map.as_ref().expect("claim map");
+        assert!(claim_map
+            .items
+            .iter()
+            .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
+        let oracle_artifacts = generated.oracle_artifacts.as_ref().expect("oracle crate");
+        let oracle_source = oracle_artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .expect("oracle lib.rs");
+        assert!(
+            !oracle_source.contents.contains("fn "),
+            "no oracle function is emitted"
+        );
+        assert_eq!(
+            record.disposition,
+            ObligationDisposition::Unsupported {
+                reason: UnsupportedObligation::NoDerivableClaim {
+                    node_id: refused.clone(),
+                    reason: ClaimDerivationRefusal::QuantityConversionUnsupported {
+                        operation_identity: "quire.op.quantity.convert".to_owned(),
+                        capability: QUANTITY_CONVERSION_CAPABILITY,
+                    },
+                }
+            }
+        );
+        let wire = serde_json::to_value(&record.disposition).expect("serializes");
+        assert_eq!(wire["reason"]["code"], "no_derivable_claim");
+        assert_eq!(
+            wire["reason"]["reason"]["code"],
+            "quantity_conversion_unsupported"
+        );
+        assert_eq!(
+            wire["reason"]["reason"]["capability"],
+            QUANTITY_CONVERSION_CAPABILITY
         );
     }
 }

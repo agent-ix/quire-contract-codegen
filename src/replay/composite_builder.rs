@@ -154,6 +154,8 @@ impl OriginalCompositeEqContext {
     /// Returns a typed source, package identity, dependency or function-selection refusal. These
     /// prechecks create neither a parity report nor a terminal value. Recompile/read/context
     /// refusals are returned later by [`Self::request`].
+    // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     pub fn new(
         original: CheckedPackageV2,
         inputs: ReplayInputs,
@@ -240,6 +242,8 @@ impl OriginalCompositeEqContext {
     /// # Errors
     /// Returns a typed original node/occurrence, operand, encoder, request decode, recompile or
     /// original-context refusal, with no report.
+    // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     pub fn request(
         &self,
         node: &CheckedNodeId,
@@ -262,17 +266,15 @@ impl OriginalCompositeEqContext {
             .find(|entry| entry.node_id == *node)
             .and_then(|entry| entry.body.pointer("/operation/identity"))
             .and_then(serde_json::Value::as_str);
-        let actual = match actual {
-            Some("quire.op.structural.eq") => EqualityOperator::Equal,
-            Some("quire.op.structural.ne") => EqualityOperator::NotEqual,
-            Some(_) | None => return Err(CompositeBuildError::UnsupportedNodeOperation),
-        };
+        let actual = node_equality_operator(actual)?;
         if actual != operator {
             return Err(CompositeBuildError::OperatorMismatch {
                 requested: operator,
                 actual,
             });
         }
+        // Keep the public PackageRead error inline; its refusal payload is 192 bytes.
+        #[allow(clippy::result_large_err)]
         let arguments = operands.operands.iter().map(|operand| {
             let CheckedScalarOperandChild::GraphChild(child) = &operand.child else {
                 return Err(CompositeBuildError::OperandShape);
@@ -331,6 +333,8 @@ impl OriginalCompositeEqContext {
         })
     }
 
+    // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     fn check_recompiled_context(
         &self,
         wire: &ReplayRequestWire,
@@ -371,6 +375,8 @@ impl OriginalCompositeEqContext {
     }
 }
 
+// The 192-byte refusal is retained inline to preserve the public PackageRead payload.
+#[allow(clippy::result_large_err)]
 fn wire_node(node: &CheckedNodeId) -> Result<WireNodeId, CompositeBuildError> {
     WireNodeId::from_hex(&node.digest).ok_or(CompositeBuildError::NodeIdentity)
 }
@@ -425,6 +431,8 @@ impl OriginalCompositeEqRequest {
     ///
     /// # Errors
     /// Returns a binding refusal without a terminal value if QSL's report does not match what was sent.
+    // The 192-byte refusal is retained inline to preserve the public PackageRead payload.
+    #[allow(clippy::result_large_err)]
     pub fn settle_verified(
         self,
         verified: VerifiedShadow,
@@ -465,5 +473,39 @@ impl OriginalCompositeEqReport {
     /// Returns the converter's typed full-identity refusal, without a value.
     pub fn settlement(&self) -> Result<VerifiedShadowSettlement<'_>, CompositeReportError> {
         verified_shadow_terminal_value(&self.sent, Some(&self.report))
+    }
+}
+
+/// The equality operator a selected node's operation identity names. Only the two structural
+/// equality identities name one; every other identity, a quantity conversion included, and an
+/// absent identity are an unsupported node operation.
+// The 192-byte refusal is retained inline to preserve the public PackageRead payload.
+#[allow(clippy::result_large_err)]
+fn node_equality_operator(identity: Option<&str>) -> Result<EqualityOperator, CompositeBuildError> {
+    match identity {
+        Some("quire.op.structural.eq") => Ok(EqualityOperator::Equal),
+        Some("quire.op.structural.ne") => Ok(EqualityOperator::NotEqual),
+        Some(_) | None => Err(CompositeBuildError::UnsupportedNodeOperation),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A quantity conversion is not an equality operation: the builder refuses it as an
+    /// unsupported node operation, with no request.
+    ///
+    /// Trace: FR-014-AC-2, TC-024.
+    #[test]
+    fn a_quantity_conversion_is_an_unsupported_node_operation() {
+        assert!(matches!(
+            node_equality_operator(Some("quire.op.quantity.convert")),
+            Err(CompositeBuildError::UnsupportedNodeOperation)
+        ));
+        assert!(matches!(
+            node_equality_operator(Some("quire.op.structural.eq")),
+            Ok(EqualityOperator::Equal)
+        ));
     }
 }
