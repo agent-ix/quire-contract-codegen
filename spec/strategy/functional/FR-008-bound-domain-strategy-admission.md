@@ -25,9 +25,11 @@ strategy bundle or one typed, located refusal; it SHALL NOT generate a partial b
 V2 input contract for the constructive population and campaign behavior of FR-009 through FR-012.
 The IR accessor and its public consumer test are implemented under IR-703 in Contract IR; IR's
 fresh QSL producer-origin case runs only under its conformance gate. CG also needs a V2
-comparison oracle for all six admitted operators; the current `generate_exact_scalar_oracles`
-operation set supports integer ordering but has no integer equality/inequality descriptor. Neither
-that generator nor the existing V1 bound oracle discharges this planned comparison-oracle path.
+comparison oracle for all six admitted operators, taking only the accessor's typed result. The V1
+bound oracle is not an input to it. Open decision (not decided here): whether the V2 comparison
+oracle reuses the integer eq/ne derivation that FR-014-AC-35 requires of
+`generate_exact_scalar_oracles` (planned; today's code has no integer eq/ne descriptor) or has its
+own path; the one-evaluator direction favors reuse. The planner owns the question.
 
 ## Terms
 
@@ -118,9 +120,10 @@ that generator nor the existing V1 bound oracle discharges this planned comparis
 | FR-008-AC-4 | Unknown clause, absent claim, unsupported clause kind and malformed comparison report distinct typed causes in the stated first-defect order. Diagnostics carry selected clause and claim, structural path and reached child id when available, without claiming a unique child source region. | Test |
 | FR-008-AC-5 | A request with several applicable defects returns the first only. Every refusal returns zero artifacts; a successful request returns the complete source, census and runner bundle. | Test |
 | FR-008-AC-6 | Either read endpoint or a literal at i64::MIN - 1, i64::MAX + 1, i128::MIN or i128::MAX refuses `UnsupportedRelation` at that operand without narrowing. Two individually i64-representable reads with unequal ranges also refuse; equal ranges admit when other rules hold. | Test |
-| FR-008-AC-7 | PLANNED. For each of integer.eq, ne, lt, le, gt and ge, the selected claim's V2 comparison oracle returns, for every valuation of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either authored position), the result of an independently evaluated ordered relation. | Test |
-| FR-008-AC-8 | PLANNED. The V2 comparison oracle for integer.eq and for integer.ne is produced by the V2 comparison-oracle path and not by `generate_exact_scalar_oracles` or the V1 bound oracle, which have no integer equality or inequality descriptor. | Inspection |
-| FR-008-AC-9 | PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only, and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance, observation, bounds and refusal fields for each closed operator, provenance and observation variant, with no `CheckedSemanticNodeV2.body` read. | Test |
+| FR-008-AC-7 | PLANNED. Beyond the per-operator agreement stated in FR-008-AC-3, which this criterion does not repeat, for each of integer.eq, ne, lt, le, gt and ge the selected claim's V2 comparison oracle returns, for every valuation of a 1- to 4-member domain (read-versus-read and read-versus-literal, the literal at each member and in either authored position), the result of an independently evaluated ordered relation. | Test |
+| FR-008-AC-8 | PLANNED. The V2 comparison oracle takes only the accessor's typed result for the selected claim, and no V1 bound oracle or `BoundPackage` is an input to it. | Inspection |
+| FR-008-AC-9 | PLANNED. A CG integration test calls IR's public clause-context accessor through its public API only, and the generator's census, ordered relation and diagnostics equal the accessor's operator, ordinals, provenance, observation, bounds and refusal fields for each closed operator, provenance and observation variant. | Test |
+| FR-008-AC-10 | PLANNED. Source inspection shows the generator reads no `CheckedSemanticNodeV2.body` field and decodes no body JSON (the verification of FR-008-CON-1). | Inspection |
 
 ## Dependencies
 

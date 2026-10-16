@@ -424,7 +424,7 @@ postcondition, `amount < 1000` implies `amount + 1 <= 1000`, so arithmetic in a 
 scope, or the control cannot move onto this arm), as the scalar family embeds the oracle of its
 claim and as `state_frame` already reads postcondition clause nodes from V2. The exact input type is the spec change's to define. That change is an
 FR-015 amendment in this repository's spec lane. IR-364 does not carry it: IR-364 covers the V2
-strategy chain (FR-002 and FR-008 to FR-013), not FR-015. I found no ticket for the
+strategy chain (FR-008 to FR-013; the FR-002 and FR-004 V2 criteria are IR-815), not FR-015. I found no ticket for the
 FR-015 V2 contract input; the planner should file one.
 
 What happens to the other generators:
@@ -883,9 +883,11 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      `Failed` there. `routed/` does not pair.
 6. **V1 readers.** Each of `harness`, `strategy/bound`, `evidence/bound_coverage`,
    `oracle/bound_v1.rs` and `oracle/boolean_v1.rs` is replaced and deleted with its V2 criteria.
-   IR-364 (the V2 strategy chain: FR-002 and FR-008 to FR-013 over `CheckedPackageV2`) is
-   owned by the IR team and is ordered before this step; FR-004's V2 criteria for
-   `evidence/bound_coverage` are not part of that chain and are also required before this step. No
+   IR-364 (the V2 strategy chain: FR-008 to FR-013 and NFR-004 over `CheckedPackageV2`) is
+   owned by the IR team and is ordered before this step. The V2 criteria of FR-002 (`harness`) and
+   FR-004 (`evidence/bound_coverage`) are ticket IR-815 and are also required before this step.
+   FR-005 (CLI conformance) is outside the strategy chain: it names no `BoundPackage` input and
+   depends on FR-002 only as an upstream requirement, so it needs no V2 change of its own. No
    V1 reader is deleted until its criteria exist. `typed_dependency_parameters` and `generate_boolean_oracle`, which the V2
    `kani` and `kani_obligations` import, are moved or replaced before `boolean_v1.rs` is deleted
    (see the `oracle` naming and V1 rows of the module map).
@@ -1335,7 +1337,7 @@ what it could against the code; the checks are stated.
 | Proof-dependency graph | `ProofDependencyGraph`, the V1 bundle's output type, retires at step 4f with `generate_kani_bundle`. Checked: FR-015's Inputs and Behavior name an optional declared proof-dependency census per obligation, folded into the harness identity, and FR-015-AC-22 and AC-25 are the criteria TC-005 traces. They stay verbatim as requirements on the V2 request input, and are backed by a V2 census input (step 4d), not by keeping the V1 graph type. The census request and readiness types are not the graph: they move to `kani/census.rs` (step 2b) and survive 4f, because the V2 census input needs them and the corpus imports them until 4g. Rule: if the V2 side does not back the requirements by 4f, their matrix rows go to planned or unbacked; nothing is deleted and no criterion is rewritten. | IR planner, IR-344 |
 | `RUNTIME_REVISION` | Deleted, not spelled once. Checked: the constant is read by the three emitters' manifest templates (a `rev = "..."` on the runtime dependency) and by tests (failure messages and `manifest.contains`). Nothing else decides on it: no code compares it with the runtime CG itself builds against, and CG's own `Cargo.toml` names the runtime by branch with the lockfile recording the commit. The emitted manifest needs a runtime source, not a pin, so the template names it the way `Cargo.toml` does. The cost is that an emitted crate follows the runtime branch as CG does. I did not build an emitted crate to confirm. | IR planner, IR-344; QSL concurs; repository CLAUDE.md |
 | PR 210 | Lands before the directory moves, only after this AD is approved, and with a local `make kani` transcript from its head. A precondition of migration step 2. | IR planner, IR-344 |
-| V2 strategy criteria | FR-002 and FR-008 to FR-013 over `CheckedPackageV2` are IR-364, IR team, ordered before step 6; FR-004 (evidence) is not in that chain and its V2 criteria are also needed before step 6. | IR planner, IR-344, IR-364 |
+| V2 strategy criteria | FR-008 to FR-013 and NFR-004 over `CheckedPackageV2` are IR-364, IR team, ordered before step 6; the FR-002 and FR-004 V2 criteria are IR-815, also ordered before step 6; FR-005 is outside the chain and needs no strategy V2 change. | IR planner, IR-344, IR-364 |
 | One public entry before deletion | Migration step 4e: the one public generator entry exists. A QSL-owned follow-up moves QSL's quire-integration exemplars, which call `generate_kani_bundle` today, onto it. Only then does step 4f delete `generate_kani_bundle`. | QSL review of this PR |
 | Package source for tests | After QSL-353 the corpus builds packages through QSL's facade (`call_site(...).package`, or source plus `qsl_replay`), and the arithmetic control (step 4a) is quire-integration's existing test, with a CG-side copy only if the facade allows. CG copies no QSL fixture and no QSL-emitted package file. | QSL review of this PR |
 | Terminal map dependency | Step 5's reader and the C-09 map (`kani/terminal.rs`) depend on QSL's `Inconclusive(cause)` types, merged in 02530e7 (QSL has ruled, relayed on IR-465, vacuity stays `Proved{0}`, no `NonZero`; the tool pin is gone, #551), and on the terminal value also taking the replay settlement; the FR-029 map and the IR-outcome map (FR-030, `DeclineCode::Std001`, QSL #634) are built. | QSL review of this PR |

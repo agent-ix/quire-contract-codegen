@@ -68,8 +68,9 @@ until specified.
     implements but does not yet specify.
 - The runner shall construct each verdict through the runtime `construct_verdict` operation
   (quire-contract-runtime interface-001) with the requirement and revision identity, the runtime
-  execution point (`initialization`, `handler`, `pre`, or `post`) of the selected checked clause,
-  and the clause observations.
+  execution point, and the clause observations. The sources of the requirement and revision identity
+  and of the execution point are open questions (below); this requirement is not testable beyond
+  verdict construction until they are answered.
 - For a false invariant, the runner shall use the failure detail the runtime
   provides for a contract clause, because quire-contract-runtime's specification does not yet state
   the failure detail of an invariant; a runtime specification of that mapping supersedes this rule.
@@ -116,6 +117,18 @@ until specified.
 | FR-011-AC-3 | The census runner evaluates each of the 10 `VersionUnchanged` in-domain census cases exactly once, in census order, and evaluates none of the out-of-domain cases. | Test (TC-020) |
 | FR-011-AC-4 | A campaign over a report seeded with fixed prior counts returns `discard_rate() == Some((discarded, attempted))` and `rejection_rate() == Some((rejected, attempted))` with those exact values, a fresh zero-attempt summary returns `None` for both, and a runtime snapshot whose counters are `at_limit` returns `None` for both through the generated snapshot-summary operation. | Test (TC-020) |
 | FR-011-AC-5 | A fresh 10,000-case `Broad` campaign for each fixture returns `discard_rate() == Some((0, attempted))` with `attempted > 0`, passes a zero discard ceiling, and does not end `Exhausted`. | Test (TC-020) |
+
+## Open Questions
+
+- OQ-1 (execution point): the runtime execution point (`initialization`, `handler`, `pre`, `post`)
+  has no V2 source. IR's accessor returns only the clause kind (`Invariant`, `Precondition`,
+  `Postcondition`), and IR main has no execution-point type, so an invariant could map to
+  `initialization` or `handler`. No source is invented here. The planner is taking this to the
+  owner; no FR-011 criterion depends on the answer.
+- OQ-2 (requirement and revision identity): the V1 `ClauseRef` supplied the requirement and
+  revision identity for `construct_verdict`. The V2 request (selected clause id and claim
+  occurrence) names no such source. The planner owns the answer; the V2 request shape follows the
+  interface-001 direction, which is also open.
 
 ## Dependencies
 

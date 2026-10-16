@@ -14,7 +14,7 @@ type: TestMatrix
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-AC-6 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-AC-7, FR-008-AC-9 | TC-017 | 🚧 V2 planned |
-| FR-008 | FR-008-AC-8 | Inspection | 🚧 V2 planned |
+| FR-008 | FR-008-AC-8, FR-008-AC-10 | Inspection | 🚧 V2 planned |
 | FR-008 | FR-008-CON-3 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-CON-4 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-CON-1 | Inspection | 🚧 V2 planned (V1 tests exist) |

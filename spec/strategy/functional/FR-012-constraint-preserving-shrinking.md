@@ -18,8 +18,8 @@ relationships:
 
 When proptest shrinks a failing case drawn from a `Satisfying`, `Violating`, or `Broad` population of
 a selected V2 claim ([FR-008](./FR-008-bound-domain-strategy-admission.md)), every candidate it visits shall stay inside the shared domain and keep the expectation tag
-of the case it came from. This refines [FR-002](./FR-002-tristate-proptest.md) FR-002-AC-4 for bound
-populations; FR-002-AC-4 itself stays verified by TC-004.
+of the case it came from. This refines [FR-002](./FR-002-tristate-proptest.md) FR-002-AC-4 for the
+populations of a selected V2 claim; FR-002-AC-4 itself stays verified by TC-004.
 
 ## Inputs
 
