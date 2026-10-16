@@ -67,13 +67,16 @@ use crate::{
         abi, clause_stem, contract_contexts, lower_clause, obligation_kind, symbols, LoweredClause,
         SlotContext,
     },
+    kani::generate::collection::{
+        lower_collection_claim, render_collection, CollectionDomainRefusal, LoweredCollectionClaim,
+    },
     kani::generate::contract::render_contract,
     kani::generate::frame::{generate_state_frame_role, StateFrameRequest},
     kani::generate::outcome::{
-        state_frame_disposition, InvalidObligationItem, KaniObligationError, KaniObligationOutcome,
-        KaniObligationRequest, ObligationDisposition, ObligationItem, ObligationRecord,
-        ObligationSubject, StateFrameRefusal, StateFrameRole, UnsupportedObligation,
-        MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+        state_frame_disposition, CollectionUnsupportedReason, InvalidObligationItem,
+        KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ObligationDisposition,
+        ObligationItem, ObligationRecord, ObligationSubject, StateFrameRefusal, StateFrameRole,
+        UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
     },
     kani::generate::precondition::render_precondition,
     kani::generate::record::{harness_path, record},
@@ -111,6 +114,7 @@ pub fn negotiate_kani_obligations(
     let mut harnesses = Vec::new();
     let mut scalar_harnesses = Vec::new();
     let mut state_frame_harnesses = Vec::new();
+    let mut collection_harnesses = Vec::new();
     for (index, state) in states.into_iter().enumerate() {
         let disposition = if rejected {
             state.outcome.disposition_without_harness()
@@ -130,6 +134,16 @@ pub fn negotiate_kani_obligations(
                     Ok(harness) => {
                         let symbol = harness.identity.harness_symbol.clone();
                         scalar_harnesses.push(harness);
+                        ObligationDisposition::Supported {
+                            harness_symbol: symbol,
+                        }
+                    }
+                    Err(reason) => ObligationDisposition::Unsupported { reason },
+                },
+                Outcome::LoweredCollection(lowered) => match render_collection(request, &lowered) {
+                    Ok(harness) => {
+                        let symbol = harness.identity.harness_symbol.clone();
+                        collection_harnesses.push(harness);
                         ObligationDisposition::Supported {
                             harness_symbol: symbol,
                         }
@@ -161,6 +175,7 @@ pub fn negotiate_kani_obligations(
             harnesses,
             scalar_harnesses,
             state_frame_harnesses,
+            collection_harnesses,
         }
     })
 }
@@ -213,11 +228,17 @@ enum ItemIdentity {
         clause: CheckedNodeId,
         role: StateFrameRole,
     },
+    Collection {
+        package: String,
+        function: CheckedNodeId,
+        quantifier: CheckedNodeId,
+    },
 }
 
 enum Outcome<'a> {
     Lowered(Box<LoweredClause<'a>>),
     LoweredScalar(Box<LoweredScalarClaim>),
+    LoweredCollection(Box<LoweredCollectionClaim>),
     /// A `StateFrame` item that yielded its harness.
     StateFrame(Box<StateFrameHarness>),
     /// A `StateFrame` item the engine refused. The refusal is held, not its record, so the item
@@ -239,6 +260,7 @@ impl Outcome<'_> {
             ),
             Self::Lowered(_)
             | Self::LoweredScalar(_)
+            | Self::LoweredCollection(_)
             | Self::StateFrame(_)
             | Self::RequiresBound(_)
             | Self::Unsupported(_) => false,
@@ -250,6 +272,10 @@ impl Outcome<'_> {
             // A lowered item in a rejected request is accounted but not emitted.
             Self::Lowered(lowered) => supported_without_harness(&lowered.symbols.harness),
             Self::LoweredScalar(lowered) => supported_without_harness(&lowered.harness_symbol),
+            Self::LoweredCollection(lowered) => supported_without_harness(&format!(
+                "prove_collection_{}",
+                lowered.field.quantifier.digest
+            )),
             Self::StateFrame(harness) => ObligationDisposition::Supported {
                 harness_symbol: harness.identity.harness_symbol,
             },
@@ -291,6 +317,11 @@ fn classify<'a>(
             claim_index,
             result_selection,
         } => classify_node(package, claim_map, node_id, claim_index, result_selection),
+        ObligationItem::CollectionClaim {
+            package,
+            function_id,
+            node_id,
+        } => classify_collection(package, function_id, node_id),
         ObligationItem::StateFrame {
             package,
             clause,
@@ -310,6 +341,57 @@ fn classify<'a>(
             },
             role,
         ),
+    }
+}
+
+fn classify_collection<'a>(
+    package: &'a CheckedPackageV2,
+    function_id: &'a CheckedNodeId,
+    node_id: &'a CheckedNodeId,
+) -> ItemState<'a> {
+    let outcome = match lower_collection_claim(package, function_id, node_id) {
+        Ok(lowered) => Outcome::LoweredCollection(Box::new(lowered)),
+        Err(CollectionDomainRefusal::RequiresBound { unbounded_type }) => {
+            Outcome::RequiresBound(unbounded_type)
+        }
+        Err(refusal) => Outcome::Unsupported(UnsupportedObligation::CollectionClaimNotRendered {
+            node_id: node_id.clone(),
+            reason: match refusal {
+                CollectionDomainRefusal::UnsupportedShape => {
+                    CollectionUnsupportedReason::UnsupportedClaimShape
+                }
+                CollectionDomainRefusal::FieldNotAdmitted => {
+                    CollectionUnsupportedReason::FieldNotAdmitted
+                }
+                CollectionDomainRefusal::UnsupportedFieldType => {
+                    CollectionUnsupportedReason::UnsupportedFieldType
+                }
+                CollectionDomainRefusal::UnsatisfiableElementDomain => {
+                    CollectionUnsupportedReason::UnsatisfiableElementDomain
+                }
+                CollectionDomainRefusal::RequiresBound { .. } => {
+                    unreachable!("requires-bound refusal is mapped before the remaining reasons")
+                }
+            },
+        }),
+    };
+    ItemState {
+        kind: None,
+        subject: ObligationSubject::CheckedNode {
+            node_id: node_id.clone(),
+            source_map: package
+                .source_map()
+                .iter()
+                .filter(|entry| &entry.node_id == node_id)
+                .cloned()
+                .collect(),
+        },
+        identity: Some(ItemIdentity::Collection {
+            package: package.package_id().digest.to_string(),
+            function: function_id.clone(),
+            quantifier: node_id.clone(),
+        }),
+        outcome,
     }
 }
 
@@ -649,7 +731,10 @@ pub(crate) fn classify_scalar_form(
         Outcome::Unsupported(refusal) => ScalarFormAssessment::Unsupported(refusal),
         Outcome::RequiresBound(_) => ScalarFormAssessment::RequiresBound,
         Outcome::Invalid(refusal) => ScalarFormAssessment::Invalid(refusal),
-        Outcome::Lowered(_) | Outcome::StateFrame(_) | Outcome::StateFrameRefused(_) => {
+        Outcome::Lowered(_)
+        | Outcome::LoweredCollection(_)
+        | Outcome::StateFrame(_)
+        | Outcome::StateFrameRefused(_) => {
             ScalarFormAssessment::Invalid(InvalidObligationItem::UnknownNode)
         }
     }

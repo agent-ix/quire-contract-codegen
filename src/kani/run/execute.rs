@@ -101,6 +101,11 @@ pub enum KaniExecutionRefusal {
         /// The generated artifact path.
         harness_path: String,
     },
+    /// The collection harness source, identity or record changed after generation.
+    HarnessProvenanceMismatch {
+        /// The generated artifact path.
+        harness_path: String,
+    },
     /// The run exported a Kani report this crate cannot read exactly. The run proved nothing
     /// and decided nothing; the refusal is never an outcome.
     Report(KaniReportRefusal),
@@ -153,6 +158,7 @@ impl KaniExecutionRefusal {
             Self::BatchCancelled { .. }
             | Self::Tool(_)
             | Self::HarnessNotInCrate { .. }
+            | Self::HarnessProvenanceMismatch { .. }
             | Self::Report(_)
             | Self::BatchTimedOut { .. }
             | Self::MemoryMechanismUnavailable { .. }
@@ -190,6 +196,10 @@ impl fmt::Display for KaniExecutionRefusal {
             Self::HarnessNotInCrate { harness_path } => {
                 write!(formatter, "the crate does not contain {harness_path}")
             }
+            Self::HarnessProvenanceMismatch { harness_path } => write!(
+                formatter,
+                "the generated source or identity for {harness_path} changed after generation"
+            ),
             Self::Report(refusal) => write!(formatter, "{refusal}"),
             Self::OutputOverLimit {
                 stream,
@@ -354,6 +364,11 @@ pub(crate) fn execute_kani_obligation_readonly(
 /// source byte for byte.
 fn require_in_crate(request: &KaniExecutionRequest<'_>) -> Result<(), KaniExecutionRefusal> {
     let harness = request.harness.view();
+    if !request.harness.has_valid_provenance() {
+        return Err(KaniExecutionRefusal::HarnessProvenanceMismatch {
+            harness_path: harness.rust.path.clone(),
+        });
+    }
     let library_path = request.crate_directory.join("src").join("lib.rs");
     let library = read_file(KaniTool::Library, &library_path).map_err(|_| {
         KaniExecutionRefusal::HarnessNotInCrate {

@@ -186,16 +186,18 @@ pub use kani::generate::frame::{
 };
 pub use kani::generate::negotiate::negotiate_kani_obligations;
 pub use kani::generate::outcome::{
-    BoundNotResolvedCause, DerivedDomain, InvalidObligationItem, KaniObligationError,
-    KaniObligationOutcome, KaniObligationRequest, ModelMemberRangeReason, ObligationDisposition,
-    ObligationItem, ObligationRecord, ObligationSubject, StateFrameLoweringRefusal,
-    StateFrameRefusal, StateFrameRole, UnsupportedFrameEffect, UnsupportedObligation,
-    MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
+    BoundNotResolvedCause, CollectionUnsupportedReason, DerivedDomain, InvalidObligationItem,
+    KaniObligationError, KaniObligationOutcome, KaniObligationRequest, ModelMemberRangeReason,
+    ObligationDisposition, ObligationItem, ObligationRecord, ObligationSubject,
+    StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole, UnsupportedFrameEffect,
+    UnsupportedObligation, MAX_OBLIGATION_ITEMS, MAX_OBLIGATION_UNWIND,
 };
 pub use kani::identity::{
-    EmbeddedOracle, KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness,
-    ObligationBinding, ObligationKind, ScalarObligationArgument, ScalarObligationIdentity,
-    StateComparison, StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
+    CollectionElementIdentity, CollectionKindIdentity, CollectionObligationIdentity,
+    CollectionPredicateIdentity, EmbeddedOracle, KaniCollectionObligationHarness,
+    KaniObligationHarness, KaniObligationIdentity, KaniScalarObligationHarness, ObligationBinding,
+    ObligationKind, ScalarObligationArgument, ScalarObligationIdentity, StateComparison,
+    StateFieldDomain, StateFrameHarness, StateFrameIdentity, StateFrameProperty,
     StateFrameRecordError, StateFrameScope, StateUnrangedField, StateUnrangedReason,
 };
 pub use kani::output::playback::DecodeFailure;
