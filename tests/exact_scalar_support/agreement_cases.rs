@@ -7,8 +7,8 @@
 //! test of a scratch crate that `tests/it/exact_scalar_agreement.rs` writes at
 //! test time from the generator's current output for the corpus request, so the
 //! oracles executed here are always the ones the generator emits now. Each
-//! oracle has a fixed operator and type, so a vector is an operand limit_tuple and a
-//! limit limit_tuple taken from the TC's tabled or generated vectors.
+//! oracle has a fixed operator and type, so a vector is an operand tuple and a
+//! limit tuple taken from the TC's tabled or generated vectors.
 //!
 //! IR-254: every vector here runs `agree2!` (direct runtime vs. generated
 //! oracle). A third, QSL value-authority leg (`agree3!`) used to run
@@ -179,7 +179,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
     assert_rows_agreed(&[("TC-192 generated vectors", vectors)]);
     assert_eq!(vectors, 5 * 41 * 41);
 
-    // DIV-08 exact limit_tuple, short work, short result; DIV-11 and DIV-13.
+    // DIV-08 exact limits, short work, short result; DIV-11 and DIV-13.
     let mut named = 0_usize;
     for (a, b, limit_tuple) in [
         (7, 3, DIV_08),
@@ -380,7 +380,7 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
             }
         }
     }
-    // T10 distinct profiles, T11 NFC limit_tuple, T14 non-normalizing tuples.
+    // T10 distinct profiles, T11 NFC tuple, T14 non-normalizing tuples.
     for (left, lp, right, rp, limit_tuple) in [
         ("abc", 1, "abc", 5, [0; 10]),
         (E_ACUTE, 1, E_COMBINING, 1, T11),
