@@ -1517,7 +1517,7 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
 
 /// Trace: FR-015-AC-101, TC-025.
 #[test]
-fn qsl_reader_rejects_cardinality_above_its_i64_wire_magnitude() {
+fn canonical_model_wire_rejects_cardinality_above_i64() {
     let mut document = model_document();
     let node = document["types"]
         .as_array_mut()
