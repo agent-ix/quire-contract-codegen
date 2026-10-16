@@ -4078,7 +4078,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 ("2025-01-02T03:04:05+01:00", "1.385e-05s", 17),
             ] {
                 stand_in.set_streams(
-                    &format!("{BANNER}{dir}/src/lib.rs:{pid}:2\nat {stamp} in {seconds}\n"),
+                    &format!("{BANNER}{dir}/src/lib.rs:6:21\nat {stamp} in {seconds}\n"),
                     &format!("process {pid} aborted\n"),
                 );
                 records
@@ -4276,12 +4276,15 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
             let silent = printing("diag-no-report", None, "first run\n", "", 1);
             let first = run(&silent, &harness);
+            let first_memory = first.memory.clone();
             silent.set_streams(&format!("{BANNER}{SOLVING}"), "something else\n");
-            let mut second = run(&silent, &harness);
+            let second = run(&silent, &harness);
             assert_ne!(first.diagnostics, second.diagnostics);
-            second.memory = first.memory.clone();
+            // The last argument is the run's own report path, unique to each call by design.
             let strip = |mut evidence: KaniExecutionEvidence| {
                 evidence.diagnostics = None;
+                evidence.memory = first_memory.clone();
+                evidence.arguments.pop();
                 evidence
             };
             assert_eq!(strip(first), strip(second));
