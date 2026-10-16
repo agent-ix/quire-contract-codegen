@@ -332,6 +332,63 @@ fn run_collection_kani(
     evidence
 }
 
+/// Parse the byte vectors in one Kani concrete playback block without interpreting the comments.
+/// The collection harness declares its i64 length first, then the three i64 array slots, all in
+/// declaration order, so these byte vectors directly witness that typed argument layout.
+fn collection_playback_byte_vectors(counterexample: &str) -> Vec<Vec<u8>> {
+    let body = counterexample
+        .split_once("let concrete_vals: Vec<Vec<u8>> = vec![")
+        .expect("Kani playback contains concrete_vals")
+        .1
+        .split_once("];")
+        .expect("Kani playback closes concrete_vals")
+        .0;
+    body.lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("vec!["))
+        .map(|line| {
+            line.trim_start_matches("vec![")
+                .trim_end_matches("],")
+                .split(',')
+                .map(|byte| byte.trim().parse::<u8>().expect("playback byte is u8"))
+                .collect()
+        })
+        .collect()
+}
+
+fn i64_playback_bytes(value: i64) -> Vec<u8> {
+    value.to_le_bytes().to_vec()
+}
+
+#[test]
+fn collection_playback_decodes_length_then_element_slots_from_real_byte_shape() {
+    let playback = r#"/// Test generated for harness `kob_collection_example::prove_collection_example`
+///
+/// Check for `assertion`: "collection claim"
+fn kani_concrete_playback() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 1
+        vec![1, 0, 0, 0, 0, 0, 0, 0],
+        // 0
+        vec![0, 0, 0, 0, 0, 0, 0, 0],
+        // 0
+        vec![0, 0, 0, 0, 0, 0, 0, 0],
+        // 0
+        vec![0, 0, 0, 0, 0, 0, 0, 0],
+    ];
+    kani::concrete_playback_run(concrete_vals, prove_collection_example);
+}"#;
+    assert_eq!(
+        collection_playback_byte_vectors(playback),
+        vec![
+            i64_playback_bytes(1),
+            i64_playback_bytes(0),
+            i64_playback_bytes(0),
+            i64_playback_bytes(0),
+        ]
+    );
+}
+
 fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emitted, String> {
     let limits = quire_canonical::Limits::new(1 << 20);
     let document_bytes = quire_canonical::to_vec(&document, limits)
@@ -1395,7 +1452,15 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     };
     assert!(counterexample.contains("kani::concrete_playback_run"));
     assert!(counterexample.contains(mutated_harness.identity.harness_symbol.as_str()));
-    assert!(counterexample.contains("selected_items"));
+    assert_eq!(
+        collection_playback_byte_vectors(counterexample),
+        vec![
+            i64_playback_bytes(1), // selected_items_len == 1
+            i64_playback_bytes(0), // active selected_items[0] == 0
+            i64_playback_bytes(0),
+            i64_playback_bytes(0),
+        ]
+    );
     assert_ne!(mutated_evidence.exit_code, Some(0));
 }
 
