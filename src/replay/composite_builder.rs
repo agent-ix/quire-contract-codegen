@@ -67,6 +67,8 @@ pub enum CompositeBuildError {
         /// The operator carried by the original node.
         actual: EqualityOperator,
     },
+    /// The selected node has no supported structural equality operation.
+    UnsupportedNodeOperation,
     /// The accessor returned a shape outside this graph-child constructor.
     OperandShape,
     /// The owning O-09 encoder refused the preimage.
@@ -114,6 +116,7 @@ impl fmt::Display for CompositeBuildError {
                     "requested operator {requested:?} differs from original {actual:?}"
                 )
             }
+            Self::UnsupportedNodeOperation => f.write_str("unsupported original node operation"),
             Self::OperandShape => f.write_str("unsupported structural operand projection"),
             Self::Identity(cause) => cause.fmt(f),
             Self::Report(cause) => cause.fmt(f),
@@ -249,6 +252,8 @@ impl OriginalCompositeEqContext {
             .original
             .composite_application_operands(node, occurrence, work_limit)
             .map_err(|cause| CompositeBuildError::Operands(Box::new(cause)))?;
+        // IR's operand projection validates Eq/Ne but does not return a typed operator yet.
+        // Read the selected node identity until the IR API carries that operation.
         let actual = self
             .original
             .graph()
@@ -260,7 +265,7 @@ impl OriginalCompositeEqContext {
         let actual = match actual {
             Some("quire.op.structural.eq") => EqualityOperator::Equal,
             Some("quire.op.structural.ne") => EqualityOperator::NotEqual,
-            _ => return Err(CompositeBuildError::OperandShape),
+            Some(_) | None => return Err(CompositeBuildError::UnsupportedNodeOperation),
         };
         if actual != operator {
             return Err(CompositeBuildError::OperatorMismatch {
