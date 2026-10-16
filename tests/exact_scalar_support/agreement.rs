@@ -286,7 +286,7 @@ const fn base(name: &'static str, declaration: &'static str) -> DimSpec {
     }
 }
 
-const fn unit(
+pub const fn unit(
     name: &'static str,
     dimension: &'static str,
     target: Option<&'static str>,
@@ -302,7 +302,7 @@ const fn unit(
     }
 }
 
-const fn root(name: &'static str, dimension: &'static str) -> UnitSpec {
+pub const fn root(name: &'static str, dimension: &'static str) -> UnitSpec {
     unit(name, dimension, None, (1, 1), (0, 1))
 }
 
@@ -315,9 +315,17 @@ impl GraphSpec {
                 base("T", "Time"),
                 base("Theta", "Temperature"),
                 base("M", "Mass"),
+                // Same declaration name and shape as `L`, different owner: a different node key.
+                DimSpec {
+                    name: "L_foreign",
+                    owner: "other-model",
+                    declaration: "Length",
+                    terms: &[],
+                },
             ],
             units: vec![
                 root("m", "L"),
+                root("m_foreign", "L_foreign"),
                 root("s", "T"),
                 root("K", "Theta"),
                 unit("cm", "L", Some("m"), (1, 100), (0, 1)),

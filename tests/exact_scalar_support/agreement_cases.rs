@@ -479,6 +479,9 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
     println!("TC-186 agreement: {comparisons} text comparisons, {enums} enum comparisons");
 }
 
+/// The unit families the generated TC-187 grid runs every same-unit operation over.
+const UNIT_GRID: [&str; 6] = ["m", "cm", "in", "rev", "u2", "s"];
+
 /// The TC-187 arithmetic, comparison, power and tabled-limit vectors. The vectors that convert a
 /// quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle and
 /// are not agreement rows: a conversion is refused.
@@ -489,7 +492,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
     let values = [(0_i64, 1_i64), (1, 1), (-7, 3), (250, 1), (5463, 20)];
 
     let (mut arithmetic, mut comparisons, mut powers) = (0_usize, 0_usize, 0_usize);
-    for name in ["m", "cm", "in", "rev", "u2"] {
+    for name in UNIT_GRID {
         for (ln, ld) in values {
             for (rn, rd) in values {
                 agree2! {
@@ -536,7 +539,7 @@ fn tc_024_tc187_quantity_oracles_agree() {
         ("TC-187 powers", powers),
     ]);
     let operations = arithmetic + comparisons + powers;
-    assert_eq!(operations, 5 * (5 * 5 * (4 + 6) + 5 * 6));
+    assert_eq!(operations, UNIT_GRID.len() * (5 * 5 * (4 + 6) + 5 * 6));
 
     // U19/U24 same-unit sums, U28 compound product, U13/U21 powers, U23
     // comparison tuples, and the U03 dimension mismatch.
@@ -604,6 +607,450 @@ fn tc_024_tc187_quantity_oracles_agree() {
     let named = sums + products + named_powers + tuple_comparisons;
     assert_eq!(named, 14);
     println!("TC-187 three-way agreement: {operations} operations, {named} tabled tuples");
+}
+
+use support::rt_side as rt;
+
+type QuantityRun<T> = (
+    Result<Outcome<T>, IllTyped>,
+    Vec<rt::ChargePoint>,
+    Vec<u64>,
+);
+
+#[derive(Clone, Copy)]
+enum Arithmetic {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
+impl Arithmetic {
+    const ALL: [Self; 4] = [Self::Add, Self::Subtract, Self::Multiply, Self::Divide];
+
+    fn direct(
+        self,
+        a: &Quantity,
+        b: &Quantity,
+        meter: &mut Meter,
+    ) -> Result<Outcome<Quantity>, IllTyped> {
+        rt::evaluate_quantity(
+            match self {
+                Self::Add => rt::QuantityOperation::Add(a, b),
+                Self::Subtract => rt::QuantityOperation::Subtract(a, b),
+                Self::Multiply => rt::QuantityOperation::Multiply(a, b),
+                Self::Divide => rt::QuantityOperation::Divide(a, b),
+            },
+            meter,
+        )
+    }
+
+    fn generated(
+        self,
+        a: &Quantity,
+        b: &Quantity,
+        meter: &mut Meter,
+    ) -> Result<Outcome<Quantity>, IllTyped> {
+        typed(match self {
+            Self::Add => quantity_add(a, b, meter),
+            Self::Subtract => quantity_subtract(a, b, meter),
+            Self::Multiply => quantity_multiply(a, b, meter),
+            Self::Divide => quantity_divide(a, b, meter),
+        })
+    }
+}
+
+/// Runs one binary quantity vector on the direct runtime and the generated oracle, requires them
+/// to agree in outcome, charges, counters and every single-charge denial, and returns the runtime
+/// run for the vector's own expected-disposition assertions.
+fn agree_arithmetic(
+    bounds: ScalarLimits,
+    operation: Arithmetic,
+    left: (i64, &str),
+    right: (i64, &str),
+) -> QuantityRun<Quantity> {
+    agree2! {
+        limits: bounds,
+        setup: { let f = fixture(); let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1)); },
+        direct: |m| operation.direct(&a, &b, m),
+        generated: |m| operation.generated(&a, &b, m),
+    };
+    let f = rt::fixture();
+    let (a, b) = (f.qi(left.0, left.1), f.qi(right.0, right.1));
+    let (outcome, charges, consumed) = rt::metered(bounds, |m| operation.direct(&a, &b, m));
+    (outcome, charges, consumed)
+}
+
+/// The power counterpart of [`agree_arithmetic`].
+fn agree_power(bounds: ScalarLimits, base: (i64, &str), exponent: &str) -> QuantityRun<Quantity> {
+    agree2! {
+        limits: bounds,
+        setup: { let f = fixture(); let (a, n) = (f.qi(base.0, base.1), big(exponent)); },
+        direct: |m| evaluate_quantity(QuantityOperation::Power(&a, &n), m),
+        generated: |m| typed(quantity_power(&a, &n, m)),
+    };
+    let f = rt::fixture();
+    let (a, n) = (f.qi(base.0, base.1), rt::big(exponent));
+    let (outcome, charges, consumed) = rt::metered(bounds, |m| {
+        rt::evaluate_quantity(rt::QuantityOperation::Power(&a, &n), m)
+    });
+    (outcome, charges, consumed)
+}
+
+/// The vector refused `ill_typed` and admitted no charge.
+fn assert_ill_typed_without_charge(row: &str, run: &QuantityRun<Quantity>) {
+    assert!(
+        matches!(run.0, Err(IllTyped { .. })),
+        "{row}: expected refused ill_typed, got {:?}",
+        run.0
+    );
+    assert!(run.1.is_empty(), "{row}: a refusal before arithmetic admits no charge");
+    assert!(run.2.iter().all(|consumed| *consumed == 0), "{row}: nothing is consumed");
+}
+
+/// The ascending compound-unit terms of a quantity, by base-unit name.
+fn compound_terms(f: &rt::Fixture, quantity: &Quantity) -> Vec<(rt::NodeKey, Integer)> {
+    let _ = f;
+    match quantity.unit() {
+        rt::QuantityUnit::Compound(unit) => unit
+            .terms()
+            .map(|(key, exponent)| (key, exponent.clone()))
+            .collect(),
+        other => panic!("expected a compound unit, got {other:?}"),
+    }
+}
+
+fn expected_terms(f: &rt::Fixture, terms: &[(&str, i64)]) -> Vec<(rt::NodeKey, Integer)> {
+    let mut expected: Vec<_> = terms
+        .iter()
+        .map(|(name, exponent)| (f.key(name), Integer::from(*exponent)))
+        .collect();
+    expected.sort_by_key(|(key, _)| *key);
+    expected
+}
+
+fn completed(run: &QuantityRun<Quantity>, row: &str) -> Quantity {
+    match &run.0 {
+        Ok(Outcome::Completed(quantity)) => quantity.clone(),
+        other => panic!("{row}: expected a completed quantity, got {other:?}"),
+    }
+}
+
+/// TC-187 U12: quantity multiplication, division and power under canonical compound units, with
+/// the `s` family the grid needs for a mixed-unit product.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u12_compound_unit_products_agree() {
+    let f = rt::fixture();
+    let unlimited = rt::UNLIMITED;
+    let mut agreements = 0_usize;
+
+    let product = agree_arithmetic(unlimited, Arithmetic::Multiply, (2, "m"), (3, "s"));
+    let quantity = completed(&product, "2 m * 3 s");
+    assert_eq!(*quantity.value(), rt::ratio(6, 1));
+    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 1), ("s", 1)]));
+
+    let quotient = agree_arithmetic(unlimited, Arithmetic::Divide, (6, "m"), (2, "s"));
+    let quantity = completed(&quotient, "6 m / 2 s");
+    assert_eq!(*quantity.value(), rt::ratio(3, 1));
+    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 1), ("s", -1)]));
+
+    let square = agree_power(unlimited, (2, "m"), "2");
+    let quantity = completed(&square, "(2 m)^2");
+    assert_eq!(*quantity.value(), rt::ratio(4, 1));
+    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 2)]));
+
+    let cancelled = agree_arithmetic(unlimited, Arithmetic::Divide, (5, "m"), (5, "m"));
+    let quantity = completed(&cancelled, "5 m / 5 m");
+    assert_eq!(*quantity.value(), rt::ratio(1, 1));
+    assert!(quantity.unit().dimension().is_dimensionless());
+    assert!(compound_terms(&f, &quantity).is_empty());
+    agreements += 4;
+    assert_rows_agreed(&[("TC-187 U12 products", agreements)]);
+}
+
+/// TC-187 U02: the normalized dimension map drops zero exponents; `(L*T)/T` is `L` and `L^0` is
+/// the empty dimension, both in the retained sorted maps and through the quantity operators.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u02_dimension_normalization_agrees() {
+    let f = rt::fixture();
+    let (l, t) = (
+        f.graph.dimension(f.key("L")).expect("length dimension"),
+        f.graph.dimension(f.key("T")).expect("time dimension"),
+    );
+    let normalized = l.multiply(t).divide(t);
+    assert_eq!(&normalized, l);
+    assert_eq!(
+        normalized.exponents().map(|(k, e)| (k, e.clone())).collect::<Vec<_>>(),
+        vec![(f.key("L"), Integer::from(1_i64))]
+    );
+    let zeroth = l.power(&rt::int(0));
+    assert!(zeroth.is_dimensionless());
+    assert_eq!(zeroth.exponents().count(), 0);
+
+    // The same normalization through the operators both sides execute: (1 m * 1 s) / 1 s.
+    let mut agreements = 0_usize;
+    agree2! {
+        limits: UNLIMITED,
+        setup: { let f = fixture(); let (a, b) = (f.qi(1, "m"), f.qi(1, "s")); },
+        direct: |m| {
+            let product = evaluate_quantity(QuantityOperation::Multiply(&a, &b), m);
+            let quotient = match &product {
+                Ok(Outcome::Completed(p)) => Some(evaluate_quantity(QuantityOperation::Divide(p, &b), m)),
+                _ => None,
+            };
+            (product, quotient)
+        },
+        generated: |m| {
+            let product = typed(quantity_multiply(&a, &b, m));
+            let quotient = match &product {
+                Ok(Outcome::Completed(p)) => Some(typed(quantity_divide(p, &b, m))),
+                _ => None,
+            };
+            (product, quotient)
+        },
+    };
+    agreements += 1;
+    let (a, b) = (f.qi(1, "m"), f.qi(1, "s"));
+    let ((product, quotient), _, _) = rt::metered(rt::UNLIMITED, |m| {
+        let product = rt::evaluate_quantity(rt::QuantityOperation::Multiply(&a, &b), m);
+        let quotient = match &product {
+            Ok(Outcome::Completed(p)) => {
+                Some(rt::evaluate_quantity(rt::QuantityOperation::Divide(p, &b), m))
+            }
+            _ => None,
+        };
+        (product, quotient)
+    });
+    assert!(matches!(product, Ok(Outcome::Completed(_))));
+    let Some(Ok(Outcome::Completed(quantity))) = quotient else {
+        panic!("(1 m * 1 s) / 1 s must complete");
+    };
+    assert_eq!(quantity.unit().dimension(), l);
+    assert_eq!(compound_terms(&f, &quantity), expected_terms(&f, &[("m", 1)]));
+
+    let power = agree_power(rt::UNLIMITED, (1, "m"), "0");
+    agreements += 1;
+    let quantity = completed(&power, "(1 m)^0");
+    assert!(quantity.unit().dimension().is_dimensionless());
+    assert_rows_agreed(&[("TC-187 U02 normalization", agreements)]);
+}
+
+/// TC-187 U05: arithmetic, comparison-free operators and a power on a nonzero-offset point
+/// (`degC`, `degF`) are refused `ill_typed` before any charge.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
+    let mut agreements = 0_usize;
+    for (left, right) in [
+        ((1, "degC"), (2, "degC")),
+        ((1, "degF"), (2, "degF")),
+        ((1, "degC"), (2, "degF")),
+    ] {
+        for operation in Arithmetic::ALL {
+            let run = agree_arithmetic(rt::UNLIMITED, operation, left, right);
+            assert_ill_typed_without_charge("U05 binary", &run);
+            agreements += 1;
+        }
+    }
+    for unit in ["degC", "degF"] {
+        for exponent in ["-1", "0", "2"] {
+            let run = agree_power(rt::UNLIMITED, (3, unit), exponent);
+            assert_ill_typed_without_charge("U05 power", &run);
+            agreements += 1;
+        }
+    }
+    assert_rows_agreed(&[("TC-187 U05 affine points", agreements)]);
+    assert_eq!(agreements, 3 * 4 + 2 * 3);
+}
+
+/// TC-187 U09: a base dimension with the same declaration name and shape as `L` but a different
+/// owner, hence a different node key, is an incompatible dimension despite the resemblance.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
+    let run = agree_arithmetic(rt::UNLIMITED, Arithmetic::Add, (1, "m"), (1, "m_foreign"));
+    assert_ill_typed_without_charge("U09", &run);
+    let Err(refusal) = run.0 else { unreachable!("asserted above") };
+    assert_eq!(refusal.cause, rt::IllTypedCause::IncompatibleDimensions);
+    assert_eq!(IllTyped::CODE, "ill_typed");
+    // The control: the same shape under the one `L` key is accepted.
+    let control = agree_arithmetic(rt::UNLIMITED, Arithmetic::Add, (1, "m"), (1, "m"));
+    assert!(matches!(control.0, Ok(Outcome::Completed(_))));
+}
+
+/// TC-187 U14: under `L(0,0,0,0,0,0)` each incompatible, affine or distinct-unit operation is
+/// refused `ill_typed` with no charge.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u14_static_refusals_charge_nothing() {
+    let zero = rt::unit_tuple([0; 6]);
+    let mut agreements = 0_usize;
+    for (operation, left, right) in [
+        (Arithmetic::Add, (1, "m"), (1, "s")),
+        (Arithmetic::Add, (1, "degC"), (1, "s")),
+        (Arithmetic::Add, (1, "degC"), (1, "degC")),
+        (Arithmetic::Divide, (1, "degC"), (0, "degC")),
+        (Arithmetic::Add, (1, "cm"), (1, "m")),
+    ] {
+        let run = agree_arithmetic(zero, operation, left, right);
+        assert_ill_typed_without_charge("U14", &run);
+        agreements += 1;
+    }
+    assert_rows_agreed(&[("TC-187 U14 static refusals", agreements)]);
+    assert_eq!(agreements, 5);
+}
+
+/// TC-187 U20: the affine-by-composed-offset units `u1` and `u3` refuse arithmetic with no
+/// charge; `u2`'s offsets compose to zero, so its sum is exact with no edge.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
+    let zero = rt::unit_tuple([0; 6]);
+    let sum = agree_arithmetic(zero, Arithmetic::Add, (1, "u1"), (2, "u1"));
+    assert_ill_typed_without_charge("U20 u1 sum", &sum);
+    let product = agree_arithmetic(zero, Arithmetic::Multiply, (1, "u3"), (1, "m"));
+    assert_ill_typed_without_charge("U20 u3 product", &product);
+
+    let exact = agree_arithmetic(
+        rt::unit_tuple([4, 0, 0, 2, 5, 1]),
+        Arithmetic::Add,
+        (1, "u2"),
+        (2, "u2"),
+    );
+    let quantity = completed(&exact, "U20 u2 sum");
+    assert_eq!(*quantity.value(), rt::ratio(3, 1));
+    let f = rt::fixture();
+    assert_eq!(quantity.unit(), &f.unit("u2"));
+    assert!(!exact.1.contains(&rt::ChargePoint::UnitEdge), "u2 is not affine: no edge is charged");
+    assert_rows_agreed(&[("TC-187 U20 affinity", 3)]);
+}
+
+/// TC-187 U27: `1 cm / 0 cm` is undefined after both identity reads and before any edge; one work
+/// unit fewer stops incomplete at the second read.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
+    let undefined = agree_arithmetic(
+        rt::unit_tuple([1, 0, 0, 2, 2, 0]),
+        Arithmetic::Divide,
+        (1, "cm"),
+        (0, "cm"),
+    );
+    assert!(matches!(
+        undefined.0,
+        Ok(Outcome::Undefined(rt::Undefined::DivisionByZero))
+    ));
+    assert_eq!(
+        undefined.1,
+        vec![rt::ChargePoint::UnitIdentityRead, rt::ChargePoint::UnitIdentityRead]
+    );
+
+    let stopped = agree_arithmetic(
+        rt::unit_tuple([1, 0, 0, 2, 1, 0]),
+        Arithmetic::Divide,
+        (1, "cm"),
+        (0, "cm"),
+    );
+    let Ok(Outcome::Incomplete(incomplete)) = &stopped.0 else {
+        panic!("U27 under one work unit must be incomplete, got {:?}", stopped.0);
+    };
+    assert_eq!(incomplete.limit_kind, rt::LimitKind::WorkUnits);
+    assert_eq!((incomplete.limit, incomplete.consumed), (1, 1));
+    assert_eq!(incomplete.next_charge, Integer::from(1_i64));
+    assert_eq!(incomplete.charge_point, rt::ChargePoint::UnitIdentityRead);
+    assert_rows_agreed(&[("TC-187 U27 division by zero", 2)]);
+}
+
+/// The refusal cause of a graph admission that must fail.
+fn admission_refusal(result: Result<rt::UnitGraph, rt::InvalidSemanticGraph>) -> rt::SemanticGraphCause {
+    match result {
+        Ok(_) => panic!("the unit graph was admitted"),
+        Err(refusal) => {
+            assert_eq!(rt::InvalidSemanticGraph::CODE, "invalid_semantic_graph");
+            refusal.cause
+        }
+    }
+}
+
+fn node(n: u8) -> rt::NodeKey {
+    rt::NodeKey::from_hex(&format!("{n:064x}")).expect("a 64-digit hex key")
+}
+
+fn declaration(
+    dimension: rt::NodeKey,
+    target: Option<rt::NodeKey>,
+    scale: rt::Rational,
+) -> rt::UnitDeclaration {
+    rt::UnitDeclaration {
+        dimension,
+        target,
+        scale,
+        offset: rt::ratio(0, 1),
+    }
+}
+
+/// TC-187 U06 and U11: the generated oracles take an already admitted unit graph, so these rows
+/// have no generated oracle; they run against the same graph admission every agreement vector
+/// builds its fixture through. A zero scale and each broken topology of the `L` graph is refused
+/// `invalid_semantic_graph`, with its typed cause, before a quantity can exist.
+///
+/// Trace: FR-014-AC-6, TC-024.
+#[test]
+fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
+    // The corpus fixture itself admits.
+    assert!(rt::admit_graph(&support::GraphSpec::tc187()).is_ok());
+
+    // U06: a unit with zero scale.
+    let mut zero_scale = support::GraphSpec::tc187();
+    zero_scale.units.push(support::unit("zero", "L", Some("m"), (0, 1), (0, 1)));
+    let cause = admission_refusal(rt::admit_graph(&zero_scale).map(|fixture| fixture.graph));
+    assert_eq!(cause, rt::SemanticGraphCause::ZeroScale);
+
+    // U11, built through the fixture: a second targetless root under `L`.
+    let mut two_roots = support::GraphSpec::tc187();
+    two_roots.units.push(support::root("m_second_root", "L"));
+    let cause = admission_refusal(rt::admit_graph(&two_roots).map(|fixture| fixture.graph));
+    assert_eq!(cause, rt::SemanticGraphCause::DuplicateRoot);
+
+    // U11, built from raw node keys, because content-hashed fixture keys cannot form a cycle,
+    // omit a root that a target needs, or name a target that does not exist.
+    let (length, time) = (node(1), node(2));
+    let (a, b, root) = (node(10), node(11), node(12));
+    let dimensions = || [(length, vec![]), (time, vec![])];
+    let one = || rt::ratio(1, 1);
+
+    let cause = admission_refusal(rt::UnitGraph::admit(
+        dimensions(),
+        [(a, declaration(length, Some(b), one())), (b, declaration(length, Some(a), one()))],
+    ));
+    assert_eq!(cause, rt::SemanticGraphCause::MissingRoot);
+
+    let cause = admission_refusal(rt::UnitGraph::admit(
+        dimensions(),
+        [(root, declaration(length, None, one())), (a, declaration(length, Some(b), one()))],
+    ));
+    assert_eq!(cause, rt::SemanticGraphCause::UnknownTarget);
+
+    let cause = admission_refusal(rt::UnitGraph::admit(
+        dimensions(),
+        [(root, declaration(time, None, one())), (a, declaration(length, Some(root), one()))],
+    ));
+    assert_eq!(cause, rt::SemanticGraphCause::CrossDimensionTarget);
+
+    let cause = admission_refusal(rt::UnitGraph::admit(
+        dimensions(),
+        [(root, declaration(length, None, one())), (a, declaration(length, Some(a), one()))],
+    ));
+    assert_eq!(cause, rt::SemanticGraphCause::TargetCycle);
 }
 
 /// The TC-193 class matrix patterns of `IeeeWidth::ALL[width]`.
