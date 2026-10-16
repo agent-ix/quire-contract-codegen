@@ -9,7 +9,6 @@ use quire_contract_model::{
     CheckedSemanticNodeV2,
 };
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use crate::{
     core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
@@ -85,13 +84,16 @@ pub(super) struct LoweredCollectionClaim {
     pub(super) field: CollectionFieldDomain,
 }
 
-/// Compact, stable generated identifier material. The full package and quantifier identities
-/// remain in the persisted proof identity; the short symbol is only a Rust/Kani path component.
-fn collection_symbol_digest(identity_preimage: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(b"quire.codegen.collection-harness/v1\0");
-    hasher.update(identity_preimage);
-    format!("{:x}", hasher.finalize())
+/// Canonical digest of the complete semantic identity used to shorten generated Rust symbols.
+/// The short symbol is only a path component; the persisted proof record retains the full fields.
+fn collection_symbol_digest<T: serde::Serialize + ?Sized>(
+    identity_preimage: &T,
+) -> Result<String, UnsupportedObligation> {
+    let value = crate::core::canonical::preimage_value(identity_preimage)
+        .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    let digest = crate::core::canonical::content_digest(&value)
+        .map_err(|_| UnsupportedObligation::RenderFailed)?;
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn collection_harness_symbols(digest: &str) -> (String, String) {
@@ -253,7 +255,7 @@ pub(super) fn render_collection(
         ),
     ))
     .map_err(|_| UnsupportedObligation::RenderFailed)?;
-    let digest = collection_symbol_digest(&symbol_material);
+    let digest = collection_symbol_digest(&symbol_material)?;
     // Keep both Rust identifiers short enough for Kani's internal generated filenames. A
     // collision after truncation is detected during request negotiation before artifacts leave
     // this module; the full semantic identity remains in the proof record and artifact identity.
@@ -339,14 +341,18 @@ mod tests {
 
     #[test]
     fn collection_symbols_are_bounded_and_stable_per_full_identity() {
-        let first = collection_symbol_digest(b"package-a/function-a/quantifier-a/domain-a");
-        let same = collection_symbol_digest(b"package-a/function-a/quantifier-a/domain-a");
+        let identity = ("package-a", "function-a", "quantifier-a", "domain-a");
+        let first = collection_symbol_digest(&identity).expect("canonical identity digest");
+        let same = collection_symbol_digest(&identity).expect("same canonical identity");
         let changed_package =
-            collection_symbol_digest(b"package-b/function-a/quantifier-a/domain-a");
+            collection_symbol_digest(&("package-b", "function-a", "quantifier-a", "domain-a"))
+                .expect("changed package identity");
         let changed_subject =
-            collection_symbol_digest(b"package-a/function-b/quantifier-a/domain-a");
+            collection_symbol_digest(&("package-a", "function-b", "quantifier-a", "domain-a"))
+                .expect("changed subject identity");
         let changed_domain =
-            collection_symbol_digest(b"package-a/function-a/quantifier-a/domain-b");
+            collection_symbol_digest(&("package-a", "function-a", "quantifier-a", "domain-b"))
+                .expect("changed domain identity");
         assert_eq!(first, same);
         assert_ne!(first, changed_package);
         assert_ne!(first, changed_subject);
