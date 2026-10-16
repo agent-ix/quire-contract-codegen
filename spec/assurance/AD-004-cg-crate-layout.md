@@ -531,7 +531,8 @@ records only the work order the ruling allows, because the code still has V1 rea
 - Oracle, strategy and evidence side: `harness`, `strategy/bound`, `evidence/bound_coverage`,
   `oracle/bound_v1.rs` and `oracle/boolean_v1.rs` read V1. FR-008 to FR-013 and NFR-004 now carry
   planned V2 criteria over `CheckedPackageV2`, which `strategy/bound` has not yet implemented;
-  FR-002 (`harness`) and FR-004 (`evidence/bound_coverage`) have no V2 criteria yet. They sit in their final
+  FR-002 (`harness`, FR-002-AC-7 to AC-12) and FR-004 (`evidence/bound_coverage`, FR-004-AC-16 to
+  AC-19) now carry planned V2 criteria too (IR-815), which no code implements yet. They sit in their final
   directories, named V1 in the module map, and each is deleted in the PR that adds its V2
   replacement. A layout test fails if a V1 type is named anywhere else. This is a rule about where
   the leftover may be, not a second supported path. `strategy/campaign.rs` reads no V1 type.

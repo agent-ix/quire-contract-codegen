@@ -27,6 +27,13 @@ Pass an existing report containing a discard into an otherwise successful determ
 require the completed-run policy to reject the cumulative discard excess. An aborted search with
 the same prior excess must retain both exhaustion and the exceeded-ceiling policy result.
 
+Planned V2 controls (IR-815): from an admitted `CheckedPackageV2`, select one precondition and one
+postcondition and generate the harness. Drive seeded cases that make the precondition false, the
+postcondition false, and neither, with an instrumented subject that records call order and whether
+it was invoked. Select an unknown clause identity, a clause of the wrong kind, the same clause for
+both selections, and a body outside the FR-014-AC-38 shape. Generate twice and compare bytes.
+Inspect the generator source for any `BoundPackage`, `ClauseRef` or private body decoder.
+
 ## Expected Results
 
 Supported constraints are shaped directly, every emitted boundary census contains accepted and
@@ -37,3 +44,8 @@ accepted/rejected/failed/discarded validation. It rejects zero/below-floor campa
 above the requested discard ceiling.
 An exhausted search remains a typed `Exhausted` result even when its retained policy result says
 that a floor was missed; completed searches still return the corresponding floor failure directly.
+
+The V2 controls expect a rejected case to leave the subject uninvoked, a false postcondition to be a
+failed postcondition, snapshot, precondition, invocation and postcondition to run in that order,
+each wrong selection or unsupported body to yield a typed diagnostic and no artifact with no
+filtering fallback, and identical bytes on repeat. These controls are planned.

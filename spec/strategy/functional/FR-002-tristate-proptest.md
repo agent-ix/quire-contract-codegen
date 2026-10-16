@@ -18,6 +18,10 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 ## Inputs
 
 - Executable clauses, execution points, state bindings, ranges, memberships, and supported relations.
+- Planned (IR-815): for the V2 harness, an admitted `CheckedPackageV2` with the clause ids of one
+  selected precondition and one selected postcondition, read through Contract IR's public typed
+  API. The source of the execution point and of the requirement and revision identity for this
+  input is open (Open Questions); no V2 criterion below depends on it.
 
 ## Outputs
 
@@ -53,6 +57,19 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
   discarded disposition.
 - Harness and strategy generation shall return deterministic source, or a structured non-generated
   terminal state with no partial bundle.
+- Planned (IR-815): when a request selects one precondition and one postcondition of an admitted
+  `CheckedPackageV2`, the generator shall embed in the harness the FR-014 V2 clause oracle of each
+  selected clause body (FR-014-AC-38) and shall keep the snapshot, precondition, invocation and
+  postcondition ordering of this requirement.
+- Planned (IR-815): the V2 harness generator shall read clause kind, identity and body only through
+  Contract IR's public typed API for the admitted package, and shall take no `BoundPackage` or
+  `ClauseRef` input.
+- Planned (IR-815): if a selected clause identity is unknown, is not of the expected kind, or
+  names the same clause as both selections, then the V2 harness generator shall return a typed,
+  located diagnostic and no artifact.
+- Planned (IR-815): if a selected clause body is outside the FR-014-AC-38 shape, then the V2
+  harness generator shall return a structured unsupported diagnostic and no artifact, with no
+  fallback to filtering.
 
 ## Acceptance Criteria
 
@@ -64,6 +81,19 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 | FR-002-AC-4 | Shrinking preserves generated constraints or records a residual rejection. | Test (TC-004) |
 | FR-002-AC-5 | The generated campaign runner owns execution, explicit-discard accounting, and conclusion, returns a typed terminal result, and rejects campaigns below either configured coverage floor or above the explicit-discard ceiling; exhausted searches retain their reason and any missed floor without becoming a completed floor failure. | Test (TC-004) |
 | FR-002-AC-6 | Integer and generated Boolean harness campaign cases bind exact values to executable accepted/rejected expectations; enum cases execute an all-admitted membership expectation. | Test (TC-004) |
+| FR-002-AC-7 | PLANNED (IR-815). For one precondition and one postcondition selected from an admitted `CheckedPackageV2`, the generated harness embeds each selected clause's FR-014 V2 clause oracle, and a seeded case on which the precondition is false is rejected with the subject not invoked, one on which the postcondition is false is a failed postcondition, and any other is a pass. | Test (TC-004) |
+| FR-002-AC-8 | PLANNED (IR-815). In the V2 harness the pre-state snapshot precedes precondition evaluation, which precedes subject invocation, which precedes postcondition evaluation, for every case, as an instrumented subject observes. | Test (TC-004) |
+| FR-002-AC-9 | PLANNED (IR-815). Source inspection shows the V2 harness generator reads clause meaning only through Contract IR's public typed API and names no `BoundPackage`, `ClauseRef` or private body decoder. | Inspection |
+| FR-002-AC-10 | PLANNED (IR-815). A selected clause identity that is unknown, of the wrong clause kind, or the same for both selections yields a typed, located diagnostic naming the selection and no artifact. | Test (TC-004) |
+| FR-002-AC-11 | PLANNED (IR-815). A selected clause body outside the FR-014-AC-38 shape yields a structured unsupported diagnostic and no artifact, and the generator emits no filtering strategy for it. | Test (TC-004) |
+| FR-002-AC-12 | PLANNED (IR-815). Repeated V2 harness generation for the same admitted package, selected clause identities and campaign policy is byte-identical. | Test (TC-004) |
+
+## Open Questions
+
+- OQ-1 (execution point and identity): the V2 source of the harness's execution point and of the
+  requirement and revision identity is the open question recorded as FR-011 OQ-1 and OQ-2, and the
+  V2 entry shape follows the open interface-001 direction. No FR-002 V2 criterion depends on the
+  answer, and none invents a source.
 
 ## Dependencies
 
