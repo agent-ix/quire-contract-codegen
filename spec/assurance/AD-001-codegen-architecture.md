@@ -249,8 +249,10 @@ The views and decisions above state the target. At this revision:
 
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue`; it imports no Contract IR witness type.
   The bounded-Kani corpus (`src/kani/generate/corpus/bounded_kani_corpus.rs`) generates and classifies cases and
-  retains no counterexample packet and claims no replay: every caller of the retired replay
-  passed a constant closure as its native evaluator, so the verdict was predetermined.
+  retains no counterexample packet. Its replay method (`BoundedCorpusCase::replay_counterexample`,
+  with `compile_corpus_qsl_package` in `src/replay/function.rs`) is live today, serves only its
+  graph and collection cases, and is dropped, not re-homed, by the final retirement slice
+  (FR-015-AC-111); the real-Kani replays of FR-015-AC-99 and FR-015-AC-106 replace it.
 - Function replay (`src/replay/function.rs`) decodes the persisted Kani playback, checks each
   decoded argument against its declared domain before replay, renders QSL's `Witness` and calls
   `qsl_replay::replay`. Its function path builds a replay request but no counterexample
@@ -267,8 +269,8 @@ The views and decisions above state the target. At this revision:
   through 4g have not yet retired these paths. The bounded-profile classifier, three
   finite-input lowerers and corpus emitter have interim ownership under FR-015-AC-82 to
   FR-015-AC-94; its current generated-case classification retires at AD-004 step 4g
-  under planned FR-015-AC-95. The corpus retains no counterexample packet or
-  native replay result.
+  under planned FR-015-AC-95, reached by the per-family slices FR-015-AC-109 to AC-111. The corpus
+  retains no counterexample packet or native replay result.
 - No backend adapter trait exists yet. The runner enforces a wall-clock and memory ceiling,
   and `src/kani/terminal.rs` maps a Kani run outcome paired with its replay settlement to a
   QSL terminal value (FR-029); neither fact completes the planned adapter trait.

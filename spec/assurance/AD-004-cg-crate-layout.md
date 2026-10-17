@@ -203,7 +203,8 @@ src/
     census.rs                 the proof-dependency census types (the FR-015 census input)
     identity.rs               the harness and identity record types, ObligationKind, ObligationBinding
     generate/                 the one generator
-      spec.rs                 HarnessSpec (step 4b; not created by 2f)
+      spec.rs                 HarnessSpec and its one constructor (step 4b; shape decided in "The
+                              HarnessSpec and render contract"; not created by 2f)
       render.rs               the one renderer: the only code that emits Kani attributes and macros
                               (step 4b; not created by 2f)
       negotiate.rs            negotiate_kani_obligations, the one public generation entry, with the
@@ -354,7 +355,7 @@ Rules, each checkable:
   `output` and `classify` (and `abi`, for `KaniSolver`), not `generate`: the harness and identity
   record types it needs live in `kani/identity.rs` (step 2b), so a harness is run from its identity
   and its source text.
-- Inside `kani/generate/` the order is `outcome`, `record`, `census_validation`, then the families
+- Inside `kani/generate/` the order is `outcome`, `record`, `spec`, `render`, `census_validation`, then the families
   (`scalar` and `collection`, `clause`, then `precondition` and `contract`, `frame`, `lower`,
   `corpus`, `v1_bundle`), then `negotiate`, which imports `outcome`, `record`, `scalar`,
   `collection`, `clause`, `precondition`, `contract` and `frame` (the `StateFrame` arm of step 4d
@@ -362,7 +363,7 @@ Rules, each checkable:
   `census_validation`) and is imported by none. `collection` imports `outcome` and `record` from
   this directory, besides `core`, `kani::abi` and `kani::identity`, and imports no other crate
   path, so never `negotiate`, `lower` or `corpus` either (the layout test lists exactly these
-  five prefixes for `collection.rs`); `scalar` and `collection` share a rank, so neither imports the other. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
+  five prefixes for `collection.rs`); `scalar` and `collection` share a rank, so neither imports the other. `spec` imports `outcome` (for `MAX_OBLIGATION_UNWIND`), `core::identity` (for `HarnessPath`) and `kani::abi`; `render` imports `spec`, `outcome`, `core::artifact` and `kani::abi`, and not `record`; a family that has been ported (scalar at 4b) imports `spec` and `render`. A family file may import `outcome` and `record` and never `negotiate`: the passes that read the whole request
   (classification, name settlement, assumption resolution) are `negotiate`'s, and what lowers or
   renders one item is its family's. `corpus` imports `lower` and `census_validation`; `v1_bundle`
   imports `census_validation`; `frame` imports `outcome` only. `kani/test_support.rs` is
@@ -397,16 +398,17 @@ Rules, each checkable:
 FR-015 is the one generator (ADR-001 Q1, AD-001). In code that means one renderer, one spec type,
 one identity record, one cover rule and one entry, not one function:
 
-- `kani/generate/spec.rs` defines `HarnessSpec`: the proof attribute (`proof` or
-  `proof_for_contract`), `HarnessPath`, the argument bindings with their bounds, the assumptions,
-  the subject call, the assertions and the covers, in that order.
+- `kani/generate/spec.rs` defines `HarnessSpec`: the proof attribute, the validated `HarnessPath`
+  (defined in `core/identity.rs`), the symbolic inputs with their domains, the assumptions, the subject
+  call, the assertions and the cover. Its fields, invariants and constructor are decided in "The
+  HarnessSpec and render contract (step 4b)" below.
 - **Cover rule (IR-464).** A non-empty cover list is not a non-vacuity check. The rule is where the
   covers go: `render.rs` emits every cover after all assumptions, after the subject call and after
   every assertion, as the last statement of the body, never before, so a cover is reachable only
   when the assumptions are satisfiable and no failing assertion shares its valuation, and the cover states
   the property's own reachability (for the scalar family, that the oracle's `Completed` branch is
-  reached; for the precondition family, that the precondition holds). The constructor refuses an
-  empty cover list, and the order is fixed by the renderer, not by the family. A frame harness's
+  reached; for the precondition family, that the precondition holds). The constructor refuses a
+  spec without exactly one cover (decision H-3), and the order is fixed by the renderer, not by the family. A frame harness's
   `kani::cover!(true, ...)` satisfies the rule once it follows the subject call and the frame
   assertions, as FR-015-AC-7 states. Test (L-4): a harness whose assumptions are unsatisfiable does not classify
   `Verified` under real Kani. The corpus has no symbolic input; FR-015-AC-55 gives its harness a cover after its assertion (IR-464), and FR-015-AC-58's inspection of emitted text guards every emitter, and stays beside this constructor once a family renders through it; see step 4g.
@@ -414,7 +416,7 @@ one identity record, one cover rule and one entry, not one function:
   `kani::requires`, `kani::ensures`, `kani::any`, `kani::assume` and `kani::cover!`. A layout test
   checks string literals in non-test source (not comments, so doc prose that names them passes).
 - Five family lowerers (`scalar`, `precondition`, `contract`, `frame`, `collection`) each take
-  lowered IR claims and return `HarnessSpec`s. They do not format Rust source. Until its step
+  lowered IR claims and return `HarnessSpec`s. They format no harness structure (statements, attributes, macros, layout, cover placement); the one text a lowerer supplies is an expression fragment (`ExprText`, decision H-2). Until its step
   ports it, a family returns what it lowers and renders today: `collection` returns a typed
   domain and a rendered harness until step 4h. `generate_state_frame_obligations`
   becomes a frame arm of `ObligationItem`, so `negotiate_kani_obligations` is the one public
@@ -423,6 +425,206 @@ one identity record, one cover rule and one entry, not one function:
   `kani/identity.rs` record with the family's own members as a typed variant, so the argument
   vector, ceilings, symbols and bounds are spelled once. The obligation digest of AD-003
   is computed from that record by one function.
+
+### The HarnessSpec and render contract (step 4b)
+
+This subsection decides the shape SR-785 left open (its FND-005 held the `HarnessSpec` design for
+this step) and states what step 4b changes. It decides only what the scalar family needs. Every
+member another family needs (a `proof_for_contract` target, contract attributes, a frame's
+`requires`/`ensures`, a collection's typed domain) is added by the step that ports that family, as
+an edit to this subsection; 4b adds no variant, field or helper for a family it does not port.
+Steps 4c to 4h are not specified here.
+
+**Decision H-1. The shape of `HarnessSpec` (`kani/generate/spec.rs`).** A `HarnessSpec` is a typed
+description of one harness, with no Kani spelling in it. Its fields:
+
+| Field | Type and meaning |
+| --- | --- |
+| `label` | The text of the `// Obligation: <label>` header line. The scalar lowerer supplies ``exact-scalar `<operation identity>` ``. `render` writes the fixed header: the line `// SPDX-License-Identifier: MIT OR Apache-2.0`, the Obligation line, a blank line, then `oracle_source`, then one newline, then the module wrapper (the bytes `render_scalar` writes today, `scalar.rs` lines 463 to 470). |
+| `path` | The validated `HarnessPath` (module and harness symbols), defined in `core/identity.rs` and built by `harness_path` in `record.rs`; neither moves. It is the only source of the `mod` and `fn` names and of the artifact path `src/generated/<module>.rs`. |
+| `oracle_source` | The generated FR-014 oracle source, placed verbatim after the header and before the harness module. It is opaque to `render.rs`. |
+| `proof` | `ProofKind`. Step 4b defines one variant, `Proof` (`#[kani::proof]`). Step 4c adds `ProofForContract` with its own spec change. |
+| `body` | An ordered list of `Statement`: `Input`, `Assume`, `Let`, `Call` and `Assert`. See below. |
+| `cover` | Exactly one `Cover`: a condition (`ExprText`) and a message. See H-3. |
+| `unwind`, `solver` | The loop bound (`1..=MAX_OBLIGATION_UNWIND`) and the `KaniSolver`. They are not emitted into the source; they are the run options. |
+| `options` | The adapter option vector (`adapter_options(path, unwind, solver, false)`), computed once by the constructor from `path`, `unwind` and `solver`. The family's identity record reads `unwind`, `solver` and `options` from the spec, never from the request a second time, so the run options and the identity cannot disagree. |
+
+`Statement` variants (all fields typed, none is a line of Rust):
+
+- `Input { name, ty, domain, then }`: a symbolic input. `ty` is a `KaniPrimitiveType` from
+  `kani/abi.rs` (4b uses `I64`). `domain` is an inclusive `[minimum, maximum]` pair of the same
+  type. Render emits `let <name>: <ty> = kani::any();` and `kani::assume(<name> >= <minimum> &&
+  <name> <= <maximum>);`. `then` is the ordered list of `Let`s that must follow this input
+  immediately (the scalar harness copies the input to `<name>_native` and shadows it with its
+  `rt::Integer`); it keeps today's per-operand grouping, which byte identity needs.
+- `Assume { condition }`: an extra `kani::assume(<condition>)` after the inputs. The scalar family
+  uses none. It is in 4b's shape for one reason: the L-4 control (FR-015-AC-117) is a hand-built
+  spec with an unsatisfiable `Assume`, since no scalar claim can carry an unsatisfiable input
+  domain (the constructor and the lowerer both refuse one). At 4b only that test constructs it, so the variant carries
+  `#[cfg_attr(not(test), allow(dead_code))]`, scoped to it, so that `make lint` (clippy
+  `--all-targets -D warnings`) stays green; the attribute is removed when 4c's lowerer builds an
+  `Assume`. 4c may extend its use; it adds no field here.
+- `Let { name, ty, mutable, init }`: a binding. `ty` is an optional annotation of a spec-local `LetType`
+  whose only variant at 4b is `I128` (nothing else is constructed, so no unused variant exists
+  for `make lint` to reject), because the scalar harness writes `let exact: i128 = ...`. It is not
+  `KaniPrimitiveType`, which is public API with `Boolean` and `I64` only and which 4b does not
+  widen.
+  `init` is an `ExprText` or `Init::UnlimitedMeter` (the all-`u64::MAX` `rt::Meter` of the
+  generated oracle runtime, whose multi-line spelling `render.rs` owns because every family that
+  calls a generated oracle shares it).
+- `Call { result, callee, args }`: the one subject call. `args` are `Borrow(name)` or
+  `BorrowMut(name)`.
+- `Assert { condition, message }`: `assert!(<condition>, "<message>");`.
+
+**Decision H-2. `ExprText` is the one text a lowerer supplies, and it is an expression only.**
+`ExprText` is one Rust expression as text, for the native `i128` expression, the outcome `match`
+and the `matches!` of the cover: the family's own meaning, not harness structure. It is a
+validated newtype whose constructor refuses text that:
+
+- does not parse as a `syn::Expr`;
+- spells `kani::` or `#[`;
+- contains a block, `unsafe`, `async`, closure, loop (`loop`, `while`, `for`) or `let` expression
+  anywhere in its tree (a `match` is allowed: the scalar outcome check is one); or
+- contains a macro invocation other than `matches!`, or a `matches!` that has a guard
+  (`if ...`). The arguments of `matches!` are parsed as an expression and a pattern, and the
+  checks above apply to the expression, so a macro, block or closure nested in it is refused too.
+
+So an `ExprText` cannot hold a statement, an assertion, a panic or a cover, and R-1 item 2's
+promise that nothing a lowerer supplies changes where the cover goes is enforced rather than
+hoped for. Adding a macro to the allowlist is a spec change here. An `ExprText` may span lines;
+its lines after the first carry their indentation relative to the statement, and `render.rs` adds
+the statement's own indent to each, which is what lets the port be byte-identical. A typed
+expression tree was considered and rejected for 4b: it would be a second Rust AST inside the crate
+for four arithmetic expressions, and `syn` is already the validity check on the rendered whole.
+The cost is that an `ExprText` is checked for parse, form and the absence of Kani spellings, not
+for meaning; the real-Kani lane remains the meaning check.
+
+A `message` (of an `Assert` or the `Cover`) is a string with no `"`, `\`, `{`, `}` or line
+break; the constructor refuses one that has any, as a typed error, rather than escaping it, because
+the scalar assertion message interpolates the operation identity and an escape rule would change
+bytes. `label` follows the same rule except that it may hold backticks and may not hold a line
+break.
+
+**Decision H-3. Invariants, enforced by `HarnessSpec::new`, the only constructor.** A refusal is a
+typed `HarnessSpecError`; none is a panic.
+
+1. Exactly one cover. The AD's earlier wording was "at least one"; FR-015-AC-7 says every
+   generated harness has exactly one non-vacuity cover, and L-4 follows it. A spec with no cover
+   or two covers does not construct.
+2. Exactly one `Call`, and every `Input` and `Assume` precedes it. Every `Assert` follows it.
+3. A binding name is bound once, except that a `then` `Let` may rebind its own input's name (the
+   `rt::Integer` shadow). Every name, `result` and `callee` is a valid Rust identifier.
+4. Every `Input` domain has `minimum <= maximum` and lies within the type of `ty`. An inverted or
+   out-of-type domain is a typed refusal, not a harness whose assumption is unsatisfiable.
+5. `unwind` is in `1..=MAX_OBLIGATION_UNWIND`.
+6. Every `ExprText` satisfies H-2 and every message satisfies the message rule of H-2. The cover
+   condition is an `ExprText` that is not the literal `true`. This last rule is new in 4b: no
+   FR-015 text forbids a `true` cover today, but a `true` cover is reachable whenever the harness is
+   and so is not the property's own reachability that IR-464 requires. A frame harness's
+   `kani::cover!(true, ...)` (FR-015-AC-7) is 4d's to allow in its own spec change.
+
+Placement is not an invariant of the spec because the spec does not choose it: the cover is a field
+outside `body` precisely so no family can put it elsewhere.
+
+**Decision H-4. Ownership and visibility.** Each family lowerer constructs its `HarnessSpec`
+(`scalar.rs` at 4b); nothing else constructs one, and `negotiate.rs` does not. `HarnessSpec`,
+`Statement`, `ExprText` and `HarnessSpecError` are `pub(super)` to `kani/generate/` and are not
+re-exported: they are not public API, and the public surface of the crate, its
+`KaniScalarObligationHarness`, `ScalarObligationIdentity`, `ObligationRecord` and the
+`negotiate_kani_obligations` signatures, does not change. A `HarnessSpecError` surfaced from a
+lowerer is an internal invariant failing and maps to `UnsupportedObligation::InvalidGeneratedSyntax`
+with the error text, as `harness_path`'s refusal does today (`record.rs`). The spec holds no
+identity record: the family builds its own identity record (`ScalarObligationIdentity`) beside the
+spec, from the same lowered claim, and `record.rs` joins identity and artifact as today.
+
+**Decision R-1. `render.rs` contract (`kani/generate/render.rs`).** One function,
+`render(&HarnessSpec) -> Result<Artifact, UnsupportedObligation>`:
+
+1. It is the spelling site for every harness it renders: the proof attribute, `kani::any`,
+   `kani::assume`, `kani::cover!`, `#[cfg(kani)]`, the `mod` wrapper, `use super::*;` and the
+   generated-runtime ABI text the spec cannot say in a typed field (`Init::UnlimitedMeter`).
+   At 4b that covers the ported scalar family only; the other families, `v1_bundle.rs`, the
+   corpus and collection still spell their own templates, so L-3 (render.rs is the only site for
+   all seven spellings) is not yet true and lands after 4f, 4g and 4h, as L-3 says. After the
+   port `scalar.rs` spells none of them.
+2. It places the cover. The body is the header, the oracle source, the module wrapper, the
+   attribute, then the `body` statements in spec order, then the cover as the last statement of
+   the function, after every assumption, the call and every assertion (IR-464, FR-015-AC-7).
+   Nothing a lowerer provides can change where the cover goes (H-2 keeps a cover or an assertion
+   out of an `ExprText`).
+3. It holds no family-specific template text. It has one emitter per `Statement` variant, per
+   `ProofKind` and per `Init`; a family's meaning reaches it only as data (`label`, `ExprText`,
+   `message`). This is evidenced by behaviour (FR-015-AC-113): specs whose labels, expressions and
+   messages are not the scalar family's render to source that holds exactly what the spec
+   supplied and the fixed structure, and nothing else.
+4. Design rationale: it is a pure function of the spec, with no map or set iteration, no clock,
+   no environment and no address-dependent formatting, so equal specs render equal bytes.
+   Indentation is four spaces per level, as the scalar template writes it today.
+5. It validates what it renders as today's `render_scalar` does, in the same order and with the
+   same refusals: first `ResourceLimitExceeded` when the source exceeds `MAX_GENERATED_SOURCE_BYTES`
+   (core/artifact), then `InvalidGeneratedSyntax` when `syn::parse_file` rejects the source. Those
+   two checks leave `scalar.rs`; a family not yet ported keeps its own check (collection and
+   frame carry the same two checks today).
+6. It returns the `Artifact` at `src/generated/<module>.rs`; it builds no identity and no record.
+   It imports `spec`, `outcome` (for `UnsupportedObligation`), `core::artifact` and `kani::abi`,
+   and not `record`.
+
+**Decision P-1. The scalar port.** `scalar.rs` keeps `lower_scalar_claim`, `ScalarOperation`,
+`derive_domain`, `unsatisfiable` and `scalar_stem` unchanged. `render_scalar` becomes
+`scalar_harness` (same arguments and result), and it does four things in order: build the
+`HarnessSpec` from the lowered claim (`path`, one `Input` group per operand, the unlimited-meter
+`Let`, the oracle `Call`, the `exact`, `admitted` and `sound` `Let`s, the one `Assert` on `sound`,
+and the `completed` binding with its cover condition), call `render`, build the
+`ScalarObligationIdentity` from the same lowered claim and the spec's `unwind`, `solver` and
+`options`, and call `record`. The helpers `native_expression` and `operand_names` stay as the
+source of the `ExprText`s. The rename's whole surface is: the import and call in `negotiate.rs`
+(`:85`, `:135`) and its module doc (`:23`), the doc mentions in `src/oracle/scalar/mod.rs`
+(`:637`, `:3158`), `tests/exact_scalar_support/agreement_cases.rs` (`:98`, `:102`) and
+`scalar.rs`'s own intra-doc links. The code PR may keep the old name instead; nothing in this
+contract needs the rename.
+
+**Decision P-2. The port is byte-identical.** For every claim `render_scalar` accepts today, the
+rendered `Artifact` (path and source bytes), the `ScalarObligationIdentity`, the `options`, the
+`ObligationRecord` and every digest derived from them equal what the pre-port renderer computes.
+The port introduces no explicitly-specified difference. Rationale: byte identity makes the
+evidence a comparison, needs no new real-Kani run to establish that the old verdicts still hold,
+and keeps the identity digest of AD-003 stable for callers. A difference of any kind, including
+whitespace, is a spec change to this subsection before it is a code change, and if one is
+accepted the real-Kani lane of P-3 item 2 becomes mandatory for it.
+
+**Decision P-3. Evidence for the port (TC-025 steps 42 to 47).**
+
+1. A differential test. The code PR keeps the body of today's `render_scalar` as a `#[cfg(test)]`
+   reference function, test-only, and compares the ported path against it, byte for byte, over a
+   fixed claim set: each of the four operations (`add`, `subtract`, `multiply`, `negate`), a claim
+   with a literal operand, a claim with an inferred operand, a claim with each operand at an `i64`
+   extreme, and claims at two unwind values (including `MAX_OBLIGATION_UNWIND`) and two ceilings
+   values. The compared values are the artifact path and bytes, the identity, `options` and the
+   record. There is no bless or regenerate mode: the reference is code, not a stored file. The
+   reference copy is deleted when step 4g retires the scalar render path or sooner if the reviewer
+   agrees that the L-4 and AC-58 evidence has replaced it.
+2. The `kani` lane scalar tests of `tests/it/kani_obligations.rs` run once under the installed
+   backend after the port, as the smoke that the rendered source still verifies: the existing
+   scalar mutation control (`tests/it/kani_obligations.rs:2950`, FR-015-AC-37: the oracle's `Add`
+   swapped for `Subtract`) classifies `Falsified`, and the unmutated harness classifies `Verified`
+   with its cover satisfied. This lane is a smoke, not the proof of equivalence: item 1 is.
+   QSL's `left + right + 1` control (QSL-342 QI #10, L-5) is a quire-integration test and not
+   part of this PR's evidence.
+3. The L-4 control: a new hand-built `HarnessSpec` with an unsatisfiable `Assume`, rendered by
+   `render` into a generated crate and run under the installed backend, does not classify
+   `Verified` (it classifies `CoverUnsatisfied`). No scalar claim can carry this, so it is
+   built from the spec, which is why `Assume` is in the 4b shape.
+4. The FR-015-AC-58 inspection still drives every emitting entry point; the ported scalar
+   harness is emitted by `render`, so that inspection now reaches `render.rs` for scalar. The
+   guard's list of driven files loses `scalar.rs` and gains `render.rs`.
+5. Constructor and renderer tests over hand-built `HarnessSpec`s that no family produces (see
+   TC-025 steps 42 and 43).
+
+**Not decided here, left to the steps that need it.** The `ProofForContract` variant and contract
+attributes (4c); the frame harness's `true` cover and its roles (4d); the collection family's typed
+domain (4h); the corpus template (4g); anything about `negotiate_kani_obligations` beyond the
+renamed call. Whether `record.rs` is absorbed into the spec is not decided: `record.rs` is
+unchanged by 4b.
 
 **The contract families need a V2 input first.** The precondition, postcondition and invariant
 families exist only over V1 (see Current state). Deleting the V1 arm without a V2 replacement would
@@ -644,7 +846,7 @@ requirement is authored.
   `kani/generate/corpus/bounded_kani_corpus.rs`) and the collection template (until 4h, in
   `kani/generate/collection.rs`); the scan lists them by file and each entry is
   removed with its step.
-- L-4. A `HarnessSpec` has at least one cover, and `render.rs` places every cover after all
+- L-4. A `HarnessSpec` has exactly one cover (FR-015-AC-7; decision H-3), and `render.rs` places every cover after all
   assumptions, the subject call and every assertion, as the last statement. Test: the constructor's refusal, and a real-Kani test that a
   harness with an unsatisfiable assumption does not classify `Verified`.
 - L-5. QSL's arithmetic control passes at every migration step, on the path that serves it: the
@@ -779,7 +981,13 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      today. A CG-side control is added only if the `qsl-replay` facade offers a way to build the
      package (`call_site(...).package`, or QSL source plus `qsl_replay`); otherwise that is a need
      routed to QSL. No copied QI test and no QSL-emitted package file.
-   - 4b: `HarnessSpec`, `render` with the cover rule, and the scalar family ported.
+   - 4b: `HarnessSpec`, `render` with the cover rule, and the scalar family ported. Its design is
+     decided in "The HarnessSpec and render contract (step 4b)" (H-1 to H-3, R-1, P-1 to P-3), and
+     its criteria are FR-015-AC-112 to FR-015-AC-117 with TC-025 steps 42 to 47. Scope: `spec.rs`,
+     `render.rs`, the scalar port, the differential test that proves it byte-identical (P-2, P-3) and the
+     rename of `render_scalar` (surface listed in P-1). It does not touch the precondition, contract, frame,
+     collection, corpus or V1 templates, and it leaves L-3 unlanded (L-3 lands after 4f, 4g and
+     4h); after 4b the FR-015-AC-58 guard's list of driven files loses `scalar.rs` and gains `render.rs`.
    - 4c: the V2 contract arm. First a spec PR in this repository's spec lane amends FR-015 with the
      V2 clause input (design intent above; no ticket found, the planner should file one). Then
      the code: the precondition and contract families take the V2 input and render through
@@ -799,8 +1007,9 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      in `kani/census.rs` stay: the V2 census input needs them, and the corpus imports them until
      4g. `validate_dependencies` (census validation, and the `KaniDiagnostic` it returns with the
      identity and path helpers it uses) is not bundle validation for this purpose: the corpus calls
-     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place and it is deleted with the
-     corpus lowerer at 4g, or when the V2 census input replaces it. It is not in `kani/census.rs`
+     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place. The items of
+     `census_validation.rs` (`validate_dependencies`, `KaniDiagnostic`, `KaniErrorCode`) are removed once their last caller is gone: the V1 bundle path
+     (removed at 4f) and the corpus (removed at 4g), or earlier when the V2 census input replaces them. It is not in `kani/census.rs`
      because it returns the V1 bundle's error type. Step 2f put it, with `KaniDiagnostic`,
      `KaniErrorCode`, the helpers and `deterministic_json`, in `kani/generate/census_validation.rs`,
      and everything else of the bundle in `kani/generate/v1_bundle.rs`, so 4f deletes `v1_bundle.rs`
@@ -809,13 +1018,22 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      passes on the V2 contract arm (4c), and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
-   - 4g: the corpus. Until its V2 replacement serves all three families, the corpus stays as it is,
+   - 4g: the corpus, retired per family in three slices with no compatibility wrapper and no second
+     public generator (IR-598, FR-015-AC-109 to AC-111); step 4b (IR-858) gates every slice. The
+     arithmetic slice deletes the `Arithmetic` arm and `definedness_arithmetic.rs`; V2 does not
+     serve divide or remainder (div settles `Unsupported(OperationNotRendered)`, rem stays a
+     refused identity) until IR-854, which also owns `mod`. The collection slice, gated also on
+     step 4h, deletes the `Collection` arm and `bounded_collections.rs`. The graph slice, gated
+     on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
+     replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
+     identity helpers in `replay/function.rs`, with their only caller) and the whole public
+     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to `validate_dependencies` but not `census_validation.rs`: every item there is also used by `v1_bundle.rs` (public `KaniDiagnostic` and `KaniErrorCode` included), so its items go once their last caller is gone, as 4f says. Until a family's slice lands, that family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
      to L-3 and, until it renders through `HarnessSpec`, outside L-4; FR-015-AC-58's inspection
      covers its text meanwhile. QSL-353 establishes emission-to-admission coverage but does not
-     provide the symbolic corpus. After the V2 arithmetic, collection and graph cases are backed
+     provide the symbolic corpus. After a family's V2 cases are backed
      from QSL-emitted packages admitted through Contract IR, and the collection and graph cases
      satisfy FR-015-AC-96 to AC-102, the hand-built package lowerer retires. The graph path first
      needs Contract IR's typed finite model-object population input; a caller expansion ceiling
@@ -1371,6 +1589,10 @@ FR-015 V2 contract input (step 4c).
 
 ### Not verified in this AD
 
+- The step 4b contract (decisions H-1 to P-3) was written against `render_scalar` at `origin/main`
+  0e0f92e by reading it; no build or test was run. That the port is byte-identical is a claim the
+  differential test of P-3 checks; the shape of `ExprText` and the statement list is the code PR's to
+  confirm by compiling, and a disagreement is fixed in this subsection, not worked around.
 - The arithmetic control was not run, and QSL's tests were not read. Which generator they route
   through, and whether the control's clause is a contract-family clause or a scalar claim, is the
   planner's statement on IR-344 and was not determined here.

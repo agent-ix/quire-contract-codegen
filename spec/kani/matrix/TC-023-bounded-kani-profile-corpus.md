@@ -12,7 +12,7 @@ relationships:
 
 Verify the current bounded-profile classifier, three CG-owned finite-input
 lowerers and corpus emitter against FR-015-AC-82 through
-FR-015-AC-95. Before AD-004 step 4g, the hand-built path's generated
+FR-015-AC-95 and the retirement slices FR-015-AC-109 to FR-015-AC-111. Before AD-004 step 4g, the hand-built path's generated
 `KaniOutcome` is a case classification; after step 4g, generation returns no
 `KaniOutcome`. Only FR-017's installed-backend run provides proof evidence.
 Each successful case retains a QSL source unit and its imported dependency
@@ -21,7 +21,7 @@ immediately to the replay facade; playback is run evidence, not a persisted
 case artifact. Current
 source tests carry `TC-023` trace tags. The computed matrix tags FR-015-AC-94
 with seven corpus unit tests; FR-015-AC-82 through FR-015-AC-93 and
-FR-015-AC-95 remain untagged. A trace tag alone does not establish proof
+FR-015-AC-95 and FR-015-AC-109 to FR-015-AC-111 remain untagged. A trace tag alone does not establish proof
 evidence for the planned replacement.
 
 ## Test Procedure
@@ -45,9 +45,11 @@ harness. Then check that neither successful nor refused generation returns a
 FR-017 backend runs (FR-015-AC-95; planned). An absent typed graph population
 input leaves this replacement incomplete rather than substituting a caller
 expansion ceiling.
+
+Retirement procedure (IR-598), per slice, only after IR-858 (step 4b) has landed. Arithmetic (FR-015-AC-109): require a div claim to settle `Unsupported(OperationNotRendered)` with no harness and a rem claim to stay a refused identity; search `src/` and `tests/` for each deleted arithmetic name, and confirm the corpus replay is still present; confirm the AC-84/85 divide and remainder loss is recorded as a Rust checked-arithmetic literal check and points to IR-854. Collection (FR-015-AC-110): require step 4h landed and a recorded `make kani` or `make kani-gate` run on the slice PR's head with the AC-99 controls green, cited in the PR, then search for the deleted collection names. Graph and final (FR-015-AC-111): require IR-805's graph claims backed (QSL-819, IR-852, IR-851) and the same recorded run with FR-015-AC-106's real-Kani graph replay green, then search for every deleted name, the `BoundedCorpus*` types, the corpus replay and `generate_bounded_kani_corpus_case`, and confirm no generation path returns a `KaniOutcome`. For each slice, inspect that no `interface-001` operation was added and no `src/` item converts a finite-input request type into a V2 generator call.
 Inspect the resolved Cargo graph for a reverse Contract IR-to-codegen dependency.
 
-Replay procedure (IR-453): for each falsifiable family, compile the case's
+Replay procedure (IR-453; live until the final slice FR-015-AC-111 drops corpus replay, which is not re-homed; the real-Kani replays of FR-015-AC-99 and FR-015-AC-106 replace it): for each falsifiable family, compile the case's
 retained QSL unit and locked dependency through `call_site`, run the generated
 harness under Kani with concrete playback enabled, then pass the actual
 `Falsified` playback and the case's typed harness/site identity through the
@@ -108,7 +110,7 @@ Implemented (IR-464): the harness every corpus case emits, of each of the arithm
 and collection families, ends with exactly one `kani::cover!` after its assertion of the
 case's oracle, and the installed backend classifies a case of each family whose oracle is true
 `Verified`, and a graph or collection case whose oracle is false (an arithmetic case's
-oracle is always true) `Falsified` with the assertion's empty-valued
+oracle is always true) `Falsified` with the assertion's
 playback, which its cover after the assertion keeps from being the one Kani prints
 (FR-015-AC-55, FR-015-AC-57). `tc_023_kani_falsifies_the_generated_false_collection_harness`
 and `tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness` run the false

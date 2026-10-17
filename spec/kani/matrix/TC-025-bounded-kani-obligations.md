@@ -15,8 +15,8 @@ relationships:
 Verify that bounded contracts produce one harness per obligation kind and
 refuse non-finite obligations. IR-268 covers the collection half of planned V2
 symbolic obligations: the claim is an admitted QSL clause/function body over a
-selected model collection field. Graph reachability remains required by
-FR-015-AC-98, assigned to IR-805 and blocked on QSL-804; it is not IR-268
+selected model collection field. Graph reachability is required by
+FR-015-AC-98 and FR-015-AC-105 to FR-015-AC-108 (IR-805); it is not IR-268
 evidence. The finite-input collection and graph corpus is not proof evidence
 for either symbolic family.
 
@@ -67,13 +67,47 @@ run evidence, including actual Kani, Rust and solver versions. These tests are
 planned until the symbolic collection generation exists. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
-For the graph family retained in FR-015-AC-98, IR-805 must later supply the
-QSL-emitted graph claim and Contract IR's typed finite object population before
-its symbolic reachability controls can run. Preserve tests for selected-field
-positive-length reachability (including isolated and self-loop `start =
-target`), inclusive population/multiplicity bounds, unbounded and unsupported
-refusals, seeded counterexample, and identity changes; none is implementation
-or proof evidence for IR-268. This graph work is blocked on QSL-804.
+For the graph family (IR-805), author a QSL unit whose model has an object
+type `Order` with an optional `Reference<Order>` field, a `Reference` field and
+a bounded `Sequence<Reference<Order>>` field, and relationships `next`
+(`{0,1}`), `kids` (`{0,3}` unique), `litter` (`{0,3}` not unique) and a `{2,3}`
+end; write invariant/precondition/postcondition clauses of the form
+`reaches(self, target, <name>)` and `not reaches(self, self, <name>)`. Emit
+through QSL and admit through Contract IR (no copied wire or hand-built
+builder). QSL gives such a clause no finite population (it is a state-clause
+`reaches`, not a function parameter typed `Population<T>[N]`), so no fixture
+can show a successful harness until IR-852 and QSL-819 (bounded domain
+population for reaches) land, and IR-851 for a relationship-end claim. Steps testable now (refusals, no harness): (1) the claim is
+the `state_clause` node id and argument path of a `quire.op.model.reaches`
+(member `relationship_end`) or `quire.op.model.reaches_field` (member `field`)
+application; (2) today every emitted claim's population selection is `Unavailable` (no IR
+mapping, IR-852), so each settles `unsupported`; (3) with a selection supplied
+as `Unbounded`, the claim settles `requires_bound` (a claim whose population has no finite
+authored bound, after QSL-819 and IR-852), and an unbounded collection edge settles `requires_bound`; (4) each
+other FR-015-AC-108 `unsupported` input reachable from an admitted package
+settles `unsupported` naming it, including a relationship-end claim while the
+IR-851 accessor code is unmerged or unpinned; (5)
+claim location: the same reachability twice in a condition, one node under two
+clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no
+caller `max_expansions`, population or multiplicity changes any outcome.
+Inspection: the three `relationship_end` refusals (`UnknownNode`,
+`NotReachesApplication`, `UnresolvedEnd`; Contract IR FR-038-AC-262 to
+FR-038-AC-268) cannot arise from a QSL-emitted, IR-admitted package
+(`UnresolvedEnd` needs a crate-internal post-admission mutation), so their
+`unsupported` mapping in FR-015-AC-108 is checked by inspection of the
+generator's error mapping, or by a named in-crate accessor test double, and is
+not a testable-now step. AC-107's location refusal runs before the accessor, so
+a path naming no reachability is never `NotReachesApplication`. Also, QSL refuses `reaches` in a function body, so no function-body graph
+claim can reach the generator. Steps that wait on the QSL ticket (unbacked):
+positive-length semantics (an isolated `start = target` unreachable, a self-loop
+reachable) in the generated draw and the `qsl_replay` oracle; inclusive
+populations `N = 0` and the maximum, edge counts `lower`, `upper` and between,
+`kids` uniqueness, `litter` repeats and `{2,3}`; the healthy `Verified` case and
+each FR-015-AC-106 mutant `Falsified` with an in-domain playback; and identity
+changes for the clause path, form, field or role, population extent, edge
+multiplicity, subject and unwind, with byte identity on equal inputs. The
+finite-input `GraphRequest` corpus is not evidence.
+
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract
 with an unbounded domain, one with unsatisfiable bounds, and one over a
@@ -408,6 +442,39 @@ replaces `tc_035_the_generator_reads_no_field_range_from_the_object_shape_qsl_em
 the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the test of
 FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
 harness, so its previous test evidence remains planned until that migration lands.
+
+## One renderer and the scalar family port (planned, IR-858)
+
+These steps verify AD-004 step 4b (AD-004 "The HarnessSpec and render contract (step 4b)"); they back FR-015-AC-112 to FR-015-AC-117. Steps 42 to 47
+are numbered after step 41 and are independent of the IR-805 prose above.
+
+42. Build `HarnessSpec`s by hand that break each invariant: no cover, two covers, a `true` cover
+    condition, no call, two calls, an input after the call, an assertion before the call, a name bound
+    twice, a name that is not a Rust identifier, an inverted domain, a domain outside its type, an
+    `unwind` of 0 and of `MAX_OBLIGATION_UNWIND` plus one, a message containing each of `"`, `\`, `{`,
+    `}` and a line break, and `ExprText`s that do not parse, spell `kani::`, hold a block, `unsafe`,
+    closure, loop or `let` expression, or hold a macro other than `matches!` (`assert!`, `panic!`,
+    a `kani` macro), a `matches!` with a guard, and a `matches!` whose expression holds a nested
+    `panic!` or block. Read a typed `HarnessSpecError` for each and no spec; read that a `match` and a
+    `matches!` expression construct (FR-015-AC-112).
+43. Render valid hand-built specs whose statements are in several legal orders and read the cover as
+    the last statement of the function in each; render the same spec twice, and in a second process,
+    and compare the bytes; reorder two inputs and read different bytes; render a spec with non-scalar
+    labels, expressions and messages and read that the source is the fixed structure plus exactly what
+    the spec supplied (FR-015-AC-113, FR-015-AC-114, FR-015-AC-116).
+44. Keep today's `render_scalar` body as a `#[cfg(test)]` reference function. Over the claim set of
+    FR-015-AC-115 (four operations, a literal operand, an inferred operand, `i64` extremes, two unwind
+    values including `MAX_OBLIGATION_UNWIND`, two ceilings values) compare the ported path with the
+    reference: artifact path and bytes, identity, options and record, equal. There is no bless mode.
+45. Drive a claim whose source exceeds `MAX_GENERATED_SOURCE_BYTES` and read `ResourceLimitExceeded`
+    with the same byte count as the reference, and drive invalid generated syntax and read
+    `InvalidGeneratedSyntax`, each raised by `render`, the size check first (FR-015-AC-115).
+46. Run the FR-015-AC-58 inspection with `render.rs` among the driven files and `scalar.rs` out of the
+    list; read the scalar harness's cover as its last statement (FR-015-AC-58, FR-015-AC-116).
+47. With the installed backend, run the existing scalar lane tests (`tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic`
+    and its healthy run): `Verified` with its cover satisfied, and the
+    `Add` to `Subtract` mutation `Falsified`; then run a hand-built spec with an unsatisfiable `Assume`
+    through `render` and read that it is not `Verified` (FR-015-AC-117).
 
 ## Blocked
 
