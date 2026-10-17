@@ -428,7 +428,7 @@ in `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute
 (IR-848 replaces this test: the value is read from the cause by `run_terminal_value`, which takes
 `&KaniExecutionEvidence` and reads the cause from it; `out_of_memory` gives `Incomplete(ResourceExhausted)` and `exit_code_64` and
 `cbmc_exploded` give `Failed`, FR-029-AC-32; independence from the diagnostic record holds because the
-map takes no record); by the tests of the exit-status
+map never reads the diagnostics record); by the tests of the exit-status
 vocabulary, the 64-byte cut and the one-entry rule in `src/kani/output/report.rs`; by the serialize-only
 check, which is the rustdoc `compile_fail` example on `KaniFailureCause` run by `cargo test --doc`
 beside its `serde_json::to_string` control and the `tc_027_the_cause_implements_no_deserialize`
