@@ -18,11 +18,16 @@ When a caller requests runtime Text admission, the code generator shall emit an
 oracle and a separately bounded Kani obligation for a caller-owned
 `TextPayload` and declared `TextType`. This is a caller-ingress claim, not a
 claim about an expression node in an admitted `CheckedPackageV2`. The oracle
-calls Contract Runtime's own `exact::admit_text` API and
-returns its outcome and metering unchanged. Its evidence identifies the
-caller-declared profile, inclusive length bounds, payload class and proof
-configuration, without `ir_confirmed` provenance, a checked node id or a QSL
-term identity.
+calls the exact kernel's `quire_exact::admit_text` API and returns its
+outcome and metering unchanged. Its evidence identifies the caller-declared
+profile, inclusive length bounds, payload class and proof configuration,
+without `ir_confirmed` provenance, a checked node id or a QSL term identity.
+
+In this requirement, `rt::` denotes the exact API that the generated oracle
+and harness import, and the specified binding is `quire_exact`. The current
+generator still binds `rt` to Contract Runtime's separate
+`quire_contract_runtime::exact` copy, so the generated harness does not yet
+run on the kernel. Moving that binding to `quire_exact` is IR-837's slice.
 
 [FR-014](./FR-014-exact-scalar-oracles.md) continues to own generated oracles
 for admitted, catalogued text comparison nodes. A comparison's existing

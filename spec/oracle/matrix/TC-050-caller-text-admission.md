@@ -114,11 +114,13 @@ generated-versus-direct agreement assertions and the final cover:
 Every measured harness of every shape, including the empty payload under
 `binary-utf8` `Text[1,1]`, exhausted the 1 GiB ceiling. Where Kani reported a
 verdict, it was `MemoryExhausted` in CBMC before any verification condition
-was solved. Three runs, the empty per-literal `unicode-scalars` `Text[0,8]`
-harness, the first three-member NFC `Text[1,1]` partition and the per-literal
-`ee` mutation control, were killed by the cap with no verdict line, and their
-phase was not retained. The widened-type mutation controls produced no
-falsification or concrete playback. The cost floor is one admission call on
+was solved. Two runs, the empty per-literal `unicode-scalars` `Text[0,8]`
+harness and the first three-member NFC `Text[1,1]` partition, were killed by
+the cap with no verdict line, and their phase was not retained. The widened-type
+mutation controls, the per-literal `ee` NFC `Text[1,1]` control and the
+original-shape control, each reported a failed verification with Kani's CBMC
+out-of-memory message, and neither produced a falsified agreement assertion or
+a concrete playback. The cost floor is one admission call on
 one concrete payload, not the 21-way selection:
 
 - A single admission of the literal `e` under `unicode-scalars` `Text[0,8]`,
@@ -129,7 +131,7 @@ one concrete payload, not the 21-way selection:
   the runtime path and 65 seconds on the kernel path.
 - On the kernel path, symbolic execution is dominated by `BigUint::from(u128)`
   unwinding inside the exact `Meter::charge`, the same integer-encoding cost
-  class tracked by IR-705-AC-9.
+  class as the planned, unrun quire-exact criterion FR-359-AC-9.
 - Separately, the generated harness's `assert_eq!` on two `Meter` values
   compares the ten-counter array through CBMC's `memcmp` model, whose loop
   fails its unwinding assertion at `--unwind 8` even with no admission call.
@@ -146,8 +148,9 @@ FR-035-AC-4 and FR-035-AC-5 remain planned and unrun, and they have no proof
 credit.
 
 The next owners are tracked tickets. quire-exact owns the remaining integer
-cost of exact metering under IR-705, whose AC-9 covers the same encoding
-class, so a reduction there is a precondition for this proof. CG owns IR-837,
+cost of exact `Meter::charge` under IR-705, against quire-exact FR-359-AC-9,
+which covers the same encoding class, so a reduction there is a precondition
+for this proof. CG owns IR-837,
 which moves the TC-050 harness onto the quire-exact admission path and
 compares meters through public accessors instead of `Meter` equality. The
 twelve harnesses and the mutation control are rerun under this test's
