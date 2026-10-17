@@ -88,6 +88,14 @@ Reviewed at 238ca5304ed1a81717b8b02be279aab2161657a7 (rebased onto #418 75a0bb8)
 | --- | --- | --- | --- |
 | FND-007 | low | The driver's accepted condition "The receipt shall bind the exposed entries to the immutable snapshot CG actually executed, never to a later filesystem read" is a new `shall` with no acceptance criterion. AC-48 checks only that recomputing over the exposed entries equals the digest, and a later re-read of an unchanged snapshot would also pass that. So no test can catch the entries being sourced from a post-run read. One more clause in AC-48 would make it testable, for example: the exposed entries are the bytes measured for the identity, and no entry accessor reads the filesystem (by source scan, or by mutating a snapshot file after the receipt is built). | spec/kani/functional/FR-017-kani-execution-evidence.md:723-724, spec/kani/functional/FR-017-kani-execution-evidence.md:806 |
 
+## New findings (disposition pass 2)
+
+Reviewed at d8c7be6d3850bba322b3117987ca3774098d12c2 (rebased onto #418 a569513), diff `origin/peter/ir-847-native-error-discriminant-spec...HEAD`. FND-001..006 text survives the rebase unchanged; the only other spec changes are #418's own AC-41/42/44 and TC-027 class-mapping edits.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | TC-027 step (4a) says "after the receipt is built, overwrite each snapshot file with different bytes and then delete the snapshot directory". But `PrivateSnapshot` is a local of the runner that unseals and removes the directory on `Drop` (scalar.rs:216, :935) before the caller receives the receipt. At the public API there is nothing left to overwrite: writing to those paths would create new files and pass vacuously. Either name an in-crate seam that keeps the snapshot alive past receipt construction, or restate the step as: assert the snapshot path no longer exists, then require the exposed entries to still read and recompute (which already proves no filesystem read). Also, (4a) is placed before (4). | spec/kani/matrix/TC-027-kani-execution-evidence.md:461, src/kani/run/scalar.rs:935 |
+
 ## Dispositions
 
 | FND | outcome | sha/reason |
@@ -98,3 +106,4 @@ Reviewed at 238ca5304ed1a81717b8b02be279aab2161657a7 (rebased onto #418 75a0bb8)
 | FND-004 | fixed | 238ca53: "A consumer shall not mint a wire value from operands, limits or outcome; the only legitimate recomputation is the driver's, over the exposed staged entries." |
 | FND-005 | fixed | 238ca53: AC-46 reads "the harness record at `kani-obligations/<module>.json` (the only record path the runner admits)". |
 | FND-006 | fixed | 238ca53: the Retention bullet spells out the rename map (emitted `src/lib.rs` against entry `src/oracle-artifacts-lib.rs`, harness against entry `src/lib.rs`, record against its `kani-obligations/<module>.json` entry) and adds that a path-by-path comparison would falsely mismatch. |
+| FND-007 | fixed | d8c7be6: FR-017-AC-48 "The exposed entries are exactly the bytes measured for the identity, captured at measurement time and held in the receipt; no entry accessor reads the filesystem. After the receipt is built, overwriting a snapshot file or deleting the snapshot directory leaves the exposed entries and the digest unchanged, and the digest still recomputes from them." TC-027 step (4a) tests it by mutation. |
