@@ -58,3 +58,18 @@ Completeness was checked by grepping FR-021, TC-031 and the oracle tests.md at t
 ## Verdict
 
 CHANGES REQUESTED (one medium, three low). Apart from AC-3, the conversion is complete and true to the decision. Each converted Test criterion (AC-1, 5, 7, 9, 10, 14, 17, 19, 20, 26) keeps a real, testable schedule or claim-map remainder, and its binding in `quire matrix` is unchanged. AC-8 and AC-16 stay Inspection, which is correct. AC-31 is now an Inspection boundary performed by TC-031 step 11. Its oracle-matrix row is Covered, and that is consistent: the only 100,000-node test, `tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack`, claims generation and schedule compilation, not execution. The mutation rows for AC-4, 8, 16, 19, 20 and 31 match their reworded ACs. Nothing contradicts #416's boundary text: AC-18 and FR-014-AC-47 are untouched. FR-014-AC-47 is about the QSL value authority and AC-31 is about the QSL application API, so the two boundaries are distinct and do not overlap. Criterion-strength and scope-boundary findings are in SR-12141 and SR-12142.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Introduced by the FND-004 fix at head 18832ac. The TC-031 registry row now traces FR-021-AC-25 through AC-33, but its status cell still reads "Covered; FR-021-AC-15, FR-021-AC-24, FR-021-AC-32 and FR-021-AC-34 are Planned and FR-021-AC-18 is covered by inspection". That cell implicitly marks covered five criteria that FR-021 itself marks PLANNED (IR-511): AC-25 and AC-27 to AC-30. None of the five has an FR-021 row in the owning table above, and AC-30 is `untagged` in `quire matrix`. The cell also omits that AC-31 is covered by inspection. Either list AC-25 and AC-27 to AC-30 as Planned (IR-511) and AC-31 as covered by inspection in the status cell, or add owning FR-021 rows for them. | spec/oracle/matrix/tests.md:100, spec/oracle/functional/FR-021-function-application-oracles.md:272-277 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1, head 18832ac: AC-3 now reads "The origin mapping to a QSL-owned API is outside CG's boundary (IR-845)." No QSL-358/IR-349 PLANNED clause remains in FR-021, TC-031 or tests.md. |
+| FND-002 | fixed | round 1, head 18832ac: AC-9 now reads "... an incomplete stop before body work, and the denied charge is not applied". |
+| FND-003 | fixed | round 1, head 18832ac: AC-26 is stated as a property of the target-neutral schedule's branch/stop edges. |
+| FND-004 | fixed | round 1, head 18832ac: the TC-031 registry row now traces FR-021-AC-31 and AC-32, and notes AC-32 as Planned. The status-cell gaps the fix introduced are recorded as FND-005. |

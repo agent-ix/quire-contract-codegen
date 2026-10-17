@@ -44,3 +44,10 @@ Ticket: IR-845. This review asks whether each FR-021 criterion the PR touched ca
 ## Verdict
 
 CHANGES REQUESTED (one medium, one low). None of the criteria whose PLANNED QSL-358/IR-349 clause became an IR-845 boundary is vacuous. AC-1, 5, 7, 10, 14, 19 and 20 each keep a schedule or claim-map property that a mutant fails, as their mutation rows state. AC-17 keeps "origin from the request binding", which a request-ordinal mutant fails. AC-9 and AC-26 keep their charge-point and branch/stop edges (see SR-12140 for wording). The weakness is in AC-2 (FND-001): the decision removes its only future target, and the spec does not say what replaces the historical port.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | IR-853 (planner ruling: cross-repo architecture; Peter, luna:IR and terra:QSL decide). At head 18832ac, AC-2, AC-4, the AC-5 corpus half, the AC-9 agreement vectors and the AC-17 runtime check each carry "PLANNED, blocked on IR-853: once Contract Runtime FR-275 deletes the `exact` port, ... target is decided by IR-853". Status adds that their text is testable as written while the port exists. No target is invented. |
+| FND-002 | fixed | round 1, head 18832ac: TC-031 step 12 now inspects "the schedule crate and the concrete oracle CG emits today", and records that the current oracle still requires `exact`, so AC-32 stays Planned. |
