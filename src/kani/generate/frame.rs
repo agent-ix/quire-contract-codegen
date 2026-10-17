@@ -734,6 +734,8 @@ impl ClauseShape {
         for (member, effect) in [
             ("creates", UnsupportedFrameEffect::Creates),
             ("deletes", UnsupportedFrameEffect::Deletes),
+            // A scoped delete (the receiver or a reference parameter) is a delete.
+            ("deletes_scoped", UnsupportedFrameEffect::Deletes),
         ] {
             let entries = body
                 .get(member)
@@ -750,7 +752,12 @@ impl ClauseShape {
             .ok_or_else(malformed)?
         {
             match entry.get("kind").and_then(Value::as_str) {
-                Some("field") => {}
+                // The reader admits only these two scopes (FR-040-AC-18); the single-object
+                // harness renders both the same way, so the scope selects nothing here.
+                Some("field") => match entry.get("scope").and_then(Value::as_str) {
+                    Some("receiver" | "every-object") => {}
+                    _ => return Err(malformed()),
+                },
                 Some(_) => return Err(unsupported(UnsupportedFrameEffect::Relationship)),
                 None => return Err(malformed()),
             }

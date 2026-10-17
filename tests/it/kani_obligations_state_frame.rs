@@ -137,6 +137,10 @@ enum FrameEffect {
     None,
     Creates,
     Deletes,
+    /// `deletes_scoped` holds the `receiver` entry: the operation deletes `self`.
+    DeletesSelf,
+    /// `deletes_scoped` holds a `parameter` entry naming the operation's `other` parameter.
+    DeletesParameter,
     GrantsRelationship,
     GrantsForeignField,
 }
@@ -383,24 +387,29 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             parameter_body("result", 1),
         );
     }
-    let field_entry = |declaration: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name});
+    let field_entry = |declaration: &str, scope: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name, "scope": scope});
     let mut modifies = shape
         .modifies
         .iter()
-        .map(|name| field_entry(&object, name))
+        .map(|name| field_entry(&object, "receiver", name))
         .collect::<Vec<_>>();
     let mut frame_dependencies = vec![object.clone()];
     let (mut creates, mut deletes) = (vec![], vec![]);
+    let mut deletes_scoped = vec![];
     match shape.frame_effect {
         FrameEffect::None => {}
         FrameEffect::Creates => creates.push(node_ref(&object)),
         FrameEffect::Deletes => deletes.push(node_ref(&object)),
+        FrameEffect::DeletesSelf => deletes_scoped.push(json!({"kind": "receiver"})),
+        FrameEffect::DeletesParameter => {
+            deletes_scoped.push(json!({"kind": "parameter", "name": "other"}));
+        }
         FrameEffect::GrantsRelationship => {
             modifies.push(json!({"kind": "relationship", "declaration": node_ref(&relationship)}));
             frame_dependencies.push(relationship.clone());
         }
         FrameEffect::GrantsForeignField => {
-            modifies.push(field_entry(&other_object, "balance"));
+            modifies.push(field_entry(&other_object, "every-object", "balance"));
             frame_dependencies.push(other_object.clone());
         }
     }
@@ -411,7 +420,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         "state",
         "frame",
         &object,
-        json!({"term": "frame", "modifies": modifies, "creates": creates, "deletes": deletes}),
+        json!({"term": "frame", "modifies": modifies, "creates": creates, "deletes": deletes, "deletes_scoped": deletes_scoped}),
         &frame_dependencies,
     );
     builder.node_with(
@@ -1093,6 +1102,21 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
         }),
         UnsupportedFrameEffect::Deletes
     ));
+    // A scoped delete is a delete: of the receiver, or of a reference parameter.
+    assert!(unsupported_effect(
+        with(13, |shape| Shape {
+            frame_effect: FrameEffect::DeletesSelf,
+            ..shape
+        }),
+        UnsupportedFrameEffect::Deletes
+    ));
+    assert!(unsupported_effect(
+        with(14, |shape| Shape {
+            frame_effect: FrameEffect::DeletesParameter,
+            ..shape
+        }),
+        UnsupportedFrameEffect::Deletes
+    ));
     assert!(unsupported_effect(
         with(8, |shape| Shape {
             frame_effect: FrameEffect::GrantsRelationship,
@@ -1313,6 +1337,8 @@ const DELETES: usize = 15;
 const FOREIGN_FIELD: usize = 16;
 const KEYWORD_READ: usize = 19;
 const NEGATION_GRANTS_ALL: usize = 23;
+const DELETES_SELF: usize = 24;
+const DELETES_PARAMETER: usize = 25;
 
 fn arm_shapes() -> Vec<Shape> {
     let edits: Vec<fn(Shape) -> Shape> = vec![
@@ -1402,6 +1428,14 @@ fn arm_shapes() -> Vec<Shape> {
         |shape| Shape {
             condition: Condition::Negated,
             modifies: &["audit", "balance"],
+            ..shape
+        },
+        |shape| Shape {
+            frame_effect: FrameEffect::DeletesSelf,
+            ..shape
+        },
+        |shape| Shape {
+            frame_effect: FrameEffect::DeletesParameter,
             ..shape
         },
     ];
@@ -1850,6 +1884,29 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
                 }
             )
         }),
+        ("frame deletes self", DELETES_SELF, Frame, |refusal| {
+            matches!(
+                refusal,
+                StateFrameRefusal::FrameEffectUnsupported {
+                    effect: UnsupportedFrameEffect::Deletes,
+                    ..
+                }
+            )
+        }),
+        (
+            "frame deletes a parameter",
+            DELETES_PARAMETER,
+            Frame,
+            |refusal| {
+                matches!(
+                    refusal,
+                    StateFrameRefusal::FrameEffectUnsupported {
+                        effect: UnsupportedFrameEffect::Deletes,
+                        ..
+                    }
+                )
+            },
+        ),
         (
             "frame grants a relationship",
             RELATIONSHIP_FRAME,
