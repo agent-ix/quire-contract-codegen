@@ -87,9 +87,10 @@ falsified with concrete playback before the restored call verifies over that
 same class. A fixed literal, a non-symbolic enumeration, a branch-local control
 or a higher resource ceiling does not discharge these criteria. The symbolic
 selector table must be bijective with the specified 21-member class, and both
-agreement assertions must remain in the selected harness. IR-796 owns the
-next source-backed proof design or a separately reviewed spec disposition;
-neither an inconclusive run nor this status note establishes impossibility.
+agreement assertions must remain in the selected harness. An inconclusive
+run alone does not establish impossibility; the measured disposition below
+records the impossibility IR-796 established for the current kernel path and
+the tickets that own the next change.
 
 Non-normative observation: IR-796 records that the original NFC `Text[1,1]`
 candidate from PR #381 reached CBMC and ended `MemoryExhausted` under the
@@ -102,12 +103,12 @@ or prove that a sound design cannot complete within the ceiling.
 ## Measured Proof-Bound Disposition (IR-796)
 
 IR-796 measured whether a different harness shape could satisfy FR-035-AC-4
-and FR-035-AC-5 under the unchanged published bound: 1 GiB per obligation,
-600 seconds, `--unwind 8`, Cadical, Kani 0.68.0 with CBMC 6.11.0 and the
-Contract Runtime revision in this repository's lockfile. Three shapes were
-measured in a scratch copy of the generated harness, each keeping the public
-`TextPayload::from_utf8` constructor, the generated-versus-direct agreement
-assertions and the final cover:
+and FR-035-AC-5 under the unchanged published bound of 1 GiB per obligation,
+600 seconds, `--unwind 8` and Cadical. The toolchain and dependency revisions
+of each run are recorded in the IR-796 ticket receipts, not in this test.
+Three shapes were measured in a scratch copy of the generated harness, each
+keeping the public `TextPayload::from_utf8` constructor, the
+generated-versus-direct agreement assertions and the final cover:
 
 - one concrete literal per harness, so the harness set rather than a selector
   ranges over the 21 members;
@@ -116,40 +117,43 @@ assertions and the final cover:
   `from_utf8` call.
 
 Every measured harness of every shape, including the empty payload under
-`binary-utf8` `Text[1,1]`, ended `MemoryExhausted` inside CBMC before any
-verification condition was solved, and the widened-type mutation control of
-the per-literal and original shapes also ended `MemoryExhausted` without a
-falsification or playback. The cost floor is therefore one
-`rt::admit_text` call on one concrete payload, not the 21-way selection:
+`binary-utf8` `Text[1,1]`, exhausted the 1 GiB ceiling. Where Kani reported a
+verdict, it was `MemoryExhausted` in CBMC before any verification condition
+was solved. Three runs, the empty per-literal `unicode-scalars` `Text[0,8]`
+harness, the first three-member NFC `Text[1,1]` partition and the per-literal
+`ee` mutation control, were killed by the cap with no verdict line, and their
+phase was not retained. The widened-type mutation controls produced no
+falsification or concrete playback. The cost floor is one admission call on
+one concrete payload, not the 21-way selection:
 
-- Without the agreement comparison, a single `rt::admit_text` on the literal
-  `e` under `unicode-scalars` `Text[0,8]` exhausts 1 GiB in CBMC symbolic
-  execution. Under a diagnostic 8 GiB ceiling, the concrete single-literal
-  agreement harness was still in symbolic execution at the 600-second limit,
-  at 3.4 GiB.
-- Symbolic execution unwinds `core::str::count::do_count_chars` for a
-  one-scalar payload, which is reached through the scalar counts in the
-  runtime's Text `prepare` path and `TextProfile::length`. With those counts
-  rewritten in a scratch runtime copy, symbolic execution of one admission
-  finishes in about 5 seconds. Propositional conversion then needs about
-  2.6 GiB, and the full single-literal agreement harness exceeded 3.6 GiB.
-- Separately, `assert_eq!` on two `Meter` values compares the ten-counter
-  array through CBMC's `memcmp` model, whose loop fails its unwinding
-  assertion at `--unwind 8` even with no admission call.
+- A single admission of the literal `e` under `unicode-scalars` `Text[0,8]`,
+  with no agreement comparison, exhausts 1 GiB. The IR-796 review reproduced
+  this for both the Contract Runtime admission path and the current
+  `quire_exact::admit_text` kernel path, and at a 4 GiB diagnostic ceiling
+  the single admission still ended `MemoryExhausted`, after 481 seconds on
+  the runtime path and 65 seconds on the kernel path.
+- On the kernel path, symbolic execution is dominated by `BigUint::from(u128)`
+  unwinding inside the exact `Meter::charge`, the same integer-encoding cost
+  class tracked by IR-705-AC-9.
+- Separately, the generated harness's `assert_eq!` on two `Meter` values
+  compares the ten-counter array through CBMC's `memcmp` model, whose loop
+  fails its unwinding assertion at `--unwind 8` even with no admission call.
+  Comparing the two meters through their public accessors verifies. This is
+  a defect of the generated harness, not of the kernel.
 
-No harness shape that keeps the public constructor, the direct runtime
-admission call and full outcome and metering agreement fits the published
-ceiling with this runtime and toolchain. A narrower assertion, stubbing of
-runtime admission or metering, a raised ceiling or unwind bound, or a
-per-harness unwind override would weaken FR-035-AC-4 or FR-035-AC-5, and none
-is accepted as discharge. FR-035-AC-4 and FR-035-AC-5 remain planned and
-unrun, and they have no proof credit.
+No harness shape that keeps the public constructor, the direct admission call
+and full outcome and metering agreement fits the published ceiling with the
+current kernel and toolchain. A narrower assertion or a stub of admission or
+metering would weaken FR-035-AC-4 or FR-035-AC-5. A raised memory ceiling, a
+higher global unwind bound or a per-harness unwind override would change the
+published bound rather than meet it. None of these is accepted as discharge.
+FR-035-AC-4 and FR-035-AC-5 remain planned and unrun, and they have no proof
+credit.
 
-The next owner is Contract Runtime: the proof cost of the exact Text admission
-and metering path (`prepare` scalar counting, `Meter::charge` and `Meter`
-equality) has to come within the published ceiling under `--unwind 8` before
-CG can regenerate the twelve harnesses and the mutation control. That change
-is a separate runtime slice, followed by a CG generator slice that rebinds
-TC-050 step 3 to the reduced runtime. A Kani or CBMC change that keeps the
-concrete payload length constant through `Box<str>` construction is an
-alternative upstream route. Neither route alters this test's criteria.
+The next owners are tracked tickets. quire-exact owns the remaining integer
+cost of exact metering under IR-705, whose AC-9 covers the same encoding
+class, so a reduction there is a precondition for this proof. CG owns IR-837,
+which moves the TC-050 harness onto the quire-exact admission path and
+compares meters through public accessors instead of `Meter` equality. The
+twelve harnesses and the mutation control are rerun under this test's
+unchanged criteria once both have landed.
