@@ -14,7 +14,8 @@ Verify that several harnesses run in one launcher process with each member decid
 report entry and its own console playback, that an output stream over its limit is refused and never
 truncated, that a capture failure is refused, and that no launcher descendant outlives a run
 (IR-277; FR-017-AC-14 and FR-017-AC-21 to FR-017-AC-25), and that the diagnostic record of a
-`NoVerdict` group never feeds classification (FR-017-AC-36). The batch timeout rule it exercises is
+`NoVerdict` group never feeds classification (FR-017-AC-36), and that a batch member's CBMC failure
+cause is kept beside the batch timeout rule (FR-017-AC-39). The batch timeout rule it exercises is
 FR-028-AC-12, verified by TC-039.
 
 ## Test Procedure
@@ -47,11 +48,18 @@ FR-028-AC-12, verified by TC-039.
     `c::check` that exits 1 with no report and prints `Checking harness a::check...`,
     `Solving with CaDiCaL 3.0.0` and `Checking harness b::check...`; the same group printing a
     compile failure and no `Checking harness` line; one whose report has every member Success and
-    exits 1; one whose report has a Failure entry and exits 1; the same report and exit twice with
+    exits 1; one whose report has a Failure entry with no exit status and exits 1; the same report and exit twice with
     different stream text; two no-report runs with equal exit and different stream text; and the
     over-limit and unread streams of steps 1 and 2. Map a `NoVerdict` evidence through FR-029, with
     and without its `diagnostics`. Build two otherwise compatible requests with `home_directory` `/h/u` and
     `/h/v`, a pair with one absent, and a pair with both `/h/u`, and count the processes.
+12. (FR-017-AC-39; PLANNED/UNRUN, IR-827.) Run a batch stand-in of members `a::check`, `b::check`,
+    `c::check` and `d::check` that exits 1 with a report in the shape of a real batch report:
+    `a::check` `Success` with a passing assertion, every cover satisfied and an `error_details`
+    entry with no exit status; `b::check` `Failure` with no checks and exit status `exit_code_64`;
+    `c::check` `Failure` with no checks and exit status `timeout`; and `d::check` `Failure` listing a
+    failed assertion, with no playback block headed for its path, and exit status `timeout`. Run the
+    same group again with two entries for `b::check`, one `timeout` and one `exit_code_64`.
 
 ## Expected Results
 
@@ -92,13 +100,19 @@ FR-028-AC-12, verified by TC-039.
 11. In the no-report group `a::check` is `solver`, `b::check` is `backend` and `c::check` is
     `unknown`, all `NoVerdict` with the group's excerpts; the compile-failure group gives every
     member `compile`; the all-Success report beside exit 1 gives every member `NoVerdict` with phase
-    `unknown`; the report with a Failure entry has no member `NoVerdict` and no member record; the
+    `unknown`; the report with a Failure entry with no exit status has no member `NoVerdict` and no member record; the
     two runs with the same report and exit have the same outcome, checks, SUCCESS count and
     playback; the two no-report runs have equal evidence in every field but `diagnostics` and
     `memory`; the over-limit and unread streams remain refused with `kani_output_over_limit` and
     `kani_output_unread`, with no evidence and no record; the FR-029 terminal value is `Failed`
     with and without the record; the differing-home pairs start two processes and the equal-home
     pair one, whose members' excerpts are byte-identical (FR-017-AC-36).
+12. `a::check` is `Verified` with no `failureCause`; `b::check` is `FailedWithoutCounterexample`
+    with `failureCause { kind: "exit_code", code: 64 }` and a `diagnostics` record of phase
+    `unknown` holding the group's excerpts; `c::check` is inconclusive timed out naming T with no
+    `failureCause` and no `diagnostics`; `d::check` is `FailedWithoutCounterexample` with
+    `failureCause { kind: "timeout" }` and a `diagnostics` record. With the two entries for
+    `b::check`, `b::check` is inconclusive timed out with no `failureCause` (FR-017-AC-39).
 
 ## Implementation
 
@@ -145,6 +159,9 @@ Step 11 (FR-017-AC-36) is covered by the tests of `batch_tests::no_verdict_diagn
 `src/kani/output/diagnostics.rs`, and, for the FR-029 terminal value,
 `tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics` in
 `tests/it/kani_obligations.rs`.
+
+Step 12 (FR-017-AC-39) is PLANNED/UNRUN (IR-827): no test is tagged with it yet; the IR-827 code
+change adds it to `batch_tests` in `src/kani/run/execute.rs`.
 
 ## Status
 

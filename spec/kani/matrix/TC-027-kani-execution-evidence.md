@@ -103,6 +103,27 @@ process `HOME` values, and with each redacted value changed. Classify a verified
 cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive run and serialize
 each evidence.
 
+CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40; PLANNED/UNRUN, IR-827). Build reports
+in the shape the measured real reports have: one result `proofs::check` with status `Failure` and no
+checks, and one `error_details` entry `{ "harness_id": "proofs::check", "has_errors": true,
+"error_type": "verification_failure", "failed_properties_type": "Other", "exit_status": <value> }`.
+With a single-run stand-in that exits 1, prints `Checking harness proofs::check...` and
+`CBMC failed with status 64` on stdout and `Unknown option: --no-such-option` on stderr, run each
+exit status `exit_code_64`, `exit_code_15`, `exit_code_0`, `exit_code_-1`, `out_of_memory`,
+`timeout`, `cbmc_exploded`, `exit_code_`, `exit_code_064`, `exit_code_+64`, `exit_code_-0`,
+`exit_code_2147483648`, `exit_code_64x`, `EXIT_CODE_64`, a 100-byte ASCII value and a value whose
+64th byte falls inside a 4-byte character. Then run a `Failure` report listing a failed assertion
+with no playback on the console and exit status `properties_failed`; the same report with no
+`error_details` member, with an entry for another harness only, with two entries for the harness,
+with a null `exit_status`, and with a result that names no `harness_id`; an `exit_code_64` entry
+beside a verified and a cover-unsatisfied report (exit 0), a falsified report with its playback and
+an unwind-bound-exhausted report (exit 1), and a success report beside exit 1; a timed-out and a
+memory-exhausted run; and a report whose `exit_status` is the number `64`. Run three stand-ins with
+one `Failure` report and exit and the entries `exit_code_64`, `out_of_memory` and `cbmc_exploded`,
+each printing different stream text, and map each evidence through FR-029 with and without its
+`failureCause` and `diagnostics`. In the `make kani` lane, append `--cbmc-args --no-such-option` to
+a generated harness's option vector and run it through `execute_kani_obligation`.
+
 The output cap, capture failure, group cleanup and batching (FR-017-AC-14, FR-017-AC-21 to
 FR-017-AC-25) are verified by TC-043, not here.
 
@@ -192,7 +213,28 @@ and the runs that differ only in redacted values serialize byte-identical record
 `diagnostics { phase, stdout { text, omittedBytes }, stderr { text, omittedBytes } }`. The
 `compile_fail` rustdoc example that deserializes the record fails to compile while its
 `serde_json::to_string` control compiles. No evidence of a non-`NoVerdict` run has a `diagnostics`
-member.
+member, apart from the `FailedWithoutCounterexample` evidence of a CBMC failure cause below.
+
+CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40; PLANNED/UNRUN): every exit-status run
+is `Inconclusive` `FailedWithoutCounterexample`. `exit_code_64`, `exit_code_15`, `exit_code_0` and
+`exit_code_-1` carry `failureCause { kind: "exit_code" }` with `code` 64, 15, 0 and -1;
+`out_of_memory` and `timeout` carry their own `kind`; `cbmc_exploded` and each malformed
+`exit_code` spelling carry `{ kind: "unknown", exitStatus }` with the value verbatim; the 100-byte
+value keeps its first 64 bytes and the straddling value is cut before the character. Each of them
+carries a `diagnostics` record of phase `unknown` whose stderr excerpt holds
+`Unknown option: --no-such-option`. The `properties_failed` run carries
+`{ kind: "properties_failed" }` and no `diagnostics` member; the runs with no entry, another
+harness's entry, two entries, a null exit status and no `harness_id` are
+`FailedWithoutCounterexample` with neither member. The verified, cover-unsatisfied, falsified,
+unwind-bound-exhausted, `NoVerdict`, timed-out and memory-exhausted runs keep their outcomes and have
+no `failureCause` member. The numeric `exit_status` is refused as malformed with no evidence. The
+`compile_fail` rustdoc example that deserializes `KaniFailureCause` fails to compile while its
+`serde_json::to_string` control compiles. The three runs differing in cause and stream text have
+equal outcome, checks, SUCCESS count and playback, equal evidence in every field but
+`failureCause`, `diagnostics`, `memory` and the report-path argument, and FR-029 terminal value
+`Failed` with and without the two members. The real run with `--cbmc-args --no-such-option` exits
+unsuccessfully, exports a report and is `FailedWithoutCounterexample` with
+`{ kind: "exit_code", code: 64 }` and a stderr excerpt holding `Unknown option: --no-such-option`.
 
 The absent launcher is a typed tool refusal naming the launcher and its path.
 
@@ -323,6 +365,11 @@ not compile); the `src/kani/run/execute.rs` stand-in tests in `batch_tests::no_v
 tests of the phase rules, the excerpt bounds and every redaction pair. The serialize-only check is
 the rustdoc `compile_fail` example on `KaniNoVerdictDiagnostics`, run by `cargo test --doc`, with
 its compiling `serde_json::to_string` control beside it.
+
+FR-017-AC-37, FR-017-AC-38 and FR-017-AC-40 are PLANNED/UNRUN (IR-827): no test is tagged with
+them, and the IR-827 code change adds the stand-in tests in `src/kani/run/execute.rs` and
+`src/kani/output/report.rs`, the rustdoc `compile_fail` example on `KaniFailureCause`, and the
+`make kani` lane test in `tests/it/kani_obligations.rs`.
 
 The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
 not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No current
