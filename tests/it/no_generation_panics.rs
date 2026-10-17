@@ -255,7 +255,7 @@ fn bare() { abort() }
     }
 }
 
-/// Trace: NFR-005-AC-1, TC-042. No file under `src/` holds a panic token in its non-test,
+/// Trace: NFR-005-AC-1, NFR-005-M-1, TC-042. No file under `src/` holds a panic token in its non-test,
 /// literal-free code; the scan read every file that holds a measured site.
 #[test]
 fn tc_042_ac1_src_holds_no_panic_token() {
@@ -341,7 +341,7 @@ fn tc_023_canonical_encoding_has_one_source_boundary() {
     assert!(core_seen, "the canonical boundary was not scanned");
 }
 
-/// Trace: NFR-005-AC-8, TC-042. The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,
+/// Trace: NFR-005-AC-8, NFR-005-M-3, TC-042. The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,
 /// `observe_clause` and `generate_boolean_oracle_inner`, located in the literal-free non-test code
 /// of their files, hold no index token and no subtraction token.
 #[test]
@@ -422,7 +422,7 @@ fn tc_042_ac8_the_body_check_flags_index_and_subtraction_and_passes_their_lookal
     }
 }
 
-/// Trace: NFR-005-AC-2, TC-042. `classify_claim` reports a generated claim with no checked bound,
+/// Trace: NFR-005-AC-2, NFR-005-M-2, TC-042. `classify_claim` reports a generated claim with no checked bound,
 /// and one whose first checked bound is not among the derived integer ranges, as
 /// `OperationNotRendered`; the unmodified claim is supported.
 #[test]
@@ -495,7 +495,7 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
     }
 }
 
-/// Trace: NFR-005-AC-3, TC-042. A hand-built `Unsupported` settlement carrying an
+/// Trace: NFR-005-AC-3, NFR-005-M-2, TC-042. A hand-built `Unsupported` settlement carrying an
 /// `invalid_capability` cause has no warning to name; each `unsupported_projection` cause still
 /// carries its warning.
 #[test]

@@ -150,9 +150,9 @@ Each site is named by function, not by line. The class is how the code must expr
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Panic tokens in the non-test, literal-free code of `src/` | 0 | 0 | lexical scan, `tests/common/panic_scan.rs` |
-| Measured sites a test can reach that abort instead of returning a typed value | 0 | 0 | unit tests at the four sites with a seam (NFR-005-AC-2 to AC-5) and the two IR-577 seams (NFR-005-AC-6, NFR-005-AC-7) |
-| Index, slice and unchecked subtraction expressions in the bodies of the five IR-577 functions | 0 | 0 | lexical scan of those bodies (NFR-005-AC-8) |
+| Panic tokens in the non-test, literal-free code of `src/` | 0 | 0 | Test (TC-042): lexical scan, `tests/common/panic_scan.rs` |
+| Measured sites a test can reach that abort instead of returning a typed value | 0 | 0 | Test (TC-042): unit tests at the four sites with a seam (NFR-005-AC-2 to AC-5) and the two IR-577 seams (NFR-005-AC-6, NFR-005-AC-7) |
+| Index, slice and unchecked subtraction expressions in the bodies of the five IR-577 functions | 0 | 0 | Test (TC-042): lexical scan of those bodies (NFR-005-AC-8) |
 
 ## Acceptance Criteria
 

@@ -523,6 +523,7 @@ fn tc_025_real_kani_classifies_the_v1_bundle_verified_vacuous_and_falsified() {
 /// TC-003
 /// TC-005
 /// TC-007
+/// NFR-001-M-1
 #[test]
 fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     let dependencies = [ProofDependencyRequest {
