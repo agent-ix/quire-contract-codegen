@@ -61,6 +61,7 @@ Rechecked at frozen head 75a0bb88176666b785d64bf7496bb5bf768a713c (fix commit 58
 | FND-002 | fixed | verified in 58f8bbe at 75a0bb8 |
 | FND-003 | fixed | round 2: verified in a569513 |
 | FND-004 | fixed | round 2: verified in a569513 |
+| FND-005 | fixed | round 5: verified in 4e54b15; DependencyLock is EnvironmentFault in the section text, the table, AC-42 and TC-027 step 2; the TC-027 summary counts 3 refusal and 7 fault variants (plus Kani and ProofNotVerified, 12 in all); AC-44 freezes the mapping by reference to the table |
 
 ## New findings (disposition pass 4)
 
