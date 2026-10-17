@@ -93,3 +93,58 @@ published 1 GiB ceiling after 72.021 seconds, at a measured peak of
 place the observed cost in symbolic UTF-8 validation and scalar-count
 unwinding before SAT. This one run does not settle the other eleven harnesses
 or prove that a sound design cannot complete within the ceiling.
+
+## Measured Proof-Bound Disposition (IR-796)
+
+IR-796 measured whether a different harness shape could satisfy FR-035-AC-4
+and FR-035-AC-5 under the unchanged published bound: 1 GiB per obligation,
+600 seconds, `--unwind 8`, Cadical, Kani 0.68.0 with CBMC 6.11.0 and the
+Contract Runtime revision in this repository's lockfile. Three shapes were
+measured in a scratch copy of the generated harness, each keeping the public
+`TextPayload::from_utf8` constructor, the generated-versus-direct agreement
+assertions and the final cover:
+
+- one concrete literal per harness, so the harness set rather than a selector
+  ranges over the 21 members;
+- a symbolic selector over a partition of three members per harness;
+- one symbolic selector over a constant 21-row byte table feeding a single
+  `from_utf8` call.
+
+Every measured harness of every shape, including the empty payload under
+`binary-utf8` `Text[1,1]`, ended `MemoryExhausted` inside CBMC before any
+verification condition was solved, and the widened-type mutation control of
+the per-literal and original shapes also ended `MemoryExhausted` without a
+falsification or playback. The cost floor is therefore one
+`rt::admit_text` call on one concrete payload, not the 21-way selection:
+
+- Without the agreement comparison, a single `rt::admit_text` on the literal
+  `e` under `unicode-scalars` `Text[0,8]` exhausts 1 GiB in CBMC symbolic
+  execution. Under a diagnostic 8 GiB ceiling, the concrete single-literal
+  agreement harness was still in symbolic execution at the 600-second limit,
+  at 3.4 GiB.
+- Symbolic execution unwinds `core::str::count::do_count_chars` for a
+  one-scalar payload, which is reached through the scalar counts in the
+  runtime's Text `prepare` path and `TextProfile::length`. With those counts
+  rewritten in a scratch runtime copy, symbolic execution of one admission
+  finishes in about 5 seconds. Propositional conversion then needs about
+  2.6 GiB, and the full single-literal agreement harness exceeded 3.6 GiB.
+- Separately, `assert_eq!` on two `Meter` values compares the ten-counter
+  array through CBMC's `memcmp` model, whose loop fails its unwinding
+  assertion at `--unwind 8` even with no admission call.
+
+No harness shape that keeps the public constructor, the direct runtime
+admission call and full outcome and metering agreement fits the published
+ceiling with this runtime and toolchain. A narrower assertion, stubbing of
+runtime admission or metering, a raised ceiling or unwind bound, or a
+per-harness unwind override would weaken FR-035-AC-4 or FR-035-AC-5, and none
+is accepted as discharge. FR-035-AC-4 and FR-035-AC-5 remain planned and
+unrun, and they have no proof credit.
+
+The next owner is Contract Runtime: the proof cost of the exact Text admission
+and metering path (`prepare` scalar counting, `Meter::charge` and `Meter`
+equality) has to come within the published ceiling under `--unwind 8` before
+CG can regenerate the twelve harnesses and the mutation control. That change
+is a separate runtime slice, followed by a CG generator slice that rebinds
+TC-050 step 3 to the reduced runtime. A Kani or CBMC change that keeps the
+concrete payload length constant through `Box<str>` construction is an
+alternative upstream route. Neither route alters this test's criteria.
