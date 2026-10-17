@@ -83,7 +83,9 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - Planned (IR-848): the CBMC failure cause. It is not a free input: `run_terminal_value` takes the
   run's evidence, `&KaniExecutionEvidence`, and reads the outcome and the `failureCause` from it, so
   a caller cannot omit the cause of a run that has one. The planned signature is
-  `run_terminal_value(evidence: &KaniExecutionEvidence, success_checks, settlement)`. The cause is
+  `run_terminal_value(evidence: &KaniExecutionEvidence, settlement)`. It reads the outcome, the
+  SUCCESS-check count (`KaniExecutionEvidence.success_checks`) and the cause from the evidence; no
+  separate count parameter remains. The cause is
   that FR-017 retains in the evidence of a `FailedWithoutCounterexample` run (absent for every other
   run, and for a `FailedWithoutCounterexample` run whose entry states no exit status). The map reads
   it for the failure-without-counterexample reason only and ignores it for every other outcome. This
@@ -171,9 +173,11 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - The cause `properties_failed` is `Failed` because Kani reported a failed property and the backend
   printed no playback: a genuine failed-property verdict that CG cannot replay, the reading
   FR-017's failure-class rule takes (class `CompletionRefusal`).
-- No cause at all is `Failed` for a different reason: a `Failure` report with no checks and no
-  exit status is no evidence of a verdict or of a resource stop, so the tool broke its output
-  contract. FR-017's class for it is `CompletionRefusal`; the terminal value is `Failed` either way.
+- No cause at all has two shapes, both `Failed`, for different reasons, and both with FR-017 class
+  `CompletionRefusal`. (a) A failed check is listed and the entry states no exit status
+  (FR-017-AC-38's no-cause shapes): a genuine failed-property verdict that CG cannot replay.
+  (b) No checks and no exit status (FR-029-AC-32's case): no evidence of a verdict or of a resource
+  stop, so the tool broke its output contract.
 - The cause `exit_code` or `unknown` states a CBMC failure that is neither a resource stop nor a
   failed property: FR-017's class is `EnvironmentFault`, and the terminal value is `Failed`, the
   tool breaking its output contract. That `Failed` is stated, not defaulted: it keeps a CBMC crash

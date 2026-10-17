@@ -659,7 +659,7 @@ changes none of their text.
 For `ProofNotVerified`, `class()` is `CompletionRefusal` when the evidence outcome is a genuine
 property or proof verdict: `Falsified`, `CoverUnsatisfied`, or `Inconclusive` with reason
 `MissingCoverSummary`, `VacuousProof`, `UnwindBoundExhausted`, or `FailedWithoutCounterexample`
-with no `failureCause` or with `failureCause` `properties_failed` (a failed property, which real Kani writes for a failed assertion without playback). It is `EnvironmentFault` when the run did not reach a
+with `failureCause` `properties_failed` (a failed property, which real Kani writes for a failed assertion without playback), or with no `failureCause` in either of two shapes: a failed check listed with no exit status stated (a failed property), or no checks and no exit status (no verdict evidence, which FR-029 maps to `Failed` as a tool-contract break; the class stays `CompletionRefusal`). It is `EnvironmentFault` when the run did not reach a
 verdict: `Cancelled`, `Inconclusive` with reason `TimedOut`, `MemoryExhausted` or `NoVerdict`, and
 `FailedWithoutCounterexample` with a `failureCause` other than `properties_failed` (a CBMC timeout,
 out-of-memory, exit code or unknown failure, as `is_cbmc_failure()` tells). `ProofNotVerified` carrying outcome `Verified` is an internal inconsistency: it is an `EnvironmentFault`, returned without a panic (NFR-005), and is part of the frozen mapping. This is consistent with the FR-029 mapping of a

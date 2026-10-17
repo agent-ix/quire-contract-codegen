@@ -27,3 +27,18 @@ Examined (role examined): FR-029 Inputs cause bullet (:81-91), the no-settlement
 ## Verdict
 
 Needs changes (medium). The new table, AC-5, AC-25 and the bounded-shadow text are mutually consistent and match FR-017's amended bullet and interface-001's signature (outcome, cause, SUCCESS count, settlement, matching the planned signature). The structural gaps are the unstated no-wildcard rule for the cause, AC-35's settlement axis, and one-sided trace edges.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-005 | medium | The new signature takes the SUCCESS-check count twice. `run_terminal_value(evidence: &KaniExecutionEvidence, success_checks, settlement)` reads the outcome and cause from the evidence but keeps `success_checks` as a separate argument, although FR-017 :347 requires the evidence to carry that count and `KaniExecutionEvidence.success_checks` exists (src/kani/run/execute.rs:276-280; the driver and the IR-827 tests already pass `evidence.success_checks`). The fix-round note's reason that the evidence does not carry it is not true at this head. With two sources, a caller can pass a count that disagrees with the evidence, and `Proved { success_checks }` then states a count the evidence contradicts: the same hazard the evidence input was added to remove for the cause. Read the count from the evidence too (`run_terminal_value(evidence, settlement)`), or state why a separate count is needed and require it to equal `evidence.success_checks`. | spec/kani/functional/FR-029-run-outcome-terminal-record.md:83-89; spec/core/functional/interface-001-codegen-api.md:149; spec/kani/functional/FR-017-kani-execution-evidence.md:347; src/kani/run/execute.rs:276-280 | wrong-requirement |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | d536e94: FR-029 :120-122 requires the FWC arm to match `KaniFailureCause` (or its absence) exhaustively with no wildcard arm, so a new cause is a compile error. |
+| FND-002 | fixed | d536e94: AC-35 states the settlement axis ("with the replay settlement each outcome takes: a falsified outcome with a reproduced replay is Refuted whatever the cause; the cause never turns a non-Refuted result into Refuted"); TC-040 step 5 adds falsified+reproduced beside each cause. |
+| FND-003 | fixed | d536e94: TC-043 adds step 13 and expected result 13 for c::check/d::check (FR-029-AC-33); the TC-040 summary row lists FR-029-AC-32..35 and FR-017-AC-40; AC-36 is Inspection with no TC, as the FR-029 row says. |
+| FND-004 | fixed | d536e94: rebased onto #418 (d9cf2b0) and the PR base changed to it. No conflict markers remain; FR-017 AC-40 (amended) sits at :730 directly before #418's AC-41..44 (:731-734); #418's Scalar native error discriminant section is byte-identical to d9cf2b0. Its class rule agrees with FR-029's terminal map; the remaining wording gap is SR-12192 FND-003. |

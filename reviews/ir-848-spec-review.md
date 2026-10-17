@@ -27,3 +27,18 @@ Examined (role examined): FR-029 Inputs cause bullet (:81-91), the no-settlement
 ## Verdict
 
 Needs changes. The mapping itself (option b, classify.rs unchanged, out_of_memory to ResourceExhausted, timeout to TimedOut, everything else Failed) matches the planner rulings and the code shape, and the new FR-029 table, bounded-shadow text and AC-25 agree with each other. Two high defects are stale or self-contradicting statements left beside the amendment in FR-017 and TC-027, and the matrix overclaims AC-40. #418's section is untouched (it is not in this branch's ancestry; a trial merge conflicts only on the adjacent AC-40/AC-41 rows, see SR-12191 FND-004).
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-005 | low | The TC-027 coverage note was not updated for the round-1 signature. It still says IR-848's replacement test reads the cause through `run_terminal_value`, "which takes `Option<&KaniFailureCause>`", while FR-029 (:83-89) and interface-001 now give `run_terminal_value(evidence: &KaniExecutionEvidence, success_checks, settlement)`. Change it to "which takes the run's `KaniExecutionEvidence` and reads `failureCause` from it". | spec/kani/matrix/TC-027-kani-execution-evidence.md:427-431; spec/kani/functional/FR-029-run-outcome-terminal-record.md:83-89 | wrong-requirement |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | d536e94: FR-017 :565-567 drops the terminal value from the independence list ("the outcome, the checks, the SUCCESS-check count, the playback and every refusal ... before and independently of the cause"); the cause-read sentence is the only terminal rule. |
+| FND-002 | fixed | d536e94: TC-027 :247-251 expected result now gives Incomplete(ResourceExhausted) for out_of_memory and Failed for exit_code_64 and cbmc_exploded, noting the bound test still asserts the old value until the code PR. |
+| FND-003 | fixed | d536e94: tests.md splits FR-017-AC-40 into its own row, 🚧 Partial (IR-848), TC-027 and TC-040, naming the bound test that flips; the TC-027 summary row follows. |
+| FND-004 | fixed | d536e94: AC-32..36 carry `PLANNED (IR-848).`; the Inputs bullet no longer says "today" and the cause bullet is headed "Planned (IR-848)". |
