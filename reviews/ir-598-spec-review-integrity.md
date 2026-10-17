@@ -23,3 +23,17 @@ Ticket: IR-598. Integrity and completeness check of the deletion lists in FR-015
 ## Verdict
 
 The arithmetic and collection arm lists match the code: lower/definedness_arithmetic.rs and bounded_collections.rs have no caller outside the corpus and lib.rs. The interface-001 status edits are consistent with the slices, except for the classifier. Fix the AC-111 residue list and remove the conditional.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | Introduced by the fix round. AC-111 and AD-004 4g now delete all of `kani/generate/census_validation.rs`, but that file also holds the public `KaniDiagnostic` and `KaniErrorCode` (lib.rs:135 re-export). `v1_bundle.rs` uses them (:23-25, :146, :252 and on), and it stays live until step 4f. AC-111 is not gated on 4f, so its deletion list can contradict live code. Either gate AC-111 on step 4f, or delete only `validate_dependencies` at AC-111 and remove the file once 4f has landed, as AD-004 4f (:1008-1016) already describes. | FR-015-AC-111, AD-004 (spec/kani/functional/FR-015-bounded-kani-obligations.md:802) |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified at 455b1b1 (round 1) |
+| FND-002 | fixed | Verified at 455b1b1 (round 1) |
+| FND-003 | fixed | Verified at 455b1b1 (round 1) |
