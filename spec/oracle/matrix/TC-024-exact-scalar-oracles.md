@@ -45,20 +45,43 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
    `numeric.convert_rounding`); derive every `quantity.convert` node of the corpus
-   (each carries the `exact` mode its unit type pins) and check it is refused as
-   `QuantityConversionUnsupported` with the named capability and no descriptor;
-   request each of them under caller-declared descriptors, through
-   `generate_routed`, through Kani obligation negotiation and through capability
-   settlement, and check the same refusal and an empty artifact set: the
-   generated crate defines no oracle function and no harness is emitted
-   (FR-014-AC-2). Check that the function-application generator and the function schedules refuse a
-   conversion reached from a body, a call or a call argument with the named
-   capability, and that the composite-equality generator refuses a conversion root as
-   `FormMismatch` and a conversion operand as an unsupported quantity, each
-   before any artifact.
-   The TC-187 vectors that convert a quantity have no oracle and are not
-   agreement rows; check that every agreement row of step 4 compares at least
-   one vector. Derive nodes that are not applications, carry no identity, name an
+   (each carries the `exact` mode its unit type pins) and check each derives an
+   `ir_confirmed` descriptor and generates an oracle that calls `convert_quantity`
+   with `QuantityTarget::Exact` and returns a `Quantity` in the unit passed as the
+   call-time argument `unit: &QuantityUnit`, never a scalar and never checked
+   against the node's `type_argument` (FR-014-AC-48, FR-014-AC-50). Run the conversion vectors
+   (U01, U04 `degC` to `K`, U09b, U10, U15, U22, U25's second step and U26) and the `ill_typed` vectors (`1 m` to `s`, U09, `1 N_m` to `J`, compound `4 m^2` to `m`),
+   and check each outcome, admitted charges and consumed counters equal direct
+   `convert_quantity` execution, with zero charges and no counter change for
+   `ill_typed` (FR-014-AC-49). Request the same nodes under caller-declared
+   descriptors, through `generate_routed` and through Kani obligation
+   negotiation, and check capability settlement reports `OperationNotRendered`
+   (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
+   function-application generator and the function schedules refuse a
+   conversion body as `UnsupportedOperator` (generator) and
+   `ScheduleRefusal::UnsupportedOperation` (schedules), and the schedules refuse
+   a function with a unit-typed parameter or result as a per-function
+   `ScheduleRefusal::UnsupportedOperation`, never as a request-level error,
+   accepting an earlier
+   `Unsupported`, `NotExpression`, `UnsupportedOperandType` or argument refusal
+   where that check fires first (FR-021-AC-21), that a conversion node with a scalar or compound
+   `type_argument` is refused as `OperandFormsNotDerivable` and one with a
+   non-`exact` mode as `ModeNotDerivable`, each with no oracle, and the mode is
+   checked first, so a scalar `type_argument` with a non-`exact` mode is
+   `ModeNotDerivable` (FR-014-AC-50). The compound-unit target refusal
+   (`OperandFormsNotDerivable`, IR-831) runs on an admitted-package fixture,
+   because Contract IR FR-038-AC-248 and FR-038 admit a `quire.op.quantity.convert`
+   into a `compound_unit`. The scalar-target refusal and the `ModeNotDerivable`
+   case run only on hand-built nodes in module tests: FR-038-AC-248 refuses a
+   `quire.op.quantity.convert` to a non-quantity type upstream, and
+   FR-038-AC-213 admits only `exact` for a unit `type_argument`, so no admitted
+   package reaches either. Check also that the composite-equality generator refuses a conversion
+   root as `FormMismatch` and a conversion operand as an unsupported quantity,
+   each before any artifact.
+   The TC-187 quantity-to-quantity conversion vectors are agreement rows
+   (FR-014-AC-6); U07, U08, U16, U17, U18, U29 (scalar targets) and U25's
+   first step (compound target, IR-831) are refusal rows (FR-014-AC-50); check that every agreement row of
+   step 4 compares at least one vector. Derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that
