@@ -586,7 +586,6 @@ fn process_id_span(rest: &str) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kani::test_support::implements_deserialize;
 
     const HOME: &str = "/h/u";
 

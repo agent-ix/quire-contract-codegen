@@ -649,7 +649,6 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::kani::test_support::implements_deserialize;
 
     const CRATE_DIR: &str = "/h/u/ws/crate";
 
