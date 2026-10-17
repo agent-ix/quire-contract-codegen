@@ -1,0 +1,81 @@
+---
+id: "SR-12135"
+title: "IR-846 spec review: scalar proof-content identity as the FR-357 observation digest"
+type: SpecReview
+analysis: base
+scope: "agent-ix/quire-contract-codegen@fa8c661de64f5023e51c23e29bdf8c1da226ae8c; spec/kani/functional/FR-017-kani-execution-evidence.md, spec/kani/matrix/TC-027-kani-execution-evidence.md, spec/kani/matrix/tests.md, spec/replay/functional/FR-032-routed-scalar-replay-binding.md"
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-017
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/TC-027
+    type: reviews
+  - target: ix://agent-ix/quire-contract-codegen/FR-032
+    type: reviews
+---
+
+# SR-12135: IR-846 spec review
+
+## Summary
+
+Ticket: IR-846. PR: agent-ix/quire-contract-codegen#419, frozen head fa8c661, stacked on #418
+(peter/ir-847-native-error-discriminant-spec); only `git diff origin/peter/ir-847-native-error-discriminant-spec...HEAD`
+was reviewed. Method: spec-review base checklist, with failure-domain, integrity and consumer-fit
+checks folded in (no separate sub-analysis artifacts).
+
+## Method
+
+I read the new FR-017 section "Scalar proof-content identity as the FR-357 observation digest",
+FR-017-AC-45..49, the TC-027 step paragraph, the two tests.md rows and the FR-032 pointer. I
+checked the preimage against the code at this head: `src/kani/run/scalar.rs` (`CanonicalArtifact`,
+`ScalarProofPreimage`, `stage_package`, `measure`, `canonical_identity`, the request validation at
+:275-281 and :378-408) and `src/core/canonical.rs` (`content_digest_with_limits`), plus
+quire-canonical 5dc4e12 (`sha256`, `Limits`). Ground truth was QSL main 812939fb5 (FR-357, AC-14,
+qsl-foundation digest.rs `Sha256Jcs` and `is_raw_byte_addressed`, qsl-replay composite.rs
+`content_identity: DigestRecord`). Consumer fit was checked against quire-driver FR-009 (b3d7112).
+
+The preimage matches the code exactly: schema `agent-ix/cg-kani-scalar-proof-content/v2`; fields
+`schema`, `artifacts`, `path`, `contents`; the emitted `src/lib.rs` renamed to
+`src/oracle-artifacts-lib.rs` and the harness at `src/lib.rs`; the record at
+`kani-obligations/<module>.json`; the runner-read `Cargo.lock` and `src/bin/ir791_native.rs`; a
+`String::cmp` sort, which is UTF-8 byte order; the reserved-path and duplicate refusals; plain
+SHA-256 of the RFC 8785 bytes with no domain label; a 256 MiB ceiling on canonical output bytes.
+At this head the encode failure maps to `NativeResult`; #418's FR-017-AC-43 makes it
+`IdentityEncode`, which the spec correctly cites. The AC-46 order (Cargo.lock, Cargo.toml,
+claim-map.json, kani-obligations/..., src/bin/ir791_native.rs, src/lib.rs,
+src/oracle-artifacts-lib.rs) is correct in byte order. `sha256-jcs` over a structural preimage
+agrees with QSL's `is_raw_byte_addressed`.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | FR-017-AC-49 asks for a test that fails when the golden digest changes but the schema string does not. No test in the same tree can enforce that: one edit updates the golden and leaves the schema. The golden's input is also left open. If it is a real staged run, the real `Cargo.lock` is in the digest, so every dependency bump changes the golden with no schema change. AC-49's own Cargo.lock clause says that is legitimate, and it collides with the golden rule. | spec/kani/functional/FR-017-kani-execution-evidence.md:774, spec/kani/functional/FR-017-kani-execution-evidence.md:771, spec/kani/matrix/TC-027-kani-execution-evidence.md:446-448 |
+| FND-002 | medium | The non-UTF-8 refusal names no variant, code or class. The code returns `InvalidRequest("staged artifact is not UTF-8")`, which #418's AC-42 classes as `CompletionRefusal`. But request artifacts hold `String` contents, so only the runner-read `Cargo.lock` or adapter can be non-UTF-8. That is an environment or snapshot fault, not a caller refusal. The TC step names no seam that injects it. | spec/kani/functional/FR-017-kani-execution-evidence.md:682, spec/kani/functional/FR-017-kani-execution-evidence.md:771 |
+| FND-003 | medium | Consumer misfit. quire-driver FR-009 (statement and AC-7) says the driver "verif[ies] QSL's observation digest against that outcome". Under this section the digest excludes the outcome and is checked by recomputing it over the receipt's staged entries. No driver contract in the spec matches the authentication this section assigns to the IR-773 driver, and no follow-up ticket is named. | spec/kani/functional/FR-017-kani-execution-evidence.md:693-709, spec/kani/functional/FR-017-kani-execution-evidence.md:773 |
+| FND-004 | low | The Owners bullet says "A consumer shall not mint this value from receipt fields other than the exposed identity". The Retention bullet and AC-48 have the driver recompute it from the exposed entries, which are receipt fields. Read literally, the two rules contradict. | spec/kani/functional/FR-017-kani-execution-evidence.md:695-696 |
+| FND-005 | low | AC-46 hedges the record position ("assuming the `kani-obligations/<module>.json` path ...; any other record path sorts where its bytes put it"). The runner admits only `kani-obligations/{module_symbol}.json` (scalar.rs:275-281), so the hedge describes an unreachable case and blurs an otherwise exact order assertion. | spec/kani/functional/FR-017-kani-execution-evidence.md:771 |
+| FND-006 | low | The driver's comparison ("requires the package, harness and harness-record entries to equal the bytes of the artifact it runs") does not restate the rename map. Under that map the emitted `src/lib.rs` is entry `src/oracle-artifacts-lib.rs` and entry `src/lib.rs` is the harness. A path-by-path comparison of the emitted package would falsely mismatch. | spec/kani/functional/FR-017-kani-execution-evidence.md:704-706 |
+
+## Verdict
+
+Request changes for FND-001 through FND-003, then approve. The QSL-ruled contract is correct as
+written: `sha256-jcs` domain, artifact-only preimage, CG mints, the driver authenticates, QSL
+carries. The preimage agrees byte for byte with the code at this head, and AC-45, AC-47 and AC-48
+can be tested as written. AC-48's retention of the staged `(path, bytes)` list, including
+`Cargo.lock` and the adapter, is sound and is enough for the driver to recompute the digest. The
+section also states honestly that for those two entries the driver relies on CG's attestation.
+
+Suggested fixes:
+
+- FND-001: compute the golden with the measurement function over fixed literal entries,
+  including a literal `Cargo.lock` and adapter, not over a real staged run. Pin the
+  `(schema string, golden)` pair in one assertion. Restate "a test fails if the golden changes
+  while the schema is unchanged" as a review rule: a change to the golden without a schema bump
+  is rejected in review.
+- FND-002: name the variant, for example `IdentityEncode` / `identity_encode` /
+  `EnvironmentFault`, and name the test seam that writes a non-UTF-8 `Cargo.lock`.
+- FND-003: name the driver-side follow-up, or add a sentence that quire-driver FR-009 AC-7's
+  "against that outcome" must be re-specified as recomputation over the exposed entries.
+
+I considered the base checklist's hash/digest antipattern rule and did not apply it. This digest
+is the cross-repo identity that QSL FR-357 requires, not a tracking hash.

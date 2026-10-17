@@ -699,7 +699,7 @@ none of its text; FR-032 refers here for the representation.
   path `src/lib.rs`; the retained harness record under its own record path; the runner-generated
   `Cargo.lock`; and the runner-generated native invocation adapter `src/bin/ir791_native.rs`.
   `path` is the relative, `/`-separated path in the staged tree; `contents` is the file's bytes as
-  a UTF-8 string (a non-UTF-8 input is refused, never lossily converted). The array is ordered by
+  a UTF-8 string (a non-UTF-8 input is refused, never lossily converted: the refusal is the variant `Snapshot`, code `snapshot_io`, class `EnvironmentFault`, because request artifacts are `String` and only the runner-read `Cargo.lock` or adapter can be non-UTF-8, which is a snapshot fault and not a caller refusal). The array is ordered by
   `path`, ascending in UTF-8 byte order, with no duplicate path; JCS orders object members but not
   array elements, so this sort is part of the preimage. The ceiling on the encoded preimage is
   256 MiB; exceeding it is `IdentityEncode` (FR-017-AC-43).
@@ -713,7 +713,8 @@ none of its text; FR-032 refers here for the representation.
   bytes equal `ScalarProofContentIdentity::as_bytes()`. The IR-773 driver authenticates it, by
   recomputing it (below) from the artifact it executes before it sends the claim. QSL carries it and
   binds it into the claim identity; QSL never mints, recomputes or authenticates it. A consumer
-  shall not mint this value from receipt fields other than the exposed identity.
+  shall not mint a wire value from operands, limits or outcome; the only legitimate recomputation
+  is the driver's, over the exposed staged entries, below.
 - **Retention for recomputation.** The digest covers two inputs the caller never supplies: the
   `Cargo.lock` that `cargo generate-lockfile --offline` and the runtime-revision pin produce in the
   private snapshot, and the native adapter the runner generates from the harness identity. The
@@ -721,19 +722,34 @@ none of its text; FR-032 refers here for the representation.
   `(path, bytes)` entries the preimage was built from, including those two. Without that list the
   driver holds only the package and harness it passed in, cannot reproduce those two entries, and
   cannot recompute the digest; that is a gap at spec time, and the receipt shall close it. The
-  driver recomputes the digest over the exposed entries, requires it to equal the receipt's
-  `DigestRecord`, and requires the package, harness and harness-record entries to equal the bytes of
-  the artifact it runs; any mismatch is a driver-side typed refusal with no claim sent. The driver
-  cannot independently derive the `Cargo.lock` and adapter bytes: for those two entries it
-  authenticates only that they are the bytes the receipt retains and that the recomputed digest
-  matches, and it relies on CG's attestation that they are the bytes proved and executed.
+  receipt shall bind the exposed entries to the immutable snapshot CG actually executed, never to a
+  later filesystem read. The driver recomputes `sha256-jcs` over the full exposed set, requires it to
+  equal the receipt's `DigestRecord`, and compares the driver-owned bytes with the retained
+  originals under the rename map: the emitted package's `Cargo.toml` and `claim-map.json` by their
+  own paths, the emitted package's `src/lib.rs` against entry `src/oracle-artifacts-lib.rs`, the
+  retained harness source against entry `src/lib.rs`, and the harness record against its
+  `kani-obligations/<module>.json` entry. A path-by-path comparison of the emitted package would
+  falsely mismatch. Any mismatch is a driver-side typed refusal with no claim sent.
+  **Trust boundary.** The `Cargo.lock` and adapter bytes are CG-owned runner bytes: the driver
+  neither knows nor generates them. For those two entries it relies on CG's sealed receipt and
+  checks only that they are what the receipt retains and that the recomputed digest matches. "The
+  driver authenticates" therefore means it authenticates the driver-owned artifact bytes and the
+  digest's consistency over the full set, not that it independently reproduces CG-owned bytes.
+- **Driver follow-up.** quire-driver FR-009 (statement and AC-7) says the driver verifies "QSL's
+  observation digest against that outcome". That conflicts with this section and must be amended:
+  the observation digest is artifact-only and authenticated by recomputation over the receipt's
+  exposed entries, not checked against the outcome. The amendment is owned by the quire-driver team
+  (routed from IR-846) and blocks quire-driver IR-773 AC-6/7.
 - **Stability.** The schema string is the version of the preimage. Any change to the artifact set,
   a path name or rename, the ordering, the content encoding, the field names, the canonicalization
   or the hash shall change the schema string (`.../v2` to `.../v3`), and digests under different
   schema strings are never equal or comparable. The domain stays `sha256-jcs`. A change to the
   bytes of a staged input (a different `Cargo.lock` or adapter) changes the digest without a schema
-  bump, because it names different proved content. A golden digest for a fixed small package is
-  pinned in tests, so any silent change to the preimage fails a test. The stale description of the
+  bump, because it names different proved content. The golden digest is computed over fixed literal entries (a literal `Cargo.lock` and adapter
+  included), never a real staged run, so dependency bumps do not move it, and is pinned together
+  with the schema string in one assertion. A test cannot detect a golden edited beside an unchanged
+  schema string, so that is a review rule: a change to the golden without a schema bump is
+  rejected in review. The stale description of the
   digest as "length-framed" appears in the code doc comment of `ScalarProofContentIdentity` only,
   not in spec text; correcting it to "SHA-256 of the RFC 8785 canonical encoding" is code-phase work.
 
@@ -788,10 +804,10 @@ none of its text; FR-032 refers here for the representation.
 | FR-017-AC-43 | A canonical-identity encoding failure is `IdentityEncode` with code `identity_encode` and class `EnvironmentFault`; no path returns `NativeResult` for it. `NativeResult` is produced only for the helper's malformed, missing or unsupported structured result, and a forced identity-encode failure through an in-crate test seam returns `IdentityEncode`, not `NativeResult`. | Test (TC-027) |
 | FR-017-AC-44 | The code table and the mapping to class are frozen: a test lists every variant with its expected code and its mapping to class (one class for a fixed variant; for `proof_not_verified` the class of each `KaniRunOutcome`, `KaniInconclusiveReason` and `KaniFailureCause` value; for `kani_execution` the class of each nested refusal), fails if a variant, outcome, reason, cause or nested refusal exists that the list lacks or if a code value or a mapped class differs, and fails if two variants share a code. Adding a variant, code, class or mapping entry is a spec change to the "Scalar native error discriminant" section made together with that table. The nested `KaniExecutionRefusal::code()` of `OutputOverLimit` and `OutputUnread` is unchanged. | Test (TC-027) |
 | FR-017-AC-45 | The receipt exposes its proof-content identity as a `DigestRecord` with domain `sha256-jcs` and 32 bytes equal to `ScalarProofContentIdentity::as_bytes()`. An independent computation in the test, SHA-256 of the RFC 8785 encoding of `{"schema": "agent-ix/cg-kani-scalar-proof-content/v2", "artifacts": [...]}` over the entries of AC-46, gives the same 32 bytes. The domain is not `GeneratedArtifactBytesV1`. | Test (TC-027) |
-| FR-017-AC-46 | For a genuine routed `x + 1` package the preimage artifacts are, in this order by UTF-8 byte order of `path`: `Cargo.lock`, `Cargo.toml`, `claim-map.json`, the harness record at its own path (assuming the `kani-obligations/<module>.json` path, which sorts here; any other record path sorts where its bytes put it), `src/bin/ir791_native.rs`, `src/lib.rs` holding the harness source, and `src/oracle-artifacts-lib.rs` holding the emitted library bytes. Removing, renaming, reordering or duplicating any entry, or changing one byte of any entry's contents, changes the digest. A non-UTF-8 staged input is refused and never lossily converted. A golden digest for a fixed small package is pinned and fails on any silent preimage change. | Test (TC-027) |
+| FR-017-AC-46 | For a genuine routed `x + 1` package the preimage artifacts are, in this order by UTF-8 byte order of `path`: `Cargo.lock`, `Cargo.toml`, `claim-map.json`, the harness record at `kani-obligations/<module>.json` (the only record path the runner admits), `src/bin/ir791_native.rs`, `src/lib.rs` holding the harness source, and `src/oracle-artifacts-lib.rs` holding the emitted library bytes. Removing, renaming, reordering or duplicating any entry, or changing one byte of any entry's contents, changes the digest. A non-UTF-8 runner-read `Cargo.lock` or adapter is refused, never lossily converted, as `Snapshot` / `snapshot_io` / `EnvironmentFault` (not `InvalidRequest`), and no receipt is returned. A golden digest over fixed literal entries (not a real staged run) is pinned in one assertion with the schema string, and fails on any silent preimage change. | Test (TC-027) |
 | FR-017-AC-47 | Two receipts for the same package and harness with different operands, different `ScalarLimits` and different native outcomes have equal `DigestRecord`s; operand order, limits, ranges, outcome and Kani evidence appear nowhere in the preimage. This holds for the swapped-operand runs of FR-017-AC-31. | Test (TC-027) |
 | FR-017-AC-48 | The receipt exposes read-only the ordered staged `(path, bytes)` entries the digest was built from, including the runner-generated `Cargo.lock` and `src/bin/ir791_native.rs`. Recomputing the digest from only those exposed entries equals the receipt's `DigestRecord`. A recomputation that substitutes one byte in the package, harness or harness record (which a driver holding different bytes would do) differs from the receipt's digest. The receipt has no constructor, deserializer or setter for the entries or the digest, and nothing mints the digest from operands, limits or outcome. | Test (TC-027) |
-| FR-017-AC-49 | A change to the preimage schema (artifact set, path names, ordering, encoding, canonicalization or hash) is made only by changing the schema string, with the golden digest of AC-46 updated in the same change; a test fails if the golden digest changes while the schema string is unchanged. A change to the bytes of `Cargo.lock` or the adapter changes the digest with the schema string unchanged. The domain remains `sha256-jcs` across a schema bump. | Test (TC-027) |
+| FR-017-AC-49 | A change to the preimage schema (artifact set, path names, ordering, encoding, canonicalization or hash) is made only by changing the schema string, with the golden digest of AC-46 updated in the same change; the golden is computed over fixed literal entries, so dependency bumps do not move it, and is asserted together with the schema string in one assertion; a golden change without a schema bump is rejected in review (a test cannot enforce it). A change to the bytes of `Cargo.lock` or the adapter changes the digest with the schema string unchanged. The domain remains `sha256-jcs` across a schema bump. | Test (TC-027) |
 
 ## Dependencies
 

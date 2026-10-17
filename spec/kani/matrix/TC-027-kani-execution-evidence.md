@@ -454,12 +454,14 @@ to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the schema ob
 artifact list in the test, independently of the runner's encoder. (2) Assert the exposed entry
 paths are exactly the AC-46 set in UTF-8 byte order, with the library under
 `src/oracle-artifacts-lib.rs` and the harness under `src/lib.rs`; then drop, rename, reorder,
-duplicate and one-byte-change each entry in turn and require a different digest; feed a non-UTF-8
-input and require refusal. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
+duplicate and one-byte-change each entry in turn and require a different digest; through a test
+seam that writes non-UTF-8 bytes to the snapshot's `Cargo.lock` (and again to the adapter) after
+it is generated, require `Snapshot`, `snapshot_io`, `EnvironmentFault`, and no receipt. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
 value and require equal `DigestRecord`s. (4) Recompute from only the exposed entries, including
 `Cargo.lock` and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
-package, harness or record and require inequality. (5) Pin a golden digest for a fixed small
-package; require a test that fails if the golden changes with the schema string unchanged, and
-change the `Cargo.lock` bytes in a test seam to see the digest change with the schema unchanged. No
+package, harness or record and require inequality. (5) Compute a golden digest with the measurement function over fixed literal entries, including a
+literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema string, golden)` in one
+assertion. Change the `Cargo.lock` bytes in a test seam to see the digest change with the schema
+unchanged. A golden edited without a schema bump is a review rule, not a test. No
 driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
-driver-owned (FR-032 boundary). These steps are Planned until the IR-846 code slice lands.
+driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These steps are Planned until the IR-846 code slice lands.
