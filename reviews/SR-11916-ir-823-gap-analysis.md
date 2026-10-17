@@ -112,3 +112,23 @@ Reviewed at 9fbbd957c07aca05b23f20b194b7261c3a661067.
 ### Round 2 verdict
 
 Mergeable once the full gates pass. FND-001 to FND-006 are resolved, and FND-007 is low. Fix FND-007 in this PR (a Dependencies line naming T12-A and covering AC-37), or defer it to the ticket that will carry the AC-37 ruling. That ticket should be filed before merge, so the open gap has an owner.
+
+## Dispositions (round 3)
+
+At head 4cf122462156f45dae3cac5b64573628d716794a (fix commits dcceb77 and 4cf1224).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-007 | fixed | FR-014-AC-37's verification column and TC-024 Boolean step 1 now point at an FR-014 Dependencies note, "qsl-replay-only constraint". That note names QSL arch-lint T12-A, covers AC-37's Boolean and integer `eq`/`ne` corpus, and cites IR-833 for the ownership question and IR-669 for the RT-against-QSL composition. IR-833 exists (Backlog, titan:kani:plan lane) and lists AC-37, TC-024 step 1 and the out-of-PR FR-018/TC-029 sites. No regression: FR-014, TC-024 and tests.md contain no "three-way vectors" or "not a leg" text and no claim of QSL evidence. `make spec` reports only the pre-existing line-252 warning. |
+
+## New findings (disposition pass 3)
+
+Reviewed at 4cf122462156f45dae3cac5b64573628d716794a.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | The new Dependencies note says the `qsl-replay` facade "exposes no quantity, integer or Boolean value evaluator". At the locked QSL revision 23f9f342, `qsl-replay` does export integer operator parity: `replay_operator_parity`, whose `ScalarOperator` is add, sub, mul and negate and whose outcome is a `Value::Integer`. It also exports `replay_value_parity` for non-Boolean functions, and `replay` settles a Boolean predicate at its bindings. None of these reports the outcome, charges and consumed counters that AC-37 compares, and none covers integer comparisons or connectives. So the conclusion holds for AC-37's corpus, but the sentence overstates the facade's limits. It also misstates the premise IR-833's ruling depends on: the planner's earlier ruling called the qsl-replay route "partial (no ill-typed rows, no charges)", not absent. Suggested wording: "exposes no evaluator that reports the outcome, charges and counters FR-014-AC-37 compares, and none for integer comparisons or Boolean connectives". | spec/oracle/functional/FR-014-exact-scalar-oracles.md:495 |
+
+### Round 3 verdict
+
+Mergeable once the full gates pass. Every finding from FND-001 to FND-007 is resolved. FND-008 is a low wording overstatement in a Dependencies note: nothing claims evidence it lacks. Fix it in this PR, or carry it into IR-833, where the ruling needs the accurate premise.
