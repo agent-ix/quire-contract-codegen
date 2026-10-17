@@ -59,3 +59,5 @@ Rechecked at frozen head 75a0bb88176666b785d64bf7496bb5bf768a713c (fix commit 58
 | --- | --- | --- |
 | FND-001 | fixed | verified in 58f8bbe at 75a0bb8 |
 | FND-002 | fixed | verified in 58f8bbe at 75a0bb8 |
+| FND-003 | fixed | round 2: verified in a569513 |
+| FND-004 | fixed | round 2: verified in a569513 |
