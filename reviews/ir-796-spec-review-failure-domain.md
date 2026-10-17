@@ -35,3 +35,11 @@ Checks the disposition's classification of what counts as weakening. It wrongly 
 ## Verdict
 
 Changes requested: separate 'weakens a criterion' (narrower assertion, stubbing) from 'changes the published bound' (ceiling, unwind).
+
+## Dispositions
+
+Round 1, reviewed at b94bdd4e7f8d15e1d317391ac0fe07fd93bc9a02.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |

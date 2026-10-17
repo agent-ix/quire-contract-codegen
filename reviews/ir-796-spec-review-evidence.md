@@ -37,3 +37,18 @@ Checks whether the disposition's measured claims are backed by retained, reprodu
 ## Verdict
 
 The central claims reproduce: the original harness OOMs at 1 GiB, one concrete admission OOMs at 1 GiB, the constructor alone verifies, and the Meter memcmp unwinding failure occurs. The impossibility also holds on the current kernel path (quire_exact::admit_text). Only low evidence gaps remain.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | Only two of the three named runs lack a verdict line. The per-literal `ee` mutation control (author run mut_conc_nfc11_s05, exit 137) does have one: its kani.log has `VERIFICATION:- FAILED` and the CBMC out-of-memory message. The miscount came from this reviewer's own SR-12003 FND-002, which listed that run wrongly. Failure scenario: the mutation control's MemoryExhausted verdict reads as unretained, which understates the evidence for the AC-5 control. | spec/oracle/matrix/TC-050-caller-text-admission.md:122-125 |
+
+## Dispositions
+
+Round 1, reviewed at b94bdd4e7f8d15e1d317391ac0fe07fd93bc9a02.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |

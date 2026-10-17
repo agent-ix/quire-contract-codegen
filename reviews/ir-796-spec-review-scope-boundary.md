@@ -41,3 +41,19 @@ Allocation of the next owner. Runtime main 6036f70 (IR-349 #95) deleted src/exac
 ## Verdict
 
 Changes requested. Re-allocate: the residual kernel cost (Integer encoding in Meter::charge) goes to quire-exact under or linked to IR-705. The runtime pin and route moving off the deleted runtime text API, plus the accessor-based Meter comparison, go to CG.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | FR-035:21 still says the oracle 'calls Contract Runtime's own `exact::admit_text` API', which contradicts the new Upstream bullet (FR-035:114-116, quire-exact). Behavior and ACs (FR-035:69, 86, 105) use a bare `rt::admit_text` with nothing binding `rt`. The generator binds `rt` to `quire_contract_runtime::exact` (PR #381 src/oracle/caller_text.rs:143), and at the locked runtime revision that is a separate copy, not quire-exact. Failure scenario: an IR-837 implementer follows the Description and keeps the deleted runtime path. Or a reader takes `rt` as quire_exact and concludes the current harness already exercises the kernel. | spec/oracle/functional/FR-035-caller-text-admission.md:21, 69, 86, 105 |
+
+## Dispositions
+
+Round 1, reviewed at b94bdd4e7f8d15e1d317391ac0fe07fd93bc9a02.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
