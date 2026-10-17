@@ -1063,7 +1063,9 @@ fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
     assert_eq!(lib.matches("pub fn oracle_").count(), 0);
 }
 
-/// Trace: FR-018 Behavior ("disagrees with its descriptor's arity or
+/// Trace: FR-018, TC-029
+///
+/// FR-018 Behavior ("disagrees with its descriptor's arity or
 /// operand types"), TC-029 step 1 ("a descriptor disagreeing with its
 /// operand types"), codegen#82.
 ///
