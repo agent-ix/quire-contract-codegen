@@ -1086,7 +1086,7 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
 /// Each row of the advertised-mode table settles its own disposition, and an
 /// unbounded extent never settles `supported` on a bounded-only advertisement.
 ///
-/// Trace: FR-019-AC-26, FR-019-AC-31
+/// Trace: FR-019-AC-26, FR-019-AC-31, TC-030
 /// Provenance: codegen#86
 #[test]
 fn tc_030_the_advertised_mode_table_settles_each_row() {

@@ -1642,6 +1642,7 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     ));
 }
 
+/// Trace: TC-031
 /// A caller-selected scalar operator cannot override the checked body operation identity.
 #[test]
 fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
@@ -2416,7 +2417,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
 }
 
-/// Trace: FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
+/// Trace: FR-021-AC-1, TC-031 (duplicate handling, matching FR-014/FR-018). One
 /// node id requested twice under one binding refuses every copy.
 #[test]
 fn tc_031_ac1_duplicate_request_refuses_every_copy() {
@@ -2433,7 +2434,7 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
     ));
 }
 
-/// Trace: FR-021-AC-12 (signature/body-kind agreement), TC-031. A `Scalar`
+/// Trace: FR-021-AC-12, TC-031 (signature/body-kind agreement). A `Scalar`
 /// body's declared parameter count or result type disagreeing with what the
 /// body kind requires is refused with `SignatureMismatch` at generation
 /// time, instead of assembling into a package whose emitted
@@ -2499,7 +2500,8 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     ));
 }
 
-/// Trace: FR-021-AC-15/AC-17 (duplicate declared names), TC-031. Two
+/// Trace: FR-021-AC-15, TC-031 (duplicate declared names; the surviving origin also
+/// exercises AC-17, origin from the request function binding). Two
 /// declarations sharing one name -- different node ids, same string --
 /// are both refused as `AmbiguousFunctionName` rather than colliding into
 /// one Stage 1 classification, and a third, uniquely-named survivor's
@@ -2607,7 +2609,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     ));
 }
 
-/// Trace: FR-021-AC-1 (item-level arity), TC-031. An item's argument count
+/// Trace: FR-021-AC-1, TC-031 (item-level arity). An item's argument count
 /// disagreeing with the applied function's declared parameter count is
 /// refused as `ArityMismatch`, naming both counts.
 #[test]
@@ -3376,10 +3378,10 @@ fn tc_031_ac14_manifest_and_source_shape() {
     assert!(lib.contains("Outcome::Completed(rt::Value::Boolean(value))"));
 }
 
-/// Trace: FR-021-AC-15 (origin half only -- see module doc "Location
+/// Trace: FR-021-AC-15, TC-031 (origin half only -- see module doc "Location
 /// tagging" and `spec/oracle/matrix/tests.md`'s FR-021 row: the `path`-non-empty
 /// case is not implemented and is unreachable from this V1's scoped body
-/// vocabulary), TC-031. The location map records one entry per generated
+/// vocabulary). The location map records one entry per generated
 /// function body, each `Location{origin, path}` re-derivable from the
 /// request's own expression tree with no execution: every generated
 /// function in this V1 has a body that is one classified node at its own
@@ -3457,7 +3459,7 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
 /// This package uses the FR-021 checked shape: a `function/pure_function`
 /// declaration binds parameter nodes and an expression body; its local call
 /// references the declaration followed by ordered argument references.
-/// Trace: FR-021-AC-27
+/// Trace: FR-021-AC-27, TC-031
 #[test]
 fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
     let (checked, ids) = source_bound_call_package().admit_resolved();
