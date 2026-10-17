@@ -119,8 +119,9 @@ required dependency or target path.
     concrete owner-path crate from the same schedule, compile it, and execute
     both the main corpus and the 100,000-node case on a 512 KiB stack under
     caller limits raised to fit. Compare outcomes, typed input refusals,
-    charge sequences and consumed counters with an independently assembled
-    QSL-owned package and shallow equivalent; deny each charge in turn and
+    charge sequences and consumed counters with an independently constructed
+    shallow equivalent; no comparison with a QSL-owned package runs here (outside
+    CG's boundary, owned by quire-integration IR-842; FR-014-AC-47); deny each charge in turn and
     assert `Incomplete` before the denied charge. Inspect linked-mode
     admission, no kernel-mode application, exhaustive owner-result handling,
     no literal outcomes/charges and no dependence on dynamic location/losses.
