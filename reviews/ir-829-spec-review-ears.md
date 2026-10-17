@@ -35,3 +35,10 @@ Ticket: IR-829. Examined the four appended criteria FR-005-AC-6..9, the rewritte
 ## Verdict
 
 CHANGES REQUESTED (one medium, one low). FR-005-AC-7 joins two triggers that share one response (`unchanged` with prior bytes, untouched developer file, no residue), which matches the code path; it is singular in response and acceptable. FR-005-AC-9 is singular and matches the rollback-failure branch exactly. FR-005-AC-3 is a single universally quantified condition with three named failure forms: falsifiable, and it invents no numeric bound. The Behavior bullet is a well-formed `shall`. No criterion was renumbered; AC-6..9 are appended.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The alias clause is dropped from FR-005-AC-6, and the exact-duplicate case is its own criterion, FR-005-AC-10 (`DuplicateArtifactPath` naming the later `bundle.artifacts[i].path`), singular and matching `validate_artifacts`; the test asserts code and `bundle.artifacts[1].path`. |
+| FND-002 | fixed | FR-005-AC-8 now opens with "When removal of the replaced bundle's backup fails after the staged bundle has replaced the destination, the publisher reports ...". |

@@ -30,3 +30,9 @@ Ticket: IR-829, PR quire-contract-codegen#405. The five Rust files change only `
 ## Verdict
 
 PASS. Only comments changed, and every edited line keeps the repo's `Trace:` tag convention (criterion ids, comma separated, on the test's doc comment). There is no logic, panic, unsafe or conversion surface to review. No build or test run is needed for a comment-only change; `quire coverage --strict` reads the new tags (221 to 219 unbacked rows, reproduced).
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | `real_backup_cleanup_failure_reports_published_with_both_new_artifacts` assumes a non-root runner: as root the 0o555 directory does not stop `remove_dir_all`, publication succeeds and `result.unwrap_err()` panics. It is `#[cfg(unix)]` only, with no skip or note for a privileged (for example container-as-root) run. On any assertion failure it also leaves its temp dir behind (permissions are restored first, so it is removable), as the file's other tests do. | src/publication/publish.rs:443-486 |

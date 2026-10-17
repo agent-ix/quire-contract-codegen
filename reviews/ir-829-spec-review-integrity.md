@@ -35,3 +35,9 @@ Ticket: IR-829. Checked the new TC-007 Differential Disposition Register, the TC
 ## Verdict
 
 CHANGES REQUESTED (one medium). Consistent and recorded clean: TC-007's register text, FR-005-AC-3 and the FR-005 Behavior bullet state the same three failure forms; the matrix keeps AC-3 Planned with an honest note; the TC-002 and TC-007 summary rows list the moved and appended criteria; the TC-002 procedure's path forms match AC-6 and the test. The `✅ Covered` row for AC-6..9 beside TC-002's `🚧 Planned` summary status is governed by the matrix's own precedence note and is not a contradiction (but see SR-11966 FND-001 on AC-8's coverage). The FR-039-AC-5 split is accurate: `quire matrix` reports it untagged.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The register now says TC-007-tagged tests run corpus slices and assert agreement, but no full differential run produces a list of differing cases and no check joins that list against the register. |

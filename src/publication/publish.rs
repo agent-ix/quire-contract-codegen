@@ -440,28 +440,59 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
+    /// Removes a temporary tree on drop, first restoring write access to every directory so a
+    /// failed assertion leaves no read-only residue.
+    #[cfg(unix)]
+    struct UnlockOnDrop(PathBuf);
+
+    #[cfg(unix)]
+    impl UnlockOnDrop {
+        fn unlock(path: &Path) {
+            use std::os::unix::fs::PermissionsExt;
+            let Ok(metadata) = fs::symlink_metadata(path) else {
+                return;
+            };
+            if metadata.is_dir() {
+                let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
+                if let Ok(entries) = fs::read_dir(path) {
+                    for entry in entries.filter_map(Result::ok) {
+                        Self::unlock(&entry.path());
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for UnlockOnDrop {
+        fn drop(&mut self) {
+            Self::unlock(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// Trace: TC-002, FR-005-AC-8. The real backup-cleanup failure path: the replaced bundle's
     /// backup holds a read-only directory, so removing it fails after the swap has committed.
+    /// Skips when the process ignores directory permissions (root).
     #[cfg(unix)]
     #[test]
     fn real_backup_cleanup_failure_reports_published_with_both_new_artifacts() {
         use std::os::unix::fs::PermissionsExt;
 
         let parent = temporary("real-backup-cleanup");
+        let _cleanup = UnlockOnDrop(parent.clone());
         let destination = parent.join("generated");
         write_bundle_atomic(&bundle("old\n"), &destination).unwrap();
         let locked = destination.join("src/generated");
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+        if fs::write(locked.join("probe"), "").is_ok() {
+            eprintln!("skipped: directory permissions are not enforced for this user");
+            return;
+        }
 
         let result = publish(&bundle("new\n"), &destination, PublicationFault::None);
 
         let backups = residue(&parent);
-        let backup = parent.join(backups.first().cloned().unwrap_or_default());
-        fs::set_permissions(
-            backup.join("src/generated"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .unwrap();
         let error = result.unwrap_err();
         assert_eq!(error.code, PublicationErrorCode::IoFailed);
         assert_eq!(
@@ -479,10 +510,9 @@ mod tests {
         assert_eq!(backups.len(), 1);
         assert!(backups[0].contains(".quire-backup-"));
         assert_eq!(
-            fs::read_to_string(backup.join("src/generated/nested.rs")).unwrap(),
+            fs::read_to_string(parent.join(&backups[0]).join("src/generated/nested.rs")).unwrap(),
             "nested old\n"
         );
-        fs::remove_dir_all(parent).unwrap();
     }
 
     /// Trace: TC-002, FR-005-AC-1, FR-005-AC-6, FR-005-AC-10, NFR-001-AC-3
@@ -497,6 +527,8 @@ mod tests {
             "nested//alias",
             "trailing/",
             "nested\\windows",
+            "",
+            "control\u{7}char",
         ] {
             let error = ArtifactBundle::new(vec![generated(path, "x")]).unwrap_err();
             assert_eq!(

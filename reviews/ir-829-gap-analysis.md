@@ -46,3 +46,18 @@ Ticket: IR-829. Planless gap analysis. Plan completion: not assessed. Computed m
 ## Verdict
 
 CHANGES REQUESTED (two medium, two low). Correct bindings, recorded as clean: FR-005-AC-6 forms (absolute, `..`, `.`, empty segment, trailing separator, backslash, alias pair) are each exercised against `UnsafeArtifactPath` at construction, which takes no destination, so the no-I/O clause holds by signature; FR-005-AC-7 covers both triggers (BeforeArtifact/BeforeSwap, and DuringSwap with `replacing = true`, which runs the real rollback) and asserts `Unchanged`, absence, the developer file and empty residue; FR-005-AC-9 asserts `Unknown`, absent destination, and every artifact of both the backup and staged siblings through the real rollback-failure branch. NFR-001-M-2 and M-3 bind the injected-failure test, which asserts no partial bundle and an unchanged developer file. NFR-005-M-1 binds the `src/` panic scan, M-3 the five-body scan, and each of the seven M-2 tests (scalar.rs AC-2, the it AC-2 and AC-3, generate.rs AC-5 and AC-6, bound_coverage.rs AC-4 and AC-7) asserts the typed refusal at its site, covering the six sites the metric names. FR-005-AC-3 is correctly untagged and Planned: the register is empty and no test joins differing cases against it. FR-039-AC-4/5 are untagged as the matrix now says.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | The fix round widened FR-005-AC-6 to "a control character, or is empty", but `unsafe_and_duplicate_artifact_paths_are_refused` still loops over the same eight paths: no control-character path and no empty path is exercised anywhere in the test tree, while the matrix marks FR-005-AC-6 through FR-005-AC-10 Covered and the TC-002 procedure does not list the two new forms. | spec/core/functional/FR-005-cli-conformance.md:52, src/publication/publish.rs:488-516, spec/core/matrix/tests.md:18, spec/core/matrix/TC-002-compile-atomic.md:29-31 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | New `real_backup_cleanup_failure_reports_published_with_both_new_artifacts` (unix) makes the old bundle's `src/generated` 0o555 so the real `cleanup(&backup, ..)` fails after the swap; it asserts `Published`, both new artifacts, one residue entry named `.quire-backup-`, and restores 0o755 before asserting. Run 21 times as uid 1000: all pass, no tmp dir left. Mutation (state assignment at publish.rs:146 removed) fails it with `Unchanged` != `Published`. The injection test no longer carries the AC-8 tag. |
+| FND-002 | fixed | NFR-001-M-1 removed from `publication_is_order_independent_...` and added to `kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles`, which builds the bundle twice from identical inputs and asserts `first == second`. |
+| FND-003 | fixed | The per-form loop now asserts `error.path == "bundle.artifacts[0].path"` for every form. |
+| FND-004 | fixed | The fixture's nested artifact is now `nested {version}`, and the injected-failure test asserts the restored `src/generated/nested.rs` reads `nested old`. |
