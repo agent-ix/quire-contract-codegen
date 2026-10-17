@@ -76,7 +76,7 @@ end; write invariant/precondition/postcondition clauses of the form
 through QSL and admit through Contract IR (no copied wire or hand-built
 builder). QSL gives such a clause no finite population (it is a state-clause
 `reaches`, not a function parameter typed `Population<T>[N]`), so no fixture
-can show a successful harness until QSL ticket TBD (bounded domain population
+can show a successful harness until QSL-819 (bounded domain population
 for reaches) lands. Steps testable now (refusals, no harness): (1) the claim is
 the `state_clause` node id and argument path of a `quire.op.model.reaches`
 (member `relationship_end`) or `quire.op.model.reaches_field` (member `field`)
