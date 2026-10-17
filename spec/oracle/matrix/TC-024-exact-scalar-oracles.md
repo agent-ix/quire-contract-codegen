@@ -49,21 +49,23 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    `ir_confirmed` descriptor and generates an oracle that calls `convert_quantity`
    with `QuantityTarget::Exact` and returns a `Quantity` in the `type_argument`
    unit, never a scalar (FR-014-AC-48, FR-014-AC-50). Run the conversion vectors
-   (U01, U04 `degC` to `K`, U10, U15, U26 and the other positive conversions
-   of FR-014-AC-6) and the `ill_typed` vectors (`1 m` to `s`, U09, `1 N_m` to `J`),
+   (U01, U04 `degC` to `K`, U09b, U10, U15, U22, U25's second step and U26) and the `ill_typed` vectors (`1 m` to `s`, U09, `1 N_m` to `J`, compound `4 m^2` to `m`),
    and check each outcome, admitted charges and consumed counters equal direct
    `convert_quantity` execution, with zero charges and no counter change for
    `ill_typed` (FR-014-AC-49). Request the same nodes under caller-declared
    descriptors, through `generate_routed` and through Kani obligation
    negotiation, and check capability settlement reports `OperationNotRendered`
    (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
-   function-application generator and the function schedules accept a
-   conversion reached from a body, a call or a call argument as a quantity
-   operation, and that the composite-equality generator refuses a conversion
+   function-application generator and the function schedules refuse a
+   conversion reached from a body, a call or a call argument as
+   `UnsupportedOperator`, that a conversion node with a scalar or compound
+   `type_argument` or a non-`exact` mode is refused as `OperandFormsNotDerivable`
+   or `ModeNotDerivable` with no oracle (FR-014-AC-50), and that the composite-equality generator refuses a conversion
    root as `FormMismatch` and a conversion operand as an unsupported quantity,
    each before any artifact.
-   The TC-187 conversion vectors are agreement rows (FR-014-AC-6) except
-   U25's compound-target first step (IR-831); check that every agreement row of
+   The TC-187 quantity-to-quantity conversion vectors are agreement rows
+   (FR-014-AC-6); U07, U08, U16, U17, U18, U29 (scalar targets) and U25's
+   first step (compound target, IR-831) are refusal rows (FR-014-AC-50); check that every agreement row of
    step 4 compares at least one vector. Derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
