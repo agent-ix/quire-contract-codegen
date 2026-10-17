@@ -68,11 +68,14 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    `type_argument` is refused as `OperandFormsNotDerivable` and one with a
    non-`exact` mode as `ModeNotDerivable`, each with no oracle, and the mode is
    checked first, so a scalar `type_argument` with a non-`exact` mode is
-   `ModeNotDerivable` (FR-014-AC-50). The scalar-target refusal runs on an
-   admitted-package fixture; the `ModeNotDerivable` and compound-unit cases run
-   only on hand-built nodes in module tests, because Contract IR FR-038-AC-213
-   admits only `exact` for a unit `type_argument` and defines no compound-unit
-   form (IR-831), so no admitted package reaches them. Check also that the composite-equality generator refuses a conversion
+   `ModeNotDerivable` (FR-014-AC-50). The compound-unit target refusal
+   (`OperandFormsNotDerivable`, IR-831) runs on an admitted-package fixture,
+   because Contract IR FR-038-AC-248 and FR-038 admit a `quire.op.quantity.convert`
+   into a `compound_unit`. The scalar-target refusal and the `ModeNotDerivable`
+   case run only on hand-built nodes in module tests: FR-038-AC-248 refuses a
+   `quire.op.quantity.convert` to a non-quantity type upstream, and
+   FR-038-AC-213 admits only `exact` for a unit `type_argument`, so no admitted
+   package reaches either. Check also that the composite-equality generator refuses a conversion
    root as `FormMismatch` and a conversion operand as an unsupported quantity,
    each before any artifact.
    The TC-187 quantity-to-quantity conversion vectors are agreement rows
