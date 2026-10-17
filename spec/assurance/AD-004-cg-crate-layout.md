@@ -1019,13 +1019,21 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      passes on the V2 contract arm (4c), and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
-   - 4g: the corpus. Until its V2 replacement serves all three families, the corpus stays as it is,
+   - 4g: the corpus, retired per family in three slices with no compatibility wrapper and no second
+     public generator (IR-598, FR-015-AC-109 to AC-111); step 4b (IR-858) gates every slice. The
+     arithmetic slice deletes the `Arithmetic` arm, `definedness_arithmetic.rs` and the corpus
+     replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
+     identity helpers in `replay/function.rs`) after a real-Kani V2 scalar replay test is green; V2
+     refuses divide and remainder (`NoRenderer`) until IR-854. The collection slice deletes the
+     `Collection` arm and `bounded_collections.rs`. The graph slice, gated on IR-805, deletes the
+     `Graph` arm, `finite_reference_graphs.rs`, the classifier and the whole public corpus API
+     with the generation-time `KaniOutcome`. Until a family's slice lands, that family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
      to L-3 and, until it renders through `HarnessSpec`, outside L-4; FR-015-AC-58's inspection
      covers its text meanwhile. QSL-353 establishes emission-to-admission coverage but does not
-     provide the symbolic corpus. After the V2 arithmetic, collection and graph cases are backed
+     provide the symbolic corpus. After a family's V2 cases are backed
      from QSL-emitted packages admitted through Contract IR, and the collection and graph cases
      satisfy FR-015-AC-96 to AC-102, the hand-built package lowerer retires. The graph path first
      needs Contract IR's typed finite model-object population input; a caller expansion ceiling

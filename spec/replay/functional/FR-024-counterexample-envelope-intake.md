@@ -413,7 +413,9 @@ FR-024-AC-11 to FR-024-AC-30:
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue` and imports no
   Contract IR witness type.
 - The bounded-Kani corpus retains no counterexample packet, so no corpus counterexample reaches
-  QSL as the `Input` arm and FR-024-AC-5 is unbacked.
+  QSL as the `Input` arm and FR-024-AC-5 is unbacked. The corpus path is removed, not planned:
+  FR-015-AC-109 to FR-015-AC-111 delete it per family and drop its replay, so FR-024-AC-5 stays
+  unbacked.
 - No domain check runs before replay, and no `WitnessEnvelope` is built.
 - A postcondition state-clause counterexample is replayed (IR-460): `src/replay/state_clause.rs`
   builds the invocation and snapshot documents through `core::canonical` and replays through
