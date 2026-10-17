@@ -562,9 +562,9 @@ count, a playback or a refusal.
   already names CBMC as the stage that failed. When the cause is
   `properties_failed`, or the evidence has no cause, the generator shall retain no diagnostic
   record.
-- The generator shall compute the outcome, the checks, the SUCCESS-check count, the playback, every
-  refusal and the FR-029 terminal value exactly as the rules above state, before and independently
-  of the cause and the diagnostic record. A `FailedWithoutCounterexample` run stays
+- The generator shall compute the outcome, the checks, the SUCCESS-check count, the playback and
+  every refusal exactly as the rules above state, before and independently of the cause and the
+  diagnostic record. A `FailedWithoutCounterexample` run stays
   `FailedWithoutCounterexample` whatever its cause. Its FR-029 terminal value is read from the cause
   by the terminal map alone (IR-848): `out_of_memory` gives `Incomplete(ResourceExhausted)`,
   `timeout` gives `Incomplete(TimedOut)`, and any other cause or none gives `Failed`. The cause

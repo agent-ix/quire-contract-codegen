@@ -26,7 +26,8 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
    reason once per cause: absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`
    and `unknown`. Map the memory-exhausted reason. Map `NoVerdict` and `MissingCoverSummary` with each
    cause. Build the single-run and batch stand-in evidence of FR-029-AC-32 and FR-029-AC-33
-   (`proofs::check`, `c::check`, `d::check`) and pass its cause.
+   (`proofs::check`, `c::check`, `d::check`) and pass that evidence. Map `falsified` with a reproduced
+   replay beside each cause.
 6. Map every ordinary source-predicate outcome and reason, and collect the values.
 7. Map `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness`,
    `NoValue`).
@@ -74,7 +75,7 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
    `Incomplete(ResourceExhausted)` for `out_of_memory` and `Incomplete(TimedOut)` for `timeout`, and
    `Failed` for the other causes and for none (FR-029-AC-32, FR-029-AC-33). The memory-exhausted
    reason and `out_of_memory` agree (FR-029-AC-34). `c::check` and `d::check` are both
-   `Incomplete(TimedOut)`. No value is `Refuted`, and `NoVerdict` and `MissingCoverSummary` are `Failed`
+   `Incomplete(TimedOut)`. `Refuted` appears only for the reproduced falsified run, whatever the cause, and `NoVerdict` and `MissingCoverSummary` are `Failed`
    whatever the cause (FR-029-AC-35).
 6. No ordinary source-predicate value is `Tested` (FR-029-AC-6).
 7. Each is `Inconclusive(ReplayParity)` carrying its `DisagreementCause` (FR-029-AC-8).

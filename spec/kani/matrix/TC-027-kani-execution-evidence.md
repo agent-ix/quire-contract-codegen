@@ -245,7 +245,10 @@ evidence. The
 `serde_json::to_string` control compiles. The three runs differing in cause and stream text have
 equal outcome, checks, SUCCESS count and playback, equal evidence in every field but
 `failureCause`, `diagnostics`, `memory` and the report-path argument, and FR-029 terminal value
-`Failed` with and without the two members. The real run whose manifest passes `--no-such-option` to CBMC exits
+`Incomplete(ResourceExhausted)` for the `out_of_memory` run and `Failed` for the `exit_code_64` and
+`cbmc_exploded` runs (IR-848, FR-029-AC-32; planned, and the bound test
+`tests/it/kani_obligations.rs` `tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause`
+asserts the old value `Failed` for every cause until the code change flips it). The real run whose manifest passes `--no-such-option` to CBMC exits
 unsuccessfully, exports a report and is `FailedWithoutCounterexample` with
 `{ kind: "exit_code", code: 64 }` and a stderr excerpt holding `Unknown option: --no-such-option`.
 
