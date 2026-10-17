@@ -426,7 +426,7 @@ in `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute
 `tc_027_the_cause_never_feeds_classification`) and, for the FR-029 terminal value,
 `tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause` in `tests/it/kani_obligations.rs`
 (IR-848 replaces this test: the value is read from the cause by `run_terminal_value`, which takes
-`Option<&KaniFailureCause>`; `out_of_memory` gives `Incomplete(ResourceExhausted)` and `exit_code_64` and
+`&KaniExecutionEvidence` and reads the cause from it; `out_of_memory` gives `Incomplete(ResourceExhausted)` and `exit_code_64` and
 `cbmc_exploded` give `Failed`, FR-029-AC-32; independence from the diagnostic record holds because the
 map takes no record); by the tests of the exit-status
 vocabulary, the 64-byte cut and the one-entry rule in `src/kani/output/report.rs`; by the serialize-only

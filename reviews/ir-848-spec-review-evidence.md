@@ -24,3 +24,9 @@ Examined (role examined): FR-029 Inputs cause bullet (:81-91), the no-settlement
 ## Verdict
 
 Acceptable with one low. AC-32 is testable with the existing single-run launcher stand-in pattern of tests/it/kani_obligations.rs:2330-2378 (execute_kani_obligation, then pass evidence.failure_cause.as_ref()); the exit statuses it lists are all in FR-017-AC-37/AC-38's stand-in set. AC-33's batch c::check and d::check are reachable through the public execute_kani_obligations with the AC-39 report shape (in-crate fixture at src/kani/run/execute.rs:4864-4930). AC-34 and AC-35 are pure-map table tests in tests/it/terminal_map.rs. Test is the right method for AC-32..34.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | d536e94: the SIGKILL clause is gone from AC-35. The limit is stated as rationale (FR-029 :181-185) and verified by the new FR-029-AC-36 (Inspection), which checks that the rationale states it. Inspection is the right method for a stated limit. |
