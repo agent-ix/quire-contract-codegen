@@ -98,3 +98,17 @@ Round 1, at head 218f97bc6d560e9af7b8dd40a4cecbb9ef8fdb3d (fix commit 218f97b). 
 | FND-003 | fixed | AC-47 is now a direct assertion: "No test name, trace tag, test output line or doc comment of the TC-187 agreement cases, no TC-024 step and no oracle-matrix row for a TC-187 vector names agreement with the QSL value authority." The ownership pointer moved to Dependencies. `make spec` no longer warns at line 487. |
 | FND-004 | fixed | AC-6 now says the U06/U11 test "exercises no CG code, so it is not evidence about any generated oracle". The trace to FR-014-AC-6 now carries no claim about a generated oracle. |
 | FND-005 | fixed | AC-6 now separates the tabled vectors, run at QSpec's tuple, from those QSpec gives none, which run unlimited (U02, U05, U09, U12 and the untabled parts of U23). The residual U03 attribution is FND-006. |
+| FND-001 | fixed | Round 2, at 9fbbd957c07aca05b23f20b194b7261c3a661067. The contradiction is gone. TC-024's Description now says QSL agreement "is not evidenced and not claimed by CG". The "three-way vectors" sentence is replaced by "checked against direct runtime execution only". Boolean step 1, FR-014-AC-37's verification column and tests.md row 28 each mark AC-37's QSL leg as an open gap that CG does not claim and that nothing evidences. A grep of FR-014, TC-024 and tests.md finds no remaining statement that claims QSL evidence. AC-37 stays Planned and still states a requirement CG cannot satisfy under QSL arch-lint T12-A. That ruling is outside this finding, and no Linear ticket tracks it yet; see FND-007. |
+| FND-006 | fixed | Round 2, at 9fbbd95. AC-6 now lists the tabled vectors without U03, and says "U03 under U14's zero tuple, which QSpec gives its identical `1 m + 1 s` case", which matches agreement_cases.rs:503. |
+
+## New findings (disposition pass 2)
+
+Reviewed at 9fbbd957c07aca05b23f20b194b7261c3a661067.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | FR-014-AC-37's verification column and TC-024 Boolean step 1 cite "the reason given in FR-014-AC-47" (the step says "CG may call the `qsl-replay` facade only"). AC-47 now gives no reason: it is a bare inspection assertion. FR-014's Dependencies note covers only TC-187 vectors and never names the `qsl-replay`-only constraint (QSL arch-lint T12-A). So the pointer leads nowhere, and the open gap's cause and owner for AC-37's Boolean and integer `eq`/`ne` corpus are not stated in FR-014. The AC-37 satisfiability ruling also has no Linear ticket: a title search for "AC-37" finds none. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:478, spec/oracle/functional/FR-014-exact-scalar-oracles.md:487, spec/oracle/functional/FR-014-exact-scalar-oracles.md:494, spec/oracle/matrix/TC-024-exact-scalar-oracles.md:232-235 |
+
+### Round 2 verdict
+
+Mergeable once the full gates pass. FND-001 to FND-006 are resolved, and FND-007 is low. Fix FND-007 in this PR (a Dependencies line naming T12-A and covering AC-37), or defer it to the ticket that will carry the AC-37 ruling. That ticket should be filed before merge, so the open gap has an owner.
