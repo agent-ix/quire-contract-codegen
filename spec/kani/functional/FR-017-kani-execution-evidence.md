@@ -699,7 +699,7 @@ none of its text; FR-032 refers here for the representation.
   path `src/lib.rs`; the retained harness record under its own record path; the runner-generated
   `Cargo.lock`; and the runner-generated native invocation adapter `src/bin/ir791_native.rs`.
   `path` is the relative, `/`-separated path in the staged tree; `contents` is the file's bytes as
-  a UTF-8 string (a non-UTF-8 input is refused, never lossily converted: the refusal is the variant `Snapshot`, code `snapshot_io`, class `EnvironmentFault`, because request artifacts are `String` and only the runner-read `Cargo.lock` or adapter can be non-UTF-8, which is a snapshot fault and not a caller refusal). The array is ordered by
+  a UTF-8 string (a non-UTF-8 input is refused, never lossily converted: the fault is the variant `Snapshot`, code `snapshot_io`, class `EnvironmentFault`, because request artifacts are `String` and only the runner-read `Cargo.lock` or adapter can be non-UTF-8, which is a snapshot fault and not a caller refusal). The array is ordered by
   `path`, ascending in UTF-8 byte order, with no duplicate path; JCS orders object members but not
   array elements, so this sort is part of the preimage. The ceiling on the encoded preimage is
   256 MiB; exceeding it is `IdentityEncode` (FR-017-AC-43).
