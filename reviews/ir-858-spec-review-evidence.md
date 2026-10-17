@@ -39,3 +39,12 @@ the data flow the port changes. Fix both before the code PR relies on them.
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-015-AC-117, P-3 item 3 and TC-025 step 47 call for 'the kani lane scalar tests' to run three controls, and two of them do not exist in that form. The existing scalar mutation control (tests/it/kani_obligations.rs:2950, Trace FR-015-AC-37) swaps the oracle's Add for Subtract; it is not `left + right + 1`, which is QSL-342 QI #10 and is routed through QSL (L-5). No scalar harness with an unsatisfiable input assumption can be built: H-3 item 4 refuses an inverted domain, and lower_scalar_claim/unsatisfiable refuse such bounds (tc_025_unsatisfiable_bounds_are_refused). Fix: name the existing mutation, and specify the L-4 control as a new hand-built spec with an unsatisfiable Assume, rendered by render and run under Kani. | spec/kani/functional/FR-015-bounded-kani-obligations.md:742, spec/assurance/AD-004-cg-crate-layout.md:569-574, spec/kani/matrix/TC-025-bounded-kani-obligations.md:436-438, tests/it/kani_obligations.rs:2950, tests/it/kani_obligations.rs:1685 |
 | FND-002 | medium | The golden claim set varies only the operation and the operand ranges (four operations, a literal operand, an inferred operand, i64 extremes). The port changes another data flow: unwind, solver and options move from the request into the spec, and the identity reads them from the spec (H-1). With one fixed unwind and ceilings, a constructor that ignores the requested unwind or computes options from a default still matches the goldens. Fix: add claims at two unwind values (including MAX_OBLIGATION_UNWIND) and two ceilings values, and state that the golden test has no regenerate or bless mode. | spec/kani/functional/FR-015-bounded-kani-obligations.md:740, spec/assurance/AD-004-cg-crate-layout.md:561-565, spec/kani/matrix/TC-025-bounded-kani-obligations.md:426-428 |
+
+## Dispositions
+
+Round 1, checked at 15d7cad (fix 77f5178..15d7cad).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-117, P-3.2 and step 47 name the existing Add-to-Subtract control (kani_obligations.rs:2950). The L-4 control is a new hand-built spec with an unsatisfiable Assume. QSL's left+right+1 control is declared out of this PR's evidence. |
+| FND-002 | fixed | The claim set adds two unwind values (including MAX_OBLIGATION_UNWIND) and two ceilings values, and AC-115 rules out stored expectation files and any regenerate mode. |

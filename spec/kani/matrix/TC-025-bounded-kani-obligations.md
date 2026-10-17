@@ -420,7 +420,8 @@ are numbered after step 41 and are independent of the IR-805 prose above.
     `unwind` of 0 and of `MAX_OBLIGATION_UNWIND` plus one, a message containing each of `"`, `\`, `{`,
     `}` and a line break, and `ExprText`s that do not parse, spell `kani::`, hold a block, `unsafe`,
     closure, loop or `let` expression, or hold a macro other than `matches!` (`assert!`, `panic!`,
-    a `kani` macro). Read a typed `HarnessSpecError` for each and no spec; read that a `match` and a
+    a `kani` macro), a `matches!` with a guard, and a `matches!` whose expression holds a nested
+    `panic!` or block. Read a typed `HarnessSpecError` for each and no spec; read that a `match` and a
     `matches!` expression construct (FR-015-AC-112).
 43. Render valid hand-built specs whose statements are in several legal orders and read the cover as
     the last statement of the function in each; render the same spec twice, and in a second process,

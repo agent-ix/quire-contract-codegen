@@ -49,3 +49,18 @@ mergeable until FND-001 to FND-004 and FND-008 are fixed; the lows are one-line 
 | FND-006 | low | H-1 Input says ty is 'a KaniPrimitive from kani/abi.rs'; the type is KaniPrimitiveType (src/lib.rs:127). | spec/assurance/AD-004-cg-crate-layout.md:454-456 |
 | FND-007 | low | The label row says the header is 'the one header comment line, // Obligation: <label>'. The scalar source opens with two lines, `// SPDX-License-Identifier: MIT OR Apache-2.0` and the Obligation line, then a blank line, and a newline follows the oracle source (scalar.rs:463-470). R-1 item 2's 'the header' does not define it. Byte identity needs render's fixed header spelled out. | spec/assurance/AD-004-cg-crate-layout.md:443, spec/assurance/AD-004-cg-crate-layout.md:519-521, src/kani/generate/scalar.rs:463-470 |
 | FND-008 | medium | H-3 item 6 requires every message to be 'valid under H-2', but H-2 defines validity for ExprText only (it parses as syn::Expr). Messages go into `assert!(c, "<message>")` and `kani::cover!(c, "<message>")` format strings, and the scalar assert message interpolates the operation identity. A message with `"` or `\` breaks the literal. A message with `{` or `}` becomes a format placeholder, which syn::parse_file accepts and rustc rejects only under Kani. Fix: define the message rule (refuse or escape `"`, `\`, `{` and `}`) and add it to FR-015-AC-112. | spec/assurance/AD-004-cg-crate-layout.md:493, spec/assurance/AD-004-cg-crate-layout.md:470-480, src/kani/generate/scalar.rs:439 |
+
+## Dispositions
+
+Round 1, checked at 15d7cad (fix 77f5178..15d7cad).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Let carries an optional spec-local LetType {I64, I128}. That is the right call: KaniPrimitiveType is public API (lib.rs:127) with Boolean and I64, and widening it to i128 would change both the public surface and the binding ABI that H-4 says stays unchanged. |
+| FND-002 | fixed | The path row names core/identity.rs, and the import rule lists outcome, core::identity, kani::abi for spec and drops record from render. |
+| FND-003 | fixed | The false AC-7 citation is gone, and the true-cover rule is stated as new in 4b. |
+| FND-004 | fixed | R-1.1 now says render is the spelling site for the families it renders, and that L-3 lands after 4f, 4g and 4h. |
+| FND-005 | fixed | Step 4b now says the FR-015-AC-58 guard list loses scalar.rs and gains render.rs. |
+| FND-006 | fixed | The type is now KaniPrimitiveType. |
+| FND-007 | fixed | The fixed header is spelled out: the SPDX line, the Obligation line, a blank line, the oracle source, then one newline. |
+| FND-008 | fixed | A message must not contain a double quote, backslash, brace or line break, and one that does is refused rather than escaped; label follows the same rule. AC-112 and step 42 now test it. |

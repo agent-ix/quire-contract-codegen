@@ -45,3 +45,12 @@ base checklist until FND-001 is fixed; FND-002 should be fixed with it.
 | --- | --- | --- | --- |
 | FND-001 | high | FR-015-AC-116 and TC-025 step 46 are source-text scans: no non-test string literal in scalar.rs spells an L-3 item, and no operation name, oracle symbol or the word scalar appears in a render.rs string literal. The checklist forbids a test case that scans source text, and existing use (L-3, FR-015-AC-58) is not a justification. The new clauses add scanned terms beyond the existing guard. Fix: drop the scan clauses; evidence R-1 item 3 behaviourally (FR-015-AC-113's hand-built specs carry non-scalar labels, ExprTexts and messages and the rendered source holds only what the spec supplied) and keep FR-015-AC-58's parse inspection of the emitted harness for the cover rule. | spec/kani/functional/FR-015-bounded-kani-obligations.md:741, spec/kani/matrix/TC-025-bounded-kani-obligations.md:433-435, spec/assurance/AD-004-cg-crate-layout.md:526 |
 | FND-002 | medium | FR-015-AC-115 and P-3 items 1-2 make the equivalence evidence depend on commit history: golden files captured in the code PR's first commit, which the port commit does not edit, and a golden file edited in the port commit fails review. That is a recorded/reviewed-revision check, which the checklist disallows, and no test can fail it. Fix: state the observable only (the ported path renders the same artifact, identity, options and record as the pre-port renderer), and evidence it with a differential test that keeps today's render_scalar body as a cfg(test) reference and compares both over the claim set. That is non-circular without git history. If golden files stay, take the provenance clauses out of the AC. | spec/kani/functional/FR-015-bounded-kani-obligations.md:740, spec/assurance/AD-004-cg-crate-layout.md:561-567, spec/kani/matrix/TC-025-bounded-kani-obligations.md:426-428 |
+
+## Dispositions
+
+Round 1, checked at 15d7cad (fix 77f5178..15d7cad).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-116 and step 46 no longer scan source text; R-1.3 is evidenced by rendering hand-built non-scalar specs. |
+| FND-002 | fixed | The provenance clauses are gone. AC-115 states the observable and evidences it with a cfg(test) reference copy of render_scalar. Whether that copy matches main's body is a one-time diff in code review, not an evidence clause. |
