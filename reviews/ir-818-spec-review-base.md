@@ -50,3 +50,9 @@ Context only: FR-014-AC-1, RT FR-007-AC-21, src/oracle/function/mod.rs (no quant
 | FND-002 | fixed | d685fc5: new EARS bullets plus AC-50 name `OperandFormsNotDerivable` for a scalar or compound `type_argument` and `ModeNotDerivable` for a non-`exact` mode. Both are existing variants whose docs ("operand or result scalar forms select no operator", "mode selects no rounding") fit |
 | FND-003 | fixed | d685fc5: AC-49 now lists compound `4 m^2` to `m` and labels `N_m` to `J` as U22 |
 | FND-004 | fixed | de6295e: the schedules now name `ScheduleRefusal::UnsupportedOperation` (the existing out-of-subset variant, schedule.rs:70). The generator keeps `ExactFunctionRefusal::UnsupportedOperator` for a body. Earlier checks that fire first (`Unsupported`, `NotExpression` and the root checks, `UnsupportedOperandType`, an argument's own refusal) are accepted explicitly, with no strict order claimed; a test can assert membership in that set plus no oracle or schedule |
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | With the target unit a call-time `unit: &QuantityUnit` that "the generator does not check" against the node's `type_argument`, nothing in FR-014 binds the supplied unit to the node's declared target. An AC-48 agreement run against any same-dimension unit passes as evidence for that node. The claim-map entry (FR-014-AC-5) does not record the `type_argument` type node, so a harness has nothing to choose the matching unit from. The design is planner-ruled and stated openly; the missing piece is a traceable binding | spec/oracle/functional/FR-014-exact-scalar-oracles.md:275-284, spec/oracle/functional/FR-014-exact-scalar-oracles.md:517 |
