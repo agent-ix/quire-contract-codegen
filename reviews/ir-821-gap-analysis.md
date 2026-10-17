@@ -39,3 +39,17 @@ under CARGO_TARGET_TMPDIR, which `cargo clean` removes) and reclaimed on the nex
 tests prove is unchanged. I diffed every converted file, and apart from `.0` becoming `.path`
 the manifests, commands and assertions are identical. The open gaps are the remaining
 /tmp-based Kani-lane scratch crates (FND-001) and the lane hang recorded in SR-11990 FND-001.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | Unit-test scratch crates in src/ still sit under /tmp with pid-only names, so a killed `cargo test --lib` leaks them. They are not named in IR-834. src/oracle/equality/mod.rs:2873 writes and builds a full cargo crate with a target directory. src/oracle/function/schedule.rs:1277 builds the 100k-node AC-7 schedule with rustc. The review pass missed them, because its grep did not recurse src/**. src/publication/publish.rs:273 and src/kani/run/scalar.rs:1052 are small file-only directories. src/kani/run/scalar.rs:912 is production code and out of scope. Add the two crate-building sites to IR-834, or convert them the way discover_scratch was converted. | src/oracle/equality/mod.rs:2873, src/oracle/function/schedule.rs:1277, src/publication/publish.rs:273, src/kani/run/scalar.rs:1052 |
+
+## Dispositions
+
+Disposition pass 1, over e3f3375.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred: IR-834 | Converted in e3f3375: bound_coverage.rs, bound_generation.rs, capability_settlement.rs, exact_function_generation.rs (both sites), scratch_crate.rs:151 and src/kani/test_support.rs, where discover_scratch now sits under <target>/tmp/quire-kani-discover/ with a dead-pid sweep. The remaining sites, kani_obligations.rs:2096 and :2759, kani_witness_join.rs:240, kani_batching.rs:113 and kani_generation_claims.rs:767, sit in files owned by CG #406 and adjacent to IR-808. They moved to the linked subticket IR-834, whose acceptance names each site. The PR title should narrow to match. |
