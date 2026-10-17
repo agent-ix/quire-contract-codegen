@@ -1,6 +1,7 @@
 //! FR-014: exact complete-V1 scalar oracle generation over admitted
 //! CheckedPackage V2 input.
 
+use ix_trace_rs::trace;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -162,13 +163,14 @@ fn resolved_items(items: &[ExactScalarItem], ids: &FixtureIds) -> Vec<ExactScala
         .collect()
 }
 
-/// Trace: FR-014-AC-2, TC-024. UNBACKED today: the six text admissions (FR-014-AC-2's text
+/// UNBACKED today: the six text admissions (FR-014-AC-2's text
 /// admission case) are refused by Contract IR at admission, so no oracle is generated for them
 /// and no agreement or generation test can run over them. `quire.op.numeric.convert` takes
 /// `exact_numeric`, no catalogued `convert` identity takes `text`, and QSL lowers no text
 /// admission; it is unblocked by a catalogued text-admission operation. This test pins the exact
 /// refusal of each node (code, cause, pointer, locus), so the behaviour is recorded and a change
 /// in either IR or the corpus shows up here.
+#[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
     let refused = refused_corpus();
@@ -205,7 +207,8 @@ fn tc_024_text_admission_corpus_is_refused_by_ir_today() {
     }
 }
 
-/// Trace: FR-037-AC-1, TC-052. The aggregate operand is an explicit reader negative.
+/// The aggregate operand is an explicit reader negative.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
     let (result, wire, ids) = expression_operand_package().read_resolved();
@@ -231,7 +234,8 @@ fn tc_052_aggregate_scalar_operand_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-037-AC-1, TC-052. A literal's kind must agree with its declared type.
+/// A literal's kind must agree with its declared type.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
     let (result, wire, ids) = wrong_operand_package().read_resolved();
@@ -259,7 +263,8 @@ fn tc_052_mistyped_scalar_literal_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-037-AC-1, TC-052. The reader rejects a quantity-typed scalar literal.
+/// The reader rejects a quantity-typed scalar literal.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_quantity_literal_operand_is_refused_by_reader() {
     let (result, wire, ids) = literal_quantity_package().read_resolved();
@@ -287,7 +292,8 @@ fn tc_052_quantity_literal_operand_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-037-AC-1, TC-052. A noncanonical endpoint has no structural candidate.
+/// A noncanonical endpoint has no structural candidate.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
     let (_, mut wire, ids) = corpus_package().read_resolved();
@@ -335,8 +341,9 @@ fn tc_052_noncanonical_integer_endpoint_is_refused_by_reader() {
     assert_eq!(refusal.expected_node_id(), None);
 }
 
-/// Trace: FR-037-AC-4, TC-052. A valid application body under a different node key
+/// A valid application body under a different node key
 /// is refused by the reader with the original admitted key as its expected identity.
+#[trace("FR-037-AC-4", "TC-052")]
 #[test]
 fn tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire() {
     let (admitted, mut wire, ids) = bounded_increment_package().read_resolved();
@@ -381,8 +388,9 @@ fn tc_052_reader_refuses_stale_application_key_in_admitted_positive_wire() {
     assert_eq!(refusal.expected_node_id(), Some(&expected));
 }
 
-/// Trace: FR-037-AC-4, TC-052. Changing a valid application literal while retaining
+/// Changing a valid application literal while retaining
 /// its admitted key must be refused before any fixture rekey can conceal the mismatch.
+#[trace("FR-037-AC-4", "TC-052")]
 #[test]
 fn tc_052_reader_refuses_application_body_mutation_under_prior_key() {
     let (admitted, mut wire, ids) = bounded_increment_package().read_resolved();
@@ -426,7 +434,8 @@ fn tc_052_reader_refuses_application_body_mutation_under_prior_key() {
     assert_eq!(refusal.expected_node_id(), Some(&expected));
 }
 
-/// Trace: FR-037-AC-1, TC-052. A mismatched decimal mode is reader-ineligible.
+/// A mismatched decimal mode is reader-ineligible.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
     let (_, mut wire, ids) = corpus_package().read_resolved();
@@ -457,11 +466,10 @@ fn tc_052_mismatched_decimal_mode_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(candidate));
 }
 
-/// Trace: FR-014-AC-4, TC-024.
-///
 /// The corpus crate is exactly `Cargo.toml`, `src/lib.rs` and `claim-map.json`;
 /// the claim map on disk is the serialized in-memory claim map; and every
 /// generated claim's oracle symbol is defined in `src/lib.rs`.
+#[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
     let (package, ids) = corpus_package().admit_resolved();
@@ -497,7 +505,7 @@ fn tc_024_corpus_crate_artifacts_are_complete_and_self_consistent() {
     );
 }
 
-/// Trace: FR-014-AC-4, TC-024.
+#[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_generation_is_byte_deterministic_across_runs_and_request_orders() {
     let package = corpus_package().admit();
@@ -531,7 +539,7 @@ fn tc_024_generation_is_byte_deterministic_across_runs_and_request_orders() {
     assert_eq!(generate(&package, &interleaved), first);
 }
 
-/// Trace: FR-014-AC-1, FR-014-AC-2, TC-024.
+#[trace("FR-014-AC-1", "FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator() {
     let oracles = generate(&corpus_package().admit(), &golden_items());
@@ -730,7 +738,7 @@ fn function_body<'l>(lib: &'l str, symbol: &str) -> &'l str {
     &lib[start..end]
 }
 
-/// Trace: FR-014-AC-1, FR-014-AC-3, FR-014-AC-7, FR-014-AC-10, TC-024.
+#[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-7", "FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     let (package, ids) = corpus_package().admit_resolved();
@@ -982,8 +990,6 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
     ));
 }
 
-/// Trace: FR-014-AC-5, FR-014-AC-11, FR-014-AC-14, TC-024.
-///
 /// AC-14 is bound here for its provenance conjunct only: the loop below asserts that every
 /// `Refused` claim is `CallerDeclared` with a typed blocked item. It asserts nothing about the
 /// identity such a claim reports, so AC-14's identity clause stays unbacked and its row in
@@ -998,6 +1004,7 @@ fn tc_024_refused_items_are_typed_emit_no_code_and_leave_siblings_unchanged() {
 /// `tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise`.
 /// Adding a deliberately mislabelled item to `golden_items()` would break the assertion below
 /// for a reason unrelated to AC-5 or AC-11; widen AC-12/AC-13 coverage in their own tests.
+#[trace("FR-014-AC-5", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item() {
     let wire = corpus_package().wire();
@@ -1206,7 +1213,7 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
     )
 }
 
-/// Trace: FR-014-AC-4, TC-024.
+#[trace("FR-014-AC-4", "TC-024")]
 #[test]
 fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     let package = corpus_package().admit();
@@ -1244,8 +1251,6 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
     );
 }
 
-/// Trace: FR-014-AC-13, TC-024.
-///
 /// Node 1011 is a truncating division whose own `operation.laws` does not name the floor
 /// definition. A floor descriptor implies the same catalogued identity (`quire.op.integer.div`),
 /// so this is not AC-12's different-operation case, and the item's disposition is `Generated`, so
@@ -1253,6 +1258,7 @@ fn tc_024_claim_map_entries_ascend_by_node_id_domain_then_digest() {
 /// generates the oracle its descriptor
 /// names and is marked `caller_declared` because the law disagrees. Deleting the law check would
 /// leave AC-11, AC-12 and AC-14 satisfied and this one violated.
+#[trace("FR-014-AC-13", "TC-024")]
 #[test]
 fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_otherwise() {
     let package = corpus_package().admit();
@@ -1314,13 +1320,13 @@ fn tc_024_a_mislabelled_descriptor_is_refused_where_bounds_disagree_and_marked_o
 /// anyway -- the defect this ticket exists to close -- would render an oracle that adds where the
 /// catalog says multiply and a harness whose `operation_identity` says `mul`.
 ///
-/// Trace: FR-014-AC-12, FR-038-AC-3, TC-024.
 ///
 /// Backs AC-12: an `Add` descriptor against node 1004's catalogued `quire.op.integer.mul`, over
 /// the identical `[-1000,1000]` bound and the identical binary `&rt::Integer` shape, is not
 /// confirmed. The mismatched case is asserted first; the agreeing case second, which is AC-11
 /// for that one node. AC-11 over the whole corpus is discharged by
 /// `tc_024_claim_map_carries_identity_source_bounds_and_operation_per_item`.
+#[trace("FR-014-AC-12", "FR-038-AC-3", "TC-024")]
 #[test]
 fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
     let package = corpus_package().admit();
@@ -1375,8 +1381,7 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
 
 /// Wrong arity and result form/target refuse before source is emitted, while binary operand
 /// order and the descriptor-selected runtime callee remain visible in generated code.
-///
-/// Trace: FR-038-AC-3, FR-014-AC-8, FR-014-AC-13, FR-014-AC-18, TC-024.
+#[trace("FR-038-AC-3", "FR-014-AC-8", "FR-014-AC-13", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order_and_target() {
     let (package, _) = corpus_package().admit_resolved();
@@ -1477,8 +1482,9 @@ fn work_exhausted_builder(references: usize) -> PackageBuilder {
     builder
 }
 
-/// Trace: FR-014-AC-15, TC-024. The stress shape reaches the reader before
+/// The stress shape reaches the reader before
 /// the lowering work ceiling is applied.
+#[trace("FR-014-AC-15", "TC-024")]
 #[test]
 fn tc_024_work_exhaustion_shape_is_reader_admitted_at_small_size() {
     let (result, _, _) = work_exhausted_builder(2).read_resolved();
@@ -1488,8 +1494,9 @@ fn tc_024_work_exhaustion_shape_is_reader_admitted_at_small_size() {
     );
 }
 
-/// Trace: FR-037-AC-1, TC-052. A binary integer operator cannot take an
+/// A binary integer operator cannot take an
 /// aggregate directly in an operand slot.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_aggregate_integer_operand_is_refused_by_reader() {
     let mut builder = minimal_integer_builder();
@@ -1554,7 +1561,7 @@ fn work_exhausted_fixture() -> (CheckedPackageV2, ExactScalarItem) {
     )
 }
 
-/// Trace: FR-014-AC-3, FR-014-AC-15, TC-024.
+#[trace("FR-014-AC-3", "FR-014-AC-15", "TC-024")]
 #[test]
 fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     let (package, item) = work_exhausted_fixture();
@@ -1570,14 +1577,13 @@ fn tc_024_lowering_work_exhaustion_is_a_typed_refusal() {
     assert!(!contents(&oracles, "src/lib.rs").contains(code_id(3001).digest.as_ref()));
 }
 
-/// Trace: FR-014-AC-40, TC-024.
-///
 /// A call whose lowered contract package is longer than the checked package, read under a ceiling
 /// that admits the checked package and is one byte below that lowered package, fails every
 /// requested record for bytes (Contract IR FR-038-AC-95): every item is refused as
 /// `LoweringByteLimitExceeded` with the ceiling as `limit` and one shared `consumed` above it,
 /// never as `LoweringWorkExhausted`, and no function is generated. The per-node case and each
 /// other limit kind are asserted on hand-built records in the module's own tests.
+#[trace("FR-014-AC-40", "TC-024")]
 #[test]
 fn tc_024_a_byte_ceiling_lowering_failure_is_refused_per_item_as_its_own_refusal() {
     use crate::common::byte_ceiling::{
@@ -1750,8 +1756,6 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
     }
 }
 
-/// Trace: FR-014-AC-1, FR-014-AC-3, FR-014-AC-11, FR-014-AC-14, TC-024.
-///
 /// One fixture per `ExactScalarRefusal` variant, each checked against
 /// `refusal_variant_name`'s exhaustive match (see its own doc). What this
 /// test adds is not novel exhaustiveness protection for `ExactScalarRefusal`
@@ -1795,6 +1799,7 @@ fn refusal_variant_name(refusal: &ExactScalarRefusal) -> &'static str {
 /// exercise `refusal_variant_name`'s own match arms for these four variants
 /// -- they are not evidence that production code produces them, which is the
 /// two unit tests' job.
+#[trace("FR-014-AC-1", "FR-014-AC-3", "FR-014-AC-11", "FR-014-AC-14", "TC-024")]
 #[test]
 fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
     let package = corpus_package().admit();
@@ -1890,8 +1895,7 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
 
 /// An integer-range endpoint spelled `05` is refused by the authoritative
 /// checked-package reader before a CG claim can exist.
-///
-/// Trace: FR-014-AC-10, TC-024.
+#[trace("FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_unreadable_integer_bound_is_a_strict_reader_refusal() {
     let mut builder = PackageBuilder::default();
@@ -1919,7 +1923,7 @@ fn tc_024_unreadable_integer_bound_is_a_strict_reader_refusal() {
 
 /// A non-exact IEEE rounding mode over bare Float32 is refused by the reader
 /// before CG can classify the missing rounding bound.
-/// Trace: FR-014-AC-10, TC-024.
+#[trace("FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_missing_rounding_mode_is_a_strict_reader_refusal() {
     let (outcome, wire, ids) = missing_rounding_package().read_resolved();
@@ -1948,7 +1952,7 @@ fn tc_024_missing_rounding_mode_is_a_strict_reader_refusal() {
 }
 
 /// The corpus Integer is the anonymous structural authority required by the reader.
-/// Trace: FR-014-AC-10, TC-024.
+#[trace("FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_anonymous_integer_range_generates_one_addition() {
     const OPERAND: u32 = 39_011;
@@ -2002,7 +2006,7 @@ fn tc_024_anonymous_integer_range_generates_one_addition() {
     assert!(contents(&oracles, "src/lib.rs").contains("rt::IntegerArithmetic::Add"));
 }
 
-/// Trace: FR-014-AC-10, TC-024.
+#[trace("FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     let (outcome, _, ids) = corpus_package().read_resolved();
@@ -2038,7 +2042,7 @@ fn tc_024_corpus_reader_admits_anonymous_integer_ranges() {
     );
 }
 
-/// Trace: FR-014-AC-9, TC-024.
+#[trace("FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
     // One canonical range is shared by every admitted application. The range is represented
@@ -2122,7 +2126,7 @@ fn tc_024_generated_source_over_the_ceiling_is_refused_whole() {
     ));
 }
 
-/// Trace: FR-014-AC-3, FR-014-AC-9, TC-024.
+#[trace("FR-014-AC-3", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed() {
     let oracles = generate(&corpus_package().admit(), &golden_items());
@@ -2208,7 +2212,7 @@ fn tc_024_literal_operands_are_classified_by_value_kind_and_constants_stop_typed
     }
 }
 
-/// Trace: FR-014-AC-8, FR-014-AC-9, TC-024.
+#[trace("FR-014-AC-8", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     let oracles = generate(&corpus_package().admit(), &golden_items());
@@ -2261,8 +2265,7 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
 /// A `reference` operand typed by an `integer_range` `bounded_domain` (QSL's `Int[0, 9]`
 /// parameter) is an Integer operand and generates; before IR-297 it was refused as
 /// `OperandTypeMismatch { found: None }`.
-///
-/// Trace: FR-014-AC-17, TC-024.
+#[trace("FR-014-AC-17", "TC-024")]
 #[test]
 fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
     let oracles = generate(
@@ -2285,8 +2288,9 @@ fn add_over(low: i64, high: i64) -> ExactScalarOperation {
     }
 }
 
-/// Trace: FR-014-AC-44, TC-024. An admitted direct temporal formula request keeps its node
+/// An admitted direct temporal formula request keeps its node
 /// identity and settles as a typed unsupported refusal without producing oracle code.
+#[trace("FR-014-AC-44", "TC-024")]
 #[test]
 fn tc_024_ac44_direct_temporal_formula_is_unsupported() {
     let package = qspec_package("positive-all-families.json");
@@ -2367,8 +2371,9 @@ fn qspec_package(fixture: &str) -> CheckedPackageV2 {
     }
 }
 
-/// Trace: FR-014-AC-44, TC-024. A directly requested case keeps its operation and node identity
+/// A directly requested case keeps its operation and node identity
 /// while producing no generated claim.
+#[trace("FR-014-AC-44", "TC-024")]
 #[test]
 fn tc_024_ac44_direct_control_case_is_unsupported() {
     let package = qspec_package("positive-union-nodes.json");
@@ -2409,8 +2414,8 @@ fn tc_024_ac44_direct_control_case_is_unsupported() {
         .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
 }
 
-/// Trace: FR-021-AC-33, TC-031
 /// A directly requested case must keep its identity through the public function path.
+#[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_control_case_is_unsupported() {
     use quire_contract_codegen::ContractRequestPosition;
@@ -2551,8 +2556,7 @@ fn two_parameter_derive(code: u32) -> Result<ExactScalarItem, AdmittedRefusal> {
 /// bounds are the result bound first, then each operand's own. Derivation returns the descriptor
 /// over the result bound. Before IR-298 the three reachable `integer_range` bounds over Integer
 /// were `AmbiguousBound`.
-///
-/// Trace: FR-014-AC-20, TC-024
+#[trace("FR-014-AC-20", "TC-024")]
 #[test]
 fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound() {
     let (checked, ids) = two_parameter_checked_bounds(TWO_PARAMETER_SUM, add_over(0, 29));
@@ -2582,8 +2586,7 @@ fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound
 
 /// A scalar-typed result whose reachable bounds are the operands' own two and one more resolves to
 /// the one that is no operand's.
-///
-/// Trace: FR-014-AC-21, TC-024
+#[trace("FR-014-AC-21", "TC-024")]
 #[test]
 fn tc_024_ac21_a_scalar_typed_result_takes_the_one_bound_no_operand_types() {
     let (checked, ids) = two_parameter_checked_bounds(TWO_PARAMETER_ATTACHED, add_over(0, 29));
@@ -2591,8 +2594,7 @@ fn tc_024_ac21_a_scalar_typed_result_takes_the_one_bound_no_operand_types() {
 }
 
 /// A scalar-typed result whose reachable bounds are all operands' own has no result bound.
-///
-/// Trace: FR-014-AC-22, TC-024
+#[trace("FR-014-AC-22", "TC-024")]
 #[test]
 fn tc_024_ac22_a_scalar_typed_result_with_only_operand_bounds_is_ambiguous() {
     assert_eq!(
@@ -2605,8 +2607,7 @@ fn tc_024_ac22_a_scalar_typed_result_with_only_operand_bounds_is_ambiguous() {
 }
 
 /// An operand, or the result, typed by a bound of another form is `MissingBound`.
-///
-/// Trace: FR-014-AC-23, TC-024
+#[trace("FR-014-AC-23", "TC-024")]
 #[test]
 fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused() {
     for code in [
@@ -2628,8 +2629,7 @@ fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused(
 /// with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]`
 /// and `[100, 200]` with a `[100, 1800]` result all generate, derive the same descriptor, and
 /// record each operand's own bound after the result bound.
-///
-/// Trace: FR-014-AC-24, TC-024
+#[trace("FR-014-AC-24", "TC-024")]
 #[test]
 fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
     let negate = ExactScalarOperation::IntegerArithmetic {
@@ -2686,8 +2686,7 @@ fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
 /// one, or the result is typed by one, it is `RequiresBound` naming its type, in generation and in
 /// derivation. A literal operand is never refused, and a package whose operands own no bound and
 /// whose result is scalar-typed keeps the one-bound reading.
-///
-/// Trace: FR-014-AC-25, TC-024
+#[trace("FR-014-AC-25", "TC-024")]
 #[test]
 fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_bound() {
     // The scalar-typed result's one reachable bound is `[0, 9]`, so its descriptor is over that.
@@ -2820,8 +2819,7 @@ fn ambiguous_integer_bound() -> ExactScalarRefusal {
 /// literal and whose type is the plain Integer type: that operand is a literal, so `x + 1` over
 /// `x: Int[0, 9]` narrowed to `Int[0, 10]` generates with checked bounds `[0, 10]` then `[0, 9]`
 /// and derives the descriptor over `[0, 10]`.
-///
-/// Trace: FR-014-AC-26, TC-024
+#[trace("FR-014-AC-26", "TC-024")]
 #[test]
 fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
     let (checked, ids) = qsl_checked_bounds(QSL_INC, add_over(0, 10));
@@ -2843,8 +2841,7 @@ fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
 /// the conversion's. `x + y` over `[0, 9]` and `[10, 20]` narrowed to `[10, 29]` checks `[10, 29]`,
 /// `[0, 9]`, `[10, 20]`, and a descriptor over an operand's bound is a mismatch against `[10, 29]`;
 /// `-z` over `[0, 9]` narrowed to `[-9, 0]` checks `[-9, 0]` then `[0, 9]`.
-///
-/// Trace: FR-014-AC-27, TC-024
+#[trace("FR-014-AC-27", "TC-024")]
 #[test]
 fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion() {
     let (package, ids) = qsl_admitted();
@@ -2893,8 +2890,7 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
 
 /// The referenced node's body decides: `n` is a plain-Integer `value` node of form `literal`
 /// whose body is not a literal, so `x + n` is `RequiresBound`.
-///
-/// Trace: FR-014-AC-28, TC-024
+#[trace("FR-014-AC-28", "TC-024")]
 #[test]
 fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
     assert_qsl_refused(
@@ -2905,8 +2901,7 @@ fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
 }
 
 /// `x + p` narrowed to `Int[0, 29]`, `p` a plain-Integer parameter, is `RequiresBound`.
-///
-/// Trace: FR-014-AC-29, TC-024
+#[trace("FR-014-AC-29", "TC-024")]
 #[test]
 fn tc_024_ac29_a_plain_parameter_beside_a_bounded_one_requires_a_bound() {
     assert_qsl_refused(QSL_PLAIN_OPERAND, add_over(0, 29), requires_integer_bound());
@@ -2914,8 +2909,7 @@ fn tc_024_ac29_a_plain_parameter_beside_a_bounded_one_requires_a_bound() {
 
 /// `q + q` narrowed to `Int[0, 29]`, no operand owning a bound, is `RequiresBound`: the narrowing
 /// bounds the result as a `bounded_domain` result type does.
-///
-/// Trace: FR-014-AC-30, TC-024
+#[trace("FR-014-AC-30", "TC-024")]
 #[test]
 fn tc_024_ac30_plain_operands_under_a_narrowing_require_a_bound() {
     assert_qsl_refused(QSL_PLAIN_PAIR, add_over(0, 29), requires_integer_bound());
@@ -2924,8 +2918,7 @@ fn tc_024_ac30_plain_operands_under_a_narrowing_require_a_bound() {
 /// A literal operand of an integer operation that is not an `integer` literal is refused by its
 /// own kind, whatever the node referencing it is typed: `x + "a"`, the text literal in a
 /// plain-Integer-typed `value` node.
-///
-/// Trace: FR-014-AC-31, TC-024
+#[trace("FR-014-AC-31", "TC-024")]
 #[test]
 fn tc_024_ac31_a_non_integer_literal_operand_is_an_operand_type_mismatch() {
     assert_qsl_refused(
@@ -2940,8 +2933,7 @@ fn tc_024_ac31_a_non_integer_literal_operand_is_an_operand_type_mismatch() {
 }
 
 /// Two narrowing conversions to different bounds leave the result role unresolved.
-///
-/// Trace: FR-014-AC-32, TC-024
+#[trace("FR-014-AC-32", "TC-024")]
 #[test]
 fn tc_024_ac32_two_distinct_narrowings_are_ambiguous() {
     assert_qsl_refused(
@@ -2953,8 +2945,7 @@ fn tc_024_ac32_two_distinct_narrowings_are_ambiguous() {
 
 /// A narrowing to a bound of another form, or of the form over another scalar type, is
 /// `MissingBound`.
-///
-/// Trace: FR-014-AC-33, TC-024
+#[trace("FR-014-AC-33", "TC-024")]
 #[test]
 fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
     assert_qsl_refused(
@@ -3002,8 +2993,7 @@ fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
 /// `x + 2` is narrowed to `Int[0, 11]` and is also an operand of `(x + 2) + x`: the narrow's
 /// bound does not bound that other use, so it is `AmbiguousBound`. `x + 1`, consumed only by its
 /// narrowing, generates.
-///
-/// Trace: FR-014-AC-34, TC-024
+#[trace("FR-014-AC-34", "TC-024")]
 #[test]
 fn tc_024_ac34_a_node_narrowed_and_consumed_otherwise_is_ambiguous() {
     assert_qsl_refused(QSL_SHARED, add_over(0, 11), ambiguous_integer_bound());
@@ -3029,8 +3019,7 @@ fn derive_one(
 /// Deriving from the package alone yields, for every golden-corpus node, the descriptor the
 /// fixture declares, and generating from the derived items gives the same claim map as
 /// generating from the declared ones, every claim `ir_confirmed`.
-///
-/// Trace: FR-014-AC-18, FR-014-AC-19, TC-024
+#[trace("FR-014-AC-18", "FR-014-AC-19", "TC-024")]
 #[test]
 fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
     let package = corpus_package().admit();
@@ -3080,8 +3069,7 @@ fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
 /// The operations with more than one descriptor for one identity are told apart by what the node
 /// carries: the operand forms (`rational.div`), the result form (`numeric.convert`,
 /// `numeric.convert_rounding`) and the laws (`integer.div`).
-///
-/// Trace: FR-014-AC-18, TC-024
+#[trace("FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
     let package = derivation_package().admit();
@@ -3141,8 +3129,7 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
 
 /// The refused set: identities outside the derivable set, nodes that are not applications, and
 /// refused bounds each return their own typed refusal and no descriptor.
-///
-/// Trace: FR-014-AC-18, FR-014-AC-22, TC-024
+#[trace("FR-014-AC-18", "FR-014-AC-22", "TC-024")]
 #[test]
 fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     let package = derivation_package().admit();
@@ -3187,9 +3174,10 @@ fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
     ));
 }
 
-/// Trace: FR-014-AC-39, FR-018-AC-19, TC-024, TC-029. The shared scan names every token the two
+/// The shared scan names every token the two
 /// criteria list, in each delimiter form and with whitespace before the `!`, and does not name
 /// the allowed lookalikes, so a scan test built on it can fail on each and only on those.
+#[trace("FR-014-AC-39", "FR-018-AC-19", "TC-024", "TC-029")]
 #[test]
 fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
     for banned in [
@@ -3246,11 +3234,12 @@ fn tc_024_ac39_the_panic_scan_names_every_banned_token_and_no_lookalike() {
     }
 }
 
-/// Trace: FR-014-AC-39, FR-018-AC-19, TC-024, TC-029. `non_test_code` removes the items a
+/// `non_test_code` removes the items a
 /// `#[cfg(test)]` attribute governs by structure, wherever they sit, and keeps everything else:
 /// an earlier mention of the attribute in a comment or a literal cuts nothing, code after a test
 /// module is kept, braces in literals do not end the module early, and comments are dropped
 /// without mistaking `//` inside a string for one.
+#[trace("FR-014-AC-39", "FR-018-AC-19", "TC-024", "TC-029")]
 #[test]
 fn tc_024_ac39_non_test_code_strips_test_items_by_structure() {
     let source = "\
@@ -3294,9 +3283,10 @@ fn last() { c.unwrap_or(1) }
     );
 }
 
-/// Trace: FR-014-AC-39, TC-024. The scalar generator's non-test code holds no panic site, and
+/// The scalar generator's non-test code holds no panic site, and
 /// neither does the `src/lib.rs` of the corpus crate (every other crate this module generates
 /// is scanned inside [`generate`] as it is produced).
+#[trace("FR-014-AC-39", "TC-024")]
 #[test]
 fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -3314,8 +3304,6 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
     );
 }
 
-/// Trace: FR-014-AC-42, TC-024.
-///
 /// The non-test code of the three oracle generators reads no `failed` record's limit kind: it
 /// names no `CheckedPackageLimit`, accesses no `.limit_kind`, and meets a `Failed` record only at
 /// an arm that binds nothing (`Failed { .. }`) and hands the record to
@@ -3323,6 +3311,7 @@ fn tc_024_ac39_scalar_generator_and_generated_crates_hold_no_panic_site() {
 /// unrecognised-lowering refusal and its conversion; operand-range resource refusals use their
 /// distinct `resource_kind` field. The shared module names `CheckedPackageLimit` and is the only
 /// generator module that reads a failed lowering record's limit kind.
+#[trace("FR-014-AC-42", "TC-024")]
 #[test]
 fn tc_024_ac42_only_the_shared_classifier_reads_a_failed_records_limit_kind() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -3431,7 +3420,7 @@ pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
     })
 }
 
-/// Trace: FR-021-AC-21, TC-031 (the source half: the function generator holds zero invocations;
+/// FR-021-AC-21 (the source half: the function generator holds zero invocations;
 /// the emitted source is AC-19's, in `exact_function_generation`); IR-352 (partial, the scalar
 /// and equality generators). Evidence that no generator panics on an unknown Contract Runtime
 /// variant. The RT enums are `#[non_exhaustive]` and foreign to this crate, so a test cannot build
@@ -3444,6 +3433,7 @@ pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
 /// any path prefix) and no excused arm. The equality generator's two former `unreachable!` arms,
 /// for `ValueType::Quantity` and `ValueType::Reference`, now return a typed render error
 /// (FR-018-AC-18).
+#[trace("FR-021-AC-21", "TC-031")]
 #[test]
 fn oracle_generators_have_no_panicking_arms() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -3471,9 +3461,10 @@ fn oracle_generators_have_no_panicking_arms() {
     );
 }
 
-/// Trace: FR-021-AC-21, TC-031. The whole-file scan of the function generator counts a
+/// The whole-file scan of the function generator counts a
 /// `#[cfg(test)]` module: a banned macro inside one survives `comments_stripped` and is named,
 /// where `non_test_code` would drop it, and a banned word inside a comment is not counted.
+#[trace("FR-021-AC-21", "TC-031")]
 #[test]
 fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
     let source = "fn real() {}\n// todo!()\n#[cfg(test)]\nmod probe_tests {\n    fn p() { unreachable!(\"probe\") }\n}\n";
@@ -3485,8 +3476,7 @@ fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
 
 /// `quire.op.quantity.convert` is refused with its own named capability for every conversion node:
 /// the refusal carries the operation identity and the capability text, and no descriptor is built.
-///
-/// Trace: FR-014-AC-2, FR-014-AC-18, TC-024
+#[trace("FR-014-AC-2", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_quantity_conversion_is_refused_with_its_named_capability() {
     let package = derivation_package().admit();
@@ -3563,8 +3553,7 @@ fn contract_request(
 /// A function whose declared body is a quantity conversion node, called by a requested call, is
 /// refused on that call's claim with the named capability and the conversion node's id, under
 /// either declared body kind, and no oracle and no location entry exists for it.
-///
-/// Trace: FR-014-AC-2, TC-024
+#[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion() {
     use quire_contract_codegen::{
@@ -3622,8 +3611,7 @@ fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_convers
 /// The composite-equality generator accepts only a `binary` expression, so a quantity conversion
 /// node is refused as `FormMismatch` with its `conversion` form before any descriptor is read and
 /// no oracle is produced for it.
-///
-/// Trace: FR-014-AC-2, TC-024
+#[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artifact() {
     use quire_contract_codegen::{
@@ -3669,8 +3657,7 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
 /// Function schedules refuse a function declared over a quantity conversion body with the named
 /// capability, as a refused function, whatever result type is declared: no schedule, no module
 /// and no artifact is produced, and the request as a whole still settles.
-///
-/// Trace: FR-014-AC-2, TC-024
+#[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_capability() {
     use quire_contract_codegen::{
@@ -3724,8 +3711,7 @@ fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_ca
 /// A call that passes a quantity conversion node as an argument to a declared function is
 /// refused on its claim with the named capability and the conversion node's id, and generates no
 /// oracle: the conversion is found anywhere in the closure of the call.
-///
-/// Trace: FR-014-AC-2, TC-024
+#[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_argument() {
     use quire_contract_codegen::{
@@ -3790,8 +3776,7 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
 
 /// A schedule item whose call passes a quantity conversion node as an argument is refused with
 /// the named capability, and no schedule is produced for it.
-///
-/// Trace: FR-014-AC-2, TC-024
+#[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_named_capability() {
     use quire_contract_codegen::{
@@ -3850,8 +3835,7 @@ fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_
 /// A quantity equality that reads a conversion node as an operand is refused by the
 /// composite-equality generator as an unsupported quantity, with no oracle: the operand is read
 /// through to the converted quantity type, which has no equality encoding.
-///
-/// Trace: FR-014-AC-2, FR-018-AC-15, TC-024
+#[trace("FR-014-AC-2", "FR-018-AC-15", "TC-024")]
 #[test]
 fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quantity() {
     use quire_contract_codegen::{
@@ -3895,8 +3879,7 @@ fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quanti
 /// caller can declare: `generate_exact_scalar_oracles` and `plan_exact_scalar_oracles` return the
 /// named refusal, the plan holds no oracle to render, and the generated crate has no oracle
 /// function and no harness.
-///
-/// Trace: FR-014-AC-2, FR-014-AC-18, TC-024
+#[trace("FR-014-AC-2", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_caller_declared_quantity_conversion_is_refused_and_generates_nothing() {
     let package = derivation_package().admit();

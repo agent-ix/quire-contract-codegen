@@ -1,3 +1,4 @@
+use ix_trace_rs::trace;
 use std::{
     fs,
     path::PathBuf,
@@ -58,7 +59,7 @@ fn embedded_source(source: &str) -> String {
     format!("//{crate_docs}\n{}\n", lines.collect::<Vec<_>>().join("\n"))
 }
 
-/// Trace: FR-002-AC-4, FR-002-AC-6, TC-004
+#[trace("FR-002-AC-4", "FR-002-AC-6", "TC-004")]
 #[test]
 fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraints() {
     let requirement = requirement();
@@ -219,7 +220,7 @@ mod generated_tests {{
     );
 }
 
-/// Trace: FR-002-AC-2, TC-004
+#[trace("FR-002-AC-2", "TC-004")]
 #[test]
 fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
     let requirement = requirement();
@@ -345,7 +346,7 @@ fn tc_004_boundary_campaigns_tag_inside_and_immediately_outside_values() {
     assert!(no_event.rust.contents.contains("::Accepted"));
 }
 
-/// Trace: FR-002-AC-6, TC-004
+#[trace("FR-002-AC-6", "TC-004")]
 #[test]
 fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_warnings() {
     let requirement = requirement();
@@ -443,7 +444,7 @@ mod generated_tests {{
     );
 }
 
-/// Trace: NFR-002-AC-3, TC-003, TC-004
+#[trace("NFR-002-AC-3", "TC-003", "TC-004")]
 #[test]
 fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
     let requirement = requirement();
@@ -580,7 +581,7 @@ fn tc_004_invalid_shapes_fail_with_structured_diagnostics() {
     assert_eq!(resource_limit.path, "generated.rust");
 }
 
-/// Trace: FR-002-AC-6, TC-004
+#[trace("FR-002-AC-6", "TC-004")]
 #[test]
 fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
     let requirement = requirement();

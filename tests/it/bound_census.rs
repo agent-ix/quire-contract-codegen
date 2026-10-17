@@ -1,3 +1,4 @@
+use ix_trace_rs::trace;
 use std::{
     fs,
     path::PathBuf,
@@ -88,7 +89,7 @@ fn out_of_domain_pairs(census: &BoundaryCensus) -> Vec<(i64, Option<i64>)> {
         .collect()
 }
 
-/// Trace: TC-019, FR-010-AC-1
+#[trace("TC-019", "FR-010-AC-1")]
 #[test]
 fn tc_019_literal_census_for_amount_less_than_seven_is_exact() {
     use CensusTag::{Holds as H, Violated as V};
@@ -125,7 +126,7 @@ fn tc_019_literal_census_for_amount_less_than_seven_is_exact() {
     assert!(!source.contains("serde"));
 }
 
-/// Trace: TC-019, FR-010-AC-1
+#[trace("TC-019", "FR-010-AC-1")]
 #[test]
 fn tc_019_literal_edges_coinciding_with_domain_edges_are_deduplicated() {
     use CensusTag::{Holds as H, Violated as V};
@@ -154,7 +155,7 @@ fn tc_019_literal_edges_coinciding_with_domain_edges_are_deduplicated() {
     assert_eq!(source.matches("CensusCase { amount: 1, ").count(), 1);
 }
 
-/// Trace: TC-019, FR-010-AC-2
+#[trace("TC-019", "FR-010-AC-2")]
 #[test]
 fn tc_019_two_read_census_for_version_unchanged_is_exact() {
     use CensusTag::{Holds as H, Violated as V};
@@ -207,7 +208,7 @@ fn tc_019_two_read_census_for_version_unchanged_is_exact() {
     ));
 }
 
-/// Trace: TC-019, FR-010-AC-3
+#[trace("TC-019", "FR-010-AC-3")]
 #[test]
 fn tc_019_full_i64_domain_lists_outer_edges_as_unrepresentable() {
     let amount = compute_census(literal(ComparisonOperator::Less, 7), FULL_DOMAIN).unwrap();
@@ -278,7 +279,7 @@ fn tc_019_full_i64_domain_lists_outer_edges_as_unrepresentable() {
         }));
 }
 
-/// Trace: TC-019, FR-010-AC-1, FR-010-AC-2, FR-010-AC-3
+#[trace("TC-019", "FR-010-AC-1", "FR-010-AC-2", "FR-010-AC-3")]
 #[test]
 fn tc_019_rendered_census_constants_compile_with_denied_warnings() {
     let fixtures = [
@@ -412,7 +413,7 @@ mod generated_tests {
     );
 }
 
-/// Trace: TC-019, FR-010-AC-4
+#[trace("TC-019", "FR-010-AC-4")]
 #[test]
 fn tc_019_single_tagged_census_refuses_boundary_but_keeps_edge_arrays() {
     let census =
@@ -458,7 +459,7 @@ fn tc_019_single_tagged_census_refuses_boundary_but_keeps_edge_arrays() {
     assert!(!edges.contains("CensusTag"));
 }
 
-/// Trace: TC-019
+#[trace("TC-019")]
 #[test]
 fn tc_019_invalid_domain_and_field_names_are_structured_refusals() {
     let reversed = compute_census(
@@ -567,7 +568,7 @@ fn sweep_relations(domain: Domain) -> Vec<Relation> {
     relations
 }
 
-/// Trace: TC-019, FR-010-AC-5, NFR-004-AC-2
+#[trace("TC-019", "FR-010-AC-5", "NFR-004-AC-2")]
 #[test]
 fn tc_019_exhaustive_sweep_tags_domains_order_size_and_determinism() {
     let mut largest = 0;

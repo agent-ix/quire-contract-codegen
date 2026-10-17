@@ -7,6 +7,7 @@
 //! `check_type` guard, AC-9's denial injection, AC-11's complementary
 //! outcomes) are covered by `tests/composite_equality_agreement.rs`.
 
+use ix_trace_rs::trace;
 use std::{
     collections::BTreeSet,
     fs,
@@ -49,7 +50,8 @@ mod package;
 
 use package::*;
 
-/// Trace: FR-037-AC-1, TC-052. Structural equality reaching IEEE is reader-ineligible.
+/// Structural equality reaching IEEE is reader-ineligible.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_nested_ieee_equality_is_refused_by_reader() {
     let (result, wire, ids) = nested_ieee_package().read_resolved();
@@ -77,7 +79,8 @@ fn tc_052_nested_ieee_equality_is_refused_by_reader() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-037-AC-1, TC-052. A sequence body has one element reference.
+/// A sequence body has one element reference.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_052_two_reference_sequence_body_is_refused_by_reader() {
     let (_, mut wire, ids) = corpus_package().read_resolved();
@@ -339,7 +342,7 @@ fn admitted_profile() -> CompleteLoweringProfileV2 {
     }
 }
 
-/// Trace: FR-018-AC-31, TC-029.
+#[trace("FR-018-AC-31", "TC-029")]
 #[test]
 fn invalid_type_resolution_work_limit_refuses_before_lowering() {
     let package = admit(corpus_package());
@@ -368,8 +371,8 @@ fn invalid_type_resolution_work_limit_refuses_before_lowering() {
     );
 }
 
-/// Trace: FR-018-AC-32, TC-029. The direct case keeps its claim identity and typed cause,
-/// schedules no source/location, and leaves a healthy equality sibling byte-identical.
+/// The direct case keeps its claim identity and typed cause, schedules no source/location, and leaves a healthy equality sibling byte-identical.
+#[trace("FR-018-AC-32", "TC-029")]
 #[test]
 fn tc_029_ac32_direct_control_case_refusal_preserves_healthy_equality_sibling() {
     use quire_contract_model::LoweringProfileRef;
@@ -574,7 +577,7 @@ fn generated(
     }
 }
 
-/// Trace: FR-018-AC-24, TC-029.
+#[trace("FR-018-AC-24", "TC-029")]
 #[test]
 fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
     let list = generate(
@@ -607,7 +610,7 @@ fn tc_029_ac24_recursive_list_and_tree_items_emit_one_oracle_each() {
     }
 }
 
-/// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+#[trace("FR-018-AC-24", "FR-018-AC-26", "FR-018-AC-27", "TC-029")]
 #[test]
 fn tc_029_public_qsl_recursive_items_generate_through_reader() {
     let (builder, list, tree) = qsl_recursive_items_package();
@@ -690,7 +693,7 @@ fn assert_recursive_item_generation(
 
 /// Optional local conformance against the private QSpec fixture. The public
 /// QSL facade case above exercises the same reader-to-oracle path in CI.
-/// Trace: FR-018-AC-24, FR-018-AC-26, FR-018-AC-27, TC-029.
+#[trace("FR-018-AC-24", "FR-018-AC-26", "FR-018-AC-27", "TC-029")]
 #[test]
 fn tc_029_authoritative_qspec_recursive_items_generate_through_reader() {
     const FIXTURE: &str = "proposals/checked-package-v2/fixtures/positive-recursive-records.json";
@@ -735,11 +738,10 @@ fn refused(claim: &CompositeEqualityClaim) -> &CompositeEqualityRefusal {
     }
 }
 
-/// Trace: FR-018-AC-20, TC-029.
-///
 /// A call whose lowered contract package exceeds the Contract IR byte ceiling
 /// has no package for CG to consume. Contract IR FR-038-AC-95 retains the exact
 /// typed Failed(Bytes) records and publishes no package or generated artifact.
+#[trace("FR-018-AC-20", "TC-029")]
 #[test]
 fn tc_029_ac20_byte_ceiling_has_failed_records_and_no_contract_package() {
     use crate::common::byte_ceiling::{
@@ -828,7 +830,7 @@ fn tc_029_ac20_byte_ceiling_has_failed_records_and_no_contract_package() {
     assert!(failed.package.wire().is_none());
 }
 
-/// Trace: FR-018-AC-1, TC-029.
+#[trace("FR-018-AC-1", "TC-029")]
 #[test]
 fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
     let package = admit(corpus_package());
@@ -869,7 +871,7 @@ fn tc_029_ac1_every_item_gets_one_disposition_refused_siblings_unchanged() {
     );
 }
 
-/// Trace: FR-018-AC-3, TC-029.
+#[trace("FR-018-AC-3", "TC-029")]
 #[test]
 fn tc_029_ac3_claim_descriptor_matches_the_request() {
     // Left and right carry different source types (a bounded-integer-to-integer
@@ -914,7 +916,7 @@ fn tc_029_ac3_claim_descriptor_matches_the_request() {
     );
 }
 
-/// Trace: FR-018-AC-4, TC-029.
+#[trace("FR-018-AC-4", "TC-029")]
 #[test]
 fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
     let package = admit(corpus_package());
@@ -947,7 +949,7 @@ fn tc_029_admitted_one_reference_sequence_resolves_its_separate_bound() {
     );
 }
 
-/// Trace: FR-018-AC-4, TC-029.
+#[trace("FR-018-AC-4", "TC-029")]
 #[test]
 fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
     let package = admit(corpus_package());
@@ -1019,8 +1021,9 @@ fn tc_029_ac4_schedule_matches_checked_equality_for_every_shape() {
     // here exercises `EqualitySchedule::Quantity`.
 }
 
-/// Trace: FR-018-AC-4, FR-018-AC-16, TC-029. Sequence cardinality comes from
+/// Sequence cardinality comes from
 /// the admitted bound index, and its absence is a typed refusal.
+#[trace("FR-018-AC-4", "FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_a_sequence_without_a_separate_collection_bound_is_refused() {
     let package = admit(unbounded_sequence_package());
@@ -1042,7 +1045,7 @@ fn tc_029_a_sequence_without_a_separate_collection_bound_is_refused() {
     );
 }
 
-/// Trace: FR-018-AC-5, TC-029.
+#[trace("FR-018-AC-5", "TC-029")]
 #[test]
 fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
     let package = admit(corpus_package());
@@ -1063,8 +1066,6 @@ fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
     assert_eq!(lib.matches("pub fn oracle_").count(), 0);
 }
 
-/// Trace: FR-018, TC-029
-///
 /// FR-018 Behavior ("disagrees with its descriptor's arity or
 /// operand types"), TC-029 step 1 ("a descriptor disagreeing with its
 /// operand types"), codegen#82.
@@ -1074,6 +1075,7 @@ fn tc_029_ac5_a_disallowed_conversion_refuses_at_generation_time() {
 /// different type for either position must refuse before generation --
 /// checked left, then right, so the two requests below exercise both
 /// positions and each reports the position that actually disagreed.
+#[trace("FR-018", "TC-029")]
 #[test]
 fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generation() {
     let package = admit(corpus_package());
@@ -1142,7 +1144,7 @@ fn tc_029_a_body_operand_disagreeing_with_the_descriptor_refuses_before_generati
     let _ = generated(only_claim(&oracles, E_OPERAND_MISMATCH));
 }
 
-/// Trace: FR-018-AC-6, TC-029.
+#[trace("FR-018-AC-6", "TC-029")]
 #[test]
 fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     let package = admit(corpus_package());
@@ -1209,10 +1211,11 @@ fn tc_029_ac6_ieee_at_any_depth_is_operator_ineligible() {
     assert!(!not_ieee_environment.contains_ieee(&not_float_sequence_type));
 }
 
-/// Trace: FR-018-AC-15, TC-029. An operand is a `reference` to its own node. A reference to a
+/// An operand is a `reference` to its own node. A reference to a
 /// conversion node is read as the type of what it converts: the descriptor's `source_type` must
 /// equal it, and a descriptor naming any other source refuses at that position, reporting the
 /// converted operand's type as found.
+#[trace("FR-018-AC-15", "TC-029")]
 #[test]
 fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
     let package = admit(corpus_package());
@@ -1248,9 +1251,10 @@ fn tc_029_ac15_a_reference_to_a_conversion_is_read_as_the_type_it_converts() {
     ));
 }
 
-/// Trace: FR-018-AC-15, TC-029. A conversion of a conversion is read through to the first node
+/// A conversion of a conversion is read through to the first node
 /// that is not a conversion: the source type is the innermost operand's, not the inner
 /// conversion's result type.
+#[trace("FR-018-AC-15", "TC-029")]
 #[test]
 fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
     let package = admit(nested_conversion_package());
@@ -1286,8 +1290,9 @@ fn tc_029_ac15_nested_conversions_are_read_through_to_the_innermost_operand() {
     }
 }
 
-/// Trace: FR-018-AC-15, TC-029. A reference to an application that is not a conversion is read
+/// A reference to an application that is not a conversion is read
 /// as that node's own `semantic_type`, never as its first argument's type.
+#[trace("FR-018-AC-15", "TC-029")]
 #[test]
 fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
     let package = admit(application_operand_package());
@@ -1320,9 +1325,10 @@ fn tc_029_ac15_a_non_conversion_application_operand_is_read_as_its_own_type() {
     }
 }
 
-/// Trace: FR-018-AC-7, TC-029. Reader-admissible unsupported families retain
+/// Reader-admissible unsupported families retain
 /// their own generator blockers; reference composites have a reader-stage
 /// control in `tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today`.
+#[trace("FR-018-AC-7", "TC-029")]
 #[test]
 fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     let package = admit(corpus_package());
@@ -1405,12 +1411,13 @@ fn tc_029_ac7_each_family_gets_its_own_distinct_blocker() {
     }
 }
 
-/// Trace: FR-018-AC-7, TC-029. The direct `reference` composite form: an equality over two
+/// The direct `reference` composite form: an equality over two
 /// `REF_TYPE` operands is refused by Contract IR at admission, before this generator runs, so the
 /// generator's `QuireSpecLanguage120` blocker is not reached for it today. This pins the exact
 /// refusal (code, cause, pointer, locus); `quire.op.reference.eq` needs a `Reference<X>` naming a
 /// model object type of a selected document, which `REF_TYPE` does not. Unblocked by a corpus
 /// with such a model declaration.
+#[trace("FR-018-AC-7", "TC-029")]
 #[test]
 fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
     let (result, wire, ids) = direct_reference_package().read_resolved();
@@ -1436,8 +1443,9 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-018-AC-8, TC-029 (generation-time half; the `check_type` guard
+/// FR-018-AC-8 (generation-time half; the `check_type` guard
 /// half is `tc_029_ac8_check_type_guards_the_oracle` in the agreement test).
+#[trace("FR-018-AC-8", "TC-029")]
 #[test]
 fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
     let package = admit(corpus_package());
@@ -1457,7 +1465,7 @@ fn tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause() {
     }
 }
 
-/// Trace: FR-018-AC-10, TC-029.
+#[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     let package = admit(corpus_package());
@@ -1484,7 +1492,7 @@ fn tc_029_ac10_bytes_are_deterministic_across_request_permutations() {
     }
 }
 
-/// Trace: FR-018-AC-10, TC-029.
+#[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_claim_map_entries_ascend_by_the_descriptor_key() {
     let package = admit(corpus_package());
@@ -1575,10 +1583,9 @@ pub(super) fn corpus_oracles() -> FixtureOracles {
     generate(&admit(corpus_package()), &golden_items())
 }
 
-/// Trace: FR-018-AC-10, TC-029.
-///
 /// Generating the corpus twice, each time from a freshly built and admitted
 /// package, yields equal output: every artifact's bytes and the claim map.
+#[trace("FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     let first = corpus_oracles();
@@ -1589,8 +1596,9 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     }
 }
 
-/// Trace: FR-018-AC-11, TC-029 (generation-time half; complementary outcomes
+/// FR-018-AC-11 (generation-time half; complementary outcomes
 /// are `tc_029_ac11_complementary_outcomes` in the agreement test).
+#[trace("FR-018-AC-11", "TC-029")]
 #[test]
 fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_declared() {
     let package = admit(corpus_package());
@@ -1643,14 +1651,13 @@ fn tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_d
     );
 }
 
-/// Trace: FR-018-AC-12, TC-029.
-///
 /// The `rebuild_integer` reconstruction helper is emitted only when some rendered
 /// bound actually calls it (a reachable bounded `Int` or `Decimal`).
 /// Unconditional emission would be unused, and hence dead code, for a
 /// request that reaches neither — which would fail this same test's
 /// `-D warnings` build below for that request, even though the full corpus
 /// (which does reach one, via TUP_PAIR) never observes it.
+#[trace("FR-018-AC-12", "TC-029")]
 #[test]
 fn tc_029_ac12_integer_helper_omitted_when_unreached() {
     let package = admit(corpus_package());
@@ -1668,7 +1675,7 @@ fn tc_029_ac12_integer_helper_omitted_when_unreached() {
     );
 }
 
-/// Trace: FR-018-AC-12, TC-029.
+#[trace("FR-018-AC-12", "TC-029")]
 #[test]
 fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     let oracles = generate(&admit(corpus_package()), &golden_items());
@@ -1741,7 +1748,7 @@ fn tc_029_ac12_manifest_is_unpublished_and_charge_free() {
     );
 }
 
-/// Trace: FR-018-AC-13, TC-029.
+#[trace("FR-018-AC-13", "TC-029")]
 #[test]
 fn tc_029_ac13_declaration_keys_are_the_reached_v2_node_ids() {
     let package = admit(corpus_package());
@@ -1890,9 +1897,10 @@ fn tuple_refusal(extras: &[u32], members: &[u32]) -> (CompositeEqualityRefusal, 
     (refused(only_claim(&oracles, E_TUPLE)).clone(), oracles.ids)
 }
 
-/// Trace: FR-018-AC-16, TC-029. The corpus tuple `(Int[-100, 100], Text[0, 16; nfc])` names the
+/// The corpus tuple `(Int[-100, 100], Text[0, 16; nfc])` names the
 /// `text_bounds` node as its text position, as QSL emits a text type; the generated declaration
 /// is that tuple, read from the bound's own members.
+#[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
     let (oracles, lib) = tuple_source(&[], &[T_INTEGER_BOUNDED, BD_TEXT]);
@@ -1910,9 +1918,10 @@ fn tc_029_ac16_a_text_bounds_member_reconstructs_its_own_text_type() {
     );
 }
 
-/// Trace: FR-018-AC-16, TC-029. A numeric member that names its `bounded_domain` node reads as
+/// A numeric member that names its `bounded_domain` node reads as
 /// the same type as one that names the base scalar the bound hangs off, for integer, decimal
 /// and rational bases.
+#[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
     let (_, through_scalars) = tuple_source(
@@ -1940,9 +1949,10 @@ fn tc_029_ac16_numeric_bounded_domain_members_read_as_their_bounded_scalars() {
     }
 }
 
-/// Trace: FR-018-AC-16, TC-029. A `bounded_domain` member reads its own bound and never a sibling
+/// A `bounded_domain` member reads its own bound and never a sibling
 /// bound over the same base: with a second `text_bounds` over the text scalar, naming either
 /// reads that node's `min` and `max`, neither is ambiguous.
+#[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
     let (oracles, lib) = tuple_source(&[BD_TEXT_SIBLING], &[T_INTEGER_BOUNDED, BD_TEXT_SIBLING]);
@@ -1955,8 +1965,9 @@ fn tc_029_ac16_a_bounded_domain_member_never_reads_a_sibling_bound() {
     assert!(!lib.contains("rebuild_text(1, 5,"));
 }
 
-/// Trace: FR-018-AC-16, TC-029. A bound whose form is not the one its base scalar reads is
+/// A bound whose form is not the one its base scalar reads is
 /// refused as missing the form the base needs, not read as an unbounded type.
+#[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
     let (refusal, ids) = tuple_refusal(&[BD_INTEGER_WRONG_FORM], &[BD_INTEGER_WRONG_FORM, BD_TEXT]);
@@ -1972,8 +1983,9 @@ fn tc_029_ac16_a_bound_form_that_does_not_fit_its_base_is_refused() {
     }
 }
 
-/// Trace: FR-018-AC-16, FR-018-AC-6, TC-029. A tuple containing IEEE is
+/// A tuple containing IEEE is
 /// refused by the checked reader before equality generation.
+#[trace("FR-018-AC-16", "FR-018-AC-6", "TC-029")]
 #[test]
 fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
     let (result, wire, ids) =
@@ -2002,8 +2014,9 @@ fn tc_029_ac16_a_float_rounding_member_is_refused_as_operator_ineligible() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// Trace: FR-018-AC-16, TC-029. The original bounded-domain negatives over
+/// The original bounded-domain negatives over
 /// Boolean, an enum, and a record are rejected by the checked reader.
+#[trace("FR-018-AC-16", "TC-029")]
 #[test]
 fn tc_029_ac16_a_bounded_domain_over_a_base_without_a_bound_form_is_refused() {
     for bound in [BD_BOOLEAN, BD_ENUM, BD_OVER_COMPOSITE] {
@@ -2284,9 +2297,10 @@ fn emitted_enum<'l>(lib: &'l str, name: &str) -> &'l str {
     &lib[open..=close]
 }
 
-/// Trace: FR-018-AC-17, TC-029. The `src/lib.rs` the generator returns for the corpus request
+/// The `src/lib.rs` the generator returns for the corpus request
 /// (every generated item) holds no panic token, no silent fallback, and no index or slice
 /// expression.
+#[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
     let oracles = corpus_oracles();
@@ -2309,10 +2323,11 @@ fn tc_029_ac17_emitted_source_has_no_panic_site_fallback_or_index_expression() {
     );
 }
 
-/// Trace: FR-018-AC-17, TC-029. Every reconstruction in the corpus crate goes through a helper
+/// Every reconstruction in the corpus crate goes through a helper
 /// returning `Result<_, ReconstructionError>`, every call of one is propagated or refused, no
 /// runtime constructor or integer parse is called outside a helper, and the two error enums have
 /// the variants the criterion lists.
+#[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
     let oracles = corpus_oracles();
@@ -2371,8 +2386,9 @@ fn tc_029_ac17_emitted_reconstruction_is_typed_and_refused_never_unwrapped() {
     );
 }
 
-/// Trace: FR-018-AC-17, TC-029. The structural checker names each way a source can depart from
+/// The structural checker names each way a source can depart from
 /// the criterion, so the corpus test above is a check that can fail.
+#[trace("FR-018-AC-17", "TC-029")]
 #[test]
 fn tc_029_ac17_the_structural_checker_names_each_departure() {
     let wrong_return = "fn rebuild_interval(a: &str) -> rt::IntegerInterval {\n    todo_body\n}\n";
@@ -2439,8 +2455,9 @@ fn tc_029_ac17_the_structural_checker_names_each_departure() {
     assert!(index_expressions("let a = vec![1]; let b = f([1]); let c = [1];").is_empty());
 }
 
-/// Trace: FR-018-AC-19, TC-029. The composite-equality generator's non-test code holds no panic
+/// The composite-equality generator's non-test code holds no panic
 /// token, counting the string literals it emits.
+#[trace("FR-018-AC-19", "TC-029")]
 #[test]
 fn tc_029_ac19_the_equality_generator_source_holds_no_panic_token() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/oracle/equality/mod.rs");
