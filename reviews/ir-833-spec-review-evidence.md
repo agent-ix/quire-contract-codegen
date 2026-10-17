@@ -42,4 +42,16 @@ Ticket: IR-833. Checked each converted criterion's verification method against w
 
 CHANGES REQUESTED (three medium). Keeping FR-014-AC-37 and FR-018-AC-2 as Test with a boundary sentence instead of new ids is sound on the evidence side: what each still claims (agreement with direct runtime execution) is testable, the existing composite-equality bindings assert exactly that, and the boundary sentence makes no claim of its own a Test would need to verify. That it relies on FR-014-AC-47 for enforcement is a scope question (SR-12088 FND-001). FR-021-AC-3 stays Test; its rewording keeps it falsifiable (the existing AC-3 binding in `exact_function_generation.rs` checks the request-derived identity) without presupposing a QSL comparison. The FR-021-AC-1..AC-3 matrix row split correctly removes AC-2 from the ✅ Test row.
 
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The TC-031 summary row in the oracle tests.md still says "FR-021-AC-15, FR-021-AC-18, FR-021-AC-24 and FR-021-AC-34 are 🚧 Planned", while the FR-021-AC-18 row now reads "TC-031 (Inspection) ✅ Covered by inspection". Drop AC-18 from the summary row's planned list. (Present at the first head too; missed in the review pass.) | spec/oracle/matrix/tests.md:98, spec/oracle/matrix/tests.md:45 |
+
 ## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1, head ee9da7736b18: FR-021-AC-2 is Test again and states the direct-application agreement the tagged tests assert; quire matrix shows agreement_cases.rs:202 and exact_function_agreement.rs:42 bound and tagged. |
+| FND-002 | fixed | round 1, head ee9da7736b18: new TC-031 step 12a performs the AC-18/FR-014-AC-47 inspection, and AC-18 permits boundary-stating text. The three doc comments (tests/it/exact_function_agreement.rs:14-18, tests/exact_function_support/agreement_cases.rs:14-18, src/oracle/function/mod.rs:127-132) were rewritten; git diff shows only `//!` comment lines changed. |
+| FND-003 | fixed | round 1, head ee9da7736b18: FR-021-AC-4 again states that the oracle returns the input refusals unchanged before any execution charge; the matrix row's partial-coverage reason and the bound tc_031_ac4 test match it again. |

@@ -45,4 +45,16 @@ Ticket: IR-833. Checked that every boundary sentence the PR adds is consistent w
 
 CHANGES REQUESTED (one medium, one low). The boundary is drawn in the right place and owners are attributed correctly: CG keeps its direct-runtime agreement, IR-842 owns the generated oracle against QSL and IR-669 the RT composition. T12-A is cited as the reason. No line in the diff moves a QSL-owned application API line (IR-845) or contradicts it.
 
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The widened FR-014-AC-47 covers the TC-187 cases and the FR-014-AC-37, FR-018-AC-2 and FR-021 corpora, but not FR-014-AC-6's other agreement vectors (QSpec TC-185, TC-186, TC-192, TC-193). TC-024's integer arithmetic, rational arithmetic and ordering paragraph states the QSL boundary for exactly those oracles and cites AC-47, so that boundary is still unenforced for their test corpus. Saying "every oracle-agreement corpus of FR-014, FR-018 and FR-021" would close it. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:505, spec/oracle/matrix/TC-024-exact-scalar-oracles.md:227-230 |
+| FND-004 | low | `tests/exact_scalar_support/agreement.rs:12-14` (unchanged) says generated-oracle against QSL comparison for the quantity vectors "is owned by the quire-integration lane (Contract Runtime FR-007-AC-5, TC-022)", which is IR-669's RT composition. The FR-014 Dependencies note this PR rewrites now assigns that comparison to IR-842. Comment-only follow-up: name IR-842. | tests/exact_scalar_support/agreement.rs:12-14, spec/oracle/functional/FR-014-exact-scalar-oracles.md:516 |
+
 ## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1, head ee9da7736b18: FR-014-AC-47 now covers the TC-187 cases and the FR-014-AC-37, FR-018-AC-2 and FR-021 corpora, the TC-024, TC-029 and TC-031 steps, and their matrix rows; the AC-47 matrix row matches. The residual FR-014-AC-6 non-TC-187 gap is new FND-003. The AC-47 change applies to #415's final FR-014 text (93d7747) without conflict: AC-6 already claims no QSL agreement and AC-48 to AC-50 compare only with direct convert_quantity. |
+| FND-002 | fixed | round 1, head ee9da7736b18: FR-014-AC-47 and FR-021-AC-18 now read "claims, or presents as evidence" and "text that states this boundary is permitted"; the mutation row for AC-18 matches. |
