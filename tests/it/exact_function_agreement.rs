@@ -11,12 +11,11 @@
 //! `exact_scalar_agreement`'s scratch-crate runner. AC-17 needs the generator
 //! itself and runs here.
 //!
-//! FR-021-AC-18 (three-way agreement with the QSL authority) is not
-//! implemented here: this repository reaches QSL only through `qsl-replay`'s
-//! public API, not the `quire_spec_language::value::expression` API AC-18
-//! was written against (see `src/oracle/function/mod.rs`'s module doc). The
-//! agreement legs are exactly two: the generated oracle and a direct
-//! Contract Runtime call.
+//! Agreement with the QSL application authority (FR-021-AC-18) is outside
+//! CG's boundary and not claimed here: this repository reaches QSL only
+//! through `qsl-replay`'s public API, and that agreement is owned by
+//! quire-integration IR-842 (FR-014-AC-47). The agreement legs are exactly
+//! two: the generated oracle and a direct Contract Runtime call.
 
 // Duplicated per consumer (also `exact_function_generation.rs`) for structural consistency with
 // the exact_scalar/composite_equality families (IR-237). Unlike those two, this package.rs holds

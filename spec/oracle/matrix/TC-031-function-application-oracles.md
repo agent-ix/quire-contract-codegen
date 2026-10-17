@@ -119,19 +119,26 @@ required dependency or target path.
     concrete owner-path crate from the same schedule, compile it, and execute
     both the main corpus and the 100,000-node case on a 512 KiB stack under
     caller limits raised to fit. Compare outcomes, typed input refusals,
-    charge sequences and consumed counters with an independently constructed
-    shallow equivalent; no comparison with a QSL-owned package runs here (outside
-    CG's boundary, owned by quire-integration IR-842; FR-014-AC-47); deny each charge in turn and
+    charge sequences and consumed counters with an independent application
+    assembled from the request, never read back from generated code (AC-2,
+    AC-3), and with the shallow equivalent for the deep case (AC-31); no
+    comparison with a QSL-owned package runs here (outside CG's boundary, owned
+    by quire-integration IR-842; FR-014-AC-47); deny each charge in turn and
     assert `Incomplete` before the denied charge. Inspect linked-mode
     admission, no kernel-mode application, exhaustive owner-result handling,
     no literal outcomes/charges and no dependence on dynamic location/losses.
     This is the distinct PLANNED execution gate for AC-2, AC-4, AC-5, AC-8,
-    AC-9, AC-16 through AC-20, AC-26 and AC-31; schedule compilation in step
+    AC-9, AC-16, AC-17, AC-19, AC-20, AC-26 and AC-31; schedule compilation in step
     5 does not satisfy it.
 12. Inspect the schedule crate and eventual owner-path emission for any
     `quire_contract_runtime::exact` dependency, alias, wrapper or compatibility
     surface. Assert none is required. The owner-path leg remains PLANNED until
     QSL-358/IR-349 defines the API (AC-32).
+12a. Inspect (AC-18, FR-014-AC-47): scan the function-application corpus's test
+    names, `Trace:` tags, output lines and doc comments, this procedure's steps
+    and the FR-021 rows of the oracle matrix. None may claim, or present as
+    evidence, agreement with the QSL value authority; text that states the
+    boundary (outside CG, owned by IR-842) is permitted.
 13. Direct unsupported roots (FR-021-AC-33). Admit formula, fairness and case
     roots through Contract IR's public V2 reader, using QSpec FR-370/FR-440
     for formula/case shapes and Contract IR FR-038-AC-107 for fairness.
