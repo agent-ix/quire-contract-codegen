@@ -209,8 +209,7 @@ mod tests {
     #[test]
     fn proof_harness_embeds_the_public_generated_oracle_artifact() {
         let text_type = TextType::new(1, 1, TextProfile::Nfc).expect("valid type");
-        let oracle = generate_caller_text_oracle(CallerTextAdmissionRequest { text_type })
-            .expect("generated public oracle");
+        let oracle = generate_caller_text_oracle(CallerTextAdmissionRequest { text_type });
         let harness = generate_caller_text_kani_harness(request(TextProfile::Nfc, 1, 1))
             .expect("generated proof harness");
         let embedded = oracle.source.contents.trim();
@@ -236,7 +235,7 @@ mod tests {
                 assert!(names.insert(harness.identity.harness_path().to_string()));
                 assert_eq!(
                     harness.identity.caller_claim.profile,
-                    crate::oracle::caller_text::caller_profile(profile).expect("supported profile")
+                    crate::oracle::caller_text::caller_profile(profile)
                 );
                 assert_eq!(
                     (

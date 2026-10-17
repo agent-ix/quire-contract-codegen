@@ -55,8 +55,6 @@ pub enum CallerTextProofRefusal {
         /// Requested inclusive maximum.
         max: u64,
     },
-    /// The kernel added a profile with no finite proof encoding here.
-    UnsupportedProfile,
 }
 
 impl std::fmt::Display for CallerTextProofRefusal {
@@ -70,9 +68,6 @@ impl std::fmt::Display for CallerTextProofRefusal {
                     formatter,
                     "caller Text bounds {min}..={max} have no finite proof encoding"
                 )
-            }
-            Self::UnsupportedProfile => {
-                formatter.write_str("kernel Text profile has no caller proof encoding")
             }
         }
     }
@@ -135,34 +130,31 @@ pub struct CallerTextProofHarness {
 }
 
 /// Emit a caller-ingress oracle that delegates admission and accounting to the exact kernel.
-pub fn generate_caller_text_oracle(
-    request: CallerTextAdmissionRequest,
-) -> Result<CallerTextOracle, CallerTextProofRefusal> {
+pub fn generate_caller_text_oracle(request: CallerTextAdmissionRequest) -> CallerTextOracle {
     let text_type = request.text_type;
     let (min, max) = (text_type.min(), text_type.max());
     let source = "use quire_exact as rt;\n\npub fn admit_caller_text(operand: &rt::TextPayload, text_type: &rt::TextType, meter: &mut rt::Meter) -> rt::Outcome<rt::Text> {\n    rt::admit_text(operand, text_type, meter)\n}\n".to_owned();
-    Ok(CallerTextOracle {
+    CallerTextOracle {
         identity: CallerTextProofIdentity {
-            profile: caller_profile(text_type.profile())?,
+            profile: caller_profile(text_type.profile()),
             min,
             max,
             payload_class: CALLER_TEXT_PAYLOAD_CLASS,
         },
         source: Artifact::new("src/lib.rs", source),
-    })
+    }
 }
 
 /// Emit the generated public caller oracle source for embedding in a proof harness.
 ///
 /// The proof harness consumes this artifact rather than reconstructing an equivalent wrapper, so
 /// agreement and mutation checks exercise the same function callers receive.
-pub(crate) fn generated_caller_text_oracle_source(
-    text_type: &TextType,
-) -> Result<String, CallerTextProofRefusal> {
-    let oracle = generate_caller_text_oracle(CallerTextAdmissionRequest {
+pub(crate) fn generated_caller_text_oracle_source(text_type: &TextType) -> String {
+    generate_caller_text_oracle(CallerTextAdmissionRequest {
         text_type: *text_type,
-    })?;
-    Ok(oracle.source.contents)
+    })
+    .source
+    .contents
 }
 
 /// Execute caller-ingress admission through the exact kernel's `quire_exact` API.
@@ -190,7 +182,7 @@ pub fn validate_caller_text_proof(
         });
     }
     Ok(CallerTextProofIdentity {
-        profile: caller_profile(text_type.profile())?,
+        profile: caller_profile(text_type.profile()),
         min: bounds.0,
         max: bounds.1,
         payload_class: CALLER_TEXT_PAYLOAD_CLASS,
@@ -211,7 +203,7 @@ pub fn generate_caller_text_proof_harness(
     let profile = profile_source(identity.profile);
     let min = identity.min;
     let max = identity.max;
-    let oracle = generated_caller_text_oracle_source(text_type)?;
+    let oracle = generated_caller_text_oracle_source(text_type);
     let input_arms = caller_text_input_arms();
     let source = format!(
         r#"pub mod caller_text {{
@@ -293,16 +285,14 @@ pub fn caller_text_admission_agrees() {{
     })
 }
 
-pub(crate) fn caller_profile(
-    profile: TextProfile,
-) -> Result<CallerTextProfile, CallerTextProofRefusal> {
+pub(crate) fn caller_profile(profile: TextProfile) -> CallerTextProfile {
     match profile {
-        TextProfile::UnicodeScalars => Ok(CallerTextProfile::UnicodeScalars),
-        TextProfile::Nfc => Ok(CallerTextProfile::Nfc),
-        TextProfile::Nfd => Ok(CallerTextProfile::Nfd),
-        TextProfile::Nfkc => Ok(CallerTextProfile::Nfkc),
-        TextProfile::Nfkd => Ok(CallerTextProfile::Nfkd),
-        TextProfile::BinaryUtf8 => Ok(CallerTextProfile::BinaryUtf8),
+        TextProfile::UnicodeScalars => CallerTextProfile::UnicodeScalars,
+        TextProfile::Nfc => CallerTextProfile::Nfc,
+        TextProfile::Nfd => CallerTextProfile::Nfd,
+        TextProfile::Nfkc => CallerTextProfile::Nfkc,
+        TextProfile::Nfkd => CallerTextProfile::Nfkd,
+        TextProfile::BinaryUtf8 => CallerTextProfile::BinaryUtf8,
     }
 }
 
@@ -355,8 +345,7 @@ mod tests {
     fn caller_oracle_calls_runtime_admission_without_checked_node_identity() {
         let generated = generate_caller_text_oracle(CallerTextAdmissionRequest {
             text_type: TextType::new(0, 8, TextProfile::Nfc).expect("valid type"),
-        })
-        .expect("known runtime profile");
+        });
         assert!(generated.source.contents.contains(
             "pub fn admit_caller_text(operand: &rt::TextPayload, text_type: &rt::TextType, meter: &mut rt::Meter)"
         ));
@@ -497,7 +486,7 @@ mod tests {
                 )
                 .expect("supported request");
                 let source = harness.source.contents;
-                assert_eq!(harness.identity.profile, caller_profile(profile).unwrap());
+                assert_eq!(harness.identity.profile, caller_profile(profile));
                 assert_eq!((harness.identity.min, harness.identity.max), (min, max));
                 assert_eq!(harness.identity.payload_class, CALLER_TEXT_PAYLOAD_CLASS);
                 assert_eq!(harness.solver, "cadical");
