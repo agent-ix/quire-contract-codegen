@@ -68,6 +68,12 @@ Revise before accept: settle which input authority binds a claim to its populati
 | --- | --- | --- | --- |
 | FND-009 | low | AC-108 glosses `UnknownNode` as "the claim's node id is absent from the graph" and `NotReachesApplication` as "the path names no `quire.op.model.reaches` application". In IR FR-038 (:3202-3208), `relationship_end` takes the id of the reaches application at the path, not the claim's `state_clause` id. A path that names no reachability is already AC-107's `unsupported` "missing claim" refusal, so the same input has two different refusal names. Gloss the errors as "the application id at the claim's path is absent" or "not a reaches application", and state that AC-107's location refusal comes first. | spec/kani/functional/FR-015-bounded-kani-obligations.md:791 |
 
+## New findings (disposition pass 8)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-010 | low | The FND-009 fix spliced AC-108's last sentence: "... gets AC-107's refusal and never `NotReachesApplication`, a field member of another shape and a claim form the encoding cannot express each settle `unsupported` naming the input." The field-member and claim-form refusals now read as part of the AC-107 ordering clause. End the ordering sentence after `NotReachesApplication` and restore those two items as their own sentence. | spec/kani/functional/FR-015-bounded-kani-obligations.md:791 |
+
 ## Dispositions
 
 Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
@@ -108,3 +114,9 @@ Round 6 reviewed at 3bf7325c6ac1614314cbc17b0e67afc13fa5cc0b (fix 9a91874..3bf73
 Round 6 sweep: I grepped every added line of `git diff origin/main...3bf7325 -- spec/` for IR-851, IR-852, QSL-819, Unavailable, Unbounded, "every claim", requires_bound, QSL-804 and "blocked". Every hit agrees with the 3-step sequence. IR-852 is cited for the claim-to-population mapping (today `Unavailable`, settles `unsupported`). QSL-819 is cited for the finite authored bound, and `Unbounded` -> `requires_bound` applies only after QSL-819 and IR-852. IR-851 is cited only for relationship-end multiplicity. "Every claim" appears only for today's `unsupported` state. No new findings.
 
 Round 7 note at 94718fd04fe90be72842cc6e840e9dd94afb2dd1 (fix 3bf7325..94718fd, IR-851 spec citation). The citation was verified against quire-contract-ir d1f2f83f (on origin/main). `CheckedPackageV2::relationship_end(&self, application: &CheckedNodeId) -> Result<CheckedRelationshipEnd, CheckedRelationshipEndError>` exists in FR-038 :3202-3213. Its nine fields (application, relationship, role, destination_type, lower, upper, ordered, unique, forward) and its closed errors (UnknownNode, NotReachesApplication, UnresolvedEnd) match FR-015 :140 exactly, and FR-038-AC-262 to FR-038-AC-268 are the PLANNED/UNRUN IR-851 rows. FND-001 to FND-008 stay `fixed`: the 3-step sequence, IR-852/QSL-819 citations and tests.md :95 are unchanged and consistent. New FND-009 is above.
+
+Round 8 reviewed at 33854d0ef1a8c0733109cba68c0b7c7a84c18fab (fix 94718fd..33854d0).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-009 | fixed | 33854d0: AC-108 glosses `UnknownNode` as the id of the reaches application found at the claim's path (not the `state_clause` id), `NotReachesApplication` as that application id naming a non-reaches node, and states that AC-107's location refusal is checked first. |
