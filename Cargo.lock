@@ -800,6 +800,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "ix-trace-rs"
+version = "0.1.0"
+source = "git+https://github.com/agent-ix/ix-trace-rs?branch=main#9378a67762a9871fbad0179028185bb8785a825b"
+
+[[package]]
 name = "js-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1426,6 +1431,7 @@ name = "quire-contract-codegen"
 version = "0.1.0"
 dependencies = [
  "command-fds",
+ "ix-trace-rs",
  "jsonschema 0.17.1",
  "num-bigint",
  "proc-macro2",
