@@ -61,3 +61,10 @@ Round 2 reviewed at bff9ba20ffd6bc59bec6401cd61caaf449665946.
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-002 | fixed | bff9ba2: FR-015 :147-160 states the sequence Unavailable->unsupported (IR-851), then Unbounded->requires_bound (QSL-819), then Finite; AC-108, TC-025 steps (2)-(3) and tests.md :95 match it. |
+
+Round 3 reviewed at f7a398ec39cf8fe7186ef5cc9faf56090d5fbd20.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-003 | fixed | f7a398e: AC-108 now cites the Description paragraph "Disposition sequence for a graph claim" (:147), which exists. |
+| FND-004 | fixed | f7a398e: AC-98, AC-105 and AC-106 now read "needs IR-851 and QSL-819", matching the sequence and tests.md :95. |
