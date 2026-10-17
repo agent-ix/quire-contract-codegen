@@ -368,7 +368,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     write_manifest(
         &directory.path,
         &format!(
-            "[package]\nname = \"native-vacuity\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\n{}\n",
+            "[package]\nname = \"native-vacuity\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
         ),
     );

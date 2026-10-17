@@ -248,21 +248,10 @@ fn resource_profile_and_path_refusals_preserve_no_classifications() {
 /// Trace: TC-006, FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-7, FR-004-AC-9
 #[test]
 fn complete_bound_package_is_observed_against_actual_native_llvm() {
-    use std::{
-        fs,
-        path::PathBuf,
-        process::Command,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "bound-coverage-native-{}-{nonce}",
-        std::process::id()
-    ));
-    fs::create_dir(&root).unwrap();
+    use crate::scratch_crate::TemporaryDirectory;
+    use std::{fs, path::PathBuf, process::Command};
+    let scratch = TemporaryDirectory::new("bound-coverage-native");
+    let root = scratch.path.clone();
     let (package, generated) = generate(&projection("coverage/native", &expressions(), true));
     let BoundOracleGeneration::Generated(g) = &generated else {
         panic!("native expected executable")
@@ -431,7 +420,6 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
         changed["clauses"][5]["diagnostics"][0]["code"],
         "inconsistent_observation"
     );
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Trace: TC-006, FR-004-AC-3, FR-004-AC-7, FR-004-AC-9

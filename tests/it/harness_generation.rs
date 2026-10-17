@@ -197,7 +197,7 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
     write_manifest(
         &temporary.path,
         &format!(
-            "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&["proptest"])
         ),
     );
@@ -652,7 +652,7 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         write_manifest(
             &temporary.path,
             &format!(
-                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
                 runtime_dependency(&["proptest"])
             ),
         );

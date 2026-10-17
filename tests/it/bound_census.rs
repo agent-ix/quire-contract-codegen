@@ -368,7 +368,7 @@ mod generated_tests {
     let temporary = TemporaryDirectory::new("quire-generated-bound-census");
     fs::write(
         temporary.path.join("Cargo.toml"),
-        "[package]\nname = \"generated-bound-census\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\n",
+        "[package]\nname = \"generated-bound-census\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\n\n[workspace]\n",
     )
     .unwrap();
     fs::write(temporary.path.join("src/lib.rs"), source).unwrap();

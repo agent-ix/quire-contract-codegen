@@ -298,10 +298,11 @@ fn validate(schema: &str, instance: &serde_json::Value) {
 }
 
 fn write_generated_crate(
+    prefix: &str,
     bundle: &quire_contract_codegen::KaniArtifactBundle,
     subject: &str,
 ) -> TemporaryDirectory {
-    let directory = TemporaryDirectory::new("quire-generated-kani");
+    let directory = TemporaryDirectory::new(prefix);
     fs::create_dir_all(directory.path.join("src")).expect("source directory should be writable");
     fs::write(
         directory.path.join("src/lib.rs"),
@@ -332,7 +333,7 @@ fn execute_kani(
 ) -> std::process::Output {
     let graph: ProofDependencyGraph =
         serde_json::from_str(&bundle.proof_graph.contents).expect("graph should deserialize");
-    let directory = write_generated_crate(bundle, subject);
+    let directory = write_generated_crate("quire-generated-kani-execute", bundle, subject);
     Command::new("cargo")
         .arg("kani")
         .args(&graph.options)
@@ -413,7 +414,7 @@ fn classify_bundle(
 ) -> KaniRunOutcome {
     let graph: ProofDependencyGraph =
         serde_json::from_str(&bundle.proof_graph.contents).expect("graph should deserialize");
-    let directory = write_generated_crate(bundle, subject);
+    let directory = write_generated_crate("quire-generated-kani-classify", bundle, subject);
     let report_path = directory.path.join("report.json");
     let output = Command::new("cargo")
         .arg("kani")
@@ -549,6 +550,7 @@ fn kani_bundle_is_deterministic_schema_valid_and_stable_rust_compiles() {
     assert_eq!(graph.proof_execution_state, "not_run");
 
     let directory = write_generated_crate(
+        "quire-generated-kani-compile",
         &first,
         "/// Customer transition under proof.\npub fn subject(input: bool, pre_state: bool) -> bool { input || pre_state }",
     );
@@ -737,6 +739,7 @@ fn numeric_state_bindings_are_normalized_bounded_and_schema_valid() {
     );
 
     let directory = write_generated_crate(
+        "quire-generated-kani-mixed",
         &first,
         "/// Mixed primitive transition under proof.\npub fn subject(amount: i64, flag: bool, enabled: bool, version: i64) -> (bool, i64) { let _ = (amount, enabled); (flag, version) }",
     );
@@ -1612,6 +1615,7 @@ fn kani_executes_the_generated_contract_proof() {
     let graph: ProofDependencyGraph =
         serde_json::from_str(&bundle.proof_graph.contents).expect("graph should deserialize");
     let directory = write_generated_crate(
+        "quire-generated-kani-contract-proof",
         &bundle,
         "/// Customer transition under proof.\npub fn subject(input: bool, pre_state: bool) -> bool { input || pre_state }",
     );
@@ -1671,6 +1675,7 @@ fn kani_executes_the_generated_contract_proof() {
             .expect("conditional graph should deserialize");
     assert_eq!(conditional_graph.readiness, ProofReadiness::Conditional);
     let conditional_directory = write_generated_crate(
+        "quire-generated-kani-conditional",
         &conditional_bundle,
         "/// Customer transition under proof.\npub fn subject(input: bool, pre_state: bool) -> bool { input || pre_state }",
     );
@@ -1826,7 +1831,8 @@ fn kani_bundle_oracle_overflow_is_a_failing_check_not_a_wrapped_value() {
         "/// Customer transition under proof.\npub fn subject(_x_current: i64) {{}}\n\n#[cfg(kani)]\nmod overflow_probe {{\n    use super::*;\n\n    #[kani::proof]\n    fn unconstrained() {{\n        let x: i64 = kani::any();\n        let _ = {oracle}(x);\n    }}\n\n    #[kani::proof]\n    fn domain_assumed() {{\n        let x: i64 = kani::any();\n        kani::assume(x >= 0_i64 && x <= 10_i64);\n        let _ = {oracle}(x);\n    }}\n}}\n"
     );
     let run = |harness: &str| {
-        let directory = write_generated_crate(&bundle, &subject);
+        let directory =
+            write_generated_crate("quire-generated-kani-overflow-probe", &bundle, &subject);
         Command::new("cargo")
             .args([
                 "kani",
