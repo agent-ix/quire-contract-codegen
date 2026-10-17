@@ -422,8 +422,10 @@ in `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute
 `tc_027_a_malformed_exit_status_still_refuses_the_report` and
 `tc_027_the_cause_never_feeds_classification`) and, for the FR-029 terminal value,
 `tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause` in `tests/it/kani_obligations.rs`
-(the value is `Failed` for each cause; that it is independent of the cause and the record holds by the
-signature of `run_terminal_value`, which receives only the outcome and the SUCCESS-check count); by the tests of the exit-status
+(IR-848 replaces this test: the value is read from the cause by `run_terminal_value`, which takes
+`Option<&KaniFailureCause>`; `out_of_memory` gives `Incomplete(ResourceExhausted)` and `exit_code_64` and
+`cbmc_exploded` give `Failed`, FR-029-AC-32; independence from the diagnostic record holds because the
+map takes no record); by the tests of the exit-status
 vocabulary, the 64-byte cut and the one-entry rule in `src/kani/output/report.rs`; by the serialize-only
 check, which is the rustdoc `compile_fail` example on `KaniFailureCause` run by `cargo test --doc`
 beside its `serde_json::to_string` control and the `tc_027_the_cause_implements_no_deserialize`
