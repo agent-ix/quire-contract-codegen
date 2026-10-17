@@ -91,6 +91,9 @@ Text-admission identity rather than claiming a checked node or contract role.
 - For a `NoVerdict` run only, a diagnostic record in that evidence: a typed failure phase and a
   bounded, redacted tail excerpt of each of the launcher's stdout and stderr (see NoVerdict
   diagnostics below).
+- For a `FailedWithoutCounterexample` run whose report states an exit status for the harness, the
+  typed cause that exit status names; and, when that cause is a CBMC failure rather than a failed
+  property, the same diagnostic record (see CBMC failure cause below).
 - A typed refusal, and no run, when the launcher is absent or when the crate
   does not contain the harness.
 - For a paired routed-scalar run, an opaque receipt containing the measured proof-content
@@ -360,7 +363,8 @@ verdict claim.
   `KaniInconclusiveReason::NoVerdict`, the generator shall retain in that evidence a diagnostic
   record holding a typed failure phase, a stdout excerpt and a stderr excerpt.
 - When the classified outcome is any other outcome, the generator shall retain no diagnostic
-  record, and the evidence's wire form shall have no `diagnostics` member. When the run is
+  record, and the evidence's wire form shall have no `diagnostics` member, except for the
+  `FailedWithoutCounterexample` evidence that CBMC failure cause below gives a record. When the run is
   refused, the generator shall return no evidence and so no diagnostic record.
 - The generator shall compute the outcome, the checks, the SUCCESS-check count and the playback
   exactly as the rules above state, before and independently of the diagnostic record. The
@@ -381,8 +385,9 @@ verdict claim.
 - The generator shall derive each `NoVerdict` member's failure phase `KaniFailurePhase` from the
   run's exported report, that member's own segment and the group's streams, by these rules in
   order, the first that applies deciding:
-  1. `unknown` when the run exported a report (a report of success beside an unsuccessful exit):
-     the report shows the backend finished, so no stage is named as the one that failed.
+  1. `unknown` when the run exported a report (a report of success beside an unsuccessful exit, or
+     a report whose entry states a CBMC failure): the report shows the backend finished, so no
+     stage is named as the one that failed.
   2. `solver` when the member's segment holds a line beginning `Solving with ` (the line CBMC
      prints when it hands the problem to its SAT solver).
   3. `backend` when the member has a segment: Kani printed `Checking harness <path>...` for it,
@@ -413,8 +418,8 @@ verdict claim.
 
 Rationale, not a requirement: Kani exports a report when CBMC itself fails (an unknown CBMC option,
 CBMC out of memory, CBMC killed by a signal), with the harness entry `Failure`, no checks and an
-`error_details` exit status. Such a run is classified from that report and is not `NoVerdict`, so
-this record does not cover it; retaining its cause is outside this requirement. A `backend` or
+`error_details` exit status. Such a run is classified from that report and is not `NoVerdict`;
+CBMC failure cause below retains its cause. A `backend` or
 `solver` phase therefore describes a Kani driver that ended without exporting its report after the
 member's verification pipeline started.
 
@@ -500,11 +505,72 @@ carries at most N times 16 KiB of diagnostic text however much its streams carri
   failure for none, every member being `NoVerdict`, the generator shall give each member the phase
   `unknown` and the excerpts of the group's streams.
 - Where a group's process exits unsuccessfully and its report states failure for at least one
-  member, no member being `NoVerdict` under FR-017-AC-22, the generator shall give no member a
-  diagnostic record.
+  member, no member being `NoVerdict` under FR-017-AC-22, the generator shall give a diagnostic
+  record only to a `FailedWithoutCounterexample` member that CBMC failure cause below gives one.
 - The generator shall serialize the record as `diagnostics { phase, stdout { text, omittedBytes },
   stderr { text, omittedBytes } }`, with `phase` one of `launcher`, `compile`, `backend`, `solver`
   and `unknown`, and shall implement no deserialization for the record, its phase or its excerpts.
+
+### CBMC failure cause
+
+When CBMC itself fails, Kani still exports a report: the harness entry states failure, lists no
+checks, and the report's `error_details` entry for the harness carries an `exit_status` naming why.
+The run is classified from that report, as `FailedWithoutCounterexample`, so its evidence keeps the
+cause the report states. The cause is diagnostic only: it never changes an outcome, a check, a
+count, a playback or a refusal.
+
+- The generator shall read, in `src/kani/output/report.rs`, the reported exit status of each
+  harness result: the `exit_status` of the one `error_details` entry whose `harness_id` equals the
+  result's `harness_id`. The harness has no reported exit status when no entry or more than one
+  entry names it, when the result names no `harness_id`, or when that entry's `exit_status` is
+  absent or null.
+- The generator shall map a reported exit status to the closed vocabulary `KaniFailureCause`, the
+  first rule that applies deciding:
+  1. `properties_failed` is `properties_failed`: a property check failed.
+  2. `timeout` is `timeout`: Kani's own per-harness timeout stopped the harness.
+  3. `out_of_memory` is `out_of_memory`: Kani's statement that CBMC was killed by `SIGKILL`, which
+     Kani reports as out of memory whatever sent the signal.
+  4. `exit_code_` followed by a canonical decimal integer that fits a signed 32-bit integer (`0`,
+     or an optional `-` then a digit 1 to 9 then any digits) is `exit_code` with that integer as
+     `code`. The generator keeps the number Kani states and does not read it as an exit code or a
+     signal number.
+  5. Any other value is `unknown` with the value as `exitStatus`, kept whole when it is at most 64
+     bytes and otherwise cut to its longest prefix of at most 64 bytes that ends on a character
+     boundary.
+- When the classified outcome of a run or of a batch member is `KaniRunOutcome::Inconclusive` with
+  `KaniInconclusiveReason::FailedWithoutCounterexample` and the harness has a reported exit status,
+  the generator shall retain in that evidence the cause as `failureCause`. For every other
+  outcome, and for a harness with no reported exit status, the evidence's wire form shall have no
+  `failureCause` member.
+- When that cause is `timeout`, `out_of_memory`, `exit_code` or `unknown`, the generator shall also
+  retain in that evidence the diagnostic record of NoVerdict diagnostics, built by the same rules
+  from the same streams, its phase being `unknown` by failure-phase rule 1. When the cause is
+  `properties_failed`, or the evidence has no cause, the generator shall retain no diagnostic
+  record.
+- The generator shall compute the outcome, the checks, the SUCCESS-check count, the playback, every
+  refusal and the FR-029 terminal value exactly as the rules above state, before and independently
+  of the cause and the diagnostic record. A `FailedWithoutCounterexample` run stays
+  `FailedWithoutCounterexample` whatever its cause, and its FR-029 terminal value stays `Failed`.
+- The generator shall apply the batch timeout rule of FR-017-AC-22 to the `error_details` entries
+  as that rule reads them, independently of the one-entry rule above: a member whose entry states
+  failure with no checks and is named by an entry with exit status `timeout` is inconclusive timed
+  out, and so carries no `failureCause`. A member whose `timeout` entry lists checks keeps the
+  classification the rules above give it, and when that is `FailedWithoutCounterexample` carries
+  the cause `timeout`. A single run's classification reads no exit status; a single run whose entry
+  gives `timeout` stays `FailedWithoutCounterexample` with the cause `timeout`.
+- The generator shall keep refusing as malformed a report whose `exit_status` is neither a string
+  nor null, and shall never refuse a report or a run for an exit status it does not know.
+- The generator shall serialize the cause as `failureCause { kind }` with `kind` one of
+  `properties_failed`, `timeout` and `out_of_memory`, as `failureCause { kind: "exit_code", code }`
+  with `code` a JSON number, and as `failureCause { kind: "unknown", exitStatus }`, and shall
+  implement no deserialization for the cause.
+
+Rationale, not a requirement: Kani's report names a CBMC failure only by this exit status. Measured,
+an unknown CBMC option gives `exit_code_64`, `SIGTERM` sent to CBMC gives `exit_code_15` (the signal
+number), `SIGKILL` sent to CBMC gives `out_of_memory`, Kani's own per-harness timeout gives
+`timeout` and a failed assertion gives `properties_failed`; a successful harness's entry has no
+exit status. CBMC's own message (such as `Unknown option: --no-such-option`) is on the launcher's
+stderr, which the diagnostic record's excerpt keeps.
 
 ## Constraints
 
@@ -543,11 +609,15 @@ carries at most N times 16 KiB of diagnostic text however much its streams carri
 | FR-017-AC-29 | The runner measures one canonical proof-content identity over the exact paths and bytes of every staged execution input: the complete generated package, retained harness, native invocation adapter and resolved dependency lock. This identity binds the content actually proved and executed; it is not a tool-version or file-version tracking identity, and no separate identity is added for any staged item. The Kani and native invocations cannot write the staged source tree. A changed, replaced or additional staged file before or after either invocation yields a typed failure and no receipt. The receipt separately binds the scalar identity, oracle symbol, ordered concrete operands and exact supplied `ScalarLimits`; none of these request fields may be substituted after measurement or inferred from the proof-content identity. | Test (TC-027) |
 | FR-017-AC-30 | The public receipt exposes the measured identity, scalar identity, ordered operands, exact supplied and meter-used `ScalarLimits`, verified Kani evidence and actual typed native outcome through read-only access. Callers cannot construct, deserialize or mutate a receipt, set its identity or outcome, or turn any non-verified, refused, inconclusive, faulted or malformed run into a receipt. | Test (TC-027) |
 | FR-017-AC-31 | The paired runner executes an order-sensitive routed scalar operation with two symbolic operands in two concrete operand orders. Each real Kani run is verified; the native invocation returns the result for that order; and each receipt binds its exact ordered operand vector and typed native result. Swapping the operands changes the observed result and receipt context while retaining the same generated proof-content identity. | Test (TC-027) |
-| FR-017-AC-32 | In the `make kani` lane, a crate whose library source holds the generated harness byte for byte and, beside it, an item that does not compile (a reference to an undefined name) is run through `execute_kani_obligation`: the run exits unsuccessfully, exports no report and is `Inconclusive` `NoVerdict` with its exit code, and its evidence carries a diagnostic record whose phase is `compile`, whose stdout excerpt holds the rustc error code and Kani's `error: Failed to execute cargo` line and whose stderr excerpt holds Cargo's `error: could not compile` line with the crate path as `<CRATE_DIR>`. A launcher stand-in that exits 1 with no report and prints nothing is `NoVerdict` with phase `launcher` and two empty excerpts with `omittedBytes` 0. Evidence of a verified, cover-unsatisfied, falsified, timed-out, memory-exhausted or other inconclusive run has no `diagnostics` member on the wire, and every refusal returns no evidence and no record. | Test (TC-027) |
+| FR-017-AC-32 | In the `make kani` lane, a crate whose library source holds the generated harness byte for byte and, beside it, an item that does not compile (a reference to an undefined name) is run through `execute_kani_obligation`: the run exits unsuccessfully, exports no report and is `Inconclusive` `NoVerdict` with its exit code, and its evidence carries a diagnostic record whose phase is `compile`, whose stdout excerpt holds the rustc error code and Kani's `error: Failed to execute cargo` line and whose stderr excerpt holds Cargo's `error: could not compile` line with the crate path as `<CRATE_DIR>`. A launcher stand-in that exits 1 with no report and prints nothing is `NoVerdict` with phase `launcher` and two empty excerpts with `omittedBytes` 0. Evidence of a verified, cover-unsatisfied, falsified, timed-out, memory-exhausted or other inconclusive run has no `diagnostics` member on the wire, apart from the `FailedWithoutCounterexample` evidence FR-017-AC-37 gives one, and every refusal returns no evidence and no record. | Test (TC-027) |
 | FR-017-AC-33 | Over single-run launcher stand-ins that exit 1: a report of success beside the unsuccessful exit is `unknown` even when its stdout holds `Solving with CaDiCaL 3.0.0`; with no report, stdout holding the Kani banner, `Checking harness proofs::check...` and `Solving with CaDiCaL 3.0.0` is `solver`; the banner and the `Checking harness` line alone is `backend`; the banner and `error: Failed to execute cargo (exit status: 101). Found 1 compilation errors.` is `compile`, as is stderr `error: could not compile` alone with the banner; a usage error on stderr and nothing on stdout is `launcher`; the banner alone is `unknown`; a solver line in a wording other than `Solving with ` after the `Checking harness` line is `backend`, never `solver`; a `Checking harness` line for a path the launch did not pass starts no segment, so the run is `unknown`; `-j 2` in the option vector with the `solver` stdout above is `unknown`. The phase is the same when the marker lies before the 8192-byte excerpt window. | Test (TC-027) |
 | FR-017-AC-34 | A redacted stream of exactly 8192 bytes is kept whole with `omittedBytes` 0; one of 8193 bytes whose final line starts within the window keeps the longest line-aligned suffix of at most 8192 bytes with `omittedBytes` the byte count before it; a stream whose final line alone exceeds 8192 bytes keeps at most 8192 bytes ending at its last byte, starting on a character boundary; a stream that is one 10000-byte line followed by `\n` keeps the last 8192 bytes of it, ending in `\n`, never an empty excerpt; a stream of a 10000-byte line, `\n`, `error: last\n` keeps exactly `error: last\n`; a 4-byte character straddling the cut is never split; invalid UTF-8 is decoded with U+FFFD; ANSI escapes are removed; a stream of only line feeds is kept whole up to 8192 bytes. No excerpt exceeds 8192 bytes, and a stream at its 8 MiB limit still yields an excerpt of at most 8192 bytes. | Test (TC-027) |
 | FR-017-AC-35 | With crate directory `/h/u/ws/crate`, target directory `/h/u/ws/crate/target` and home directory `/h/u` supplied in the request, a stand-in whose streams print `(/h/u/ws/crate)`, `/h/u/ws/crate/src/lib.rs:6:21`, `/h/u/ws/crate/target/debug/x.out`, `/h/u/.kani/bin`, `/h/u/ws/crate2/src/lib.rs`, `/opt/tool/bin`, `https://host/x/y`, `and/or`, `/`, `2026-10-16T22:27:04.275975036Z`, `Runtime Symex: 0.00331318s`, `Runtime Solver: 1.385e-05s`, `in 0.02s`, `check_ttl_30s`, `u32s`, `pid 4242` and `thread 'main' (4242) panicked` yields, in order, `(<CRATE_DIR>)`, `<CRATE_DIR>/src/lib.rs:6:21`, `<TARGET_DIR>/debug/x.out`, `<HOME>/.kani/bin`, `<HOME>/ws/crate2/src/lib.rs`, `<PATH>`, `https://host/x/y`, `and/or`, `/`, `<TIMESTAMP>`, `Runtime Symex: <DURATION>`, `Runtime Solver: <DURATION>`, `in <DURATION>`, `check_ttl_30s`, `u32s`, `pid <PID>` and `thread 'main' (<PID>) panicked`. A home directory of `/` redacts nothing as `<HOME>`, and an absent one leaves `/h/u/.kani/bin` as `<PATH>`. The generator reads no `HOME` from its environment: the same run under two different process `HOME` values gives the same record. Two runs whose streams differ only in those redacted values serialize byte-identical records. The record serializes as `diagnostics { phase, stdout { text, omittedBytes }, stderr { text, omittedBytes } }`; a rustdoc `compile_fail` example on the record type that calls `serde_json::from_str` for it fails to compile, beside a compiling control that calls `serde_json::to_string` on the same value. | Test (TC-027) |
-| FR-017-AC-36 | The diagnostic record never feeds classification: two runs with the same report and exit and different stream text classify to the same outcome, checks, SUCCESS count and playback, and two `NoVerdict` runs with equal exit and no report whose streams differ have equal evidence in every field but `diagnostics`, `memory` (the observed peak resident bytes vary run to run) and the run's report-path argument (the last argument, unique to each run); the FR-029 terminal value of a `NoVerdict` evidence carrying a record is `Failed`, the value FR-029-AC-4 gives the no-verdict reason, equal to the terminal value of the same evidence with `diagnostics` absent. A group of members A, B and C whose process exits 1 with no report, whose stdout holds `Checking harness a::check...`, `Solving with CaDiCaL 3.0.0` and then `Checking harness b::check...`, gives A `solver`, B `backend` and C `unknown`, all `NoVerdict` with the group's excerpts; the same group whose stdout holds a compile failure and no segment gives every member `compile`. A group whose report has every member Success and whose process exits 1 gives every member `NoVerdict` with phase `unknown`; one whose report has a Failure entry and exits 1 has no member `NoVerdict` and no member record. A stream over 8 MiB times the harness count stays refused with `kani_output_over_limit`, and an unread stream with `kani_output_unread`, with no evidence and no record. Two otherwise compatible requests whose `home_directory` differs (one `/h/u`, one `/h/v`, or one absent) start two processes; two with the same `home_directory` start one, and their members' excerpts of the shared output are byte-identical. | Test (TC-043) |
+| FR-017-AC-36 | The diagnostic record never feeds classification: two runs with the same report and exit and different stream text classify to the same outcome, checks, SUCCESS count and playback, and two `NoVerdict` runs with equal exit and no report whose streams differ have equal evidence in every field but `diagnostics`, `memory` (the observed peak resident bytes vary run to run) and the run's report-path argument (the last argument, unique to each run); the FR-029 terminal value of a `NoVerdict` evidence carrying a record is `Failed`, the value FR-029-AC-4 gives the no-verdict reason, equal to the terminal value of the same evidence with `diagnostics` absent. A group of members A, B and C whose process exits 1 with no report, whose stdout holds `Checking harness a::check...`, `Solving with CaDiCaL 3.0.0` and then `Checking harness b::check...`, gives A `solver`, B `backend` and C `unknown`, all `NoVerdict` with the group's excerpts; the same group whose stdout holds a compile failure and no segment gives every member `compile`. A group whose report has every member Success and whose process exits 1 gives every member `NoVerdict` with phase `unknown`; one whose report has a Failure entry with no exit status and exits 1 has no member `NoVerdict` and no member record. A stream over 8 MiB times the harness count stays refused with `kani_output_over_limit`, and an unread stream with `kani_output_unread`, with no evidence and no record. Two otherwise compatible requests whose `home_directory` differs (one `/h/u`, one `/h/v`, or one absent) start two processes; two with the same `home_directory` start one, and their members' excerpts of the shared output are byte-identical. | Test (TC-043) |
+| FR-017-AC-37 | Over single-run launcher stand-ins that exit 1, print `Checking harness proofs::check...` and `CBMC failed with status 64` on stdout and `Unknown option: --no-such-option` on stderr, and export a report whose one result `proofs::check` is `Failure` with no checks and whose one `error_details` entry for `proofs::check` has the exit status shown: `exit_code_64` is `Inconclusive` `FailedWithoutCounterexample` with `failureCause` `{ "kind": "exit_code", "code": 64 }` and a `diagnostics` record of phase `unknown` whose stderr excerpt holds `Unknown option: --no-such-option`; `exit_code_15` has `code` 15; `exit_code_0` has `code` 0; `exit_code_-1` has `code` -1; `out_of_memory` is `{ "kind": "out_of_memory" }`; `timeout` is `{ "kind": "timeout" }` and stays `FailedWithoutCounterexample`; `cbmc_exploded` is `{ "kind": "unknown", "exitStatus": "cbmc_exploded" }`; `exit_code_`, `exit_code_064`, `exit_code_+64`, `exit_code_-0`, `exit_code_2147483648`, `exit_code_64x` and `EXIT_CODE_64` are each `unknown` with that value as `exitStatus`; a 100-byte ASCII value is `unknown` with its first 64 bytes, and a value whose 64th byte falls inside a 4-byte character is cut before that character. Every one of these evidences carries a `diagnostics` record. PLANNED/UNRUN (IR-827). | Test (TC-027) |
+| FR-017-AC-38 | A single-run stand-in that exits 1 and exports a `Failure` report listing a failed assertion check with no playback on the console, whose entry for the harness has exit status `properties_failed`, is `FailedWithoutCounterexample` with `failureCause` `{ "kind": "properties_failed" }` and no `diagnostics` member. The same report with no `error_details` member, with an entry that names another harness only, with two entries naming the harness, with an entry whose `exit_status` is null, or whose one result names no `harness_id`, is `FailedWithoutCounterexample` with neither a `failureCause` nor a `diagnostics` member. An entry with exit status `exit_code_64` beside a verified or cover-unsatisfied report with exit 0, or beside a falsified (its playback printed) or unwind-bound-exhausted report with exit 1, leaves that outcome unchanged with no `failureCause` member; a `NoVerdict` run (a success report beside exit 1 with that entry, or no report), a timed-out run and a memory-exhausted run have none either. A report whose `exit_status` is the number `64` stays refused as malformed with no evidence. A rustdoc `compile_fail` example on `KaniFailureCause` that calls `serde_json::from_str` for it fails to compile, beside a compiling control that calls `serde_json::to_string` on the same value. PLANNED/UNRUN (IR-827). | Test (TC-027) |
+| FR-017-AC-39 | A batch stand-in of members `a::check`, `b::check`, `c::check` and `d::check` whose process exits 1 and whose report has `a::check` `Success` with a passing assertion, every cover satisfied and no exit status, `b::check` `Failure` with no checks and exit status `exit_code_64`, `c::check` `Failure` with no checks and exit status `timeout`, and `d::check` `Failure` listing a failed assertion with no playback block headed for its path and exit status `timeout`, gives `a::check` `Verified` with no `failureCause`; `b::check` `FailedWithoutCounterexample` with `{ "kind": "exit_code", "code": 64 }` and a `diagnostics` record of phase `unknown` holding the group's excerpts; `c::check` inconclusive timed out naming T, with no `failureCause` and no `diagnostics`; and `d::check` `FailedWithoutCounterexample` with `{ "kind": "timeout" }` and a `diagnostics` record. The same group whose report holds two entries for `b::check`, one `timeout` and one `exit_code_64`, gives `b::check` inconclusive timed out with no `failureCause`, the timeout rule reading the entries as before. PLANNED/UNRUN (IR-827). | Test (TC-043) |
+| FR-017-AC-40 | The cause never feeds classification: three single-run stand-ins with the same `Failure` report, no checks and the same exit, whose entries give `exit_code_64`, `out_of_memory` and `cbmc_exploded` and whose streams differ, classify to the same outcome, checks, SUCCESS count and playback, and their evidence is equal in every field but `failureCause`, `diagnostics`, `memory` and the report-path argument; the FR-029 terminal value of each is `Failed`, equal to the terminal value of the same evidence with `failureCause` and `diagnostics` absent. In the `make kani` lane, a generated harness whose option vector has `--cbmc-args --no-such-option` appended is run through `execute_kani_obligation`: the run exits unsuccessfully, exports a report and is `Inconclusive` `FailedWithoutCounterexample` with `failureCause` `{ "kind": "exit_code", "code": 64 }` and a `diagnostics` record whose stderr excerpt holds `Unknown option: --no-such-option`. PLANNED/UNRUN (IR-827). | Test (TC-027) |
 
 ## Dependencies
 
