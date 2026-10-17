@@ -62,6 +62,8 @@ FR-028-AC-12, verified by TC-039.
     `e::check` `Failure` listing a failed assertion, with no playback block headed for its path,
     and exit status `properties_failed`, the entry real Kani writes for a failed assertion. Run the
     same group again with two entries for `b::check`, one `timeout` and one `exit_code_64`.
+13. (FR-029-AC-33, planned under IR-848.) Pass the evidence of `c::check` and of `d::check` from
+    step 12 to `run_terminal_value`.
 
 ## Expected Results
 
@@ -117,6 +119,8 @@ FR-028-AC-12, verified by TC-039.
     `FailedWithoutCounterexample` with `failureCause { kind: "properties_failed" }` and no
     `diagnostics` member. With the two entries for
     `b::check`, `b::check` is inconclusive timed out with no `failureCause` (FR-017-AC-39).
+13. Both are `Incomplete(TimedOut)`: `c::check` through the timed-out row, `d::check` through its
+    cause `timeout` (FR-029-AC-33).
 
 ## Implementation
 

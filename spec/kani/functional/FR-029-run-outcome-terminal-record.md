@@ -78,17 +78,19 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - Planned (IR-806): for the composite parity route, the proof subject (`production` or
   `bounded_shadow`, FR-028), the verified outcome's proof strength (FR-028-AC-17) and retained
   `refinement_failed` disagreement whatever the backend outcome. `run_terminal_value` takes none of
-  these today; its input is the outcome, the CBMC failure cause (IR-848, below), the SUCCESS-check
-  count and the optional replay settlement.
-- The CBMC failure cause (IR-848): `Option<&KaniFailureCause>`, the cause FR-017 retains in the
-  evidence of a `FailedWithoutCounterexample` run (absent for every other run, and for a
-  `FailedWithoutCounterexample` run whose entry states no exit status). The map reads it for the
-  failure-without-counterexample reason only and ignores it for every other outcome. The signature
-  of `run_terminal_value` is `run_terminal_value(outcome, failure_cause: Option<&KaniFailureCause>,
-  success_checks, settlement)`; this is a breaking change to a public function. This repository has
-  no production caller; its test callers change with it. The downstream caller
-  `quire-driver/src/provider.rs` stops compiling at its next bump of this crate, and that change is
-  routed to the driver team (draco), not made here.
+  these; its inputs are the run (the outcome, with the CBMC failure cause under IR-848, below), the
+  SUCCESS-check count and the optional replay settlement.
+- Planned (IR-848): the CBMC failure cause. It is not a free input: `run_terminal_value` takes the
+  run's evidence, `&KaniExecutionEvidence`, and reads the outcome and the `failureCause` from it, so
+  a caller cannot omit the cause of a run that has one. The planned signature is
+  `run_terminal_value(evidence: &KaniExecutionEvidence, success_checks, settlement)`. The cause is
+  that FR-017 retains in the evidence of a `FailedWithoutCounterexample` run (absent for every other
+  run, and for a `FailedWithoutCounterexample` run whose entry states no exit status). The map reads
+  it for the failure-without-counterexample reason only and ignores it for every other outcome. This
+  is a breaking change to a public function. This repository has no production caller; its test
+  callers change with it. The downstream caller `quire-driver/src/provider.rs:89` stops compiling at
+  its next bump of this crate; the driver contract is to pass the `KaniExecutionEvidence` it already
+  holds. That change is routed to the driver team (draco), not made here.
 
 - Delivered IR-666 direct converter; planned IR-806 production invocation: the same-claim composite
   parity settlement/record, binding, bounds and refinement evidence defined below and by
@@ -115,7 +117,9 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 
 - The Kani adapter shall map run outcomes in exactly one function, public so the driver calls it,
   whose `match` over the pair (`KaniRunOutcome` with `KaniInconclusiveReason`, replay settlement)
-  has no wildcard arm.
+  has no wildcard arm. When the reason is failure-without-counterexample, the map shall match the
+  `KaniFailureCause` (or its absence) exhaustively too, with no wildcard arm, so a new cause is a
+  compile error in the map (the type is serialize-only and its FR-017 cause set is closed).
 - The Kani adapter shall map each pair as the table states:
 
   | Outcome | Replay settlement | Result |
@@ -163,17 +167,22 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
   limit, so the run is incomplete, not broken: `Incomplete(ResourceExhausted)` and
   `Incomplete(TimedOut)`. The same exhaustion that CG's own memory stop sees is `MemoryExhausted`
   and maps to `Incomplete(ResourceExhausted)`, so one physical event has one terminal value whoever
-  observed it. A failure without a counterexample whose cause is `properties_failed` or absent keeps
-  `Failed`: Kani reported a failed property and the backend printed no playback, which is a genuine
-  failed-property verdict that CG cannot replay (the reading FR-017's failure-class rule takes). A
-  cause `exit_code` or `unknown` states a CBMC failure that is neither a resource stop nor a failed
-  property: the class is an environment fault (FR-017), and its terminal value is `Failed`, the tool
-  breaking its output contract. That `Failed` is stated, not defaulted: it keeps a CBMC crash
-  loud. Classification is unchanged: the run stays `FailedWithoutCounterexample`.
-- Kani reports any `SIGKILL` of CBMC as `out_of_memory`, whether the kernel OOM killer, a cgroup
-  limit or an operator sent it. This requirement accepts that signal as `ResourceExhausted` without
-  corroboration, as a known limit: an operator kill is read as exhaustion. No verdict is claimed,
-  nothing becomes `Proved` or `Refuted`, and the raw cause stays in the evidence.
+  observed it. Classification is unchanged: the run stays `FailedWithoutCounterexample`.
+- The cause `properties_failed` is `Failed` because Kani reported a failed property and the backend
+  printed no playback: a genuine failed-property verdict that CG cannot replay, the reading
+  FR-017's failure-class rule takes (class `CompletionRefusal`).
+- No cause at all is `Failed` for a different reason: a `Failure` report with no checks and no
+  exit status is no evidence of a verdict or of a resource stop, so the tool broke its output
+  contract. FR-017's class for it is `CompletionRefusal`; the terminal value is `Failed` either way.
+- The cause `exit_code` or `unknown` states a CBMC failure that is neither a resource stop nor a
+  failed property: FR-017's class is `EnvironmentFault`, and the terminal value is `Failed`, the
+  tool breaking its output contract. That `Failed` is stated, not defaulted: it keeps a CBMC crash
+  loud.
+- Rationale, not a requirement: Kani reports any `SIGKILL` of CBMC as `out_of_memory`, whether the
+  kernel OOM killer, a cgroup limit or an operator sent it. This requirement accepts that signal as
+  `ResourceExhausted` without corroboration, as a known limit: an operator kill is read as
+  exhaustion. No verdict is claimed, nothing becomes `Proved` or `Refuted`, and the raw cause stays
+  in the evidence.
 - The two timeout paths agree on the terminal value and differ in classification. A batch member
   with no checks and exit status `timeout` is classified `TimedOut` (FR-017-AC-22) and maps to
   `Incomplete(TimedOut)` through the timed-out row. A single run, which reads no exit status for
@@ -376,10 +385,11 @@ retain the partial/planned statuses below; falsified native/generated-family wor
 | FR-029-AC-29 | A direct `KaniRunOutcome::Cancelled { source }` maps both IR source variants to QSL `IncompleteCause::Cancelled` with the matching exact cause, using the same exhaustive conversion as FR-030; supplying a replay settlement returns `UnexpectedSettlement`. The production cancellation path publishes only FR-030's result. | Test |
 | FR-029-AC-30 | PLANNED (IR-806). A `bounded_shadow` outcome (verified, falsified, inconclusive or cover-unsatisfied) reaches only the composite parity route on the production path and never `run_terminal_value`, because `KaniRunOutcome` cannot tell a shadow from a production proof and a verified shadow outcome there would read as `Proved`, which FR-028-AC-17 forbids. | Test |
 | FR-029-AC-31 | PLANNED (IR-806). The parity route fabricates no predicate replay and no terminal cause for a bounded-shadow outcome: its terminal value is the one QSL's report carries under AC-17 and AC-19 to AC-27. | Test |
-| FR-029-AC-32 | A `FailedWithoutCounterexample` run with cause `out_of_memory` maps to `Incomplete(ResourceExhausted)`, and the same reason with cause `properties_failed`, `exit_code` (any code), `unknown` or no cause maps to `Failed`. Over a single-run stand-in that exits 1 and exports a `Failure` report for `proofs::check` with no checks and one `error_details` entry with exit status `out_of_memory`, the evidence's cause passed to `run_terminal_value` gives `Incomplete(ResourceExhausted)`; the same report with exit status `exit_code_64`, `cbmc_exploded`, `properties_failed`, a null status or no `error_details` gives `Failed`. | Test (TC-040) |
-| FR-029-AC-33 | A `FailedWithoutCounterexample` run with cause `timeout` maps to `Incomplete(TimedOut)`: the single-run stand-in of FR-029-AC-32 with exit status `timeout` gives `Incomplete(TimedOut)`. The batch member `c::check` of FR-017-AC-39 (a `Failure` with no checks and exit status `timeout`, classified `TimedOut`) keeps `Incomplete(TimedOut)` through the timed-out row, and the member `d::check` (a `Failure` listing a failed check with no playback, exit status `timeout`, classified `FailedWithoutCounterexample` with cause `timeout`) gives `Incomplete(TimedOut)` through the cause. | Test (TC-040, TC-043) |
-| FR-029-AC-34 | CG's own memory stop (the memory-exhausted reason) and a `FailedWithoutCounterexample` run with cause `out_of_memory` give the same terminal value, `Incomplete(ResourceExhausted)`, so one exhaustion has one value whoever observed it. The cause is read for the failure-without-counterexample reason only: every other outcome and reason maps identically whatever cause is passed, including a cause passed with `NoVerdict` or `MissingCoverSummary`. | Test (TC-040) |
-| FR-029-AC-35 | No outcome becomes `Proved` or `Refuted` through a cause: over every pair of outcome and cause (absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`, `unknown`), the `NoVerdict` and `MissingCoverSummary` reasons map to `Failed`, no result is `Refuted`, and `Proved` appears only for the rows FR-029-AC-1 and FR-029-AC-2 give. Classification is unchanged: the same stand-ins classify exactly as FR-017-AC-40 states. The SIGKILL limit is the stated one: an `out_of_memory` cause from any `SIGKILL` of CBMC is `Incomplete(ResourceExhausted)` with no corroboration, and the evidence keeps the raw cause. | Test (TC-040) |
+| FR-029-AC-32 | PLANNED (IR-848). A `FailedWithoutCounterexample` run with cause `out_of_memory` maps to `Incomplete(ResourceExhausted)`, and the same reason with cause `properties_failed`, `exit_code` (any code), `unknown` or no cause maps to `Failed`. Over a single-run stand-in that exits 1 and exports a `Failure` report for `proofs::check` with no checks and one `error_details` entry with exit status `out_of_memory`, the evidence passed to `run_terminal_value` gives `Incomplete(ResourceExhausted)`; the same report with exit status `exit_code_64`, `cbmc_exploded`, `properties_failed`, a null status or no `error_details` gives `Failed`. | Test (TC-040) |
+| FR-029-AC-33 | PLANNED (IR-848). A `FailedWithoutCounterexample` run with cause `timeout` maps to `Incomplete(TimedOut)`: the single-run stand-in of FR-029-AC-32 with exit status `timeout` gives `Incomplete(TimedOut)`. The batch member `c::check` of FR-017-AC-39 (a `Failure` with no checks and exit status `timeout`, classified `TimedOut`) keeps `Incomplete(TimedOut)` through the timed-out row, and the member `d::check` (a `Failure` listing a failed check with no playback, exit status `timeout`, classified `FailedWithoutCounterexample` with cause `timeout`) gives `Incomplete(TimedOut)` through the cause. | Test (TC-040, TC-043) |
+| FR-029-AC-34 | PLANNED (IR-848). CG's own memory stop (the memory-exhausted reason) and a `FailedWithoutCounterexample` run with cause `out_of_memory` give the same terminal value, `Incomplete(ResourceExhausted)`, so one exhaustion has one value whoever observed it. The cause is read for the failure-without-counterexample reason only: every other outcome and reason maps identically whatever cause is passed, including a cause passed with `NoVerdict` or `MissingCoverSummary`. | Test (TC-040) |
+| FR-029-AC-35 | PLANNED (IR-848). The cause never creates a verdict. Over every combination of outcome, reason and cause (absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`, `unknown`), and with the replay settlement each outcome takes: a `falsified` outcome with a reproduced replay is `Refuted` whatever the cause; the cause never turns a non-`Refuted` result into `Refuted`, and never turns any result into `Proved` (`Proved` appears only for the rows FR-029-AC-1 and FR-029-AC-2 give). The `NoVerdict` and `MissingCoverSummary` reasons map to `Failed` whatever the cause. Classification is unchanged: the same stand-ins classify exactly as FR-017-AC-40 states. | Test (TC-040) |
+| FR-029-AC-36 | PLANNED (IR-848). The rationale of this requirement states that Kani reports any `SIGKILL` of CBMC as `out_of_memory`, that an `out_of_memory` cause is accepted as `Incomplete(ResourceExhausted)` without corroboration, and that the raw cause stays in the evidence. | Inspection |
 
 ### Mutation FR-029-AC-17 detects
 
@@ -409,7 +419,7 @@ The `Cancelled` run variant, its direct total-map arm and FR-029-AC-29 are plann
 the existing implementation does not yet accept that variant. Its production terminal route is
 [FR-040](./FR-040-cancellation-producer.md) through FR-030, with no second terminal publication.
 
-Planned (IR-848): the cause input and FR-029-AC-32 to FR-029-AC-35. FR-030 needs no row: Contract IR
+Planned (IR-848): the evidence input and FR-029-AC-32 to FR-029-AC-36. FR-030 needs no row: Contract IR
 `KaniOutcomeKind::ResourceExhausted` and `TimedOut` already map to `Incomplete`, and the IR outcome has no
 failure-without-counterexample kind.
 
