@@ -14,7 +14,7 @@ relationships:
 
 Verify that scalar oracles generated from an admitted CheckedPackage V2 cover
 every scalar family, refuse every non-generated item with a typed reason, are
-byte-deterministic, and agree with the runtime and the QSL value authority.
+byte-deterministic, and agree with direct runtime execution. Agreement with the QSL value authority is not evidenced and not claimed by CG (FR-014-AC-47); the integer, rational and Boolean steps below that name it are an open gap.
 
 ## Test Procedure
 
@@ -34,10 +34,11 @@ byte-deterministic, and agree with the runtime and the QSL value authority.
    generated source ceiling; construct invalid and incomplete body records.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute its oracles on vectors
-   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U03, U13, U19, U21, U23, U24 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); compare each
+   adapted from QSpec TC-185, TC-186, TC-192 and TC-193 and from the TC-187 vectors U02, U03, U05, U09, U12, U13, U14, U19, U20, U21, U23, U24, U27 and U28 (FR-014-AC-6 lists the TC-187 vectors that are not covered); run each at QSpec's own limit tuple and assert QSpec's disposition, with the whole incomplete record; assert U06 and U11 against the runtime's unit-graph admission, since they have no generated oracle; compare each
    outcome, admitted charges and consumed counters with direct runtime
    execution, including the outcome of denying each admitted charge in turn.
-   Agreement with `quire_spec_language::value` is not asserted here (IR-823).
+   No TC-187 vector is compared with the QSL value authority here (FR-014-AC-47).
+   U06 and U11 are a Contract Runtime unit-graph admission check (Contract Runtime FR-012-AC-4, TC-033), not oracle agreement.
 5. Compile the generated crate manifest.
 6. Derive an item for every node of the exact-scalar corpus with `derive_exact_scalar_items`
    and compare it with the descriptor the fixture declares (FR-014-AC-19);
@@ -217,7 +218,7 @@ Integer arithmetic, rational arithmetic and ordering (including decimal
 ordering) have an operator in the QSL value authority
 (`evaluate_integer_arithmetic`, `evaluate_rational_arithmetic`, and
 `order_numbers`). Their oracles are checked against direct runtime execution
-and are counted separately from the three-way vectors.
+only.
 
 ## Boolean connectives, comparisons and source maps
 
@@ -228,7 +229,10 @@ and are counted separately from the three-way vectors.
    each `eq`/`ne` calls `check_equality` and `CheckedEquality::evaluate`, each returning
    `Outcome<bool>` (FR-014-AC-35). Compile the crate against the runtime alone and run each oracle
    over the bounded domain beside direct runtime execution and the QSL value authority. Outcomes,
-   charges and counters agree on every input (FR-014-AC-37).
+   charges and counters agree on every input (FR-014-AC-37). Open gap: only the direct-runtime
+   comparison runs; the QSL value-authority comparison is not evidenced and not claimed by CG, for
+   the reason in FR-014's Dependencies note on the qsl-replay-only constraint (CG may call the
+   `qsl-replay` facade only, QSL arch-lint T12-A); FR-014-AC-47 keeps CG's artifacts from claiming it.
 2. Generate an oracle over an `implies` node and read its source map. It declares the consequent
    count, one evaluation-entry probe on the function-entry line outside every consequent region and
    one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
