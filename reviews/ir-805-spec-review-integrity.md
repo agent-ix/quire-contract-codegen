@@ -41,6 +41,13 @@ Revise before accept: settle which input authority binds a claim to its populati
 | --- | --- | --- | --- |
 | FND-002 | medium | AC-108 says a population of `Unbounded` "is every claim QSL emits today" so it settles `requires_bound`, and the description says the population "must come from the claim and its admitted package". But the fix dropped the earlier statement that IR has no accessor mapping a reaches claim to its population: QSL requirement records are not on the V2 wire, a domain-package population record has no V2 node (QSL FR-094), and FR-053 builds `Unbounded` only from an upstream `Declaration` selection. With no stated source for that selection, CG gets `Unavailable`, which AC-108 maps to `unsupported`. So the spec gives two dispositions for today's claims; name the source of the claim's population selection (or the IR ticket that adds it), or say today's claims settle `unsupported` (`Unavailable`). | spec/kani/functional/FR-015-bounded-kani-obligations.md:143, spec/kani/functional/FR-015-bounded-kani-obligations.md:781 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | AC-108 says a graph claim "settles by the sequence in the Inputs text", but the three-step disposition sequence is in the Description (FR-015 :147-160), above `## Inputs` (:164); the Inputs section holds no sequence. Point the reference at the Description paragraph. | spec/kani/functional/FR-015-bounded-kani-obligations.md:788, spec/kani/functional/FR-015-bounded-kani-obligations.md:147 |
+| FND-004 | low | AC-105 and AC-106 are tagged "PLANNED (IR-805; needs QSL-819 ...)" while the sequence (:147-160) and tests.md :95 say the Finite path runs only after both IR-851 and QSL-819. The two criteria omit IR-851. | spec/kani/functional/FR-015-bounded-kani-obligations.md:785, spec/kani/functional/FR-015-bounded-kani-obligations.md:786 |
+
 ## Dispositions
 
 Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
@@ -48,3 +55,9 @@ Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-001 | fixed | d088e9c..e1873b1: Inputs :212 now says the population is read from the admitted package, never named or sized by the caller, and the description forbids a caller-named binding. |
+
+Round 2 reviewed at bff9ba20ffd6bc59bec6401cd61caaf449665946.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-002 | fixed | bff9ba2: FR-015 :147-160 states the sequence Unavailable->unsupported (IR-851), then Unbounded->requires_bound (QSL-819), then Finite; AC-108, TC-025 steps (2)-(3) and tests.md :95 match it. |
