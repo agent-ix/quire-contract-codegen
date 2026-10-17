@@ -231,8 +231,8 @@ only.
    over the bounded domain beside direct runtime execution and the QSL value authority. Outcomes,
    charges and counters agree on every input (FR-014-AC-37). Open gap: only the direct-runtime
    comparison runs; the QSL value-authority comparison is not evidenced and not claimed by CG, for
-   the reason FR-014-AC-47 gives (CG may call the `qsl-replay` facade only; the Contract Runtime
-   against QSL composition is quire-integration IR-669).
+   the reason in FR-014's Dependencies note on the qsl-replay-only constraint (CG may call the
+   `qsl-replay` facade only, QSL arch-lint T12-A); FR-014-AC-47 keeps CG's artifacts from claiming it.
 2. Generate an oracle over an `implies` node and read its source map. It declares the consequent
    count, one evaluation-entry probe on the function-entry line outside every consequent region and
    one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
