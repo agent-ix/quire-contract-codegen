@@ -48,3 +48,12 @@ No main-branch spec text still describes `quantity_conversion_unsupported`. TC-0
 
 Examined: FR-014 Description (:213-216), Outputs (:239-243), the Behavior conversion bullet (:269-290), FR-014-AC-2, AC-6, AC-18, AC-48, AC-49, AC-50, AC-51; FR-021-AC-21; TC-024 step 6 (:44-66); tests.md rows :14-16.
 Context only: RT FR-007-AC-20..25, RT TC-201, QSpec TC-187 U01-U29, TC-030:308, FR-019-AC-44, FR-015-AC-15, FR-022-AC-11, TC-025, TC-033.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | d685fc5: AC-6, TC-024 step 6 and tests.md:14 drop U07, U08, U16, U17, U18 and U29 from the agreement set and place them under AC-50 refusals |
+| FND-002 | fixed | d685fc5: the tests.md AC-2 row marks the conversion entry-point clause `🚧 Planned (IR-818 code slice)` and names the four refusal tests that flip |
+| FND-003 | fixed | d685fc5: AC-48 cites FR-007-AC-22, AC-23 and AC-25; AC-24 is gone |
+| FND-004 | fixed | d685fc5: the TC-030:308 row names `quire.op.quantity.convert` and FR-014-AC-51; AC-51 and the tests.md row name the owning TC-030 row |

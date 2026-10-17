@@ -28,3 +28,9 @@ The core conversion and `ill_typed` statements conform to EARS. The trailing ent
 ## Scope
 
 Examined: FR-014 Behavior conversion bullet (:269-290). Context only: FR-014 Description :213-216.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | d685fc5: the entry-point, scalar/compound-target, mode and composite-equality clauses are now separate `shall` statements (an `If ... then ... shall` statement for each refusal) |

@@ -35,3 +35,17 @@ FND-001 and FND-002 are medium completeness gaps that should be closed before th
 
 Examined: FR-014-AC-2, AC-6, AC-18, AC-48, AC-49, AC-50, AC-51; the FR-014 Behavior conversion bullet; FR-014 Outputs refusal-code list; FR-021-AC-21; TC-024 step 6; tests.md rows :14-16.
 Context only: FR-014-AC-1, RT FR-007-AC-21, src/oracle/function/mod.rs (no quantity support), src/kani/generate/negotiate.rs:871 (`NoRenderer` to `OperationNotRendered`).
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The fix requires the function schedules to refuse a conversion body, call or argument as `UnsupportedOperator`. `ScheduleRefusal` has no such variant: its generic refusal for an identity outside the subset is `ScheduleRefusal::UnsupportedOperation(node)` (src/oracle/function/schedule.rs:393). `UnsupportedOperator` exists only on `ExactFunctionRefusal`, where it is emitted by `classify_body_shape` for a body. For a call argument or a quantity-typed signature, the generator's existing earlier checks (`Unsupported` for a direct unsupported form, `UnsupportedOperandType` for a quantity parameter or result type) may fire first, so the named refusal is not guaranteed | spec/oracle/functional/FR-014-exact-scalar-oracles.md:285-289, spec/oracle/functional/FR-014-exact-scalar-oracles.md:455, spec/oracle/functional/FR-021-function-application-oracles.md:266, spec/oracle/matrix/TC-024-exact-scalar-oracles.md:116 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | d685fc5: the Behavior bullet now gives each entry point's disposition. Derivation and generation produce the oracle; routed, negotiation and settlement give `OperationNotRendered`; the function generator and schedules refuse (the variant naming is FND-004) |
+| FND-002 | fixed | d685fc5: new EARS bullets plus AC-50 name `OperandFormsNotDerivable` for a scalar or compound `type_argument` and `ModeNotDerivable` for a non-`exact` mode. Both are existing variants whose docs ("operand or result scalar forms select no operator", "mode selects no rounding") fit |
+| FND-003 | fixed | d685fc5: AC-49 now lists compound `4 m^2` to `m` and labels `N_m` to `J` as U22 |
