@@ -142,15 +142,22 @@ population of `E` is the inclusive `[0, N]` that `select_population` (IR
 FR-053) reads from a `bounded_domain` / `model_population` binding. That
 population must come from the claim and its admitted package: a bound chosen
 by the caller, like `max_expansions`, is forbidden, so the item does not carry
-a caller-named binding or maximum. QSL does not today give a state-clause
-`reaches` a finite population (QSL FR-104 records an unbounded extent for the
-one covering population, and `Population<T>[N]` types only function
-parameters, where `reaches` is refused), so on every claim QSL can emit today
-the population is `Unbounded` and the item settles `requires_bound`. The
-`Verified` and `Falsified` success path below is conditional on a finite
-population source for a state-clause reachability, which needs a QSL change:
-QSL-819 (bounded domain population for reaches). Until then only the
-refusal controls are testable.
+a caller-named binding or maximum.
+
+Disposition sequence for a graph claim, in the order that holds:
+1. Today IR has no mapping from a reaches claim to its population selection
+   (QSL requirement records are not on the V2 wire, a domain-package
+   population has no V2 node, and `select_population` returns `Unbounded` only
+   from a declaration selection), so the selection is `Unavailable` and every
+   claim settles `unsupported`, citing IR-851.
+2. Once IR-851 supplies the mapping, QSL still gives a state-clause `reaches`
+   no finite population (QSL FR-104 records an unbounded extent; `Population<T>[N]`
+   types only function parameters, where `reaches` is refused), so the population
+   is `Unbounded` and every claim settles `requires_bound`, citing QSL-819
+   (bounded domain population for reaches).
+3. Only after both IR-851 and QSL-819 does a `Finite` population let the
+   `Verified` and `Falsified` path below run.
+Until then only refusal controls are testable.
 The V1-draft wording of IR-268 is interpreted through the current admitted
 `quire.checked-package/v2` boundary.
 
@@ -778,7 +785,7 @@ families it names, each of which is owed a shadow or a production harness of its
 | FR-015-AC-105 | For a graph claim the harness draws an object count in `[0, N]` of the one covering population and symbolic objects within it; for every object, the selected edge as its shape states: a `Reference` field has exactly one target, an `Option` field an absent or one target, a `Collection` field or finite multi-valued relationship end a count in `[lower, upper]` (a unique end admits no repeated target, a non-unique end repeats, and `lower > 0`, such as `{2,3}`, forces at least `lower` targets) and every target is an object of the population. Start and target are drawn from that population and may be equal; a subtype operand is drawn from it too. The harness asserts the admitted clause condition with the reachability evaluated over only the selected edge by positive-length search, and ends with the FR-015-AC-7 cover after its assertions. `N = 0`, the maximum, and edge counts `lower` and `upper` are each drawn. PLANNED (IR-805; needs QSL-819 (bounded domain population for reaches)). | Test |
 | FR-015-AC-106 | The independent native oracle replays the same authored clause over each concrete graph through QSL's replay (`qsl_replay`), and does not substitute a separately authored reachability. With the installed backend, a QSL-emitted, IR-admitted healthy case yields `Verified` with its cover satisfied for one field-edge claim and one relationship-end claim over a `{0,3}` unique and a `{0,3}` non-unique end; each seeded mutant yields `Falsified` with an in-domain playback: reachability that allows a zero-length path (so an isolated `start = target` reads reachable), one that rejects a self-loop, one following another field or role, a population extent raised or lowered by one, an edge upper bound raised by one, and a negated claim. A generation-time Boolean or `KaniOutcome::Proved` is not proof evidence. PLANNED (IR-805; needs QSL-819 (bounded domain population for reaches)). | Test |
 | FR-015-AC-107 | Graph claims are located by `state_clause` node id and argument path: one reachability written twice in one condition yields two items at positions 0 and 1; one node under two clauses yields two items with different identities; a field-edge and a relationship-end reachability yield separate items; a collection claim, a clause with no reachability and a path that does not name a reachability application each settle `unsupported` naming the missing claim with no harness. A mixed request settles one disposition per item and a supported item's harness is unchanged by a refused sibling. PLANNED (IR-805). | Test |
-| FR-015-AC-108 | A graph claim whose population or edge is unbounded settles `requires_bound` naming the domain: a population of `Unbounded` or `UnknownClosureOpenExtent`, which is every claim QSL emits today, and an unbounded `Collection` edge. A claim whose input is any of the following settles `unsupported` naming it: a population selection `Unavailable`, `StaleBinding`, `ForeignPackage`, `NotPopulation`, `MissingOccurrence`, `UnknownClosureUnresolvedObjectType` or `UnknownClosureUnresolvedSubtypeClosure`; a relationship-end destination whose multiplicity IR does not yet expose as a typed value (IR-851); a field member of another shape; a claim form the encoding cannot express. Neither emits a harness, reduces a domain or substitutes caller `max_expansions`. PLANNED (IR-805). | Test |
+| FR-015-AC-108 | A graph claim settles by the sequence in the Inputs text, with no harness, domain reduction or caller `max_expansions` substitute. While the population selection for the claim is `Unavailable` (no IR mapping from the claim to a population, IR-851), the claim settles `unsupported` naming it. Given a selection, `Unbounded` or `UnknownClosureOpenExtent`, which is every claim QSL emits until QSL-819, settles `requires_bound` naming the population; an unbounded `Collection` edge settles `requires_bound` naming the edge. A selection of `StaleBinding`, `ForeignPackage`, `NotPopulation`, `MissingOccurrence`, `UnknownClosureUnresolvedObjectType` or `UnknownClosureUnresolvedSubtypeClosure`, a relationship-end destination whose multiplicity IR does not expose as a typed value (IR-851), a field member of another shape and a claim form the encoding cannot express each settle `unsupported` naming the input. PLANNED (IR-805). | Test |
 
 ### Mutations FR-015-AC-69 to FR-015-AC-76 detect
 

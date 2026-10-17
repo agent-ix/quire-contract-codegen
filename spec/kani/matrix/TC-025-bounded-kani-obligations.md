@@ -76,13 +76,15 @@ end; write invariant/precondition/postcondition clauses of the form
 through QSL and admit through Contract IR (no copied wire or hand-built
 builder). QSL gives such a clause no finite population (it is a state-clause
 `reaches`, not a function parameter typed `Population<T>[N]`), so no fixture
-can show a successful harness until QSL-819 (bounded domain population
-for reaches) lands. Steps testable now (refusals, no harness): (1) the claim is
+can show a successful harness until IR-851 and then QSL-819 (bounded domain
+population for reaches) land. Steps testable now (refusals, no harness): (1) the claim is
 the `state_clause` node id and argument path of a `quire.op.model.reaches`
 (member `relationship_end`) or `quire.op.model.reaches_field` (member `field`)
-application; (2) the unbounded population settles `requires_bound` for every
-emitted claim; (3) an unbounded collection edge settles `requires_bound`; (4)
-each of FR-015-AC-108's `unsupported` inputs settles `unsupported` naming it,
+application; (2) today every emitted claim's population selection is `Unavailable` (no IR
+mapping, IR-851), so each settles `unsupported`; (3) with a selection supplied
+as `Unbounded`, the claim settles `requires_bound` (every QSL claim until
+QSL-819), and an unbounded collection edge settles `requires_bound`; (4) each
+other FR-015-AC-108 `unsupported` input settles `unsupported` naming it,
 including the relationship-end multiplicity not exposed by IR (IR-851); (5)
 claim location: the same reachability twice in a condition, one node under two
 clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no

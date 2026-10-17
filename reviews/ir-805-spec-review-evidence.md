@@ -39,3 +39,12 @@ object type with Option/Reference/sequence-of-Reference fields, relationships `n
 `kids` (`{0,3}` unique), `litter` (`{0,3}` non-unique) and a `{2,3}` end, and invariant/pre/post
 `reaches(self, target, <name>)` clauses, all match reachability.rs and FR-038-AC-252; the
 `Population<Order>[N]` binding is the part that cannot bound a clause's reaches.
+
+## Dispositions
+
+Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d088e9c..e1873b1: TC-025 now lists only refusal steps as testable now and moves every healthy and mutant Kani control, both forms, to unbacked pending QSL-819. |
+| FND-002 | fixed | d088e9c..e1873b1: function-body item removed from AC-107 and TC-025 step 5; TC-025 records it as an Inspection that QSL refuses it. |

@@ -53,3 +53,13 @@ accessor; no reaches-claim-to-population mapping, FR-053 needs a consumer-named 
 `Type` occurrence). Settling them `unsupported` is correct and testable as refusal behaviour, but
 the success path is additionally blocked upstream in QSL semantics (FND-001), which the spec does
 not state.
+
+## Dispositions
+
+Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d088e9c..e1873b1: FR-015 :134-152 states QSL gives no state-clause reaches a finite population, that every emitted claim settles `requires_bound`, and that the success path needs QSL-819; AC-98/105/106 carry that condition. |
+| FND-002 | fixed | d088e9c..e1873b1: reachability is homogeneous; one population of `E` covers start, target and subtype operands (FR-015 :134-137, AC-105, AC-100). |
+| FND-003 | fixed | d088e9c..e1873b1: new AC-108 dispositions every FR-053 outcome incl. MissingOccurrence and both UnknownClosureUnresolved variants. |
