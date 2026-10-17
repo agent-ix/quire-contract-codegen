@@ -84,12 +84,20 @@ application; (2) today every emitted claim's population selection is `Unavailabl
 mapping, IR-852), so each settles `unsupported`; (3) with a selection supplied
 as `Unbounded`, the claim settles `requires_bound` (a claim whose population has no finite
 authored bound, after QSL-819 and IR-852), and an unbounded collection edge settles `requires_bound`; (4) each
-other FR-015-AC-108 `unsupported` input settles `unsupported` naming it,
-including a relationship-end claim while the IR-851 accessor code is unmerged or unpinned, and then each `relationship_end` refusal (`UnknownNode`, `NotReachesApplication`, `UnresolvedEnd`; Contract IR FR-038-AC-262 to FR-038-AC-268); (5)
+other FR-015-AC-108 `unsupported` input reachable from an admitted package
+settles `unsupported` naming it, including a relationship-end claim while the
+IR-851 accessor code is unmerged or unpinned; (5)
 claim location: the same reachability twice in a condition, one node under two
 clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no
 caller `max_expansions`, population or multiplicity changes any outcome.
-Inspection: QSL refuses `reaches` in a function body, so no function-body graph
+Inspection: the three `relationship_end` refusals (`UnknownNode`,
+`NotReachesApplication`, `UnresolvedEnd`; Contract IR FR-038-AC-262 to
+FR-038-AC-268) cannot arise from a QSL-emitted, IR-admitted package
+(`UnresolvedEnd` needs a crate-internal post-admission mutation), so their
+`unsupported` mapping in FR-015-AC-108 is checked by inspection of the
+generator's error mapping, or by a named in-crate accessor test double, and is
+not a testable-now step. AC-107's location refusal runs before the accessor, so
+a path naming no reachability is never `NotReachesApplication`. Also, QSL refuses `reaches` in a function body, so no function-body graph
 claim can reach the generator. Steps that wait on the QSL ticket (unbacked):
 positive-length semantics (an isolated `start = target` unreachable, a self-loop
 reachable) in the generated draw and the `qsl_replay` oracle; inclusive
