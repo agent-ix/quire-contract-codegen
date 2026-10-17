@@ -216,20 +216,10 @@ fn batch_artifact_count_is_preflighted_before_lowering() {
 /// TC-001
 #[test]
 fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
-    use std::{
-        fs,
-        process::Command,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "codegen-bound-native-{}-{nonce}",
-        std::process::id()
-    ));
-    fs::create_dir(&root).unwrap();
+    use crate::scratch_crate::TemporaryDirectory;
+    use std::{fs, process::Command};
+    let scratch = TemporaryDirectory::new("codegen-bound-native");
+    let root = scratch.path.clone();
     let destination = root.join("published");
     let result = generated(&projection("test/native", 3, true));
     assert!(!destination.exists(), "generation must not publish");
@@ -260,7 +250,7 @@ fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
     }
     calls.push_str("}\n");
     main.push_str(&calls);
-    fs::create_dir(root.join("src")).unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
     fs::write(root.join("src/main.rs"), main).unwrap();
     write_manifest(
         &root,
@@ -281,5 +271,4 @@ fn actual_bound_outputs_publish_then_compile_and_execute_against_the_runtime() {
         "native bound fixture failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    fs::remove_dir_all(&root).unwrap();
 }

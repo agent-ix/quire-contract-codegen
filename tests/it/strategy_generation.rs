@@ -1,38 +1,12 @@
-use std::{
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, process::Command};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_enum_strategy, generate_i64_strategy, EnumStrategyCampaign, EnumStrategyRequest,
     GenerationErrorCode, GenerationTerminalState, StrategyCampaign, StrategyConstraint,
     StrategyErrorCode, StrategyRequest, MAX_GENERATED_SOURCE_BYTES,
 };
 use quire_contract_model::{PackageId, RequirementId, RequirementRef, RequirementRevision};
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(path.join("src")).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 fn requirement() -> RequirementRef {
     RequirementRef::new(
@@ -116,9 +90,9 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
     let residual_function = function_name(&residual.rust.contents);
     let temporary = TemporaryDirectory::new("quire-generated-strategies");
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
-            "[package]\nname = \"generated-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            "[package]\nname = \"generated-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
         ),
     );
@@ -194,7 +168,7 @@ mod generated_tests {{
 "#
     );
     fs::write(
-        temporary.0.join("src/lib.rs"),
+        temporary.path.join("src/lib.rs"),
         format!(
             "{}\n{}\n{}\n{}",
             range.rust.contents,
@@ -206,9 +180,9 @@ mod generated_tests {{
     .unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(
@@ -384,9 +358,9 @@ fn tc_004_boundary_pinned_and_no_event_bodies_compile_and_execute_with_denied_wa
     let no_event_function = function_name(&no_event.rust.contents);
     let temporary = TemporaryDirectory::new("quire-generated-campaign-shapes");
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
-            "[package]\nname = \"generated-campaign-shapes\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            "[package]\nname = \"generated-campaign-shapes\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
         ),
     );
@@ -418,7 +392,7 @@ mod generated_tests {{
 "#
     );
     fs::write(
-        temporary.0.join("src/lib.rs"),
+        temporary.path.join("src/lib.rs"),
         format!(
             "{}\n{}\n{}\n{}",
             boundary.rust.contents,
@@ -430,9 +404,9 @@ mod generated_tests {{
     .unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(
@@ -613,9 +587,9 @@ fn tc_004_customer_enum_memberships_are_directly_shaped_and_validated() {
 
     let temporary = TemporaryDirectory::new("quire-generated-enum-strategy");
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
-            "[package]\nname = \"generated-enum-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            "[package]\nname = \"generated-enum-strategy-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
         ),
     );
@@ -672,12 +646,12 @@ mod generated_tests {{
         broad_source = broad.rust.contents,
         no_event_source = embedded_source(&no_event.rust.contents),
     );
-    fs::write(temporary.0.join("src/lib.rs"), tests).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), tests).unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(

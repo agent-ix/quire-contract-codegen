@@ -4,16 +4,9 @@
 //! `DeclarationEnvironment::check_expression`, and each operand vector that overflows does so
 //! through a declared bound the vector violates while the guards still pass.
 
-use std::{
-    cell::Cell,
-    fmt::Write as _,
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{cell::Cell, fmt::Write as _, fs, path::PathBuf, process::Command};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_boolean_oracle, generate_kani_bundle, GenerationDiagnostic, GenerationErrorCode,
     GenerationTerminalState, KaniDiagnostic, KaniErrorCode, KaniRequest, KaniSolver, OracleRequest,
@@ -1182,27 +1175,6 @@ fn tc_044_divide_remainder_and_saturate_are_refused_by_the_bundle() {
 // Generated crates
 // ---------------------------------------------------------------------------------------------
 
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(path.join("src/generated")).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
 /// The unlimited meter the generated checks run under unless a test sets a limit.
 const CHECK_PRELUDE: &str = "use quire_contract_runtime::exact as rt;
 
@@ -1240,10 +1212,11 @@ fn kind(outcome: rt::Outcome<bool>) -> u8 {
 /// Every crate shares one target directory, so the runtime builds once.
 fn run_crate(label: &str, modules: &[(String, String)], checks: &str) {
     let directory = TemporaryDirectory::new(&format!("quire-arithmetic-{label}"));
+    fs::create_dir_all(directory.path.join("src/generated")).unwrap();
     let mut root = String::from("#![deny(warnings)]\n#![allow(unexpected_cfgs)]\n\n");
     for (module, source) in modules {
         fs::write(
-            directory.0.join(format!("src/generated/{module}.rs")),
+            directory.path.join(format!("src/generated/{module}.rs")),
             source,
         )
         .unwrap();
@@ -1259,9 +1232,9 @@ fn run_crate(label: &str, modules: &[(String, String)], checks: &str) {
         "\n#[cfg(test)]\nmod checks {{\n#![allow(dead_code)]\n{CHECK_PRELUDE}\n{checks}\n}}\n"
     )
     .unwrap();
-    fs::write(directory.0.join("src/lib.rs"), root).unwrap();
+    fs::write(directory.path.join("src/lib.rs"), root).unwrap();
     write_manifest(
-        &directory.0,
+        &directory.path,
         &format!(
             "[package]\nname = \"arithmetic-{label}\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
@@ -1273,7 +1246,7 @@ fn run_crate(label: &str, modules: &[(String, String)], checks: &str) {
             "CARGO_TARGET_DIR",
             PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("oracle-arithmetic"),
         )
-        .current_dir(&directory.0)
+        .current_dir(&directory.path)
         .output()
         .unwrap();
     assert!(

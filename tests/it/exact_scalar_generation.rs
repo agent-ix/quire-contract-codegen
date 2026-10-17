@@ -7,11 +7,10 @@ use std::{
     path::PathBuf,
     process::Command,
     sync::OnceLock,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::common::panic_scan::{comments_stripped, non_test_code, panic_tokens_in};
-use crate::scratch_crate::seed_lock;
+use crate::scratch_crate::{seed_lock, TemporaryDirectory};
 use quire_contract_codegen::oracle::operator_catalog::IntegerOperator;
 use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles, BoundForm,
@@ -41,27 +40,6 @@ use serde_json::{json, Value};
 mod package;
 
 use package::*;
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 /// Generate, and scan the `src/lib.rs` it produced for a panic site (FR-014-AC-39). Every crate
 /// this module's TC-024 tests generate comes through here, so each one is scanned.
@@ -2238,17 +2216,17 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
     }
 
     let directory = TemporaryDirectory::new("quire-exact-scalar-oracles");
-    fs::create_dir_all(directory.0.join("src")).unwrap();
+    fs::create_dir_all(directory.path.join("src")).unwrap();
     for artifact in &oracles.artifacts {
-        fs::write(directory.0.join(&artifact.path), &artifact.contents).unwrap();
+        fs::write(directory.path.join(&artifact.path), &artifact.contents).unwrap();
     }
-    seed_lock(&directory.0);
+    seed_lock(&directory.path);
     let output = Command::new(env!("CARGO"))
         .args(["build", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", directory.0.join("target"))
+        .env("CARGO_TARGET_DIR", directory.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
-        .current_dir(&directory.0)
+        .current_dir(&directory.path)
         .output()
         .unwrap();
     assert!(

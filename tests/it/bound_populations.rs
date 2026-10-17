@@ -1,38 +1,11 @@
-use std::{
-    collections::BTreeSet,
-    fmt::Write as _,
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::BTreeSet, fmt::Write as _, fs, process::Command};
 
+use crate::scratch_crate::TemporaryDirectory;
 use quire_contract_codegen::{
     render_population, side_values, ComparisonOperator, Domain, GenerationTerminalState,
     OperandPosition, Partner, Population, PopulationRequest, PopulationSide, Relation,
     RenderedPopulation, SideValues, StrategyErrorCode, ValueSet,
 };
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(path.join("src")).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 /// One valuation: primary value and, for a two-read relation, partner value.
 type Valuation = (i64, Option<i64>);
@@ -945,8 +918,8 @@ fn tc_018_tc_021_generated_populations_compile_draw_and_shrink_inside_their_side
 
     let temporary = TemporaryDirectory::new("quire-generated-bound-populations");
     fs::write(
-        temporary.0.join("Cargo.toml"),
-        "[package]\nname = \"generated-bound-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\n",
+        temporary.path.join("Cargo.toml"),
+        "[package]\nname = \"generated-bound-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\n\n[workspace]\n",
     )
     .unwrap();
     let mut root = String::from(
@@ -954,21 +927,21 @@ fn tc_018_tc_021_generated_populations_compile_draw_and_shrink_inside_their_side
     );
     for module in &modules {
         fs::write(
-            temporary.0.join(format!("src/{}.rs", module.name)),
+            temporary.path.join(format!("src/{}.rs", module.name)),
             &module.generated.source,
         )
         .unwrap();
         let _ = writeln!(root, "pub mod {};", module.name);
     }
-    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
-    fs::write(temporary.0.join("src/support.rs"), GENERATED_SUPPORT).unwrap();
-    fs::write(temporary.0.join("src/populations.rs"), tests).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), root).unwrap();
+    fs::write(temporary.path.join("src/support.rs"), GENERATED_SUPPORT).unwrap();
+    fs::write(temporary.path.join("src/populations.rs"), tests).unwrap();
 
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
