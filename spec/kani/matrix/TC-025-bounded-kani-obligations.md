@@ -64,9 +64,11 @@ Change one selected field bound, claim, subject and unwind separately to check
 identity changes; repeat equal inputs for byte identity. Compare recorded
 identity domains and complete ordered options with generated source and FR-017
 run evidence, including actual Kani, Rust and solver versions. The collection-family tests exist and are tagged
-(IR-268, CG #396 fe20ecc); the Kani-lane run is `Verified` (94 checks) with the
-mutant `Falsified` (93 checks). The graph family stays planned (IR-805), and the
-run-evidence Rust-version and option-vector check has no tagged assertion yet. The finite-input
+(IR-268, CG #396 fe20ecc); the Kani-lane run is `Verified` (94 SUCCESS) with the
+mutant `Falsified` (93 SUCCESS and 1 FAILURE), per IR-268's close-out at PR head f43adca.
+The graph family stays planned (IR-805). The FR-017 run-evidence version check is
+planned (`KaniExecutionEvidence` has no Kani, Rust or solver version field), and the
+representational-ceiling refusal has no tagged test. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object
