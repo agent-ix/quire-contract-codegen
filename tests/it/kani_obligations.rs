@@ -527,7 +527,7 @@ fn scalar_package_with_occurrences(
             "state",
             "frame",
             &key(FRAMED_OBJECT),
-            json!({"term": "frame", "modifies": [], "creates": [], "deletes": []}),
+            json!({"term": "frame", "modifies": [], "creates": [], "deletes": [], "deletes_scoped": []}),
         );
     if expression_occurrences {
         builder.expression_occurrences();

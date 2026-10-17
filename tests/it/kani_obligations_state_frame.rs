@@ -383,11 +383,11 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             parameter_body("result", 1),
         );
     }
-    let field_entry = |declaration: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name});
+    let field_entry = |declaration: &str, scope: &str, name: &str| json!({"kind": "field", "declaration": node_ref(declaration), "name": name, "scope": scope});
     let mut modifies = shape
         .modifies
         .iter()
-        .map(|name| field_entry(&object, name))
+        .map(|name| field_entry(&object, "receiver", name))
         .collect::<Vec<_>>();
     let mut frame_dependencies = vec![object.clone()];
     let (mut creates, mut deletes) = (vec![], vec![]);
@@ -400,7 +400,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
             frame_dependencies.push(relationship.clone());
         }
         FrameEffect::GrantsForeignField => {
-            modifies.push(field_entry(&other_object, "balance"));
+            modifies.push(field_entry(&other_object, "every-object", "balance"));
             frame_dependencies.push(other_object.clone());
         }
     }
@@ -411,7 +411,7 @@ fn add_shape(builder: &mut PackageBuilder, shape: &Shape) {
         "state",
         "frame",
         &object,
-        json!({"term": "frame", "modifies": modifies, "creates": creates, "deletes": deletes}),
+        json!({"term": "frame", "modifies": modifies, "creates": creates, "deletes": deletes, "deletes_scoped": []}),
         &frame_dependencies,
     );
     builder.node_with(
