@@ -2500,7 +2500,8 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     ));
 }
 
-/// Trace: FR-021-AC-15, TC-031 (AC-17 duplicate declared names). Two
+/// Trace: FR-021-AC-15, TC-031 (duplicate declared names; the surviving origin also
+/// exercises AC-17, origin from the request function binding). Two
 /// declarations sharing one name -- different node ids, same string --
 /// are both refused as `AmbiguousFunctionName` rather than colliding into
 /// one Stage 1 classification, and a third, uniquely-named survivor's

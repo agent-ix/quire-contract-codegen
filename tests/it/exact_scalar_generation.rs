@@ -2412,7 +2412,7 @@ fn tc_024_ac44_direct_control_case_is_unsupported() {
 /// Trace: FR-021-AC-33, TC-031
 /// A directly requested case must keep its identity through the public function path.
 #[test]
-fn tc_031_ac32_direct_control_case_is_unsupported() {
+fn tc_031_ac33_direct_control_case_is_unsupported() {
     use quire_contract_codegen::ContractRequestPosition;
     use quire_contract_codegen::{
         generate_exact_function_oracles, ExactFunctionItem, ExactFunctionRefusal,
