@@ -41,3 +41,6 @@ The flips are mostly honest and well cited. The AC-96 and AC-97 rows match their
 | FND-001 | fixed | Verified at d88d975: AC-99 now cites the IR-268 close-out run on f43adca (code 9c5f291, same tree as fe20ecc), 1 passed, exit 0, 94 SUCCESS / 93 SUCCESS + 1 FAILURE, CaDiCaL 3.0.0; a5221e1 removed from FR-015, tests.md and TC-025 (round 1) |
 | FND-002 | fixed | Verified at d88d975: AC-100 is PARTIAL, the version and option clause is PLANNED with the missing KaniExecutionEvidence fields named, and tests.md :34/:95 and TC-025 mirror it (round 1) |
 | FND-003 | fixed | Verified at d88d975: the redundant "kani lane: make kani-gate" clause is removed (round 1) |
+| FND-004 | fixed | Verified at ed937af: AC-96 (FR-015:784) is PARTIAL, naming the uniqueness clause as unbacked by an AC-96-tagged test; the FR-015 paragraph (:95-101), tests.md :34/:95 and TC-025 mirror it (round 2) |
+| FND-005 | fixed | Verified at ed937af: AC-99 (FR-015:787) is PARTIAL, naming the symbolic-draw, cover-after-assertions and no-Vec<i128> clauses as backed only by AC-96/AC-100-tagged tests; the FR-015 paragraph, tests.md and TC-025 mirror it (round 2) |
+| FND-006 | fixed | Verified at ed937af: the AC-101 row (FR-015:789) leads with PARTIAL, cites :1608 once, and names both unbacked clauses (representational ceiling at :1675/:1070, missing or malformed declaration at :1137) (round 2) |
