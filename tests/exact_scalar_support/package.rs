@@ -4314,6 +4314,7 @@ pub fn golden_items() -> Vec<ExactScalarItem> {
 #[cfg(test)]
 mod bound_tests {
     use super::{aggregate, key, node_ref, Bound, PackageBuilder, DEC, INT, TEXT, T_INTEGER};
+    use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageV2ReadResult;
     use serde_json::json;
 
@@ -4321,7 +4322,7 @@ mod bound_tests {
         bounds.iter().map(Bound::key).collect()
     }
 
-    /// Trace: FR-014-AC-10, TC-024.
+    #[trace("FR-014-AC-10", "TC-024")]
     #[test]
     fn anonymous_integer_authority_admits_one_integer_range() {
         let mut builder = PackageBuilder::default();
@@ -4416,8 +4417,9 @@ mod bound_tests {
 #[cfg(test)]
 mod fixture_identity_tests {
     use super::*;
+    use ix_trace_rs::trace;
 
-    /// Trace: FR-037-AC-1, FR-037-AC-3, FR-037-AC-4, TC-052.
+    #[trace("FR-037-AC-1", "FR-037-AC-3", "FR-037-AC-4", "TC-052")]
     #[test]
     fn exact_application_and_enum_member_candidates_match_admitted_nodes() {
         let builder = bounded_increment_package();
