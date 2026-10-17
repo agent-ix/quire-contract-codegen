@@ -85,7 +85,7 @@ mapping, IR-852), so each settles `unsupported`; (3) with a selection supplied
 as `Unbounded`, the claim settles `requires_bound` (a claim whose population has no finite
 authored bound, after QSL-819 and IR-852), and an unbounded collection edge settles `requires_bound`; (4) each
 other FR-015-AC-108 `unsupported` input settles `unsupported` naming it,
-including the relationship-end multiplicity not exposed by IR (IR-851); (5)
+including a relationship-end claim while the IR-851 accessor code is unmerged or unpinned, and then each `relationship_end` refusal (`UnknownNode`, `NotReachesApplication`, `UnresolvedEnd`; Contract IR FR-038-AC-262 to FR-038-AC-268); (5)
 claim location: the same reachability twice in a condition, one node under two
 clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no
 caller `max_expansions`, population or multiplicity changes any outcome.
