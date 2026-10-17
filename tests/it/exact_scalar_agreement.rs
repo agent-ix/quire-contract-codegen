@@ -9,6 +9,7 @@
 //! scratch-crate runner, [`run_agreement_cases`], is shared with the composite
 //! equality and function-application agreement modules.
 
+use ix_trace_rs::trace;
 use std::{
     fmt::Write as _,
     fs,
@@ -174,12 +175,13 @@ const SCALAR_ORACLE_NAMES: &[(u32, &str)] = &[
     (1135, "quantity_at_least"),
 ];
 
-/// Trace: FR-014-AC-6, FR-014-AC-9, TC-024. The crate the generator emits now
+/// The crate the generator emits now
 /// for the corpus request compiles against the runtime, and every
 /// agreement case in `tests/exact_scalar_support/agreement_cases.rs` passes
 /// against it: each generated oracle equals the direct runtime call in outcome,
 /// admitted charges, consumed counters and single-charge denials, and a width
 /// mismatch stops before any charge.
+#[trace("FR-014-AC-6", "FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_generated_scalar_crate_agrees_with_direct_runtime() {
     let oracles = super::exact_scalar_generation::corpus_oracles();

@@ -1,5 +1,6 @@
 //! FR-033/FR-030: bind public QSL composite reports before reading their terminal values.
 
+use ix_trace_rs::trace;
 use qsl_replay::{
     replay_composite_parity, settle_verified_shadow, Certification, CompositeEvidence,
     CompositeIdentity, CompositeParityClaim, CompositeParityResult, DigestDomain, DigestRecord,
@@ -236,7 +237,14 @@ fn public_composite_fixture() -> PublicCompositeFixture {
 
 /// A valid public claim lets retained disagreement win over native faults and invalid operands;
 /// either native fault kind wins over admission and both limit stages without disagreement.
-/// Trace: FR-029-AC-20, FR-030-AC-15, FR-033-AC-12, FR-033-AC-13, TC-041, TC-048
+#[trace(
+    "FR-029-AC-20",
+    "FR-030-AC-15",
+    "FR-033-AC-12",
+    "FR-033-AC-13",
+    "TC-041",
+    "TC-048"
+)]
 #[test]
 fn tc_041_f1_and_f2_preserve_precedence_and_native_causes() {
     let fixture = public_composite_fixture();
@@ -282,7 +290,7 @@ fn tc_041_f1_and_f2_preserve_precedence_and_native_causes() {
 }
 
 /// F-3, F-4, F-5 and F-6 remain separate typed rows with the exact QSL terminal value.
-/// Trace: FR-029-AC-20, FR-030-AC-16, FR-033-AC-13, TC-041, TC-048
+#[trace("FR-029-AC-20", "FR-030-AC-16", "FR-033-AC-13", "TC-041", "TC-048")]
 #[test]
 fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
     let fixture = public_composite_fixture();
@@ -382,7 +390,7 @@ fn tc_041_f3_to_f6_keep_operand_and_limit_stages_distinct() {
 
 /// Exact verdict and pair-count divergence are distinct F-7 inputs; agreement carries the full
 /// composite claim and equality outcome, and none of the three becomes Refuted.
-/// Trace: FR-029-AC-20, FR-030-AC-17, FR-033-AC-7, TC-041, TC-048
+#[trace("FR-029-AC-20", "FR-030-AC-17", "FR-033-AC-7", "TC-041", "TC-048")]
 #[test]
 fn tc_041_f7_compares_verdict_and_pair_count_then_preserves_agreement() {
     let fixture = public_composite_fixture();
@@ -450,7 +458,7 @@ fn tc_041_f7_compares_verdict_and_pair_count_then_preserves_agreement() {
 }
 
 /// The verified entry retains its distinct V-row outcomes through the same full-identity check.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_verified_public_rows_keep_their_qsl_terminal_values() {
     let fixture = public_composite_fixture();
@@ -535,7 +543,7 @@ fn tc_048_verified_public_rows_keep_their_qsl_terminal_values() {
 }
 
 /// A real QSL prepare refusal remains a bound report and carries QSL's own code before F-1.
-/// Trace: FR-029-AC-28, FR-030-AC-17, FR-033-AC-9, TC-041, TC-048
+#[trace("FR-029-AC-28", "FR-030-AC-17", "FR-033-AC-9", "TC-041", "TC-048")]
 #[test]
 fn tc_041_bound_prepare_refusal_precedes_disagreed() {
     let fixture = public_composite_fixture();
@@ -573,7 +581,7 @@ fn tc_041_bound_prepare_refusal_precedes_disagreed() {
 
 /// Each retained identity member is checked against the real QSL report, including the native
 /// cause and refinement. A missing report has no terminal value.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_falsified_report_requires_every_sent_identity_member() {
     let fixture = public_composite_fixture();
@@ -704,7 +712,7 @@ fn tc_048_falsified_report_requires_every_sent_identity_member() {
 
 /// The report binds to the identity of a request changed before send, with no earlier unsent
 /// identity influencing the result.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_changed_request_binds_to_its_actual_sent_identity() {
     let fixture = public_composite_fixture();
@@ -735,7 +743,7 @@ fn tc_048_changed_request_binds_to_its_actual_sent_identity() {
 }
 
 /// Native fault descriptors are part of the full observation on a generated-fault report.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_native_cause_is_part_of_the_bound_observation() {
     let fixture = public_composite_fixture();
@@ -823,7 +831,7 @@ fn tc_048_native_cause_is_part_of_the_bound_observation() {
 }
 
 /// Verified reports use their own observation shape and preserve QSL's settlement.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_verified_report_requires_success_count_and_refinement() {
     let fixture = public_composite_fixture();
@@ -881,7 +889,7 @@ fn tc_048_verified_report_requires_success_count_and_refinement() {
 }
 
 /// A verified prepare refusal is a bound QSL report, with the same refusal code QSL emitted.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_verified_prepare_refusal_passes_through() {
     let fixture = public_composite_fixture();
@@ -915,7 +923,7 @@ fn tc_048_verified_prepare_refusal_passes_through() {
 }
 
 /// The two CG binding refusals stay distinct and human-readable.
-/// Trace: FR-033-AC-9, TC-048
+#[trace("FR-033-AC-9", "TC-048")]
 #[test]
 fn tc_048_binding_refusals_have_distinct_display() {
     assert_eq!(

@@ -319,14 +319,17 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     );
 }
 
-/// FR-008-CON-2, Trace: TC-044, FR-031-AC-10, FR-031-AC-18
 #[trace(
     "TC-017",
     "FR-008-AC-1",
     "FR-008-AC-2",
     "FR-008-AC-3",
     "FR-008-AC-4",
-    "FR-008-AC-5"
+    "FR-008-AC-5",
+    "FR-008-CON-2",
+    "TC-044",
+    "FR-031-AC-10",
+    "FR-031-AC-18"
 )]
 #[test]
 fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
