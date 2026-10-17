@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use ix_trace_rs::trace;
 use qsl_replay::{
     compile_package, parity_obligation, DependencyInput, DigestDomain, DigestRecord, Domain,
     DomainKey, DomainKind, EqualityOperator, FiniteBound, InconclusiveCause, Integer,
@@ -237,7 +238,7 @@ fn parameter_bounds(
 
 /// Original parameter/parameter construction reaches a genuine QSL verified report and converter.
 /// This is a constructor control with supplied verified evidence, not a generated-family proof.
-/// Trace: FR-033-AC-1, FR-033-AC-9, FR-033-AC-11, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_parameter_operands_build_positional_identity_and_public_verified_report() {
     let package = checked(SOURCE);
@@ -300,7 +301,7 @@ fn original_parameter_operands_build_positional_identity_and_public_verified_rep
 }
 
 /// Eq literal graph children keep singleton source domains, not parameter-bound substitutions.
-/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_literal_operands_retain_graph_children_and_empty_bounds() {
     for (function, literals) in [("g", 1), ("h", 2)] {
@@ -386,7 +387,7 @@ fn original_literal_operands_retain_graph_children_and_empty_bounds() {
 }
 
 /// Ne keeps the original parameter order, operator and positional O-09 arguments.
-/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_ne_parameter_operands_keep_order_and_operator() {
     let package = checked(SOURCE);
@@ -436,7 +437,7 @@ fn original_ne_parameter_operands_keep_order_and_operator() {
 }
 
 /// Ne literal graph children retain their singleton source domain and the real operation.
-/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_ne_literal_operand_keeps_empty_bounds() {
     let package = checked(SOURCE);
@@ -475,7 +476,7 @@ fn original_ne_literal_operand_keeps_empty_bounds() {
 }
 
 /// A caller cannot select Eq for a Ne node or Ne for an Eq node.
-/// Trace: FR-033-AC-1, TC-048
+#[trace("FR-033-AC-1", "TC-048")]
 #[test]
 fn original_operator_mismatch_refuses_with_typed_operators() {
     for (function, node_operator, requested) in [
@@ -497,7 +498,7 @@ fn original_operator_mismatch_refuses_with_typed_operators() {
 }
 
 /// Repeated parameter positions remain distinct O-09 arguments.
-/// Trace: FR-033-AC-11, TC-048
+#[trace("FR-033-AC-11", "TC-048")]
 #[test]
 fn self_comparison_keeps_two_positional_arguments() {
     let package = checked(SOURCE);
@@ -523,7 +524,7 @@ fn self_comparison_keeps_two_positional_arguments() {
 }
 
 /// Changed bytes and another source lock refuse before any report can be created.
-/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
 #[test]
 fn wrong_source_refuses_before_invocation() {
     let mut wrong_source = inputs(SOURCE);
@@ -553,7 +554,7 @@ fn wrong_source_refuses_before_invocation() {
 
 /// A genuinely different admitted graph retains the supplied source in its lock but refuses recompilation.
 /// Malformed package IDs cannot be constructed through IR admission and are not coverage claims.
-/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
 #[test]
 fn different_semantic_package_refuses_before_invocation() {
     let original = checked(SOURCE);
@@ -568,7 +569,7 @@ fn different_semantic_package_refuses_before_invocation() {
 }
 
 /// Extra retained dependency selection and altered admitted source-lock context refuse distinctly.
-/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
 #[test]
 fn retained_selection_and_recompiled_context_mismatch_refuse() {
     let package = checked(SOURCE);
@@ -599,7 +600,7 @@ fn retained_selection_and_recompiled_context_mismatch_refuse() {
 }
 
 /// Absent nodes/occurrences refuse structurally before evidence is accepted; no disagreement is supplied.
-/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
 #[test]
 fn wrong_node_and_occurrence_refuse_before_invocation() {
     let package = checked(SOURCE);
@@ -618,7 +619,7 @@ fn wrong_node_and_occurrence_refuse_before_invocation() {
 }
 
 /// QSL owns body membership and refuses an admitted node from another function before Disagreed.
-/// Trace: FR-033-AC-1, FR-033-AC-9, FR-033-AC-12, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "FR-033-AC-12", "TC-048")]
 #[test]
 fn another_functions_node_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
@@ -649,7 +650,7 @@ fn another_functions_node_reaches_binding_checked_qsl_refusal() {
 }
 
 /// An actual nonoperand Node bound survives CG's filter and QSL refuses it before Disagreed.
-/// Trace: FR-033-AC-9, FR-033-AC-11, FR-033-AC-12, TC-048
+#[trace("FR-033-AC-9", "FR-033-AC-11", "FR-033-AC-12", "TC-048")]
 #[test]
 fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
     let package = checked(SOURCE);
@@ -718,7 +719,7 @@ fn unrelated_node_bound_reaches_binding_checked_qsl_refusal() {
 }
 
 /// The projection's zero work budget stops in IR without traversing a CG-owned membership rule.
-/// Trace: FR-033-AC-1, FR-033-AC-11, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-11", "TC-048")]
 #[test]
 fn original_operand_projection_obeys_work_ceiling() {
     let package = checked(SOURCE);
@@ -729,7 +730,7 @@ fn original_operand_projection_obeys_work_ceiling() {
 }
 
 /// Original non-default stage limits reach QSL recompilation without substituting defaults.
-/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
 #[test]
 fn original_stage_limit_stops_recompile_before_invocation() {
     let package = checked(SOURCE);
@@ -750,7 +751,7 @@ fn original_stage_limit_stops_recompile_before_invocation() {
 }
 
 /// The public encoder rejects duplicate bounds within an authentic parameter position.
-/// Trace: FR-033-AC-11, TC-048
+#[trace("FR-033-AC-11", "TC-048")]
 #[test]
 fn duplicate_positional_bound_refuses_without_an_obligation() {
     let package = checked(SOURCE);
@@ -772,7 +773,7 @@ fn duplicate_positional_bound_refuses_without_an_obligation() {
 }
 
 /// An authentic imported root refuses until its original admitted dependencies can be retained.
-/// Trace: FR-033-AC-1, FR-033-AC-9, TC-048
+#[trace("FR-033-AC-1", "FR-033-AC-9", "TC-048")]
 #[test]
 fn original_imported_context_refuses_before_invocation() {
     let source = SOURCE.replace("record Q", "import \"test/eq-library\" as d;\nrecord Q");
