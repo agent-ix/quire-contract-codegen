@@ -48,7 +48,7 @@ FR-028-AC-12, verified by TC-039.
     `c::check` that exits 1 with no report and prints `Checking harness a::check...`,
     `Solving with CaDiCaL 3.0.0` and `Checking harness b::check...`; the same group printing a
     compile failure and no `Checking harness` line; one whose report has every member Success and
-    exits 1; one whose report has a Failure entry with no exit status and exits 1; the same report and exit twice with
+    exits 1; one whose report has a Failure entry and exits 1; the same report and exit twice with
     different stream text; two no-report runs with equal exit and different stream text; and the
     over-limit and unread streams of steps 1 and 2. Map a `NoVerdict` evidence through FR-029, with
     and without its `diagnostics`. Build two otherwise compatible requests with `home_directory` `/h/u` and
@@ -102,7 +102,7 @@ FR-028-AC-12, verified by TC-039.
 11. In the no-report group `a::check` is `solver`, `b::check` is `backend` and `c::check` is
     `unknown`, all `NoVerdict` with the group's excerpts; the compile-failure group gives every
     member `compile`; the all-Success report beside exit 1 gives every member `NoVerdict` with phase
-    `unknown`; the report with a Failure entry with no exit status has no member `NoVerdict` and no member record; the
+    `unknown`; the report with a Failure entry has no member `NoVerdict` and no member record; the
     two runs with the same report and exit have the same outcome, checks, SUCCESS count and
     playback; the two no-report runs have equal evidence in every field but `diagnostics` and
     `memory`; the over-limit and unread streams remain refused with `kani_output_over_limit` and
