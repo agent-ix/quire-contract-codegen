@@ -123,9 +123,11 @@ required dependency or target path.
     compilation in step 5 is not execution evidence. Linked-mode admission
     (AC-8), no kernel-mode application and no literal outcomes/charges (AC-14)
     are inspected on the schedule and generated source.
-12. Inspect the schedule crate for any `quire_contract_runtime::exact`
-    dependency, alias, wrapper or compatibility surface. Assert none is
-    required. CG emits no owner-path oracle (AC-32, IR-845).
+12. Inspect the schedule crate and the concrete oracle CG emits today for any
+    `quire_contract_runtime::exact` dependency, alias, wrapper or compatibility
+    surface. Assert none is required. The current oracle still requires it
+    (`src/oracle/function/mod.rs`), so AC-32 stays Planned while it does. CG
+    emits no owner-path oracle (AC-32, IR-845).
 12a. Inspect (AC-18, FR-014-AC-47): scan the function-application corpus's test
     names, `Trace:` tags, output lines and doc comments, this procedure's steps
     and the FR-021 rows of the oracle matrix. None may claim, or present as
