@@ -110,3 +110,33 @@ bounded_kani_corpus (question 4) is settled. I ran
 the real `cargo kani` Verified, Falsified and missing-cover classifications. Afterwards no
 quire-codegen-bounded-kani directory was left under target/tmp. That manifest carries
 `[workspace]`, so it is not exposed to FND-002.
+
+## Dispositions
+
+Disposition pass 1, over e3f3375 (the fix-round code commit; c872e51 only copies the SR files into
+reviews/, and those copies match the pre-disposition scratchpad files byte for byte).
+
+Runs on c872e51:
+- The 16 affected `it` modules: 312 passed, 0 failed, 14 ignored.
+- `--lib -- kani::`: 162 passed.
+- The kani_generation ignored lane, with `--test-threads=1` inside the 16G cgroup: 6 passed in 156.68 s, including `kani_executes_the_generated_contract_proof`. This reproduces the claimed 156.8 s.
+- After the runs, target/tmp held only lock files and an empty quire-kani-discover/.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `write_generated_crate` now takes a prefix, and each caller passes a distinct one. The two live directories of `kani_executes_the_generated_contract_proof` use quire-generated-kani-contract-proof and quire-generated-kani-conditional, and the test passed under real Kani. |
+| FND-002 | fixed | All eight manifests now end with `\n\n[workspace]\n` (bound_populations, bound_census, harness_generation x2, strategy_generation x3, oracle_generation native-vacuity). |
+| FND-003 | fixed | A same-thread reacquire now panics and names the prefix and the lock file, through the HELD map. A contended wait prints `waiting for the scratch lock <path>` before blocking. The cross-process wait is still unbounded, but it is no longer silent, which was the defect. |
+| FND-004 | fixed | New tests: `dropping_the_directory_removes_it`, `a_waiting_thread_proceeds_after_the_holder_drops` (it blocks at least 300 ms and then starts from a cleared directory) and `reacquiring_a_held_prefix_on_one_thread_panics_naming_it`. Deleting `impl Drop` now fails the first, an unchecked `try_lock` fails the second, and removing the guard hangs the third. |
+
+Notes on the leader's questions (no new finding):
+- Keying HELD by thread is correct. Only the thread that acquired the lock inserts an entry, and only after it has the lock, so threads waiting on one prefix never appear in the map, and one entry per path is enough. `Drop::drop` removes the entry before the lock field is released, so the next holder never collides with a stale entry.
+- Thread reuse cannot cause a false panic. libtest runs each test on a fresh thread, and std never reuses a `ThreadId`. A pool worker that nests the same prefix is the real deadlock case, and the guard catches it.
+- A panic after the insert and before `Self` is built (the stale-directory panic, or the `create_dir_all` unwrap) leaves a stale entry. It is harmless: it names a dead thread's id, so no other thread ever matches it, and the next holder overwrites it. The mutex cannot poison, because the `if` condition's guard is a temporary dropped before the `panic!` body runs.
+- One residual gap, latent and with no current site: a value created on thread A and moved to thread B that is still alive when B asks for the same prefix is not detected, and still deadlocks. No call site moves a `TemporaryDirectory` across threads.
+- `scratch_directory_is_locked_while_live` keeps its power: the `WouldBlock` assertion while the value is alive is unchanged. The wait it adds only covers a forked child briefly holding a copy of the descriptor (O_CLOEXEC closes it at exec), and the new waiter test pins the release-then-proceed path.
+- `discover_scratch` (src/kani/test_support.rs) is sound:
+  - Placement: `current_exe().ancestors().nth(3)` is target/ for target/<profile>/deps/<exe>, and target/<triple>/ under `--target`. Both stay inside the target directory.
+  - Sweep: verified empirically. A planted fake-0-4194000 directory (a dead pid) was removed, a directory named after a live `sleep` pid was kept, and an unparsable name was ignored.
+  - Pid reuse can only keep a dead run's directory longer: it is skipped while an unrelated process holds that pid. It cannot delete a live run's directory, because a live pid has `/proc/<pid>`.
+  - The one exposure is concurrent runs in different pid namespaces that share one target directory, where /proc does not show the other run's pids. That is acceptable, since the crate is already Linux-only through rustix pidfd.
