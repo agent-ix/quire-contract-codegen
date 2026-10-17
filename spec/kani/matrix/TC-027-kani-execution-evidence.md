@@ -309,6 +309,35 @@ local refusal/skip behavior on mismatch, are consumer-owned checks outside this 
 driver has no defined typed outcome for a mismatch, its owner must specify and plan that outcome
 before implementation. No driver adversarial coverage is claimed here.
 
+Scalar native error discriminant (FR-017-AC-41 to AC-44): build one `KaniScalarNativeError` of each
+of the twelve variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant, and
+`ProofNotVerified` once for each evidence outcome.
+(1) Assert `code()` of each equals its table code, that the twelve codes are pairwise distinct, that
+`Kani` gives `kani_execution` for every nested refusal, and that the type, the class enum and the
+code constants are reachable at the crate root. (2) Assert `class()` of each variant, of each nested
+`Kani` refusal, and of `ProofNotVerified` for `Falsified`, `CoverUnsatisfied`, each inconclusive
+reason, `Cancelled`, `Verified` (an internal inconsistency, requiring `EnvironmentFault` and no panic), and `FailedWithoutCounterexample` with no `failureCause`, with `properties_failed` (a real single-run stand-in of AC-38's failed assertion without playback, requiring `CompletionRefusal`) and with each of `timeout`, `out_of_memory`, `exit_code` and `unknown` (requiring `EnvironmentFault`), against
+the FR-017 table. Produce real errors by the runner for a request mismatch, an oracle stop and a falsified proof, and require `CompletionRefusal`;
+produce a real single run cancelled by its retained source and a real single run stopped by its
+wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
+with the evidence outcome unchanged; construct `DependencyLock` through an in-crate seam only (it is unreachable from a canonical request, whose manifest must equal the canonical one, and a lock update that writes no matching revision or an unreadable lock is its host fault) and require `EnvironmentFault`; inject a changed staged byte, a native launch failure,
+malformed helper output and an embedded lock with no runtime revision, and require
+`EnvironmentFault` (the last as `codegen_lock`). (3) Force the canonical identity encode to fail (a
+content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
+`EnvironmentFault`, and not `NativeResult`; feed malformed helper output and require
+`native_result`. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
+variant, and for `ProofNotVerified` and `Kani` the class of every `KaniRunOutcome`,
+`KaniInconclusiveReason`, `KaniFailureCause` and nested-refusal value, with exhaustive `match`es (no
+wildcard) over those types inside the defining crate that stop compiling when one is added, and
+assert the nested `OutputOverLimit` and `OutputUnread` codes are unchanged. (5) Non-exhaustive and
+closed class: a rustdoc `compile_fail` example matches `KaniScalarNativeError` exhaustively without
+a wildcard arm and must fail to compile, with a compiling control that adds the wildcard arm; the
+class enum is closed by a compiling control that matches `KaniScalarNativeErrorClass` exhaustively
+with exactly `CompletionRefusal` and `EnvironmentFault` and no wildcard, together with the absence of
+`#[non_exhaustive]` on it; the doctests run by `cargo test --doc`, the pattern of the AC-38
+serialize-only check.
+These steps are Planned until the IR-847 code slice lands.
+
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
 attempt a source-tree write from each child execution boundary, and require that neither child can
@@ -325,6 +354,12 @@ Every generation-time refusal above exposes no harness, so `execute_kani_obligat
 takes a `KaniObligationHarness` — has nothing to run for it: a generation-time classification can
 never surface as one of FR-017's execution outcomes because no code path converts one into the
 other.
+
+For the scalar error discriminant, each variant has its table code and class, the codes are distinct
+and frozen, the three refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
+property or proof verdict are `CompletionRefusal`; the seven fault variants, every other nested refusal and a
+`ProofNotVerified` of a cancelled, timed-out, memory-exhausted or no-verdict run are
+`EnvironmentFault`, and an identity-encode failure is `IdentityEncode`, never `NativeResult`.
 
 In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an
 argument vector that begins, after the subcommand, with its harness identity's options; the seeded defect is
