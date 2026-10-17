@@ -66,7 +66,10 @@ if [[ -n $before_tree ]]; then
     result failed 0 0 "$version" dirty
     exit 1
 fi
-if ! freshness=$(/usr/bin/bash "$(dirname -- "$0")/kani_scope.sh" --main-freshness); then
+# Only the sibling script is located by real path; evidence, git and cargo stay
+# relative to the working directory so a caller can run the gate in a sandbox.
+script_dir=$(dirname -- "$(/usr/bin/readlink -f -- "$0")")
+if ! freshness=$(/usr/bin/bash "$script_dir/kani_scope.sh" --main-freshness); then
     printf 'kani-gate: source stale against origin/main (%s)\n' "${freshness//$'\n'/, }" >&2
     result failed 0 0 "$version" clean
     exit 1
