@@ -245,9 +245,16 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
 
 fn assert_same_meter(actual: &rt::Meter, direct: &rt::Meter) {{
     assert_eq!(actual.limits(), direct.limits());
-    for kind in rt::LimitKind::ALL {{
-        assert_eq!(actual.consumed(kind), direct.consumed(kind));
-    }}
+    assert_eq!(actual.consumed(rt::LimitKind::IntegerBits), direct.consumed(rt::LimitKind::IntegerBits));
+    assert_eq!(actual.consumed(rt::LimitKind::DecimalDigits), direct.consumed(rt::LimitKind::DecimalDigits));
+    assert_eq!(actual.consumed(rt::LimitKind::ScaleExpansion), direct.consumed(rt::LimitKind::ScaleExpansion));
+    assert_eq!(actual.consumed(rt::LimitKind::TextInputBytes), direct.consumed(rt::LimitKind::TextInputBytes));
+    assert_eq!(actual.consumed(rt::LimitKind::TextScalars), direct.consumed(rt::LimitKind::TextScalars));
+    assert_eq!(actual.consumed(rt::LimitKind::NormalizedScalars), direct.consumed(rt::LimitKind::NormalizedScalars));
+    assert_eq!(actual.consumed(rt::LimitKind::UnitEdges), direct.consumed(rt::LimitKind::UnitEdges));
+    assert_eq!(actual.consumed(rt::LimitKind::ValueOccurrences), direct.consumed(rt::LimitKind::ValueOccurrences));
+    assert_eq!(actual.consumed(rt::LimitKind::WorkUnits), direct.consumed(rt::LimitKind::WorkUnits));
+    assert_eq!(actual.consumed(rt::LimitKind::ResultUnits), direct.consumed(rt::LimitKind::ResultUnits));
     assert_eq!(actual.admitted_charges(), direct.admitted_charges());
     assert_eq!(actual.charge_log_truncated(), direct.charge_log_truncated());
 }}
@@ -517,13 +524,18 @@ mod tests {
                 assert!(!source.contains("assert_eq!(generated_meter, direct_meter)"));
                 for accessor in [
                     "assert_eq!(actual.limits(), direct.limits());",
-                    "for kind in rt::LimitKind::ALL {",
-                    "assert_eq!(actual.consumed(kind), direct.consumed(kind));",
                     "assert_eq!(actual.admitted_charges(), direct.admitted_charges());",
                     "assert_eq!(actual.charge_log_truncated(), direct.charge_log_truncated());",
                 ] {
                     assert_eq!(source.matches(accessor).count(), 1, "{accessor}");
                 }
+                for kind in LimitKind::ALL {
+                    let comparison = format!(
+                        "assert_eq!(actual.consumed(rt::LimitKind::{kind:?}), direct.consumed(rt::LimitKind::{kind:?}));"
+                    );
+                    assert_eq!(source.matches(&comparison).count(), 1, "{comparison}");
+                }
+                assert!(!source.contains("for kind in"));
                 assert!(source.find(meter_call).unwrap() < source.find("kani::cover!(").unwrap());
                 assert!(source.starts_with("pub mod caller_text {\nuse quire_exact as rt;\n"));
                 assert!(!source.contains("quire_contract_runtime"));
