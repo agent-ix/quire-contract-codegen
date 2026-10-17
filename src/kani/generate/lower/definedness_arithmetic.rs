@@ -91,6 +91,7 @@ pub fn prepare_checked_arithmetic(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, KaniOutcomeKind,
         KaniProfile, ModuleDescriptor, PopulationCompleteness, ProfileSelection, ResourceBounds,
@@ -100,7 +101,7 @@ mod tests {
 
     use super::{prepare_checked_arithmetic, CheckedArithmeticRequest};
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_division_by_zero_remains_a_typed_refusal() {
         let selection = ProfileSelection {
@@ -161,7 +162,7 @@ mod tests {
         assert_eq!(outcome.boolean_claim(), None);
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_checked_domain_admits_exact_values_and_refuses_outside_results() {
         let selection = ProfileSelection {

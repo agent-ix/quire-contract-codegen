@@ -18,6 +18,7 @@ use crate::kani::generate::outcome::{
     StateFrameLoweringRefusal, StateFrameRefusal, StateFrameRole, UnsupportedObligation,
 };
 use crate::kani::identity::StateFrameHarness;
+use ix_trace_rs::trace;
 
 const FIELDS: [&str; 2] = [model::FIELDS[0].0, model::FIELDS[1].0];
 const STATE_PATH: &str = "crate::subject::Account";
@@ -115,13 +116,13 @@ fn compare_roles(twin: &native_twin::Twin, refused_role: Option<StateFrameRole>)
     }
 }
 
-/// Trace: FR-015-AC-60, TC-025.
+#[trace("FR-015-AC-60", "TC-025")]
 #[test]
 fn state_frame_both_roles_match_direct_generation() {
     compare_roles(&native_twin::Twin::new(), None);
 }
 
-/// Trace: FR-015-AC-68, TC-025.
+#[trace("FR-015-AC-68", "TC-025")]
 #[test]
 fn state_frame_one_role_refused_matches_direct_generation() {
     compare_roles(

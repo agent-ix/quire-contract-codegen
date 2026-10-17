@@ -1,3 +1,4 @@
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     classify_clause, parse_llvm_coverage, ClauseCoverage, CoverageErrorCode, SourceProbe,
     MAX_COVERAGE_BYTES,
@@ -24,7 +25,7 @@ fn code(value: &Value) -> CoverageErrorCode {
         .code
 }
 
-/// Trace: TC-006
+#[trace("TC-006")]
 #[test]
 fn tc_006_complete_span_observation_and_total_measured_partition() {
     let bytes = serde_json::to_vec(&export(json!([
@@ -86,7 +87,7 @@ fn tc_006_complete_span_observation_and_total_measured_partition() {
     }
 }
 
-/// Trace: TC-006
+#[trace("TC-006")]
 #[test]
 fn tc_006_partial_gap_unterminated_and_noncount_spans_cannot_prove_entry() {
     for segments in [
@@ -111,7 +112,7 @@ fn tc_006_partial_gap_unterminated_and_noncount_spans_cannot_prove_entry() {
     }
 }
 
-/// Trace: TC-006
+#[trace("TC-006")]
 #[test]
 fn tc_006_export_shape_tuple_order_and_size_refuse_independently() {
     let valid = export(json!([
@@ -150,7 +151,7 @@ fn tc_006_export_shape_tuple_order_and_size_refuse_independently() {
     );
 }
 
-/// Trace: TC-006
+#[trace("TC-006")]
 #[test]
 fn tc_006_paths_use_root_boundaries_and_normalized_duplicate_detection() {
     let valid = export(json!([
@@ -189,7 +190,7 @@ fn tc_006_paths_use_root_boundaries_and_normalized_duplicate_detection() {
     assert_eq!(code(&changed), CoverageErrorCode::InvalidPath);
 }
 
-/// Trace: TC-006
+#[trace("TC-006")]
 #[test]
 fn tc_006_file_and_segment_census_bounds_apply_across_export() {
     let mut too_many_files = export(json!([]));

@@ -33,6 +33,7 @@ use std::{
     time::Duration,
 };
 
+use ix_trace_rs::trace;
 use native_twin::{
     playback_text, Invocation, Run, Tamper, Twin, CLAUSES, INVOCATION_DOCUMENT, PRE_DOCUMENT,
 };
@@ -714,7 +715,7 @@ fn generate(fixture: &Fixture) -> StateFrameObligations {
         .unwrap_or_else(|refusal| panic!("the fixture must generate: {refusal}"))
 }
 
-/// Trace: FR-028-AC-1.
+#[trace("FR-028-AC-1")]
 #[test]
 fn both_state_obligation_identities_change_with_either_required_ceiling() {
     let twin = Twin::new();
@@ -832,8 +833,9 @@ fn refusal(shape: &Shape, fields: &[&str]) -> StateFrameRefusal {
         .expect_err("the request must be refused")
 }
 
-/// Trace: FR-037-AC-1, TC-052. The admitted frame reaches the same rekeyed object and
+/// The admitted frame reaches the same rekeyed object and
 /// integer bound as the authored clause, even when the clause uses a second parameter.
+#[trace("FR-037-AC-1", "TC-052")]
 #[test]
 fn tc_025_state_frame_structural_candidates_settle_through_object_and_bound() {
     let shape = Shape {
@@ -859,8 +861,9 @@ fn tc_025_state_frame_structural_candidates_settle_through_object_and_bound() {
     assert!(admitted_object.dependencies.contains(&bound));
 }
 
-/// Trace: FR-015-AC-29, TC-025. Rekeying preserves both grants in each frame even when
+/// Rekeying preserves both grants in each frame even when
 /// their final declaration keys sort in a different order from the authored keys.
+#[trace("FR-015-AC-29", "TC-025")]
 #[test]
 fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
     for (variant, effect, kind) in [
@@ -916,8 +919,13 @@ fn tc_025_frame_grants_rekey_to_admitted_order_without_dropping_effects() {
 /// A postcondition clause yields two separate harnesses whose identity is scoped to the
 /// operation, anchor, frame and object, whose bounds and granted and forbidden fields are read
 /// from the IR, and each carries exactly one non-vacuity cover.
-///
-/// Trace: FR-015-AC-7, FR-015-AC-26, FR-015-AC-27, FR-015-AC-28, TC-025
+#[trace(
+    "FR-015-AC-7",
+    "FR-015-AC-26",
+    "FR-015-AC-27",
+    "FR-015-AC-28",
+    "TC-025"
+)]
 #[test]
 fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness() {
     let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
@@ -1007,8 +1015,7 @@ fn tc_025_a_postcondition_yields_a_contract_harness_and_a_scoped_frame_harness()
 }
 
 /// A frame that grants nothing checks every field, so a different frame is a different proof.
-///
-/// Trace: FR-015-AC-28, TC-025
+#[trace("FR-015-AC-28", "TC-025")]
 #[test]
 fn tc_025_the_frame_harness_follows_the_frame_node_not_the_caller() {
     let generated = generate(&emitted_fixture(
@@ -1030,8 +1037,7 @@ fn tc_025_the_frame_harness_follows_the_frame_node_not_the_caller() {
 /// Every shape outside one integer comparison of pre and post reads of one field through
 /// `self`, and every frame effect with no finite encoding, is refused by name, with no harness.
 /// Each row fails if the refusal it names is removed: the shape would otherwise generate.
-///
-/// Trace: FR-015-AC-29, TC-025
+#[trace("FR-015-AC-29", "TC-025")]
 #[test]
 fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
     let refused = |shape: Shape| refusal(&shape, &STATE_FIELDS);
@@ -1147,8 +1153,7 @@ fn tc_025_shapes_without_a_finite_encoding_are_refused_by_name() {
 
 /// Each field is assumed in the range its own member declares, so two fields with different
 /// ranges each keep theirs, and the clause field never takes another field's.
-///
-/// Trace: FR-015-AC-27, TC-025
+#[trace("FR-015-AC-27", "TC-025")]
 #[test]
 fn tc_025_each_field_is_assumed_in_its_own_declared_range() {
     let generated = generate(&emitted_fixture(
@@ -1170,8 +1175,7 @@ fn tc_025_each_field_is_assumed_in_its_own_declared_range() {
 
 /// Two clauses of one operation share an anchor and frame, yet each harness lands at its own
 /// module and record path.
-///
-/// Trace: FR-015-AC-26, TC-025
+#[trace("FR-015-AC-26", "TC-025")]
 #[test]
 fn tc_025_two_clauses_of_one_operation_never_share_a_frame_record_path() {
     let twin = Twin::new();
@@ -1185,8 +1189,7 @@ fn tc_025_two_clauses_of_one_operation_never_share_a_frame_record_path() {
 
 /// A request that is not well formed, and a node that is not a clause, are refused before any
 /// harness is generated.
-///
-/// Trace: FR-015-AC-29, TC-025
+#[trace("FR-015-AC-29", "TC-025")]
 #[test]
 fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
     let fixture = fixture(&Shape::HEALTHY);
@@ -1243,8 +1246,7 @@ fn tc_025_malformed_requests_and_non_clause_nodes_are_refused() {
 /// identifier but a Rust keyword, so a keyword reaches the engine in a clause's read and in a
 /// frame's grant, and each is refused there. A field name the caller supplies that is not an identifier is still
 /// `InvalidField`, naming it. Each assertion fails if the refusal moves to the other code.
-///
-/// Trace: FR-015-AC-67, TC-025
+#[trace("FR-015-AC-67", "TC-025")]
 #[test]
 fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
     let read = Shape {
@@ -1299,8 +1301,7 @@ fn tc_025_a_non_identifier_graph_field_name_is_a_malformed_clause() {
 
 /// A hand-built model/object_type body cannot supply a range after the model accessor refuses
 /// that object. Its apparent bounded members are irrelevant to the typed refusal.
-///
-/// Trace: FR-015-AC-66, FR-015-AC-78, TC-025
+#[trace("FR-015-AC-66", "FR-015-AC-78", "TC-025")]
 #[test]
 fn tc_025_an_unselected_model_body_never_supplies_a_range() {
     let fixture = fixture(&Shape::HEALTHY);
@@ -1601,8 +1602,7 @@ fn emitted_state_frame(
 /// the frame role, whatever an earlier item's refusal: a request of three refused items has three
 /// records, and each later item's record is the record it has alone. An implementation that
 /// returns at the first refusal reads one record, and fails the counts here.
-///
-/// Trace: FR-015-AC-59, TC-025
+#[trace("FR-015-AC-59", "TC-025")]
 #[test]
 fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused() {
     use StateFrameRole::{Contract, Frame};
@@ -1686,8 +1686,7 @@ fn tc_025_every_state_frame_item_has_a_record_whatever_an_earlier_item_refused()
 /// This integration test is traced only to TC-025: it compares with the public two-role entry,
 /// while the crate-internal role-parity test backs FR-015-AC-60 by comparing both direct roles
 /// with their negotiated items over a QSL-emitted fixture.
-///
-/// Trace: TC-025
+#[trace("TC-025")]
 #[test]
 fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates() {
     use StateFrameRole::{Contract, Frame};
@@ -1747,8 +1746,7 @@ fn tc_025_a_supported_state_frame_item_returns_the_harness_the_engine_generates(
 
 /// An unbounded integer read gives IR's lowering `RequiresBound` record. Both roles carry its
 /// exact type identity, while a bounded sibling clause in the same selected package still emits.
-///
-/// Trace: FR-015-AC-61, TC-025
+#[trace("FR-015-AC-61", "TC-025")]
 #[test]
 fn tc_025_a_state_frame_item_with_no_bound_is_requires_bound() {
     use StateFrameRole::{Contract, Frame};
@@ -1792,8 +1790,7 @@ fn tc_025_a_state_frame_item_with_no_bound_is_requires_bound() {
 /// A lowering record for an unsupported family is `unsupported` `NoFiniteEncoding` naming the
 /// record's node and family, and a node that is not a `state_clause` is `UnknownNodeKind`; neither
 /// has a harness.
-///
-/// Trace: FR-015-AC-62, TC-025
+#[trace("FR-015-AC-62", "TC-025")]
 #[test]
 fn tc_025_a_state_frame_item_outside_the_encoding_has_a_named_reason() {
     use StateFrameRole::{Contract, Frame};
@@ -1834,8 +1831,7 @@ fn tc_025_a_state_frame_item_outside_the_encoding_has_a_named_reason() {
 /// engine's refusal, never `NoFiniteEncoding`, and has no harness. Each row names the role whose
 /// harness the ground refuses; the rows that ground both roles are asked of both. A row fails if
 /// its refusal moves to another reason or to another variant.
-///
-/// Trace: FR-015-AC-63, TC-025
+#[trace("FR-015-AC-63", "TC-025")]
 #[test]
 fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal() {
     use StateFrameRole::{Contract, Frame};
@@ -1994,8 +1990,7 @@ fn tc_025_a_state_frame_item_the_arm_does_not_render_carries_the_engines_refusal
 
 /// An invalid item is a record of its own with its own code, the request is `Rejected` with every
 /// item's record, and a supported item of the request is accounted but its bytes are withheld.
-///
-/// Trace: FR-015-AC-64, TC-025
+#[trace("FR-015-AC-64", "TC-025")]
 #[test]
 fn tc_025_an_invalid_state_frame_item_rejects_the_request_with_every_record() {
     use StateFrameRole::{Contract, Frame};
@@ -2098,8 +2093,7 @@ fn tc_025_an_invalid_state_frame_item_rejects_the_request_with_every_record() {
 /// A request holding `StateFrame` items is refused whole, with the existing error and no record,
 /// for no items, too many, an unparsable request subject path (checked though no `StateFrame`
 /// item reads it) and an unwind bound outside the range.
-///
-/// Trace: FR-015-AC-65, TC-025
+#[trace("FR-015-AC-65", "TC-025")]
 #[test]
 fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
     let world = world_for(&[OK]);
@@ -2144,8 +2138,7 @@ fn tc_025_a_state_frame_request_is_refused_whole_for_the_requests_own_faults() {
 /// refuse: the condition's shape before a frame granting every field. The first assertion fails
 /// if the roles are simply run frame-first; the second pins the refusal for a missing granted
 /// field and does not tell the orders apart.
-///
-/// Trace: FR-015-AC-29, TC-025
+#[trace("FR-015-AC-29", "TC-025")]
 #[test]
 fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse() {
     let world = world_for(&[NEGATION_GRANTS_ALL, GRANTS_ALL]);
@@ -2183,8 +2176,7 @@ fn tc_025_the_single_clause_entry_keeps_its_first_refusal_when_both_roles_refuse
 /// This integration test is traced only to TC-025: it checks harness role and clause, while the
 /// crate-internal role-parity test backs FR-015-AC-68 with direct `generate_state_frame_role`
 /// comparisons over the same QSL-emitted fixture.
-///
-/// Trace: TC-025
+#[trace("TC-025")]
 #[test]
 fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
     use StateFrameRole::{Contract, Frame};
@@ -2256,8 +2248,7 @@ fn tc_025_the_two_roles_of_a_state_clause_settle_independently() {
 /// `replay_frame` refuses an envelope whose `clause_node` or `occurrence_key` is not its
 /// payload's, naming both; the same run with an agreeing envelope replays, so each refusal is the
 /// difference and not the run.
-///
-/// Trace: TC-025
+#[trace("TC-025")]
 #[test]
 fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
     let twin = Twin::new();
@@ -2284,8 +2275,7 @@ fn tc_025_replay_frame_refuses_an_envelope_that_disagrees_with_its_payload() {
 
 /// The frame-replay payload's identities are QSL's answer for the operation, and the envelope
 /// names the payload's own frame node and frame occurrence.
-///
-/// Trace: FR-015-AC-33, FR-015-AC-34, TC-025
+#[trace("FR-015-AC-33", "FR-015-AC-34", "TC-025")]
 #[test]
 fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
     let twin = Twin::new();
@@ -2303,8 +2293,7 @@ fn tc_025_the_frame_replay_envelope_names_the_payloads_frame_and_occurrence() {
 
 /// `FrameReplay::replay` returns QSL's result without Kani: a forbidden write settles a reproduced
 /// violation that names the written field, and a write the frame grants is a respected frame.
-///
-/// Trace: FR-015-AC-36, TC-025
+#[trace("FR-015-AC-36", "TC-025")]
 #[test]
 fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
     let twin = Twin::new();
@@ -2351,8 +2340,7 @@ fn tc_025_frame_replay_settles_a_forbidden_and_a_granted_write() {
 /// An operation the unit names no frame for is refused by the call site before any request is
 /// built, whether the domain package declares it (`transfer`, which no clause names) or not
 /// (`withdraw`).
-///
-/// Trace: FR-015-AC-35, TC-025
+#[trace("FR-015-AC-35", "TC-025")]
 #[test]
 fn tc_025_an_operation_with_no_frame_is_refused_when_the_request_is_built() {
     let twin = Twin::new();
@@ -2399,8 +2387,7 @@ fn replay_of(twin: &Twin, operation: &str, run: &Run) -> Result<FrameReplay, Fra
 /// The request's and the envelope's obligation identity equal the SHA-256 of the hand-written
 /// preimage of the site `qsl_replay::call_site` returns for the operation, and the envelope's
 /// `clause_node` and `occurrence_key` are the same `function` and `declaration` members.
-///
-/// Trace: FR-024-AC-22, FR-024-AC-24, TC-035
+#[trace("FR-024-AC-22", "FR-024-AC-24", "TC-035")]
 #[test]
 fn tc_035_the_request_and_the_envelope_carry_the_identity_minted_from_the_site() {
     let twin = Twin::new();
@@ -2422,8 +2409,7 @@ fn tc_035_the_request_and_the_envelope_carry_the_identity_minted_from_the_site()
 /// A harness whose frame grants nothing, replayed over a unit whose frame grants nothing, gives
 /// a different identity in the request and in the envelope; each is the minted identity of its
 /// own site.
-///
-/// Trace: FR-024-AC-24, TC-035
+#[trace("FR-024-AC-24", "TC-035")]
 #[test]
 fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope() {
     let twin = Twin::new();
@@ -2465,8 +2451,7 @@ fn tc_035_a_changed_grant_changes_the_identity_in_the_request_and_the_envelope()
 /// The identity is measured through `qsl_replay::call_site`: it changes with the frame's grants
 /// and between two operations of one object whose frames are equal text, and it does not change
 /// when the unit is shifted by blank lines or when a second clause names the same operation.
-///
-/// Trace: FR-024-AC-21, TC-035
+#[trace("FR-024-AC-21", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_follows_what_call_site_names() {
     let identity = |twin: &Twin, operation: &str| {
@@ -2516,8 +2501,7 @@ fn tc_035_the_frame_identity_follows_what_call_site_names() {
 /// unit's clauses name, so a clause added on an operation that sorts earlier moves this
 /// operation's frame occurrence. The identity of `transfer` is read before and after a clause on
 /// `deposit` is added, and it differs.
-///
-/// Trace: FR-024-AC-21, TC-035
+#[trace("FR-024-AC-21", "TC-035")]
 #[test]
 fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() {
     let identity = |twin: &Twin| {
@@ -2534,8 +2518,7 @@ fn tc_035_a_clause_on_an_earlier_sorting_operation_moves_the_frame_occurrence() 
 /// ranges of its fields or the order of its state fields. The solver is not edited: `KaniSolver`
 /// has one variant (`Cadical`), so no other solver can be built, and the identity function takes
 /// no solver.
-///
-/// Trace: FR-024-AC-21, TC-035
+#[trace("FR-024-AC-21", "TC-035")]
 #[test]
 fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
     let twin = Twin::new();
@@ -2602,8 +2585,7 @@ fn tc_035_the_frame_identity_names_none_of_the_harness_members() {
 /// neither granted nor checked, granted and checked, or no state field at all. Each is refused
 /// before the call site: the operation the unit does not name would otherwise be a
 /// `CallSite` refusal, as it is for the harness that passes the checks.
-///
-/// Trace: FR-024-AC-22, TC-035
+#[trace("FR-024-AC-22", "TC-035")]
 #[test]
 fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_site() {
     let twin = Twin::new();
@@ -2668,8 +2650,7 @@ fn tc_035_a_non_frame_and_a_mismatched_field_set_are_refused_before_the_call_sit
 /// identity read back from the record equals the generated one. A harness regenerated from equal
 /// inputs has a byte-identical record, and a record without `state_fields` is not read as a
 /// frame identity.
-///
-/// Trace: FR-024-AC-23, TC-035
+#[trace("FR-024-AC-23", "TC-035")]
 #[test]
 fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read() {
     let fixture = emitted_fixture(&Twin::new(), "BalanceNeverDrops");
@@ -2712,8 +2693,7 @@ fn tc_035_the_record_carries_the_draw_order_and_a_record_without_it_is_not_read(
 }
 
 /// A persisted unranged field records its type reason, and duplicate names cannot be decoded.
-///
-/// Trace: FR-015-AC-81
+#[trace("FR-015-AC-81")]
 #[test]
 fn tc_025_unranged_fields_have_a_reason_and_no_duplicate_record_names() {
     let twin = Twin::without_audit_range();
@@ -2739,8 +2719,7 @@ fn tc_025_unranged_fields_have_a_reason_and_no_duplicate_record_names() {
 /// A present text field has no checked member type; a bounded integer field wider than `i64`
 /// retains its exact `i128` endpoint. Neither becomes an `i64` assumption or disappears from the
 /// persisted draw list.
-///
-/// Trace: FR-015-AC-78, FR-015-AC-81
+#[trace("FR-015-AC-78", "FR-015-AC-81")]
 #[test]
 fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
     let cases = [
@@ -2801,8 +2780,7 @@ fn tc_025_model_member_types_without_i64_ranges_remain_unranged() {
 
 /// An unread selected-model variant has a typed member but no integer range. The bounded
 /// balance control still generates, while the variant stays unranged in the persisted identity.
-///
-/// Trace: FR-015-AC-78, FR-015-AC-81
+#[trace("FR-015-AC-78", "FR-015-AC-81")]
 #[test]
 fn selected_model_variant_field_is_unranged_in_generated_frame_identity() {
     let (package, clause) = Twin::build(&["balance"], &[CLAUSES[0]], 0)
@@ -2864,8 +2842,7 @@ fn selected_model_variant_field_is_unranged_in_generated_frame_identity() {
 /// The playback is decoded against the harness's draw order, not the order of its ranges or its
 /// grants: a harness that draws `audit` first reads the first playback value as `audit`, and the
 /// pre snapshot tie sees that.
-///
-/// Trace: FR-024-AC-23, FR-024-AC-25, TC-035
+#[trace("FR-024-AC-23", "FR-024-AC-25", "TC-035")]
 #[test]
 fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
     let twin = Twin::new();
@@ -2903,8 +2880,7 @@ fn tc_035_the_playback_is_decoded_in_the_harnesss_draw_order() {
 
 /// An emitted Boolean model field is drawn without an integer domain. QSL refuses an integer
 /// playback against that same source model; CG retains the field and persisted reason as context.
-///
-/// Trace: FR-015-AC-81, TC-035
+#[trace("FR-015-AC-81", "TC-035")]
 #[test]
 fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
     let twin = Twin::without_audit_range();
@@ -2955,8 +2931,7 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
 /// The same QSL source model supplies CG's selected field range and QSL replay within the
 /// integer range its current source representation can express. The out-of-range playback is
 /// stopped by CG's declared-domain check before QSL replay.
-///
-/// Trace: FR-015-AC-77, FR-024-AC-32, TC-035
+#[trace("FR-015-AC-77", "FR-024-AC-32", "TC-035")]
 #[test]
 fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override() {
     let twin = Twin::with_field_ranges((0, 1000), (0, 1_000_000));
@@ -3028,8 +3003,7 @@ fn tc_035_a_source_model_range_within_jcs_safe_integer_replays_without_override(
 /// A checked package admitted against a selected wide model records `TypeNotRange` and keeps
 /// that context on refusal. QSL replay recompiles the original 0..1000 source model in this
 /// fixture, so this test does not establish same-model replay of the wide override.
-///
-/// Trace: FR-015-AC-81, TC-025
+#[trace("FR-015-AC-81", "TC-025")]
 #[test]
 fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim() {
     let twin = Twin::build(&["balance"], &[CLAUSES[0]], 0);
@@ -3145,8 +3119,7 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
 /// The transcript `Witness::parse` is given is the one rendering function's, over the decoded
 /// values, the harness path and the check text the decode names: it is not a fixed text, and a
 /// different playback gives a different transcript.
-///
-/// Trace: FR-024-AC-25, TC-035
+#[trace("FR-024-AC-25", "TC-035")]
 #[test]
 fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
     let twin = Twin::new();
@@ -3178,8 +3151,7 @@ fn tc_035_the_frame_witness_is_rendered_from_the_decoded_playback() {
 /// wrong-width value each return a typed decode refusal carrying the decoder's cause, and the
 /// call site is not reached: the operation the unit does not name would otherwise be a
 /// `CallSite` refusal, as it is for the playback that decodes.
-///
-/// Trace: FR-024-AC-25, TC-035
+#[trace("FR-024-AC-25", "TC-035")]
 #[test]
 fn tc_035_a_playback_that_does_not_decode_is_refused_before_the_call_site() {
     let twin = Twin::new();
@@ -3227,8 +3199,7 @@ fn tc_035_a_playback_that_does_not_decode_is_refused_before_the_call_site() {
 /// A decoded value at either end of its field's declared range is admitted, and the values one
 /// below and one above are refused naming the field and the value, before the call site (the
 /// operation the unit does not name would otherwise be a `CallSite` refusal).
-///
-/// Trace: FR-024-AC-26, TC-035
+#[trace("FR-024-AC-26", "TC-035")]
 #[test]
 fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints() {
     let twin = Twin::new();
@@ -3286,8 +3257,7 @@ fn tc_035_a_decoded_value_outside_its_declared_range_is_refused_at_the_endpoints
 /// playback's own pre state settles `reproduced-with-evaluated-witness`, `violation`, naming the
 /// written field; the invocation of a different pre state, in either field, is refused naming the
 /// field and both values.
-///
-/// Trace: FR-024-AC-27, TC-035
+#[trace("FR-024-AC-27", "TC-035")]
 #[test]
 fn tc_035_the_invocation_of_the_playbacks_own_pre_state_replays_and_another_is_refused() {
     let twin = Twin::new();
@@ -3332,8 +3302,7 @@ fn tc_035_the_invocation_of_the_playbacks_own_pre_state_replays_and_another_is_r
 /// writes, lacks the object, or lacks a field or holds a non-integer for it is refused naming what
 /// is missing. Every provided document here hashes to its digest (`Invocation::edited`
 /// re-addresses it), so these refusals are the tie's own.
-///
-/// Trace: FR-024-AC-27, TC-035
+#[trace("FR-024-AC-27", "TC-035")]
 #[test]
 fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name() {
     let twin = Twin::new();
@@ -3406,8 +3375,7 @@ fn tc_035_a_pre_state_that_cannot_be_read_from_the_invocation_is_refused_by_name
 /// with its own code, and not a pre-state refusal: the tie reads the documents only after QSL's
 /// request decode has checked them. The same replay over documents that hash to their digests
 /// builds.
-///
-/// Trace: FR-024-AC-27, TC-035
+#[trace("FR-024-AC-27", "TC-035")]
 #[test]
 fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_state_one() {
     let twin = Twin::new();
@@ -3433,8 +3401,7 @@ fn tc_035_a_document_that_does_not_match_its_digest_is_qsls_refusal_not_a_pre_st
 
 /// A state field listed twice is refused: the decoder refuses the schema, and a record that lists
 /// one is not read as a frame identity.
-///
-/// Trace: FR-024-AC-23, TC-035
+#[trace("FR-024-AC-23", "TC-035")]
 #[test]
 fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
     let twin = Twin::new();
@@ -3470,8 +3437,7 @@ fn tc_035_a_repeated_state_field_is_refused_by_the_decoder_and_the_record() {
 /// `operation`, before the call site (the requested operation the unit does not name would
 /// otherwise be a `CallSite` refusal). A harness whose anchor or frame is not the one the call
 /// site names is a `ScopeMismatch` naming that member after it.
-///
-/// Trace: FR-024-AC-28, TC-035
+#[trace("FR-024-AC-28", "TC-035")]
 #[test]
 fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_member() {
     let twin = Twin::new();
@@ -3520,8 +3486,7 @@ fn tc_035_a_harness_scope_that_is_not_the_requested_operation_is_refused_by_memb
 /// the ids `call_site` names as the site's `anchor` and `frame`, and the anchor binds that frame:
 /// the node ids the generator reads from a package and the wire ids the replay requires are one
 /// id, with no rebase.
-///
-/// Trace: FR-024-AC-28, FR-024-AC-30, TC-035
+#[trace("FR-024-AC-28", "FR-024-AC-30", "TC-035")]
 #[test]
 fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
     let twin = Twin::new();
@@ -3564,8 +3529,7 @@ fn tc_035_the_node_ids_of_the_package_qsl_emits_are_the_ids_call_site_names() {
 
 /// QSL's emitted object body is empty; the admitted model's accessor supplies both ranges,
 /// including the unread `audit` field.
-///
-/// Trace: FR-015-AC-77, FR-015-AC-79
+#[trace("FR-015-AC-77", "FR-015-AC-79")]
 #[test]
 fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
     let twin = Twin::new();
@@ -3634,8 +3598,7 @@ fn tc_025_the_generator_uses_model_fields_of_the_package_qsl_emits() {
 }
 
 /// The accessor's sorted table validates names but never changes the caller's draw order.
-///
-/// Trace: FR-015-AC-77, FR-015-AC-79
+#[trace("FR-015-AC-77", "FR-015-AC-79")]
 #[test]
 fn tc_025_model_field_table_preserves_the_requested_draw_order() {
     let twin = Twin::new();
@@ -3687,8 +3650,7 @@ fn tc_025_model_field_table_preserves_the_requested_draw_order() {
 }
 
 /// The frame envelope declares no domain: `declared_domains` is present and empty.
-///
-/// Trace: FR-024-AC-29, TC-035
+#[trace("FR-024-AC-29", "TC-035")]
 #[test]
 fn tc_035_the_frame_envelope_declares_no_domain() {
     let twin = Twin::new();
@@ -3783,8 +3745,7 @@ pub(crate) fn playback_state(counterexample: &str) -> (i64, i64) {
 
 /// The operation contract verifies for a healthy subject and is falsified, for the postcondition
 /// and no other reason, when the subject is mutated to debit.
-///
-/// Trace: FR-015-AC-30, FR-015-AC-80, TC-025
+#[trace("FR-015-AC-30", "FR-015-AC-80", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifies_it() {
@@ -3815,8 +3776,7 @@ fn tc_025_real_kani_proves_the_state_postcondition_and_a_mutated_subject_falsifi
 /// one and the non-vacuity cover takes it too, whatever model the solver picks; a harness whose
 /// cover preceded its assertion would print only the cover's playback here and classify as a
 /// failure with no counterexample (IR-451).
-///
-/// Trace: FR-015-AC-7, TC-025
+#[trace("FR-015-AC-7", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_the_covers_playback()
@@ -3853,8 +3813,7 @@ fn tc_025_real_kani_a_violation_at_the_only_valuation_is_a_counterexample_not_th
 /// An effect the frame allows verifies, an effect it forbids is falsified naming the forbidden
 /// field, and regenerating the frame from a package whose `modifies` is mutated to grant nothing
 /// turns the allowed proof red.
-///
-/// Trace: FR-015-AC-31, FR-015-AC-80, TC-025
+#[trace("FR-015-AC-31", "FR-015-AC-80", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_frame_falsifies() {
@@ -3891,8 +3850,14 @@ fn tc_025_real_kani_proves_allowed_and_forbidden_frame_effects_and_a_mutated_fra
 /// `FrameReplay::new` and `replay` from its harness's identity and its real playback text alone:
 /// no obligation identity and no transcript are supplied, the decoded pre state is tied to the
 /// invocation of the native run, and QSL reproduces the violation on the written field.
-///
-/// Trace: FR-015-AC-32, FR-024-AC-30, FR-024-AC-32, FR-024-AC-34, TC-025, TC-035
+#[trace(
+    "FR-015-AC-32",
+    "FR-024-AC-30",
+    "FR-024-AC-32",
+    "FR-024-AC-34",
+    "TC-025",
+    "TC-035"
+)]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
@@ -3947,8 +3912,7 @@ fn tc_035_real_kani_frame_counterexample_replays_through_qsl() {
 /// harness yields no playback, so the run carries a hand-built one at the pre state `(5, 0)`; the
 /// forbidden counterexample is replayed from its real playback by
 /// `tc_035_real_kani_frame_counterexample_replays_through_qsl`.
-///
-/// Trace: FR-015-AC-32, TC-025
+#[trace("FR-015-AC-32", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_the_allowed_frame_effect_replays_as_a_respected_frame() {

@@ -1045,8 +1045,9 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
-    /// Trace: FR-017-AC-28.
+    #[trace("FR-017-AC-28")]
     #[test]
     fn tc_027_changed_staged_bytes_and_unexpected_files_refuse_identity() {
         let root = std::env::temp_dir().join(format!(
@@ -1072,7 +1073,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    /// Trace: FR-017-AC-29.
+    #[trace("FR-017-AC-29")]
     #[test]
     fn tc_027_scalar_proof_content_identity_tracks_staged_bytes_only() {
         let make_artifact = || CanonicalArtifact {

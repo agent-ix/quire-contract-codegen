@@ -667,13 +667,14 @@ fn observed_cancellation(cancel: &Cancel) -> Option<KaniCancellationSource> {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use rustix::event::poll;
     use std::{fs, io::Write};
 
     use super::*;
     use crate::kani::test_support::discover_scratch;
 
-    /// Trace: FR-028-AC-2.
+    #[trace("FR-028-AC-2")]
     #[test]
     fn zero_wall_ceiling_cannot_accept_an_already_exited_launcher() {
         let deadline = Instant::now();
@@ -701,7 +702,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-028-AC-2.
+    #[trace("FR-028-AC-2")]
     #[test]
     fn expired_dispatch_deadline_starts_no_helper() {
         let directory = discover_scratch("expired-helper-dispatch");
@@ -727,7 +728,7 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
-    /// Trace: FR-028-AC-21.
+    #[trace("FR-028-AC-21")]
     #[test]
     fn unavailable_tree_memory_observation_refuses_before_spawn() {
         let directory = discover_scratch("no-tree-memory-mechanism");
@@ -766,8 +767,7 @@ mod tests {
     /// fork the grandchild ends the run before any grandchild exists; a rung whose grandchild
     /// never wrote its pidfile is inconclusive and the next rung is tried, so the test passes
     /// only on a recorded grandchild that is gone.
-    ///
-    /// Trace: FR-017-AC-17, TC-027
+    #[trace("FR-017-AC-17", "TC-027")]
     #[cfg(target_os = "linux")]
     #[test]
     fn a_run_exceeding_its_budget_kills_a_real_grandchild_not_only_the_direct_child() {
@@ -892,8 +892,7 @@ mod tests {
     /// budget ended before that is inconclusive (the orphan may still have been in the group),
     /// so the budget is tried up [`GRANDCHILD_KILL_TIMEOUT_LADDER`]. The orphan is killed by pid
     /// before the assertions run, so no `sleep 45` outlives the test, passing or failing.
-    ///
-    /// Trace: FR-017-AC-16, TC-027
+    #[trace("FR-017-AC-16", "TC-027")]
     #[cfg(target_os = "linux")]
     #[test]
     fn a_process_orphaned_just_before_the_kill_does_not_block_this_calls_own_return() {
@@ -983,8 +982,7 @@ mod tests {
 
     /// A stream of more than the limit is refused whole, never truncated to a tail and returned;
     /// a stream of exactly the limit is returned whole.
-    ///
-    /// Trace: FR-017-AC-14, TC-043
+    #[trace("FR-017-AC-14", "TC-043")]
     #[test]
     fn tc_043_a_capture_over_its_limit_is_refused_and_one_at_its_limit_is_whole() {
         let limit = 4096;
@@ -1031,8 +1029,7 @@ mod tests {
 
     /// Bytes already in the pipe when the stop flag is seen are returned even though a write end
     /// is still open.
-    ///
-    /// Trace: FR-017-AC-16, TC-027
+    #[trace("FR-017-AC-16", "TC-027")]
     #[test]
     fn a_capture_thread_told_to_stop_returns_what_is_already_in_the_pipe() {
         let (reader, mut writer) = io::pipe().unwrap();
@@ -1045,8 +1042,7 @@ mod tests {
 
     /// A capture thread that is idle in its poll, with a write end still open and nothing more
     /// coming, stops once the flag is set later.
-    ///
-    /// Trace: FR-017-AC-16, TC-027
+    #[trace("FR-017-AC-16", "TC-027")]
     #[test]
     fn a_capture_thread_blocked_on_an_open_idle_pipe_stops_when_the_flag_is_set() {
         let (reader, writer) = io::pipe().unwrap();
@@ -1066,8 +1062,7 @@ mod tests {
 
     /// The drain after the stop flag ends at its limit even when bytes are still waiting: with a
     /// zero limit nothing is read.
-    ///
-    /// Trace: FR-017-AC-16, TC-027
+    #[trace("FR-017-AC-16", "TC-027")]
     #[test]
     fn a_capture_thread_stops_reading_when_its_drain_limit_has_passed() {
         let (reader, mut writer) = io::pipe().unwrap();
@@ -1080,8 +1075,7 @@ mod tests {
 
     /// A straggler that writes without pause cannot hold the capture thread past the drain
     /// limit after the flag is set.
-    ///
-    /// Trace: FR-017-AC-16, TC-027
+    #[trace("FR-017-AC-16", "TC-027")]
     #[test]
     fn a_capture_thread_stops_within_the_drain_limit_while_a_straggler_keeps_writing() {
         let (reader, mut writer) = io::pipe().unwrap();
@@ -1133,8 +1127,7 @@ mod tests {
     /// refused naming the stream, the limit and the harness count; one that prints exactly the
     /// limit completes with its real exit status and the whole stream. Nothing is truncated and
     /// then classified.
-    ///
-    /// Trace: FR-017-AC-14, TC-043
+    #[trace("FR-017-AC-14", "TC-043")]
     #[test]
     fn tc_043_a_launcher_stream_over_the_limit_is_refused_and_one_at_the_limit_completes() {
         for stream in [CaptureStream::Stdout, CaptureStream::Stderr] {
@@ -1168,8 +1161,7 @@ mod tests {
 
     /// A batch process may carry the limit for each member and no more: the limit is multiplied
     /// by the harness count, and the refusal names that count.
-    ///
-    /// Trace: FR-017-AC-14, TC-043
+    #[trace("FR-017-AC-14", "TC-043")]
     #[test]
     fn tc_043_a_batch_stream_is_bounded_by_the_limit_times_the_member_count() {
         let members = NonZeroUsize::new(3).unwrap();
@@ -1203,8 +1195,7 @@ mod tests {
     /// is killed, not only refused: the call returns while the launcher is still short of its
     /// marker (it is killed at once, not left to run on and found over the limit afterwards), and
     /// its grandchild is gone.
-    ///
-    /// Trace: FR-017-AC-14, TC-043
+    #[trace("FR-017-AC-14", "TC-043")]
     #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_an_over_limit_run_is_stopped_and_kills_the_launcher_group() {
@@ -1281,8 +1272,7 @@ mod tests {
     /// A capture thread that panics, a read that errs and a poll that errs each refuse the stream
     /// as unread: none of them returns the empty text, or what had been read so far, as the
     /// stream.
-    ///
-    /// Trace: FR-017-AC-25, TC-043
+    #[trace("FR-017-AC-25", "TC-043")]
     #[test]
     fn tc_043_a_capture_that_panics_or_whose_poll_or_read_errs_is_unread_not_empty() {
         let waiting = || {
@@ -1340,8 +1330,7 @@ mod tests {
     }
 
     /// An unread stream refuses the run with the stream named; it never becomes text.
-    ///
-    /// Trace: FR-017-AC-25, TC-043
+    #[trace("FR-017-AC-25", "TC-043")]
     #[test]
     fn tc_043_an_unread_stream_names_the_stream_in_the_launch_outcome() {
         let unread = || CaptureFailure::Unread {
@@ -1375,8 +1364,7 @@ mod tests {
     /// A launcher that exits on its own, leaving a real grandchild in its process group, has
     /// that grandchild killed by the time the run returns, as it does on a timeout. `sleep 45 &`
     /// is forked by the launcher shell, which writes its pid and exits without waiting.
-    ///
-    /// Trace: FR-017-AC-24, TC-043
+    #[trace("FR-017-AC-24", "TC-043")]
     #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_launcher_that_exits_on_its_own_has_its_grandchild_killed() {
@@ -1410,8 +1398,7 @@ mod tests {
     }
 
     /// A timeout too large to add to the current instant means no deadline, not a panic.
-    ///
-    /// Trace: FR-017-AC-15, TC-027
+    #[trace("FR-017-AC-15", "TC-027")]
     #[test]
     fn a_timeout_of_duration_max_never_elapses_and_does_not_panic() {
         let mut command = Command::new("sh");
@@ -1422,8 +1409,8 @@ mod tests {
             LaunchOutcome::Completed { exit_code: Some(0), ref text, .. } if text.contains("done")
         ));
     }
-    /// Trace: FR-028-AC-21.
     // Requires actual Linux procfs/pidfd/namespace mechanism availability.
+    #[trace("FR-028-AC-21")]
     #[cfg(target_os = "linux")]
     #[test]
     fn observation_failure_after_spawn_refuses_a_valid_report_and_stops_the_run() {

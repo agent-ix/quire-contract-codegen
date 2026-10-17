@@ -490,14 +490,14 @@ mod {module} {{\n\
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use serde_json::{json, Value};
 
     use super::*;
 
     /// A quantity conversion has no scalar harness renderer: the operation lookup declines it, so
     /// no harness is rendered for it.
-    ///
-    /// Trace: FR-014-AC-2, TC-024.
+    #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_has_no_scalar_harness_renderer() {
         assert!(ScalarOperation::of("quire.op.quantity.convert").is_none());
@@ -510,8 +510,7 @@ mod tests {
     };
 
     /// The scalar Kani projection selects exactly the four integer arithmetic entries.
-    ///
-    /// Trace: FR-038-AC-3, FR-038-AC-4, FR-015-AC-37, TC-025.
+    #[trace("FR-038-AC-3", "FR-038-AC-4", "FR-015-AC-37", "TC-025")]
     #[test]
     fn scalar_projection_uses_catalogued_arithmetic_identities_only() {
         assert_eq!(
@@ -545,8 +544,7 @@ mod tests {
 
     /// The symbolic domain is read from binding-shaped `min`/`max` members (the shape QSL emits,
     /// FR-322); a bare-literal member is not symbolic.
-    ///
-    /// Trace: FR-015-AC-5, TC-025.
+    #[trace("FR-015-AC-5", "TC-025")]
     #[test]
     fn tc_025_derive_domain_reads_binding_shaped_range_members() {
         let node = |members: Value| -> CheckedSemanticNodeV2 {
@@ -588,8 +586,7 @@ mod tests {
 
     /// Bound members are looked up by name in any order: swapped `min`/`max` members still read
     /// the right range, while a duplicated or unknown name is not a range.
-    ///
-    /// Trace: FR-015-AC-5, TC-025.
+    #[trace("FR-015-AC-5", "TC-025")]
     #[test]
     fn tc_025_range_members_are_read_by_name_not_position() {
         let node = |members: Value| -> CheckedSemanticNodeV2 {
@@ -636,7 +633,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-015-AC-5, TC-025.
+    #[trace("FR-015-AC-5", "TC-025")]
     #[test]
     fn tc_025_inverted_ranges_are_unsatisfiable_and_ordered_ranges_are_not() {
         let node = |form: &str, members: Value| -> CheckedSemanticNodeV2 {
@@ -813,8 +810,7 @@ mod tests {
     /// A claim with no checked bound, and one whose first checked bound has no `IntegerRange`
     /// among the derived domains, are the `NoRenderer` refusal: a claim map this generator did not
     /// produce, with no panic.
-    ///
-    /// Trace: NFR-005-AC-2, NFR-005-M-2, TC-042.
+    #[trace("NFR-005-AC-2", "NFR-005-M-2", "TC-042")]
     #[test]
     fn tc_042_ac2_a_claim_without_a_derivable_first_bound_has_no_renderer() {
         let bound = checked_node_id("7");
@@ -846,8 +842,7 @@ mod tests {
     /// extremes, for small ranges and for operands at `i64::MIN` and `i64::MAX`, where the
     /// results exceed `i64` and are exact in `i128`. This keeps the behaviour of the fixed-arity
     /// operands that replaced the `reachable` arm NFR-005 removed.
-    ///
-    /// Trace: TC-042.
+    #[trace("TC-042")]
     #[test]
     fn tc_042_scalar_operands_have_their_own_arity_and_reach_exact_extremes() {
         let reach = |operation: ScalarOperation, low: i64, high: i64, other: (i64, i64)| {

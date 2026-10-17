@@ -226,11 +226,11 @@ impl<'a> KaniExecutableHarness<'a> {
 mod tests {
     use super::*;
     use crate::kani::{identity::StateComparison, test_support::state_frame_harness};
+    use ix_trace_rs::trace;
 
     /// A state-clause harness reports the contract role of what it proves, so execution
     /// evidence tells an operation-contract proof from a frame-effect proof.
-    ///
-    /// Trace: TC-027
+    #[trace("TC-027")]
     #[test]
     fn tc_027_a_state_frame_harness_reports_the_kind_of_what_it_proves() {
         let harness = |property| state_frame_harness(property, Vec::new());
@@ -252,7 +252,7 @@ mod tests {
             Some(ObligationKind::Frame)
         );
     }
-    /// Trace: FR-028-AC-4.
+    #[trace("FR-028-AC-4")]
     #[test]
     fn unranged_state_draws_record_the_full_i64_domain() {
         let mut harness = state_frame_harness(
