@@ -21,3 +21,9 @@ Ticket: IR-598. Checked that the verification method and evidence fit FR-015-AC-
 ## Verdict
 
 The search-based absence checks and the refusal tests are appropriate Test evidence. The real-Kani preconditions need an evidence form that someone can audit.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified at 455b1b1 (round 1) |

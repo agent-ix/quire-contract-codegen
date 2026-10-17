@@ -1028,7 +1028,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
      replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
      identity helpers in `replay/function.rs`, with their only caller) and the whole public
-     corpus API with the generation-time `KaniOutcome`, `census_validation.rs` included. Until a family's slice lands, that family's corpus arm stays as it is,
+     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to `validate_dependencies` but not `census_validation.rs`: every item there is also used by `v1_bundle.rs` (public `KaniDiagnostic` and `KaniErrorCode` included), so the file goes at step 4f or with the V2 census input, as 4f says. Until a family's slice lands, that family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception

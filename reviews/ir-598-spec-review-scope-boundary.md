@@ -23,3 +23,11 @@ Ticket: IR-598. Checked the slice gates and boundaries (IR-858/4b, 4h, IR-268, I
 ## Verdict
 
 The boundaries are mostly right: CG owns no population input, division moves to IR-854, and every slice is gated on IR-858. Fix the 4h gap and give the IR-268 gate and the no-wrapper rule a checkable form.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified at 455b1b1 (round 1) |
+| FND-002 | fixed | Verified at 455b1b1 (round 1) |
+| FND-003 | fixed | Verified at 455b1b1 (round 1) |

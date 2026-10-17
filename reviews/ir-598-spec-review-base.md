@@ -25,3 +25,13 @@ Ticket: IR-598. Base checklist review of the CG #423 delta only (`git diff f22c5
 ## Verdict
 
 Not mergeable as is. Sound parts: the per-family split, the staged no-wrapper retirement, AC-95 kept as an end-state invariant, the IR-858 gate on every slice, the IR-805/QSL-819/IR-852/IR-851 graph gate, the IR-854 pointer for division, and the stale AD-001 replay claim, which is now corrected. The merge resolution is exact. The replay-deletion timing and the replacement test must be fixed before the code slices can be planned from this spec.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified at 455b1b1 (round 1) |
+| FND-002 | fixed | Verified at 455b1b1 (round 1) |
+| FND-003 | fixed | Verified at 455b1b1 (round 1) |
+| FND-004 | fixed | Verified at 455b1b1 (round 1) |
+| FND-005 | fixed | Verified at 455b1b1 (round 1) |
