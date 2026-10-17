@@ -57,6 +57,7 @@ Context only: RT FR-007-AC-20..25, RT TC-201, QSpec TC-187 U01-U29, TC-030:308, 
 | FND-002 | fixed | d685fc5: the tests.md AC-2 row marks the conversion entry-point clause `🚧 Planned (IR-818 code slice)` and names the four refusal tests that flip |
 | FND-003 | fixed | d685fc5: AC-48 cites FR-007-AC-22, AC-23 and AC-25; AC-24 is gone |
 | FND-004 | fixed | d685fc5: the TC-030:308 row names `quire.op.quantity.convert` and FR-014-AC-51; AC-51 and the tests.md row name the owning TC-030 row |
+| FND-005 | fixed | 79afae4: AC-50, TC-024 step 6 and tests.md:14 now put the scalar-target and `ModeNotDerivable` cases in module tests only, because IR FR-038-AC-248 refuses a non-quantity target upstream and AC-213 admits only `exact`. The compound-unit refusal gets an admitted-package fixture. At CG's locked IR 38f3581 (Cargo.lock:1451, the same on main), AC-248 is present and Implemented (IR-225, #409), with the IR test `quantity_convert_admits_equal_compound_unit_result`, so the fixture can be built on the current pin. #411's 299a126 descends from 38f3581 and keeps AC-248 |
 
 ## New findings (disposition pass 3)
 
