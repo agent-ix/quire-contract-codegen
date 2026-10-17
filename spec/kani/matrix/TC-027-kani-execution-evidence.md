@@ -310,19 +310,31 @@ driver has no defined typed outcome for a mismatch, its owner must specify and p
 before implementation. No driver adversarial coverage is claimed here.
 
 Scalar native error discriminant (FR-017-AC-41 to AC-44): build one `KaniScalarNativeError` of each
-of the eleven variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant.
-(1) Assert `code()` of each equals its table code, that the eleven codes are pairwise distinct, and
-that `Kani` gives `kani_execution` for every nested refusal. (2) Assert `class()` of each variant
-and of each nested `Kani` refusal against the FR-017 table. Produce real errors by the runner for a
-request mismatch, a mismatched dependency-lock revision, an oracle stop and an unverified proof,
-and require `CompletionRefusal`; inject a changed staged byte, a native launch failure and
-malformed helper output, and require `EnvironmentFault`. (3) Force the canonical identity encode to
-fail (a content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
-`EnvironmentFault`, and no `NativeResult`; scan the identity-measurement function for
-`NativeResult`. Feed malformed helper output and require `native_result`. (4) Keep a frozen list of
-all variants, codes and classes, with an exhaustive `match` over the type that stops compiling
-when a variant is added, and assert the nested `OutputOverLimit` and `OutputUnread` codes are
-unchanged. These steps are Planned until the IR-847 code slice lands.
+of the twelve variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant, and
+`ProofNotVerified` once for each evidence outcome.
+(1) Assert `code()` of each equals its table code, that the twelve codes are pairwise distinct, that
+`Kani` gives `kani_execution` for every nested refusal, and that the type, the class enum and the
+code constants are reachable at the crate root. (2) Assert `class()` of each variant, of each nested
+`Kani` refusal, and of `ProofNotVerified` for `Falsified`, `CoverUnsatisfied`, each inconclusive
+reason, `Cancelled`, and `FailedWithoutCounterexample` with and without a `failureCause`, against
+the FR-017 table. Produce real errors by the runner for a request mismatch, a mismatched
+dependency-lock revision, an oracle stop and a falsified proof, and require `CompletionRefusal`;
+produce a real single run cancelled by its retained source and a real single run stopped by its
+wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
+with the evidence outcome unchanged; inject a changed staged byte, a native launch failure,
+malformed helper output and an embedded lock with no runtime revision, and require
+`EnvironmentFault` (the last as `codegen_lock`). (3) Force the canonical identity encode to fail (a
+content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
+`EnvironmentFault`, and not `NativeResult`; feed malformed helper output and require
+`native_result`. (4) Keep a frozen list of all variants, codes and classes, with an exhaustive
+`match` over the type inside the defining crate that stops compiling when a variant is added, and
+assert the nested `OutputOverLimit` and `OutputUnread` codes are unchanged. (5) Non-exhaustive and
+closed class: a rustdoc `compile_fail` example matches `KaniScalarNativeError` exhaustively without
+a wildcard arm and must fail to compile, with a compiling control that adds the wildcard arm; a second
+`compile_fail` example matches `KaniScalarNativeErrorClass` with a third arm naming a class that
+does not exist and must fail, with a compiling control matching exactly `CompletionRefusal` and
+`EnvironmentFault`; both run by `cargo test --doc`, the pattern of the AC-38 serialize-only check.
+These steps are Planned until the IR-847 code slice lands.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
@@ -342,8 +354,9 @@ never surface as one of FR-017's execution outcomes because no code path convert
 other.
 
 For the scalar error discriminant, each variant has its table code and class, the codes are distinct
-and frozen, the five refusal variants and the nested request-fixed `Kani` refusals are
-`CompletionRefusal`, the five fault variants and every other nested refusal are
+and frozen, the four refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
+property or proof verdict are `CompletionRefusal`; the six fault variants, every other nested refusal and a
+`ProofNotVerified` of a cancelled, timed-out, memory-exhausted or no-verdict run are
 `EnvironmentFault`, and an identity-encode failure is `IdentityEncode`, never `NativeResult`.
 
 In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an

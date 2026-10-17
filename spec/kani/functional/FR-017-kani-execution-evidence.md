@@ -615,15 +615,22 @@ changes none of their text.
   `&'static str`, never an `Option`, from the closed set below, and a total method `class()`
   returning `KaniScalarNativeErrorClass`, a closed two-value enum (`CompletionRefusal`,
   `EnvironmentFault`) that is not `non_exhaustive`. Each code is a snake_case string constant
-  exported beside the type. `Display` and `Debug` remain human text that no consumer shall parse.
+  exported beside the type. `KaniScalarNativeErrorClass`, `KaniScalarNativeError`'s `code()` constants
+  and `class()` are public at the crate root, re-exported beside `KaniScalarNativeError` in
+  `src/lib.rs` (the constants as `SCALAR_NATIVE_CODE_INVALID_REQUEST` and so on, one per code).
+  `Display` and `Debug` remain human text that no consumer shall parse.
 - The scalar runner shall mark `KaniScalarNativeError` `#[non_exhaustive]`. A downstream `match`
   on its variants must then carry a wildcard arm; a consumer shall select on `class()` and
   `code()`, not on variants. Adding a variant is an additive Rust change but is a spec change
   (FR-017-AC-44).
 - The scalar runner shall return the identity-encode failure (canonical proof-content identity
-  could not be encoded within its byte limit) as the variant `IdentityEncode`, code
-  `identity_encode`, and shall return `NativeResult` only for a malformed, missing or unsupported
-  structured result from the native helper.
+  could not be encoded within its byte limit, reported by `canonical_identity`) as the variant
+  `IdentityEncode`, code `identity_encode`, and shall return `NativeResult` only for a malformed,
+  missing or unsupported structured result from the native helper.
+- The scalar runner shall return the failure to find a runtime revision in codegen's own embedded
+  lock (today `InvalidRequest` in the lock-revision lookup) as the variant `CodegenLock`, code
+  `codegen_lock`: it is fixed by codegen, not by the request, so it is an environment fault.
+  `DependencyLock` remains only for a supplied package whose pinned revision differs from that lock.
 - A completion refusal is a failure fixed by the request and staged content, or a typed result of
   the proof itself, that the consumer shall preserve unchanged. An environment or decode fault is
   a failure of the host, toolchain, helper or runner that the consumer shall not present as a
@@ -633,15 +640,26 @@ changes none of their text.
 | --- | --- | --- | --- |
 | `InvalidRequest` | `invalid_request` | `CompletionRefusal` | Fixed by the request: identity, package, operand or limit mismatch, found before either child starts. |
 | `ArtifactPackage` | `artifact_package` | `CompletionRefusal` | Fixed by the supplied package bytes and paths against the standard bounds. |
+| `CodegenLock` (new) | `codegen_lock` | `EnvironmentFault` | Codegen's own embedded lock names no runtime revision: a build or packaging fault of codegen, never of the request. |
 | `Snapshot` | `snapshot_io` | `EnvironmentFault` | Host I/O failure creating, writing or measuring the private snapshot. |
 | `Kani` | `kani_execution` | by the nested refusal, below | The nested `KaniExecutionRefusal` mixes request-fixed refusals and host faults, so the outer variant is neither always. |
-| `ProofNotVerified` | `proof_not_verified` | `CompletionRefusal` | A typed proof result with its evidence (falsified, cover-unsatisfied, inconclusive, no verdict); the evidence, not the class, tells the consumer why. |
+| `ProofNotVerified` | `proof_not_verified` | by the carried evidence outcome, below | On a single run, cancellation, timeout, memory exhaustion and no-verdict all arrive as `ProofNotVerified`, while their batch twins are `Kani` faults; the class follows the outcome so the two paths agree. |
 | `OracleStop` | `oracle_stop` | `CompletionRefusal` | The runtime oracle rejected a generated operand, constant or width: a typed, deterministic stop. |
 | `NativeLaunch` | `native_launch` | `EnvironmentFault` | The bounded native build or invocation did not complete: toolchain or host. |
 | `DependencyLock` | `dependency_lock` | `CompletionRefusal` | The supplied package pins a runtime revision other than this codegen's lock: fixed by the package, found before execution. |
 | `NativeResult` | `native_result` | `EnvironmentFault` | The helper returned malformed, missing or unsupported structured output: a decode fault. |
 | `SnapshotChanged` | `snapshot_changed` | `EnvironmentFault` | Staged bytes changed during a child run. The change is not determined by the request, so a retry can succeed; it is an integrity fault, not a refusal of the request. (IR-847's description listed it as a refusal; this spec decides otherwise.) |
 | `IdentityEncode` | `identity_encode` | `EnvironmentFault` | Encoding the canonical identity of already-bounded content failed: an internal runner fault. |
+
+For `ProofNotVerified`, `class()` is `CompletionRefusal` when the evidence outcome is a genuine
+property or proof verdict: `Falsified`, `CoverUnsatisfied`, or `Inconclusive` with reason
+`MissingCoverSummary`, `VacuousProof`, `UnwindBoundExhausted`, or `FailedWithoutCounterexample`
+with no `failureCause` (a failed property). It is `EnvironmentFault` when the run did not reach a
+verdict: `Cancelled`, `Inconclusive` with reason `TimedOut`, `MemoryExhausted` or `NoVerdict`, and
+`FailedWithoutCounterexample` with any `failureCause` (a CBMC timeout, out-of-memory, exit code or
+unknown failure). `Verified` cannot occur. This is consistent with the FR-029 mapping of a
+timeout or memory exhaustion to an incomplete terminal (IR-848): such a run is not a verdict.
+The evidence is carried unchanged for either class.
 
 For `Kani`, `class()` is `CompletionRefusal` when the nested refusal is `HarnessNotInCrate`,
 `HarnessProvenanceMismatch`, `OutputOverLimit` or `PlaybackForNonMember` (fixed by the harness,
@@ -653,7 +671,7 @@ spec's decision. The outer `code()` of `Kani` is always `kani_execution`; the ne
 `KaniExecutionRefusal::code()` is unchanged and remains `Some` only for `OutputOverLimit` and
 `OutputUnread`. Giving every nested refusal a stable code is not required here.
 
-Stability contract: the eleven codes above are the whole set. A code is never renamed, reused for
+Stability contract: the twelve codes above are the whole set. A code is never renamed, reused for
 another variant, or removed while its variant exists. A variant's `class()` never changes. Adding a
 variant, code or nested classification is a spec change to this section, made with its tests.
 
@@ -703,9 +721,9 @@ variant, code or nested classification is a spec change to this section, made wi
 | FR-017-AC-38 | A single-run stand-in that exits 1 and exports a `Failure` report listing a failed assertion check with no playback on the console, whose entry for the harness has exit status `properties_failed`, is `FailedWithoutCounterexample` with `failureCause` `{ "kind": "properties_failed" }` and no `diagnostics` member. The same report with no `error_details` member, with an entry that names another harness only, with two entries naming the harness, with an entry whose `exit_status` is null, or whose one result names no `harness_id`, is `FailedWithoutCounterexample` with neither a `failureCause` nor a `diagnostics` member. An entry with exit status `exit_code_64` beside a verified or cover-unsatisfied report with exit 0, or beside a falsified (its playback printed) or unwind-bound-exhausted report with exit 1, leaves that outcome unchanged with no `failureCause` member; a `NoVerdict` run (a success report beside exit 1 with that entry, or no report), a timed-out run and a memory-exhausted run have none either. A report whose `exit_status` is the number `64`, and one whose `exit_status` is the string `"\ud800"` (a lone surrogate escape), each stay refused as malformed with no evidence. A rustdoc `compile_fail` example on `KaniFailureCause` that calls `serde_json::from_str` for it fails to compile, beside a compiling control that calls `serde_json::to_string` on the same value. | Test (TC-027) |
 | FR-017-AC-39 | A batch stand-in of members `a::check`, `b::check`, `c::check`, `d::check` and `e::check` whose process exits 1 and whose report has `a::check` `Success` with a passing assertion, every cover satisfied and no exit status, `b::check` `Failure` with no checks and exit status `exit_code_64`, `c::check` `Failure` with no checks and exit status `timeout`, `d::check` `Failure` listing a failed assertion with no playback block headed for its path and exit status `timeout`, and `e::check` `Failure` listing a failed assertion with no playback block headed for its path and exit status `properties_failed` (the entry real Kani writes for a failed assertion), gives `a::check` `Verified` with no `failureCause`; `b::check` `FailedWithoutCounterexample` with `{ "kind": "exit_code", "code": 64 }` and a `diagnostics` record of phase `unknown` holding the group's excerpts; `c::check` inconclusive timed out naming T, with no `failureCause` and no `diagnostics`; `d::check` `FailedWithoutCounterexample` with `{ "kind": "timeout" }` and a `diagnostics` record; and `e::check` `FailedWithoutCounterexample` with `{ "kind": "properties_failed" }` and no `diagnostics` member. The same group whose report holds two entries for `b::check`, one `timeout` and one `exit_code_64`, gives `b::check` inconclusive timed out with no `failureCause`, the timeout rule reading the entries as before. | Test (TC-043) |
 | FR-017-AC-40 | The cause never feeds classification: three single-run stand-ins with the same `Failure` report, no checks and the same exit, whose entries give `exit_code_64`, `out_of_memory` and `cbmc_exploded` and whose streams differ, classify to the same outcome, checks, SUCCESS count and playback, and their evidence is equal in every field but `failureCause`, `diagnostics`, `memory` and the report-path argument; the FR-029 terminal value of each is `Failed`, equal to the terminal value of the same evidence with `failureCause` and `diagnostics` absent. In the `make kani` lane, a generated harness in a crate whose manifest carries `[package.metadata.kani]` with `unstable = { unstable-options = true }` and `flags = { cbmc-args = ["--no-such-option"] }`, its option vector unchanged, is run through `execute_kani_obligation`: the run exits unsuccessfully, exports a report and is `Inconclusive` `FailedWithoutCounterexample` with `failureCause` `{ "kind": "exit_code", "code": 64 }` and a `diagnostics` record whose stderr excerpt holds `Unknown option: --no-such-option`. | Test (TC-027) |
-| FR-017-AC-41 | Every `KaniScalarNativeError` variant has a `code()` that is a total `&'static str` from exactly this set: `invalid_request`, `artifact_package`, `snapshot_io`, `kani_execution`, `proof_not_verified`, `oracle_stop`, `native_launch`, `dependency_lock`, `native_result`, `snapshot_changed`, `identity_encode`. The set is closed and the codes are pairwise distinct. The type is `#[non_exhaustive]`, and `class()` returns a closed `KaniScalarNativeErrorClass`. For a `Kani` error the code is `kani_execution` for every nested refusal. | Test (TC-027) |
-| FR-017-AC-42 | `class()` is `CompletionRefusal` for `invalid_request`, `artifact_package`, `proof_not_verified`, `oracle_stop` and `dependency_lock`, and `EnvironmentFault` for `snapshot_io`, `native_launch`, `native_result`, `snapshot_changed` and `identity_encode`. For `kani_execution` it is `CompletionRefusal` for nested `HarnessNotInCrate`, `HarnessProvenanceMismatch`, `OutputOverLimit` and `PlaybackForNonMember`, and `EnvironmentFault` for every other nested refusal. Real errors produced by the runner for the request-mismatch, dependency-lock, oracle-stop and proof-not-verified causes are refusals; the injected snapshot-change, native-launch and malformed-helper-output causes are faults. | Test (TC-027) |
-| FR-017-AC-43 | A canonical-identity encoding failure is `IdentityEncode` with code `identity_encode` and class `EnvironmentFault`; no path returns `NativeResult` for it. `NativeResult` is produced only for the helper's malformed, missing or unsupported structured result, and a source scan of the identity-measurement function finds no `NativeResult`. | Test (TC-027) |
+| FR-017-AC-41 | Every `KaniScalarNativeError` variant has a `code()` that is a total `&'static str` from exactly this set: `invalid_request`, `artifact_package`, `snapshot_io`, `kani_execution`, `proof_not_verified`, `oracle_stop`, `native_launch`, `dependency_lock`, `native_result`, `snapshot_changed`, `identity_encode`, `codegen_lock`. The set is closed and the codes are pairwise distinct. The type is `#[non_exhaustive]` (a rustdoc `compile_fail` exhaustive match without a wildcard arm, beside a compiling control with one), and `class()` returns a closed `KaniScalarNativeErrorClass` (a rustdoc `compile_fail` match that names a third class, beside a compiling exhaustive two-arm control). For a `Kani` error the code is `kani_execution` for every nested refusal. | Test (TC-027) |
+| FR-017-AC-42 | `class()` is `CompletionRefusal` for `invalid_request`, `artifact_package`, `oracle_stop` and `dependency_lock`, and `EnvironmentFault` for `snapshot_io`, `native_launch`, `native_result`, `snapshot_changed`, `identity_encode` and `codegen_lock`. For `proof_not_verified` it is `CompletionRefusal` for evidence outcome `Falsified`, `CoverUnsatisfied`, and `Inconclusive` `MissingCoverSummary`, `VacuousProof`, `UnwindBoundExhausted` or `FailedWithoutCounterexample` with no `failureCause`, and `EnvironmentFault` for `Cancelled`, `Inconclusive` `TimedOut`, `MemoryExhausted` or `NoVerdict`, and `FailedWithoutCounterexample` with a `failureCause`. For `kani_execution` it is `CompletionRefusal` for nested `HarnessNotInCrate`, `HarnessProvenanceMismatch`, `OutputOverLimit` and `PlaybackForNonMember`, and `EnvironmentFault` for every other nested refusal. Real errors produced by the runner for the request-mismatch, dependency-lock, oracle-stop and proof-not-verified causes are refusals; a real single run cancelled by its source and one stopped by its wall-clock timeout are faults, as are the injected snapshot-change, native-launch, malformed-helper-output and missing-embedded-lock-revision causes. | Test (TC-027) |
+| FR-017-AC-43 | A canonical-identity encoding failure is `IdentityEncode` with code `identity_encode` and class `EnvironmentFault`; no path returns `NativeResult` for it. `NativeResult` is produced only for the helper's malformed, missing or unsupported structured result, and a forced identity-encode failure through the public API returns `IdentityEncode`, not `NativeResult`. | Test (TC-027) |
 | FR-017-AC-44 | The code table is frozen: a test lists every variant with its expected code and class, fails if a variant exists that the list lacks or if a code value differs, and fails if two variants share a code. Adding a variant, code or class is a spec change to the "Scalar native error discriminant" section made together with that table. The nested `KaniExecutionRefusal::code()` of `OutputOverLimit` and `OutputUnread` is unchanged. | Test (TC-027) |
 
 ## Dependencies
