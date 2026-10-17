@@ -120,3 +120,9 @@ Round 8 reviewed at 33854d0ef1a8c0733109cba68c0b7c7a84c18fab (fix 94718fd..33854
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-009 | fixed | 33854d0: AC-108 glosses `UnknownNode` as the id of the reaches application found at the claim's path (not the `state_clause` id), `NotReachesApplication` as that application id naming a non-reaches node, and states that AC-107's location refusal is checked first. |
+
+Round 9 reviewed at 07b2ea10f85b37e13a0a01c4cf0af4237581271c (fix 33854d0..07b2ea1; scoped to the changed lines). No new findings.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-010 | fixed | 07b2ea1: AC-108 now ends the AC-107 ordering sentence after `NotReachesApplication`; the field-member and claim-form refusals are their own sentence. |

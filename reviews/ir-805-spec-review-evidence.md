@@ -68,3 +68,9 @@ Round 8 reviewed at 33854d0ef1a8c0733109cba68c0b7c7a84c18fab.
 | FND | Outcome | sha/reason |
 | --- | --- | --- |
 | FND-003 | fixed | 33854d0: TC-025 step (4) is limited to inputs reachable from an admitted package; the three `relationship_end` refusals move to an Inspection paragraph (:93-99), checked by inspecting the error mapping or a named in-crate accessor test double, and are no longer a testable-now step. |
+
+Round 9 reviewed at 07b2ea10f85b37e13a0a01c4cf0af4237581271c (fix 33854d0..07b2ea1; scoped to the changed lines). No new findings.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-004 | fixed | 07b2ea1: AC-108's Verification column now reads `Test, Inspection`, matching TC-025's Inspection paragraph. |
