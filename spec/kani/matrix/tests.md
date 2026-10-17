@@ -45,6 +45,7 @@ type: TestMatrix
 | FR-017 | FR-017-AC-32 through FR-017-AC-35 | TC-027 | ✅ Covered (IR-809); the `NoVerdict` diagnostic record (typed failure phase, bounded redacted stdout/stderr tail), asserted against launcher stand-ins and in the `make kani` lane against real Kani on a non-compiling crate |
 | FR-017 | FR-017-AC-36 | TC-043 | ✅ Covered (IR-809); batch `NoVerdict` records, independence from classification, the FR-029 terminal value, home-directory grouping and the over-limit/unread refusals |
 | FR-017 | FR-017-AC-37, FR-017-AC-38, FR-017-AC-40 | TC-027 | ✅ Covered (IR-827); the typed CBMC failure cause and diagnostic record of `FailedWithoutCounterexample` evidence, its independence from classification and the `make kani` lane run with an unknown CBMC option, asserted against launcher stand-ins and in the `make kani` lane against real Kani |
+| FR-017 | FR-017-AC-41 through FR-017-AC-44 | TC-027 | 🚧 Planned (IR-847); the stable `KaniScalarNativeError` code set, the completion-refusal/environment-fault split, the separate identity-encode variant and the frozen code table |
 | FR-017 | FR-017-AC-39 | TC-043 | ✅ Covered (IR-827); a batch member's CBMC failure cause beside the batch timeout rule |
 | FR-025 | FR-025-AC-1 | TC-036 | 🚧 Planned; emission order is asserted only for the V1 `BoundClause` harness kinds, and the ascending order and the scalar-claim harness are unasserted |
 | FR-025 | FR-025-AC-2 through FR-025-AC-8 | TC-036 | 🚧 Planned |
@@ -101,6 +102,7 @@ column is marked `⚠️` or `🚧` in the table that owns it, that table govern
 | TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-2, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7, FR-017-AC-11, FR-017-AC-12, FR-017-AC-13, FR-017-AC-15, FR-017-AC-16, FR-017-AC-17, FR-017-AC-18, FR-017-AC-19, FR-017-AC-20, FR-017-AC-26, FR-017-CON-1, FR-017-CON-2 | 🚧 Planned; caller admission execution is unimplemented (IR-494) |
 | TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-32, FR-017-AC-33, FR-017-AC-34, FR-017-AC-35 | ✅ Covered (IR-809) |
 | TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-37, FR-017-AC-38, FR-017-AC-40 | ✅ Covered (IR-827) |
+| TC-027 | Verify Kani obligation execution and its evidence | Analysis | P0 | FR-017-AC-41, FR-017-AC-42, FR-017-AC-43, FR-017-AC-44 | 🚧 Planned (IR-847) |
 | TC-043 | Verify Kani harness batching, the output cap and launcher cleanup | Integration | P0 | FR-017-AC-14, FR-017-AC-21, FR-017-AC-22, FR-017-AC-23, FR-017-AC-24, FR-017-AC-25 | ✅ Covered |
 | TC-043 | Verify Kani harness batching, the output cap and launcher cleanup | Integration | P0 | FR-017-AC-36 | ✅ Covered (IR-809) |
 | TC-043 | Verify Kani harness batching, the output cap and launcher cleanup | Integration | P0 | FR-017-AC-39 | ✅ Covered (IR-827) |
