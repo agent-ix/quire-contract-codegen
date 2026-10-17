@@ -320,7 +320,7 @@ reason, `Cancelled`, `Verified` (an internal inconsistency, requiring `Environme
 the FR-017 table. Produce real errors by the runner for a request mismatch, an oracle stop and a falsified proof, and require `CompletionRefusal`;
 produce a real single run cancelled by its retained source and a real single run stopped by its
 wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
-with the evidence outcome unchanged; construct `DependencyLock` through an in-crate seam only (it is unreachable from a canonical request, whose manifest must equal the canonical one, and a failed lock update is `NativeLaunch`) and require `CompletionRefusal`; inject a changed staged byte, a native launch failure,
+with the evidence outcome unchanged; construct `DependencyLock` through an in-crate seam only (it is unreachable from a canonical request, whose manifest must equal the canonical one, and a lock update that writes no matching revision or an unreadable lock is its host fault) and require `EnvironmentFault`; inject a changed staged byte, a native launch failure,
 malformed helper output and an embedded lock with no runtime revision, and require
 `EnvironmentFault` (the last as `codegen_lock`). (3) Force the canonical identity encode to fail (a
 content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
@@ -356,8 +356,8 @@ never surface as one of FR-017's execution outcomes because no code path convert
 other.
 
 For the scalar error discriminant, each variant has its table code and class, the codes are distinct
-and frozen, the four refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
-property or proof verdict are `CompletionRefusal`; the six fault variants, every other nested refusal and a
+and frozen, the three refusal variants, the nested request-fixed `Kani` refusals and a `ProofNotVerified` carrying a
+property or proof verdict are `CompletionRefusal`; the seven fault variants, every other nested refusal and a
 `ProofNotVerified` of a cancelled, timed-out, memory-exhausted or no-verdict run are
 `EnvironmentFault`, and an identity-encode failure is `IdentityEncode`, never `NativeResult`.
 

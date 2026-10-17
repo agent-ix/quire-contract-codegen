@@ -61,3 +61,11 @@ Rechecked at frozen head 75a0bb88176666b785d64bf7496bb5bf768a713c (fix commit 58
 | FND-002 | fixed | verified in 58f8bbe at 75a0bb8 |
 | FND-003 | fixed | round 2: verified in a569513 |
 | FND-004 | fixed | round 2: verified in a569513 |
+
+## New findings (disposition pass 4)
+
+Planner-ruled gap round at frozen head 24a4caf84f0ad5f21e7160c683505a7b06ed7e1c (fix commit 24a4caf). The Verified-as-fault rule and the AC-43 in-crate seam wording were checked and are consistent with AC-42, AC-44 and the frozen mapping; no finding there.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | The round-4 text makes DependencyLock unreachable from a canonical request (validate_request requires Cargo.toml to equal oracle_crate_manifest, which names the runtime by branch = main with no rev; scalar.rs:402-406, profile.rs:22-27) and keeps it a CompletionRefusal 'because the package would fix it'. Both claims are verified except the conclusion: with the manifest forced canonical, no package can fix it, and the paths that still reach it (scalar.rs:879-889) are host or toolchain faults: `cargo update --precise <rev>` exits 0 but the lock does not name that revision, or reading Cargo.lock fails, which `.ok()` turns into DependencyLock{actual: None}. So the variant is reachable only through environment faults and is classed a refusal, the same mismatch SR-12131 FND-001 fixed for ProofNotVerified; quire-driver FR-009-AC-7 would pass it through unchanged as a refusal of the request. Class it EnvironmentFault (and update AC-42, TC-027 step 2 and the frozen mapping), or state that a refusal is chosen despite every reachable cause being environmental. | spec/kani/functional/FR-017-kani-execution-evidence.md:633 |
