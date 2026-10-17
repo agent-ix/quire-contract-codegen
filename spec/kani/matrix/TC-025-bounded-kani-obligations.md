@@ -16,7 +16,7 @@ Verify that bounded contracts produce one harness per obligation kind and
 refuse non-finite obligations. IR-268 covers the collection half of planned V2
 symbolic obligations: the claim is an admitted QSL clause/function body over a
 selected model collection field. Graph reachability is required by
-FR-015-AC-98 and FR-015-AC-105 to FR-015-AC-107 (IR-805); it is not IR-268
+FR-015-AC-98 and FR-015-AC-105 to FR-015-AC-108 (IR-805); it is not IR-268
 evidence. The finite-input collection and graph corpus is not proof evidence
 for either symbolic family.
 
@@ -68,42 +68,35 @@ planned until the symbolic collection generation exists. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object
-type `Order` with an optional `Reference<Order>` field, a `Reference`, and a
-bounded `Sequence<Reference<Order>>` field, and relationships `next`
-(`{0,1}`), `kids` (`{0,3}` unique) and `litter` (`{0,3}` not unique), plus a
-`{2,3}` end, with `Population<Order>[N]` bindings; write invariant/precondition/
-postcondition clauses of the form `reaches(self, target, <name>)` and
-`not reaches(self, self, <name>)`. Emit through QSL and admit through Contract IR
-(no copied wire or hand-built builder). Inspect that the claim is the
-`state_clause` node id with the argument path of a `quire.op.model.reaches`
+type `Order` with an optional `Reference<Order>` field, a `Reference` field and
+a bounded `Sequence<Reference<Order>>` field, and relationships `next`
+(`{0,1}`), `kids` (`{0,3}` unique), `litter` (`{0,3}` not unique) and a `{2,3}`
+end; write invariant/precondition/postcondition clauses of the form
+`reaches(self, target, <name>)` and `not reaches(self, self, <name>)`. Emit
+through QSL and admit through Contract IR (no copied wire or hand-built
+builder). QSL gives such a clause no finite population (it is a state-clause
+`reaches`, not a function parameter typed `Population<T>[N]`), so no fixture
+can show a successful harness until QSL ticket TBD (bounded domain population
+for reaches) lands. Steps testable now (refusals, no harness): (1) the claim is
+the `state_clause` node id and argument path of a `quire.op.model.reaches`
 (member `relationship_end`) or `quire.op.model.reaches_field` (member `field`)
-application. Steps: (1) positive-length semantics: with `start = target`, an
-isolated object is unreachable and a self-loop is reachable, both in the
-generated draw and in the `qsl_replay` oracle; (2) inclusive bounds: populations
-`N = 0` and the maximum, edge counts `lower`, `upper` and between, uniqueness of
-`kids` and repeats of `litter`, `{2,3}` forcing two targets; (3) refusals with no
-harness: unbounded population (`requires_bound`), unbounded collection edge
-(`requires_bound`), unavailable, stale or non-population binding, a member of
-another shape and an absent relationship-end multiplicity accessor
-(`unsupported`), and a population or edge domain over the ceiling
-(`unsupported`); never a caller `max_expansions`; (4) claim location: the same
-reachability twice in a condition, one node under two clauses, the two forms,
-a function-body claim and a bad path (FR-015-AC-107); (5) mutation control and
-real Kani: the healthy case is `Verified` with its cover satisfied, and each
-seeded mutant of FR-015-AC-106 is `Falsified` with an in-domain playback, with
-the native oracle compared on the same inputs; (6) identity: change the clause
-path, form, field or role, either population maximum, the edge multiplicity,
-subject and unwind separately, and repeat equal inputs for byte identity.
-The finite-input `GraphRequest` corpus is not evidence.
-
-Open upstream inputs: IR 64f884e7 and 299a126 expose no typed accessor for a
-relationship end's multiplicity and none that maps a reaches claim to its
-population binding (`select_population` needs a binding and `Type` occurrence).
-Until IR provides them the relationship-end and population controls settle
-`unsupported` and stay unbacked; the field-edge multiplicity is available now
-through `model_object_fields`. Code-phase pin: `quire-contract-ir` and
-`quire-contract-model` at or after 64f884e7 (the current lock's 38f3581 predates
-it; 299a126 contains it) and `qsl-*` at or after 46aa650be.
+application; (2) the unbounded population settles `requires_bound` for every
+emitted claim; (3) an unbounded collection edge settles `requires_bound`; (4)
+each of FR-015-AC-108's `unsupported` inputs settles `unsupported` naming it,
+including the relationship-end multiplicity not exposed by IR (IR-851); (5)
+claim location: the same reachability twice in a condition, one node under two
+clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no
+caller `max_expansions`, population or multiplicity changes any outcome.
+Inspection: QSL refuses `reaches` in a function body, so no function-body graph
+claim can reach the generator. Steps that wait on the QSL ticket (unbacked):
+positive-length semantics (an isolated `start = target` unreachable, a self-loop
+reachable) in the generated draw and the `qsl_replay` oracle; inclusive
+populations `N = 0` and the maximum, edge counts `lower`, `upper` and between,
+`kids` uniqueness, `litter` repeats and `{2,3}`; the healthy `Verified` case and
+each FR-015-AC-106 mutant `Falsified` with an in-domain playback; and identity
+changes for the clause path, form, field or role, population extent, edge
+multiplicity, subject and unwind, with byte identity on equal inputs. The
+finite-input `GraphRequest` corpus is not evidence.
 
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract
