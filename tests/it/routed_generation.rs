@@ -3,6 +3,7 @@
 //!
 //! The fixtures are TC-024/TC-025's: `kani_obligations::scalar_package` and its claim map.
 
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     generate_exact_scalar_oracles, generate_routed as generate_routed_impl,
     negotiate_kani_obligations, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
@@ -34,7 +35,7 @@ const RENDERED: [&str; 3] = [
 
 /// An external driver can name the scalar rendering envelope's typed source
 /// ceiling without reaching through a private module.
-/// Trace: FR-022-AC-25, TC-033.
+#[trace("FR-022-AC-25", "TC-033")]
 #[test]
 fn routed_scalar_source_ceiling_is_publicly_matchable() {
     fn source_ceiling(error: &RoutedGenerationError) -> Option<(usize, usize, &'static str)> {
@@ -357,7 +358,7 @@ fn process_route(
     .expect("matching process descriptor")
 }
 
-/// Trace: FR-022-AC-21, TC-046
+#[trace("FR-022-AC-21", "TC-046")]
 #[test]
 fn routed_process_construction_preserves_optional_manifest_bounds() {
     let fixture = fixture();
@@ -387,7 +388,7 @@ fn routed_process_construction_preserves_optional_manifest_bounds() {
     assert_eq!(construct(&absent), construct(&present_empty));
 }
 
-/// Trace: FR-022-AC-17, FR-022-AC-19, FR-022-AC-21, TC-046.
+#[trace("FR-022-AC-17", "FR-022-AC-19", "FR-022-AC-21", "TC-046")]
 #[test]
 fn process_items_generate_empty_outputs_in_request_order() {
     let fixture = fixture();
@@ -430,7 +431,7 @@ fn process_items_generate_empty_outputs_in_request_order() {
     );
 }
 
-/// Trace: FR-022-AC-22, TC-046.
+#[trace("FR-022-AC-22", "TC-046")]
 #[test]
 fn routed_item_constructor_refuses_mismatched_and_unknown_linked_descriptors() {
     let fixture = fixture();
@@ -490,7 +491,7 @@ fn kani_context(subject_path: &str, unwind: u32) -> GenerationContexts<'_> {
 }
 
 /// A Kani route must carry the exact selected result used at preflight.
-/// Trace: FR-022-AC-23, FR-022-AC-24, TC-033.
+#[trace("FR-022-AC-23", "FR-022-AC-24", "TC-033")]
 #[test]
 fn routed_scalar_selection_must_match_admitted_driver_position() {
     let fixture = fixture();
@@ -551,7 +552,7 @@ fn routed_scalar_selection_must_match_admitted_driver_position() {
     );
 }
 
-/// Trace: FR-028-AC-1.
+#[trace("FR-028-AC-1")]
 #[test]
 fn routed_scalar_identity_records_both_required_ceilings() {
     let fixture = fixture();
@@ -656,7 +657,7 @@ fn generate_step_one(fixture: &Fixture, routed: &[RoutedGenerationItem]) -> Rout
 /// Every routed Kani item equals what FR-015 returns in ascending request-index order, with the
 /// driver's index in every record, and each harness is joined by `harness_symbol`.
 ///
-/// Trace: FR-022-AC-2, FR-022-AC-8, TC-033
+#[trace("FR-022-AC-2", "FR-022-AC-8", "TC-033")]
 #[test]
 fn tc_033_routed_kani_items_equal_fr015_output_keyed_by_request_index() {
     let fixture = fixture();
@@ -713,7 +714,7 @@ fn tc_033_routed_kani_items_equal_fr015_output_keyed_by_request_index() {
 
 /// The entry point takes no settlement input.
 ///
-/// Trace: FR-022-AC-3, TC-033
+#[trace("FR-022-AC-3", "TC-033")]
 #[test]
 fn tc_033_the_entry_point_takes_no_settlement_input() {
     // The coercion fails to compile if the signature gains a manifest, candidate set, extent or
@@ -729,7 +730,7 @@ fn tc_033_the_entry_point_takes_no_settlement_input() {
 
 /// Duplicate request indexes and a missing kind context each refuse the whole call.
 ///
-/// Trace: FR-022-AC-5, TC-033
+#[trace("FR-022-AC-5", "TC-033")]
 #[test]
 fn tc_033_duplicate_index_and_missing_context_refuse_the_call() {
     let fixture = fixture();
@@ -778,7 +779,7 @@ fn tc_033_duplicate_index_and_missing_context_refuse_the_call() {
 
 /// A Kani group-level refusal is returned unchanged as `Kani`.
 ///
-/// Trace: FR-022-AC-6, TC-033
+#[trace("FR-022-AC-6", "TC-033")]
 #[test]
 fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
     let fixture = fixture();
@@ -811,7 +812,7 @@ fn tc_033_a_kani_group_refusal_is_returned_unchanged() {
 /// An `invalid_request` item rejects the Kani group: every record, no harness, and the duplicate
 /// names the driver's index of the first occurrence.
 ///
-/// Trace: FR-022-AC-7, TC-033
+#[trace("FR-022-AC-7", "TC-033")]
 #[test]
 fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
     let fixture = fixture();
@@ -862,7 +863,7 @@ fn tc_033_an_invalid_kani_item_rejects_the_group_with_driver_indexes() {
 
 /// An empty routed set is an empty result, whether or not a context is supplied.
 ///
-/// Trace: FR-022-AC-8, TC-033
+#[trace("FR-022-AC-8", "TC-033")]
 #[test]
 fn tc_033_an_empty_routed_set_returns_an_empty_result() {
     let fixture = fixture();
@@ -886,7 +887,7 @@ fn tc_033_an_empty_routed_set_returns_an_empty_result() {
 /// Regeneration and slice order do not change the result, and the request index does not reach
 /// the harness.
 ///
-/// Trace: FR-022-AC-9, TC-033
+#[trace("FR-022-AC-9", "TC-033")]
 #[test]
 fn tc_033_output_is_deterministic_and_independent_of_the_request_index() {
     let fixture = fixture();
@@ -951,7 +952,7 @@ fn harness_at(generation: &RoutedGeneration, position: usize) -> &KaniScalarObli
 /// A node routed alone and the same node routed among siblings of other operations get
 /// byte-identical harnesses: a name depends only on siblings that share its readable stem.
 ///
-/// Trace: FR-022-AC-9, TC-033
+#[trace("FR-022-AC-9", "TC-033")]
 #[test]
 fn tc_033_a_node_gets_identical_bytes_whatever_its_differently_named_siblings() {
     let fixture = fixture();
@@ -974,7 +975,7 @@ fn tc_033_a_node_gets_identical_bytes_whatever_its_differently_named_siblings() 
 /// Two nodes of one operation share a readable stem and take ordinals in node-id order, so
 /// swapping their request positions leaves each node's harness byte-identical.
 ///
-/// Trace: FR-022-AC-9, TC-033
+#[trace("FR-022-AC-9", "TC-033")]
 #[test]
 fn tc_033_nodes_sharing_a_stem_take_stable_ordinals_in_node_order() {
     let (package, ids) = routed_two_parameter_package();
@@ -1031,7 +1032,14 @@ fn tc_033_nodes_sharing_a_stem_take_stable_ordinals_in_node_order() {
 /// the literal `1` at its own value (IR-302). No claim map
 /// is supplied: the operation and domain are derived from the package alone (IR-294).
 ///
-/// Trace: FR-014-AC-16, FR-014-AC-17, FR-022-AC-2, FR-022-AC-10, TC-024, TC-033
+#[trace(
+    "FR-014-AC-16",
+    "FR-014-AC-17",
+    "FR-022-AC-2",
+    "FR-022-AC-10",
+    "TC-024",
+    "TC-033"
+)]
 #[test]
 fn tc_033_bounded_increment_over_a_bounded_parameter_is_supported_with_a_scalar_harness() {
     let (package, ids) = routed_bounded_increment_package();
@@ -1106,7 +1114,7 @@ fn ranges(harness: &KaniScalarObligationHarness) -> Vec<(i64, i64)> {
 /// Supported too: operand bounds need not lie inside the result bound. A literal operand has no
 /// bound of its own and is ranged at its own value.
 ///
-/// Trace: FR-014-AC-20, FR-014-AC-24, FR-022-AC-13, TC-024, TC-033
+#[trace("FR-014-AC-20", "FR-014-AC-24", "FR-022-AC-13", "TC-024", "TC-033")]
 #[test]
 fn tc_033_bounded_parameters_are_supported_with_a_per_operand_scalar_harness() {
     for (code, identity, expected, result) in [
@@ -1180,7 +1188,7 @@ fn tc_033_bounded_parameters_are_supported_with_a_per_operand_scalar_harness() {
 /// with no harness: `x + y` (`x` bounded, `y` plain, result bounded), `y + y`, and `x + y` with a
 /// scalar-typed result.
 ///
-/// Trace: FR-014-AC-25, FR-022-AC-13, TC-033
+#[trace("FR-014-AC-25", "FR-022-AC-13", "TC-033")]
 #[test]
 fn tc_033_a_plain_typed_reference_operand_is_requires_bound_with_no_harness() {
     for code in [
@@ -1246,7 +1254,7 @@ fn qsl_shaped_routing_input_in(
 /// record, harness and claim unchanged. InvalidBody is covered at the inference/lowering seam:
 /// the checked V2 reader rejects malformed bodies before a package can enter routed generation.
 ///
-/// Trace: FR-014-AC-46, FR-015-AC-104, TC-033.
+#[trace("FR-014-AC-46", "FR-015-AC-104", "TC-033")]
 #[test]
 fn tc_033_routed_operand_refusals_leave_healthy_sibling_unchanged() {
     const DIVISION: u32 = 9_300_001;
@@ -1393,7 +1401,13 @@ fn tc_033_routed_operand_refusals_leave_healthy_sibling_unchanged() {
 /// `Int[10, 29]` ranges each over its own bound; `-z` over `Int[0, 9]` into `Int[-9, 0]` ranges
 /// `z` over `[0, 9]`. Each harness asserts the result against the conversion's bound.
 ///
-/// Trace: FR-014-AC-26, FR-014-AC-27, FR-015-AC-16, FR-022-AC-15, TC-033
+#[trace(
+    "FR-014-AC-26",
+    "FR-014-AC-27",
+    "FR-015-AC-16",
+    "FR-022-AC-15",
+    "TC-033"
+)]
 #[test]
 fn tc_033_qsl_shaped_increment_sum_and_negation_are_supported() {
     for (code, identity, expected, result) in [
@@ -1441,7 +1455,13 @@ fn tc_033_qsl_shaped_increment_sum_and_negation_are_supported() {
 /// With two represented conversions, the routed package uses the caller's selected first
 /// conversion rather than inferring an ambiguous result from the shared expression node.
 ///
-/// Trace: FR-014-AC-28, FR-014-AC-29, FR-014-AC-32, FR-022-AC-15, TC-033
+#[trace(
+    "FR-014-AC-28",
+    "FR-014-AC-29",
+    "FR-014-AC-32",
+    "FR-022-AC-15",
+    "TC-033"
+)]
 #[test]
 fn tc_033_qsl_shaped_plain_operands_refuse_and_selected_narrowing_generates() {
     for code in [package::QSL_PLAIN_OPERAND, package::QSL_NOT_LITERAL_OPERAND] {
@@ -1687,7 +1707,14 @@ fn route_qsl_functions(
 /// infer a finite range through that graph, while a plain-Integer parameter at any nested depth
 /// remains a typed refusal.
 ///
-/// Trace: FR-014-AC-45, FR-014-AC-46, FR-015-AC-103, FR-015-AC-104, TC-024, TC-033
+#[trace(
+    "FR-014-AC-45",
+    "FR-014-AC-46",
+    "FR-015-AC-103",
+    "FR-015-AC-104",
+    "TC-024",
+    "TC-033"
+)]
 #[test]
 fn tc_033_qsl_emitted_nested_integer_operands_are_bounded_or_require_bounds() {
     let package = nested_qsl_package();
@@ -1802,7 +1829,7 @@ fn tc_033_qsl_emitted_nested_integer_operands_are_bounded_or_require_bounds() {
     );
 }
 
-/// Trace: FR-014-AC-46, FR-015-AC-104, TC-024, TC-033.
+#[trace("FR-014-AC-46", "FR-015-AC-104", "TC-024", "TC-033")]
 #[test]
 fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() {
     let package = deep_qsl_package();
@@ -1948,7 +1975,13 @@ fn tc_033_qsl_nested_operand_depth_limit_is_typed_and_keeps_sibling_supported() 
 /// `(x + 2) + x`, is `oracle_refused` with `OperandTypeMismatch`; the shared
 /// expression's own selected narrow remains unambiguous on the package path.
 ///
-/// Trace: FR-015-AC-17, FR-015-AC-18, FR-014-AC-31, FR-014-AC-34, TC-033
+#[trace(
+    "FR-015-AC-17",
+    "FR-015-AC-18",
+    "FR-014-AC-31",
+    "FR-014-AC-34",
+    "TC-033"
+)]
 #[test]
 fn tc_033_qsl_shaped_literal_and_consumer_refusals_have_no_harness() {
     let mut builder = package::qsl_shaped_package();
@@ -2071,7 +2104,7 @@ fn derived() -> Derived {
 /// derivation refusal, with no harness; the group is not rejected and its siblings' records and
 /// harnesses equal what they are without it.
 ///
-/// Trace: FR-022-AC-11, FR-015-AC-15, TC-033
+#[trace("FR-022-AC-11", "FR-015-AC-15", "TC-033")]
 #[test]
 fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected() {
     let derived = derived();
@@ -2141,7 +2174,7 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
 /// record carries `quantity_conversion_unsupported` with the operation identity and the
 /// capability text, and the group is not rejected.
 ///
-/// Trace: FR-014-AC-2, FR-022-AC-11, FR-015-AC-15, TC-033
+#[trace("FR-014-AC-2", "FR-022-AC-11", "FR-015-AC-15", "TC-033")]
 #[test]
 fn tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_harness() {
     let derived = derived();
@@ -2199,7 +2232,7 @@ fn tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_
 /// `NoDerivableClaim` per underivable node, in node-id order; it is `None`
 /// with nothing routed.
 ///
-/// Trace: FR-022-AC-12, TC-033
+#[trace("FR-022-AC-12", "TC-033")]
 #[test]
 fn tc_033_the_returned_claim_map_orders_package_claims_and_refusals() {
     let derived = derived();
@@ -2298,7 +2331,7 @@ fn routed_alone(package: &CheckedPackageV2, node: &CheckedNodeId) -> (Obligation
 /// `requires_bound`, `blocked_on_upstream` or `unsatisfiable_bound`, and reject nothing. The
 /// noncanonical `UNREADABLE` shape is tested at the reader boundary in TC-052.
 ///
-/// Trace: FR-022-AC-8, FR-015-AC-3, FR-015-AC-5, FR-015-AC-14, TC-033
+#[trace("FR-022-AC-8", "FR-015-AC-3", "FR-015-AC-5", "FR-015-AC-14", "TC-033")]
 #[test]
 fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
     let (package, _, ids) = routed_scalar_package();
@@ -2369,7 +2402,7 @@ fn tc_033_lowering_and_bound_refusals_keep_their_fr015_dispositions() {
 /// `DuplicateRequest` claim refusal at both positions. FR-015 still names the
 /// first driver's index when it rejects the second item as a duplicate.
 ///
-/// Trace: FR-022-AC-7, FR-022-AC-12, TC-033
+#[trace("FR-022-AC-7", "FR-022-AC-12", "TC-033")]
 #[test]
 fn tc_033_a_selected_pair_routed_twice_retains_its_duplicate_refusal() {
     let fixture = fixture();
@@ -2421,7 +2454,7 @@ fn tc_033_a_selected_pair_routed_twice_retains_its_duplicate_refusal() {
 /// A refused derivation is an `Underived` claim carrying the node's operation
 /// identity. An absent sibling keeps IR's prior `InvalidInput` record.
 ///
-/// Trace: FR-014-AC-18, FR-022-AC-12, TC-033
+#[trace("FR-014-AC-18", "FR-022-AC-12", "TC-033")]
 #[test]
 fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
     let derived = derived();
@@ -2461,7 +2494,7 @@ fn tc_033_an_underivable_claim_is_underived_and_carries_the_nodes_identity() {
 /// `x + 1` over `Int[0, 9]` returns the package-backed oracle crate,
 /// defining every `Generated` claim's symbol referenced by its harness.
 ///
-/// Trace: FR-022-AC-14, TC-033
+#[trace("FR-022-AC-14", "TC-033")]
 #[test]
 fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_references() {
     let (package, ids) = routed_bounded_increment_package();
@@ -2513,7 +2546,7 @@ fn tc_033_the_oracle_crate_is_returned_and_defines_the_symbol_the_harness_refere
 /// A group with no generated node still returns its package-backed crate,
 /// and nothing routed returns no crate.
 ///
-/// Trace: FR-022-AC-14, TC-033
+#[trace("FR-022-AC-14", "TC-033")]
 #[test]
 fn tc_033_an_all_underivable_group_returns_package_crate_and_no_group_returns_none() {
     let derived = derived();
@@ -2537,7 +2570,7 @@ fn tc_033_an_all_underivable_group_returns_package_crate_and_no_group_returns_no
 /// The FR-330 package path serializes the complete claim map, including an
 /// underivable sibling's typed `NoDerivableClaim` refusal.
 ///
-/// Trace: FR-022-AC-14, TC-033
+#[trace("FR-022-AC-14", "TC-033")]
 #[test]
 fn tc_033_the_returned_claim_map_file_keeps_underivable_refusals() {
     let derived = derived();

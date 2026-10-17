@@ -2,6 +2,7 @@
 //!
 //! Each test walks one row of FR-290's ordered rules.
 
+use ix_trace_rs::trace;
 use qsl_replay::{
     compile_package, DependencyInput, DomainKey, DomainKind, FiniteBound, Integer, ProofBound,
     ReplayLimits, SourceIdentity, StageLimits, WireNodeId,
@@ -346,7 +347,7 @@ fn wire_node_id_from_hex(digest: &str) -> WireNodeId {
 /// A bounded Kani request retains its caller-supplied source bound in the borrowed request
 /// while settlement reports support. The result schema has no bound field, so this checks input
 /// custody and linkage without claiming a result-side serialization contract.
-/// Trace: FR-019-AC-26, FR-019-AC-32
+#[trace("FR-019-AC-26", "FR-019-AC-32")]
 #[test]
 fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
     let (package, _, _) = crate::kani_obligations::scalar_package();
@@ -423,7 +424,7 @@ fn kani_supported_bounded_request_keeps_exact_proof_bound_input() {
 /// Request-index correlation lets a caller recover each immutable request's exact bounds.
 /// This asserts correlation only; it does not claim detached result serialization or settle
 /// FR-019 AC-32's result-side preservation interpretation.
-/// Trace: FR-019-AC-2, FR-019-AC-32
+#[trace("FR-019-AC-2", "FR-019-AC-32")]
 #[test]
 fn kani_bounded_settlements_correlate_each_request_bound_by_index() {
     let make_bound = |seed: u8, kind: DomainKind, path: Vec<u32>, maximum: i64| {
@@ -500,7 +501,7 @@ fn extent_domain(kind: DomainKind) -> ExtentDomain {
     }
 }
 
-/// Trace: FR-019-AC-11, FR-019-AC-12, FR-019-AC-20, TC-046.
+#[trace("FR-019-AC-11", "FR-019-AC-12", "FR-019-AC-20", "TC-046")]
 #[test]
 fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
     let backend = process("kani", &[Mode::Bounded], &[DomainKind::Integer]);
@@ -571,7 +572,7 @@ fn process_kind_uses_origin_manifest_modes_and_explicit_bound_kinds() {
     );
 }
 
-/// Trace: FR-019-AC-42, FR-019-AC-18, FR-019-AC-8, TC-046
+#[trace("FR-019-AC-42", "FR-019-AC-18", "FR-019-AC-8", "TC-046")]
 #[test]
 fn process_manifest_bounds_keep_absence_distinct_from_present_empty() {
     let absent = process("solver", &[Mode::Bounded], &[DomainKind::Integer]);
@@ -609,7 +610,13 @@ fn process_manifest_bounds_keep_absence_distinct_from_present_empty() {
     );
 }
 
-/// Trace: FR-019-AC-16, FR-019-AC-17, FR-019-AC-21, FR-019-AC-22, TC-046.
+#[trace(
+    "FR-019-AC-16",
+    "FR-019-AC-17",
+    "FR-019-AC-21",
+    "FR-019-AC-22",
+    "TC-046"
+)]
 #[test]
 fn process_unbounded_settlement_checks_only_boundable_domains() {
     let backend = process("solver", &[Mode::Bounded], &[DomainKind::Collection]);
@@ -663,7 +670,7 @@ fn process_unbounded_settlement_checks_only_boundable_domains() {
     );
 }
 
-/// Trace: FR-019-AC-19, TC-046.
+#[trace("FR-019-AC-19", "TC-046")]
 #[test]
 fn process_bounded_coverage_reads_explicit_kind_with_fixed_domain_key() {
     let backend = process("solver", &[Mode::Bounded], &[DomainKind::Collection]);
@@ -695,7 +702,7 @@ fn process_bounded_coverage_reads_explicit_kind_with_fixed_domain_key() {
     );
 }
 
-/// Trace: FR-019-AC-23, TC-046.
+#[trace("FR-019-AC-23", "TC-046")]
 #[test]
 fn process_bounded_maximum_does_not_change_domain_coverage() {
     let backend = process("solver", &[Mode::Bounded], &[DomainKind::Integer]);
@@ -732,7 +739,7 @@ fn process_bounded_maximum_does_not_change_domain_coverage() {
     }
 }
 
-/// Trace: FR-019-AC-13, FR-019-AC-18, TC-046.
+#[trace("FR-019-AC-13", "FR-019-AC-18", "TC-046")]
 #[test]
 fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
     let identity = "/this/process/provider/does/not/exist";
@@ -792,8 +799,8 @@ fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
 /// Every variant of the closed backend kind reaches a dispatched arm, and each
 /// one settles rather than falling through.
 ///
-/// Trace: FR-019-AC-1, TC-030
 /// Provenance: codegen#86
+#[trace("FR-019-AC-1", "TC-030")]
 #[test]
 fn tc_030_every_backend_kind_has_a_dispatched_arm() {
     for backend in BackendKind::ALL {
@@ -838,8 +845,8 @@ fn tc_030_every_backend_kind_has_a_dispatched_arm() {
 /// An absent kind and an unknown label settle before the candidate table is
 /// consulted, each with its own cause and the unknown label reported verbatim.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_an_absent_or_unknown_kind_settles_before_the_candidate_table() {
     // Candidates that would otherwise settle `supported`: the kind rules win.
@@ -878,8 +885,8 @@ fn tc_030_an_absent_or_unknown_kind_settles_before_the_candidate_table() {
 /// An item carrying no extent classification settles `invalid-request`, and is
 /// never defaulted to `bounded` to reach a disposition.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_an_absent_extent_classification_settles_invalid_request() {
     let settlement = settle_one(
@@ -903,8 +910,8 @@ fn tc_030_an_absent_extent_classification_settles_invalid_request() {
 /// The unknown-backend mark, and a registered backend with no negotiation arm,
 /// both settle `invalid-request` naming the backend.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_an_unroutable_backend_settles_invalid_request() {
     let marked = settle_one(
@@ -953,8 +960,8 @@ fn tc_030_an_unroutable_backend_settles_invalid_request() {
 /// A candidate absent from the manifest, and one that does not advertise the
 /// item's kind, each settle `invalid-request` naming the offender.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_inconsistent_candidates_settle_invalid_request() {
     let absent_from_manifest = settle_one(
@@ -994,8 +1001,8 @@ fn tc_030_inconsistent_candidates_settle_invalid_request() {
 /// An empty candidate set settles `unsupported`, warned, naming the kind and
 /// the named backend when the request names one.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_an_empty_candidate_set_settles_unsupported_with_a_warning() {
     let unnamed = settle_one(
@@ -1040,8 +1047,8 @@ fn tc_030_an_empty_candidate_set_settles_unsupported_with_a_warning() {
 /// Two candidates with no named backend settle `invalid-request`, naming every
 /// candidate in candidate order, identically under either registration order.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
     let second = BackendDescriptor {
@@ -1086,8 +1093,8 @@ fn tc_030_two_candidates_with_no_named_backend_settle_ambiguous() {
 /// Each row of the advertised-mode table settles its own disposition, and an
 /// unbounded extent never settles `supported` on a bounded-only advertisement.
 ///
-/// Trace: FR-019-AC-26, FR-019-AC-31, TC-030
 /// Provenance: codegen#86
+#[trace("FR-019-AC-26", "FR-019-AC-31", "TC-030")]
 #[test]
 fn tc_030_the_advertised_mode_table_settles_each_row() {
     let kind = CapabilityKind::ValueValidity;
@@ -1156,7 +1163,14 @@ fn tc_030_the_advertised_mode_table_settles_each_row() {
 
 /// The Kani arm checks typed form support before extent and advertised mode.
 ///
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-27, FR-019-AC-29, FR-019-AC-31, FR-019-AC-44.
+#[trace(
+    "FR-019-AC-25",
+    "FR-019-AC-26",
+    "FR-019-AC-27",
+    "FR-019-AC-29",
+    "FR-019-AC-31",
+    "FR-019-AC-44"
+)]
 #[test]
 fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
     let candidates = Candidates::Set(vec![candidate(BackendKind::Kani.identity())]);
@@ -1210,7 +1224,7 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
 /// A selected quantity conversion settles as unsupported with the named capability: the Kani
 /// arm cannot accept an operation its generator refuses.
 ///
-/// Trace: FR-014-AC-2, FR-019-AC-44, TC-024.
+#[trace("FR-014-AC-2", "FR-019-AC-44", "TC-024")]
 #[test]
 fn a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capability() {
     let (package, _, ids) = crate::kani_obligations::routed_scalar_package();
@@ -1253,7 +1267,7 @@ fn a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capabili
 
 /// Selected-result defects follow request/candidate validation and precede
 /// the advertised-mode and extent settlement branches.
-/// Trace: FR-019-AC-44, TC-030.
+#[trace("FR-019-AC-44", "TC-030")]
 #[test]
 fn selected_scalar_context_refusal_keeps_validation_precedence() {
     let mut form = integer_scalar("quire.op.integer.add");
@@ -1313,7 +1327,7 @@ fn selected_scalar_context_refusal_keeps_validation_precedence() {
 
 /// A checked integer function call settles only when the FR-021 lowering plan
 /// succeeds and the requested callee and ordered arguments match the source.
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-29
+#[trace("FR-019-AC-25", "FR-019-AC-26", "FR-019-AC-29")]
 #[test]
 fn kani_source_call_preflight_binds_callee_and_ordered_arguments() {
     use exact_function_fixture::{
@@ -1498,7 +1512,7 @@ fn source_derived_division_refusal() -> UnsupportedObligation {
 }
 
 /// Direct FR-015 classification remains available for checked-source callers.
-/// Trace: TC-025.
+#[trace("TC-025")]
 #[test]
 fn direct_fr015_division_keeps_renderer_refusal() {
     assert!(matches!(
@@ -1509,7 +1523,13 @@ fn direct_fr015_division_keeps_renderer_refusal() {
 
 /// A source-mapped, admitted integer division reaches form classification, rather than
 /// disappearing behind the missing-result guard. The FR-015 refusal wins before mode settlement.
-/// Trace: FR-015-AC-15, FR-019-AC-25, FR-019-AC-29, FR-019-AC-44, TC-030.
+#[trace(
+    "FR-015-AC-15",
+    "FR-019-AC-25",
+    "FR-019-AC-29",
+    "FR-019-AC-44",
+    "TC-030"
+)]
 #[test]
 fn kani_selected_division_preserves_exact_renderer_refusal() {
     use crate::kani_obligations::package;
@@ -1703,7 +1723,7 @@ fn kani_form_preflight_refuses_admitted_expression_over_source_limit() {
 
 /// V1 roles with zero definedness obligations remain healthy controls, and a source clause with
 /// one such obligation preserves that exact count.
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-33
+#[trace("FR-019-AC-25", "FR-019-AC-26", "FR-019-AC-33")]
 #[test]
 fn kani_v1_planned_clause_selector_uses_the_exact_lowering_refusal() {
     let package = crate::kani_obligations::bound_package(1_000);
@@ -1787,7 +1807,7 @@ fn v2_state_frame_form(
 }
 
 /// The V2 state-frame selectors derive both role and refusal from the admitted graph.
-/// Trace: FR-019-AC-25, FR-019-AC-26, FR-019-AC-33
+#[trace("FR-019-AC-25", "FR-019-AC-26", "FR-019-AC-33")]
 #[test]
 fn kani_state_frame_planned_selectors_keep_the_exact_fr015_refusal() {
     use quire_contract_codegen::{KaniObligationRole, StateFrameRefusal};
@@ -1887,7 +1907,7 @@ fn kani_state_frame_planned_selectors_keep_the_exact_fr015_refusal() {
 }
 
 /// State-frame refusals retain the checked operation identity and selected harness role.
-/// Trace: FR-019-AC-25, FR-019-AC-27, FR-019-AC-30, FR-019-AC-33.
+#[trace("FR-019-AC-25", "FR-019-AC-27", "FR-019-AC-30", "FR-019-AC-33")]
 #[test]
 fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
     use quire_contract_codegen::{KaniObligationRole, KaniStateFrameRole, StateFrameRefusal};
@@ -1961,7 +1981,7 @@ fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
 /// Checked scalar nodes without source occurrences are invalid at the routed preflight seam,
 /// even when the direct FR-015 classifier has a result for the same nodes.
 ///
-/// Trace: FR-019-AC-44, TC-030.
+#[trace("FR-019-AC-44", "TC-030")]
 #[test]
 fn kani_routed_preflight_requires_selected_result_occurrences() {
     use quire_contract_codegen::{
@@ -2044,7 +2064,7 @@ fn kani_routed_preflight_requires_selected_result_occurrences() {
 }
 
 /// Every scalar family retains its typed identity when a source occurrence is missing.
-/// Trace: FR-019-AC-44, TC-030.
+#[trace("FR-019-AC-44", "TC-030")]
 #[test]
 fn kani_scalar_family_selectors_require_selected_result() {
     use quire_contract_codegen::KaniFormFamily;
@@ -2094,7 +2114,7 @@ fn kani_scalar_family_selectors_require_selected_result() {
     }
 }
 
-/// Trace: FR-019-AC-44, TC-030.
+#[trace("FR-019-AC-44", "TC-030")]
 #[test]
 fn kani_boolean_operator_selector_requires_selected_result() {
     let (package, node_id) = crate::kani_obligations::boolean_operation_package();
@@ -2124,7 +2144,7 @@ fn kani_boolean_operator_selector_requires_selected_result() {
 }
 
 /// Nonexpression checked nodes cannot furnish a selected scalar result.
-/// Trace: FR-019-AC-44, TC-030.
+#[trace("FR-019-AC-44", "TC-030")]
 #[test]
 fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
     let (package, _, _) = crate::kani_obligations::scalar_package();
@@ -2196,7 +2216,7 @@ fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
 
 /// Form refusal follows candidate validation and precedes mode settlement.
 ///
-/// Trace: FR-019-AC-27, FR-019-AC-28, FR-019-AC-29.
+#[trace("FR-019-AC-27", "FR-019-AC-28", "FR-019-AC-29")]
 #[test]
 fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
     let outside = outside_form();
@@ -2289,7 +2309,7 @@ fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
 
 /// Human-facing labels do not participate in typed Kani form identity.
 ///
-/// Trace: FR-019-AC-30.
+#[trace("FR-019-AC-30")]
 #[test]
 fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
     for form in [
@@ -2319,8 +2339,8 @@ fn kani_form_identity_does_not_depend_on_display_or_debug_text() {
 /// An envelope whose capability vocabulary is absent or another identity is
 /// refused whole, and no kind of it is read.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
     for supplied in ["", "quire.capability-kind/v2"] {
@@ -2358,8 +2378,8 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
 /// FR-290's `unknown-backend` never matched the `unknown_backend` an earlier
 /// `rename_all` produced, and every assertion here still passed.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_kinds_and_causes_serialise_in_the_spelling_the_spec_writes() {
     for kind in CapabilityKind::ALL {
@@ -2441,8 +2461,8 @@ fn tc_030_kinds_and_causes_serialise_in_the_spelling_the_spec_writes() {
 /// to be right, and `tc_030_every_backend_kind_has_a_dispatched_arm` — which
 /// iterates it — silently checks fewer variants than exist.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_each_census_holds_every_variant_of_its_kind() {
     for (position, kind) in CapabilityKind::ALL.into_iter().enumerate() {
@@ -2470,8 +2490,8 @@ fn tc_030_each_census_holds_every_variant_of_its_kind() {
 /// A foreign contract version refuses the carrier, and the refusal says which
 /// member was wrong.
 ///
-/// Trace: TC-030
 /// Provenance: codegen#86
+#[trace("TC-030")]
 #[test]
 fn tc_030_a_foreign_contract_version_refuses_the_carrier_and_names_the_member() {
     let refusal = negotiate_backend_provider(&BackendProviderEnvelope {

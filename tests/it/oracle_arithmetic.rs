@@ -4,6 +4,7 @@
 //! `DeclarationEnvironment::check_expression`, and each operand vector that overflows does so
 //! through a declared bound the vector violates while the guards still pass.
 
+use ix_trace_rs::trace;
 use std::{
     cell::Cell,
     fmt::Write as _,
@@ -762,7 +763,7 @@ fn arithmetic_free() -> Built {
 /// `evaluate_integer_arithmetic` with their variant and the type's interval, and the body holds
 /// no Rust arithmetic operator and no wrapping, checked, saturating or overflowing method.
 ///
-/// Trace: TC-044, FR-031-AC-1
+#[trace("TC-044", "FR-031-AC-1")]
 #[test]
 fn tc_044_native_arithmetic_is_the_runtime_exact_operation_over_the_types_interval() {
     for (built, variant, interval) in [
@@ -805,7 +806,7 @@ fn tc_044_native_arithmetic_is_the_runtime_exact_operation_over_the_types_interv
 /// FR-031-AC-3: an oracle with an arithmetic node returns `Outcome<bool>` and takes a trailing
 /// `&mut Meter`; one with none returns `bool` and takes no meter.
 ///
-/// Trace: TC-044, FR-031-AC-3
+#[trace("TC-044", "FR-031-AC-3")]
 #[test]
 fn tc_044_an_arithmetic_oracle_returns_an_outcome_and_takes_a_meter() {
     let arithmetic = o4_multiply(ComparisonOperator::LessEqual, 10).source();
@@ -881,7 +882,7 @@ y_current
 /// FR-031-AC-12: the oracle of an expression with no arithmetic node is byte-identical to what the
 /// tree before this requirement generated. Held agreement: it passes before and after the change.
 ///
-/// Trace: TC-044, FR-031-AC-12
+#[trace("TC-044", "FR-031-AC-12")]
 #[test]
 fn tc_044_an_arithmetic_free_oracle_is_byte_identical_to_the_one_before() {
     assert_eq!(arithmetic_free().source(), ARITHMETIC_FREE_ORACLE);
@@ -890,7 +891,7 @@ fn tc_044_an_arithmetic_free_oracle_is_byte_identical_to_the_one_before() {
 /// FR-031-AC-13: generating an arithmetic oracle twice, and from a request whose declarations are
 /// permuted, yields identical bytes.
 ///
-/// Trace: TC-044, FR-031-AC-13
+#[trace("TC-044", "FR-031-AC-13")]
 #[test]
 fn tc_044_an_arithmetic_oracle_is_deterministic_and_independent_of_declaration_order() {
     let first = o1_add(ComparisonOperator::LessEqual, 0);
@@ -908,7 +909,7 @@ fn tc_044_an_arithmetic_oracle_is_deterministic_and_independent_of_declaration_o
 /// FR-031-AC-14: the generated source of an arithmetic oracle holds no `unwrap`, `expect` or
 /// panic macro, for every connective and negation the arithmetic can sit under.
 ///
-/// Trace: TC-044, FR-031-AC-14
+#[trace("TC-044", "FR-031-AC-14")]
 #[test]
 fn tc_044_an_arithmetic_oracle_holds_no_unwrap_expect_or_panic_macro() {
     let mut sources = vec![
@@ -945,7 +946,7 @@ fn tc_044_an_arithmetic_oracle_holds_no_unwrap_expect_or_panic_macro() {
 /// FR-031-AC-15: each of the six comparisons with an arithmetic operand is the runtime call the
 /// table names, with no Rust comparison operator between its operands.
 ///
-/// Trace: TC-044, FR-031-AC-15
+#[trace("TC-044", "FR-031-AC-15")]
 #[test]
 fn tc_044_a_comparison_with_an_arithmetic_operand_is_the_runtime_call() {
     for comparison in COMPARISONS {
@@ -995,7 +996,7 @@ fn plain_comparison(comparison: ComparisonOperator) -> Built {
 /// FR-031-AC-4, generation half: an arithmetic-free comparison is the one native operator the
 /// table names and returns a plain `bool`.
 ///
-/// Trace: TC-044, FR-031-AC-4
+#[trace("TC-044", "FR-031-AC-4")]
 #[test]
 fn tc_044_an_arithmetic_free_comparison_keeps_the_native_operator() {
     for comparison in COMPARISONS {
@@ -1023,7 +1024,7 @@ fn tc_044_an_arithmetic_free_comparison_keeps_the_native_operator() {
 /// `UnsupportedSaturatingArithmetic` at the node's span, naming the missing runtime operation,
 /// with no artifact. On the tree before the change each of these generated.
 ///
-/// Trace: TC-044, FR-031-AC-7
+#[trace("TC-044", "FR-031-AC-7")]
 #[test]
 fn tc_044_saturating_arithmetic_is_refused_at_its_node() {
     for built in [
@@ -1052,7 +1053,7 @@ fn tc_044_saturating_arithmetic_is_refused_at_its_node() {
 /// `saturate` addition followed by a negation is refused at the addition, and a negation
 /// followed by one is refused at the negation.
 ///
-/// Trace: TC-044, FR-031-AC-7
+#[trace("TC-044", "FR-031-AC-7")]
 #[test]
 fn tc_044_the_refusal_locus_is_the_first_unsupported_node_in_preorder() {
     let clause = Clause::new(-10, 10, OverflowPolicy::Saturate);
@@ -1109,7 +1110,7 @@ fn division_constructions() -> Vec<(&'static str, Built)> {
 /// refused with `UnsupportedIntegerDivision` at its node, naming IR-601, terminal state
 /// `unsupported`, with no artifact. On the tree before the change each generated.
 ///
-/// Trace: TC-044, FR-031-AC-18
+#[trace("TC-044", "FR-031-AC-18")]
 #[test]
 fn tc_044_divide_and_remainder_are_refused_by_the_native_oracle() {
     for (case, built) in division_constructions() {
@@ -1138,7 +1139,7 @@ fn tc_044_divide_and_remainder_are_refused_by_the_native_oracle() {
 /// with `ClauseGenerationFailed` retaining the oracle's own code and the node's span, and no
 /// harness. The same holds for a `saturate` add, subtract and multiply (FR-031-AC-11).
 ///
-/// Trace: TC-044, FR-031-AC-18, FR-031-AC-11
+#[trace("TC-044", "FR-031-AC-18", "FR-031-AC-11")]
 #[test]
 fn tc_044_divide_remainder_and_saturate_are_refused_by_the_bundle() {
     for (case, built) in division_constructions() {
@@ -1312,7 +1313,7 @@ fn module_of(index: usize, label: &str) -> String {
 /// FR-031-AC-5: under `reject`, an add, subtract or multiply result outside the type's interval
 /// is `Refused(IntegerOutOfDomain)`, never a panic or a wrapped value: O-1, O-2 and O-4.
 ///
-/// Trace: TC-044, FR-031-AC-5
+#[trace("TC-044", "FR-031-AC-5")]
 #[test]
 fn tc_044_overflow_under_reject_is_the_runtimes_refusal() {
     let cases = [
@@ -1377,7 +1378,7 @@ const GRID: [i64; 17] = [
 /// `i128` result when it lies in the type's interval, `Refused(IntegerOutOfDomain)` when it does
 /// not, with the outcome kind compared on every vector of the grid.
 ///
-/// Trace: TC-044, FR-031-AC-8
+#[trace("TC-044", "FR-031-AC-8")]
 #[test]
 fn tc_044_arithmetic_outcomes_equal_an_independent_plain_integer_model() {
     let mut modules = Vec::new();
@@ -1441,7 +1442,7 @@ fn tc_044_arithmetic_outcomes_equal_an_independent_plain_integer_model() {
 /// `order_numbers` for the four orderings, `check_equality` then `evaluate` for equal and not
 /// equal. Held agreement: it passes before and after the change.
 ///
-/// Trace: TC-044, FR-031-AC-4
+#[trace("TC-044", "FR-031-AC-4")]
 #[test]
 fn tc_044_arithmetic_free_comparisons_agree_with_the_runtime() {
     let values = [
@@ -1599,7 +1600,7 @@ fn propagation_clauses() -> Vec<(&'static str, Built)> {
 /// the left decided is never reached; a total connective returns the first stop of its two
 /// operands; and a stop is never `Completed(true)` or `Completed(false)`.
 ///
-/// Trace: TC-044, FR-031-AC-9
+#[trace("TC-044", "FR-031-AC-9")]
 #[test]
 fn tc_044_the_first_stop_in_evaluation_order_is_the_outcome() {
     const REFUSED: u8 = 2;
@@ -1738,7 +1739,7 @@ fn bound_package(value: &serde_json::Value) -> quire_contract_model::BoundPackag
 /// clause is refused when a sibling clause of the same package holds a refused node, and the
 /// refusal names the sibling (FR-031 Consumers, FR-008-AC-3).
 ///
-/// Trace: TC-044, FR-031-AC-10, FR-008-AC-3
+#[trace("TC-044", "FR-031-AC-10", "FR-008-AC-3")]
 #[test]
 fn tc_044_a_refused_sibling_clause_refuses_the_strategy_of_every_clause_in_its_package() {
     use quire_contract_codegen::{
@@ -1787,7 +1788,7 @@ fn tc_044_a_refused_sibling_clause_refuses_the_strategy_of_every_clause_in_its_p
 /// lowering each refuse a clause holding an arithmetic node with the refusal the Consumers
 /// section names, emit no artifact, and never read an `Outcome<bool>` as `bool`.
 ///
-/// Trace: TC-044, FR-031-AC-10
+#[trace("TC-044", "FR-031-AC-10")]
 #[test]
 fn tc_044_consumers_that_need_a_plain_bool_refuse_arithmetic() {
     use quire_contract_codegen::{
@@ -1978,7 +1979,7 @@ pub(crate) fn post_oracle(bundle_source: &str) -> syn::ItemFn {
 /// are each the one infix operator over `i64`. The real-Kani half is
 /// `kani_generation::kani_exemplar_*`.
 ///
-/// Trace: TC-044, FR-031-AC-11, FR-031-AC-19
+#[trace("TC-044", "FR-031-AC-11", "FR-031-AC-19")]
 #[test]
 fn tc_044_the_bundle_oracle_keeps_the_infix_operators_in_the_exemplars_shape() {
     for (built, operator) in [
@@ -2052,7 +2053,7 @@ fn tc_044_the_bundle_oracle_keeps_the_infix_operators_in_the_exemplars_shape() {
 /// inside the declared domain at which the guards pass, edges included, compiled and run in plain
 /// `cargo test` with no Kani.
 ///
-/// Trace: TC-044, FR-031-AC-21
+#[trace("TC-044", "FR-031-AC-21")]
 #[test]
 fn tc_044_the_bundle_oracle_agrees_with_the_native_oracle_inside_the_domain() {
     let mut modules = Vec::new();

@@ -1,3 +1,4 @@
+use ix_trace_rs::trace;
 use std::{
     collections::BTreeSet,
     fmt::Write as _,
@@ -220,7 +221,7 @@ fn assert_empty_population(
     assert!(failure.message.contains(name), "{}", failure.message);
 }
 
-/// Trace: TC-018, FR-009-AC-2
+#[trace("TC-018", "FR-009-AC-2")]
 #[test]
 fn tc_018_value_sets_equal_independent_enumeration_and_empty_sides_refuse() {
     let mut checked_sides = 0;
@@ -308,7 +309,7 @@ fn tc_018_value_sets_equal_independent_enumeration_and_empty_sides_refuse() {
     assert!(refused_renders > 0);
 }
 
-/// Trace: TC-018, FR-009-AC-4
+#[trace("TC-018", "FR-009-AC-4")]
 #[test]
 fn tc_018_amount_below_zero_and_at_or_above_zero_refuse_the_empty_side() {
     let below = literal(ComparisonOperator::Less, OperandPosition::Left, 0);
@@ -335,7 +336,7 @@ fn tc_018_amount_below_zero_and_at_or_above_zero_refuse_the_empty_side() {
     assert!(satisfying.source.contains("(0i64..=1000i64)"));
 }
 
-/// Trace: TC-018, FR-009-AC-5
+#[trace("TC-018", "FR-009-AC-5")]
 #[test]
 fn tc_018_full_i64_domain_value_sets_use_checked_edges_without_overflow() {
     let full = u128::from(u64::MAX) + 1;
@@ -438,7 +439,7 @@ fn tc_018_full_i64_domain_value_sets_use_checked_edges_without_overflow() {
     }
 }
 
-/// Trace: TC-018, FR-009-AC-3, FR-009-AC-6
+#[trace("TC-018", "FR-009-AC-3", "FR-009-AC-6")]
 #[test]
 fn tc_018_generated_sources_are_constructive_and_byte_identical() {
     let mut scanned = 0;
@@ -509,7 +510,7 @@ fn tc_018_generated_sources_are_constructive_and_byte_identical() {
     );
 }
 
-/// Trace: TC-018
+#[trace("TC-018")]
 #[test]
 fn tc_018_malformed_requests_refuse_before_rendering() {
     let relation = two_reads(ComparisonOperator::Less);
@@ -800,7 +801,17 @@ pub fn check_replaced_oracle_counterexample<T: Debug>(
 }
 "#;
 
-/// Trace: TC-018, TC-021, FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-5, FR-012-AC-1, FR-012-AC-2, FR-012-AC-3
+#[trace(
+    "TC-018",
+    "TC-021",
+    "FR-009-AC-1",
+    "FR-009-AC-2",
+    "FR-009-AC-3",
+    "FR-009-AC-5",
+    "FR-012-AC-1",
+    "FR-012-AC-2",
+    "FR-012-AC-3"
+)]
 #[test]
 fn tc_018_tc_021_generated_populations_compile_draw_and_shrink_inside_their_sides() {
     let mut modules = Vec::new();

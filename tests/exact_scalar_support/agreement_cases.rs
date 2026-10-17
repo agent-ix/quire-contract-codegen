@@ -39,6 +39,7 @@ use generated::{
     rational_divide, rational_greater, rational_multiply, rational_negate, rational_subtract,
     text_at_least, text_at_most, text_equal, text_greater, text_less, text_not_equal, OracleStop,
 };
+use ix_trace_rs::trace;
 use quire_contract_runtime::exact::{
     EnumValue, IllTyped, Integer, Meter, Outcome, Quantity, ScalarLimits, Text,
 };
@@ -134,7 +135,7 @@ fn integer_add_refuses_a_result_leaving_its_declared_domain() {
     );
 }
 
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc192_division_and_modulus_oracles_agree() {
     const DIV_08: [u64; 10] = [3, 0, 0, 0, 0, 0, 0, 2, 4, 2];
@@ -219,7 +220,7 @@ fn tc_024_tc192_division_and_modulus_oracles_agree() {
 
 const COEFFICIENTS: [i64; 10] = [-25, -10, -7, -5, -1, 0, 1, 3, 8, 10];
 
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc185_decimal_oracles_agree() {
     const D09: [u64; 10] = [7, 3, 2, 0, 0, 0, 0, 2, 5, 1];
@@ -355,7 +356,7 @@ const SEQUENCES: [&str; 12] = [
     "\u{1e0c}\u{307}",
 ];
 
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc186_text_and_enum_oracles_agree() {
     const T11: [u64; 10] = [0, 0, 0, 5, 3, 2, 0, 2, 6, 1];
@@ -439,7 +440,7 @@ const UNIT_GRID: [&str; 6] = ["m", "cm", "in", "rev", "u2", "s"];
 /// quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle and
 /// are not agreement rows: a conversion is refused.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_quantity_oracles_agree() {
     let values = [(0_i64, 1_i64), (1, 1), (-7, 3), (250, 1), (5463, 20)];
@@ -831,7 +832,7 @@ fn completed(run: &QuantityRun<Quantity>, row: &str) -> Quantity {
 /// TC-187 U12: quantity multiplication, division and power under canonical compound units, with
 /// the `s` family the grid needs for a mixed-unit product.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u12_compound_unit_products_agree() {
     let f = rt::fixture();
@@ -870,7 +871,7 @@ fn tc_024_tc187_u12_compound_unit_products_agree() {
 /// TC-187 U02: the normalized dimension map drops zero exponents; `(L*T)/T` is `L` and `L^0` is
 /// the empty dimension, both in the retained sorted maps and through the quantity operators.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u02_dimension_normalization_agrees() {
     let f = rt::fixture();
@@ -942,7 +943,7 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
 /// TC-187 U05: arithmetic, comparison-free operators and a power on a nonzero-offset point
 /// (`degC`, `degF`) are refused `ill_typed` before any charge.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
     let mark = vectors_run();
@@ -968,7 +969,7 @@ fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
 /// TC-187 U09: a base dimension with the same declaration name and shape as `L` but a different
 /// owner, hence a different node key, is an incompatible dimension despite the resemblance.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
     let mark = vectors_run();
@@ -988,7 +989,7 @@ fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
 /// TC-187 U14: under `L(0,0,0,0,0,0)` each incompatible, affine or distinct-unit operation is
 /// refused `ill_typed` with no charge.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u14_static_refusals_charge_nothing() {
     let zero = rt::unit_tuple([0; 6]);
@@ -1009,7 +1010,7 @@ fn tc_024_tc187_u14_static_refusals_charge_nothing() {
 /// TC-187 U20: the affine-by-composed-offset units `u1` and `u3` refuse arithmetic with no
 /// charge; `u2`'s offsets compose to zero, so its sum is exact with no edge.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
     let zero = rt::unit_tuple([0; 6]);
@@ -1039,7 +1040,7 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
 /// TC-187 U27: `1 cm / 0 cm` is undefined after both identity reads and before any edge; one work
 /// unit fewer stops incomplete at the second read.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
     let mark = vectors_run();
@@ -1115,7 +1116,7 @@ fn declaration(
 /// builds its fixture through. A zero scale and each broken topology of the `L` graph is refused
 /// `invalid_semantic_graph`, with its typed cause, before a quantity can exist.
 ///
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {
     // The corpus fixture itself admits.
@@ -1211,7 +1212,7 @@ fn classes(width: usize) -> Vec<u64> {
     .collect()
 }
 
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc193_ieee_oracles_agree() {
     let (narrow, wide) = (classes(0), classes(1));
@@ -1305,7 +1306,7 @@ fn tc_024_tc193_ieee_oracles_agree() {
     println!("TC-193 agreement: {vectors} class-matrix vectors, {named} tabled tuples");
 }
 
-/// Trace: FR-014-AC-9, TC-024.
+#[trace("FR-014-AC-9", "TC-024")]
 #[test]
 fn tc_024_operand_width_mismatch_is_a_typed_stop_before_any_charge() {
     use quire_contract_runtime::exact::{IeeeValue, Meter, ScalarLimits};
@@ -1337,7 +1338,7 @@ fn tc_024_operand_width_mismatch_is_a_typed_stop_before_any_charge() {
     assert!(meter.admitted_charges().is_empty());
 }
 
-/// Trace: FR-014-AC-6, TC-024.
+#[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_no_vector_here_has_an_authority_leg_and_all_agree_with_direct_runtime() {
     let mut vectors = 0_usize;

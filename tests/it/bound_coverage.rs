@@ -1,5 +1,6 @@
 //! Synthetic projections and exports are explicit; native control below uses real LLVM.
 use crate::scratch_crate::{runtime_dependency, write_manifest};
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     analyze_bound_coverage, generate_bound_oracles, ArtifactBytes, BoundCoverageInputs,
     BoundOracleGeneration,
@@ -170,7 +171,7 @@ fn validate_schema(value: &Value) {
     assert!(errors.is_empty(), "schema errors {errors:?}: {value}");
 }
 
-/// Trace: TC-006, FR-004-AC-4, FR-004-AC-5, FR-004-AC-9
+#[trace("TC-006", "FR-004-AC-4", "FR-004-AC-5", "FR-004-AC-9")]
 #[test]
 fn strict_domain_schema_refuses_qualification_and_erased_identity() {
     let (package, generated) = generate(&projection("coverage/schema", &expressions(), true));
@@ -194,7 +195,7 @@ fn strict_domain_schema_refuses_qualification_and_erased_identity() {
     assert!(!validator.is_valid(&bad));
 }
 
-/// Trace: TC-006, FR-004-AC-5, FR-004-AC-7
+#[trace("TC-006", "FR-004-AC-5", "FR-004-AC-7")]
 #[test]
 fn resource_profile_and_path_refusals_preserve_no_classifications() {
     let (package, generated) = generate(&projection("coverage/refusals", &expressions(), true));
@@ -245,7 +246,14 @@ fn resource_profile_and_path_refusals_preserve_no_classifications() {
     );
 }
 
-/// Trace: TC-006, FR-004-AC-1, FR-004-AC-2, FR-004-AC-3, FR-004-AC-7, FR-004-AC-9
+#[trace(
+    "TC-006",
+    "FR-004-AC-1",
+    "FR-004-AC-2",
+    "FR-004-AC-3",
+    "FR-004-AC-7",
+    "FR-004-AC-9"
+)]
 #[test]
 fn complete_bound_package_is_observed_against_actual_native_llvm() {
     use std::{
@@ -434,7 +442,7 @@ fn complete_bound_package_is_observed_against_actual_native_llvm() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// Trace: TC-006, FR-004-AC-3, FR-004-AC-7, FR-004-AC-9
+#[trace("TC-006", "FR-004-AC-3", "FR-004-AC-7", "FR-004-AC-9")]
 #[test]
 fn complete_population_is_measured_but_never_run_qualified() {
     let (package, generated) = generate(&projection("coverage/first", &expressions(), true));
@@ -468,7 +476,7 @@ fn complete_population_is_measured_but_never_run_qualified() {
     );
 }
 
-/// Trace: TC-006, FR-004-AC-4, FR-004-AC-5, FR-004-AC-7
+#[trace("TC-006", "FR-004-AC-4", "FR-004-AC-5", "FR-004-AC-7")]
 #[test]
 fn inexact_artifact_inventory_fails_without_classifications() {
     let value = projection("coverage/first", &expressions(), true);
@@ -509,7 +517,7 @@ fn inexact_artifact_inventory_fails_without_classifications() {
     }
 }
 
-/// Trace: TC-006, FR-004-AC-5, FR-004-AC-9
+#[trace("TC-006", "FR-004-AC-5", "FR-004-AC-9")]
 #[test]
 fn missing_observations_are_not_zero_and_foreign_generated_files_refuse() {
     let (package, generated) = generate(&projection("coverage/missing", &expressions(), true));
@@ -548,7 +556,7 @@ fn missing_observations_are_not_zero_and_foreign_generated_files_refuse() {
     assert!(report["clauses"].as_array().unwrap().is_empty());
 }
 
-/// Trace: TC-006, FR-004-AC-9
+#[trace("TC-006", "FR-004-AC-9")]
 #[test]
 fn informational_only_is_no_executable_not_invalid_or_exercised() {
     for info in [false, true] {
@@ -567,7 +575,7 @@ fn informational_only_is_no_executable_not_invalid_or_exercised() {
     }
 }
 
-/// Trace: TC-006, FR-004-AC-4, FR-004-AC-5
+#[trace("TC-006", "FR-004-AC-4", "FR-004-AC-5")]
 #[test]
 fn normalized_mapping_root_is_retained_and_bounded() {
     let (package, generated) = generate(&projection("coverage/root", &expressions(), false));
@@ -608,7 +616,7 @@ fn normalized_mapping_root_is_retained_and_bounded() {
     }
 }
 
-/// Trace: TC-006, FR-004-AC-3, FR-004-AC-5
+#[trace("TC-006", "FR-004-AC-3", "FR-004-AC-5")]
 #[test]
 fn aggregate_consequent_cannot_outcount_its_loop_free_oracle() {
     let (package, generated) = generate(&projection("coverage/counts", &expressions(), false));
