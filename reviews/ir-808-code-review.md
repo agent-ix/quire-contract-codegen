@@ -55,3 +55,16 @@ Approve. Both findings are low and neither blocks the merge.
   (FND-001).
 - The rust-review lane found nothing. `to_str().expect` on a CARGO_MANIFEST_DIR path is
   acceptable in tests, and the ps needle and the spawned argv are built from the same env value.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The new test `gate_invoked_through_a_symlink_finds_its_scope_script` carries `Trace: NFR-006-AC-8`. NFR-006-AC-8 covers a tree or head that moves between the before-build and after-run reads, and this test does not exercise that. What the test shows is that the freshness step is reached and passes, so the run starts. That is closest to NFR-006-AC-14's "it may run" clause, or else it is a robustness test with no criterion tag. As written, the matrix credits AC-8 with a test that cannot fail when AC-8 is violated. | tests/it/kani_gate.rs:340-341 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7df0f6: kani_gate.sh now sets `script_dir=$(dirname -- "$(/usr/bin/readlink -f -- "$0")")` and has a comment saying that only the sibling script is located by real path. The new symlink test fails against the 3254cf4 script (panic at kani_gate.rs:356) and passes at 5013686. `/usr/bin/readlink` follows the hard-coded `/usr/bin/readlink` at line 49 and `/usr/bin/bash` and `/usr/bin/python3` elsewhere, so it is consistent. Under `make kani-gate` the helper is now called by absolute path, which behaves the same because kani_scope.sh uses `$0` only in its usage message. |
+| FND-002 | fixed | e7df0f6: the negative test now requires the full result line, from `kani-gate: result=failed ran=3 expected=3 elapsed=` through `s kani=Kani 1.0 tree=clean`. Red check: with `FAKE_MOVE_TREE=yes` the 3254cf4 oracle passes and the e7df0f6 oracle fails with "only the identity check may fail: ... tree=dirty". |
