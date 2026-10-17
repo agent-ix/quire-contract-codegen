@@ -44,8 +44,10 @@ The runtime carries no structural equality on `Value`: the FR-149 relation
 reached through `check_equality`, `plan_equality` and `CheckedEquality::evaluate`
 is the only equality, and it is the only relation that is metered, that is
 correct for signed zero, for decimal values retained at differing scales and for
-cross-universe references, and that the quire-spec-language authority
-decides. Generated oracles therefore call it and decide nothing themselves.
+cross-universe references. Generated oracles therefore call it and decide
+nothing themselves. Agreement with the quire-spec-language value authority is
+outside CG's boundary and not claimed by CG (FR-014-AC-47); generated-oracle
+against QSL agreement is owned by quire-integration IR-842.
 [FR-014](./FR-014-exact-scalar-oracles.md) owns the integer and Boolean `eq`
 and `ne` nodes and emits this same relation for them.
 
@@ -371,7 +373,7 @@ reaches it today, so the mapping is asserted where reachable.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-018-AC-1 | Every requested item receives exactly one generated or typed-refused disposition; a refused item contributes no function, no environment constructor and no symbol to the generated crate, while its siblings are generated unchanged. | Test (TC-029) |
-| FR-018-AC-2 | On every vector of the composite-equality corpus, the generated oracle's `Outcome<bool>`, its admitted charge sequence and its consumed counters are equal to those of `quire_contract_runtime::exact::TypeEnvironment::check_equality` plus `CheckedEquality::evaluate` invoked directly on an independently constructed environment, operands and fresh `Meter`, and equal to `quire_spec_language::value`. | Test (TC-029) |
+| FR-018-AC-2 | On every vector of the composite-equality corpus, the generated oracle's `Outcome<bool>`, its admitted charge sequence and its consumed counters are equal to those of `quire_contract_runtime::exact::TypeEnvironment::check_equality` plus `CheckedEquality::evaluate` invoked directly on an independently constructed environment, operands and fresh `Meter`. This criterion claims no agreement with the QSL value authority: that boundary is owned by quire-integration IR-842 (FR-014-AC-47). | Test (TC-029) |
 | FR-018-AC-3 | Each generated item's claim-map entry records the descriptor the request supplied — operator, both operand source types and both conversion targets — and it is equal to the request's, so the independent native run of AC-2 is driven from the request and never read back out of the generated crate. | Test (TC-029) |
 | FR-018-AC-4 | Each generated item's claim-map entry records an `EqualitySchedule` equal to `CheckedEquality::schedule()` of the `CheckedEquality` its descriptor admits, for a top-level text, enum and quantity pair and for each `Plan`-schedule composite and collection shape. | Test (TC-029) |
 | FR-018-AC-5 | A descriptor with a `convert<T>` operand outside `admits_equality_conversion`, distinct text profiles, distinct enum declarations, incompatible dimensions, distinct units, or no common type is refused at generation time with its `IllTypedCause`, emits no code, and admits no charge on any `Meter`. | Test (TC-029) |
@@ -454,7 +456,7 @@ without one is not written.
 
 - **Upstream**: [FR-014](./FR-014-exact-scalar-oracles.md), Contract IR FR-036/FR-038
   (CheckedPackage V2 lowering), Contract Runtime FR-008 (composite, collection
-  and equality families), the quire-spec-language value authority.
+  and equality families).
 - **Downstream**: [TC-029](../matrix/TC-029-composite-equality-oracles.md);
   [FR-015](../../kani/functional/FR-015-bounded-kani-obligations.md), whose composite-equality
   shadow reads this item's closure (FR-018-AC-21) and whose refinement obligation
