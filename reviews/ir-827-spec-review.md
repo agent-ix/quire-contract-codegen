@@ -48,3 +48,11 @@ section. The cause is kept out of classification, refusal and FR-029.
 Needs changes (one medium on how the reused record is justified, two lows). The design (closed
 vocabulary, one-entry rule, serialize-only, batch interaction) holds together and matches the code it
 describes.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 8ad2cc6: phase rule lead-in now covers FWC members with a CBMC-failure cause (FR-017:386-388); rule 1 gives separate justifications, and for a CBMC failure says failureCause names the stage (:390-393); record type and member kept unrenamed, stated in the section (:556-560) and interface-001. |
+| FND-002 | fixed | 8ad2cc6: TC-027 Implementation now reads 'for FR-017-AC-18 (none of them covers FR-017-AC-19, which is Planned)'. |
+| FND-003 | fixed | 8ad2cc6/a90c8a6: AC-39 and TC-043 step 12 add e::check (failed assertion, properties_failed) with no diagnostics. AC-36 reverts to IR-809 wording; the prose bullet at FR-017:550-554 limits it to an entry with no exit status. No contradiction: AC-36 describes a concrete fixture, and the batch rule (:510-512) is consistent. |
