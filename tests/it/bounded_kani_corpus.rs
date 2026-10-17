@@ -14,6 +14,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, prepare_finite_graph_reaches,
@@ -141,7 +142,7 @@ impl Drop for TemporaryDirectory {
     }
 }
 
-/// Trace: TC-023.
+#[trace("TC-023")]
 #[test]
 fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     let (profile, dispatch, input) = fixture();
@@ -214,7 +215,7 @@ fn tc_023_public_corpus_uses_the_validated_profile_boundary() {
     assert_eq!(counterexample.outcome.boolean_claim(), Some(false));
 }
 
-/// Trace: FR-015-AC-57, TC-023.
+#[trace("FR-015-AC-57", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_executes_the_generated_arithmetic_harness() {
@@ -242,7 +243,7 @@ fn tc_023_kani_executes_the_generated_arithmetic_harness() {
     );
 }
 
-/// Trace: FR-015-AC-57, TC-023.
+#[trace("FR-015-AC-57", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_executes_the_generated_graph_harness() {
@@ -271,8 +272,7 @@ fn tc_023_kani_executes_the_generated_graph_harness() {
 
 /// A branch outside the shortest route consumes the depth-first expansion budget before the
 /// target branch; the generated oracle and native admission must agree at the boundary.
-///
-/// Trace: TC-023.
+#[trace("TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_branching_graph_oracle_preserves_native_expansion_budget() {
@@ -336,8 +336,7 @@ fn tc_023_branching_graph_oracle_preserves_native_expansion_budget() {
 
 /// Raw identity ordering must survive Rust literal escaping in the generated graph oracle.
 /// At bound two, visiting `a0` before `a\n` would miss the target.
-///
-/// Trace: TC-023.
+#[trace("TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_escaped_graph_identity_keeps_native_and_oracle_order() {
@@ -394,8 +393,7 @@ fn tc_023_escaped_graph_identity_keeps_native_and_oracle_order() {
 
 /// A true collection case classifies `Verified`, and a false graph case is `Falsified` with the
 /// assertion's playback, which draws no value, so it is empty-valued.
-///
-/// Trace: FR-015-AC-57, TC-023.
+#[trace("FR-015-AC-57", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() {
@@ -441,8 +439,7 @@ fn tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness() 
 
 /// Without its cover a corpus harness carries no cover summary, so the cover is what lets a
 /// true case classify `Verified`.
-///
-/// Trace: FR-015-AC-55, TC-023.
+#[trace("FR-015-AC-55", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_summary() {
@@ -480,7 +477,7 @@ fn tc_023_kani_reads_a_corpus_harness_without_its_cover_as_missing_the_cover_sum
     );
 }
 
-/// Trace: FR-015-AC-57, TC-023.
+#[trace("FR-015-AC-57", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
@@ -504,8 +501,7 @@ fn tc_023_kani_falsifies_the_generated_false_collection_harness() {
 }
 
 /// Captured Kani counterexamples for false corpus cases reproduce through each case's QSL source.
-///
-/// Trace: FR-015-AC-57, TC-023.
+#[trace("FR-015-AC-57", "TC-023")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_023_real_corpus_playback_replays_through_its_qsl_source() {
@@ -637,8 +633,7 @@ fn falsification_playback(outcome: KaniRunOutcome) -> String {
 }
 
 /// Every corpus family's harness ends with exactly one cover, after the oracle's assertion.
-///
-/// Trace: FR-015-AC-55, TC-023.
+#[trace("FR-015-AC-55", "TC-023")]
 #[test]
 fn tc_023_every_corpus_family_ends_its_harness_with_one_cover_after_its_assertion() {
     for (family, harness) in guard_sources() {
@@ -712,8 +707,7 @@ pub(crate) fn guard_sources() -> Vec<(&'static str, String)> {
 /// to deserialize -- validated against the published schema file the same way
 /// `tests/it/kani_generation.rs` validates `quire.kani-proof-graph/v2` graphs against
 /// `schemas/kani-proof-graph-v2.schema.json`.
-///
-/// Trace: TC-023, FR-028-AC-1.
+#[trace("TC-023", "FR-028-AC-1")]
 #[test]
 fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
@@ -779,8 +773,7 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
 
 /// A declared `Required` dependency's edge must also validate against the published schema, not
 /// only the empty-census shape the test above exercises.
-///
-/// Trace: TC-023, FR-028-AC-1.
+#[trace("TC-023", "FR-028-AC-1")]
 #[test]
 fn tc_023_proof_graph_with_a_declared_dependency_validates_against_its_published_schema() {
     let (profile, dispatch, input) = fixture();
