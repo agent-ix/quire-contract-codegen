@@ -50,6 +50,7 @@ Context only: FR-014-AC-1, RT FR-007-AC-21, src/oracle/function/mod.rs (no quant
 | FND-002 | fixed | d685fc5: new EARS bullets plus AC-50 name `OperandFormsNotDerivable` for a scalar or compound `type_argument` and `ModeNotDerivable` for a non-`exact` mode. Both are existing variants whose docs ("operand or result scalar forms select no operator", "mode selects no rounding") fit |
 | FND-003 | fixed | d685fc5: AC-49 now lists compound `4 m^2` to `m` and labels `N_m` to `J` as U22 |
 | FND-004 | fixed | de6295e: the schedules now name `ScheduleRefusal::UnsupportedOperation` (the existing out-of-subset variant, schedule.rs:70). The generator keeps `ExactFunctionRefusal::UnsupportedOperator` for a body. Earlier checks that fire first (`Unsupported`, `NotExpression` and the root checks, `UnsupportedOperandType`, an argument's own refusal) are accepted explicitly, with no strict order claimed; a test can assert membership in that set plus no oracle or schedule |
+| FND-005 | fixed | 79afae4: FR-014-AC-5 adds the `type_argument` type node id to a conversion's claim-map entry, and AC-48 says a harness or agreement run uses it to select the matching unit. That binds the call-time unit to the node through a test-checkable field |
 
 ## New findings (disposition pass 3)
 
