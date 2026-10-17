@@ -930,7 +930,7 @@ fn tc_018_tc_021_generated_populations_compile_draw_and_shrink_inside_their_side
     let temporary = TemporaryDirectory::new("quire-generated-bound-populations");
     fs::write(
         temporary.path.join("Cargo.toml"),
-        "[package]\nname = \"generated-bound-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\n",
+        "[package]\nname = \"generated-bound-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = { version = \"=1.5.0\", default-features = false, features = [\"std\"] }\n\n[workspace]\n",
     )
     .unwrap();
     let mut root = String::from(

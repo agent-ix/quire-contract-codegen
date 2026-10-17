@@ -755,15 +755,8 @@ fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
         }
     );
 
-    let scratch = std::env::temp_dir().join(format!(
-        "quire-codegen-process-settlement-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir(&scratch).unwrap();
+    let guard = crate::scratch_crate::TemporaryDirectory::new("quire-codegen-process-settlement");
+    let scratch = guard.path.clone();
     let executable = scratch.join("record-start");
     let record = scratch.join("started");
     fs::write(
@@ -793,7 +786,6 @@ fn process_settlement_does_not_resolve_provider_identity_as_an_executable() {
         record.exists(),
         "the executable must record an actual start"
     );
-    fs::remove_dir_all(scratch).unwrap();
 }
 
 /// Every variant of the closed backend kind reaches a dispatched arm, and each

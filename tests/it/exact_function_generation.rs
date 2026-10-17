@@ -674,9 +674,8 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         }
     ));
 
-    let directory = std::env::temp_dir().join(format!("ir496-schedule-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&directory);
-    fs::create_dir_all(&directory).expect("create schedule compile directory");
+    let scratch = crate::scratch_crate::TemporaryDirectory::new("exact-function-schedule");
+    let directory = scratch.path.clone();
     let source = directory.join("schedule.rs");
     fs::write(&source, &generated.source).expect("write generated schedule crate");
     let output = Command::new("rustc")
@@ -691,7 +690,6 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
         "generated schedule compile failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let _ = fs::remove_dir_all(&directory);
 }
 
 #[trace(
@@ -1040,11 +1038,10 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 .iter()
                 .all(|module| module.contents.len() <= 16 * 1024 * 1024));
 
-            let directory = std::env::temp_dir().join(format!(
-                "ir496-ac7-generated-schedule-{}",
-                std::process::id()
-            ));
-            let _ = fs::remove_dir_all(&directory);
+            let scratch = crate::scratch_crate::TemporaryDirectory::new(
+                "exact-function-ac7-generated-schedule",
+            );
+            let directory = scratch.path.clone();
             let source_directory = directory.join("src");
             fs::create_dir_all(&source_directory).expect("create generated schedule source dir");
             let root_source = source_directory.join("lib.rs");
@@ -1071,7 +1068,6 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
                 "generated schedule crate compile failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            let _ = fs::remove_dir_all(&directory);
             eprintln!("IR-496 AC7 phase=public-raised-complete");
             eprintln!(
                 "AC-7 admitted V2 public generation: call_nodes={calls}, instructions={}, source_bytes={}, modules={}",
