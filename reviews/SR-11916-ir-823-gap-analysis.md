@@ -78,3 +78,23 @@ and how CG would run it under QSL arch-lint T12-A. The ruling should also confir
 scope covers generated-oracle agreement through FR-014-AC-6 composition. Otherwise
 generated-against-QSL agreement for these vectors has no owner. FR-018-AC-2 and FR-021-AC-18 have
 the same shape, but they are outside this PR.
+
+## New findings (disposition pass 1)
+
+Reviewed at 218f97bc6d560e9af7b8dd40a4cecbb9ef8fdb3d.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | AC-6's new tuple clause lists U03 among the vectors QSpec "tables" a limit tuple for. QSpec TC-187 U03 gives none; the test runs it under `L(0,0,0,0,0,0)`, the tuple QSpec gives U14's identical `1 m + 1 s` case. The test is stricter than unlimited, which is fine, but the clause misattributes the tuple to U03. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:447, tests/exact_scalar_support/agreement_cases.rs:503 |
+
+## Dispositions
+
+Round 1, at head 218f97bc6d560e9af7b8dd40a4cecbb9ef8fdb3d (fix commit 218f97b). Judged against the spec text and code. No ruling text from titan:kani:plan was on IR-823 when I checked.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | still-open | Deferred pending the titan:kani:plan ruling, and not addressed in 218f97b. TC-024 is unchanged. Its Description (line 17) still says there is no QSL leg, while line 221 refers to "three-way vectors", Boolean step 1 (lines 226-232) still runs "beside ... the QSL value authority", and FR-014-AC-37 (line 478) still claims QSL agreement. The PR stays unmergeable until a ruling resolves this or explicitly defers it. |
+| FND-002 | fixed | FR-014's Dependencies now say no lane evidences QSL agreement for these vectors today. IR-669 owns an RT-against-QSL composition, and generated-oracle agreement would follow only by composing it with FR-014-AC-6. tests.md row 38 says "nothing evidences it today". |
+| FND-003 | fixed | AC-47 is now a direct assertion: "No test name, trace tag, test output line or doc comment of the TC-187 agreement cases, no TC-024 step and no oracle-matrix row for a TC-187 vector names agreement with the QSL value authority." The ownership pointer moved to Dependencies. `make spec` no longer warns at line 487. |
+| FND-004 | fixed | AC-6 now says the U06/U11 test "exercises no CG code, so it is not evidence about any generated oracle". The trace to FR-014-AC-6 now carries no claim about a generated oracle. |
+| FND-005 | fixed | AC-6 now separates the tabled vectors, run at QSpec's tuple, from those QSpec gives none, which run unlimited (U02, U05, U09, U12 and the untabled parts of U23). The residual U03 attribution is FND-006. |

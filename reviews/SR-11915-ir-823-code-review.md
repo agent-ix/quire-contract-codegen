@@ -107,3 +107,17 @@ Gate detail at the head, in my throwaway worktree under the session scratchpad:
 - The PR changes no file that either set compiles: agreement_cases.rs and agreement.rs are built
   only by the scratch agreement crate. I did not re-run these sets at origin/main.
 - The full gates should still run once, unsandboxed and from the real worktree, before merge.
+
+## Dispositions
+
+Round 1, at head 218f97bc6d560e9af7b8dd40a4cecbb9ef8fdb3d (fix commit 218f97b). Judged against the code, re-measured in a throwaway worktree of that head with RT 3cc88c48 patched in.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The literal counters are replaced by `note_vector()`, called at entry to `agree_arithmetic`, `agree_power` and `agree_comparison`, and by `assert_vectors_since(row, mark, expected)`, which compares a thread-local delta measured since `mark` with the row's vector count. I deleted six vector calls (U19's incomplete tuple, the U09 control, a U14 row, a U05 power exponent, U27's second call, and U23's `rev` comparison). Each turned its test red with "every named vector must run". The delta is relative to a mark taken in the same test, so it cannot pick up other tests' counts. U02's one direct `agree2!` is counted by a hand-placed `note_vector()`, which is acceptable for a single call. |
+| FND-002 | fixed | The cross-dimension graph now gives `L` its own root `b`. An RT mutant that runs the root checks before the cross-dimension check now survives, as it should, because the graph has a single defect. Removing the cross-dimension check still fails the test. |
+| FND-003 | fixed | `compound_terms` takes only the quantity, and the one-element loop is gone. `rustfmt --check` on agreement_cases.rs reports no diff. |
+
+### Mutations at 218f97b
+
+Baseline 16/16. Every mutant from the review pass is killed again, by the same tests: 16 RT and 3 generated-oracle mutants. The vector-deletion mutants above are all killed. The order-swap mutant `rt_roots_before_cross_dim` survives, which is the intended outcome.

@@ -14,7 +14,7 @@ relationships:
 
 Verify that scalar oracles generated from an admitted CheckedPackage V2 cover
 every scalar family, refuse every non-generated item with a typed reason, are
-byte-deterministic, and agree with direct runtime execution (the QSL value authority is not a leg of this case; FR-014-AC-47).
+byte-deterministic, and agree with direct runtime execution. Agreement with the QSL value authority is not evidenced and not claimed by CG (FR-014-AC-47); the integer, rational and Boolean steps below that name it are an open gap.
 
 ## Test Procedure
 
@@ -218,7 +218,7 @@ Integer arithmetic, rational arithmetic and ordering (including decimal
 ordering) have an operator in the QSL value authority
 (`evaluate_integer_arithmetic`, `evaluate_rational_arithmetic`, and
 `order_numbers`). Their oracles are checked against direct runtime execution
-and are counted separately from the three-way vectors.
+only.
 
 ## Boolean connectives, comparisons and source maps
 
@@ -229,7 +229,10 @@ and are counted separately from the three-way vectors.
    each `eq`/`ne` calls `check_equality` and `CheckedEquality::evaluate`, each returning
    `Outcome<bool>` (FR-014-AC-35). Compile the crate against the runtime alone and run each oracle
    over the bounded domain beside direct runtime execution and the QSL value authority. Outcomes,
-   charges and counters agree on every input (FR-014-AC-37).
+   charges and counters agree on every input (FR-014-AC-37). Open gap: only the direct-runtime
+   comparison runs; the QSL value-authority comparison is not evidenced and not claimed by CG, for
+   the reason FR-014-AC-47 gives (CG may call the `qsl-replay` facade only; the Contract Runtime
+   against QSL composition is quire-integration IR-669).
 2. Generate an oracle over an `implies` node and read its source map. It declares the consequent
    count, one evaluation-entry probe on the function-entry line outside every consequent region and
    one entry-token probe inside each consequent's region; dropping or duplicating a region leaves the
