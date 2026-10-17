@@ -40,6 +40,12 @@ object type with Option/Reference/sequence-of-Reference fields, relationships `n
 `reaches(self, target, <name>)` clauses, all match reachability.rs and FR-038-AC-252; the
 `Population<Order>[N]` binding is the part that cannot bound a clause's reaches.
 
+## New findings (disposition pass 7)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | TC-025 step (4) makes each `relationship_end` refusal (`UnknownNode`, `NotReachesApplication`, `UnresolvedEnd`) a control that is "testable now", but TC-025 allows only QSL-emitted, IR-admitted packages with no hand-built wire. Under that rule none of the three is reachable. CG resolves the clause path to an existing node first, and AC-107 refuses a non-reaches path before the accessor is called. IR FR-038 (:3275-3280) says `UnresolvedEnd` is reachable only through crate-internal post-admission mutation. Either name the seam that injects these refusals (for example a test double for the accessor) or record the mapping as Inspection. | spec/kani/matrix/TC-025-bounded-kani-obligations.md:86 |
+
 ## Dispositions
 
 Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
@@ -48,3 +54,5 @@ Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e
 | --- | --- | --- |
 | FND-001 | fixed | d088e9c..e1873b1: TC-025 now lists only refusal steps as testable now and moves every healthy and mutant Kani control, both forms, to unbacked pending QSL-819. |
 | FND-002 | fixed | d088e9c..e1873b1: function-body item removed from AC-107 and TC-025 step 5; TC-025 records it as an Inspection that QSL refuses it. |
+
+Round 7 note at 94718fd04fe90be72842cc6e840e9dd94afb2dd1: FND-001 and FND-002 stay `fixed`; new FND-003 is above.
