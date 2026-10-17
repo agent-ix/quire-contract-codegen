@@ -149,6 +149,7 @@ pub fn prepare_finite_graph_reaches(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
         FiniteReference, KaniOutcomeKind, KaniProfile, ModuleDescriptor, PopulationCompleteness,
@@ -157,7 +158,7 @@ mod tests {
 
     use super::{prepare_finite_graph_reaches, GraphRequest};
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn branching_graph_uses_a_stable_bounded_discovery_order() {
         let selection = ProfileSelection {

@@ -7,6 +7,7 @@ use std::{
     process::{Command, Output},
 };
 
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     classify_kani_run, ClassifiedRun, KaniCheckResult, KaniCheckStatus, KaniRunOutcome,
 };
@@ -432,7 +433,14 @@ fn falsifying_mutant<'a>(
     Ok(failures)
 }
 
-/// Trace: FR-041-AC-1, FR-041-AC-2, FR-041-AC-3, FR-041-AC-4, FR-041-AC-5, NFR-006-AC-19.
+#[trace(
+    "FR-041-AC-1",
+    "FR-041-AC-2",
+    "FR-041-AC-3",
+    "FR-041-AC-4",
+    "FR-041-AC-5",
+    "NFR-006-AC-19"
+)]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
 fn real_kani_claims_have_discharge_and_falsifying_mutations() {
@@ -651,7 +659,7 @@ fn real_kani_claims_have_discharge_and_falsifying_mutations() {
     println!("Kani claim evidence: {}", directory.display());
 }
 
-/// Trace: FR-041-AC-2.
+#[trace("FR-041-AC-2")]
 #[test]
 fn a_success_in_one_module_does_not_discharge_an_unreachable_neighbor() {
     use quire_contract_codegen::{KaniCheckClass, KaniCheckLocation};
@@ -725,7 +733,7 @@ fn a_success_in_one_module_does_not_discharge_an_unreachable_neighbor() {
     );
 }
 
-/// Trace: FR-041-AC-1.
+#[trace("FR-041-AC-1")]
 #[test]
 fn empty_removed_and_absent_compiled_claims_fail() {
     let claim = || Claim {
@@ -761,7 +769,8 @@ fn empty_removed_and_absent_compiled_claims_fail() {
     );
 }
 
-/// Trace: FR-041-AC-1. An absent base declaration differs from an unreadable blob.
+/// An absent base declaration differs from an unreadable blob.
+#[trace("FR-041-AC-1")]
 #[test]
 fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
     let directory = std::env::temp_dir().join(format!("cg-ir19-base-{}", std::process::id()));
@@ -830,7 +839,7 @@ fn base_claims_allow_proven_absence_but_refuse_failed_object_read() {
     fs::remove_dir_all(directory).expect("remove own scratch Git repository");
 }
 
-/// Trace: FR-041-AC-3.
+#[trace("FR-041-AC-3")]
 #[test]
 fn transitive_graph_intersection_finds_shared_helper() {
     let graph = BTreeMap::from([
@@ -854,7 +863,8 @@ fn transitive_graph_intersection_finds_shared_helper() {
     );
 }
 
-/// Trace: FR-041-AC-3. A reachable GOTO edge without a pretty name is opaque.
+/// A reachable GOTO edge without a pretty name is opaque.
+#[trace("FR-041-AC-3")]
 #[test]
 fn current_graph_refuses_unmapped_reachable_call() {
     let names = BTreeMap::from([("root-id".to_owned(), Some("root".to_owned()))]);
@@ -866,7 +876,8 @@ fn current_graph_refuses_unmapped_reachable_call() {
     assert!(std::panic::catch_unwind(|| reachable(&graph, "root")).is_err());
 }
 
-/// Trace: FR-041-AC-2, TC-056. Separate real harnesses share one source file.
+/// Separate real harnesses share one source file.
+#[trace("FR-041-AC-2", "TC-056")]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
 fn real_kani_two_module_check_attribution() {

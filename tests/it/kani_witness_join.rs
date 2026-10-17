@@ -24,6 +24,7 @@ use std::{
 };
 
 use crate::scratch_crate::{runtime_dependency, write_manifest};
+use ix_trace_rs::trace;
 use qsl_replay::WitnessValue;
 use quire_contract_codegen::{
     decode_falsification, execute_kani_obligation, negotiate_kani_obligations, write_bundle_atomic,
@@ -350,8 +351,7 @@ fn persisted_arguments(record: &Value) -> Vec<ObligationBinding> {
 /// off disk, and decodes the transcript with it. Then mutates the file two ways — drops a binding,
 /// and separately changes a declared primitive type (hence byte width) — and shows the decode
 /// refuses by name both times, against the very same transcript that decoded cleanly.
-///
-/// Trace: FR-016-AC-8, TC-026.
+#[trace("FR-016-AC-8", "TC-026")]
 #[test]
 #[ignore = "kani lane: run serially through `cargo test --test it kani_witness_join -- --ignored`"]
 fn tc_026_real_falsification_decodes_against_the_persisted_schema_and_mutation_refuses() {

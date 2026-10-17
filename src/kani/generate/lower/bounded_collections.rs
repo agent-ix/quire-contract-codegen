@@ -83,6 +83,7 @@ pub fn prepare_bounded_collection_query(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, KaniOutcomeKind,
         KaniProfile, ModuleDescriptor, PopulationCompleteness, ProfileSelection, ResourceBounds,
@@ -137,7 +138,7 @@ mod tests {
         (profile, dispatch, input)
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_collection_order_duplicates_and_bounds_remain_exact() {
         let (profile, dispatch, input) = fixture();

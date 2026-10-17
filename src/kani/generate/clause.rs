@@ -427,12 +427,13 @@ pub(super) fn symbolic_arguments(arguments: &[ObligationBinding]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_model::{
         AnchorName, ClauseId, DependencyName, IntegerDomain, IntegerType, OverflowPolicy,
         RequirementRef,
     };
 
-    /// Trace: FR-015-AC-1, TC-025.
+    #[trace("FR-015-AC-1", "TC-025")]
     #[test]
     fn tc_025_every_clause_kind_maps_to_at_most_one_obligation_kind() {
         assert_eq!(
@@ -456,7 +457,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-015-CON-1, TC-025.
+    #[trace("FR-015-CON-1", "TC-025")]
     #[test]
     fn tc_025_clause_abi_refuses_both_outside_i64_endpoints() {
         let requirement = RequirementRef::parse("test/kani-abi", "FR-015", 1).unwrap();

@@ -1268,11 +1268,11 @@ fn frame_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     /// A quantity conversion is not a state comparison, so the frame reader declines it and the
     /// clause is refused as unsupported.
-    ///
-    /// Trace: FR-014-AC-2, TC-024.
+    #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_is_not_a_state_comparison() {
         assert_eq!(
@@ -1282,8 +1282,7 @@ mod tests {
     }
 
     /// Frame rendering keeps each comparison identity and its authored operand direction.
-    ///
-    /// Trace: FR-038-AC-1, FR-038-AC-3, FR-038-AC-6, TC-025.
+    #[trace("FR-038-AC-1", "FR-038-AC-3", "FR-038-AC-6", "TC-025")]
     #[test]
     fn state_projection_uses_catalogued_comparison_symbols() {
         let cases = [
@@ -1360,8 +1359,7 @@ mod tests {
 
     /// An operation name that would break a format string reaches the generated assertions as a
     /// format argument, never as the format string, in both generators.
-    ///
-    /// Trace: FR-015-AC-26, TC-025.
+    #[trace("FR-015-AC-26", "TC-025")]
     #[test]
     fn tc_025_an_operation_name_with_braces_cannot_break_an_assertion() {
         let abi = Abi {

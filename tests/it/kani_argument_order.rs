@@ -28,12 +28,11 @@
 //! sites (`render_precondition` in `src/kani/generate/precondition.rs` and `render_contract`,
 //! serving both Postcondition and Invariant, in `src/kani/generate/contract.rs`), and a divergence at
 //! either is the same silent misbind in `decode_falsification` this test exists to exclude.
-//!
-//! Trace: FR-016-AC-8, TC-026.
 
 use crate::common;
 
 use common::withdraw_fixture::withdraw_harnesses;
+use ix_trace_rs::trace;
 use quire_contract_codegen::KaniObligationHarness;
 use syn::{
     visit::{self, Visit},
@@ -126,6 +125,7 @@ fn assert_emission_order_matches_identity(harness: &KaniObligationHarness) {
 
 /// IR-213: asserts the invariant `decode_falsification` depends on, directly against the
 /// generator's own output, for every harness kind `symbolic_arguments` is called for.
+#[trace("FR-016-AC-8", "TC-026")]
 #[test]
 fn ir_213_kani_any_emission_order_matches_persisted_identity_arguments() {
     let harnesses = withdraw_harnesses();
