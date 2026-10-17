@@ -91,3 +91,12 @@ Round 5 reviewed at 9a918744823279b4d9a2fcff0a38bd477d276074 (fix bb65e1b..9a918
 | --- | --- | --- |
 | FND-005 | fixed | 9a91874: AC-98, AC-105 and AC-106 tags now add "relationship-end form also IR-851", matching sequence step 3 and tests.md :95 (gloss placement is FND-007). |
 | FND-006 | fixed | 9a91874: step 2 now says IR-852 lands only after QSL-819 and that, once both land, a claim with no finite authored bound is `Unbounded` and settles `requires_bound`; step 3 says a finite authored bound runs the Verified/Falsified path. |
+
+Round 6 reviewed at 3bf7325c6ac1614314cbc17b0e67afc13fa5cc0b (fix 9a91874..3bf7325).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-007 | fixed | 3bf7325: AC-98, AC-105 and AC-106 tags read "needs IR-852 and QSL-819 (bounded domain population for reaches); relationship-end form also IR-851 (relationship-end multiplicity)". |
+| FND-008 | fixed | 3bf7325: AC-108 and TC-025 step (3) now qualify `Unbounded` as "a claim whose population has no finite authored bound (after QSL-819 and IR-852)". |
+
+Round 6 sweep: I grepped every added line of `git diff origin/main...3bf7325 -- spec/` for IR-851, IR-852, QSL-819, Unavailable, Unbounded, "every claim", requires_bound, QSL-804 and "blocked". Every hit agrees with the 3-step sequence. IR-852 is cited for the claim-to-population mapping (today `Unavailable`, settles `unsupported`). QSL-819 is cited for the finite authored bound, and `Unbounded` -> `requires_bound` applies only after QSL-819 and IR-852. IR-851 is cited only for relationship-end multiplicity. "Every claim" appears only for today's `unsupported` state. No new findings.
