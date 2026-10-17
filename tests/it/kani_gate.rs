@@ -337,7 +337,7 @@ fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
     );
 }
 
-/// Trace: NFR-006-AC-8. A gate reached through a symlink still finds its
+/// Trace: TC-045. A gate reached through a symlink still finds its
 /// sibling scope script and proceeds to the run phase.
 #[test]
 fn gate_invoked_through_a_symlink_finds_its_scope_script() {
