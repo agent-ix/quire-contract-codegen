@@ -73,3 +73,4 @@ CHANGES REQUESTED (one medium, three low). Apart from AC-3, the conversion is co
 | FND-002 | fixed | round 1, head 18832ac: AC-9 now reads "... an incomplete stop before body work, and the denied charge is not applied". |
 | FND-003 | fixed | round 1, head 18832ac: AC-26 is stated as a property of the target-neutral schedule's branch/stop edges. |
 | FND-004 | fixed | round 1, head 18832ac: the TC-031 registry row now traces FR-021-AC-31 and AC-32, and notes AC-32 as Planned. The status-cell gaps the fix introduced are recorded as FND-005. |
+| FND-005 | fixed | round 2, head 46b9b5f: the TC-031 registry row status cell now reads "FR-021-AC-15, FR-021-AC-24, FR-021-AC-32 and FR-021-AC-34 are Planned, FR-021-AC-25 and FR-021-AC-27 to FR-021-AC-30 are Planned (IR-511), and FR-021-AC-18 and FR-021-AC-31 are covered by inspection". AC-26 and AC-33 carry no PLANNED marker in FR-021 and are tagged in `quire matrix`, so leaving them out of the cell is correct. |
