@@ -2306,7 +2306,8 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
 }
 
 /// The FR-029 terminal value of `FailedWithoutCounterexample` evidence is `Failed` whatever its
-/// CBMC cause, equal to the value of the same evidence with the cause and the record absent.
+/// CBMC cause. The independence from the cause and the record holds by the signature of
+/// `run_terminal_value`, which takes only the outcome and the SUCCESS-check count.
 ///
 /// Trace: FR-017-AC-40, TC-027
 #[cfg(unix)]
@@ -2336,7 +2337,7 @@ fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
             ),
         );
         let installation = KaniInstallation::new(launcher);
-        let mut evidence = execute_kani_obligation(&KaniExecutionRequest {
+        let evidence = execute_kani_obligation(&KaniExecutionRequest {
             cancel: &cancel,
             installation: &installation,
             harness: (&harness).into(),
@@ -2355,13 +2356,9 @@ fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
             serde_json::to_value(&evidence).unwrap()["failureCause"].is_object(),
             "{status}"
         );
-        let with_cause = run_terminal_value(&evidence.outcome, evidence.success_checks, None);
-        evidence.diagnostics = None;
-        evidence.failure_cause = None;
-        let without = run_terminal_value(&evidence.outcome, evidence.success_checks, None);
-        let (with_cause, without) = (with_cause.unwrap(), without.unwrap());
-        assert_eq!(format!("{with_cause:?}"), "Failed", "{status}");
-        assert_eq!(with_cause, without);
+        let terminal =
+            run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
+        assert_eq!(format!("{terminal:?}"), "Failed", "{status}");
     }
     let _ = fs::remove_dir_all(&directory);
 }

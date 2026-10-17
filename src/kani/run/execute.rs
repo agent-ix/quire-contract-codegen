@@ -66,7 +66,7 @@ pub struct KaniExecutionRequest<'a> {
     /// Cargo target directory for the run.
     pub target_directory: &'a Path,
     /// The home directory of the launcher's environment, when the caller knows it. It redacts
-    /// the diagnostics of a run that gave no verdict and keeps requests with different home
+    /// the diagnostics record of the run and keeps requests with different home
     /// directories out of one launcher process; it is never read from the process environment.
     pub home_directory: Option<&'a Path>,
 }
@@ -287,8 +287,12 @@ pub struct KaniExecutionEvidence {
     /// says so and names who shared it. Absent for a run of one harness.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub batch: Option<KaniBatchInvocation>,
-    /// Present exactly when the outcome is [`KaniInconclusiveReason::NoVerdict`]: why the
-    /// backend gave no verdict, from the launcher's streams. It is never an input to the outcome.
+    /// The bounded, redacted record of the launcher's streams. Present on evidence whose outcome
+    /// is [`KaniInconclusiveReason::NoVerdict`] (why the backend gave no verdict), and on
+    /// [`KaniInconclusiveReason::FailedWithoutCounterexample`] evidence whose
+    /// [`failure_cause`](Self::failure_cause) is `timeout`, `out_of_memory`, `exit_code` or
+    /// `unknown` (a CBMC failure; its phase is `unknown`). Absent for every other outcome, and
+    /// for a failed property. It is never an input to the outcome.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<KaniNoVerdictDiagnostics>,
     /// Present exactly when the outcome is [`KaniInconclusiveReason::FailedWithoutCounterexample`]
@@ -485,31 +489,29 @@ fn evidence_of(
     }
 }
 
-/// What the evidence retains beyond the classified run: the `NoVerdict` diagnostic record, or the
-/// CBMC failure cause with the record that goes with it. Both are decided after the outcome.
+/// What the evidence retains beyond the classified run: the diagnostic record of a `NoVerdict`
+/// run, or the failure cause of a `FailedWithoutCounterexample` run with the record that goes with
+/// a CBMC failure. Both are decided after the outcome.
 struct Record {
     diagnostics: Option<KaniNoVerdictDiagnostics>,
     failure_cause: Option<KaniFailureCause>,
 }
 
 impl Record {
-    /// The record of `run`, whose launcher printed `streams`. `diagnose` builds the member's
+    /// The record of `run`, whose report stated `exit_status` for the harness and whose launcher
+    /// printed `streams`. The exit status is read only here, after the outcome is decided. `diagnose` builds the member's
     /// diagnostic record from those streams and is called only when one is retained.
     fn of(
         run: &ClassifiedRun,
+        exit_status: Option<&str>,
         streams: Option<&CapturedStreams>,
         directories: &KnownDirectories<'_>,
         diagnose: impl FnOnce(&CapturedStreams) -> KaniNoVerdictDiagnostics,
     ) -> Self {
-        let failure_cause = matches!(
-            run.outcome,
-            KaniRunOutcome::Inconclusive {
-                reason: KaniInconclusiveReason::FailedWithoutCounterexample
-            }
-        )
-        .then_some(run.exit_status.as_deref())
-        .flatten()
-        .map(|status| KaniFailureCause::from_exit_status(status, directories));
+        let failure_cause = is_failed_without_counterexample(run)
+            .then_some(exit_status)
+            .flatten()
+            .map(|status| KaniFailureCause::from_exit_status(status, directories));
         let cbmc_failed = failure_cause
             .as_ref()
             .is_some_and(KaniFailureCause::is_cbmc_failure);
@@ -563,8 +565,10 @@ fn finish_single(
 ) -> Result<ReportedExecution, KaniExecutionRefusal> {
     let harness = request.harness.view();
     let (run, exit_code, streams) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
+    let exit_status = single_exit_status(&run, report.as_deref());
     let record = Record::of(
         &run,
+        exit_status.as_deref(),
         streams.as_ref(),
         &directories_of(request),
         |streams| {
@@ -582,6 +586,25 @@ fn finish_single(
     Ok(evidence_of(
         request, &harness, arguments, exit_code, run, None, record,
     ))
+}
+
+/// Whether the run's outcome is `FailedWithoutCounterexample`, the only one that keeps a cause.
+fn is_failed_without_counterexample(run: &ClassifiedRun) -> bool {
+    matches!(
+        run.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::FailedWithoutCounterexample
+        }
+    )
+}
+
+/// The exit status a single run's report states for its harness, read only for a run already
+/// classified `FailedWithoutCounterexample`. That run's report parsed when it was classified.
+fn single_exit_status(run: &ClassifiedRun, report: Option<&[u8]>) -> Option<String> {
+    if !is_failed_without_counterexample(run) {
+        return None;
+    }
+    KaniHarnessReport::parse(report?).ok()?.exit_status
 }
 
 /// Whether the run's outcome is `NoVerdict`, which carries a diagnostic record.
@@ -853,17 +876,23 @@ fn finish_group(
     let output = process_output(first, streams, &selections, &arguments, report_exported);
     // Read once for the whole group, and only when some member has a record to carry.
     let shared = std::cell::OnceCell::new();
-    let evidence = |run: Vec<ClassifiedRun>| -> Vec<ReportedExecution> {
+    let evidence = |run: Vec<(ClassifiedRun, Option<&str>)>| -> Vec<ReportedExecution> {
         group
             .iter()
             .zip(&views)
             .zip(run)
-            .map(|(((_, request), view), run)| {
-                let record = Record::of(&run, Some(streams), &output.directories, |_| {
-                    shared
-                        .get_or_init(|| output.analyse())
-                        .diagnostics_of(&view.selection)
-                });
+            .map(|(((_, request), view), (run, exit_status))| {
+                let record = Record::of(
+                    &run,
+                    exit_status,
+                    Some(streams),
+                    &output.directories,
+                    |_| {
+                        shared
+                            .get_or_init(|| output.analyse())
+                            .diagnostics_of(&view.selection)
+                    },
+                );
                 evidence_of(
                     request,
                     view,
@@ -884,13 +913,15 @@ fn finish_group(
             Ok(evidence(
                 group
                     .iter()
-                    .map(|_| ClassifiedRun {
-                        outcome: KaniRunOutcome::Inconclusive {
-                            reason: KaniInconclusiveReason::NoVerdict,
-                        },
-                        success_checks: 0,
-                        checks: Vec::new(),
-                        exit_status: None,
+                    .map(|_| {
+                        let run = ClassifiedRun {
+                            outcome: KaniRunOutcome::Inconclusive {
+                                reason: KaniInconclusiveReason::NoVerdict,
+                            },
+                            success_checks: 0,
+                            checks: Vec::new(),
+                        };
+                        (run, None)
                     })
                     .collect(),
             ))
@@ -922,12 +953,13 @@ fn finish_group(
             .iter()
             .zip(&views)
             .map(|(member, view)| {
-                classify_member(
+                let run = classify_member(
                     process_succeeded,
                     member,
                     || counterexample_playback(&text, Some(&view.selection)),
                     view.kind,
-                )
+                );
+                (run, member.report.exit_status.as_deref())
             })
             .collect(),
     ))
@@ -1040,7 +1072,6 @@ pub(super) fn launch_evidence(
                 outcome: KaniRunOutcome::Inconclusive { reason },
                 success_checks: 0,
                 checks: Vec::new(),
-                exit_status: None,
             },
             None,
             None,
@@ -1061,7 +1092,6 @@ pub(super) fn launch_evidence(
                 outcome: KaniRunOutcome::Cancelled { source },
                 success_checks: 0,
                 checks: Vec::new(),
-                exit_status: None,
             },
             None,
             None,
@@ -3785,7 +3815,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         );
     }
 
-    /// The diagnostic record of a run Kani gave no verdict for, over launcher stand-ins
+    /// The diagnostic record of a run Kani gave no verdict for, or whose CBMC failed, over launcher stand-ins
     /// (FR-017-AC-32 to FR-017-AC-36).
     #[cfg(target_os = "linux")]
     mod no_verdict_diagnostics {
@@ -4152,7 +4182,8 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             fs::write(out, serde_json::to_string(diagnostics(&evidence)).unwrap()).unwrap();
         }
 
-        /// Only `NoVerdict` evidence has a `diagnostics` member on the wire: verified,
+        /// Apart from `NoVerdict` evidence and the `FailedWithoutCounterexample` evidence of a CBMC
+        /// failure, no evidence has a `diagnostics` member on the wire: verified,
         /// cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive runs
         /// have none.
         ///
