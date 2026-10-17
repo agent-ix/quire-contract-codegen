@@ -32,6 +32,7 @@ use super::kani_obligations_state_frame::{
     native_twin::{playback_text, Twin},
     prove, subject, Declares, Fixture,
 };
+use ix_trace_rs::trace;
 
 /// The clause whose counterexample the tests replay: `balance` never drops.
 const BALANCE: &str = "BalanceNeverDrops";
@@ -40,8 +41,13 @@ const AUDIT: &str = "AuditNeverDrops";
 
 /// The production adapter types the persisted draw order, accepts only the matching failed
 /// assertion, and leaves model-domain admission to the existing replay builder.
-///
-/// Trace: FR-016-AC-8, FR-024-AC-13, FR-024-AC-15, FR-024-AC-17, TC-035
+#[trace(
+    "FR-016-AC-8",
+    "FR-024-AC-13",
+    "FR-024-AC-15",
+    "FR-024-AC-17",
+    "TC-035"
+)]
 #[test]
 fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
     let twin = Twin::new();
@@ -245,8 +251,7 @@ fn state_clause_kani_playback_adapter_refuses_wrong_evidence() {
 
 /// QSL's emitted checked package has an empty model body, yet replay takes the caller's field
 /// order and both inclusive ranges from the admitted model declaration's accessor.
-///
-/// Trace: FR-024-AC-31, FR-024-AC-33
+#[trace("FR-024-AC-31", "FR-024-AC-33")]
 #[test]
 fn tc_035_emitted_model_fields_bind_replay_before_playback() {
     let twin = Twin::new();
@@ -364,8 +369,7 @@ fn witness_arm(result: &StateClauseReplayResult) -> &qsl_replay::WitnessArmResul
 /// `StateClauseReplay::replay` returns what `replay_state_clause` returns for the same request
 /// and envelope, for a violating and a respecting run whose results differ, and `replay_through`
 /// hands its executor the request and envelope it built and returns the executor's value as it is.
-///
-/// Trace: FR-024-AC-11, TC-035
+#[trace("FR-024-AC-11", "TC-035")]
 #[test]
 fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_executors_value() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -419,8 +423,7 @@ fn tc_035_replay_returns_the_direct_result_and_replay_through_returns_the_execut
 /// The payload names its clause and the `Invocation` arm, the envelope's identities are the
 /// `ClauseSite`'s that `call_site` names, two clauses carry their own, and an undeclared clause is
 /// refused by the call site when the request is built.
-///
-/// Trace: FR-024-AC-12, TC-035
+#[trace("FR-024-AC-12", "TC-035")]
 #[test]
 fn tc_035_the_envelope_carries_the_call_sites_clause_identities() {
     let twin = Twin::new();
@@ -586,8 +589,7 @@ fn assert_documents(
 
 /// The snapshots hold the playback's and the supplied values, the invocation holds the stated
 /// members with both digests, and a changed value changes only its own snapshot.
-///
-/// Trace: FR-024-AC-13, TC-035
+#[trace("FR-024-AC-13", "TC-035")]
 #[test]
 fn tc_035_the_documents_hold_the_playback_the_post_state_and_their_digests() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -662,8 +664,7 @@ fn tc_035_the_documents_hold_the_playback_the_post_state_and_their_digests() {
 
 /// The debit at the declared floor leaves an exact out-of-range post-state observation. QSL
 /// replays it as a violated witness and the ordinary falsified terminal is refuted.
-///
-/// Trace: FR-029-AC-18, TC-040
+#[trace("FR-029-AC-18", "TC-040")]
 #[test]
 fn tc_040_out_of_range_debit_post_state_is_exact_and_refuted() {
     let twin = Twin::new();
@@ -692,8 +693,7 @@ fn tc_040_out_of_range_debit_post_state_is_exact_and_refuted() {
 
 /// A state field with no playback value, or no post-state value, is refused by name and no
 /// default is supplied.
-///
-/// Trace: FR-024-AC-15, TC-035
+#[trace("FR-024-AC-15", "TC-035")]
 #[test]
 fn tc_035_a_missing_field_is_refused_by_name() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -716,8 +716,7 @@ fn tc_035_a_missing_field_is_refused_by_name() {
 
 /// A name the framed object does not declare, and a field bound twice, are refused by name on
 /// the playback and on the post state alike: no binding is dropped or taken first-wins.
-///
-/// Trace: FR-024-AC-15, TC-035
+#[trace("FR-024-AC-15", "TC-035")]
 #[test]
 fn tc_035_an_undeclared_or_repeated_binding_is_refused_by_name() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -757,8 +756,7 @@ fn tc_035_an_undeclared_or_repeated_binding_is_refused_by_name() {
 /// the clause and each playback value. QSL's replay reads neither, so only these assertions
 /// pin them. A field whose member declares no range is carried and is not range-checked or
 /// given a domain.
-///
-/// Trace: FR-024-AC-12, TC-035
+#[trace("FR-024-AC-12", "TC-035")]
 #[test]
 fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_playback() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -823,8 +821,7 @@ fn tc_035_the_envelope_declares_each_ranged_field_and_the_transcript_names_the_p
 /// `violation` with an evaluated `false`; the unmutated subject's run over the same pre state
 /// settles `inconclusive` with cause `Verdicts`; both envelopes are on the `Witness` arm with a
 /// payload `witness` of none.
-///
-/// Trace: FR-024-AC-16, TC-035
+#[trace("FR-024-AC-16", "TC-035")]
 #[test]
 fn tc_035_a_violating_run_reproduces_and_a_respecting_run_is_inconclusive() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -869,8 +866,7 @@ fn tc_035_a_violating_run_reproduces_and_a_respecting_run_is_inconclusive() {
 /// post state is whatever the subject ran to; how a post state outside the range should settle
 /// is a pending QSL ruling (see the replay spec's Current state), and this test pins no answer to
 /// it.
-///
-/// Trace: FR-024-AC-17, TC-035
+#[trace("FR-024-AC-17", "TC-035")]
 #[test]
 fn tc_035_a_value_outside_its_declared_range_is_out_of_domain() {
     let (twin, fixture) = (Twin::new(), healthy());
@@ -931,8 +927,7 @@ fn tc_035_a_value_outside_its_declared_range_is_out_of_domain() {
 
 /// An operation that declares a parameter, and one that declares a result, are refused by shape
 /// before anything else is read; one that declares neither is not.
-///
-/// Trace: FR-024-AC-19, TC-035
+#[trace("FR-024-AC-19", "TC-035")]
 #[test]
 fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
     let twin = Twin::new();
@@ -992,8 +987,7 @@ fn tc_035_an_operation_declaring_a_parameter_or_a_result_is_refused_by_shape() {
 /// reproduces the violation. The subject is the debit that stops at the floor of `balance`'s range
 /// (`deposit_debiting_within_range`); the wrapping debit's out-of-range post state is covered by
 /// FR-029-AC-18 below.
-///
-/// Trace: FR-024-AC-18, FR-024-AC-34, TC-035
+#[trace("FR-024-AC-18", "FR-024-AC-34", "TC-035")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
@@ -1093,8 +1087,7 @@ fn tc_035_real_kani_state_clause_counterexample_replays_through_qsl() {
 
 /// Real Kani playback of the wrapping debit starts at the range floor. The native subject's
 /// -1 post state survives CG's snapshot construction and QSL settles the violation.
-///
-/// Trace: FR-029-AC-18, TC-040
+#[trace("FR-029-AC-18", "TC-040")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {

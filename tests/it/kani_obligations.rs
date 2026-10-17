@@ -21,6 +21,7 @@ use std::{
 };
 
 use crate::scratch_crate::{runtime_dependency, write_manifest};
+use ix_trace_rs::trace;
 use package::{
     application, bounded, code_id, corpus_package, golden_items, id, integer_add, key, op,
     reference, Bound, MISSING, MODEL, STATE, T_BOOLEAN, T_INTEGER, UNBOUNDED, V_BOOLEAN,
@@ -57,7 +58,7 @@ const ASSERTION: &str = "amount-nonnegative";
 /// time-heavy on these small obligations; this is a ceiling against a genuine hang, not a
 /// performance target.
 pub(crate) const REAL_KANI_TIMEOUT: Duration = Duration::from_secs(600);
-/// Trace: FR-028-AC-1.
+#[trace("FR-028-AC-1")]
 #[test]
 fn changing_either_request_ceiling_changes_the_generated_proof_identity() {
     let package = bound_package(1000);
@@ -670,9 +671,8 @@ fn scalar_records(
 
 /// Each precondition, postcondition and invariant clause is its own obligation, harness and
 /// proof, with its clause, source span and assumed preconditions recorded.
-///
-/// Trace: FR-015-AC-1, FR-015-AC-7, FR-015-AC-8, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-3, TC-045
+#[trace("FR-015-AC-1", "FR-015-AC-7", "FR-015-AC-8", "TC-025")]
 #[test]
 fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
     let package = bound_package(1000);
@@ -776,8 +776,7 @@ fn tc_025_each_clause_lowers_to_a_separate_harness_with_exact_correspondence() {
 /// arguments — not a literal. A regression to `kani::cover!(true, ...)`, or to a
 /// `precondition_holds` that is not derived from the oracle call, makes this fail: the cover
 /// would then be trivially reachable regardless of whether the precondition is satisfiable.
-///
-/// Trace: FR-015-AC-7, TC-025
+#[trace("FR-015-AC-7", "TC-025")]
 #[test]
 fn tc_025_precondition_cover_argument_is_derived_from_the_precondition_expression() {
     let package = bound_package(1000);
@@ -814,9 +813,8 @@ fn tc_025_precondition_cover_argument_is_derived_from_the_precondition_expressio
 
 /// Symbolic ranges are the IR's inclusive domains, and every flag is part of the harness
 /// identity.
-///
-/// Trace: FR-015-AC-2, FR-015-AC-9, FR-015-AC-10, FR-015-AC-11, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-1, TC-045
+#[trace("FR-015-AC-2", "FR-015-AC-9", "FR-015-AC-10", "FR-015-AC-11", "TC-025")]
 #[test]
 fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
     let package = bound_package(1000);
@@ -951,8 +949,7 @@ fn tc_025_symbolic_bounds_equal_ir_domains_and_every_option_is_identity() {
 /// returning `Completed`, so the proof held whatever the arithmetic did. `outcome.is_ok()` is still
 /// not matched: it is true for `Ok(Refused(_))` too. This is a source-inspection check of the
 /// rendered text; the real-Kani tests below discharge it and falsify a mutated oracle.
-///
-/// Trace: FR-015-AC-37, FR-015-AC-7, TC-025
+#[trace("FR-015-AC-37", "FR-015-AC-7", "TC-025")]
 #[test]
 fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
     let (scalar, claim_map, ids) = scalar_package();
@@ -1038,8 +1035,7 @@ fn tc_025_scalar_harness_asserts_the_native_arithmetic_relation() {
 /// out here independently of the generator. A slip in one (operands swapped for subtraction,
 /// multiplication rendered as addition, a dropped negation) would make the first real Kani run of
 /// that operation falsify a correct oracle, and the real-Kani lane runs only addition.
-///
-/// Trace: FR-015-AC-37, TC-025
+#[trace("FR-015-AC-37", "TC-025")]
 #[test]
 fn tc_025_every_rendered_operation_states_its_own_native_relation() {
     const EXACT: [(&str, &str); 4] = [
@@ -1105,9 +1101,8 @@ fn tc_025_every_rendered_operation_states_its_own_native_relation() {
 /// `UnsupportedObligation`) are never available to `execute_kani_obligation`, which requires a
 /// `KaniObligationHarness`: an item this test refuses never produces one, so there is no way to
 /// report the refusal as an execution outcome (`KaniRunOutcome`) instead of what it is.
-///
-/// Trace: FR-015-AC-3, FR-017-CON-2, TC-025, TC-027
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
+#[trace("FR-015-AC-3", "FR-017-CON-2", "TC-025", "TC-027")]
 #[test]
 fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses() {
     let (scalar, claim_map, ids) = scalar_package();
@@ -1184,8 +1179,7 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
 /// A quantity conversion node declared by the caller reaches the Kani obligation engine only as
 /// a refused claim: each is accounted `unsupported` with the named capability and no harness is
 /// emitted.
-///
-/// Trace: FR-014-AC-2, FR-015-AC-15, TC-025
+#[trace("FR-014-AC-2", "FR-015-AC-15", "TC-025")]
 #[test]
 fn tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness() {
     let (scalar, _, ids) = scalar_package();
@@ -1289,8 +1283,7 @@ const RENDERED_OPERATIONS: [&str; 4] = [
 /// the shape `generate_exact_scalar_oracles` would never itself produce for a non-`expression`
 /// node, to simulate what a future widening of that gate -- or a claim map assembled by another
 /// caller -- could hand this function.
-///
-/// Trace: FR-015-AC-14, TC-025
+#[trace("FR-015-AC-14", "TC-025")]
 #[test]
 fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silently_supported() {
     const UNRECOGNIZED_STATE_FORM: u32 = 3003;
@@ -1369,8 +1362,7 @@ fn tc_025_a_present_node_with_an_unrecognized_kind_is_refused_rather_than_silent
 /// is: never another `UnsupportedObligation` variant and never `LoweringWorkExhausted`. Each
 /// refusal is placed in a claim map by hand, as `ClaimMap` and `ExactScalarClaim` are fully
 /// `pub`; the generator's own byte-ceiling refusal is FR-014-AC-40's.
-///
-/// Trace: FR-015-AC-50, TC-025
+#[trace("FR-015-AC-50", "TC-025")]
 #[test]
 fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused_unchanged() {
     let (package, claim_map, ids) = scalar_package();
@@ -1424,8 +1416,7 @@ fn tc_025_a_byte_ceiling_and_an_unrecognised_lowering_refusal_are_oracle_refused
 /// and bounds, so the claim's own bound lookups still resolve and it would otherwise reach
 /// `Outcome::LoweredScalar` -- proving this is the "node absent from the graph" ground, not the
 /// "no finite encoding" or "unrecognized tag/form" one.
-///
-/// Trace: FR-015-AC-14, TC-025
+#[trace("FR-015-AC-14", "TC-025")]
 #[test]
 fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_supported() {
     const NODE_ABSENT_FROM_GRAPH: u32 = 8888;
@@ -1481,8 +1472,7 @@ fn tc_025_a_claim_naming_a_node_absent_from_the_graph_is_refused_not_silently_su
 
 /// The only assumptions are the IR bounds of symbolic arguments; nothing constrains results,
 /// and clause predicates appear only as the contract's own requires and ensures.
-///
-/// Trace: FR-015-AC-4, TC-025
+#[trace("FR-015-AC-4", "TC-025")]
 #[test]
 fn tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds() {
     let package = bound_package(1000);
@@ -1536,9 +1526,8 @@ fn tc_025_assumptions_constrain_only_arguments_to_their_ir_bounds() {
 /// bound holds at once. Whether it is satisfied is decided by Kani (the kani lane reports this
 /// harness `CoverUnsatisfied`); here the harness must carry the cover after the call and embed
 /// both preconditions, so nothing about it can be reported verified without that cover.
-///
-/// Trace: FR-015-AC-4, FR-015-AC-5, FR-015-AC-7, FR-015-AC-8, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
+#[trace("FR-015-AC-4", "FR-015-AC-5", "FR-015-AC-7", "FR-015-AC-8", "TC-025")]
 #[test]
 fn tc_025_jointly_unsatisfiable_preconditions_leave_a_cover_that_decides_vacuity() {
     let package = operation_group_package(1000);
@@ -1585,8 +1574,7 @@ fn transfer_harness(package: &BoundPackage) -> KaniObligationHarness {
 /// Contract obligations on one operation share one subject signature, the union of their
 /// slots, even when one reads an input the other does not; a union that gives one slot two
 /// bounds refuses every obligation in the group with a typed reason and no harness.
-///
-/// Trace: FR-015-AC-1, TC-025
+#[trace("FR-015-AC-1", "TC-025")]
 #[test]
 fn tc_025_contract_harnesses_on_one_operation_share_one_subject_signature() {
     let package = operation_group_package(1000);
@@ -1678,9 +1666,8 @@ fn tc_025_contract_harnesses_on_one_operation_share_one_subject_signature() {
 }
 
 /// A bound whose lower limit exceeds its upper limit is refused, not emitted as an empty proof.
-///
-/// Trace: FR-015-AC-5, TC-025
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-2, TC-045
+#[trace("FR-015-AC-5", "TC-025")]
 #[test]
 fn tc_025_unsatisfiable_bounds_are_refused() {
     let (scalar, claim_map, ids) = scalar_package();
@@ -1710,8 +1697,7 @@ fn tc_025_unsatisfiable_bounds_are_refused() {
 /// `OperationNotRendered` -- known, honestly-named debt, never the old `CallerDeclaredOperation`
 /// lie (that provenance is unreachable here: every one of these claims' nodes was successfully
 /// lowered and checked, from an admitted package whose IR already confirmed the identity).
-///
-/// Trace: FR-015-AC-6, TC-025
+#[trace("FR-015-AC-6", "TC-025")]
 #[test]
 fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
     const RENDERED: [&str; 4] = [
@@ -1792,8 +1778,7 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
 /// `tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed`) but is not confirmed,
 /// so it must reach FR-015 negotiation as a typed refusal with no harness, never a proof over a
 /// mismatched operator.
-///
-/// Trace: FR-015-AC-6, FR-038-AC-3, TC-025
+#[trace("FR-015-AC-6", "FR-038-AC-3", "TC-025")]
 #[test]
 fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
     let (package, ids) = corpus_package().admit_resolved();
@@ -1845,9 +1830,8 @@ fn tc_025_a_caller_declared_operation_is_refused_with_no_harness() {
 /// too: a rejected `negotiate_kani_obligations` call returns no `KaniObligationHarness` at all,
 /// so `execute_kani_obligation` has nothing to run and nothing to misreport as an execution
 /// outcome in place of the refusal it actually is.
-///
-/// Trace: FR-015-AC-12, FR-017-CON-2, TC-025, TC-027
 /// Upstream: agent-ix/quire-contract-ir FR-036-AC-4, TC-045
+#[trace("FR-015-AC-12", "FR-017-CON-2", "TC-025", "TC-027")]
 #[test]
 fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
     let package = bound_package(1000);
@@ -2013,8 +1997,7 @@ fn tc_025_every_item_is_accounted_before_any_harness_is_exposed() {
 }
 
 /// A missing launcher is a typed refusal naming it, and nothing runs.
-///
-/// Trace: FR-017-AC-2, TC-027
+#[trace("FR-017-AC-2", "TC-027")]
 #[test]
 fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
     let cancel = quire_exact::Cancel::new();
@@ -2042,8 +2025,7 @@ fn tc_027_a_missing_launcher_is_refused_before_anything_runs() {
 }
 
 /// Invalid launcher file kinds and execute permissions are typed faults before dispatch.
-///
-/// Trace: TC-027
+#[trace("TC-027")]
 #[cfg(unix)]
 #[test]
 fn tc_027_non_executable_launchers_are_refused_before_anything_runs() {
@@ -2165,9 +2147,18 @@ fn run(
 /// separately, a seeded defect is falsified with a concrete counterexample, jointly unsatisfiable
 /// requires are reported vacuous rather than verified, and a real run given a budget it cannot
 /// meet is reported timed out rather than left to block or misreported as `NoVerdict`.
-///
-/// Trace: FR-015-AC-1, FR-015-AC-4, TC-025, FR-017-AC-4, FR-017-AC-5, FR-017-AC-6, FR-017-AC-7,
-/// FR-017-CON-1, FR-017-CON-2, TC-027
+#[trace(
+    "FR-015-AC-1",
+    "FR-015-AC-4",
+    "TC-025",
+    "FR-017-AC-4",
+    "FR-017-AC-5",
+    "FR-017-AC-6",
+    "FR-017-AC-7",
+    "FR-017-CON-1",
+    "FR-017-CON-2",
+    "TC-027"
+)]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_runs_verify_separate_obligations_and_falsify_a_seeded_defect() {
@@ -2456,8 +2447,7 @@ fn write_scalar_crate(
 /// A routed scalar harness carries the same non-vacuity cover shape a contract harness does, so
 /// a run classifies identically: every cover satisfied is verified, an unsatisfied one is
 /// cover-unsatisfied, and success text with no cover summary is inconclusive.
-///
-/// Trace: FR-017-AC-4, FR-017-AC-11, TC-027
+#[trace("FR-017-AC-4", "FR-017-AC-11", "TC-027")]
 #[test]
 fn tc_027_a_routed_scalar_harness_run_classifies_like_a_contract_harness() {
     let (scalar, _manifest) = routed_scalar_increment();
@@ -2540,8 +2530,7 @@ fn run_scalar_under_real_kani(
 /// driver assembles (`Cargo.toml` from `oracle_artifacts`, the harness source as `src/lib.rs`)
 /// under the real Kani backend and is verified; its evidence carries the scalar identity. A
 /// crate whose `src/lib.rs` lacks the harness is refused with no run.
-///
-/// Trace: FR-017-AC-7, FR-017-AC-11, TC-027
+#[trace("FR-017-AC-7", "FR-017-AC-11", "TC-027")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_a_routed_scalar_harness_verifies() {
@@ -2576,8 +2565,7 @@ fn tc_027_a_routed_scalar_harness_verifies() {
 }
 
 /// A retained routed scalar is proved and invoked with normal and constrained native limits.
-///
-/// Trace: FR-017-AC-27, FR-017-AC-28, FR-017-AC-29, FR-017-AC-30.
+#[trace("FR-017-AC-27", "FR-017-AC-28", "FR-017-AC-29", "FR-017-AC-30")]
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
@@ -2652,8 +2640,7 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
 }
 
 /// The routed subtraction fixture retains two independently bounded symbolic operands.
-///
-/// Trace: FR-017-AC-31.
+#[trace("FR-017-AC-31")]
 #[test]
 fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
     let (harness, _) = routed_scalar_binary_subtraction_with_artifacts();
@@ -2665,7 +2652,7 @@ fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
         .all(|argument| argument.minimum == 0 && argument.maximum == 9));
 }
 
-/// Trace: FR-017-AC-31.
+#[trace("FR-017-AC-31")]
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
@@ -2748,8 +2735,7 @@ fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
 }
 
 /// Mismatched staged paths, retained scalar identity and operands refuse before either child starts.
-///
-/// Trace: FR-017-AC-28, FR-017-AC-29.
+#[trace("FR-017-AC-28", "FR-017-AC-29")]
 #[test]
 fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
     use quire_contract_codegen::{KaniScalarNativeError, KaniScalarNativeRequest};
@@ -2917,8 +2903,7 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
 
 /// The same harness with its checked domain narrowed to `[0, 5]` asserts a bound the oracle does
 /// not enforce (it completes up to 9), so the real backend falsifies it with a counterexample.
-///
-/// Trace: FR-017-AC-7, FR-017-AC-11, TC-027
+#[trace("FR-017-AC-7", "FR-017-AC-11", "TC-027")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
@@ -2943,8 +2928,7 @@ fn tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified() {
 /// falsified by a counterexample on the harness's own assertion, not by a build error: the mutated
 /// source still compiles, and the failing check is the generated `sound` assertion, whose message
 /// the counterexample names.
-///
-/// Trace: FR-015-AC-37, TC-025, FR-017-AC-11
+#[trace("FR-015-AC-37", "TC-025", "FR-017-AC-11")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic() {

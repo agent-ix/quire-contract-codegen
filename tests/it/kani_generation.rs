@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::scratch_crate::{runtime_dependency, write_manifest};
+use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode,
@@ -271,7 +272,7 @@ fn fixture_bundle(
     .expect("fixture bundle should generate")
 }
 
-/// Trace: FR-028-AC-1.
+#[trace("FR-028-AC-1")]
 #[test]
 fn bundle_proof_record_requires_and_records_each_request_ceiling() {
     let environment = environment();
@@ -467,8 +468,7 @@ const HEALTHY_BUNDLE_SUBJECT: &str = "/// Customer transition under proof.\npub 
 /// requires no bounded argument satisfies is `CoverUnsatisfied` with no satisfied cover of one,
 /// and a broken `ensures` is `Falsified` with the cover unreachable. A bundle without its cover
 /// carries no cover summary, so the cover is what makes the first of these a proof.
-///
-/// Trace: FR-015-AC-54, FR-015-AC-56, TC-025
+#[trace("FR-015-AC-54", "FR-015-AC-56", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_025_real_kani_classifies_the_v1_bundle_verified_vacuous_and_falsified() {
@@ -1769,8 +1769,7 @@ fn mutated(
 /// bundle holds exactly one syntactic addition, the shape the mutation targets. This is the
 /// in-repo equivalent of the QSL exemplar run, which needs a checkout of the integration repository
 /// and is recorded separately (FR-031-AC-11).
-///
-/// Trace: TC-044, FR-031-AC-11
+#[trace("TC-044", "FR-031-AC-11")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn kani_exemplar_verifies_and_its_addition_mutant_is_falsified_at_999() {
@@ -1828,8 +1827,7 @@ fn kani_exemplar_verifies_and_its_addition_mutant_is_falsified_at_999() {
 /// fails Kani's "attempt to multiply with overflow" check, and the counterexample's playback value
 /// satisfies `x < 5` and overflows `x * 2` (no particular value is named); a harness that assumes
 /// the declared domain on `x` verifies the same oracle.
-///
-/// Trace: TC-044, FR-031-AC-20
+#[trace("TC-044", "FR-031-AC-20")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn kani_bundle_oracle_overflow_is_a_failing_check_not_a_wrapped_value() {

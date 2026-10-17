@@ -682,12 +682,13 @@ fn kani_symbol(requirement: &str, revision: u64, proof_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_model::{
         DependencyName, IntegerDomain, IntegerType, OverflowPolicy, SourceDocumentId,
         SourceIdentity, SourceLocation, SourceRevision,
     };
 
-    /// Trace: FR-015-CON-2, TC-025.
+    #[trace("FR-015-CON-2", "TC-025")]
     #[test]
     fn tc_025_subject_binding_refuses_both_outside_i64_endpoints() {
         let requirement = RequirementRef::parse("test/kani-subject", "FR-015", 1).unwrap();

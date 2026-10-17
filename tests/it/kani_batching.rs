@@ -14,6 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     execute_kani_obligation, execute_kani_obligations, Artifact, HarnessSymbol,
     KaniExecutionEvidence, KaniExecutionRequest, KaniInconclusiveReason, KaniInstallation,
@@ -197,8 +198,7 @@ fn evidence_directory() -> PathBuf {
 /// before batching and once after, every harness verifies either way, and each batched member's
 /// evidence names the batch. The counts and wall times are written to
 /// `process-counts.json`.
-///
-/// Trace: FR-017-AC-21, TC-043
+#[trace("FR-017-AC-21", "TC-043")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_043_real_kani_one_process_runs_n_harnesses_where_n_ran_before() {
@@ -262,8 +262,14 @@ fn tc_043_real_kani_one_process_runs_n_harnesses_where_n_ran_before() {
 /// verified member stays verified, each falsified member carries the playback Kani headed for its
 /// own path (the first, for the one with two), and the cut-off member is inconclusive as timed
 /// out. Two harnesses then run in a batch at the largest `--harness-timeout` Kani accepts.
-///
-/// Trace: FR-017-AC-21, FR-017-AC-22, FR-017-AC-23, FR-028-AC-12, TC-039, TC-043
+#[trace(
+    "FR-017-AC-21",
+    "FR-017-AC-22",
+    "FR-017-AC-23",
+    "FR-028-AC-12",
+    "TC-039",
+    "TC-043"
+)]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_043_real_kani_batch_keeps_each_members_own_result_and_times_out_one_member() {

@@ -1251,6 +1251,7 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use serde_json::json;
 
     use super::*;
@@ -1334,7 +1335,7 @@ mod tests {
         lowered
     }
 
-    /// Trace: FR-015-AC-13, TC-025.
+    #[trace("FR-015-AC-13", "TC-025")]
     #[test]
     fn render_refuses_a_generated_source_over_the_byte_ceiling() {
         let package = render_probe_package();
@@ -1358,7 +1359,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-015-AC-13, TC-025.
+    #[trace("FR-015-AC-13", "TC-025")]
     #[test]
     fn render_refuses_a_generated_source_that_fails_to_parse() {
         let package = render_probe_package();
@@ -1384,8 +1385,7 @@ mod tests {
 
     /// A frame is not a clause oracle: the clause renderer refuses one by name rather than as
     /// an internal render failure.
-    ///
-    /// Trace: FR-015-AC-1, TC-025.
+    #[trace("FR-015-AC-1", "TC-025")]
     #[test]
     fn render_refuses_a_frame_as_not_a_clause_oracle() {
         let package = render_probe_package();

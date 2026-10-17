@@ -57,6 +57,7 @@ pub fn classify_bounded_kani_profile(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, KaniProfile, ProfileSelection,
     };
@@ -116,7 +117,6 @@ mod tests {
         ]
     }
 
-    /// Trace: TC-023.
     ///
     /// An early `Refused` disposition must not discard the dispositions of constructs
     /// encountered after it, and a later `Inconclusive` disposition must not discard a
@@ -130,6 +130,7 @@ mod tests {
     /// entirely: such a mutation would return 4 entries in matrix order, not 3 in request order,
     /// so it fails both the length assertion and the per-index assertions here. This was verified
     /// by hand against that exact mutation.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_census_reports_every_construct_including_ones_after_an_early_refusal() {
         let request = vec![
@@ -183,12 +184,12 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
     ///
     /// A request naming a construct absent from the profile's matrix is a malformed request, not
     /// a disposition: `classify` must reject it with `Err` carrying the `kani_capability_missing`
     /// code, rather than folding it into the returned census or reusing the
     /// `kani_capability_request_invalid` code reserved for an empty/duplicate construct name.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_missing_construct_is_rejected_with_kani_capability_missing() {
         let request = vec!["arithmetic.add".to_owned(), "no.such.construct".to_owned()];

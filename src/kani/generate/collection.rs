@@ -870,6 +870,7 @@ fn term_target(term: &Value) -> Option<CheckedNodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     #[test]
     fn collection_symbols_are_bounded_and_stable_per_full_identity() {
@@ -968,8 +969,7 @@ mod tests {
     /// differs from the base in exactly one field of the digest preimage, holding the package
     /// digest, ids and ceilings constant where the field is not the one varied: a field dropped
     /// from the preimage makes its row fail.
-    ///
-    /// Trace: FR-015-AC-100, TC-025.
+    #[trace("FR-015-AC-100", "TC-025")]
     #[test]
     fn every_identity_component_changes_the_rendered_harness_path() {
         const MEMORY: u64 = 1 << 30;
@@ -1092,8 +1092,7 @@ mod tests {
 
     /// A quantity conversion is not a `binary` expression, so the collection predicate reader
     /// refuses it as an unsupported shape before reading an operand.
-    ///
-    /// Trace: FR-014-AC-2, TC-024.
+    #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_predicate_is_an_unsupported_shape() {
         let id = |digest: &str| {
@@ -1132,7 +1131,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-015-AC-101, TC-025.
+    #[trace("FR-015-AC-101", "TC-025")]
     #[test]
     fn a_declaration_without_listable_fields_or_the_selected_field_is_field_not_admitted() {
         use quire_contract_model::CheckedModelFieldsError;

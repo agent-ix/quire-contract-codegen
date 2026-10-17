@@ -983,6 +983,7 @@ pub(crate) fn state_frame_disposition(refusal: StateFrameRefusal) -> ObligationD
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     fn node(seed: u8) -> CheckedNodeId {
         CheckedNodeId {
@@ -1270,8 +1271,7 @@ mod tests {
     /// another disposition or reason fails its row. The mapping is one `match` with no wildcard
     /// arm: `deny(clippy::wildcard_enum_match_arm)` rejects one under `make lint`, and the
     /// inspection that follows this test parses the function.
-    ///
-    /// Trace: FR-015-AC-66, TC-025.
+    #[trace("FR-015-AC-66", "TC-025")]
     #[test]
     fn tc_025_every_state_frame_refusal_maps_to_the_disposition_the_table_gives() {
         let rows = table();
@@ -1353,8 +1353,7 @@ mod tests {
     /// `deny(clippy::wildcard_enum_match_arm)`, and none of its arms, at any depth, is `_` or a
     /// bare binding. A mutant that drops the `deny`, or that folds explicit patterns into
     /// `other => ...`, fails here.
-    ///
-    /// Trace: FR-015-AC-66, TC-025.
+    #[trace("FR-015-AC-66", "TC-025")]
     #[test]
     fn tc_025_the_state_frame_mapping_has_no_wildcard_or_binding_arm() {
         use syn::visit::Visit;

@@ -155,6 +155,7 @@ impl KaniInstallation {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use std::fs;
 
     use super::*;
@@ -162,8 +163,7 @@ mod tests {
 
     /// `discover_from` is a pure function of its arguments, so every `HOME`/`CARGO_HOME`/`PATH`
     /// combination is exercised directly here with no process environment mutation.
-    ///
-    /// Trace: FR-017-AC-2, TC-027
+    #[trace("FR-017-AC-2", "TC-027")]
     #[test]
     fn tc_027_the_launcher_resolves_through_cargo_home_then_path() {
         let directory = discover_scratch("launcher");

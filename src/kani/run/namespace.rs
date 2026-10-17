@@ -484,6 +484,7 @@ mod tests {
         identity::ProofCeilings,
         run::{launch::run_bounded_launcher, owners::LaunchOwners},
     };
+    use ix_trace_rs::trace;
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
 
@@ -538,7 +539,7 @@ mod tests {
         (found, observed)
     }
 
-    /// Trace: FR-017-AC-28.
+    #[trace("FR-017-AC-28")]
     #[test]
     fn prepared_source_bind_is_read_only_to_the_backend() {
         let directory = discover_scratch("readonly-source-bind");
@@ -579,7 +580,7 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
-    /// Trace: FR-028-AC-2, FR-028-AC-21.
+    #[trace("FR-028-AC-2", "FR-028-AC-21")]
     #[test]
     fn startup_cap_refuses_without_claiming_the_identity_wall_ceiling_elapsed() {
         let (_command, mut owner) = NamespaceOwner::prepare(
@@ -600,7 +601,7 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
     }
 
-    /// Trace: FR-028-AC-21.
+    #[trace("FR-028-AC-21")]
     #[test]
     fn gated_startup_abort_kills_init_before_gate_eof_and_never_dispatches_backend() {
         let directory = discover_scratch("namespace-startup-abort");
@@ -644,7 +645,7 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
-    /// Trace: FR-028-AC-21, FR-017-AC-24.
+    #[trace("FR-028-AC-21", "FR-017-AC-24")]
     #[test]
     fn completed_monitor_cleanup_kills_an_orphan_and_its_fork_after_the_last_sample() {
         let directory = discover_scratch("namespace-late-fork");

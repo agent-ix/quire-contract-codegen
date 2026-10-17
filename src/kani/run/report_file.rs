@@ -78,11 +78,11 @@ pub(super) fn read_report(path: &Path) -> Result<Option<Vec<u8>>, KaniReportRefu
 mod tests {
     use super::*;
     use crate::kani::test_support::discover_scratch;
+    use ix_trace_rs::trace;
 
     /// The exported report is read bounded: a file over the limit is refused, and a report that
     /// was never written is `None`.
-    ///
-    /// Trace: TC-027
+    #[trace("TC-027")]
     #[test]
     fn tc_027_the_report_is_read_bounded_and_refused_not_truncated() {
         let directory = discover_scratch("report-bound");
