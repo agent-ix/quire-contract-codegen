@@ -9,6 +9,7 @@
 
 use crate::exact_scalar_generation::invokes_panicking_macro;
 use crate::scratch_crate::runtime_dependency;
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     generate_exact_function_oracles, generate_function_schedules,
     generate_function_schedules_with_limits, CallPointKind, ClaimDisposition, ExactFunctionItem,
@@ -20,7 +21,7 @@ use quire_contract_codegen::{
 use quire_contract_model::{derive_structural_candidates, CheckedPackageV2, CheckedSemanticNodeV2};
 use std::ops::Deref;
 
-/// Trace: FR-021-AC-28, FR-021-AC-34, TC-031.
+#[trace("FR-021-AC-28", "FR-021-AC-34", "TC-031")]
 #[test]
 fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     use serde_json::{json, Value};
@@ -693,7 +694,14 @@ fn tc_031_ac34_public_strict_reader_chain_generates_compilable_flat_schedule() {
     let _ = fs::remove_dir_all(&directory);
 }
 
-/// Trace: FR-021-AC-7, FR-021-AC-25, FR-021-AC-27, FR-021-AC-28, FR-021-AC-29, TC-031.
+#[trace(
+    "FR-021-AC-7",
+    "FR-021-AC-25",
+    "FR-021-AC-27",
+    "FR-021-AC-28",
+    "FR-021-AC-29",
+    "TC-031"
+)]
 #[test]
 fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack() {
     use serde_json::{json, Value};
@@ -1078,7 +1086,7 @@ fn tc_031_ac7_admitted_hundred_thousand_call_nodes_generate_on_a_512_kib_stack()
         .expect("admitted deep generation fits 512 KiB");
 }
 
-/// Trace: FR-021-AC-23, TC-031.
+#[trace("FR-021-AC-23", "TC-031")]
 #[test]
 fn tc_031_application_candidate_repair_admits_parent_after_child_key_changes() {
     use serde_json::json;
@@ -1446,12 +1454,11 @@ fn disposition_for(
         .result
 }
 
-/// Trace: FR-021-AC-23, TC-031.
-///
 /// Under a ceiling below either canonical lowered package, Contract IR returns
 /// distinct typed Failed(Bytes) accounting for body and call root requests but
 /// no ContractPackage for CG to consume. At an exact sufficient ceiling, the
 /// admitted package still reaches the function generator.
+#[trace("FR-021-AC-23", "TC-031")]
 #[test]
 fn tc_031_ac23_byte_ceiling_has_failed_records_and_no_contract_package() {
     use crate::common::byte_ceiling::{
@@ -1538,8 +1545,9 @@ fn tc_031_ac23_byte_ceiling_has_failed_records_and_no_contract_package() {
     );
 }
 
-/// Trace: FR-021-AC-23, TC-031. Both request sets over the shared chain must
+/// Both request sets over the shared chain must
 /// truly lower with their predecessors before their encoded lengths define a byte ceiling.
+#[trace("FR-021-AC-23", "TC-031")]
 #[test]
 fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
     use crate::common::byte_ceiling::{
@@ -1600,10 +1608,11 @@ fn tc_031_ac23_small_shared_chain_lowers_with_complete_closures() {
     }
 }
 
-/// Trace: FR-021-AC-1, TC-031. Every requested item receives exactly one
+/// Every requested item receives exactly one
 /// generated or typed-refused disposition; a refused item (naming an
 /// unknown function) contributes nothing, while its siblings generate
 /// unchanged.
+#[trace("FR-021-AC-1", "TC-031")]
 #[test]
 fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     let package = admit(ext_corpus_package());
@@ -1642,8 +1651,8 @@ fn tc_031_ac1_every_item_gets_one_disposition_and_refusal_does_not_cascade() {
     ));
 }
 
-/// Trace: TC-031
 /// A caller-selected scalar operator cannot override the checked body operation identity.
+#[trace("TC-031")]
 #[test]
 fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
     let package = admit(source_bound_call_package());
@@ -1660,11 +1669,12 @@ fn tc_031_scalar_body_operator_must_match_checked_operation_identity() {
     ));
 }
 
-/// Trace: FR-021-AC-3, TC-031. The claim-map entry for a generated item
+/// The claim-map entry for a generated item
 /// records the applied function's name and its `Origin::Body{function,
 /// index}` equal to the request's own declared-function ordering (functions
 /// sorted by declaring node id, digest domain then digest) -- read from the
 /// generator's own bookkeeping, not from the generated source text.
+#[trace("FR-021-AC-3", "TC-031")]
 #[test]
 fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     let package = admit(ext_corpus_package());
@@ -1710,11 +1720,12 @@ fn tc_031_ac3_claim_records_function_and_origin_from_the_request() {
     }
 }
 
-/// Trace: FR-021-AC-6, TC-031. A function whose declared operator
+/// A function whose declared operator
 /// requirements name a capability no registered backend can discharge is
 /// marked unsupported at generation time, naming the capability; no oracle
 /// is emitted for any item naming it, and no `capability_fn` item was even
 /// requested here, so this test drives it as a direct second request.
+#[trace("FR-021-AC-6", "TC-031")]
 #[test]
 fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
     let package = admit(ext_corpus_package());
@@ -1729,9 +1740,10 @@ fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
     ));
 }
 
-/// Trace: FR-021-AC-8, TC-031 (Inspection). Only `CheckMode::Linked` is ever
+/// (Inspection). Only `CheckMode::Linked` is ever
 /// admitted: the generated source's `checked_package()` names
 /// `rt::CheckMode::Linked` and never `rt::CheckMode::Kernel`.
+#[trace("FR-021-AC-8", "TC-031")]
 #[test]
 fn tc_031_ac8_generated_source_never_names_check_mode_kernel() {
     let package = admit(ext_corpus_package());
@@ -1741,9 +1753,10 @@ fn tc_031_ac8_generated_source_never_names_check_mode_kernel() {
     assert!(!lib.contains("CheckMode::Kernel"));
 }
 
-/// Trace: FR-021-AC-10, TC-031. A reference parameter type outside the
+/// A reference parameter type outside the
 /// admitted FR-330 graph is refused at that exact type key before CG can
 /// classify its deeper family.
+#[trace("FR-021-AC-10", "TC-031")]
 #[test]
 fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     let package = admit(ext_corpus_package());
@@ -1759,10 +1772,11 @@ fn tc_031_ac10_reference_parameter_outside_package_is_unknown_type_node() {
     assert!(!contents(&oracles, "src/lib.rs").contains("pub fn oracle_"));
 }
 
-/// Trace: FR-021-AC-11, TC-031. The requested function roots are checked
+/// The requested function roots are checked
 /// Model/State nodes, while the call fixtures retain a valid source-bound
 /// callee. The claim map must preserve the distinct root blockers and still
 /// generate the healthy source-bound sibling.
+#[trace("FR-021-AC-11", "TC-031")]
 #[test]
 fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     let package = admit(ac11_classifier_package());
@@ -1803,9 +1817,10 @@ fn tc_031_ac11_model_and_state_are_distinct_blockers() {
     );
 }
 
-/// Trace: FR-021-AC-12, TC-031. A declared function whose own body fails to
+/// A declared function whose own body fails to
 /// lower -- here, a nested `call` naming an absent callee -- refuses every
 /// item bound to that function, without changing `unrelated_fn`'s item.
+#[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
     let package = admit(ext_corpus_package());
@@ -1830,10 +1845,11 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
     ));
 }
 
-/// Trace: FR-021-AC-12, TC-031 (second case). A function whose own body
+/// (second case). A function whose own body
 /// node's real form disagrees with its declared body kind ("a form none of
 /// this generator's classifiers admits") is refused with `FormMismatch`,
 /// isolated to its own item.
+#[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
     let package = admit(ext_corpus_package());
@@ -1858,8 +1874,9 @@ fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
     ));
 }
 
-/// Trace: FR-021-AC-33, TC-031 step 13. A distinct call request retains its identity while the
+/// step 13. A distinct call request retains its identity while the
 /// function's separately declared temporal formula body supplies the refusal cause.
+#[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_call_claim_retains_identity_and_uses_declared_body_refusal() {
     let package = admit(ext_corpus_package());
@@ -2094,8 +2111,8 @@ fn tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
     assert!(!contents(&combined, "src/lib.rs").contains(requested_id.digest.as_ref()));
 }
 
-/// Trace: FR-021-AC-33, TC-031. A directly requested formula call-node settles to Unsupported,
-/// retains its request identity, and does not alter a healthy function sibling.
+/// A directly requested formula call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
+#[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_formula_call_node_is_unsupported() {
     tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
@@ -2107,8 +2124,8 @@ fn tc_031_ac33_direct_formula_call_node_is_unsupported() {
     );
 }
 
-/// Trace: FR-021-AC-33, TC-031. A directly requested case call-node settles to Unsupported,
-/// retains its request identity, and does not alter a healthy function sibling.
+/// A directly requested case call-node settles to Unsupported, retains its request identity, and does not alter a healthy function sibling.
+#[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     tc_031_ac33_direct_unsupported_item_keeps_identity_and_healthy_function(
@@ -2120,8 +2137,8 @@ fn tc_031_ac33_direct_case_call_node_is_unsupported() {
     );
 }
 
-/// Trace: FR-021-AC-33, TC-031. A reader-admitted fairness root keeps its request identity,
-/// refuses with the temporal cause, and leaves a supported function sibling byte-identical.
+/// A reader-admitted fairness root keeps its request identity, refuses with the temporal cause, and leaves a supported function sibling byte-identical.
+#[trace("FR-021-AC-33", "TC-031")]
 #[test]
 fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     use serde_json::{json, Value};
@@ -2417,8 +2434,9 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
 }
 
-/// Trace: FR-021-AC-1, TC-031 (duplicate handling, matching FR-014/FR-018). One
+/// (duplicate handling, matching FR-014/FR-018). One
 /// node id requested twice under one binding refuses every copy.
+#[trace("FR-021-AC-1", "TC-031")]
 #[test]
 fn tc_031_ac1_duplicate_request_refuses_every_copy() {
     let package = admit(ext_corpus_package());
@@ -2434,7 +2452,7 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
     ));
 }
 
-/// Trace: FR-021-AC-12, TC-031 (signature/body-kind agreement). A `Scalar`
+/// (signature/body-kind agreement). A `Scalar`
 /// body's declared parameter count or result type disagreeing with what the
 /// body kind requires is refused with `SignatureMismatch` at generation
 /// time, instead of assembling into a package whose emitted
@@ -2442,6 +2460,7 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
 /// measured repros: an `Add` declaration with only one declared parameter,
 /// and an `Add` declaration whose declared result type is `Boolean` instead
 /// of `Integer`.
+#[trace("FR-021-AC-12", "TC-031")]
 #[test]
 fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     let package = admit(ext_corpus_package());
@@ -2500,7 +2519,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     ));
 }
 
-/// Trace: FR-021-AC-15, TC-031 (duplicate declared names; the surviving origin also
+/// (duplicate declared names; the surviving origin also
 /// exercises AC-17, origin from the request function binding). Two
 /// declarations sharing one name -- different node ids, same string --
 /// are both refused as `AmbiguousFunctionName` rather than colliding into
@@ -2509,6 +2528,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
 /// the surviving functions, not a value corrupted by the excluded pair.
 /// This is FR-021-AC-15's own mutation table entry ("record it against the
 /// wrong function's index") reproduced and proven fixed.
+#[trace("FR-021-AC-15", "TC-031")]
 #[test]
 fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     let package = admit(ext_corpus_package());
@@ -2609,9 +2629,10 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     ));
 }
 
-/// Trace: FR-021-AC-1, TC-031 (item-level arity). An item's argument count
+/// (item-level arity). An item's argument count
 /// disagreeing with the applied function's declared parameter count is
 /// refused as `ArityMismatch`, naming both counts.
+#[trace("FR-021-AC-1", "TC-031")]
 #[test]
 fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
     let package = admit(ext_corpus_package());
@@ -2633,10 +2654,11 @@ fn tc_031_arity_mismatch_refuses_when_item_argument_count_disagrees() {
     ));
 }
 
-/// Trace: FR-021-AC-21, TC-031. `IntegerOperator::Negate` is unary and out of
+/// `IntegerOperator::Negate` is unary and out of
 /// this V1's scope (only binary `Add`/`Subtract`/`Multiply` are supported): a
 /// `Scalar` body declaring it is refused as `UnsupportedOperator` and the
 /// function is absent from the emitted `checked_package()`.
+#[trace("FR-021-AC-21", "TC-031")]
 #[test]
 fn tc_031_ac21_unsupported_operator_refuses_unary_negate_scalar_body() {
     let package = admit(ext_corpus_package());
@@ -2817,11 +2839,12 @@ impl DuplicateNodeFixture {
     }
 }
 
-/// Trace: FR-021-AC-22, TC-031 step 9 fixture (i). Two declarations sharing one declaring node
+/// step 9 fixture (i). Two declarations sharing one declaring node
 /// id and both admissible are both refused, whichever order they arrive in: neither enters
 /// `checked_package()`, the source or `location-map.json`, and each item naming one is
 /// `DuplicateDeclaringNode`, never `UnknownFunction`. A distinct-node function is generated
 /// unchanged.
+#[trace("FR-021-AC-22", "TC-031")]
 #[test]
 fn tc_031_ac22_fixture_i_both_bodies_admissible() {
     let package = admit(ext_corpus_package());
@@ -2844,10 +2867,11 @@ fn tc_031_ac22_fixture_i_both_bodies_admissible() {
     .check(&package);
 }
 
-/// Trace: FR-021-AC-22, TC-031 step 9 fixture (ii). One declaration of the pair would be
+/// step 9 fixture (ii). One declaration of the pair would be
 /// refused in Stage 1 (an undischargeable capability) and its same-node sibling is admissible:
 /// the sibling does not survive, and neither item reports `UnknownFunction`, nor the refused
 /// one's own Stage 1 reason.
+#[trace("FR-021-AC-22", "TC-031")]
 #[test]
 fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
     let package = admit(ext_corpus_package());
@@ -2870,10 +2894,11 @@ fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
     .check(&package);
 }
 
-/// Trace: FR-021-AC-22, TC-031 step 9 fixture (iii). The pair also shares one name, and a third
+/// step 9 fixture (iii). The pair also shares one name, and a third
 /// declaration with its own node id holds the same name: the third is refused as
 /// `AmbiguousFunctionName` and is absent from `checked_package()` and the location map, while
 /// items naming the shared name are `DuplicateDeclaringNode`, never `AmbiguousFunctionName`.
+#[trace("FR-021-AC-22", "TC-031")]
 #[test]
 fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
     let package = admit(ext_corpus_package());
@@ -2893,10 +2918,11 @@ fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
     .check(&package);
 }
 
-/// Trace: FR-021-AC-22, TC-031 step 9 fixture (iv). A declaration whose nested `call` names a
+/// step 9 fixture (iv). A declaration whose nested `call` names a
 /// member of the pair is refused as `UnknownCallee`, and a distinct-node function and an item
 /// naming each function are handled: the pair's items `DuplicateDeclaringNode`, the caller's
 /// item `UnknownCallee`, the distinct function's generated.
+#[trace("FR-021-AC-22", "TC-031")]
 #[test]
 fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee() {
     let package = admit(ext_corpus_package());
@@ -2936,9 +2962,10 @@ fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee()
     }
 }
 
-/// Trace: FR-021-AC-22, TC-031 step 9 fixture (v). One name is held by two duplicate groups, on
+/// step 9 fixture (v). One name is held by two duplicate groups, on
 /// `FN_ADD` and on `FN_EQ`: an item naming it is refused `DuplicateDeclaringNode` carrying the
 /// smaller of the two node ids, under every order of the declarations.
+#[trace("FR-021-AC-22", "TC-031")]
 #[test]
 fn tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id() {
     let package = admit(ext_corpus_package());
@@ -2962,9 +2989,10 @@ fn tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id() {
     }
 }
 
-/// Trace: FR-021-AC-22, TC-031 step 9 fixture (vi). Two items on one call node naming the two
+/// step 9 fixture (vi). Two items on one call node naming the two
 /// members of a duplicate pair, and one such item requested twice, each get
 /// `DuplicateDeclaringNode`: the refusal takes precedence over the duplicate-request collapse.
+#[trace("FR-021-AC-22", "TC-031")]
 #[test]
 fn tc_031_ac22_fixture_vi_same_call_node_items_over_a_pair_each_keep_the_node_refusal() {
     let package = admit(ext_corpus_package());
@@ -3034,8 +3062,9 @@ fn both_orders(
     forward
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (i). One unknown name on a call node is one
+/// step 12 case (i). One unknown name on a call node is one
 /// `UnknownFunction` entry naming it.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_i_one_unknown_name_is_one_entry() {
     let package = admit(ext_corpus_package());
@@ -3047,9 +3076,10 @@ fn tc_031_ac24_case_i_one_unknown_name_is_one_entry() {
     assert_eq!(entries(&oracles), vec![&unknown("zz_unknown")]);
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (ii). Two different unknown names on one call node
+/// step 12 case (ii). Two different unknown names on one call node
 /// with equal arguments are two entries, `aa_unknown` then `zz_unknown`, never `DuplicateRequest`,
 /// identical under both request orders.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order() {
     let package = admit(ext_corpus_package());
@@ -3064,8 +3094,9 @@ fn tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order() {
     );
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (iii). The same unknown name requested twice is one
+/// step 12 case (iii). The same unknown name requested twice is one
 /// `DuplicateRequest` entry.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
     let package = admit(ext_corpus_package());
@@ -3085,9 +3116,10 @@ fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
     );
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (iv). A declared `add_fn` and `zz_unknown` on one
+/// step 12 case (iv). A declared `add_fn` and `zz_unknown` on one
 /// call node are two entries, the unknown one first, each equal to the entry its item gets when
 /// requested alone.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
     let package = admit(ext_corpus_package());
@@ -3133,8 +3165,9 @@ fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
     assert_eq!(oracles.claim_map.items[0].result, unknown("zz_unknown"));
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (v). Names order byte-wise and case-sensitively:
+/// step 12 case (v). Names order byte-wise and case-sensitively:
 /// `Zz_unknown` (`Z` is 0x5A) before `aa_unknown` (`a` is 0x61), identical under both orders.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_v_names_order_by_bytes_case_sensitively() {
     let package = admit(ext_corpus_package());
@@ -3149,11 +3182,12 @@ fn tc_031_ac24_case_v_names_order_by_bytes_case_sensitively() {
     );
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (vi). Items on one call node naming the two members
+/// step 12 case (vi). Items on one call node naming the two members
 /// of a duplicate-node pair are two entries ordered by function name. With `m_multi` and `z_pair`
 /// on the larger node N2 and `m_multi` and `q_extra` on the smaller node N1, `m_multi` (whose
 /// refusal carries N1) orders before `z_pair` (N2); with `z_multi` and `a_pair`, `a_pair` (N2)
 /// orders before `z_multi` (N1). Identical under both request orders and every declaration order.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
     let package = admit(ext_corpus_package());
@@ -3195,12 +3229,13 @@ fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
     }
 }
 
-/// Trace: FR-021-AC-24, TC-031 step 12 case (vii). The name tie-break applies only to items equal
+/// step 12 case (vii). The name tie-break applies only to items equal
 /// on the earlier key fields: items whose declaring node ids differ are ordered by declaring node
 /// id first. With `a_pair` and `z_pair` on N2, `z_pair` and `q_extra` on N1, and `a_pair` alone on
 /// the larger N3, `a_pair` resolves to N3 and `z_pair` to N2, so `z_pair` (refusal N1) orders
 /// before `a_pair` (refusal N2) although `a_pair` is the smaller name, under both request orders
 /// and every declaration order.
+#[trace("FR-021-AC-24", "TC-031")]
 #[test]
 fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
     let package = admit(ext_corpus_package());
@@ -3228,10 +3263,11 @@ fn tc_031_ac24_case_vii_differing_declaring_node_ids_order_before_names() {
     }
 }
 
-/// Trace: FR-021-AC-19, TC-031. The emitted `src/lib.rs` of the main corpus
+/// The emitted `src/lib.rs` of the main corpus
 /// (scalar `add_fn`, equality `eq_fn`, nested-call `call_fn`) and of the chain
 /// corpus contains no `.unwrap(`, no `.expect(` and no panicking macro in any
 /// delimiter form.
+#[trace("FR-021-AC-19", "TC-031")]
 #[test]
 fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
     let oracles = main_oracles();
@@ -3247,12 +3283,13 @@ fn tc_031_ac19_emitted_function_oracle_source_has_no_panicking_path() {
     assert!(lib.contains("rt::TypeEnvironment::default()"));
 }
 
-/// Trace: FR-021-AC-20, TC-031. In the emitted bodies of `add_fn` and `eq_fn`
+/// In the emitted bodies of `add_fn` and `eq_fn`
 /// the `match` over the runtime operator's `Result<Outcome<_>, Refusal>` has
 /// the five arms in order and ends with a catch-all `Ok(_)` arm valued
 /// `Outcome::Refused(Refusal::CheckedInvariant)`. The unknown variant cannot
 /// be built from a test crate (`rt::Outcome` is `#[non_exhaustive]`), so the
 /// arm's text is the evidence.
+#[trace("FR-021-AC-20", "TC-031")]
 #[test]
 fn tc_031_ac20_unknown_outcome_variant_refuses_checked_invariant() {
     let lib = contents(&main_oracles(), "src/lib.rs");
@@ -3316,11 +3353,12 @@ pub fn contents(oracles: &quire_contract_codegen::ExactFunctionOracles, path: &s
         .clone()
 }
 
-/// Trace: FR-021-AC-13, TC-031. Generated bytes are identical across
+/// Generated bytes are identical across
 /// repeated runs and across permutations of the request order; claim-map
 /// entries are ordered by the item key (call node id, then the applied
 /// function's declaring node id, then each argument operand's source node
 /// id).
+#[trace("FR-021-AC-13", "TC-031")]
 #[test]
 fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     let package = admit(ext_corpus_package());
@@ -3350,10 +3388,11 @@ fn tc_031_ac13_generation_is_deterministic_across_runs_and_permutations() {
     }
 }
 
-/// Trace: FR-021-AC-14, TC-031. The generated crate declares
+/// The generated crate declares
 /// `publish = false`, names the runtime by branch with the `exact` feature,
 /// contains no charge amount and no literal `Outcome`/`Value` constant
 /// standing in for a runtime result, and forbids unsafe code.
+#[trace("FR-021-AC-14", "TC-031")]
 #[test]
 fn tc_031_ac14_manifest_and_source_shape() {
     let package = admit(ext_corpus_package());
@@ -3378,7 +3417,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
     assert!(lib.contains("Outcome::Completed(rt::Value::Boolean(value))"));
 }
 
-/// Trace: FR-021-AC-15, TC-031 (origin half only -- see module doc "Location
+/// (origin half only -- see module doc "Location
 /// tagging" and `spec/oracle/matrix/tests.md`'s FR-021 row: the `path`-non-empty
 /// case is not implemented and is unreachable from this V1's scoped body
 /// vocabulary). The location map records one entry per generated
@@ -3387,6 +3426,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
 /// function in this V1 has a body that is one classified node at its own
 /// root, so `path` is always empty and `origin` always equals the
 /// generator's own function ordering.
+#[trace("FR-021-AC-15", "TC-031")]
 #[test]
 fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     let package = admit(ext_corpus_package());
@@ -3430,12 +3470,13 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     }
 }
 
-/// Trace: FR-021-AC-16, TC-031 (Inspection). No generated code or claim map
+/// (Inspection). No generated code or claim map
 /// reads, branches on, or asserts non-emptiness of `Evaluation.location` or
 /// `Evaluation.losses`: the generated oracle discards both by construction
 /// (`.map(|evaluation| evaluation.outcome)`), and this test greps the
 /// generated source and the serialized claim/location maps to confirm no
 /// occurrence of either field name slipped in some other way.
+#[trace("FR-021-AC-16", "TC-031")]
 #[test]
 fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
     let package = admit(ext_corpus_package());
@@ -3459,7 +3500,7 @@ fn tc_031_ac16_no_generated_code_reads_location_or_losses() {
 /// This package uses the FR-021 checked shape: a `function/pure_function`
 /// declaration binds parameter nodes and an expression body; its local call
 /// references the declaration followed by ordered argument references.
-/// Trace: FR-021-AC-27, TC-031
+#[trace("FR-021-AC-27", "TC-031")]
 #[test]
 fn tc_031_source_function_call_binds_callee_and_ordered_arguments() {
     let (checked, ids) = source_bound_call_package().admit_resolved();

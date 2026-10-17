@@ -34,12 +34,11 @@ mod generated {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/names.rs"));
 }
 
+use ix_trace_rs::trace;
 use package::*;
 use quire_contract_runtime::exact as rt;
 use support::rt_side;
 
-/// Trace: FR-018-AC-2, FR-018-AC-9, FR-018-AC-10, TC-029.
-///
 /// Every vector below is run under `UNLIMITED` limits, which lets `agree2!`
 /// exercise a full, uncontested run against the direct Contract Runtime call
 /// (AC-2) and, from the charges that run actually admits, a denial of each
@@ -50,6 +49,7 @@ use support::rt_side;
 /// record, text and enum vectors: a mutated `EqualityOperatorKind::path()`
 /// changes what the generated `not_equal` oracle computes, and only executing
 /// it against the direct runtime call catches that.
+#[trace("FR-018-AC-2", "FR-018-AC-9", "FR-018-AC-10", "TC-029")]
 #[test]
 fn tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree() {
     // Record (E_RECORD, `equal`): equal and unequal points.
@@ -296,8 +296,6 @@ fn tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree() {
     }
 }
 
-/// Trace: FR-018-AC-2, TC-029.
-///
 /// The one `converted` execution vector (FR-018-AC-2's disclosed gap):
 /// E_CONV's left operand is `convert<Integer>(e)` for `e: Int[-100, 100]`
 /// (the same pair FR-018-AC-3's generation-time test already uses), and the
@@ -317,6 +315,7 @@ fn tc_029_ac2_and_ac9_record_tuple_option_and_collection_oracles_agree() {
 /// (`operand_value`'s `(Integer | Int(_), Integer)` arm), so it admits no
 /// conversion charge point at all. `tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges`
 /// below adds a vector that does.
+#[trace("FR-018-AC-2", "TC-029")]
 #[test]
 fn tc_029_ac2_a_converted_operand_agrees() {
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
@@ -346,8 +345,6 @@ fn tc_029_ac2_a_converted_operand_agrees() {
     }
 }
 
-/// Trace: FR-018-AC-9, TC-029.
-///
 /// FR-018-AC-9 names "each conversion charge point in turn"; the vector
 /// above admits none, so this one converts `Int[-100, 100]` to
 /// `Decimal[-100, 100; 0, 0]`, which charges `DecimalOperands`,
@@ -357,6 +354,7 @@ fn tc_029_ac2_a_converted_operand_agrees() {
 /// every `LimitKind` counter of the run each denial stops — not only
 /// `ResultUnits` — so a counter two of the three implementations get wrong
 /// in the same denied run cannot pass silently.
+#[trace("FR-018-AC-9", "TC-029")]
 #[test]
 fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
     for (l, r) in [(5_i64, 5_i64), (5, 6)] {
@@ -389,7 +387,7 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
     }
 }
 
-/// Trace: FR-018-AC-2, TC-029, codegen#83.
+/// codegen#83.
 ///
 /// One vector per remaining `admits_equality_conversion` row (`Int -> *` is
 /// already covered above by E_CONV/E_CONV_CHARGE): `Rational -> Rational`,
@@ -401,6 +399,7 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
 /// distinct oracle node, so AC-2's "apply the right
 /// operand's conversion before the left's" mutation row has a genuine
 /// converted operand to cross-wire on every row, not only E_CONV's.
+#[trace("FR-018-AC-2", "TC-029")]
 #[test]
 fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
     // Rational[-10, 10; 1, 1] -> Rational[-100, 100; 1, 5].
@@ -555,14 +554,13 @@ fn tc_029_ac2_every_remaining_admits_equality_conversion_row_agrees() {
     }
 }
 
-/// Trace: FR-018-AC-8, TC-029.
-///
 /// The other half of AC-8 (a refused declaration closure carrying its
 /// `DeclarationCause`) is `tc_029_ac8_a_duplicate_field_is_refused_with_its_declaration_cause`
 /// in `composite_equality_generation.rs`. This half is the oracle's own
 /// `check_type` guard: called under an environment that does not admit the
 /// operand's comparison type, the oracle refuses before any charge rather
 /// than panicking or completing a Boolean.
+#[trace("FR-018-AC-8", "TC-029")]
 #[test]
 fn tc_029_ac8_check_type_guards_the_oracle() {
     let good = rt_side::environment_record();
@@ -595,11 +593,10 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
         .unwrap(),
     ] {
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
-        let outcome =
-            generated::oracle_e_record_equal(
-                // E_RECORD Equal
-                &empty, &left, &right, &mut meter,
-            );
+        let outcome = generated::oracle_e_record_equal(
+            // E_RECORD Equal
+            &empty, &left, &right, &mut meter,
+        );
         assert_eq!(outcome, rt::Outcome::Refused(rt::Refusal::CheckedInvariant));
         assert!(
             meter.admitted_charges().is_empty(),
@@ -608,11 +605,10 @@ fn tc_029_ac8_check_type_guards_the_oracle() {
     }
 }
 
-/// Trace: FR-018-AC-9, TC-029.
-///
 /// A direct, explicit check (independent of `agree2!`'s Debug-equality
 /// comparison above) that a denied charge surfaces as `Outcome::Incomplete`
 /// and never as a completed Boolean.
+#[trace("FR-018-AC-9", "TC-029")]
 #[test]
 fn tc_029_ac9_a_denied_charge_is_incomplete_never_a_completed_boolean() {
     let environment = rt_side::environment_record();
@@ -639,41 +635,34 @@ fn tc_029_ac9_a_denied_charge_is_incomplete_never_a_completed_boolean() {
     }
 }
 
-/// Trace: FR-018-AC-11, TC-029.
-///
 /// The generation-level half (distinct symbols, `caller_declared`, the
 /// blocked-item mark) is covered by
 /// `tc_029_ac11_two_operators_over_one_node_get_distinct_symbols_and_are_caller_declared`
 /// in `composite_equality_generation.rs`. This is the execution half: the
 /// two operator variants over the same expression node produce
 /// complementary outcomes on a vector whose operands differ.
+#[trace("FR-018-AC-11", "TC-029")]
 #[test]
 fn tc_029_ac11_operator_variants_produce_complementary_outcomes() {
-    let equal_env =
-        generated::environment_e_record_equal()
-            .unwrap();
-    let not_equal_env =
-        generated::environment_e_record_not_equal()
-            .unwrap();
+    let equal_env = generated::environment_e_record_equal().unwrap();
+    let not_equal_env = generated::environment_e_record_not_equal().unwrap();
 
     for (lx, ly, rx, ry) in [(1, 2, 1, 2), (1, 2, 3, 4)] {
         let left = rt_side::record_point(&equal_env, lx, ly);
         let right = rt_side::record_point(&equal_env, rx, ry);
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
-        let equal_outcome =
-            generated::oracle_e_record_equal(
-                // E_RECORD Equal
-                &equal_env, &left, &right, &mut meter,
-            );
+        let equal_outcome = generated::oracle_e_record_equal(
+            // E_RECORD Equal
+            &equal_env, &left, &right, &mut meter,
+        );
         let mut meter = rt::Meter::new(rt_side::UNLIMITED);
-        let not_equal_outcome =
-            generated::oracle_e_record_not_equal(
-                // E_RECORD NotEqual
-                &not_equal_env,
-                &left,
-                &right,
-                &mut meter,
-            );
+        let not_equal_outcome = generated::oracle_e_record_not_equal(
+            // E_RECORD NotEqual
+            &not_equal_env,
+            &left,
+            &right,
+            &mut meter,
+        );
         match (equal_outcome, not_equal_outcome) {
             (rt::Outcome::Completed(equal), rt::Outcome::Completed(not_equal)) => {
                 assert_ne!(

@@ -20,7 +20,10 @@ use std::{
 /// Contract Runtime the generated crate already depends on. Same exact
 /// versions as this repository's own manifest, so `--offline` resolves them
 /// from the lockfile copied alongside.
-const AGREEMENT_DEV_DEPENDENCIES: &str = "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n";
+const AGREEMENT_DEV_DEPENDENCIES: &str = concat!(
+    "serde_json = \"=1.0.151\"\nsha2 = \"=0.10.9\"\n",
+    "ix-trace-rs = { version = \"=0.1.0\", git = \"https://github.com/agent-ix/ix-trace-rs\", branch = \"main\" }\n",
+);
 
 /// Writes `artifacts` (path, contents) as a crate at `<target tmp>/<label>`,
 /// adds `extra_files` beside them, registers `cases` (a path under this

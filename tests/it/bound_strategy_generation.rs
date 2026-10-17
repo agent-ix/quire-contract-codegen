@@ -1,5 +1,6 @@
 //! Synthetic public executable projections for the complete numeric strategy slice.
 
+use ix_trace_rs::trace;
 use std::{
     fmt::Write as _,
     fs,
@@ -169,7 +170,7 @@ fn generate(
     .unwrap()
 }
 
-/// Trace: TC-017, FR-008-AC-3, FR-008-AC-6, TC-003, NFR-002-AC-3.
+#[trace("TC-017", "FR-008-AC-3", "FR-008-AC-6", "TC-003", "NFR-002-AC-3")]
 #[test]
 fn wide_ir_domain_refuses_the_i64_strategy() {
     for (minimum, maximum) in [
@@ -318,8 +319,15 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     );
 }
 
-/// Trace: TC-017, FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-CON-2,
-/// Trace: TC-044, FR-031-AC-10, FR-031-AC-18
+/// FR-008-CON-2, Trace: TC-044, FR-031-AC-10, FR-031-AC-18
+#[trace(
+    "TC-017",
+    "FR-008-AC-1",
+    "FR-008-AC-2",
+    "FR-008-AC-3",
+    "FR-008-AC-4",
+    "FR-008-AC-5"
+)]
 #[test]
 fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     let package = decode(&version_projection());
@@ -804,7 +812,7 @@ fn tc_017_bound_admission_uses_the_public_clause_and_domain() {
     assert!(boundary_error.source_span.is_none());
 }
 
-/// Trace: TC-018, FR-009-AC-4
+#[trace("TC-018", "FR-009-AC-4")]
 #[test]
 fn tc_018_public_generation_refuses_every_population_with_an_empty_required_side() {
     let fixtures = [
@@ -848,7 +856,7 @@ fn tc_018_public_generation_refuses_every_population_with_an_empty_required_side
     }
 }
 
-/// Trace: TC-020, TC-021, FR-011-AC-3, FR-011-AC-4, FR-012-AC-4
+#[trace("TC-020", "TC-021", "FR-011-AC-3", "FR-011-AC-4", "FR-012-AC-4")]
 #[test]
 fn tc_020_tc_021_runner_rates_census_and_replay_surface_are_generated() {
     let source = generate(BoundStrategyPopulation::Boundary).rust.contents;
@@ -862,8 +870,17 @@ fn tc_020_tc_021_runner_rates_census_and_replay_surface_are_generated() {
     assert!(!source.contains("TestCaseError::reject"));
 }
 
-/// Trace: TC-020, TC-021, TC-022, FR-011-AC-1, FR-011-AC-3, FR-011-AC-4,
-/// Trace: FR-011-AC-5, FR-012-AC-4, FR-013-AC-1
+#[trace(
+    "TC-020",
+    "TC-021",
+    "TC-022",
+    "FR-011-AC-1",
+    "FR-011-AC-3",
+    "FR-011-AC-4",
+    "FR-011-AC-5",
+    "FR-012-AC-4",
+    "FR-013-AC-1"
+)]
 #[test]
 fn tc_020_tc_021_tc_022_generated_consumer_runs_sampled_and_census_campaigns() {
     let generated = generate(BoundStrategyPopulation::Broad);
@@ -1021,7 +1038,7 @@ mod generated_checks {{
     );
 }
 
-/// Trace: TC-020, TC-021, FR-011-AC-2, FR-012-AC-4
+#[trace("TC-020", "TC-021", "FR-011-AC-2", "FR-012-AC-4")]
 #[test]
 fn tc_020_tc_021_negated_oracle_returns_a_structured_minimal_mismatch() {
     let pre_value = scalar_projection(
@@ -1212,7 +1229,7 @@ pub fn {oracle}({oracle_parameters}) -> bool {{
     );
 }
 
-/// Trace: TC-020, FR-011-AC-1, FR-011-AC-4, FR-011-AC-5, NFR-004-AC-1
+#[trace("TC-020", "FR-011-AC-1", "FR-011-AC-4", "FR-011-AC-5", "NFR-004-AC-1")]
 #[test]
 fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     let pre_value = scalar_projection(
@@ -1485,7 +1502,7 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     );
 }
 
-/// Trace: TC-022, FR-013-AC-1, FR-013-AC-2, FR-013-AC-4, FR-013-AC-5
+#[trace("TC-022", "FR-013-AC-1", "FR-013-AC-2", "FR-013-AC-4", "FR-013-AC-5")]
 #[test]
 fn tc_022_bundle_is_typed_rust_with_bound_identity() {
     let generated = generate(BoundStrategyPopulation::Broad);

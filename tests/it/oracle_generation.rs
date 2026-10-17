@@ -1,3 +1,4 @@
+use ix_trace_rs::trace;
 use std::{
     collections::BTreeSet,
     fmt::Write as _,
@@ -180,7 +181,7 @@ fn integer_literal_wide(value: i128, value_type: &IntegerType, at: u64) -> Expre
     )
 }
 
-/// Trace: TC-003, NFR-002-AC-3, TC-044, FR-031-AC-28.
+#[trace("TC-003", "NFR-002-AC-3", "TC-044", "FR-031-AC-28")]
 #[test]
 fn wide_ir_integer_bounds_refuse_an_i64_oracle_without_generated_source() {
     for (minimum, maximum, literal) in [
@@ -310,7 +311,7 @@ fn source_symbol(source: &str) -> &str {
         .unwrap()
 }
 
-/// Trace: TC-001, TC-006
+#[trace("TC-001", "TC-006")]
 #[test]
 fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     use quire_contract_codegen::{
@@ -489,7 +490,7 @@ fn tc_006_generated_oracle_probes_qualify_against_native_llvm_export() {
     }
 }
 
-/// Trace: TC-001
+#[trace("TC-001")]
 #[test]
 fn tc_001_boolean_oracle_bundle_is_deterministic_traceable_and_schema_valid() {
     let environment = boolean_environment(&["enabled"]);
@@ -745,7 +746,7 @@ impl IntegerComparison {
     }
 }
 
-/// Trace: TC-002
+#[trace("TC-002")]
 #[test]
 fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluator() {
     let environment = differential_environment();
@@ -955,7 +956,7 @@ fn run_generated_program(crate_name: &str, program: &str) {
     );
 }
 
-/// Trace: NFR-001-AC-1, TC-002
+#[trace("NFR-001-AC-1", "TC-002")]
 #[test]
 fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_model() {
     let value_type =
@@ -1092,7 +1093,7 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
     );
 }
 
-/// Trace: TC-001
+#[trace("TC-001")]
 #[test]
 fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     let environment = boolean_environment(&["a", "b", "implies_short_circuit"]);
@@ -1177,7 +1178,7 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
 /// negation in authored preorder, so the addition is the first unsupported node, and a negation
 /// that comes first is still refused as an unsupported expression.
 ///
-/// Trace: TC-044, FR-031-AC-7
+#[trace("TC-044", "FR-031-AC-7")]
 #[test]
 fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     let integer =
@@ -1351,7 +1352,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     );
 }
 
-/// Trace: NFR-002-AC-3, TC-003
+#[trace("NFR-002-AC-3", "TC-003")]
 #[test]
 fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
     let rational = RationalType::new(-10, 10, 10).unwrap();
@@ -1398,7 +1399,7 @@ fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
     assert_eq!(diagnostic.source_span.as_ref(), Some(&reference_span));
 }
 
-/// Trace: TC-003
+#[trace("TC-003")]
 #[test]
 fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded() {
     let environment = boolean_environment(&["enabled-flag", "enabled_flag"]);
@@ -1441,7 +1442,7 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
 /// TC-003, and TC-044 (FR-031-AC-18): a division whose divisor and range IR discharged is still
 /// refused, because the oracle takes no raw `/`.
 ///
-/// Trace: TC-044, FR-031-AC-18
+#[trace("TC-044", "FR-031-AC-18")]
 #[test]
 fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
     let integer = IntegerType::new(IntegerDomain::Signed, -10, 10, OverflowPolicy::Reject).unwrap();
@@ -1521,7 +1522,7 @@ fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
     assert!(refusal.message.contains("IR-601"), "{}", refusal.message);
 }
 
-/// Trace: TC-001
+#[trace("TC-001")]
 #[test]
 fn tc_001_deep_expression_output_is_linear_and_bounded() {
     std::thread::Builder::new()
@@ -1551,7 +1552,7 @@ fn tc_001_deep_expression_output_is_linear_and_bounded() {
         .unwrap();
 }
 
-/// Trace: NFR-002-AC-3, TC-003
+#[trace("NFR-002-AC-3", "TC-003")]
 #[test]
 fn tc_003_source_size_limit_rejects_without_a_partial_bundle() {
     std::thread::Builder::new()
