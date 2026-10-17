@@ -31,3 +31,11 @@ Method: spec-review/ears-conformance over the new and rewritten criteria.
 ## Verdict
 
 Accept with the low finding noted; the other examined criteria are single-response and testable.
+
+## Dispositions
+
+Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d088e9c..e1873b1: AC-98's refusal triggers moved to AC-108; the end trigger is now an input condition (multiplicity IR does not expose as a typed value, IR-851). |

@@ -46,3 +46,11 @@ Revise before accept. The pinned facts are themselves accurate (38f3581 is an an
 64f884e7, 64f884e7 is in 299a126, 23f9f34 and 2a316c0 predate 46aa650be), but the checklist rule
 is removal regardless of accuracy. All node identities and IR names the spec binds were checked
 and exist as written (see the failure-domain review SR-12101 for the substantive defects).
+
+## Dispositions
+
+Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d088e9c..e1873b1: every commit pin removed from FR-015 :109-148, TC-025 and tests.md :95; `grep` over spec/ finds none of the six revisions. |
