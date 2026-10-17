@@ -1841,9 +1841,11 @@ pub fn golden_items() -> Vec<CompositeEqualityItem> {
 
 #[cfg(test)]
 mod fixture_identity_tests {
+    use ix_trace_rs::trace;
+
     use super::*;
 
-    /// Trace: FR-037-AC-1, FR-037-AC-4, TC-052.
+    #[trace("FR-037-AC-1", "FR-037-AC-4", "TC-052")]
     #[test]
     fn composite_application_candidate_matches_admitted_node() {
         let builder = byte_ceiling_package();
@@ -1890,7 +1892,7 @@ mod fixture_identity_tests {
         );
     }
 
-    /// Trace: FR-037-AC-2, TC-052.
+    #[trace("FR-037-AC-2", "TC-052")]
     #[test]
     fn grouped_application_candidate_matches_admitted_node() {
         let mut builder = byte_ceiling_package();

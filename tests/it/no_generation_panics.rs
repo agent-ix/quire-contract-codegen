@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use ix_trace_rs::trace;
 use quire_contract_codegen::{
     negotiate_kani_obligations, CapabilityKind, Cause, ClaimDisposition, Disposition,
     ItemSettlement, KaniObligationOutcome, KaniObligationRequest, ObligationDisposition,
@@ -224,9 +225,10 @@ fn unchecked_tokens(body: &str) -> Vec<(Unchecked, usize)> {
     found
 }
 
-/// Trace: NFR-005-AC-1, TC-042. The helper keeps a panic token in code and drops one in a string
+/// The helper keeps a panic token in code and drops one in a string
 /// literal, a character literal, a comment and a `#[cfg(test)]` item, and keeps `abort` as a bare
 /// identifier.
+#[trace("NFR-005-AC-1", "TC-042")]
 #[test]
 fn tc_042_ac1_the_literal_free_scan_keeps_code_and_drops_literals_comments_and_test_items() {
     let source = "\
@@ -255,8 +257,9 @@ fn bare() { abort() }
     }
 }
 
-/// Trace: NFR-005-AC-1, NFR-005-M-1, TC-042. No file under `src/` holds a panic token in its non-test,
+/// No file under `src/` holds a panic token in its non-test,
 /// literal-free code; the scan read every file that holds a measured site.
+#[trace("NFR-005-AC-1", "NFR-005-M-1", "TC-042")]
 #[test]
 fn tc_042_ac1_src_holds_no_panic_token() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -312,10 +315,11 @@ fn tc_042_ac1_src_holds_no_panic_token() {
     );
 }
 
-/// Trace: TC-023. This guards the canonical encoding boundary described by AD-004 L-9: only the
+/// This guards the canonical encoding boundary described by AD-004 L-9: only the
 /// core boundary may call the canonical byte encoder or digest. It checks removed serializer and
 /// artifact-wrapper definitions without banning
 /// legitimate `FixedShape` or `Encode` type use elsewhere in the crate.
+#[trace("TC-023")]
 #[test]
 fn tc_023_canonical_encoding_has_one_source_boundary() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -341,9 +345,10 @@ fn tc_023_canonical_encoding_has_one_source_boundary() {
     assert!(core_seen, "the canonical boundary was not scanned");
 }
 
-/// Trace: NFR-005-AC-8, NFR-005-M-3, TC-042. The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,
+/// The bodies of `generate_kani`, `route_records`, `rewrite_duplicate_position`,
 /// `observe_clause` and `generate_boolean_oracle_inner`, located in the literal-free non-test code
 /// of their files, hold no index token and no subtraction token.
+#[trace("NFR-005-AC-8", "NFR-005-M-3", "TC-042")]
 #[test]
 fn tc_042_ac8_the_ir_577_bodies_hold_no_index_or_subtraction() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -376,9 +381,10 @@ fn tc_042_ac8_the_ir_577_bodies_hold_no_index_or_subtraction() {
     );
 }
 
-/// Trace: NFR-005-AC-8, TC-042. The body check flags every index, range slice and subtraction
+/// The body check flags every index, range slice and subtraction
 /// spelling the requirement names, and passes the array, pattern, attribute, macro, arrow and
 /// unary-minus shapes it names.
+#[trace("NFR-005-AC-8", "TC-042")]
 #[test]
 fn tc_042_ac8_the_body_check_flags_index_and_subtraction_and_passes_their_lookalikes() {
     for (body, expected) in [
@@ -422,9 +428,10 @@ fn tc_042_ac8_the_body_check_flags_index_and_subtraction_and_passes_their_lookal
     }
 }
 
-/// Trace: NFR-005-AC-2, NFR-005-M-2, TC-042. `classify_claim` reports a generated claim with no checked bound,
+/// `classify_claim` reports a generated claim with no checked bound,
 /// and one whose first checked bound is not among the derived integer ranges, as
 /// `OperationNotRendered`; the unmodified claim is supported.
+#[trace("NFR-005-AC-2", "NFR-005-M-2", "TC-042")]
 #[test]
 fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_rendered() {
     let (package, claim_map, _) = scalar_package();
@@ -495,9 +502,10 @@ fn tc_042_ac2_a_claim_map_this_generator_did_not_produce_is_operation_not_render
     }
 }
 
-/// Trace: NFR-005-AC-3, NFR-005-M-2, TC-042. A hand-built `Unsupported` settlement carrying an
+/// A hand-built `Unsupported` settlement carrying an
 /// `invalid_capability` cause has no warning to name; each `unsupported_projection` cause still
 /// carries its warning.
+#[trace("NFR-005-AC-3", "NFR-005-M-2", "TC-042")]
 #[test]
 fn tc_042_ac3_an_unsupported_settlement_warns_only_for_an_unsupported_projection_cause() {
     let settle = |cause: Cause| ItemSettlement {

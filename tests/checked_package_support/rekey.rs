@@ -467,10 +467,13 @@ pub fn resolve_wire(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
+
     use super::*;
 
-    /// Trace: FR-021-AC-34, TC-031. A function key changes after its body application's
+    /// A function key changes after its body application's
     /// public candidate changes, and the caller application then consumes that function key.
+    #[trace("FR-021-AC-34", "TC-031")]
     #[test]
     fn interleaved_function_and_application_candidates_settle_before_reader() {
         let key = |code: u32| CheckedNodeId {
@@ -521,8 +524,9 @@ mod tests {
         assert_eq!(stable, settled);
     }
 
-    /// Trace: FR-037-AC-1, TC-052. A later non-application substitution
+    /// A later non-application substitution
     /// refreshes the dependent public application candidate.
+    #[trace("FR-037-AC-1", "TC-052")]
     #[test]
     fn application_candidates_converge_across_a_reference_chain() {
         let node_ref = |digest: &str| json!({"domain": NODE_DOMAIN, "digest": digest});
@@ -596,8 +600,9 @@ mod tests {
         );
     }
 
-    /// Trace: FR-037-AC-2, TC-052. Group identity uses the complete ordered
+    /// Group identity uses the complete ordered
     /// snapshot; an absent or partial context cannot supply the same candidate.
+    #[trace("FR-037-AC-2", "TC-052")]
     #[test]
     fn grouped_application_candidates_require_complete_context() {
         let node_ref = |digest: &str| json!({"domain": NODE_DOMAIN, "digest": digest});
@@ -683,8 +688,9 @@ mod tests {
         }
     }
 
-    /// Trace: FR-037-AC-1, TC-052. Rekeying changes digest order, while an authored
+    /// Rekeying changes digest order, while an authored
     /// out-of-order frame negative must still reach the reader unchanged.
+    #[trace("FR-037-AC-1", "TC-052")]
     #[test]
     fn frame_entry_rekey_sorts_only_authored_ordered_arrays() {
         let node = |entries: Vec<Value>| {
@@ -716,8 +722,9 @@ mod tests {
         );
     }
 
-    /// Trace: FR-037-AC-1, TC-052. A predecessor-first chain consumes each public
+    /// A predecessor-first chain consumes each public
     /// candidate within one changing graph pass and settles to those candidate IDs.
+    #[trace("FR-037-AC-1", "TC-052")]
     #[test]
     fn predecessor_first_candidates_settle_in_one_changing_pass() {
         let key = |code: u32| CheckedNodeId {
