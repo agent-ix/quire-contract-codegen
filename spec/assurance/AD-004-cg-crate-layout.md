@@ -1019,13 +1019,14 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
    - 4g: the corpus, retired per family in three slices with no compatibility wrapper and no second
      public generator (IR-598, FR-015-AC-109 to AC-111); step 4b (IR-858) gates every slice. The
-     arithmetic slice deletes the `Arithmetic` arm, `definedness_arithmetic.rs` and the corpus
+     arithmetic slice deletes the `Arithmetic` arm and `definedness_arithmetic.rs`; V2 does not
+     serve divide or remainder (div settles `Unsupported(OperationNotRendered)`, rem stays a
+     refused identity) until IR-854, which also owns `mod`. The collection slice, gated also on
+     step 4h, deletes the `Collection` arm and `bounded_collections.rs`. The graph slice, gated
+     on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
      replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
-     identity helpers in `replay/function.rs`) after a real-Kani V2 scalar replay test is green; V2
-     refuses divide and remainder (`NoRenderer`) until IR-854. The collection slice deletes the
-     `Collection` arm and `bounded_collections.rs`. The graph slice, gated on IR-805, deletes the
-     `Graph` arm, `finite_reference_graphs.rs`, the classifier and the whole public corpus API
-     with the generation-time `KaniOutcome`. Until a family's slice lands, that family's corpus arm stays as it is,
+     identity helpers in `replay/function.rs`, with their only caller) and the whole public
+     corpus API with the generation-time `KaniOutcome`, `census_validation.rs` included. Until a family's slice lands, that family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception

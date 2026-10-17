@@ -250,9 +250,9 @@ The views and decisions above state the target. At this revision:
 - `src/replay/witness.rs` decodes the playback into `qsl_replay::WitnessValue`; it imports no Contract IR witness type.
   The bounded-Kani corpus (`src/kani/generate/corpus/bounded_kani_corpus.rs`) generates and classifies cases and
   retains no counterexample packet. Its replay method (`BoundedCorpusCase::replay_counterexample`,
-  with `compile_corpus_qsl_package` in `src/replay/function.rs`) is live today and is dropped, not
-  re-homed, by the arithmetic retirement slice (FR-015-AC-109), which replaces it with a real-Kani V2
-  scalar counterexample replay test.
+  with `compile_corpus_qsl_package` in `src/replay/function.rs`) is live today, serves only its
+  graph and collection cases, and is dropped, not re-homed, by the final retirement slice
+  (FR-015-AC-111); the real-Kani replays of FR-015-AC-99 and FR-015-AC-106 replace it.
 - Function replay (`src/replay/function.rs`) decodes the persisted Kani playback, checks each
   decoded argument against its declared domain before replay, renders QSL's `Witness` and calls
   `qsl_replay::replay`. Its function path builds a replay request but no counterexample
