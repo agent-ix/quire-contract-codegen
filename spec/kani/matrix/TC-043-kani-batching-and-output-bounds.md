@@ -54,11 +54,13 @@ FR-028-AC-12, verified by TC-039.
     and without its `diagnostics`. Build two otherwise compatible requests with `home_directory` `/h/u` and
     `/h/v`, a pair with one absent, and a pair with both `/h/u`, and count the processes.
 12. (FR-017-AC-39; PLANNED/UNRUN, IR-827.) Run a batch stand-in of members `a::check`, `b::check`,
-    `c::check` and `d::check` that exits 1 with a report in the shape of a real batch report:
+    `c::check`, `d::check` and `e::check` that exits 1 with a report in the shape of a real batch report:
     `a::check` `Success` with a passing assertion, every cover satisfied and an `error_details`
     entry with no exit status; `b::check` `Failure` with no checks and exit status `exit_code_64`;
     `c::check` `Failure` with no checks and exit status `timeout`; and `d::check` `Failure` listing a
-    failed assertion, with no playback block headed for its path, and exit status `timeout`. Run the
+    failed assertion, with no playback block headed for its path, and exit status `timeout`; and
+    `e::check` `Failure` listing a failed assertion, with no playback block headed for its path,
+    and exit status `properties_failed`, the entry real Kani writes for a failed assertion. Run the
     same group again with two entries for `b::check`, one `timeout` and one `exit_code_64`.
 
 ## Expected Results
@@ -111,7 +113,9 @@ FR-028-AC-12, verified by TC-039.
     with `failureCause { kind: "exit_code", code: 64 }` and a `diagnostics` record of phase
     `unknown` holding the group's excerpts; `c::check` is inconclusive timed out naming T with no
     `failureCause` and no `diagnostics`; `d::check` is `FailedWithoutCounterexample` with
-    `failureCause { kind: "timeout" }` and a `diagnostics` record. With the two entries for
+    `failureCause { kind: "timeout" }` and a `diagnostics` record; `e::check` is
+    `FailedWithoutCounterexample` with `failureCause { kind: "properties_failed" }` and no
+    `diagnostics` member. With the two entries for
     `b::check`, `b::check` is inconclusive timed out with no `failureCause` (FR-017-AC-39).
 
 ## Implementation
