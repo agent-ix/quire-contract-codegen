@@ -563,17 +563,22 @@ fn finish_single(
 ) -> Result<ReportedExecution, KaniExecutionRefusal> {
     let harness = request.harness.view();
     let (run, exit_code, streams) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
-    let record = Record::of(&run, streams.as_ref(), &directories_of(request), |streams| {
-        process_output(
-            request,
-            streams,
-            std::slice::from_ref(&harness.selection),
-            &arguments,
-            report.is_some(),
-        )
-        .analyse()
-        .diagnostics_of(&harness.selection)
-    });
+    let record = Record::of(
+        &run,
+        streams.as_ref(),
+        &directories_of(request),
+        |streams| {
+            process_output(
+                request,
+                streams,
+                std::slice::from_ref(&harness.selection),
+                &arguments,
+                report.is_some(),
+            )
+            .analyse()
+            .diagnostics_of(&harness.selection)
+        },
+    );
     Ok(evidence_of(
         request, &harness, arguments, exit_code, run, None, record,
     ))
@@ -4477,6 +4482,494 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 format!("{BANNER}<HOME>/x\n")
             );
             assert_eq!(processes(None, None).0, 1);
+        }
+
+        /// The CBMC failure cause kept on `FailedWithoutCounterexample` evidence.
+        mod failure_cause {
+            use serde_json::{json, Value};
+
+            use super::*;
+            use crate::kani::terminal::run_terminal_value;
+
+            const NO_COUNTEREXAMPLE: KaniRunOutcome = KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::FailedWithoutCounterexample,
+            };
+            const CHECKING: &str = "Checking harness proofs::check...\n";
+            const HARNESS: &str = "proofs::check";
+
+            /// A one-harness report: the result's `harness_id`, its status and checks, and the
+            /// `error_details` member as given.
+            fn document(
+                harness_id: Option<&str>,
+                status: &str,
+                checks: &[(&str, &str)],
+                details: Option<Value>,
+            ) -> Vec<u8> {
+                let mut document: Value = serde_json::from_slice(&report(status, checks)).unwrap();
+                match harness_id {
+                    Some(id) => {
+                        document["verification_results"]["results"][0]["harness_id"] = json!(id)
+                    }
+                    None => {
+                        document["verification_results"]["results"][0]
+                            .as_object_mut()
+                            .unwrap()
+                            .remove("harness_id");
+                    }
+                }
+                if let Some(details) = details {
+                    document["error_details"] = details;
+                }
+                serde_json::to_vec(&document).unwrap()
+            }
+
+            fn entry_for(harness: &str, exit_status: Value) -> Value {
+                json!({ "harness_id": harness, "has_errors": true, "exit_status": exit_status })
+            }
+
+            /// A failure with no checks and the one entry for the harness stating `exit_status`.
+            fn failing_with(exit_status: &str) -> Vec<u8> {
+                document(
+                    Some(HARNESS),
+                    "Failure",
+                    &[],
+                    Some(json!([entry_for(HARNESS, json!(exit_status))])),
+                )
+            }
+
+            fn wire(evidence: &KaniExecutionEvidence) -> Value {
+                serde_json::to_value(evidence).unwrap()
+            }
+
+            fn has_member(evidence: &KaniExecutionEvidence, name: &str) -> bool {
+                wire(evidence).as_object().unwrap().contains_key(name)
+            }
+
+            /// The streams a CBMC failure leaves: Kani's line and CBMC's own message.
+            fn cbmc_failed(name: &str, report: &[u8]) -> StandIn {
+                printing(
+                    name,
+                    Some(report),
+                    &format!("{BANNER}{CHECKING}CBMC failed with status 64\n"),
+                    "Unknown option: --no-such-option\n",
+                    1,
+                )
+            }
+
+            /// A `FailedWithoutCounterexample` run keeps the cause the report states, and a
+            /// cause that names a CBMC failure brings the diagnostic record.
+            ///
+            /// Trace: FR-017-AC-37, TC-027
+            #[test]
+            fn tc_027_every_exit_status_gives_its_cause_and_a_diagnostic_record() {
+                let stand_in = cbmc_failed("cause-vocabulary", &failing_with("exit_code_64"));
+                let harness = proofs();
+                let evidence = run(&stand_in, &harness);
+                assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE);
+                assert_eq!(
+                    wire(&evidence)["failureCause"],
+                    json!({ "kind": "exit_code", "code": 64 })
+                );
+                let record = diagnostics(&evidence);
+                assert_eq!(record.phase, KaniFailurePhase::Unknown);
+                assert!(record
+                    .stderr
+                    .text
+                    .contains("Unknown option: --no-such-option"));
+                assert!(record.stdout.text.contains("CBMC failed with status 64"));
+
+                let crate_path = format!("{}/x", stand_in.crate_directory.display());
+                let long = "a".repeat(100);
+                let straddling = format!("{}\u{1f600}tail", "a".repeat(62));
+                let cases: Vec<(String, Value)> = vec![
+                    ("exit_code_15".into(), json!({ "kind": "exit_code", "code": 15 })),
+                    ("exit_code_0".into(), json!({ "kind": "exit_code", "code": 0 })),
+                    ("exit_code_-1".into(), json!({ "kind": "exit_code", "code": -1 })),
+                    (
+                        "exit_code_2147483647".into(),
+                        json!({ "kind": "exit_code", "code": 2_147_483_647 }),
+                    ),
+                    (
+                        "exit_code_-2147483648".into(),
+                        json!({ "kind": "exit_code", "code": -2_147_483_648_i64 }),
+                    ),
+                    ("out_of_memory".into(), json!({ "kind": "out_of_memory" })),
+                    ("timeout".into(), json!({ "kind": "timeout" })),
+                    (
+                        "cbmc_exploded".into(),
+                        json!({ "kind": "unknown", "exitStatus": "cbmc_exploded" }),
+                    ),
+                    ("a".repeat(64), json!({ "kind": "unknown", "exitStatus": "a".repeat(64) })),
+                    ("a".repeat(65), json!({ "kind": "unknown", "exitStatus": "a".repeat(64) })),
+                    (long, json!({ "kind": "unknown", "exitStatus": "a".repeat(64) })),
+                    (straddling, json!({ "kind": "unknown", "exitStatus": "a".repeat(62) })),
+                    (crate_path, json!({ "kind": "unknown", "exitStatus": "<CRATE_DIR>/x" })),
+                    (
+                        "x\u{1b}[31mred".into(),
+                        json!({ "kind": "unknown", "exitStatus": "xred" }),
+                    ),
+                    (
+                        "killed pid 4242 after 3.5s".into(),
+                        json!({ "kind": "unknown", "exitStatus": "killed pid <PID> after <DURATION>" }),
+                    ),
+                ]
+                .into_iter()
+                .chain(
+                    [
+                        "exit_code_",
+                        "exit_code_064",
+                        "exit_code_+64",
+                        "exit_code_-0",
+                        "exit_code_2147483648",
+                        "exit_code_64x",
+                        "EXIT_CODE_64",
+                    ]
+                    .map(|status| (status.to_owned(), json!({ "kind": "unknown", "exitStatus": status }))),
+                )
+                .collect();
+                for (status, expected) in cases {
+                    fs::write(
+                        stand_in.directory.join("report.json"),
+                        failing_with(&status),
+                    )
+                    .unwrap();
+                    let evidence = run(&stand_in, &harness);
+                    assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{status}");
+                    assert_eq!(wire(&evidence)["failureCause"], expected, "{status}");
+                    assert!(evidence.diagnostics.is_some(), "{status}");
+                }
+            }
+
+            /// A failed property keeps its cause and no record; a report naming no single entry
+            /// for the harness keeps neither.
+            ///
+            /// Trace: FR-017-AC-38, TC-027
+            #[test]
+            fn tc_027_a_failed_property_has_no_record_and_an_unnamed_entry_has_no_cause() {
+                let harness = proofs();
+                let failing = |details: Option<Value>, id: Option<&str>| {
+                    document(id, "Failure", &[FAILED], details)
+                };
+                let stand_in = printing("cause-property", Some(&[]), CHECKING, "", 1);
+                let run_with = |report: Vec<u8>| {
+                    fs::write(stand_in.directory.join("report.json"), report).unwrap();
+                    run(&stand_in, &harness)
+                };
+                let evidence = run_with(failing(
+                    Some(json!([entry_for(HARNESS, json!("properties_failed"))])),
+                    Some(HARNESS),
+                ));
+                assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE);
+                assert_eq!(
+                    wire(&evidence)["failureCause"],
+                    json!({ "kind": "properties_failed" })
+                );
+                assert!(!has_member(&evidence, "diagnostics"));
+
+                let exit_64 = entry_for(HARNESS, json!("exit_code_64"));
+                let silent: [(&str, Vec<u8>); 5] = [
+                    ("no error_details", failing(None, Some(HARNESS))),
+                    (
+                        "another harness only",
+                        failing(
+                            Some(json!([entry_for("other::check", json!("timeout"))])),
+                            Some(HARNESS),
+                        ),
+                    ),
+                    (
+                        "two entries",
+                        failing(Some(json!([exit_64.clone(), exit_64])), Some(HARNESS)),
+                    ),
+                    (
+                        "null exit_status",
+                        failing(
+                            Some(json!([entry_for(HARNESS, Value::Null)])),
+                            Some(HARNESS),
+                        ),
+                    ),
+                    (
+                        "no harness_id",
+                        failing(
+                            Some(json!([entry_for(HARNESS, json!("exit_code_64"))])),
+                            None,
+                        ),
+                    ),
+                ];
+                for (label, report) in silent {
+                    let evidence = run_with(report);
+                    assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{label}");
+                    assert!(!has_member(&evidence, "failureCause"), "{label}");
+                    assert!(!has_member(&evidence, "diagnostics"), "{label}");
+                }
+            }
+
+            /// An entry with `exit_code_64` beside any other outcome leaves that outcome as it
+            /// was and adds no cause: the cause is read only for `FailedWithoutCounterexample`.
+            ///
+            /// Trace: FR-017-AC-38, TC-027
+            #[test]
+            fn tc_027_the_cause_is_kept_for_no_other_outcome() {
+                let harness = proofs();
+                let with_entry = |status: &str, checks: &[(&str, &str)]| {
+                    document(
+                        Some(HARNESS),
+                        status,
+                        checks,
+                        Some(json!([entry_for(HARNESS, json!("exit_code_64"))])),
+                    )
+                };
+                let falsifying = block(HARNESS, "assertion", "falsify");
+                let cases: [(&str, Vec<u8>, &str, i32, fn(&KaniRunOutcome) -> bool); 6] = [
+                    (
+                        "verified",
+                        with_entry("Success", &[PASSED, COVER_OK]),
+                        "",
+                        0,
+                        |outcome| *outcome == KaniRunOutcome::Verified,
+                    ),
+                    (
+                        "cover-unsatisfied",
+                        with_entry("Success", &[PASSED, COVER_NO]),
+                        "",
+                        0,
+                        |outcome| matches!(outcome, KaniRunOutcome::CoverUnsatisfied { .. }),
+                    ),
+                    (
+                        "falsified",
+                        with_entry("Failure", &[FAILED, COVER_OK]),
+                        &falsifying,
+                        1,
+                        |outcome| matches!(outcome, KaniRunOutcome::Falsified { .. }),
+                    ),
+                    (
+                        "unwind bound exhausted",
+                        with_entry("Failure", &[("Failure", "unwind")]),
+                        "",
+                        1,
+                        |outcome| {
+                            *outcome
+                                == KaniRunOutcome::Inconclusive {
+                                    reason: KaniInconclusiveReason::UnwindBoundExhausted,
+                                }
+                        },
+                    ),
+                    (
+                        "no verdict: success beside exit 1",
+                        with_entry("Success", &[PASSED, COVER_OK]),
+                        "",
+                        1,
+                        |outcome| *outcome == NO_VERDICT,
+                    ),
+                    ("no verdict: no report", Vec::new(), "", 1, |outcome| {
+                        *outcome == NO_VERDICT
+                    }),
+                ];
+                for (label, report, console, exit, expected) in cases {
+                    let exported = (!report.is_empty()).then_some(report.as_slice());
+                    let stand_in = printing("cause-other-outcome", exported, console, "", exit);
+                    let evidence = run(&stand_in, &harness);
+                    assert!(
+                        expected(&evidence.outcome),
+                        "{label}: {:?}",
+                        evidence.outcome
+                    );
+                    assert!(!has_member(&evidence, "failureCause"), "{label}");
+                }
+
+                // A run stopped by the timeout or by the memory ceiling reads no report.
+                let stand_in = StandIn::scaffold("cause-stopped");
+                for (launch, expected) in [
+                    (LaunchOutcome::TimedOut, KaniInconclusiveReason::TimedOut),
+                    (
+                        LaunchOutcome::MemoryExhausted,
+                        KaniInconclusiveReason::MemoryExhausted,
+                    ),
+                ] {
+                    let reported = finish_single(
+                        &stand_in.request(&harness, T),
+                        Vec::new(),
+                        launch,
+                        Some(failing_with("exit_code_64")),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        reported.outcome,
+                        KaniRunOutcome::Inconclusive { reason: expected }
+                    );
+                    assert_eq!((reported.failure_cause, reported.diagnostics), (None, None));
+                }
+            }
+
+            /// A number and a lone surrogate escape as the exit status are still refused as
+            /// malformed, with no evidence; a string no vocabulary names never is.
+            ///
+            /// Trace: FR-017-AC-38, TC-027
+            #[test]
+            fn tc_027_a_malformed_exit_status_still_refuses_the_report() {
+                let harness = proofs();
+                let stand_in = printing("cause-malformed", Some(&[]), CHECKING, "", 1);
+                for literal in ["64", r#""\ud800""#] {
+                    let text = String::from_utf8(failing_with("timeout")).unwrap();
+                    let malformed = text.replace(r#""timeout""#, literal);
+                    assert_ne!(text, malformed);
+                    fs::write(stand_in.directory.join("report.json"), malformed).unwrap();
+                    let refusal =
+                        execute_kani_obligation(&stand_in.request(&harness, T)).unwrap_err();
+                    assert!(
+                        matches!(
+                            refusal,
+                            KaniExecutionRefusal::Report(KaniReportRefusal::Malformed { .. })
+                        ),
+                        "{literal}: {refusal:?}"
+                    );
+                }
+            }
+
+            /// A batch member keeps the cause beside the batch timeout rule.
+            ///
+            /// Trace: FR-017-AC-39, TC-043
+            #[test]
+            fn tc_043_batch_members_keep_their_cause_beside_the_timeout_rule() {
+                let members = ["a", "b", "c", "d", "e"].map(|module| member(module, "check", 4));
+                let entry_with = |id: &'static str, status, checks, exit_status| BatchEntry {
+                    harness_id: id,
+                    status,
+                    checks,
+                    exit_status,
+                };
+                let report = batch_report(&[
+                    entry_with("a::check", "Success", &[PASSED, COVER_OK], None),
+                    entry_with("b::check", "Failure", &[], Some("exit_code_64")),
+                    entry_with("c::check", "Failure", &[], Some("timeout")),
+                    entry_with("d::check", "Failure", &[FAILED], Some("timeout")),
+                    entry_with("e::check", "Failure", &[FAILED], Some("properties_failed")),
+                ]);
+                let stdout = format!("{BANNER}CBMC failed with status 64\n");
+                let stand_in =
+                    printing("cause-batch", Some(&report), &stdout, "Unknown option\n", 1);
+                let evidence = only_group(stand_in.batch(&members, T)).unwrap();
+                let causes: Vec<_> = evidence
+                    .iter()
+                    .map(|member| wire(member).get("failureCause").cloned())
+                    .collect();
+                assert_eq!(
+                    causes,
+                    [
+                        None,
+                        Some(json!({ "kind": "exit_code", "code": 64 })),
+                        None,
+                        Some(json!({ "kind": "timeout" })),
+                        Some(json!({ "kind": "properties_failed" })),
+                    ]
+                );
+                assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
+                assert_eq!(evidence[1].outcome, NO_COUNTEREXAMPLE);
+                assert_eq!(
+                    evidence[2].outcome,
+                    KaniRunOutcome::Inconclusive {
+                        reason: KaniInconclusiveReason::TimedOut
+                    }
+                );
+                assert_eq!(evidence[3].outcome, NO_COUNTEREXAMPLE);
+                assert_eq!(evidence[4].outcome, NO_COUNTEREXAMPLE);
+                assert_eq!(evidence[2].batch.as_ref().unwrap().timeout_seconds, 30);
+                for index in [1, 3] {
+                    let record = diagnostics(&evidence[index]);
+                    assert_eq!(record.phase, KaniFailurePhase::Unknown);
+                    assert_eq!(record.stdout.text, stdout);
+                    assert_eq!(record.stderr.text, "Unknown option\n");
+                }
+                for index in [0, 2, 4] {
+                    assert!(
+                        !has_member(&evidence[index], "diagnostics"),
+                        "member {index}"
+                    );
+                }
+            }
+
+            /// Two entries for `b::check`, one `timeout` and one `exit_code_64`: the timeout rule
+            /// reads the entries as before and the member is timed out with no cause.
+            ///
+            /// Trace: FR-017-AC-39, TC-043
+            #[test]
+            fn tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged() {
+                let members = ["a", "b"].map(|module| member(module, "check", 4));
+                let mut document: Value = serde_json::from_slice(&batch_report(&[
+                    BatchEntry {
+                        harness_id: "a::check",
+                        status: "Success",
+                        checks: &[PASSED, COVER_OK],
+                        exit_status: None,
+                    },
+                    BatchEntry {
+                        harness_id: "b::check",
+                        status: "Failure",
+                        checks: &[],
+                        exit_status: Some("timeout"),
+                    },
+                ]))
+                .unwrap();
+                document["error_details"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(entry_for("b::check", json!("exit_code_64")));
+                let report = serde_json::to_vec(&document).unwrap();
+                let stand_in = printing("cause-batch-two", Some(&report), BANNER, "", 1);
+                let evidence = only_group(stand_in.batch(&members, T)).unwrap();
+                assert_eq!(
+                    evidence[1].outcome,
+                    KaniRunOutcome::Inconclusive {
+                        reason: KaniInconclusiveReason::TimedOut
+                    }
+                );
+                assert!(!has_member(&evidence[1], "failureCause"));
+                assert!(!has_member(&evidence[1], "diagnostics"));
+            }
+
+            /// Three runs with the same failure report and different CBMC causes and streams
+            /// classify alike and have equal evidence outside the cause, the record, the memory
+            /// observation and the report path; each terminal value is `Failed`, as it is with
+            /// the cause and record absent.
+            ///
+            /// Trace: FR-017-AC-40, TC-027
+            #[test]
+            fn tc_027_the_cause_never_feeds_classification_or_the_terminal_value() {
+                let harness = proofs();
+                let mut stripped = Vec::new();
+                let stand_in = printing("cause-independent", Some(&[]), "", "", 1);
+                for (index, (status, stdout)) in [
+                    ("exit_code_64", "CBMC failed with status 64\n"),
+                    ("out_of_memory", "Killed\n"),
+                    ("cbmc_exploded", "something else entirely\n"),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    fs::write(stand_in.directory.join("report.json"), failing_with(status))
+                        .unwrap();
+                    stand_in.set_streams(stdout, &format!("stderr {index}\n"));
+                    let mut evidence = run(&stand_in, &harness);
+                    assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{status}");
+                    assert!(evidence.failure_cause.is_some() && evidence.diagnostics.is_some());
+                    let with_cause =
+                        run_terminal_value(&evidence.outcome, evidence.success_checks, None);
+                    evidence.failure_cause = None;
+                    evidence.diagnostics = None;
+                    let without =
+                        run_terminal_value(&evidence.outcome, evidence.success_checks, None);
+                    let (with_cause, without) = (with_cause.unwrap(), without.unwrap());
+                    assert_eq!(format!("{with_cause:?}"), "Failed");
+                    assert_eq!(with_cause, without);
+                    evidence.arguments.pop().expect("a report path");
+                    evidence.memory = stripped.first().map_or_else(
+                        || evidence.memory.clone(),
+                        |first: &KaniExecutionEvidence| first.memory.clone(),
+                    );
+                    stripped.push(evidence);
+                }
+                assert_eq!(stripped[0], stripped[1]);
+                assert_eq!(stripped[1], stripped[2]);
+            }
         }
     }
 }
