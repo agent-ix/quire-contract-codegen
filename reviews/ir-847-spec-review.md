@@ -63,3 +63,4 @@ Rechecked at frozen head 75a0bb88176666b785d64bf7496bb5bf768a713c (fix commit 58
 | FND-003 | fixed | verified in 58f8bbe at 75a0bb8 |
 | FND-004 | fixed | round 2: verified in a569513 |
 | FND-005 | still-open | round 2: AC-44 and TC-027 step 4 now freeze the mapping to class (fixed variants, each KaniRunOutcome/KaniInconclusiveReason/KaniFailureCause value for proof_not_verified, each nested refusal for kani_execution), but the stability contract at FR-017:676-678 is unchanged and still says 'A variant's class() never changes', which is false for ProofNotVerified and Kani. One-sentence fix: e.g. 'A variant's class, or for ProofNotVerified and Kani its mapping to class, never changes.' |
+| FND-005 | fixed | round 3: verified in 8b1ff2a |
