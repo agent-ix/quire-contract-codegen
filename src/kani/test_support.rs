@@ -186,3 +186,41 @@ pub(crate) fn discover_scratch(name: &str) -> PathBuf {
 use crate::kani::identity::ProofCeilings;
 #[path = "../../tests/common/proof_ceilings.rs"]
 pub(crate) mod proof_ceilings;
+
+/// Autoref probe: `implements_deserialize` is `true` through `Yes` only for a type that is
+/// `DeserializeOwned`, and `false` through `No` otherwise, with no dependency beyond serde.
+pub(crate) struct Probe<T>(pub(crate) std::marker::PhantomData<T>);
+
+pub(crate) trait Yes {
+    fn implements_deserialize(&self) -> bool;
+}
+
+impl<T: serde::de::DeserializeOwned> Yes for Probe<T> {
+    fn implements_deserialize(&self) -> bool {
+        true
+    }
+}
+
+pub(crate) trait No {
+    fn implements_deserialize(&self) -> bool;
+}
+
+impl<T> No for &Probe<T> {
+    fn implements_deserialize(&self) -> bool {
+        false
+    }
+}
+
+/// Whether `$type` implements `Deserialize`, decided by method resolution at the call site, so
+/// the macro's caller must have `Yes` and `No` in scope.
+macro_rules! implements_deserialize {
+    ($type:ty) => {{
+        // Exactly one of the two traits is chosen by resolution, so the other import is unused
+        // in each expansion.
+        #[allow(unused_imports)]
+        use $crate::kani::test_support::{No, Yes};
+        (&$crate::kani::test_support::Probe::<$type>(std::marker::PhantomData))
+            .implements_deserialize()
+    }};
+}
+pub(crate) use implements_deserialize;

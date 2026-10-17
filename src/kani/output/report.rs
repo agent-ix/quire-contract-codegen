@@ -644,8 +644,212 @@ impl KaniHarnessReport {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
+    use serde_json::json;
+
     use super::*;
     use ix_trace_rs::trace;
+    use crate::kani::test_support::implements_deserialize;
+
+    const CRATE_DIR: &str = "/h/u/ws/crate";
+
+    fn cause_of(exit_status: &str) -> serde_json::Value {
+        let directories = KnownDirectories {
+            crate_directory: Path::new(CRATE_DIR),
+            target_directory: Path::new("/h/u/ws/crate/target"),
+            home_directory: Some(Path::new("/h/u")),
+        };
+        serde_json::to_value(KaniFailureCause::from_exit_status(
+            exit_status,
+            &directories,
+        ))
+        .unwrap()
+    }
+
+    fn unknown(exit_status: &str) -> serde_json::Value {
+        json!({ "kind": "unknown", "exitStatus": exit_status })
+    }
+
+    /// A single-run report whose one result is `harness_id` and whose `error_details` is `details`.
+    fn report_with(harness_id: Option<&str>, details: Option<serde_json::Value>) -> Vec<u8> {
+        let mut result = json!({ "status": "Failure", "checks": [] });
+        if let Some(harness_id) = harness_id {
+            result["harness_id"] = json!(harness_id);
+        }
+        let mut document = json!({
+            "metadata": { "version": "1.0" },
+            "verification_results": { "results": [result] },
+        });
+        if let Some(details) = details {
+            document["error_details"] = details;
+        }
+        serde_json::to_vec(&document).unwrap()
+    }
+
+    fn exit_status_of(report: &[u8]) -> Option<String> {
+        KaniHarnessReport::parse(report).unwrap().exit_status
+    }
+
+    /// The vocabulary: each reserved status names its cause, `exit_code_<n>` keeps a canonical
+    /// signed 32-bit decimal as stated, and any other value is `unknown`.
+    ///
+    /// Trace: FR-017-AC-37, TC-027
+    #[test]
+    fn tc_027_the_exit_status_vocabulary_maps_to_its_causes() {
+        assert_eq!(
+            cause_of("properties_failed"),
+            json!({ "kind": "properties_failed" })
+        );
+        assert_eq!(cause_of("timeout"), json!({ "kind": "timeout" }));
+        assert_eq!(
+            cause_of("out_of_memory"),
+            json!({ "kind": "out_of_memory" })
+        );
+        for (status, code) in [
+            ("exit_code_64", 64_i64),
+            ("exit_code_15", 15),
+            ("exit_code_0", 0),
+            ("exit_code_-1", -1),
+            ("exit_code_2147483647", 2_147_483_647),
+            ("exit_code_-2147483648", -2_147_483_648),
+        ] {
+            assert_eq!(
+                cause_of(status),
+                json!({ "kind": "exit_code", "code": code }),
+                "{status}"
+            );
+        }
+        assert_eq!(cause_of("cbmc_exploded"), unknown("cbmc_exploded"));
+        for status in [
+            "exit_code_",
+            "exit_code_064",
+            "exit_code_+64",
+            "exit_code_-0",
+            "exit_code_2147483648",
+            "exit_code_-2147483649",
+            "exit_code_64x",
+            "exit_code_-",
+            "EXIT_CODE_64",
+        ] {
+            assert_eq!(cause_of(status), unknown(status), "{status}");
+        }
+    }
+
+    /// An unknown status is redacted and then cut to 64 bytes on a character boundary.
+    ///
+    /// Trace: FR-017-AC-37, TC-027
+    #[test]
+    fn tc_027_an_unknown_exit_status_is_redacted_and_cut_to_64_bytes_on_a_character() {
+        for (length, kept) in [(64, 64), (65, 64), (100, 64), (10, 10)] {
+            let status = "a".repeat(length);
+            assert_eq!(
+                cause_of(&status),
+                unknown(&"a".repeat(kept)),
+                "{length} bytes"
+            );
+        }
+        // The 64th byte falls inside a 4-byte character: the cut is before the character.
+        let straddling = format!("{}\u{1f600}tail", "a".repeat(62));
+        assert_eq!(cause_of(&straddling), unknown(&"a".repeat(62)));
+        let fitting = format!("{}\u{1f600}tail", "a".repeat(60));
+        assert_eq!(
+            cause_of(&fitting),
+            unknown(&format!("{}\u{1f600}", "a".repeat(60)))
+        );
+        assert_eq!(cause_of("/h/u/ws/crate/x"), unknown("<CRATE_DIR>/x"));
+        assert_eq!(cause_of("x\u{1b}[31mred\u{1b}[0m"), unknown("xred"));
+        assert_eq!(
+            cause_of("killed pid 4242 after 3.5s"),
+            unknown("killed pid <PID> after <DURATION>")
+        );
+    }
+
+    /// The reported exit status is the one of the single entry that names the result's harness.
+    ///
+    /// Trace: FR-017-AC-38, TC-027
+    #[test]
+    fn tc_027_the_exit_status_is_read_only_from_the_one_entry_naming_the_harness() {
+        let entry = |harness: &str, status: serde_json::Value| json!({ "harness_id": harness, "exit_status": status });
+        let status = |details: Option<serde_json::Value>, harness: Option<&str>| {
+            exit_status_of(&report_with(harness, details))
+        };
+        let named = Some("m::h");
+        assert_eq!(
+            status(Some(json!([entry("m::h", json!("exit_code_64"))])), named).as_deref(),
+            Some("exit_code_64")
+        );
+        assert_eq!(status(None, named), None, "no error_details member");
+        assert_eq!(status(Some(json!([])), named), None, "no entry");
+        assert_eq!(
+            status(Some(json!([entry("n::g", json!("timeout"))])), named),
+            None,
+            "an entry for another harness"
+        );
+        assert_eq!(
+            status(
+                Some(json!([
+                    entry("m::h", json!("timeout")),
+                    entry("m::h", json!("exit_code_64"))
+                ])),
+                named
+            ),
+            None,
+            "two entries"
+        );
+        assert_eq!(
+            status(Some(json!([entry("m::h", json!(null))])), named),
+            None
+        );
+        assert_eq!(
+            status(
+                Some(json!([{ "harness_id": "m::h", "has_errors": false }])),
+                named
+            ),
+            None,
+            "an entry with no exit status"
+        );
+        assert_eq!(
+            status(Some(json!([entry("m::h", json!("timeout"))])), None),
+            None,
+            "a result with no harness_id"
+        );
+    }
+
+    /// A number and a lone surrogate escape are refused as malformed; any other string is read.
+    ///
+    /// Trace: FR-017-AC-38, TC-027
+    #[test]
+    fn tc_027_a_number_or_lone_surrogate_exit_status_is_still_malformed() {
+        let with = |literal: &str| {
+            format!(
+                r#"{{"metadata":{{"version":"1.0"}},"error_details":[{{"harness_id":"m::h","exit_status":{literal}}}],"verification_results":{{"results":[{{"harness_id":"m::h","status":"Failure","checks":[]}}]}}}}"#
+            )
+        };
+        for literal in ["64", r#""\ud800""#] {
+            assert!(
+                matches!(
+                    KaniHarnessReport::parse(with(literal).as_bytes()),
+                    Err(KaniReportRefusal::Malformed { .. })
+                ),
+                "{literal}"
+            );
+        }
+        let read = KaniHarnessReport::parse(with(r#""\u00e9""#).as_bytes()).unwrap();
+        assert_eq!(read.exit_status.as_deref(), Some("\u{e9}"));
+    }
+
+    /// The cause has the stated wire shape and implements no deserialization.
+    ///
+    /// Trace: FR-017-AC-38, TC-027
+    #[test]
+    fn tc_027_the_cause_implements_no_deserialize() {
+        assert!(
+            implements_deserialize!(String),
+            "the probe sees a Deserialize impl"
+        );
+        assert!(!implements_deserialize!(KaniFailureCause));
+    }
 
     /// `Other` cannot shadow the named classes: a spelling of `cover` or `unwind` is always that
     /// class, so its serialized form, its equality and its counting agree.

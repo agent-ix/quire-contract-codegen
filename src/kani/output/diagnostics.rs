@@ -588,6 +588,7 @@ mod tests {
     use ix_trace_rs::trace;
 
     use super::*;
+    use crate::kani::test_support::implements_deserialize;
 
     const HOME: &str = "/h/u";
 
@@ -1002,36 +1003,6 @@ mod tests {
         assert_eq!(record.phase, KaniFailurePhase::Solver);
         assert!(record.stdout.omitted_bytes > 0);
         assert!(!record.stdout.text.contains("Solving with"));
-    }
-
-    /// Autoref probe: `implements_deserialize` is `true` through `Yes` only for a type that is
-    /// `DeserializeOwned`, and `false` through `No` otherwise, with no dependency beyond serde.
-    struct Probe<T>(std::marker::PhantomData<T>);
-
-    trait Yes {
-        fn implements_deserialize(&self) -> bool;
-    }
-
-    impl<T: serde::de::DeserializeOwned> Yes for Probe<T> {
-        fn implements_deserialize(&self) -> bool {
-            true
-        }
-    }
-
-    trait No {
-        fn implements_deserialize(&self) -> bool;
-    }
-
-    impl<T> No for &Probe<T> {
-        fn implements_deserialize(&self) -> bool {
-            false
-        }
-    }
-
-    macro_rules! implements_deserialize {
-        ($type:ty) => {
-            (&Probe::<$type>(std::marker::PhantomData)).implements_deserialize()
-        };
     }
 
     /// The record and its parts implement no deserialization, so Kani output can never be
