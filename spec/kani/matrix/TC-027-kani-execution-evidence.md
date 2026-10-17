@@ -457,7 +457,7 @@ paths are exactly the AC-46 set in UTF-8 byte order, with the library under
 duplicate and one-byte-change each entry in turn and require a different digest; through a test
 seam that writes non-UTF-8 bytes to the snapshot's `Cargo.lock` (and again to the adapter) after
 it is generated, require `Snapshot`, `snapshot_io`, `EnvironmentFault`, and no receipt. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
-value and require equal `DigestRecord`s. (4) Recompute from only the exposed entries, including
+value and require equal `DigestRecord`s. (4a) After the receipt is built, overwrite each snapshot file with different bytes and then delete the snapshot directory; require the exposed entries and the digest to be byte-identical to those read before the mutation and to still recompute (a mutation test, not a source scan). (4) Recompute from only the exposed entries, including
 `Cargo.lock` and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
 package, harness or record and require inequality. (5) Compute a golden digest with the measurement function over fixed literal entries, including a
 literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema string, golden)` in one
