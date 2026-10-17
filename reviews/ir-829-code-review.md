@@ -36,3 +36,9 @@ PASS. Only comments changed, and every edited line keeps the repo's `Trace:` tag
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-002 | low | `real_backup_cleanup_failure_reports_published_with_both_new_artifacts` assumes a non-root runner: as root the 0o555 directory does not stop `remove_dir_all`, publication succeeds and `result.unwrap_err()` panics. It is `#[cfg(unix)]` only, with no skip or note for a privileged (for example container-as-root) run. On any assertion failure it also leaves its temp dir behind (permissions are restored first, so it is removable), as the file's other tests do. | src/publication/publish.rs:443-486 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | Round 2: an `UnlockOnDrop` guard restores 0o755 recursively (it does not follow symlinks) and removes the tree on drop, including while a panic unwinds. The test returns early with a message when a probe write into the 0o555 directory succeeds (root). Ran 9 times as uid 1000: passes, never skips, leaves no `/tmp/quire-publication-real*` dir. A deliberately failing run (state-assignment mutation) also left none. The earlier stale dirs are gone. |
