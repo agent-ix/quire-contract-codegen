@@ -118,4 +118,11 @@ records the architecture boundary.
 - **Related**: [FR-014](./FR-014-exact-scalar-oracles.md) for checked-package
   text comparison. QSL-694 explores text-to-number parsing inside a term; it
   does not gate this caller-ingress operation.
+- **Proof cost**: FR-035-AC-4 and FR-035-AC-5 depend on Contract Runtime's
+  Text admission and metering path completing in Kani within the published
+  1 GiB ceiling under `--unwind 8`. IR-796 measured that it does not, for any
+  harness shape that keeps these criteria. The disposition and its next owner
+  are recorded in TC-050's Measured Proof-Bound Disposition section. The
+  criteria are unchanged and stay planned and unrun until that dependency is
+  met.
 - **Verification**: [TC-050](../matrix/TC-050-caller-text-admission.md).
