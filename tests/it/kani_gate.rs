@@ -133,7 +133,12 @@ fi
     }
 
     fn gate_with_cargo(&self, cargo: &str) -> Command {
-        let mut command = self.command("scripts/kani_gate.sh");
+        // The gate clears and the stand-in cargo writes its claim evidence
+        // relative to the working directory, so it runs inside the sandbox
+        // rather than the shared checkout.
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_gate.sh");
+        let mut command = self.command(script.to_str().expect("UTF-8 gate script path"));
+        command.current_dir(&self.root);
         command.args([
             self.root
                 .join("lane.lock")
@@ -310,7 +315,8 @@ fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
     assert!(!output.status.success(), "{}", stdout(&output));
     assert!(sandbox.marker(), "fake executable reached run phase");
     assert!(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
+        sandbox
+            .root
             .join("target-codex-backends/ir19-claim-crate/original-0-report.json")
             .exists(),
         "stand-in wrote a nonempty report before rejection"
@@ -348,8 +354,9 @@ fn gate_waits_for_the_existing_lock_holder() {
         .spawn()
         .expect("start waiting gate");
     let needle = format!(
-        "flock -x {} /usr/bin/bash scripts/kani_gate.sh",
-        lock.display()
+        "flock -x {} /usr/bin/bash {}/scripts/kani_gate.sh",
+        lock.display(),
+        env!("CARGO_MANIFEST_DIR")
     );
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {

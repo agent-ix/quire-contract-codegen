@@ -66,7 +66,7 @@ if [[ -n $before_tree ]]; then
     result failed 0 0 "$version" dirty
     exit 1
 fi
-if ! freshness=$(/usr/bin/bash scripts/kani_scope.sh --main-freshness); then
+if ! freshness=$(/usr/bin/bash "$(dirname -- "$0")/kani_scope.sh" --main-freshness); then
     printf 'kani-gate: source stale against origin/main (%s)\n' "${freshness//$'\n'/, }" >&2
     result failed 0 0 "$version" clean
     exit 1
