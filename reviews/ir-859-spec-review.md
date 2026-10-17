@@ -25,3 +25,19 @@ Two medium defects remain. First, the AC-99 cell cites the IR-268 run on `a5221e
 ## Verdict
 
 The flips are mostly honest and well cited. The AC-96 and AC-97 rows match their tests clause by clause. The graph carve-outs on AC-100, -101 and -102 are correct, because every graph claim settles unsupported today. AC-98 is untouched and PLANNED. The AC-96 uniqueness-by-refusal note is disclosed honestly. Fix FND-001 and FND-002, which are spec-text changes only, before merge. Not mergeable at 86d63d3.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | AC-96 still reads IMPLEMENTED, but its own cell now says "no AC-96-tagged test backs the uniqueness clause". The planner rule on IR-859 is to flip an AC to implemented only where a tagged, passing test backs it. The fix round applied that rule to AC-100 and AC-101 and marked them PARTIAL; applied the same way, AC-96 is PARTIAL. Mark AC-96 PARTIAL, naming the uniqueness clause as backed only by AC-97's refusal (:1461, tagged AC-97/AC-102). Mirror the change in the FR-015 IR-268 paragraph (:95-98), tests.md :34 and :95, and TC-025. The alternative is to tag :1461 with FR-015-AC-96 in a code follow-up and keep the row PARTIAL until that tag lands. | FR-015-AC-96 (spec/kani/functional/FR-015-bounded-kani-obligations.md:781; :95-98; spec/kani/matrix/tests.md:34, :95) |
+| FND-005 | medium | AC-99 still reads IMPLEMENTED, but its own cell now says that the symbolic-draw, cover-after-assertions and no-`Vec<i128>` clauses are asserted only by :975 and :1346, which are tagged FR-015-AC-96 and FR-015-AC-100, and that "no AC-99-tagged test asserts them". Under the same rule, and for consistency with the PARTIAL marks on AC-100 and AC-101, AC-99 is PARTIAL until :975 (or :1346) carries the FR-015-AC-99 tag. Mark it PARTIAL and mirror the change in :95-98, tests.md :34 and :95, and TC-025. | FR-015-AC-99 (spec/kani/functional/FR-015-bounded-kani-obligations.md:784; :95-98; spec/kani/matrix/tests.md:34, :95) |
+| FND-006 | low | The AC-101 row contradicts itself and misattributes a gap. It opens with "IMPLEMENTED for the collection family", while the FR-015 paragraph, tests.md and the row's own later text call AC-101 PARTIAL. It cites :1608 twice. It attaches :1137 to the representational-ceiling gap, but :1137 is the missing-or-malformed-declaration evidence. By the cell's own account, :1137 asserts helper-internal behaviour, not the disposition or that no harness is emitted, so the declaration clause is unbacked too, and nothing in the cell says so. Lead the row with PARTIAL, cite :1608 once, and name both unbacked collection clauses (representational ceiling and missing or malformed declaration). | FR-015-AC-101 (spec/kani/functional/FR-015-bounded-kani-obligations.md:786) |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified at d88d975: AC-99 now cites the IR-268 close-out run on f43adca (code 9c5f291, same tree as fe20ecc), 1 passed, exit 0, 94 SUCCESS / 93 SUCCESS + 1 FAILURE, CaDiCaL 3.0.0; a5221e1 removed from FR-015, tests.md and TC-025 (round 1) |
+| FND-002 | fixed | Verified at d88d975: AC-100 is PARTIAL, the version and option clause is PLANNED with the missing KaniExecutionEvidence fields named, and tests.md :34/:95 and TC-025 mirror it (round 1) |
+| FND-003 | fixed | Verified at d88d975: the redundant "kani lane: make kani-gate" clause is removed (round 1) |

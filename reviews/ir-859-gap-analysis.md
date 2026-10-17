@@ -23,3 +23,11 @@ Ticket: IR-859. Plan completion: not assessed. The review was planless and read-
 ## Verdict
 
 The verification is sound for AC-96, AC-97 and the collection families of AC-100, -101 and -102. AC-99 is backed, including native replay and the Kani lane. The three low findings are citation and tag gaps; none is unbacked behaviour. These findings alone would not block merge. See SR-12210 for the two medium findings.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified at d88d975: the AC-99 cell now cites :975 and :1346 for the cover-after-assertions and symbolic-draw clauses and states they are not AC-99-tagged; the status consequence is SR-12210 FND-005 (round 1) |
+| FND-002 | fixed | Verified at d88d975: the AC-96 cell now states that the uniqueness clause is backed only by refusal at :1461, which is tagged AC-97/AC-102, not AC-96; the status consequence is SR-12210 FND-004 (round 1) |
+| FND-003 | fixed | Verified at d88d975: :1675 is qualified as upstream evidence and collection.rs:1070 is named as the untagged generator control, with tagging recorded as a follow-up; the remaining inconsistency in the row is SR-12210 FND-006 (round 1) |

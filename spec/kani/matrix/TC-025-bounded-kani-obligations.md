@@ -68,7 +68,7 @@ run evidence, including actual Kani, Rust and solver versions. The collection-fa
 mutant `Falsified` (93 SUCCESS and 1 FAILURE), per IR-268's close-out at PR head f43adca.
 The graph family stays planned (IR-805). The FR-017 run-evidence version check is
 planned (`KaniExecutionEvidence` has no Kani, Rust or solver version field), and the
-representational-ceiling refusal has no tagged test. The finite-input
+representational-ceiling and malformed-declaration refusals have no tagged test. FR-015-AC-96 (uniqueness) and FR-015-AC-99 (symbolic-draw, cover and no-`Vec<i128>` clauses) are backed only by tests tagged for other ACs, so they are partial. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
 For the graph family (IR-805), author a QSL unit whose model has an object
