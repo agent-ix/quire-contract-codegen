@@ -52,3 +52,10 @@ falsifiable. Its real-lane half is FND-001. The AC-19 matrix correction was chec
 
 Needs changes: one high (the real-lane AC is infeasible as written) and one medium (untested
 acceptance boundaries).
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 8ad2cc6: AC-40 and TC-027 use [package.metadata.kani] unstable = { unstable-options = true } with flags = { cbmc-args = ["--no-such-option"] }, the option vector unchanged. This is identical to the reviewer's measured r4 run (Kani 0.68.0: exit 1, report exit_code_64, stderr 'Unknown option: --no-such-option'). TC-027 also explains why appending the option to the vector fails. |
+| FND-002 | fixed | 8ad2cc6: AC-37 and TC-027 add exit_code_2147483647, exit_code_-2147483648, and 64-, 65- and 100-byte ASCII values. |

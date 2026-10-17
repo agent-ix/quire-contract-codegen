@@ -37,3 +37,17 @@ check-count guard means a timed-out member never also gets a cause.
 
 Needs changes, documentation only: name the OOM/timeout terminal-value split as a known limitation
 with a follow-up, and close the surrogate/redaction edge.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-004 | low | Rule 5 applies 'excerpt steps 2 and 3 of Excerpts below', but Excerpts is above (line 429). Its parenthetical sums up step 3 as 'redaction against the request's directories', while step 3 (lines 435-437) also redacts RFC 3339 date-times, durations and process identities. AC-37 tests only the crate-directory path and the ANSI escape, so an implementation that redacts only directories passes. Scenario: an unknown status `killed pid 4242` comes out as `killed pid <PID>` from one implementation and verbatim from another. Change 'below' to 'above', make the parenthetical name all of step 3 (or restrict it to paths on purpose), and add a duration or PID case to AC-37. | spec/kani/functional/FR-017-kani-execution-evidence.md:540-544, 429-438 | wrong-requirement |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 8ad2cc6: rationale at FR-017:590-599 names the out_of_memory Failed vs MemoryExhausted Incomplete split. Naming it was what this spec finding asked for; the classification question is routed to the planner (no ticket id is cited in the spec, which is acceptable for a rationale note). |
+| FND-002 | fixed | 8ad2cc6: the same rationale names the single-run/batch timeout split and says a single run reaches it only through a caller option. |
+| FND-003 | fixed | 8ad2cc6: the refusal rule (:571-575) now says a number or a lone-surrogate string is refused as malformed. That is honest: serde_json 1.0.151 parse_unicode_escape errors with LoneLeadingSurrogateInHexEscape when deserializing into String. AC-38 tests \ud800. The unknown exitStatus now gets excerpt steps 2-3 (:540-544), and AC-37 tests a path and an ANSI case. Residual wording is FND-004. |
