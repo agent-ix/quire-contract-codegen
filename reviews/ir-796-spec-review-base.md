@@ -40,3 +40,12 @@ Base checklist over the four-file IR-796 disposition diff. AC wording is unchang
 ## Verdict
 
 Changes requested. Criteria are preserved and uncredited, and make spec passes, but FND-001 is a high checklist violation.
+
+## Dispositions
+
+Round 1, reviewed at b94bdd4e7f8d15e1d317391ac0fe07fd93bc9a02.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
