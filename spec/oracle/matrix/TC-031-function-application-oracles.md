@@ -15,8 +15,8 @@ relationships:
 Verify CG's target-neutral function-body graph analysis, flat SSA schedule,
 caller-selected work and source-byte limits, compact location records, typed
 refusals and deterministic claim ordering. Concrete oracle execution is a
-separate planned leg against the QSL-owned application API after
-QSL-358/IR-349. The old Contract Runtime `exact` corpus remains historical
+separate leg that CG does not claim: QSL exports no application API through
+qsl-replay (IR-845). The old Contract Runtime `exact` corpus remains historical
 evidence for the behavioral obligations retained in FR-021; it is not a
 required dependency or target path.
 
@@ -81,15 +81,14 @@ required dependency or target path.
    chain, assert exactly 100,000 constant-size parent-linked records, no eager
    full paths, and linear source/map size. Query its deepest path with
    sufficient work and byte limits and compare all 100,000 ordinals; one
-   query unit less refuses without a partial path. Independently compare the
-   origin with the QSL-owned checker's refusal when that API exists
-   (AC-15, AC-17 and AC-29; origin cross-check PLANNED QSL-358/IR-349).
+   query unit less refuses without a partial path. The origin cross-check against a
+   QSL-owned checker's refusal is outside CG's boundary (AC-15, AC-17 and
+   AC-29; IR-845).
 7. On a shallow body with separately observable left and right charge
    points, inspect branch/stop instructions. A denied left charge must branch
    out before any right charge, and an admitted left charge must precede the
-   right and parent operation. The eventual concrete oracle shall be run
-   with both denial injections and compared with an independently assembled
-   shallow body (AC-5, AC-9 and AC-26; execution PLANNED QSL-358/IR-349).
+   right and parent operation. Running a concrete oracle with both denial
+   injections is outside CG's boundary (AC-5, AC-9 and AC-26; IR-845).
 8. Reuse the six duplicate-declaring-node fixtures and permutations of
    FR-021-AC-22: both admissible; one Stage-1 refusal; shared name plus a
    distinct-node declaration; a nested caller; two duplicate groups holding
@@ -115,25 +114,18 @@ required dependency or target path.
     for the panic tokens AC-19 and AC-21 forbid, and assert `Negate` has no
     schedule root. The schedule and claim/location maps shall not read or
     depend on dynamic invocation location or losses (AC-16, AC-19 to AC-21).
-11. After QSL-358/IR-349 publishes its callable and admission API, emit the
-    concrete owner-path crate from the same schedule, compile it, and execute
-    both the main corpus and the 100,000-node case on a 512 KiB stack under
-    caller limits raised to fit. Compare outcomes, typed input refusals,
-    charge sequences and consumed counters with an independent application
-    assembled from the request, never read back from generated code (AC-2,
-    AC-3), and with the shallow equivalent for the deep case (AC-31); no
-    comparison with a QSL-owned package runs here (outside CG's boundary, owned
-    by quire-integration IR-842; FR-014-AC-47); deny each charge in turn and
-    assert `Incomplete` before the denied charge. Inspect linked-mode
-    admission, no kernel-mode application, exhaustive owner-result handling,
-    no literal outcomes/charges and no dependence on dynamic location/losses.
-    This is the distinct PLANNED execution gate for AC-2, AC-4, AC-5, AC-8,
-    AC-9, AC-16, AC-17, AC-19, AC-20, AC-26 and AC-31; schedule compilation in step
-    5 does not satisfy it.
-12. Inspect the schedule crate and eventual owner-path emission for any
-    `quire_contract_runtime::exact` dependency, alias, wrapper or compatibility
-    surface. Assert none is required. The owner-path leg remains PLANNED until
-    QSL-358/IR-349 defines the API (AC-32).
+11. Inspect (AC-31, FR-014-AC-47): QSL exports no callable application API
+    through qsl-replay, so CG emits and runs no concrete owner-path oracle
+    (IR-845). Scan the 100,000-node case's test names, `Trace:` tags, output
+    lines and doc comments, this procedure's steps and the FR-021 rows of the
+    oracle matrix; none may claim, or present as evidence, that a generated
+    oracle compiled, ran or agreed against a QSL application API. Schedule
+    compilation in step 5 is not execution evidence. Linked-mode admission
+    (AC-8), no kernel-mode application and no literal outcomes/charges (AC-14)
+    are inspected on the schedule and generated source.
+12. Inspect the schedule crate for any `quire_contract_runtime::exact`
+    dependency, alias, wrapper or compatibility surface. Assert none is
+    required. CG emits no owner-path oracle (AC-32, IR-845).
 12a. Inspect (AC-18, FR-014-AC-47): scan the function-application corpus's test
     names, `Trace:` tags, output lines and doc comments, this procedure's steps
     and the FR-021 rows of the oracle matrix. None may claim, or present as
@@ -176,7 +168,7 @@ required dependency or target path.
     Keep step 10's actual Scalar/Equality and call-item lowering failures as
     negative controls; keep step 2's malformed source edges and AC-27 typed
     refusals as separate negative controls. This is a public strict-reader
-    case, not step 1's lowered-graph seam or step 11's planned owner execution.
+    case, not step 1's lowered-graph seam or step 11's inspection.
 
 ## Verification Status
 
@@ -194,7 +186,7 @@ source-byte limits on a small stack, compiles as a schedule crate and has no
 depth refusal. The first denied work or byte charge refuses before action or
 partial publication. Existing duplicate, unknown-name, lowering and blocker
 precedence remains testable. Concrete QSL-owner-path compilation and execution
-is a separate planned gate; no Contract Runtime `exact` path is required.
+is outside CG's boundary (IR-845); no Contract Runtime `exact` path is required.
 
 Direct formula, fairness and case requests have one typed unsupported claim
 per affected call item, retaining the call request's identity separately from
