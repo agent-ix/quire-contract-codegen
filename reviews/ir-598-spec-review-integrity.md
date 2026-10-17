@@ -37,3 +37,4 @@ The arithmetic and collection arm lists match the code: lower/definedness_arithm
 | FND-001 | fixed | Verified at 455b1b1 (round 1) |
 | FND-002 | fixed | Verified at 455b1b1 (round 1) |
 | FND-003 | fixed | Verified at 455b1b1 (round 1) |
+| FND-004 | fixed | Verified at b682a3c (round 2) |
