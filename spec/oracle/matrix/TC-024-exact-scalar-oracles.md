@@ -45,20 +45,26 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    generate from the derived items and read each claim's provenance. Derive
    every overloaded identity (`rational.div` over integers and over rationals,
    `numeric.convert_rounding`); derive every `quantity.convert` node of the corpus
-   (each carries the `exact` mode its unit type pins) and check it is refused as
-   `QuantityConversionUnsupported` with the named capability and no descriptor;
-   request each of them under caller-declared descriptors, through
-   `generate_routed`, through Kani obligation negotiation and through capability
-   settlement, and check the same refusal and an empty artifact set: the
-   generated crate defines no oracle function and no harness is emitted
-   (FR-014-AC-2). Check that the function-application generator and the function schedules refuse a
-   conversion reached from a body, a call or a call argument with the named
-   capability, and that the composite-equality generator refuses a conversion root as
-   `FormMismatch` and a conversion operand as an unsupported quantity, each
-   before any artifact.
-   The TC-187 vectors that convert a quantity have no oracle and are not
-   agreement rows; check that every agreement row of step 4 compares at least
-   one vector. Derive nodes that are not applications, carry no identity, name an
+   (each carries the `exact` mode its unit type pins) and check each derives an
+   `ir_confirmed` descriptor and generates an oracle that calls `convert_quantity`
+   with `QuantityTarget::Exact` and returns a `Quantity` in the `type_argument`
+   unit, never a scalar (FR-014-AC-48, FR-014-AC-50). Run the conversion vectors
+   (U01, U04 `degC` to `K`, U10, U15, U26 and the other positive conversions
+   of FR-014-AC-6) and the `ill_typed` vectors (`1 m` to `s`, U09, `1 N_m` to `J`),
+   and check each outcome, admitted charges and consumed counters equal direct
+   `convert_quantity` execution, with zero charges and no counter change for
+   `ill_typed` (FR-014-AC-49). Request the same nodes under caller-declared
+   descriptors, through `generate_routed` and through Kani obligation
+   negotiation, and check capability settlement reports `OperationNotRendered`
+   (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
+   function-application generator and the function schedules accept a
+   conversion reached from a body, a call or a call argument as a quantity
+   operation, and that the composite-equality generator refuses a conversion
+   root as `FormMismatch` and a conversion operand as an unsupported quantity,
+   each before any artifact.
+   The TC-187 conversion vectors are agreement rows (FR-014-AC-6) except
+   U25's compound-target first step (IR-831); check that every agreement row of
+   step 4 compares at least one vector. Derive nodes that are not applications, carry no identity, name an
    identity outside the derivable set, or carry a law, mode, operand forms or
    bound that select no parameter (FR-014-AC-18).
    Keep the six `TextAdmission` fixtures in the refused corpus and check that
