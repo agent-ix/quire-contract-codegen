@@ -53,3 +53,13 @@ Disposition pass 1, over e3f3375.
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | deferred: IR-834 | Converted in e3f3375: bound_coverage.rs, bound_generation.rs, capability_settlement.rs, exact_function_generation.rs (both sites), scratch_crate.rs:151 and src/kani/test_support.rs, where discover_scratch now sits under <target>/tmp/quire-kani-discover/ with a dead-pid sweep. The remaining sites, kani_obligations.rs:2096 and :2759, kani_witness_join.rs:240, kani_batching.rs:113 and kani_generation_claims.rs:767, sit in files owned by CG #406 and adjacent to IR-808. They moved to the linked subticket IR-834, whose acceptance names each site. The PR title should narrow to match. |
+
+Disposition pass 2, at head 102dfa9 (it only copies the round-1 SR files into reviews/; those
+copies match the round-1 scratchpad files byte for byte). The PR title now reads "IR-821: most
+tests/it scratch crates and src/kani test support live under the target dir and are reclaimed
+after killed runs (rest: IR-834)", which resolves the title point recorded in FND-001's round-1
+row.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | deferred: IR-834 | IR-834 comment 67c0a0a8 adds all four src/ sites: src/oracle/equality/mod.rs:2873, src/oracle/function/schedule.rs:1277, src/publication/publish.rs:273 and src/kani/run/scalar.rs:1052 (the last in CG #406's lane). The same reclaim rule as discover_scratch applies: the target directory found from current_exe, plus a dead-pid sweep. |
