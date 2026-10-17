@@ -140,8 +140,8 @@ pub use kani::output::diagnostics::{
     KaniFailurePhase, KaniNoVerdictDiagnostics, KaniStreamExcerpt,
 };
 pub use kani::output::report::{
-    KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniReportRefusal,
-    OtherCheckClass,
+    KaniCheckClass, KaniCheckLocation, KaniCheckResult, KaniCheckStatus, KaniFailureCause,
+    KaniReportRefusal, OtherCheckClass,
 };
 pub use kani::run::execute::{
     execute_kani_obligation, execute_kani_obligations, KaniBatchInvocation, KaniExecutionEvidence,

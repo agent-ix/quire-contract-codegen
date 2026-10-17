@@ -18,6 +18,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use super::diagnostics::{redact_text, KnownDirectories};
+
 /// The report schema version this module reads (`metadata.version`).
 const SUPPORTED_REPORT_VERSION: &str = "1.0";
 
@@ -292,6 +294,10 @@ pub(crate) struct KaniHarnessReport {
     pub(crate) status: KaniHarnessStatus,
     /// Every check, in the order Kani listed them.
     pub(crate) checks: Vec<KaniCheckResult>,
+    /// The `exit_status` of the one `error_details` entry that names this harness. Absent when no
+    /// entry or more than one names it, when the result names no `harness_id`, and when the
+    /// entry states none. Classification never reads it.
+    pub(crate) exit_status: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -313,6 +319,7 @@ impl TryFrom<RawHarness> for KaniHarnessReport {
                 .into_iter()
                 .map(KaniCheckResult::try_from)
                 .collect::<Result<_, _>>()?,
+            exit_status: None,
         })
     }
 }
@@ -332,8 +339,113 @@ struct RawErrorDetail {
     exit_status: Option<String>,
 }
 
+/// The exit status the one `error_details` entry naming `harness_id` states.
+fn reported_exit_status(details: &[RawErrorDetail], harness_id: Option<&str>) -> Option<String> {
+    let harness_id = harness_id?;
+    let mut named = details
+        .iter()
+        .filter(|detail| detail.harness_id.as_deref() == Some(harness_id));
+    match (named.next(), named.next()) {
+        (Some(detail), None) => detail.exit_status.clone(),
+        _ => None,
+    }
+}
+
 /// The `exit_status` Kani gives a harness its own per-harness timeout stopped.
 const TIMEOUT_EXIT_STATUS: &str = "timeout";
+
+/// The most bytes an unrecognised exit status keeps.
+const EXIT_STATUS_LIMIT: usize = 64;
+
+/// Why CBMC, or a property check, ended a harness without a verdict, as the report's exit status
+/// for the harness names it.
+///
+/// The cause serializes as `{ kind }` for `properties_failed`, `timeout` and `out_of_memory`, as
+/// `{ kind: "exit_code", code }` and as `{ kind: "unknown", exitStatus }`. It is diagnostic only
+/// and is never read back, so it implements no deserialization:
+///
+/// Trace: FR-017-AC-38, TC-027
+///
+/// ```compile_fail
+/// let _: quire_contract_codegen::KaniFailureCause = serde_json::from_str("{}").unwrap();
+/// ```
+///
+/// Serializing the same value compiles:
+///
+/// ```
+/// fn serializes(cause: &quire_contract_codegen::KaniFailureCause) -> String {
+///     serde_json::to_string(cause).unwrap()
+/// }
+/// # let _ = serializes;
+/// ```
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum KaniFailureCause {
+    /// A property check failed.
+    PropertiesFailed,
+    /// Kani's own per-harness timeout stopped the harness.
+    Timeout,
+    /// CBMC was killed by `SIGKILL`, which Kani reports as out of memory whatever sent it.
+    OutOfMemory,
+    /// CBMC exited with the stated status. The number is the one Kani states, not read as an
+    /// exit code or a signal number.
+    ExitCode {
+        /// The status Kani states.
+        code: i32,
+    },
+    /// An exit status outside the vocabulary above.
+    Unknown {
+        /// The status redacted and cut to 64 bytes on a character boundary.
+        #[serde(rename = "exitStatus")]
+        exit_status: String,
+    },
+}
+
+impl KaniFailureCause {
+    /// The cause the reported `exit_status` names; the first rule that applies decides.
+    pub(crate) fn from_exit_status(exit_status: &str, directories: &KnownDirectories<'_>) -> Self {
+        match exit_status {
+            "properties_failed" => Self::PropertiesFailed,
+            TIMEOUT_EXIT_STATUS => Self::Timeout,
+            "out_of_memory" => Self::OutOfMemory,
+            other => exit_code_of(other).map_or_else(
+                || Self::Unknown {
+                    exit_status: cut_to_limit(redact_text(other, directories)),
+                },
+                |code| Self::ExitCode { code },
+            ),
+        }
+    }
+
+    /// Whether the cause names a CBMC failure rather than a failed property.
+    pub(crate) fn is_cbmc_failure(&self) -> bool {
+        !matches!(self, Self::PropertiesFailed)
+    }
+}
+
+/// The number in `exit_code_<n>`, `n` a canonical decimal that fits a signed 32-bit integer.
+fn exit_code_of(exit_status: &str) -> Option<i32> {
+    let digits = exit_status.strip_prefix("exit_code_")?;
+    let magnitude = digits.strip_prefix('-').unwrap_or(digits);
+    let canonical = magnitude == "0"
+        || (magnitude.starts_with(|digit: char| ('1'..='9').contains(&digit))
+            && magnitude.bytes().all(|byte| byte.is_ascii_digit()));
+    if !canonical || digits == "-0" {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+/// `text` cut to its longest prefix of at most [`EXIT_STATUS_LIMIT`] bytes ending on a character
+/// boundary.
+fn cut_to_limit(mut text: String) -> String {
+    let end = (0..=EXIT_STATUS_LIMIT.min(text.len()))
+        .rev()
+        .find(|end| text.is_char_boundary(*end))
+        .unwrap_or(0);
+    text.truncate(end);
+    text
+}
 
 /// One harness result of a batch report, with the path Kani names it by.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -414,10 +526,14 @@ impl KaniHarnessReport {
 
     /// Reads the single harness result of an exported Kani report.
     pub(crate) fn parse(report: &[u8]) -> Result<Self, KaniReportRefusal> {
-        let mut results = Self::read(report)?.verification_results.results;
+        let raw = Self::read(report)?;
+        let details = raw.error_details;
+        let mut results = raw.verification_results.results;
         match (results.pop(), results.is_empty()) {
             (Some(harness), true) => {
-                let report = Self::try_from(harness)?;
+                let exit_status = reported_exit_status(&details, harness.harness_id.as_deref());
+                let mut report = Self::try_from(harness)?;
+                report.exit_status = exit_status;
                 report.refuse_contradiction()?;
                 Ok(report)
             }
@@ -445,7 +561,8 @@ impl KaniHarnessReport {
                         .ok_or_else(|| KaniReportRefusal::Malformed {
                             detail: "a harness result names no harness_id".to_owned(),
                         })?;
-                let report = Self::try_from(harness)?;
+                let mut report = Self::try_from(harness)?;
+                report.exit_status = reported_exit_status(&details, Some(harness_id.as_str()));
                 report.refuse_contradiction()?;
                 let timed_out = details.iter().any(|detail| {
                     detail.harness_id.as_deref() == Some(harness_id.as_str())

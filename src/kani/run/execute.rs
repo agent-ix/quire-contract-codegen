@@ -31,8 +31,8 @@ use crate::kani::{
         diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
         playback::{counterexample_playback, playback_blocks},
         report::{
-            members_in_request_order, KaniCheckResult, KaniHarnessReport, KaniHarnessStatus,
-            KaniReportRefusal,
+            members_in_request_order, KaniCheckResult, KaniFailureCause, KaniHarnessReport,
+            KaniHarnessStatus, KaniReportRefusal,
         },
     },
     run::{
@@ -291,6 +291,11 @@ pub struct KaniExecutionEvidence {
     /// backend gave no verdict, from the launcher's streams. It is never an input to the outcome.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<KaniNoVerdictDiagnostics>,
+    /// Present exactly when the outcome is [`KaniInconclusiveReason::FailedWithoutCounterexample`]
+    /// and the report states an exit status for the harness: why Kani gave no counterexample. It
+    /// is never an input to the outcome.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_cause: Option<KaniFailureCause>,
 }
 
 /// A backend report and its invocation metadata, without an attestation of resource enforcement.
@@ -311,6 +316,7 @@ struct ReportedExecution {
     checks: Vec<KaniCheckResult>,
     batch: Option<KaniBatchInvocation>,
     diagnostics: Option<KaniNoVerdictDiagnostics>,
+    failure_cause: Option<KaniFailureCause>,
 }
 
 impl ReportedExecution {
@@ -331,6 +337,7 @@ impl ReportedExecution {
             checks: self.checks,
             batch: self.batch,
             diagnostics: self.diagnostics,
+            failure_cause: self.failure_cause,
         }
     }
 }
@@ -457,7 +464,7 @@ fn evidence_of(
     exit_code: Option<i32>,
     run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
-    diagnostics: Option<KaniNoVerdictDiagnostics>,
+    record: Record,
 ) -> ReportedExecution {
     ReportedExecution {
         ceilings: harness.ceilings,
@@ -473,7 +480,55 @@ fn evidence_of(
         success_checks: run.success_checks,
         checks: run.checks,
         batch,
-        diagnostics,
+        diagnostics: record.diagnostics,
+        failure_cause: record.failure_cause,
+    }
+}
+
+/// What the evidence retains beyond the classified run: the `NoVerdict` diagnostic record, or the
+/// CBMC failure cause with the record that goes with it. Both are decided after the outcome.
+struct Record {
+    diagnostics: Option<KaniNoVerdictDiagnostics>,
+    failure_cause: Option<KaniFailureCause>,
+}
+
+impl Record {
+    /// The record of `run`, whose launcher printed `streams`. `diagnose` builds the member's
+    /// diagnostic record from those streams and is called only when one is retained.
+    fn of(
+        run: &ClassifiedRun,
+        streams: Option<&CapturedStreams>,
+        directories: &KnownDirectories<'_>,
+        diagnose: impl FnOnce(&CapturedStreams) -> KaniNoVerdictDiagnostics,
+    ) -> Self {
+        let failure_cause = matches!(
+            run.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::FailedWithoutCounterexample
+            }
+        )
+        .then_some(run.exit_status.as_deref())
+        .flatten()
+        .map(|status| KaniFailureCause::from_exit_status(status, directories));
+        let cbmc_failed = failure_cause
+            .as_ref()
+            .is_some_and(KaniFailureCause::is_cbmc_failure);
+        let diagnostics = streams
+            .filter(|_| cbmc_failed || is_no_verdict(run))
+            .map(diagnose);
+        Self {
+            diagnostics,
+            failure_cause,
+        }
+    }
+}
+
+/// The request's directories to redact a run's output against.
+fn directories_of<'a>(request: &'a KaniExecutionRequest<'_>) -> KnownDirectories<'a> {
+    KnownDirectories {
+        crate_directory: request.crate_directory,
+        target_directory: request.target_directory,
+        home_directory: request.home_directory,
     }
 }
 
@@ -508,7 +563,7 @@ fn finish_single(
 ) -> Result<ReportedExecution, KaniExecutionRefusal> {
     let harness = request.harness.view();
     let (run, exit_code, streams) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
-    let diagnostics = no_verdict_streams(&run, streams.as_ref()).map(|streams| {
+    let record = Record::of(&run, streams.as_ref(), &directories_of(request), |streams| {
         process_output(
             request,
             streams,
@@ -520,29 +575,18 @@ fn finish_single(
         .diagnostics_of(&harness.selection)
     });
     Ok(evidence_of(
-        request,
-        &harness,
-        arguments,
-        exit_code,
-        run,
-        None,
-        diagnostics,
+        request, &harness, arguments, exit_code, run, None, record,
     ))
 }
 
-/// The streams of a run, when its outcome is `NoVerdict` and so carries a diagnostic record.
-fn no_verdict_streams<'a>(
-    run: &ClassifiedRun,
-    streams: Option<&'a CapturedStreams>,
-) -> Option<&'a CapturedStreams> {
+/// Whether the run's outcome is `NoVerdict`, which carries a diagnostic record.
+fn is_no_verdict(run: &ClassifiedRun) -> bool {
     matches!(
         run.outcome,
         KaniRunOutcome::Inconclusive {
             reason: KaniInconclusiveReason::NoVerdict
         }
     )
-    .then_some(streams)
-    .flatten()
 }
 
 /// What one launcher process printed, with the request's directories to redact it against.
@@ -559,11 +603,7 @@ fn process_output<'a>(
         selections,
         arguments,
         report_exported,
-        directories: KnownDirectories {
-            crate_directory: request.crate_directory,
-            target_directory: request.target_directory,
-            home_directory: request.home_directory,
-        },
+        directories: directories_of(request),
     }
 }
 
@@ -814,7 +854,7 @@ fn finish_group(
             .zip(&views)
             .zip(run)
             .map(|(((_, request), view), run)| {
-                let diagnostics = no_verdict_streams(&run, Some(streams)).map(|_| {
+                let record = Record::of(&run, Some(streams), &output.directories, |_| {
                     shared
                         .get_or_init(|| output.analyse())
                         .diagnostics_of(&view.selection)
@@ -826,7 +866,7 @@ fn finish_group(
                     exit_code,
                     run,
                     Some(invocation.clone()),
-                    diagnostics,
+                    record,
                 )
             })
             .collect()
@@ -845,6 +885,7 @@ fn finish_group(
                         },
                         success_checks: 0,
                         checks: Vec::new(),
+                        exit_status: None,
                     })
                     .collect(),
             ))
@@ -994,6 +1035,7 @@ pub(super) fn launch_evidence(
                 outcome: KaniRunOutcome::Inconclusive { reason },
                 success_checks: 0,
                 checks: Vec::new(),
+                exit_status: None,
             },
             None,
             None,
@@ -1014,6 +1056,7 @@ pub(super) fn launch_evidence(
                 outcome: KaniRunOutcome::Cancelled { source },
                 success_checks: 0,
                 checks: Vec::new(),
+                exit_status: None,
             },
             None,
             None,

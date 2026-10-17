@@ -237,17 +237,22 @@ impl Stages {
 
 /// The redacted tail of `bytes`.
 fn excerpt(bytes: &[u8], directories: &KnownDirectories<'_>) -> KaniStreamExcerpt {
-    let text = String::from_utf8_lossy(bytes);
-    let text = strip_control(&text);
-    let text = redact_paths(&text, directories);
-    let text = redact_timestamps(&text);
-    let text = redact_durations(&text);
-    let text = redact_process_ids(&text);
+    let text = redact_text(&String::from_utf8_lossy(bytes), directories);
     let start = tail_start(&text);
     KaniStreamExcerpt {
         omitted_bytes: u64::try_from(start).unwrap_or(u64::MAX),
         text: text[start..].to_owned(),
     }
+}
+
+/// `text` with control characters and escapes removed, then paths, date-times, durations and
+/// process identities redacted.
+pub(crate) fn redact_text(text: &str, directories: &KnownDirectories<'_>) -> String {
+    let text = strip_control(text);
+    let text = redact_paths(&text, directories);
+    let text = redact_timestamps(&text);
+    let text = redact_durations(&text);
+    redact_process_ids(&text)
 }
 
 /// The byte offset where the kept tail of `text` starts.
