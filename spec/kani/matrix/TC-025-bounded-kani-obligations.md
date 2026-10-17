@@ -409,6 +409,34 @@ the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the 
 FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
 harness, so its previous test evidence remains planned until that migration lands.
 
+## One renderer and the scalar family port (planned, IR-858)
+
+These steps verify AD-004 step 4b (AD-004 "The HarnessSpec and render contract (step 4b)"); they back FR-015-AC-112 to FR-015-AC-117. Steps 42 to 47
+are numbered after step 41 and are independent of the IR-805 prose above.
+
+42. Build `HarnessSpec`s by hand that break each invariant: no cover, two covers, a `true` cover
+    condition, no call, two calls, an input after the call, an assertion before the call, a name bound
+    twice, an inverted domain, a domain outside its type, an `unwind` of 0 and of
+    `MAX_OBLIGATION_UNWIND` plus one, an `ExprText` that does not parse and one that spells
+    `kani::`. Read a typed `HarnessSpecError` for each and no spec (FR-015-AC-112).
+43. Render valid hand-built specs whose statements are in several legal orders and read the
+    cover as the last statement of the function in each, after every assumption, the call and every
+    assertion; render the same spec twice, and in a second process, and compare the bytes; reorder
+    two inputs and read different bytes (FR-015-AC-113, FR-015-AC-114).
+44. Before any port change, add the golden test over the unported `render_scalar` for the claim set
+    of FR-015-AC-115 (four operations, a literal operand, an inferred operand, `i64` extremes),
+    storing artifact bytes, identity, options and record as files, and run it green on `origin/main`.
+45. After the port, run the same test with the golden files unchanged and read equality of every
+    file (FR-015-AC-115); drive a claim whose source exceeds `MAX_GENERATED_SOURCE_BYTES` and read
+    `ResourceLimitExceeded` with the same byte count, and drive invalid generated syntax and read
+    `InvalidGeneratedSyntax`, each raised by `render`, size check first.
+46. Run the FR-015-AC-58 guard with `render.rs` among the driven files and `scalar.rs` out of the
+    list, read zero spellings in `scalar.rs`, no new spelling file, and no operation name, oracle
+    symbol or `scalar` in a `render.rs` string literal (FR-015-AC-116).
+47. With the installed backend, run the `kani` lane scalar tests: the unmutated harness `Verified`
+    with its cover satisfied, the mutated-arithmetic control `Falsified` with its counterexample, and
+    a harness with an unsatisfiable input assumption not `Verified` (FR-015-AC-117).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
