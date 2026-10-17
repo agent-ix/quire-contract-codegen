@@ -24,10 +24,9 @@ profile, inclusive length bounds, payload class and proof configuration,
 without `ir_confirmed` provenance, a checked node id or a QSL term identity.
 
 In this requirement, `rt::` denotes the exact API that the generated oracle
-and harness import, and the specified binding is `quire_exact`. The current
-generator still binds `rt` to Contract Runtime's separate
-`quire_contract_runtime::exact` copy, so the generated harness does not yet
-run on the kernel. Moving that binding to `quire_exact` is IR-837's slice.
+and harness import, and the binding is `quire_exact`. The generated harness
+runs on the kernel and compares the two meters through their public accessors
+rather than by value equality, which CBMC cannot unwind at `--unwind 8`.
 
 [FR-014](./FR-014-exact-scalar-oracles.md) continues to own generated oracles
 for admitted, catalogued text comparison nodes. A comparison's existing

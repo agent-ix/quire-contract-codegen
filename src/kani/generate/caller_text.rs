@@ -1,6 +1,6 @@
 //! Caller-ingress Text admission Kani harness generation (FR-035).
 
-use quire_contract_runtime::exact::TextType;
+use quire_exact::TextType;
 
 use crate::{
     core::{
@@ -147,7 +147,7 @@ fn caller_text_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quire_contract_runtime::exact::TextProfile;
+    use quire_exact::TextProfile;
     use std::{num::NonZeroU64, time::Duration};
 
     use crate::oracle::caller_text::{generate_caller_text_oracle, CallerTextAdmissionRequest};
