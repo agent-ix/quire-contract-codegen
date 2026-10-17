@@ -447,3 +447,19 @@ collector/lifetime criterion whose O-origin or independent termination
 witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual export or unit-test
 compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
 override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
+
+Scalar proof-content digest (FR-017-AC-45 to AC-49): run the paired runner on a genuine routed
+`x + 1` package. (1) Assert the receipt's `DigestRecord` has domain `sha256-jcs` and 32 bytes equal
+to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the schema object and the sorted
+artifact list in the test, independently of the runner's encoder. (2) Assert the exposed entry
+paths are exactly the AC-46 set in UTF-8 byte order, with the library under
+`src/oracle-artifacts-lib.rs` and the harness under `src/lib.rs`; then drop, rename, reorder,
+duplicate and one-byte-change each entry in turn and require a different digest; feed a non-UTF-8
+input and require refusal. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
+value and require equal `DigestRecord`s. (4) Recompute from only the exposed entries, including
+`Cargo.lock` and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
+package, harness or record and require inequality. (5) Pin a golden digest for a fixed small
+package; require a test that fails if the golden changes with the schema string unchanged, and
+change the `Cargo.lock` bytes in a test seam to see the digest change with the schema unchanged. No
+driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
+driver-owned (FR-032 boundary). These steps are Planned until the IR-846 code slice lands.
