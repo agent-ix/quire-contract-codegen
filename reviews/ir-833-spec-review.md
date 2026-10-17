@@ -48,3 +48,7 @@ Completeness of the conversion was checked by grepping the whole `spec/` tree at
 CHANGES REQUESTED (one medium). Conversion is complete: every ticket line and the tests.md:28 addition is converted, none is missed in the spec/ tree, and FR-031-AC-11 is correctly dropped as QSL's exemplar run, not a CG value-agreement claim. The IR-845 API lines are untouched; nothing in the diff contradicts them (FR-021 :50 now says outcome and charges are "not decided here" rather than naming the QSL application authority as decider, which is consistent with :41 and :126). FR-021-AC-3's rewording is sound: it keeps the request-not-emitted-source independence rule without presupposing a QSL comparison. The FR-018 Upstream edge to the QSL value authority is correctly removed. The `spec/oracle/matrix/tests.md` edits merge cleanly with #412 (git merge-tree auto-merges the file; #412 touches the FR-035 and TC-050 rows only). Integrity, evidence and scope-boundary findings are in SR-12086, SR-12087 and SR-12088.
 
 ## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1, head ee9da7736b18: FR-021-AC-2 is Test (TC-031) again, requiring the oracle's outcome, admitted charges and consumed counters to equal a direct application independently assembled from the request, with a QSL boundary sentence (IR-842, FR-014-AC-47, FR-021-AC-18). |

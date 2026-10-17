@@ -43,3 +43,9 @@ Ticket: IR-833. Checked that the converted criteria agree with the unchanged tex
 CHANGES REQUESTED (one medium, two low). The FR-021-AC-4 split is structurally sound: the remaining schedule clause is a testable statement and the boundary sentence follows the FR-014-AC-37 pattern (evidence-side consequences are in SR-12087). The :176 edit replacing "the QSL authority's charge-before-work order" with "the charge-before-work order of FR-021-AC-5" is correct and self-contained. The FR-021 mutation rows for AC-2 and AC-18 are rewritten to inspection mutations that would break them.
 
 ## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1, head ee9da7736b18: TC-031 step 11 now gates AC-2, AC-4, AC-5, AC-8, AC-9, AC-16, AC-17, AC-19, AC-20, AC-26 and AC-31; the FR-021 Status paragraph (:236) and the Status section (:357) list AC-16, AC-17, AC-19 and AC-20; AC-18 is in neither. AC-2 stays, correctly, as a Test again. |
+| FND-002 | fixed | round 1, head ee9da7736b18: AC-2 is the Test agreement criterion and AC-18 the sole Inspection; they no longer duplicate. |
+| FND-003 | fixed | round 1, head ee9da7736b18: step 11 compares with an independent application assembled from the request (AC-2, AC-3) and with the shallow equivalent for the deep case (AC-31), matching FR-021-AC-31's text. |
