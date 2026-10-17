@@ -69,3 +69,48 @@ Approve. Both findings are low and neither blocks the merge.
 | FND-001 | fixed | e7df0f6: kani_gate.sh now sets `script_dir=$(dirname -- "$(/usr/bin/readlink -f -- "$0")")` and has a comment saying that only the sibling script is located by real path. The new symlink test fails against the 3254cf4 script (panic at kani_gate.rs:356) and passes at 5013686. `/usr/bin/readlink` follows the hard-coded `/usr/bin/readlink` at line 49 and `/usr/bin/bash` and `/usr/bin/python3` elsewhere, so it is consistent. Under `make kani-gate` the helper is now called by absolute path, which behaves the same because kani_scope.sh uses `$0` only in its usage message. |
 | FND-002 | fixed | e7df0f6: the negative test now requires the full result line, from `kani-gate: result=failed ran=3 expected=3 elapsed=` through `s kani=Kani 1.0 tree=clean`. Red check: with `FAKE_MOVE_TREE=yes` the 3254cf4 oracle passes and the e7df0f6 oracle fails with "only the identity check may fail: ... tree=dirty". |
 | FND-003 | fixed | Round 2, dfa4bb0: the symlink test is now tagged `Trace: TC-045.` only. That tag is honest. TC-045 is the case for the `make kani-scope` and `make kani-gate` targets, and it names `scripts/kani_scope.sh` and `scripts/kani_gate.sh`, so the tag places the test in that case without crediting any criterion it cannot fail. The criterion trace set in kani_gate.rs at 99d7000 is the same as on main and at 5013686: FR-041-AC-5, NFR-006-AC-1 through AC-12, AC-14, AC-18 and AC-19, TC-045 and TC-056. NFR-006-AC-8 stays bound through `gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main` (kani_gate.rs:422), which runs the moving-head case. |
+
+
+## Follow-up review (disposition pass 3)
+
+Provisional local review only. Frozen candidate: 80378693a29f745dfb7dc1d6b4eddb07ce294a1c;
+new delta: e2f6c1b..8037869, `src/kani/run/memory.rs`. The locally cached
+`origin/main...HEAD` diff was inspected as context, including the gate script and tests;
+remote freshness was not verified. No spec/plan or CI workflow changes appear in that diff.
+No applicable AssuranceProfile was found under `spec/`.
+
+All prior finding text and disposition rows above are preserved. SR-11995 FND-001,
+FND-002 and FND-003 already have terminal `fixed` outcomes; no redundant outcome rows
+are added. This round introduces no new findings. This does not renew historical test-run
+claims: no Cargo or Kani command ran in this review. The leader reports that the required
+systemd user scope was denied before Cargo launch; this reviewer did not retry it or run
+unscoped commands. Formatting, clippy, execution tests and the aggregate gate remain UNRUN.
+
+Tracker team-key validation, private comment dedup/publication/read-back and label state
+are unavailable in this environment. No tracker or GitHub comment was posted. No remote
+state, mergeability or merge approval is asserted. This scratch artifact requires custody
+by the leader; the frozen branch was not edited.
+
+
+### Code and Rust lane evidence
+
+Provisional verdict: no new defect found in the reviewed delta; executable validation pending.
+`NamespaceOwner::dispatch` claims the init identity and calls `bind_root` before writing the
+startup-gate byte (`src/kani/run/namespace.rs:260-271`). Thus the bound init is still held
+before backend dispatch, and its identity-checked RSS is an actual observation of the owned
+root. `bind_root` propagates failed/mismatched identity reads before mutating the peak.
+The fix stores that already measured value via `Some(previous.unwrap_or(0).max(bound))`.
+Later successful `observe` calls retain the maximum; an unavailable read does not create
+an invented zero. A measured zero is legitimate, as already modeled by `resident_bytes`.
+No new panic, integer conversion, unsafe code, lock, wire schema, or spawned work is added.
+The update uses the existing peak field and max rule; it adds no new helper or copied
+upstream authority. Existing prepare-only behavior remains `None` until a tree is bound.
+
+The inspected successful-evidence test asserts `peak_resident_bytes.is_some()` after a
+real bounded launch (`src/kani/run/execute.rs:1660-1686`), and the prepare-only test asserts
+`None` (`src/kani/run/memory.rs:769-775`). These are existing behavioral checks, not new
+execution evidence. The prepare-only trace remains FR-028-AC-21, and the success test
+also cites FR-028-AC-2/4 as context. The historical symlink test's TC-045-only tag is unchanged;
+no claim is made that the pending scratch trace conversion is applied on this old base.
+
+`git diff HEAD^ HEAD --check` passed. The full local delta preserves existing CI lanes.
