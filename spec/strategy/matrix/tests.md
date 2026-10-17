@@ -11,6 +11,8 @@ type: TestMatrix
 | Functional Req | Acceptance Criteria | Test Cases | Status |
 |---|---|---|---|
 | FR-002 | FR-002-AC-1 through FR-002-AC-6 | TC-004 | 🚧 Planned |
+| FR-002 | FR-002-AC-7, FR-002-AC-8, FR-002-AC-10 through FR-002-AC-18 | TC-004 | 🚧 V2 planned |
+| FR-002 | FR-002-AC-9 | Inspection | 🚧 V2 planned |
 | FR-008 | FR-008-AC-1 through FR-008-AC-5, FR-008-CON-2 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-AC-6 | TC-017 | 🚧 V2 planned (V1 tests exist) |
 | FR-008 | FR-008-AC-7, FR-008-AC-9 | TC-017 | 🚧 V2 planned |
@@ -42,7 +44,7 @@ criteria. The V2 rows remain planned until tagged tests run on the public checke
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---|---|---|---|---|---|
-| TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6 | 🚧 Planned |
+| TC-004 | Preserve shaped proptest strategies | Property | P0 | FR-002-AC-1, FR-002-AC-2, FR-002-AC-3, FR-002-AC-4, FR-002-AC-5, FR-002-AC-6, FR-002-AC-7, FR-002-AC-8, FR-002-AC-10, FR-002-AC-11, FR-002-AC-12, FR-002-AC-13, FR-002-AC-14, FR-002-AC-15, FR-002-AC-16, FR-002-AC-17, FR-002-AC-18 | 🚧 Planned; AC-7 to AC-18 are V2 planned (IR-815) |
 | TC-017 | Verify checked V2 clause strategy admission and refusal | Integration | P0 | FR-008-AC-1, FR-008-AC-2, FR-008-AC-3, FR-008-AC-4, FR-008-AC-5, FR-008-AC-6, FR-008-AC-7, FR-008-AC-9, FR-008-CON-2, FR-008-CON-3, FR-008-CON-4 | 🚧 V2 planned (V1 tests exist) |
 | TC-018 | Verify constructive satisfying and violating populations | Property | P0 | FR-009-AC-1, FR-009-AC-2, FR-009-AC-3, FR-009-AC-4, FR-009-AC-5, FR-009-AC-6, FR-009-AC-7 | 🚧 V2 planned (V1 tests exist) |
 | TC-019 | Verify domain and relation boundary censuses | Integration | P0 | FR-010-AC-1, FR-010-AC-2, FR-010-AC-3, FR-010-AC-4, FR-010-AC-5, NFR-004-AC-2 | 🚧 V2 planned (V1 tests exist) |
