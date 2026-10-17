@@ -650,7 +650,6 @@ mod tests {
 
     use super::*;
     use ix_trace_rs::trace;
-    use crate::kani::test_support::implements_deserialize;
 
     const CRATE_DIR: &str = "/h/u/ws/crate";
 

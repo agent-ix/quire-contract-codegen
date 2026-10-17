@@ -588,7 +588,6 @@ mod tests {
     use ix_trace_rs::trace;
 
     use super::*;
-    use crate::kani::test_support::implements_deserialize;
 
     const HOME: &str = "/h/u";
 

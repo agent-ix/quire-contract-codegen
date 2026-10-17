@@ -210,17 +210,3 @@ impl<T> No for &Probe<T> {
         false
     }
 }
-
-/// Whether `$type` implements `Deserialize`, decided by method resolution at the call site, so
-/// the macro's caller must have `Yes` and `No` in scope.
-macro_rules! implements_deserialize {
-    ($type:ty) => {{
-        // Exactly one of the two traits is chosen by resolution, so the other import is unused
-        // in each expansion.
-        #[allow(unused_imports)]
-        use $crate::kani::test_support::{No, Yes};
-        (&$crate::kani::test_support::Probe::<$type>(std::marker::PhantomData))
-            .implements_deserialize()
-    }};
-}
-pub(crate) use implements_deserialize;

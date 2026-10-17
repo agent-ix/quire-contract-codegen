@@ -2154,11 +2154,18 @@ const BROKEN_ITEM: &str = "pub fn broken() -> i64 {\n    undefined_name\n}\n";
 /// stdout, installed at `path` once it can be started.
 #[cfg(unix)]
 fn write_failing_launcher(path: &Path) {
+    write_script_launcher(path, "printf 'error: unexpected argument\\n' >&2\nexit 1\n");
+}
+
+/// A launcher script that runs `body` (after exiting at once when probed), installed at `path`
+/// once it can be started.
+#[cfg(unix)]
+fn write_script_launcher(path: &Path, body: &str) {
     use std::os::unix::fs::PermissionsExt;
 
     fs::write(
         path,
-        "#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\nprintf 'error: unexpected argument\\n' >&2\nexit 1\n",
+        format!("#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\n{body}"),
     )
     .unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -2296,6 +2303,67 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     for text in [&record.stdout.text, &record.stderr.text] {
         assert!(!text.contains(&crate_text), "{text}");
     }
+}
+
+/// The FR-029 terminal value of `FailedWithoutCounterexample` evidence is `Failed` whatever its
+/// CBMC cause, equal to the value of the same evidence with the cause and the record absent.
+///
+/// Trace: FR-017-AC-40, TC-027
+#[cfg(unix)]
+#[test]
+fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
+    let cancel = quire_exact::Cancel::new();
+    let package = bound_package(1000);
+    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    let directory = write_crate(&harness, HEALTHY_SUBJECT);
+    fs::create_dir_all(directory.join("target")).unwrap();
+    for status in ["exit_code_64", "out_of_memory", "cbmc_exploded"] {
+        let report = json!({
+            "metadata": { "version": "1.0" },
+            "error_details": [{ "harness_id": "m::h", "has_errors": true, "exit_status": status }],
+            "verification_results": {
+                "results": [{ "harness_id": "m::h", "status": "Failure", "checks": [] }]
+            },
+        });
+        let exported = directory.join("report.json");
+        fs::write(&exported, report.to_string()).unwrap();
+        let launcher = directory.join("cargo-kani");
+        write_script_launcher(
+            &launcher,
+            &format!(
+                "for last; do :; done\ncp '{}' \"$last\"\nprintf 'CBMC failed\\n'\nexit 1\n",
+                exported.display()
+            ),
+        );
+        let installation = KaniInstallation::new(launcher);
+        let mut evidence = execute_kani_obligation(&KaniExecutionRequest {
+            cancel: &cancel,
+            installation: &installation,
+            harness: (&harness).into(),
+            crate_directory: &directory,
+            target_directory: &directory.join("target"),
+            home_directory: None,
+        })
+        .unwrap();
+        assert_eq!(
+            evidence.outcome,
+            KaniRunOutcome::Inconclusive {
+                reason: KaniInconclusiveReason::FailedWithoutCounterexample
+            }
+        );
+        assert!(
+            serde_json::to_value(&evidence).unwrap()["failureCause"].is_object(),
+            "{status}"
+        );
+        let with_cause = run_terminal_value(&evidence.outcome, evidence.success_checks, None);
+        evidence.diagnostics = None;
+        evidence.failure_cause = None;
+        let without = run_terminal_value(&evidence.outcome, evidence.success_checks, None);
+        let (with_cause, without) = (with_cause.unwrap(), without.unwrap());
+        assert_eq!(format!("{with_cause:?}"), "Failed", "{status}");
+        assert_eq!(with_cause, without);
+    }
+    let _ = fs::remove_dir_all(&directory);
 }
 
 /// Real Kani on a crate whose manifest hands CBMC an option it does not know, with the harness's

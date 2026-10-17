@@ -4467,13 +4467,16 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             use serde_json::{json, Value};
 
             use super::*;
-            use crate::kani::terminal::run_terminal_value;
 
             const NO_COUNTEREXAMPLE: KaniRunOutcome = KaniRunOutcome::Inconclusive {
                 reason: KaniInconclusiveReason::FailedWithoutCounterexample,
             };
             const CHECKING: &str = "Checking harness proofs::check...\n";
             const HARNESS: &str = "proofs::check";
+
+            /// A run that is not `FailedWithoutCounterexample`: its label, report, console, exit
+            /// code and the test of its outcome.
+            type OtherOutcome<'a> = (&'a str, Vec<u8>, &'a str, i32, fn(&KaniRunOutcome) -> bool);
 
             /// A one-harness report: the result's `harness_id`, its status and checks, and the
             /// `error_details` member as given.
@@ -4697,7 +4700,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     )
                 };
                 let falsifying = block(HARNESS, "assertion", "falsify");
-                let cases: [(&str, Vec<u8>, &str, i32, fn(&KaniRunOutcome) -> bool); 6] = [
+                let cases: [OtherOutcome<'_>; 6] = [
                     (
                         "verified",
                         with_entry("Success", &[PASSED, COVER_OK]),
@@ -4906,12 +4909,11 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
             /// Three runs with the same failure report and different CBMC causes and streams
             /// classify alike and have equal evidence outside the cause, the record, the memory
-            /// observation and the report path; each terminal value is `Failed`, as it is with
-            /// the cause and record absent.
+            /// observation and the report path.
             ///
             /// Trace: FR-017-AC-40, TC-027
             #[test]
-            fn tc_027_the_cause_never_feeds_classification_or_the_terminal_value() {
+            fn tc_027_the_cause_never_feeds_classification() {
                 let harness = proofs();
                 let mut stripped = Vec::new();
                 let stand_in = printing("cause-independent", Some(&[]), "", "", 1);
@@ -4929,15 +4931,8 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                     let mut evidence = run(&stand_in, &harness);
                     assert_eq!(evidence.outcome, NO_COUNTEREXAMPLE, "{status}");
                     assert!(evidence.failure_cause.is_some() && evidence.diagnostics.is_some());
-                    let with_cause =
-                        run_terminal_value(&evidence.outcome, evidence.success_checks, None);
                     evidence.failure_cause = None;
                     evidence.diagnostics = None;
-                    let without =
-                        run_terminal_value(&evidence.outcome, evidence.success_checks, None);
-                    let (with_cause, without) = (with_cause.unwrap(), without.unwrap());
-                    assert_eq!(format!("{with_cause:?}"), "Failed");
-                    assert_eq!(with_cause, without);
                     evidence.arguments.pop().expect("a report path");
                     evidence.memory = stripped.first().map_or_else(
                         || evidence.memory.clone(),
