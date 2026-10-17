@@ -1009,8 +1009,9 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      in `kani/census.rs` stay: the V2 census input needs them, and the corpus imports them until
      4g. `validate_dependencies` (census validation, and the `KaniDiagnostic` it returns with the
      identity and path helpers it uses) is not bundle validation for this purpose: the corpus calls
-     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place and it is deleted with the
-     corpus lowerer at 4g, or when the V2 census input replaces it. It is not in `kani/census.rs`
+     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place. The items of
+     `census_validation.rs` (`validate_dependencies`, `KaniDiagnostic`, `KaniErrorCode`) are removed once their last caller is gone: the V1 bundle path
+     (removed at 4f) and the corpus (removed at 4g), or earlier when the V2 census input replaces them. It is not in `kani/census.rs`
      because it returns the V1 bundle's error type. Step 2f put it, with `KaniDiagnostic`,
      `KaniErrorCode`, the helpers and `deterministic_json`, in `kani/generate/census_validation.rs`,
      and everything else of the bundle in `kani/generate/v1_bundle.rs`, so 4f deletes `v1_bundle.rs`
@@ -1028,7 +1029,7 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
      replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
      identity helpers in `replay/function.rs`, with their only caller) and the whole public
-     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to `validate_dependencies` but not `census_validation.rs`: every item there is also used by `v1_bundle.rs` (public `KaniDiagnostic` and `KaniErrorCode` included), so the file goes at step 4f or with the V2 census input, as 4f says. Until a family's slice lands, that family's corpus arm stays as it is,
+     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to `validate_dependencies` but not `census_validation.rs`: every item there is also used by `v1_bundle.rs` (public `KaniDiagnostic` and `KaniErrorCode` included), so its items go once their last caller is gone, as 4f says. Until a family's slice lands, that family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
