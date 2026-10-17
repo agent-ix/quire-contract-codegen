@@ -133,7 +133,16 @@ fi
     }
 
     fn gate_with_cargo(&self, cargo: &str) -> Command {
-        let mut command = self.command("scripts/kani_gate.sh");
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_gate.sh");
+        self.gate_script(&script, cargo)
+    }
+
+    fn gate_script(&self, script: &Path, cargo: &str) -> Command {
+        // The gate clears and the stand-in cargo writes its claim evidence
+        // relative to the working directory, so it runs inside the sandbox
+        // rather than the shared checkout.
+        let mut command = self.command(script.to_str().expect("UTF-8 gate script path"));
+        command.current_dir(&self.root);
         command.args([
             self.root
                 .join("lane.lock")
@@ -310,12 +319,41 @@ fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
     assert!(!output.status.success(), "{}", stdout(&output));
     assert!(sandbox.marker(), "fake executable reached run phase");
     assert!(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
+        sandbox
+            .root
             .join("target-codex-backends/ir19-claim-crate/original-0-report.json")
             .exists(),
         "stand-in wrote a nonempty report before rejection"
     );
-    assert!(stdout(&output).contains("result=failed ran=3 expected=3"));
+    let report = stdout(&output);
+    let result = report
+        .lines()
+        .find(|line| line.starts_with("kani-gate: result="))
+        .expect("gate result line");
+    assert!(
+        result.starts_with("kani-gate: result=failed ran=3 expected=3 elapsed=")
+            && result.ends_with("s kani=Kani 1.0 tree=clean"),
+        "only the identity check may fail: {result}"
+    );
+}
+
+/// Trace: TC-045. A gate reached through a symlink still finds its
+/// sibling scope script and proceeds to the run phase.
+#[test]
+fn gate_invoked_through_a_symlink_finds_its_scope_script() {
+    let sandbox = Sandbox::new();
+    let link = sandbox.root.join("linked-gate.sh");
+    std::os::unix::fs::symlink(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/kani_gate.sh"),
+        &link,
+    )
+    .expect("gate symlink");
+    let output = sandbox
+        .gate_script(&link, "cargo")
+        .output()
+        .expect("symlinked gate");
+    assert!(!output.status.success(), "{}", stdout(&output));
+    assert!(sandbox.marker(), "scope step passed and the run started");
 }
 
 /// Trace: NFR-006-AC-5, TC-045. A positive observed waiter precedes the
@@ -348,8 +386,9 @@ fn gate_waits_for_the_existing_lock_holder() {
         .spawn()
         .expect("start waiting gate");
     let needle = format!(
-        "flock -x {} /usr/bin/bash scripts/kani_gate.sh",
-        lock.display()
+        "flock -x {} /usr/bin/bash {}/scripts/kani_gate.sh",
+        lock.display(),
+        env!("CARGO_MANIFEST_DIR")
     );
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
