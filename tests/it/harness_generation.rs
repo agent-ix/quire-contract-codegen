@@ -151,7 +151,7 @@ fn typed_clauses() -> (DeclarationEnvironment, TypedExpression, TypedExpression)
     (environment, precondition, postcondition)
 }
 
-/// TC-004.
+/// Trace: FR-002-AC-1, FR-002-AC-5, FR-002-AC-6, TC-004
 #[test]
 fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths() {
     let (environment, precondition_expression, postcondition_expression) = typed_clauses();
@@ -567,7 +567,7 @@ mod generated_tests {
     );
 }
 
-/// TC-004.
+/// Trace: TC-004
 #[test]
 fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings() {
     let literal =
@@ -707,7 +707,7 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
     }
 }
 
-/// TC-003, TC-004.
+/// Trace: NFR-002-AC-3, TC-003, TC-004
 #[test]
 fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
     let (environment, precondition_expression, postcondition_expression) = typed_clauses();
@@ -760,7 +760,7 @@ fn tc_004_invalid_execution_point_is_a_structured_failure_without_artifact() {
     assert_eq!(resource_limit[0].path, "generated.rust");
 }
 
-/// TC-003, TC-004.
+/// Trace: TC-003, TC-004
 #[test]
 fn tc_004_invalid_campaign_inputs_fail_before_clause_generation() {
     let (environment, precondition_expression, postcondition_expression) = typed_clauses();
@@ -845,7 +845,7 @@ fn tc_004_clauses_sharing_a_readable_stem_get_distinct_oracle_names() {
     assert!(source.contains(&format!("pub fn {stem}_2(")), "{source}");
 }
 
-/// TC-003, TC-004.
+/// Trace: NFR-002-AC-3, TC-003, TC-004
 #[test]
 fn tc_004_multiple_state_bindings_fail_closed() {
     let environment = DeclarationEnvironment::new(

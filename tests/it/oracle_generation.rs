@@ -745,7 +745,7 @@ impl IntegerComparison {
     }
 }
 
-/// TC-002.
+/// Trace: TC-002
 #[test]
 fn tc_002_supported_boolean_grammar_compiles_and_matches_an_independent_evaluator() {
     let environment = differential_environment();
@@ -955,7 +955,7 @@ fn run_generated_program(crate_name: &str, program: &str) {
     );
 }
 
-/// TC-002
+/// Trace: NFR-001-AC-1, TC-002
 #[test]
 fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_model() {
     let value_type =
@@ -1092,7 +1092,7 @@ fn tc_002_integer_and_state_comparisons_are_deterministic_compile_and_match_the_
     );
 }
 
-/// TC-001
+/// Trace: TC-001
 #[test]
 fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
     let environment = boolean_environment(&["a", "b", "implies_short_circuit"]);
@@ -1351,7 +1351,7 @@ fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
     );
 }
 
-/// TC-003
+/// Trace: NFR-002-AC-3, TC-003
 #[test]
 fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
     let rational = RationalType::new(-10, 10, 10).unwrap();
@@ -1398,7 +1398,7 @@ fn tc_003_unsupported_dependency_reports_the_first_reference_span() {
     assert_eq!(diagnostic.source_span.as_ref(), Some(&reference_span));
 }
 
-/// TC-003.
+/// Trace: TC-003
 #[test]
 fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded() {
     let environment = boolean_environment(&["enabled-flag", "enabled_flag"]);
@@ -1521,7 +1521,7 @@ fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {
     assert!(refusal.message.contains("IR-601"), "{}", refusal.message);
 }
 
-/// TC-001.
+/// Trace: TC-001
 #[test]
 fn tc_001_deep_expression_output_is_linear_and_bounded() {
     std::thread::Builder::new()
@@ -1551,7 +1551,7 @@ fn tc_001_deep_expression_output_is_linear_and_bounded() {
         .unwrap();
 }
 
-/// TC-003.
+/// Trace: NFR-002-AC-3, TC-003
 #[test]
 fn tc_003_source_size_limit_rejects_without_a_partial_bundle() {
     std::thread::Builder::new()

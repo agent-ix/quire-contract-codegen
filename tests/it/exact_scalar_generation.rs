@@ -2409,6 +2409,7 @@ fn tc_024_ac44_direct_control_case_is_unsupported() {
         .any(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
 }
 
+/// Trace: FR-021-AC-33, TC-031
 /// A directly requested case must keep its identity through the public function path.
 #[test]
 fn tc_031_ac32_direct_control_case_is_unsupported() {

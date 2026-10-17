@@ -105,7 +105,7 @@ fn assert_rows_agreed(rows: &[(&str, usize)]) {
 // this change's own review transcript, that removing the domain check makes this same call
 // return `Completed(2000)` instead -- the input this test already knows must not complete.
 #[test]
-fn tc_026_integer_add_refuses_a_result_leaving_its_declared_domain() {
+fn integer_add_refuses_a_result_leaving_its_declared_domain() {
     let mut meter = Meter::new(ScalarLimits {
         integer_bits: u64::MAX,
         decimal_digits: u64::MAX,
