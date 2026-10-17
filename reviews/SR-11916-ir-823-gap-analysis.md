@@ -132,3 +132,15 @@ Reviewed at 4cf122462156f45dae3cac5b64573628d716794a.
 ### Round 3 verdict
 
 Mergeable once the full gates pass. Every finding from FND-001 to FND-007 is resolved. FND-008 is a low wording overstatement in a Dependencies note: nothing claims evidence it lacks. Fix it in this PR, or carry it into IR-833, where the ruling needs the accurate premise.
+
+## Dispositions (round 4)
+
+At head cd665548ef8aafbba7c0ca23b5693b96af4ea190 (fix commit cd66554).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-008 | fixed | The note now says the facade exposes no evaluator that reports the outcome, admitted charges and consumed counters (with each single-charge denial) that AC-37 compares. I checked it against QSL 23f9f342. `replay_operator_parity` covers only `ScalarOperator` Add, Subtract, Multiply and Negate, and its `OperatorParityResult` carries `charges: ScalarLimits`, the consumed counters from `execute::consumed`, with no admitted-charge sequence or denials. `replay_value_parity` refuses a function with a Boolean result, and `replay` settles a Boolean predicate. The note is accurate. No other spec text changed. |
+
+### Round 4 verdict
+
+Every SR-11916 finding (FND-001 to FND-008) is resolved. Mergeable once the full gates pass.
