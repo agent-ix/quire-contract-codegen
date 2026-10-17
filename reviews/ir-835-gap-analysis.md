@@ -66,3 +66,13 @@ Reviewed at 86510d48b0280a9298becba1370999db5d33cf06.
 | FND-001 | fixed | ba307de: a non-empty `deletes_scoped` now refuses as `UnsupportedFrameEffect::Deletes`, and FR-015-AC-29's scoped-delete half has tests in both refusal tables ("frame deletes self", "frame deletes a parameter"). The round-0 mutant m6 (`deletes self` on every shape) is now killed: 5 tests fail, and so does the parameter variant. Deleting the src line fails the 2 new tests. |
 | FND-002 | accepted-no-change | Ruling by titan:kani:plan, relayed by the lead: the single-object frame harness renders `receiver` and `every-object` the same way, QSL emits `every-object` for an unscoped `Modifies: f` on the clause's own field, and so there is no refusal of either scope and no scope-swap test. Re-measured: swapping the own scope to `every-object` and the foreign scope to `receiver` still leaves all 59 state-frame tests passing. The PR body says so, apart from the wording in FND-004. |
 | FND-003 | fixed | The PR body now reports IR-824 (#422): no effect observed, measured with a full `it` run and the four QSpec-fixture tests. It lists the 21 QSL commits by area (frame check, reachability, clause sets, spec or test only), and it no longer says src is untouched; it describes the `frame_grants` change. |
+
+### Round 2 dispositions
+
+Head 8576fad9aee0daeb6e307448b768e3b0979509c9. Since 86510d4 the only commit is a reviews-only one (8576fad); `src/` and `tests/` are unchanged.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | The PR body no longer says "CG ignores a field entry's `scope`" or "no scope-dependent test or mutant is possible". It now says that accepting only `receiver` fails 43 `it` tests and accepting only `every-object` fails 7 (the reviewer's round-1 measurement), that no test tells the two apart, and that the MalformedClause arm has no test. |
+
+Final state: SR-12025 FND-001 fixed; SR-12026 FND-001 fixed, FND-002 accepted-no-change, FND-003 fixed, FND-004 fixed. No finding is still open.
