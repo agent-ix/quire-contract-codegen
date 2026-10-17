@@ -175,7 +175,6 @@ fn success() -> Verdict {
 /// through QSL's `replay` and settles the same violation: the twin carrying the injected
 /// violation evaluates the clause to false at the input. QSL evaluated it; nothing here
 /// supplies the verdict.
-///
 #[trace("FR-016-AC-9", "TC-026")]
 #[test]
 fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
@@ -196,7 +195,6 @@ fn tc_026_a_falsifying_input_replays_through_qsl_to_the_same_violation() {
 /// The verdict is QSL's evaluation at the witness point: the same twin holds the clause at
 /// `amount = 0`, so a witness that is not a counterexample settles `inconclusive` with the
 /// proved violation and the replayed success both named.
-///
 #[trace("FR-016-AC-9", "FR-016-AC-10", "TC-026")]
 #[test]
 fn tc_026_the_replayed_verdict_depends_on_the_witness_value() {
@@ -210,7 +208,6 @@ fn tc_026_the_replayed_verdict_depends_on_the_witness_value() {
 /// The healthy twin holds the clause at a real counterexample's input, so QSL settles
 /// `inconclusive` naming both verdicts: replay never repairs a disagreement into a
 /// reproduction.
-///
 #[trace("FR-016-AC-4", "FR-016-AC-10", "TC-026")]
 #[test]
 fn tc_026_a_healthy_native_twin_does_not_reproduce_the_violation() {
@@ -222,7 +219,6 @@ fn tc_026_a_healthy_native_twin_does_not_reproduce_the_violation() {
 }
 
 /// A decoded value no replay parameter binds is refused before any call.
-///
 #[trace("FR-016-AC-11", "TC-026")]
 #[test]
 fn tc_026_a_value_with_no_parameter_is_refused() {
@@ -238,7 +234,6 @@ fn tc_026_a_value_with_no_parameter_is_refused() {
 
 /// A Boolean value replays as the integer 1 or 0: `flag(b) = b` is false for `false`, which
 /// reproduces the violation, and true for `true`, which does not.
-///
 #[trace("FR-016-AC-9", "TC-026")]
 #[test]
 fn tc_026_a_boolean_value_replays_as_zero_or_one() {
@@ -268,7 +263,6 @@ fn tc_026_a_boolean_value_replays_as_zero_or_one() {
 /// Every refusal the adapter has is its own typed error: a delimiter in a transcript field, a
 /// node id that makes the transcript inadmissible, a request QSL refuses, and a request whose
 /// source is not a witness.
-///
 #[trace("FR-016-AC-11", "TC-026")]
 #[test]
 fn tc_026_each_adapter_refusal_is_its_own_typed_error() {
@@ -385,7 +379,6 @@ fn dependency_lock() -> DependencyLock {
 /// field for field with the dependency's own sources and labelled with each record's own digest
 /// domain, in ascending identity order whatever order the lock lists them in. A source shared
 /// by the unit and a dependency, or by two dependencies, is provided once.
-///
 #[trace("FR-016-AC-15", "TC-026")]
 #[test]
 fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
@@ -479,7 +472,6 @@ fn tc_026_the_request_package_reference_carries_the_lock_dependencies() {
 /// A lock whose only defect is one library identity selected twice has no admitted request: QSL's
 /// `DependencyInput::new` refuses it as `DuplicateIdentity` (code `invalid_package`), and it
 /// arrives as `DependencyLockError::Input`. This crate carries no duplicate check of its own.
-///
 #[trace("FR-016-AC-24", "TC-026")]
 #[test]
 fn tc_026_a_lock_repeating_a_dependency_is_refused() {
@@ -565,7 +557,6 @@ fn replay_q(
 /// A unit that imports a locked dependency compiles with it and replays through
 /// `qsl_replay::replay`: the dependency's `big` is evaluated, so `x = 3` (not big) reproduces the
 /// proved violation and `x = 7` (big) does not.
-///
 #[trace("FR-016-AC-14", "TC-026")]
 #[test]
 fn tc_026_a_unit_importing_a_locked_dependency_replays_to_a_reproduced_verdict() {
@@ -588,7 +579,6 @@ fn tc_026_a_unit_importing_a_locked_dependency_replays_to_a_reproduced_verdict()
 
 /// The dependency is compiled from the lock's own source, not assumed: a unit whose import names
 /// no supplied library is refused at the call site.
-///
 #[trace("FR-016-AC-16", "TC-026")]
 #[test]
 fn tc_026_an_import_with_no_locked_dependency_is_refused() {
@@ -604,7 +594,6 @@ fn tc_026_an_import_with_no_locked_dependency_is_refused() {
 
 /// The request's dependency entry carries the lock's recorded `package_id`, which QSL checks
 /// against the dependency it recompiles: a lock recording another identity is refused.
-///
 #[trace("FR-016-AC-17", "TC-026")]
 #[test]
 fn tc_026_a_lock_recording_another_dependency_identity_is_refused() {
@@ -630,7 +619,6 @@ fn tc_026_a_lock_recording_another_dependency_identity_is_refused() {
 
 /// A lock selecting a library the unit does not import compiles, but QSL refuses the request
 /// naming it as unselected.
-///
 #[trace("FR-016-AC-18", "TC-026")]
 #[test]
 fn tc_026_qsl_refuses_a_dependency_the_unit_does_not_select() {
@@ -664,7 +652,6 @@ fn tc_026_qsl_refuses_a_dependency_the_unit_does_not_select() {
 
 /// Two lock libraries whose sources share an owner are no dependency input, so the package is
 /// refused before the call site compiles anything.
-///
 #[trace("FR-016-AC-19", "TC-026")]
 #[test]
 fn tc_026_libraries_sharing_a_source_owner_are_refused() {
@@ -686,7 +673,6 @@ fn tc_026_libraries_sharing_a_source_owner_are_refused() {
 }
 
 /// A lock library whose source has the unit's own owner is refused by QSL's call site.
-///
 #[trace("FR-016-AC-20", "TC-026")]
 #[test]
 fn tc_026_a_library_sharing_the_units_source_owner_is_refused() {
@@ -809,7 +795,6 @@ fn golden_arguments(
 /// The request's `obligation_identity` slot holds the O-09 function-contract digest recomputed
 /// independently from the members QSL's `FunctionSite` carries, the harness's kind and its
 /// arguments, and it is not the digest of the transcript.
-///
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
@@ -836,7 +821,6 @@ fn tc_026_the_request_slot_is_the_recomputed_function_contract_digest() {
 /// The request `replay_counterexample` hands QSL carries the recomputed O-09 digest in its slot:
 /// the request is captured at the executor seam and then replayed for real, so a slot filled
 /// with any other value fails here.
-///
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest() {
@@ -866,7 +850,6 @@ fn tc_026_the_request_replay_counterexample_sends_carries_the_recomputed_digest(
 
 /// A Boolean argument has its own golden spelling, and the arguments are ordered by identifier
 /// even where that order differs from the order of the parameters' node ids.
-///
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_a_boolean_argument_and_identifier_order_match_the_golden_text() {
@@ -913,7 +896,6 @@ fn tc_026_a_boolean_argument_and_identifier_order_match_the_golden_text() {
 
 /// O-09's `arguments` are the function's parameters: a harness that leaves a parameter without an
 /// argument, or declares an integer with no bound or a Boolean with bounds, has no identity.
-///
 #[trace("FR-016-AC-21", "TC-026")]
 #[test]
 fn tc_026_a_harness_that_is_not_the_functions_parameters_has_no_identity() {
@@ -948,7 +930,6 @@ fn tc_026_a_harness_that_is_not_the_functions_parameters_has_no_identity() {
 /// is the same across a recompile that adds only comments and blank lines and across a change of
 /// the harness's source span; it differs between two kinds over the same function and when an
 /// argument's domain differs.
-///
 #[trace("FR-016-AC-22", "TC-026")]
 #[test]
 fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_and_span() {
@@ -992,7 +973,6 @@ fn tc_026_the_identity_separates_functions_kinds_and_domains_and_ignores_text_an
 /// A function whose body has two conjuncts, replayed under one kind, has one identity: the
 /// identity is the digest of the function, declaration, kind and arguments, so it equals the
 /// recomputed digest, which has no conjunct member.
-///
 #[trace("FR-016-AC-22", "TC-026")]
 #[test]
 fn tc_026_a_two_conjunct_function_has_one_identity_per_kind() {
@@ -1015,7 +995,6 @@ fn tc_026_a_two_conjunct_function_has_one_identity_per_kind() {
 /// With the function, declaration, kind and arguments fixed, an unrelated declaration added to
 /// the unit leaves the identity unchanged, and a harness argument that names no parameter is
 /// refused rather than guessed.
-///
 #[trace("FR-016-AC-23", "TC-026")]
 #[test]
 fn tc_026_an_unrelated_declaration_does_not_change_the_identity() {
@@ -1065,7 +1044,6 @@ fn playback(harness: &KaniObligationHarness, amount: i64, balance: i64) -> Strin
 }
 
 /// A counterexample in domain that the violating twin falsifies is a reproduced violation.
-///
 #[trace("FR-016-AC-3", "TC-026")]
 #[test]
 fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
@@ -1078,7 +1056,6 @@ fn tc_026_an_in_domain_counterexample_the_twin_falsifies_is_reproduced() {
 
 /// A decoded value outside its argument's domain is evidence failure, and the replay never
 /// runs: the same value inside the domain reproduces against the same twin.
-///
 #[trace("FR-016-AC-2", "TC-026")]
 #[test]
 fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
@@ -1097,7 +1074,6 @@ fn tc_026_an_out_of_domain_counterexample_is_evidence_failure() {
 /// Each class of malformed transcript is a decode evidence failure carrying the decoder's own
 /// cause code: no playback block, a playback block with too few values for the schema, and one
 /// whose value has the wrong byte width.
-///
 #[trace("FR-016-AC-1", "TC-026")]
 #[test]
 fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
@@ -1128,7 +1104,6 @@ fn tc_026_each_malformed_counterexample_class_is_a_decode_evidence_failure() {
 
 /// A transcript recorded for another harness is a decode evidence failure and is never
 /// replayed: the same values under the right harness reproduce.
-///
 #[trace("FR-016-AC-5", "TC-026")]
 #[test]
 fn tc_026_a_counterexample_for_another_harness_is_never_replayed() {
@@ -1150,7 +1125,6 @@ fn tc_026_a_counterexample_for_another_harness_is_never_replayed() {
 
 /// A replay that runs and does not reproduce the violation is evidence failure naming QSL's
 /// settlement, never a clause success.
-///
 #[trace("FR-016-AC-4", "TC-026")]
 #[test]
 fn tc_026_a_counterexample_the_twin_holds_is_evidence_failure() {
@@ -1164,7 +1138,6 @@ fn tc_026_a_counterexample_the_twin_holds_is_evidence_failure() {
 /// The replay verdict is a function of the exact witness values: the twin that is false only at
 /// `(1, 5)` is reproduced by the transcript carrying `(1, 5)` and by no neighbouring transcript,
 /// so no constant or substituted witness can stand in for the decoded one.
-///
 #[trace("FR-016-AC-9", "TC-026")]
 #[test]
 fn tc_026_the_replay_verdict_is_decided_by_the_exact_witness_values() {

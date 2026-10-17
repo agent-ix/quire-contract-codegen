@@ -1740,7 +1740,7 @@ fn tc_031_ac6_undischargeable_capability_refuses_before_any_item() {
     ));
 }
 
-/// (Inspection). Only `CheckMode::Linked` is ever
+/// FR-021-AC-8 (Inspection). Only `CheckMode::Linked` is ever
 /// admitted: the generated source's `checked_package()` names
 /// `rt::CheckMode::Linked` and never `rt::CheckMode::Kernel`.
 #[trace("FR-021-AC-8", "TC-031")]
@@ -1845,7 +1845,7 @@ fn tc_031_ac12_dangling_callee_refuses_only_its_own_items() {
     ));
 }
 
-/// (second case). A function whose own body
+/// FR-021-AC-12 (second case). A function whose own body
 /// node's real form disagrees with its declared body kind ("a form none of
 /// this generator's classifiers admits") is refused with `FormMismatch`,
 /// isolated to its own item.
@@ -1874,7 +1874,7 @@ fn tc_031_ac12_form_mismatch_refuses_only_its_own_item() {
     ));
 }
 
-/// step 13. A distinct call request retains its identity while the
+/// FR-021-AC-33 step 13. A distinct call request retains its identity while the
 /// function's separately declared temporal formula body supplies the refusal cause.
 #[trace("FR-021-AC-33", "TC-031")]
 #[test]
@@ -2434,7 +2434,7 @@ fn tc_031_ac33_direct_fairness_call_node_is_unsupported() {
     assert!(!contents(&combined, "src/lib.rs").contains(fairness_id.digest.as_ref()));
 }
 
-/// (duplicate handling, matching FR-014/FR-018). One
+/// FR-021-AC-1 (duplicate handling, matching FR-014/FR-018). One
 /// node id requested twice under one binding refuses every copy.
 #[trace("FR-021-AC-1", "TC-031")]
 #[test]
@@ -2452,7 +2452,7 @@ fn tc_031_ac1_duplicate_request_refuses_every_copy() {
     ));
 }
 
-/// (signature/body-kind agreement). A `Scalar`
+/// FR-021-AC-12 (signature/body-kind agreement). A `Scalar`
 /// body's declared parameter count or result type disagreeing with what the
 /// body kind requires is refused with `SignatureMismatch` at generation
 /// time, instead of assembling into a package whose emitted
@@ -2519,7 +2519,7 @@ fn tc_031_signature_mismatch_refuses_arity_and_result_type_disagreement() {
     ));
 }
 
-/// (duplicate declared names; the surviving origin also
+/// FR-021-AC-15 (duplicate declared names; the surviving origin also
 /// exercises AC-17, origin from the request function binding). Two
 /// declarations sharing one name -- different node ids, same string --
 /// are both refused as `AmbiguousFunctionName` rather than colliding into
@@ -2629,7 +2629,7 @@ fn tc_031_ambiguous_function_name_refuses_both_and_does_not_corrupt_indices() {
     ));
 }
 
-/// (item-level arity). An item's argument count
+/// FR-021-AC-1 (item-level arity). An item's argument count
 /// disagreeing with the applied function's declared parameter count is
 /// refused as `ArityMismatch`, naming both counts.
 #[trace("FR-021-AC-1", "TC-031")]
@@ -2839,7 +2839,7 @@ impl DuplicateNodeFixture {
     }
 }
 
-/// step 9 fixture (i). Two declarations sharing one declaring node
+/// FR-021-AC-22 step 9 fixture (i). Two declarations sharing one declaring node
 /// id and both admissible are both refused, whichever order they arrive in: neither enters
 /// `checked_package()`, the source or `location-map.json`, and each item naming one is
 /// `DuplicateDeclaringNode`, never `UnknownFunction`. A distinct-node function is generated
@@ -2867,7 +2867,7 @@ fn tc_031_ac22_fixture_i_both_bodies_admissible() {
     .check(&package);
 }
 
-/// step 9 fixture (ii). One declaration of the pair would be
+/// FR-021-AC-22 step 9 fixture (ii). One declaration of the pair would be
 /// refused in Stage 1 (an undischargeable capability) and its same-node sibling is admissible:
 /// the sibling does not survive, and neither item reports `UnknownFunction`, nor the refused
 /// one's own Stage 1 reason.
@@ -2894,7 +2894,7 @@ fn tc_031_ac22_fixture_ii_one_body_refused_and_sibling_admissible() {
     .check(&package);
 }
 
-/// step 9 fixture (iii). The pair also shares one name, and a third
+/// FR-021-AC-22 step 9 fixture (iii). The pair also shares one name, and a third
 /// declaration with its own node id holds the same name: the third is refused as
 /// `AmbiguousFunctionName` and is absent from `checked_package()` and the location map, while
 /// items naming the shared name are `DuplicateDeclaringNode`, never `AmbiguousFunctionName`.
@@ -2918,7 +2918,7 @@ fn tc_031_ac22_fixture_iii_shared_name_takes_the_node_id_refusal() {
     .check(&package);
 }
 
-/// step 9 fixture (iv). A declaration whose nested `call` names a
+/// FR-021-AC-22 step 9 fixture (iv). A declaration whose nested `call` names a
 /// member of the pair is refused as `UnknownCallee`, and a distinct-node function and an item
 /// naming each function are handled: the pair's items `DuplicateDeclaringNode`, the caller's
 /// item `UnknownCallee`, the distinct function's generated.
@@ -2962,7 +2962,7 @@ fn tc_031_ac22_fixture_iv_nested_call_to_a_refused_duplicate_is_unknown_callee()
     }
 }
 
-/// step 9 fixture (v). One name is held by two duplicate groups, on
+/// FR-021-AC-22 step 9 fixture (v). One name is held by two duplicate groups, on
 /// `FN_ADD` and on `FN_EQ`: an item naming it is refused `DuplicateDeclaringNode` carrying the
 /// smaller of the two node ids, under every order of the declarations.
 #[trace("FR-021-AC-22", "TC-031")]
@@ -2989,7 +2989,7 @@ fn tc_031_ac22_fixture_v_two_duplicate_groups_report_the_smallest_node_id() {
     }
 }
 
-/// step 9 fixture (vi). Two items on one call node naming the two
+/// FR-021-AC-22 step 9 fixture (vi). Two items on one call node naming the two
 /// members of a duplicate pair, and one such item requested twice, each get
 /// `DuplicateDeclaringNode`: the refusal takes precedence over the duplicate-request collapse.
 #[trace("FR-021-AC-22", "TC-031")]
@@ -3062,7 +3062,7 @@ fn both_orders(
     forward
 }
 
-/// step 12 case (i). One unknown name on a call node is one
+/// FR-021-AC-24 step 12 case (i). One unknown name on a call node is one
 /// `UnknownFunction` entry naming it.
 #[trace("FR-021-AC-24", "TC-031")]
 #[test]
@@ -3076,7 +3076,7 @@ fn tc_031_ac24_case_i_one_unknown_name_is_one_entry() {
     assert_eq!(entries(&oracles), vec![&unknown("zz_unknown")]);
 }
 
-/// step 12 case (ii). Two different unknown names on one call node
+/// FR-021-AC-24 step 12 case (ii). Two different unknown names on one call node
 /// with equal arguments are two entries, `aa_unknown` then `zz_unknown`, never `DuplicateRequest`,
 /// identical under both request orders.
 #[trace("FR-021-AC-24", "TC-031")]
@@ -3094,7 +3094,7 @@ fn tc_031_ac24_case_ii_two_unknown_names_are_two_entries_in_name_order() {
     );
 }
 
-/// step 12 case (iii). The same unknown name requested twice is one
+/// FR-021-AC-24 step 12 case (iii). The same unknown name requested twice is one
 /// `DuplicateRequest` entry.
 #[trace("FR-021-AC-24", "TC-031")]
 #[test]
@@ -3116,7 +3116,7 @@ fn tc_031_ac24_case_iii_the_same_unknown_name_twice_is_one_duplicate_request() {
     );
 }
 
-/// step 12 case (iv). A declared `add_fn` and `zz_unknown` on one
+/// FR-021-AC-24 step 12 case (iv). A declared `add_fn` and `zz_unknown` on one
 /// call node are two entries, the unknown one first, each equal to the entry its item gets when
 /// requested alone.
 #[trace("FR-021-AC-24", "TC-031")]
@@ -3165,7 +3165,7 @@ fn tc_031_ac24_case_iv_known_and_unknown_order_unknown_first_and_match_solo() {
     assert_eq!(oracles.claim_map.items[0].result, unknown("zz_unknown"));
 }
 
-/// step 12 case (v). Names order byte-wise and case-sensitively:
+/// FR-021-AC-24 step 12 case (v). Names order byte-wise and case-sensitively:
 /// `Zz_unknown` (`Z` is 0x5A) before `aa_unknown` (`a` is 0x61), identical under both orders.
 #[trace("FR-021-AC-24", "TC-031")]
 #[test]
@@ -3182,7 +3182,7 @@ fn tc_031_ac24_case_v_names_order_by_bytes_case_sensitively() {
     );
 }
 
-/// step 12 case (vi). Items on one call node naming the two members
+/// FR-021-AC-24 step 12 case (vi). Items on one call node naming the two members
 /// of a duplicate-node pair are two entries ordered by function name. With `m_multi` and `z_pair`
 /// on the larger node N2 and `m_multi` and `q_extra` on the smaller node N1, `m_multi` (whose
 /// refusal carries N1) orders before `z_pair` (N2); with `z_multi` and `a_pair`, `a_pair` (N2)
@@ -3229,7 +3229,7 @@ fn tc_031_ac24_case_vi_duplicate_node_pair_members_order_by_name() {
     }
 }
 
-/// step 12 case (vii). The name tie-break applies only to items equal
+/// FR-021-AC-24 step 12 case (vii). The name tie-break applies only to items equal
 /// on the earlier key fields: items whose declaring node ids differ are ordered by declaring node
 /// id first. With `a_pair` and `z_pair` on N2, `z_pair` and `q_extra` on N1, and `a_pair` alone on
 /// the larger N3, `a_pair` resolves to N3 and `z_pair` to N2, so `z_pair` (refusal N1) orders
@@ -3417,7 +3417,7 @@ fn tc_031_ac14_manifest_and_source_shape() {
     assert!(lib.contains("Outcome::Completed(rt::Value::Boolean(value))"));
 }
 
-/// (origin half only -- see module doc "Location
+/// FR-021-AC-15 (origin half only -- see module doc "Location
 /// tagging" and `spec/oracle/matrix/tests.md`'s FR-021 row: the `path`-non-empty
 /// case is not implemented and is unreachable from this V1's scoped body
 /// vocabulary). The location map records one entry per generated
@@ -3470,7 +3470,7 @@ fn tc_031_ac15_location_map_round_trips_to_the_request_structurally() {
     }
 }
 
-/// (Inspection). No generated code or claim map
+/// FR-021-AC-16 (Inspection). No generated code or claim map
 /// reads, branches on, or asserts non-emptiness of `Evaluation.location` or
 /// `Evaluation.losses`: the generated oracle discards both by construction
 /// (`.map(|evaluation| evaluation.outcome)`), and this test greps the

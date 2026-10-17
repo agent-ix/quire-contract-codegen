@@ -792,7 +792,6 @@ fn tc_004_invalid_campaign_inputs_fail_before_clause_generation() {
 
 /// A precondition clause identical to its postcondition clause is refused before any clause
 /// is generated.
-///
 #[trace("TC-004")]
 #[test]
 fn tc_004_identical_precondition_and_postcondition_clauses_are_refused() {
@@ -820,7 +819,6 @@ fn tc_004_identical_precondition_and_postcondition_clauses_are_refused() {
 
 /// Two clause ids equal in their first 24 characters share a readable oracle stem; the harness
 /// still generates, naming the two oracles by clause order rather than refusing.
-///
 #[trace("TC-004", "FR-022-AC-9")]
 #[test]
 fn tc_004_clauses_sharing_a_readable_stem_get_distinct_oracle_names() {

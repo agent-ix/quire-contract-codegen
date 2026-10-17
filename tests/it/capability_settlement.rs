@@ -1162,7 +1162,6 @@ fn tc_030_the_advertised_mode_table_settles_each_row() {
 }
 
 /// The Kani arm checks typed form support before extent and advertised mode.
-///
 #[trace(
     "FR-019-AC-25",
     "FR-019-AC-26",
@@ -1223,7 +1222,6 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
 
 /// A selected quantity conversion settles as unsupported with the named capability: the Kani
 /// arm cannot accept an operation its generator refuses.
-///
 #[trace("FR-014-AC-2", "FR-019-AC-44", "TC-024")]
 #[test]
 fn a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capability() {
@@ -1980,7 +1978,6 @@ fn kani_state_frame_refusal_identity_keeps_operation_and_contract_frame_role() {
 
 /// Checked scalar nodes without source occurrences are invalid at the routed preflight seam,
 /// even when the direct FR-015 classifier has a result for the same nodes.
-///
 #[trace("FR-019-AC-44", "TC-030")]
 #[test]
 fn kani_routed_preflight_requires_selected_result_occurrences() {
@@ -2215,7 +2212,6 @@ fn kani_scalar_path_requires_selected_result_for_nonderivable_nodes() {
 }
 
 /// Form refusal follows candidate validation and precedes mode settlement.
-///
 #[trace("FR-019-AC-27", "FR-019-AC-28", "FR-019-AC-29")]
 #[test]
 fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
@@ -2308,7 +2304,6 @@ fn kani_form_refusal_keeps_candidate_and_mode_precedence() {
 }
 
 /// Human-facing labels do not participate in typed Kani form identity.
-///
 #[trace("FR-019-AC-30")]
 #[test]
 fn kani_form_identity_does_not_depend_on_display_or_debug_text() {

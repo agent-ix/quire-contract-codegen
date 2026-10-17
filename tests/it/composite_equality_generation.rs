@@ -1443,7 +1443,7 @@ fn tc_029_ac7_a_direct_reference_operand_is_refused_by_ir_today() {
     assert_eq!(refusal.locus, Some(node_id));
 }
 
-/// (generation-time half; the `check_type` guard
+/// FR-018-AC-8 (generation-time half; the `check_type` guard
 /// half is `tc_029_ac8_check_type_guards_the_oracle` in the agreement test).
 #[trace("FR-018-AC-8", "TC-029")]
 #[test]
@@ -1596,7 +1596,7 @@ fn tc_029_ac10_generation_is_repeatable_from_a_fresh_package() {
     }
 }
 
-/// (generation-time half; complementary outcomes
+/// FR-018-AC-11 (generation-time half; complementary outcomes
 /// are `tc_029_ac11_complementary_outcomes` in the agreement test).
 #[trace("FR-018-AC-11", "TC-029")]
 #[test]

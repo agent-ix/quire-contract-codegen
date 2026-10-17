@@ -439,7 +439,6 @@ const UNIT_GRID: [&str; 6] = ["m", "cm", "in", "rev", "u2", "s"];
 /// The TC-187 arithmetic, comparison, power and tabled-limit vectors. The vectors that convert a
 /// quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle and
 /// are not agreement rows: a conversion is refused.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_quantity_oracles_agree() {
@@ -831,7 +830,6 @@ fn completed(run: &QuantityRun<Quantity>, row: &str) -> Quantity {
 
 /// TC-187 U12: quantity multiplication, division and power under canonical compound units, with
 /// the `s` family the grid needs for a mixed-unit product.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u12_compound_unit_products_agree() {
@@ -870,7 +868,6 @@ fn tc_024_tc187_u12_compound_unit_products_agree() {
 
 /// TC-187 U02: the normalized dimension map drops zero exponents; `(L*T)/T` is `L` and `L^0` is
 /// the empty dimension, both in the retained sorted maps and through the quantity operators.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u02_dimension_normalization_agrees() {
@@ -942,7 +939,6 @@ fn tc_024_tc187_u02_dimension_normalization_agrees() {
 
 /// TC-187 U05: arithmetic, comparison-free operators and a power on a nonzero-offset point
 /// (`degC`, `degF`) are refused `ill_typed` before any charge.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
@@ -968,7 +964,6 @@ fn tc_024_tc187_u05_affine_point_arithmetic_is_refused_alike() {
 
 /// TC-187 U09: a base dimension with the same declaration name and shape as `L` but a different
 /// owner, hence a different node key, is an incompatible dimension despite the resemblance.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
@@ -988,7 +983,6 @@ fn tc_024_tc187_u09_a_foreign_dimension_key_is_ill_typed() {
 
 /// TC-187 U14: under `L(0,0,0,0,0,0)` each incompatible, affine or distinct-unit operation is
 /// refused `ill_typed` with no charge.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u14_static_refusals_charge_nothing() {
@@ -1009,7 +1003,6 @@ fn tc_024_tc187_u14_static_refusals_charge_nothing() {
 
 /// TC-187 U20: the affine-by-composed-offset units `u1` and `u3` refuse arithmetic with no
 /// charge; `u2`'s offsets compose to zero, so its sum is exact with no edge.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
@@ -1039,7 +1032,6 @@ fn tc_024_tc187_u20_composed_offsets_decide_affinity() {
 
 /// TC-187 U27: `1 cm / 0 cm` is undefined after both identity reads and before any edge; one work
 /// unit fewer stops incomplete at the second read.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u27_division_by_zero_precedes_every_edge() {
@@ -1115,7 +1107,6 @@ fn declaration(
 /// have no generated oracle; they run against the same graph admission every agreement vector
 /// builds its fixture through. A zero scale and each broken topology of the `L` graph is refused
 /// `invalid_semantic_graph`, with its typed cause, before a quantity can exist.
-///
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_u06_u11_unit_graph_admission_refuses_each_malformed_graph() {

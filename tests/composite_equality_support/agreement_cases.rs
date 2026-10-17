@@ -387,7 +387,7 @@ fn tc_029_ac9_a_converted_operand_denies_its_own_conversion_charges() {
     }
 }
 
-/// codegen#83.
+/// FR-018-AC-2 / TC-029 (codegen#83).
 ///
 /// One vector per remaining `admits_equality_conversion` row (`Int -> *` is
 /// already covered above by E_CONV/E_CONV_CHARGE): `Rational -> Rational`,

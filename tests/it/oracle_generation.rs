@@ -1177,7 +1177,6 @@ fn tc_001_every_implication_has_an_exact_unaliased_consequent_region() {
 /// TC-003, and TC-044 (FR-031-AC-7) for its first locus: the `saturate` addition precedes the
 /// negation in authored preorder, so the addition is the first unsupported node, and a negation
 /// that comes first is still refused as an unsupported expression.
-///
 #[trace("TC-044", "FR-031-AC-7")]
 #[test]
 fn tc_003_unsupported_expression_and_root_map_to_declared_terminal_states() {
@@ -1441,7 +1440,6 @@ fn tc_003_dependency_normalization_is_injective_and_artifact_names_are_bounded()
 
 /// TC-003, and TC-044 (FR-031-AC-18): a division whose divisor and range IR discharged is still
 /// refused, because the oracle takes no raw `/`.
-///
 #[trace("TC-044", "FR-031-AC-18")]
 #[test]
 fn tc_023_native_proven_division_is_refused_until_the_ir_601_ruling() {

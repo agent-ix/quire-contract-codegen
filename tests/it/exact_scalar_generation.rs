@@ -1381,7 +1381,6 @@ fn tc_024_operator_confusion_within_one_shape_is_not_silently_confirmed() {
 
 /// Wrong arity and result form/target refuse before source is emitted, while binary operand
 /// order and the descriptor-selected runtime callee remain visible in generated code.
-///
 #[trace("FR-038-AC-3", "FR-014-AC-8", "FR-014-AC-13", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_catalog_consumer_negative_cases_refuse_wrong_shapes_and_preserve_order_and_target() {
@@ -1896,7 +1895,6 @@ fn tc_024_every_exact_scalar_refusal_variant_is_matched_exhaustively() {
 
 /// An integer-range endpoint spelled `05` is refused by the authoritative
 /// checked-package reader before a CG claim can exist.
-///
 #[trace("FR-014-AC-10", "TC-024")]
 #[test]
 fn tc_024_unreadable_integer_bound_is_a_strict_reader_refusal() {
@@ -2267,7 +2265,6 @@ fn tc_024_generated_crate_is_unpublished_charge_free_and_compiles() {
 /// A `reference` operand typed by an `integer_range` `bounded_domain` (QSL's `Int[0, 9]`
 /// parameter) is an Integer operand and generates; before IR-297 it was refused as
 /// `OperandTypeMismatch { found: None }`.
-///
 #[trace("FR-014-AC-17", "TC-024")]
 #[test]
 fn tc_024_ac17_an_operand_typed_by_a_bounded_domain_generates() {
@@ -2559,7 +2556,6 @@ fn two_parameter_derive(code: u32) -> Result<ExactScalarItem, AdmittedRefusal> {
 /// bounds are the result bound first, then each operand's own. Derivation returns the descriptor
 /// over the result bound. Before IR-298 the three reachable `integer_range` bounds over Integer
 /// were `AmbiguousBound`.
-///
 #[trace("FR-014-AC-20", "TC-024")]
 #[test]
 fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound() {
@@ -2590,7 +2586,6 @@ fn tc_024_ac20_two_distinct_bounded_parameters_generate_against_the_result_bound
 
 /// A scalar-typed result whose reachable bounds are the operands' own two and one more resolves to
 /// the one that is no operand's.
-///
 #[trace("FR-014-AC-21", "TC-024")]
 #[test]
 fn tc_024_ac21_a_scalar_typed_result_takes_the_one_bound_no_operand_types() {
@@ -2599,7 +2594,6 @@ fn tc_024_ac21_a_scalar_typed_result_takes_the_one_bound_no_operand_types() {
 }
 
 /// A scalar-typed result whose reachable bounds are all operands' own has no result bound.
-///
 #[trace("FR-014-AC-22", "TC-024")]
 #[test]
 fn tc_024_ac22_a_scalar_typed_result_with_only_operand_bounds_is_ambiguous() {
@@ -2613,7 +2607,6 @@ fn tc_024_ac22_a_scalar_typed_result_with_only_operand_bounds_is_ambiguous() {
 }
 
 /// An operand, or the result, typed by a bound of another form is `MissingBound`.
-///
 #[trace("FR-014-AC-23", "TC-024")]
 #[test]
 fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused() {
@@ -2636,7 +2629,6 @@ fn tc_024_ac23_an_operand_or_result_typed_by_a_bound_of_another_form_is_refused(
 /// with a `[0, 29]` result, `-e` over `[1, 9]` with a `[-9, -1]` result and `e * f` over `[1, 9]`
 /// and `[100, 200]` with a `[100, 1800]` result all generate, derive the same descriptor, and
 /// record each operand's own bound after the result bound.
-///
 #[trace("FR-014-AC-24", "TC-024")]
 #[test]
 fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
@@ -2694,7 +2686,6 @@ fn tc_024_ac24_operand_bounds_need_not_lie_inside_the_result_bound() {
 /// one, or the result is typed by one, it is `RequiresBound` naming its type, in generation and in
 /// derivation. A literal operand is never refused, and a package whose operands own no bound and
 /// whose result is scalar-typed keeps the one-bound reading.
-///
 #[trace("FR-014-AC-25", "TC-024")]
 #[test]
 fn tc_024_ac25_a_plain_typed_reference_operand_beside_bounded_typing_requires_a_bound() {
@@ -2828,7 +2819,6 @@ fn ambiguous_integer_bound() -> ExactScalarRefusal {
 /// literal and whose type is the plain Integer type: that operand is a literal, so `x + 1` over
 /// `x: Int[0, 9]` narrowed to `Int[0, 10]` generates with checked bounds `[0, 10]` then `[0, 9]`
 /// and derives the descriptor over `[0, 10]`.
-///
 #[trace("FR-014-AC-26", "TC-024")]
 #[test]
 fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
@@ -2851,7 +2841,6 @@ fn tc_024_ac26_a_reference_to_a_literal_value_node_is_a_literal_operand() {
 /// the conversion's. `x + y` over `[0, 9]` and `[10, 20]` narrowed to `[10, 29]` checks `[10, 29]`,
 /// `[0, 9]`, `[10, 20]`, and a descriptor over an operand's bound is a mismatch against `[10, 29]`;
 /// `-z` over `[0, 9]` narrowed to `[-9, 0]` checks `[-9, 0]` then `[0, 9]`.
-///
 #[trace("FR-014-AC-27", "TC-024")]
 #[test]
 fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion() {
@@ -2901,7 +2890,6 @@ fn tc_024_ac27_a_scalar_typed_result_takes_the_bound_of_its_narrowing_conversion
 
 /// The referenced node's body decides: `n` is a plain-Integer `value` node of form `literal`
 /// whose body is not a literal, so `x + n` is `RequiresBound`.
-///
 #[trace("FR-014-AC-28", "TC-024")]
 #[test]
 fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
@@ -2913,7 +2901,6 @@ fn tc_024_ac28_a_literal_form_node_without_a_literal_body_is_not_a_literal() {
 }
 
 /// `x + p` narrowed to `Int[0, 29]`, `p` a plain-Integer parameter, is `RequiresBound`.
-///
 #[trace("FR-014-AC-29", "TC-024")]
 #[test]
 fn tc_024_ac29_a_plain_parameter_beside_a_bounded_one_requires_a_bound() {
@@ -2922,7 +2909,6 @@ fn tc_024_ac29_a_plain_parameter_beside_a_bounded_one_requires_a_bound() {
 
 /// `q + q` narrowed to `Int[0, 29]`, no operand owning a bound, is `RequiresBound`: the narrowing
 /// bounds the result as a `bounded_domain` result type does.
-///
 #[trace("FR-014-AC-30", "TC-024")]
 #[test]
 fn tc_024_ac30_plain_operands_under_a_narrowing_require_a_bound() {
@@ -2932,7 +2918,6 @@ fn tc_024_ac30_plain_operands_under_a_narrowing_require_a_bound() {
 /// A literal operand of an integer operation that is not an `integer` literal is refused by its
 /// own kind, whatever the node referencing it is typed: `x + "a"`, the text literal in a
 /// plain-Integer-typed `value` node.
-///
 #[trace("FR-014-AC-31", "TC-024")]
 #[test]
 fn tc_024_ac31_a_non_integer_literal_operand_is_an_operand_type_mismatch() {
@@ -2948,7 +2933,6 @@ fn tc_024_ac31_a_non_integer_literal_operand_is_an_operand_type_mismatch() {
 }
 
 /// Two narrowing conversions to different bounds leave the result role unresolved.
-///
 #[trace("FR-014-AC-32", "TC-024")]
 #[test]
 fn tc_024_ac32_two_distinct_narrowings_are_ambiguous() {
@@ -2961,7 +2945,6 @@ fn tc_024_ac32_two_distinct_narrowings_are_ambiguous() {
 
 /// A narrowing to a bound of another form, or of the form over another scalar type, is
 /// `MissingBound`.
-///
 #[trace("FR-014-AC-33", "TC-024")]
 #[test]
 fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
@@ -3010,7 +2993,6 @@ fn tc_024_ac33_a_narrowing_of_another_form_or_base_type_is_missing_bound() {
 /// `x + 2` is narrowed to `Int[0, 11]` and is also an operand of `(x + 2) + x`: the narrow's
 /// bound does not bound that other use, so it is `AmbiguousBound`. `x + 1`, consumed only by its
 /// narrowing, generates.
-///
 #[trace("FR-014-AC-34", "TC-024")]
 #[test]
 fn tc_024_ac34_a_node_narrowed_and_consumed_otherwise_is_ambiguous() {
@@ -3037,7 +3019,6 @@ fn derive_one(
 /// Deriving from the package alone yields, for every golden-corpus node, the descriptor the
 /// fixture declares, and generating from the derived items gives the same claim map as
 /// generating from the declared ones, every claim `ir_confirmed`.
-///
 #[trace("FR-014-AC-18", "FR-014-AC-19", "TC-024")]
 #[test]
 fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
@@ -3088,7 +3069,6 @@ fn tc_024_derivation_equals_every_golden_corpus_descriptor() {
 /// The operations with more than one descriptor for one identity are told apart by what the node
 /// carries: the operand forms (`rational.div`), the result form (`numeric.convert`,
 /// `numeric.convert_rounding`) and the laws (`integer.div`).
-///
 #[trace("FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
@@ -3149,7 +3129,6 @@ fn tc_024_each_overloaded_identity_derives_by_its_own_selector() {
 
 /// The refused set: identities outside the derivable set, nodes that are not applications, and
 /// refused bounds each return their own typed refusal and no descriptor.
-///
 #[trace("FR-014-AC-18", "FR-014-AC-22", "TC-024")]
 #[test]
 fn tc_024_derivation_refuses_what_it_cannot_derive_with_a_typed_reason() {
@@ -3441,7 +3420,7 @@ pub(crate) fn invokes_panicking_macro(text: &str) -> bool {
     })
 }
 
-/// (the source half: the function generator holds zero invocations;
+/// FR-021-AC-21 (the source half: the function generator holds zero invocations;
 /// the emitted source is AC-19's, in `exact_function_generation`); IR-352 (partial, the scalar
 /// and equality generators). Evidence that no generator panics on an unknown Contract Runtime
 /// variant. The RT enums are `#[non_exhaustive]` and foreign to this crate, so a test cannot build
@@ -3497,7 +3476,6 @@ fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
 
 /// `quire.op.quantity.convert` is refused with its own named capability for every conversion node:
 /// the refusal carries the operation identity and the capability text, and no descriptor is built.
-///
 #[trace("FR-014-AC-2", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_quantity_conversion_is_refused_with_its_named_capability() {
@@ -3575,7 +3553,6 @@ fn contract_request(
 /// A function whose declared body is a quantity conversion node, called by a requested call, is
 /// refused on that call's claim with the named capability and the conversion node's id, under
 /// either declared body kind, and no oracle and no location entry exists for it.
-///
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion() {
@@ -3634,7 +3611,6 @@ fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_convers
 /// The composite-equality generator accepts only a `binary` expression, so a quantity conversion
 /// node is refused as `FormMismatch` with its `conversion` form before any descriptor is read and
 /// no oracle is produced for it.
-///
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artifact() {
@@ -3681,7 +3657,6 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
 /// Function schedules refuse a function declared over a quantity conversion body with the named
 /// capability, as a refused function, whatever result type is declared: no schedule, no module
 /// and no artifact is produced, and the request as a whole still settles.
-///
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_capability() {
@@ -3736,7 +3711,6 @@ fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_ca
 /// A call that passes a quantity conversion node as an argument to a declared function is
 /// refused on its claim with the named capability and the conversion node's id, and generates no
 /// oracle: the conversion is found anywhere in the closure of the call.
-///
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_argument() {
@@ -3802,7 +3776,6 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
 
 /// A schedule item whose call passes a quantity conversion node as an argument is refused with
 /// the named capability, and no schedule is produced for it.
-///
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_named_capability() {
@@ -3862,7 +3835,6 @@ fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_
 /// A quantity equality that reads a conversion node as an operand is refused by the
 /// composite-equality generator as an unsupported quantity, with no oracle: the operand is read
 /// through to the converted quantity type, which has no equality encoding.
-///
 #[trace("FR-014-AC-2", "FR-018-AC-15", "TC-024")]
 #[test]
 fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quantity() {
@@ -3907,7 +3879,6 @@ fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quanti
 /// caller can declare: `generate_exact_scalar_oracles` and `plan_exact_scalar_oracles` return the
 /// named refusal, the plan holds no oracle to render, and the generated crate has no oracle
 /// function and no harness.
-///
 #[trace("FR-014-AC-2", "FR-014-AC-18", "TC-024")]
 #[test]
 fn tc_024_caller_declared_quantity_conversion_is_refused_and_generates_nothing() {
