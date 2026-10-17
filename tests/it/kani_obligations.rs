@@ -2316,6 +2316,62 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     }
 }
 
+/// Real Kani on a crate whose manifest hands CBMC an option it does not know, with the harness's
+/// option vector unchanged: the run exits unsuccessfully but exports a report, and is
+/// `FailedWithoutCounterexample` with the cause `exit_code` 64 and a diagnostic record whose
+/// stderr excerpt holds CBMC's own message.
+///
+/// Trace: FR-017-AC-40, TC-027
+#[test]
+#[ignore = "kani lane: run serially through `make kani`"]
+fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause() {
+    let cancel = quire_exact::Cancel::new();
+    let installation = KaniInstallation::discover().expect("cargo-kani is installed");
+    let package = bound_package(1000);
+    let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
+    let crate_directory = write_crate(&harness, HEALTHY_SUBJECT);
+    let manifest = crate_directory.join("Cargo.toml");
+    let mut text = fs::read_to_string(&manifest).unwrap();
+    text.push_str(
+        "\n[package.metadata.kani]\nunstable = { unstable-options = true }\nflags = { cbmc-args = [\"--no-such-option\"] }\n",
+    );
+    fs::write(&manifest, text).unwrap();
+    let evidence = execute_kani_obligation(&KaniExecutionRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: (&harness).into(),
+        crate_directory: &crate_directory,
+        target_directory: &crate_directory.join("target"),
+        home_directory: None,
+    })
+    .unwrap_or_else(|refusal| panic!("a run that started is not refused: {refusal}"));
+    let _ = fs::remove_dir_all(&crate_directory);
+    assert_eq!(
+        evidence.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::FailedWithoutCounterexample
+        }
+    );
+    assert_ne!(evidence.exit_code, Some(0));
+    let wire = serde_json::to_value(&evidence).unwrap();
+    assert_eq!(
+        wire["failureCause"],
+        json!({ "kind": "exit_code", "code": 64 }),
+        "{wire}"
+    );
+    let record = evidence
+        .diagnostics
+        .expect("a CBMC failure carries the record");
+    assert!(
+        record
+            .stderr
+            .text
+            .contains("Unknown option: --no-such-option"),
+        "{}",
+        record.stderr.text
+    );
+}
+
 /// Real Kani runs: the precondition, postcondition and invariant of a healthy subject verify
 /// separately, a seeded defect is falsified with a concrete counterexample, jointly unsatisfiable
 /// requires are reported vacuous rather than verified, and a real run given a budget it cannot
