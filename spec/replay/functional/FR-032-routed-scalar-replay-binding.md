@@ -99,7 +99,7 @@ and compares exact semantics against the supplied typed observation. QSL carryin
 is not independent authentication of the observation. CG's checked completion contract must
 require the driver's authenticated observation, rather than silently accepting a bare outcome.
 The digest's domain (`sha256-jcs`), exact preimage, artifact-only content, CG minting and driver
-recomputation are fixed by FR-017-AC-45 to AC-49 (the "Scalar proof-content identity as the FR-357
+recomputation are fixed by FR-017-AC-45 to AC-50 (the "Scalar proof-content identity as the FR-357
 observation digest" section); the receipt carries it as a `DigestRecord`. The remaining
 producer/consumer wiring stays CODE-gated; no signing scheme, tracking hash or new observation API
 is invented here.

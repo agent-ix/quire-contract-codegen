@@ -448,7 +448,7 @@ witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual
 compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
 override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
 
-Scalar proof-content digest (FR-017-AC-45 to AC-49): run the paired runner on a genuine routed
+Scalar proof-content digest (FR-017-AC-45 to AC-50): run the paired runner on a genuine routed
 `x + 1` package. (1) Assert the receipt's `DigestRecord` has domain `sha256-jcs` and 32 bytes equal
 to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the schema object and the sorted
 artifact list in the test, independently of the runner's encoder. (2) Assert the exposed entry
@@ -462,6 +462,6 @@ value and require equal `DigestRecord`s. (4) After the receipt is returned, asse
 package, harness or record and require inequality. (6) Compute a golden digest with the measurement function over fixed literal entries, including a
 literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema string, golden)` in one
 assertion. Change the `Cargo.lock` bytes in a test seam to see the digest change with the schema
-unchanged. A golden edited without a schema bump is a review rule, not a test. No
+unchanged. A golden edited without a schema bump is a review rule, not a test. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same receipt, verdict and digest, with a recorded diagnostic. No
 driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
 driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These steps are Planned until the IR-846 code slice lands.
