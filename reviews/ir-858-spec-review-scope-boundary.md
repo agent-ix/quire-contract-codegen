@@ -58,7 +58,7 @@ Raised at 15d7cad (fix round 1).
 
 ## Dispositions
 
-Round 1, checked at 15d7cad (fix 77f5178..15d7cad).
+Round 1, checked at 15d7cad (fix 77f5178..15d7cad); round 2 rows (the last two) at 9664a35 (fix 15d7cad..9664a35).
 
 | FND | outcome | reason |
 | --- | --- | --- |
@@ -67,3 +67,5 @@ Round 1, checked at 15d7cad (fix 77f5178..15d7cad).
 | FND-003 | fixed | P-1 lists the whole rename surface and allows keeping the old name. |
 | FND-004 | still-open | Raised in disposition pass 1; no fix yet. |
 | FND-005 | still-open | Raised in disposition pass 1; no fix yet. |
+| FND-004 | fixed | LetType has a single variant, I128, and Statement::Assume carries a scoped cfg_attr(not(test), allow(dead_code)) with its reason and a removal point at 4c, so the lib target has no unconstructed variant under clippy -D warnings. |
+| FND-005 | fixed | A matches! guard is refused, and matches! arguments are parsed as an expression and a pattern with H-2 applied to the expression. AC-112 and step 42 cover the guard case and a nested panic!/block. Low observation, not a finding: a pattern can itself hold a macro (Pat::Macro); the code PR should refuse it or say why not. |
