@@ -47,8 +47,9 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    `numeric.convert_rounding`); derive every `quantity.convert` node of the corpus
    (each carries the `exact` mode its unit type pins) and check each derives an
    `ir_confirmed` descriptor and generates an oracle that calls `convert_quantity`
-   with `QuantityTarget::Exact` and returns a `Quantity` in the `type_argument`
-   unit, never a scalar (FR-014-AC-48, FR-014-AC-50). Run the conversion vectors
+   with `QuantityTarget::Exact` and returns a `Quantity` in the unit passed as the
+   call-time argument `unit: &QuantityUnit`, never a scalar and never checked
+   against the node's `type_argument` (FR-014-AC-48, FR-014-AC-50). Run the conversion vectors
    (U01, U04 `degC` to `K`, U09b, U10, U15, U22, U25's second step and U26) and the `ill_typed` vectors (`1 m` to `s`, U09, `1 N_m` to `J`, compound `4 m^2` to `m`),
    and check each outcome, admitted charges and consumed counters equal direct
    `convert_quantity` execution, with zero charges and no counter change for
@@ -58,11 +59,20 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
    function-application generator and the function schedules refuse a
    conversion body as `UnsupportedOperator` (generator) and
-   `ScheduleRefusal::UnsupportedOperation` (schedules), accepting an earlier
+   `ScheduleRefusal::UnsupportedOperation` (schedules), and the schedules refuse
+   a function with a unit-typed parameter or result as a per-function
+   `ScheduleRefusal::UnsupportedOperation`, never as a request-level error,
+   accepting an earlier
    `Unsupported`, `NotExpression`, `UnsupportedOperandType` or argument refusal
    where that check fires first (FR-021-AC-21), that a conversion node with a scalar or compound
-   `type_argument` or a non-`exact` mode is refused as `OperandFormsNotDerivable`
-   or `ModeNotDerivable` with no oracle (FR-014-AC-50), and that the composite-equality generator refuses a conversion
+   `type_argument` is refused as `OperandFormsNotDerivable` and one with a
+   non-`exact` mode as `ModeNotDerivable`, each with no oracle, and the mode is
+   checked first, so a scalar `type_argument` with a non-`exact` mode is
+   `ModeNotDerivable` (FR-014-AC-50). The scalar-target refusal runs on an
+   admitted-package fixture; the `ModeNotDerivable` and compound-unit cases run
+   only on hand-built nodes in module tests, because Contract IR FR-038-AC-213
+   admits only `exact` for a unit `type_argument` and defines no compound-unit
+   form (IR-831), so no admitted package reaches them. Check also that the composite-equality generator refuses a conversion
    root as `FormMismatch` and a conversion operand as an unsupported quantity,
    each before any artifact.
    The TC-187 quantity-to-quantity conversion vectors are agreement rows
