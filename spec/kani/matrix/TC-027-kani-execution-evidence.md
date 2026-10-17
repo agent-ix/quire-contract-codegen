@@ -114,7 +114,8 @@ exit status `exit_code_64`, `exit_code_15`, `exit_code_0`, `exit_code_-1`, `exit
 `timeout`, `cbmc_exploded`, `exit_code_`, `exit_code_064`, `exit_code_+64`, `exit_code_-0`,
 `exit_code_2147483648`, `exit_code_64x`, `EXIT_CODE_64`, a 64-byte, a 65-byte and a 100-byte
 ASCII value, a value whose 64th byte falls inside a 4-byte character, `/h/u/ws/crate/x` with crate
-directory `/h/u/ws/crate` in the request, and a value holding an ANSI escape. Then run a `Failure` report listing a failed assertion
+directory `/h/u/ws/crate` in the request, a value holding an ANSI escape, and
+`killed pid 4242 after 3.5s`. Then run a `Failure` report listing a failed assertion
 with no playback on the console and exit status `properties_failed`; the same report with no
 `error_details` member, with an entry for another harness only, with two entries for the harness,
 with a null `exit_status`, and with a result that names no `harness_id`; an `exit_code_64` entry
@@ -230,7 +231,8 @@ is `Inconclusive` `FailedWithoutCounterexample`. `exit_code_64`, `exit_code_15`,
 `out_of_memory` and `timeout` carry their own `kind`; `cbmc_exploded` and each malformed
 `exit_code` spelling carry `{ kind: "unknown", exitStatus }` with the value verbatim; the 64-byte
 value is kept whole, the 65-byte and 100-byte values keep their first 64 bytes and the straddling
-value is cut before the character; the path value is `<CRATE_DIR>/x` and the escape is removed. Each of them
+value is cut before the character; the path value is `<CRATE_DIR>/x`, the escape is removed, and `killed pid 4242 after 3.5s` is
+`killed pid <PID> after <DURATION>`. Each of them
 carries a `diagnostics` record of phase `unknown` whose stderr excerpt holds
 `Unknown option: --no-such-option`. The `properties_failed` run carries
 `{ kind: "properties_failed" }` and no `diagnostics` member; the runs with no entry, another
