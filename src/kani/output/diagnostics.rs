@@ -1,4 +1,4 @@
-//! The bounded diagnostic record of a run Kani gave no verdict for (FR-017).
+//! The bounded diagnostic record of a run Kani gave no verdict for, or whose CBMC failed (FR-017).
 //!
 //! The record is read from the launcher's two streams alone. It names the last stage the output
 //! shows a member started and carries a redacted tail of each stream. It never feeds
@@ -42,7 +42,9 @@ pub struct KaniStreamExcerpt {
     pub omitted_bytes: u64,
 }
 
-/// Why a `NoVerdict` run has no verdict: its failure phase and the tails of its two streams.
+/// Why a run has no verdict or no counterexample: its failure phase and the tails of its two
+/// streams. Evidence carries it for a `NoVerdict` run and for a `FailedWithoutCounterexample` run
+/// whose failure cause is `timeout`, `out_of_memory`, `exit_code` or `unknown`.
 ///
 /// The record serializes as `{ phase, stdout { text, omittedBytes }, stderr { text,
 /// omittedBytes } }` and is never read back, so it implements no deserialization:

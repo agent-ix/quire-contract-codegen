@@ -96,9 +96,6 @@ pub struct ClassifiedRun {
     /// [`KaniExecutionEvidence::checks`](crate::kani::run::execute::KaniExecutionEvidence::checks)
     /// documents.
     pub checks: Vec<KaniCheckResult>,
-    /// The exit status the report states for the harness. It is read after the outcome is
-    /// decided and never decides it.
-    pub(crate) exit_status: Option<String>,
 }
 
 /// Classifies one run from the report Kani exported for it. Every generated harness, of every
@@ -141,7 +138,6 @@ pub fn classify_kani_run(
                 outcome: inconclusive(KaniInconclusiveReason::NoVerdict),
                 success_checks: 0,
                 checks: Vec::new(),
-                exit_status: None,
             })
         };
     };
@@ -202,7 +198,6 @@ fn classified(
         outcome,
         success_checks,
         checks: report.checks,
-        exit_status: report.exit_status,
     }
 }
 
