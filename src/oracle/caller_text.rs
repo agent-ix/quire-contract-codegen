@@ -3,7 +3,7 @@
 //! This route has its own declared text type and finite proof input. It does not
 //! consume a CheckedPackage node or borrow the FR-014 scalar claim vocabulary.
 
-use quire_contract_runtime::exact::{TextProfile, TextType};
+use quire_exact::{TextProfile, TextType};
 use serde::Serialize;
 
 use crate::core::artifact::Artifact;
@@ -55,8 +55,6 @@ pub enum CallerTextProofRefusal {
         /// Requested inclusive maximum.
         max: u64,
     },
-    /// The runtime added a profile with no finite proof encoding here.
-    UnsupportedProfile,
 }
 
 impl std::fmt::Display for CallerTextProofRefusal {
@@ -70,9 +68,6 @@ impl std::fmt::Display for CallerTextProofRefusal {
                     formatter,
                     "caller Text bounds {min}..={max} have no finite proof encoding"
                 )
-            }
-            Self::UnsupportedProfile => {
-                formatter.write_str("runtime Text profile has no caller proof encoding")
             }
         }
     }
@@ -94,7 +89,7 @@ pub struct CallerTextProofIdentity {
     pub payload_class: &'static str,
 }
 
-/// The six runtime text profiles this generator recognizes in caller claims.
+/// The six kernel text profiles this generator recognizes in caller claims.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CallerTextProfile {
@@ -134,44 +129,41 @@ pub struct CallerTextProofHarness {
     pub options: Vec<String>,
 }
 
-/// Emit a caller-ingress oracle that delegates admission and accounting to Contract Runtime.
-pub fn generate_caller_text_oracle(
-    request: CallerTextAdmissionRequest,
-) -> Result<CallerTextOracle, CallerTextProofRefusal> {
+/// Emit a caller-ingress oracle that delegates admission and accounting to the exact kernel.
+pub fn generate_caller_text_oracle(request: CallerTextAdmissionRequest) -> CallerTextOracle {
     let text_type = request.text_type;
     let (min, max) = (text_type.min(), text_type.max());
-    let source = "use quire_contract_runtime::exact as rt;\n\npub fn admit_caller_text(operand: &rt::TextPayload, text_type: &rt::TextType, meter: &mut rt::Meter) -> rt::Outcome<rt::Text> {\n    rt::admit_text(operand, text_type, meter)\n}\n".to_owned();
-    Ok(CallerTextOracle {
+    let source = "use quire_exact as rt;\n\npub fn admit_caller_text(operand: &rt::TextPayload, text_type: &rt::TextType, meter: &mut rt::Meter) -> rt::Outcome<rt::Text> {\n    rt::admit_text(operand, text_type, meter)\n}\n".to_owned();
+    CallerTextOracle {
         identity: CallerTextProofIdentity {
-            profile: caller_profile(text_type.profile())?,
+            profile: caller_profile(text_type.profile()),
             min,
             max,
             payload_class: CALLER_TEXT_PAYLOAD_CLASS,
         },
         source: Artifact::new("src/lib.rs", source),
-    })
+    }
 }
 
 /// Emit the generated public caller oracle source for embedding in a proof harness.
 ///
 /// The proof harness consumes this artifact rather than reconstructing an equivalent wrapper, so
 /// agreement and mutation checks exercise the same function callers receive.
-pub(crate) fn generated_caller_text_oracle_source(
-    text_type: &TextType,
-) -> Result<String, CallerTextProofRefusal> {
-    let oracle = generate_caller_text_oracle(CallerTextAdmissionRequest {
+pub(crate) fn generated_caller_text_oracle_source(text_type: &TextType) -> String {
+    generate_caller_text_oracle(CallerTextAdmissionRequest {
         text_type: *text_type,
-    })?;
-    Ok(oracle.source.contents)
+    })
+    .source
+    .contents
 }
 
-/// Execute caller-ingress admission through Contract Runtime's exact API.
+/// Execute caller-ingress admission through the exact kernel's `quire_exact` API.
 pub fn admit_caller_text(
-    payload: &quire_contract_runtime::exact::TextPayload,
+    payload: &quire_exact::TextPayload,
     text_type: &TextType,
-    meter: &mut quire_contract_runtime::exact::Meter,
-) -> quire_contract_runtime::exact::Outcome<quire_contract_runtime::exact::Text> {
-    quire_contract_runtime::exact::admit_text(payload, text_type, meter)
+    meter: &mut quire_exact::Meter,
+) -> quire_exact::Outcome<quire_exact::Text> {
+    quire_exact::admit_text(payload, text_type, meter)
 }
 
 /// Refuse proof requests whose bounds are outside the finite generated pair.
@@ -190,7 +182,7 @@ pub fn validate_caller_text_proof(
         });
     }
     Ok(CallerTextProofIdentity {
-        profile: caller_profile(text_type.profile())?,
+        profile: caller_profile(text_type.profile()),
         min: bounds.0,
         max: bounds.1,
         payload_class: CALLER_TEXT_PAYLOAD_CLASS,
@@ -211,7 +203,7 @@ pub fn generate_caller_text_proof_harness(
     let profile = profile_source(identity.profile);
     let min = identity.min;
     let max = identity.max;
-    let oracle = generated_caller_text_oracle_source(text_type)?;
+    let oracle = generated_caller_text_oracle_source(text_type);
     let input_arms = caller_text_input_arms();
     let source = format!(
         r#"pub mod caller_text {{
@@ -243,6 +235,22 @@ fn assert_same(actual: &rt::Outcome<rt::Text>, direct: &rt::Outcome<rt::Text>) {
     }}
 }}
 
+fn assert_same_meter(actual: &rt::Meter, direct: &rt::Meter) {{
+    assert_eq!(actual.limits(), direct.limits());
+    assert_eq!(actual.consumed(rt::LimitKind::IntegerBits), direct.consumed(rt::LimitKind::IntegerBits));
+    assert_eq!(actual.consumed(rt::LimitKind::DecimalDigits), direct.consumed(rt::LimitKind::DecimalDigits));
+    assert_eq!(actual.consumed(rt::LimitKind::ScaleExpansion), direct.consumed(rt::LimitKind::ScaleExpansion));
+    assert_eq!(actual.consumed(rt::LimitKind::TextInputBytes), direct.consumed(rt::LimitKind::TextInputBytes));
+    assert_eq!(actual.consumed(rt::LimitKind::TextScalars), direct.consumed(rt::LimitKind::TextScalars));
+    assert_eq!(actual.consumed(rt::LimitKind::NormalizedScalars), direct.consumed(rt::LimitKind::NormalizedScalars));
+    assert_eq!(actual.consumed(rt::LimitKind::UnitEdges), direct.consumed(rt::LimitKind::UnitEdges));
+    assert_eq!(actual.consumed(rt::LimitKind::ValueOccurrences), direct.consumed(rt::LimitKind::ValueOccurrences));
+    assert_eq!(actual.consumed(rt::LimitKind::WorkUnits), direct.consumed(rt::LimitKind::WorkUnits));
+    assert_eq!(actual.consumed(rt::LimitKind::ResultUnits), direct.consumed(rt::LimitKind::ResultUnits));
+    assert_eq!(actual.admitted_charges(), direct.admitted_charges());
+    assert_eq!(actual.charge_log_truncated(), direct.charge_log_truncated());
+}}
+
 #[kani::proof]
 pub fn caller_text_admission_agrees() {{
     let selector: u8 = kani::any();
@@ -261,7 +269,7 @@ pub fn caller_text_admission_agrees() {{
     let mut direct_meter = unlimited_meter();
     let direct = rt::admit_text(&payload, &text_type, &mut direct_meter);
     assert_same(&generated, &direct);
-    assert_eq!(generated_meter, direct_meter);
+    assert_same_meter(&generated_meter, &direct_meter);
     kani::cover!(true, "a constructed member of the finite caller text class is reached");
 }}
 }}
@@ -277,17 +285,14 @@ pub fn caller_text_admission_agrees() {{
     })
 }
 
-pub(crate) fn caller_profile(
-    profile: TextProfile,
-) -> Result<CallerTextProfile, CallerTextProofRefusal> {
+pub(crate) fn caller_profile(profile: TextProfile) -> CallerTextProfile {
     match profile {
-        TextProfile::UnicodeScalars => Ok(CallerTextProfile::UnicodeScalars),
-        TextProfile::Nfc => Ok(CallerTextProfile::Nfc),
-        TextProfile::Nfd => Ok(CallerTextProfile::Nfd),
-        TextProfile::Nfkc => Ok(CallerTextProfile::Nfkc),
-        TextProfile::Nfkd => Ok(CallerTextProfile::Nfkd),
-        TextProfile::BinaryUtf8 => Ok(CallerTextProfile::BinaryUtf8),
-        _ => Err(CallerTextProofRefusal::UnsupportedProfile),
+        TextProfile::UnicodeScalars => CallerTextProfile::UnicodeScalars,
+        TextProfile::Nfc => CallerTextProfile::Nfc,
+        TextProfile::Nfd => CallerTextProfile::Nfd,
+        TextProfile::Nfkc => CallerTextProfile::Nfkc,
+        TextProfile::Nfkd => CallerTextProfile::Nfkd,
+        TextProfile::BinaryUtf8 => CallerTextProfile::BinaryUtf8,
     }
 }
 
@@ -316,9 +321,7 @@ fn caller_text_input_arms() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quire_contract_runtime::exact::{
-        ChargePoint, InjectedDenial, Meter, ScalarLimits, TextPayload,
-    };
+    use quire_exact::{ChargePoint, InjectedDenial, LimitKind, Meter, ScalarLimits, TextPayload};
     use std::num::NonZeroU64;
 
     fn unlimited_meter() -> Meter {
@@ -341,8 +344,7 @@ mod tests {
     fn caller_oracle_calls_runtime_admission_without_checked_node_identity() {
         let generated = generate_caller_text_oracle(CallerTextAdmissionRequest {
             text_type: TextType::new(0, 8, TextProfile::Nfc).expect("valid type"),
-        })
-        .expect("known runtime profile");
+        });
         assert!(generated.source.contents.contains(
             "pub fn admit_caller_text(operand: &rt::TextPayload, text_type: &rt::TextType, meter: &mut rt::Meter)"
         ));
@@ -363,11 +365,7 @@ mod tests {
                     let mut actual_meter = unlimited_meter();
                     let actual = admit_caller_text(&payload, &text_type, &mut actual_meter);
                     let mut direct_meter = unlimited_meter();
-                    let direct = quire_contract_runtime::exact::admit_text(
-                        &payload,
-                        &text_type,
-                        &mut direct_meter,
-                    );
+                    let direct = quire_exact::admit_text(&payload, &text_type, &mut direct_meter);
                     assert_same(&actual, &direct);
                     assert_eq!(actual_meter, direct_meter);
                 }
@@ -387,24 +385,17 @@ mod tests {
         let refusing_type = TextType::new(1, 1, TextProfile::Nfd).expect("valid type");
         let mut refusing_meter = unlimited_meter();
         let refused = admit_caller_text(&payload, &refusing_type, &mut refusing_meter);
-        assert!(matches!(
-            refused,
-            quire_contract_runtime::exact::Outcome::Refused(_)
-        ));
-        assert!(!refusing_meter
-            .admitted_charges()
-            .contains(&ChargePoint::TextResultRetain));
+        assert!(matches!(refused, quire_exact::Outcome::Refused(_)));
+        assert_eq!(refusing_meter.consumed(LimitKind::ResultUnits), 0);
 
         let payload = TextPayload::from_utf8("e\u{301}".as_bytes()).expect("valid UTF-8");
         for profile in TextProfile::ALL {
             let text_type = TextType::new(0, 8, profile).expect("valid type");
             let mut baseline_meter = unlimited_meter();
             let baseline = admit_caller_text(&payload, &text_type, &mut baseline_meter);
-            assert!(matches!(
-                baseline,
-                quire_contract_runtime::exact::Outcome::Completed(_)
-            ));
-            for point in baseline_meter.admitted_charges().to_vec() {
+            assert!(matches!(baseline, quire_exact::Outcome::Completed(_)));
+            let mut reached = 0;
+            for point in ChargePoint::ALL {
                 let denial = InjectedDenial {
                     point,
                     occurrence: NonZeroU64::new(1).expect("nonzero"),
@@ -412,25 +403,24 @@ mod tests {
                 let mut actual_meter = unlimited_meter().with_injected_denial(denial);
                 let actual = admit_caller_text(&payload, &text_type, &mut actual_meter);
                 let mut direct_meter = unlimited_meter().with_injected_denial(denial);
-                let direct = quire_contract_runtime::exact::admit_text(
-                    &payload,
-                    &text_type,
-                    &mut direct_meter,
-                );
+                let direct = quire_exact::admit_text(&payload, &text_type, &mut direct_meter);
                 assert_same(&actual, &direct);
                 assert_eq!(actual_meter, direct_meter);
+                if !matches!(actual, quire_exact::Outcome::Incomplete(_)) {
+                    continue;
+                }
+                reached += 1;
                 if point == ChargePoint::TextNormalizeOutput {
-                    assert!(!actual_meter
-                        .admitted_charges()
-                        .contains(&ChargePoint::TextResultRetain));
+                    assert_eq!(actual_meter.consumed(LimitKind::ResultUnits), 0);
                 }
             }
+            assert!(reached > 0, "{profile:?} reaches at least one charge point");
         }
 
         let nfc = TextType::new(1, 1, TextProfile::Nfc).expect("valid type");
         let mut nfc_meter = unlimited_meter();
         let nfc_result = admit_caller_text(&payload, &nfc, &mut nfc_meter);
-        let quire_contract_runtime::exact::Outcome::Completed(nfc_text) = nfc_result else {
+        let quire_exact::Outcome::Completed(nfc_text) = nfc_result else {
             panic!("NFC composes e plus combining acute to one scalar")
         };
         assert_eq!(nfc_text.retained(), "\u{e9}");
@@ -438,20 +428,15 @@ mod tests {
         let nfd = TextType::new(1, 1, TextProfile::Nfd).expect("valid type");
         let mut nfd_meter = unlimited_meter();
         let nfd_result = admit_caller_text(&payload, &nfd, &mut nfd_meter);
-        assert!(matches!(
-            nfd_result,
-            quire_contract_runtime::exact::Outcome::Refused(_)
-        ));
-        assert!(!nfd_meter
-            .admitted_charges()
-            .contains(&ChargePoint::TextResultRetain));
+        assert!(matches!(nfd_result, quire_exact::Outcome::Refused(_)));
+        assert_eq!(nfd_meter.consumed(LimitKind::ResultUnits), 0);
     }
 
     fn assert_same(
-        actual: &quire_contract_runtime::exact::Outcome<quire_contract_runtime::exact::Text>,
-        direct: &quire_contract_runtime::exact::Outcome<quire_contract_runtime::exact::Text>,
+        actual: &quire_exact::Outcome<quire_exact::Text>,
+        direct: &quire_exact::Outcome<quire_exact::Text>,
     ) {
-        use quire_contract_runtime::exact::Outcome;
+        use quire_exact::Outcome;
         match (actual, direct) {
             (Outcome::Completed(actual), Outcome::Completed(direct)) => {
                 assert_eq!(actual.text_type(), direct.text_type());
@@ -500,7 +485,7 @@ mod tests {
                 )
                 .expect("supported request");
                 let source = harness.source.contents;
-                assert_eq!(harness.identity.profile, caller_profile(profile).unwrap());
+                assert_eq!(harness.identity.profile, caller_profile(profile));
                 assert_eq!((harness.identity.min, harness.identity.max), (min, max));
                 assert_eq!(harness.identity.payload_class, CALLER_TEXT_PAYLOAD_CLASS);
                 assert_eq!(harness.solver, "cadical");
@@ -523,13 +508,26 @@ mod tests {
                 assert!(!source.contains("encode_utf8"));
                 assert!(source.contains("let generated = admit_caller_text("));
                 assert!(source.contains("let direct = rt::admit_text("));
-                assert!(source.contains("assert_eq!(generated_meter, direct_meter);"));
-                assert!(
-                    source
-                        .find("assert_eq!(generated_meter, direct_meter);")
-                        .unwrap()
-                        < source.find("kani::cover!(").unwrap()
-                );
+                let meter_call = "assert_same_meter(&generated_meter, &direct_meter);";
+                assert_eq!(source.matches(meter_call).count(), 1);
+                assert!(!source.contains("assert_eq!(generated_meter, direct_meter)"));
+                for accessor in [
+                    "assert_eq!(actual.limits(), direct.limits());",
+                    "assert_eq!(actual.admitted_charges(), direct.admitted_charges());",
+                    "assert_eq!(actual.charge_log_truncated(), direct.charge_log_truncated());",
+                ] {
+                    assert_eq!(source.matches(accessor).count(), 1, "{accessor}");
+                }
+                for kind in LimitKind::ALL {
+                    let comparison = format!(
+                        "assert_eq!(actual.consumed(rt::LimitKind::{kind:?}), direct.consumed(rt::LimitKind::{kind:?}));"
+                    );
+                    assert_eq!(source.matches(&comparison).count(), 1, "{comparison}");
+                }
+                assert!(!source.contains("for kind in"));
+                assert!(source.find(meter_call).unwrap() < source.find("kani::cover!(").unwrap());
+                assert!(source.starts_with("pub mod caller_text {\nuse quire_exact as rt;\n"));
+                assert!(!source.contains("quire_contract_runtime"));
             }
         }
     }

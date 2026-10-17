@@ -147,12 +147,8 @@ fn emitted() -> Vec<(&'static str, String)> {
         crate::bounded_kani_corpus::guard_sources(),
     ]
     .concat();
-    let text_type = quire_contract_runtime::exact::TextType::new(
-        1,
-        1,
-        quire_contract_runtime::exact::TextProfile::Nfc,
-    )
-    .expect("supported Text type");
+    let text_type = quire_exact::TextType::new(1, 1, quire_exact::TextProfile::Nfc)
+        .expect("supported Text type");
     emitted.push((
         "caller Text admission",
         quire_contract_codegen::generate_caller_text_kani_harness(

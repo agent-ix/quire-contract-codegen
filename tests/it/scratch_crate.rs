@@ -22,6 +22,19 @@ pub(crate) fn runtime_dependency(features: &[&str]) -> String {
     format!("quire-contract-runtime = {{ {RUNTIME_DEPENDENCY_SOURCE}, features = [{features}] }}")
 }
 
+/// The `quire-exact` dependency line of a scratch manifest, with `features`, spelled as this
+/// crate's `Cargo.toml` does so the seeded lock selects the same kernel revision.
+pub(crate) fn exact_dependency(features: &[&str]) -> String {
+    let features = features
+        .iter()
+        .map(|feature| format!("\"{feature}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "quire-exact = {{ git = \"https://github.com/agent-ix/quire-exact\", branch = \"main\", features = [{features}] }}"
+    )
+}
+
 /// Copies this repository's `Cargo.lock` beside the manifest in `directory`.
 pub(crate) fn seed_lock(directory: &Path) {
     fs::copy(

@@ -14,8 +14,7 @@ use quire_contract_codegen::{
     KaniExecutionRefusal, KaniExecutionRequest, KaniInstallation, KaniReportRefusal,
     KaniRunOutcome, KaniSolver, KaniTool, KaniToolError, ProofCeilings, CALLER_TEXT_PAYLOAD_CLASS,
 };
-use quire_contract_runtime::exact::{TextProfile, TextType};
-use quire_exact::Cancel;
+use quire_exact::{Cancel, TextProfile, TextType};
 
 const PROOF_CEILING: Duration = Duration::from_secs(600);
 
@@ -44,7 +43,7 @@ fn scratch_root(label: &str) -> PathBuf {
 fn manifest() -> String {
     format!(
         "[package]\nname = \"caller-text-admission-proof\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\n{}\n\n[workspace]\n",
-        crate::scratch_crate::runtime_dependency(&["exact"])
+        crate::scratch_crate::exact_dependency(&["test-support"])
     )
 }
 
