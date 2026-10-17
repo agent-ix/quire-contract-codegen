@@ -1,4 +1,4 @@
-//! The bounded diagnostic record of a run Kani gave no verdict for (FR-017).
+//! The bounded diagnostic record of a run Kani gave no verdict for, or whose CBMC failed (FR-017).
 //!
 //! The record is read from the launcher's two streams alone. It names the last stage the output
 //! shows a member started and carries a redacted tail of each stream. It never feeds
@@ -42,7 +42,9 @@ pub struct KaniStreamExcerpt {
     pub omitted_bytes: u64,
 }
 
-/// Why a `NoVerdict` run has no verdict: its failure phase and the tails of its two streams.
+/// Why a run has no verdict or no counterexample: its failure phase and the tails of its two
+/// streams. Evidence carries it for a `NoVerdict` run and for a `FailedWithoutCounterexample` run
+/// whose failure cause is `timeout`, `out_of_memory`, `exit_code` or `unknown`.
 ///
 /// The record serializes as `{ phase, stdout { text, omittedBytes }, stderr { text,
 /// omittedBytes } }` and is never read back, so it implements no deserialization:
@@ -237,17 +239,22 @@ impl Stages {
 
 /// The redacted tail of `bytes`.
 fn excerpt(bytes: &[u8], directories: &KnownDirectories<'_>) -> KaniStreamExcerpt {
-    let text = String::from_utf8_lossy(bytes);
-    let text = strip_control(&text);
-    let text = redact_paths(&text, directories);
-    let text = redact_timestamps(&text);
-    let text = redact_durations(&text);
-    let text = redact_process_ids(&text);
+    let text = redact_text(&String::from_utf8_lossy(bytes), directories);
     let start = tail_start(&text);
     KaniStreamExcerpt {
         omitted_bytes: u64::try_from(start).unwrap_or(u64::MAX),
         text: text[start..].to_owned(),
     }
+}
+
+/// `text` with control characters and escapes removed, then paths, date-times, durations and
+/// process identities redacted.
+pub(crate) fn redact_text(text: &str, directories: &KnownDirectories<'_>) -> String {
+    let text = strip_control(text);
+    let text = redact_paths(&text, directories);
+    let text = redact_timestamps(&text);
+    let text = redact_durations(&text);
+    redact_process_ids(&text)
 }
 
 /// The byte offset where the kept tail of `text` starts.
@@ -995,36 +1002,6 @@ mod tests {
         assert_eq!(record.phase, KaniFailurePhase::Solver);
         assert!(record.stdout.omitted_bytes > 0);
         assert!(!record.stdout.text.contains("Solving with"));
-    }
-
-    /// Autoref probe: `implements_deserialize` is `true` through `Yes` only for a type that is
-    /// `DeserializeOwned`, and `false` through `No` otherwise, with no dependency beyond serde.
-    struct Probe<T>(std::marker::PhantomData<T>);
-
-    trait Yes {
-        fn implements_deserialize(&self) -> bool;
-    }
-
-    impl<T: serde::de::DeserializeOwned> Yes for Probe<T> {
-        fn implements_deserialize(&self) -> bool {
-            true
-        }
-    }
-
-    trait No {
-        fn implements_deserialize(&self) -> bool;
-    }
-
-    impl<T> No for &Probe<T> {
-        fn implements_deserialize(&self) -> bool {
-            false
-        }
-    }
-
-    macro_rules! implements_deserialize {
-        ($type:ty) => {
-            (&Probe::<$type>(std::marker::PhantomData)).implements_deserialize()
-        };
     }
 
     /// The record and its parts implement no deserialization, so Kani output can never be

@@ -53,7 +53,7 @@ FR-028-AC-12, verified by TC-039.
     over-limit and unread streams of steps 1 and 2. Map a `NoVerdict` evidence through FR-029, with
     and without its `diagnostics`. Build two otherwise compatible requests with `home_directory` `/h/u` and
     `/h/v`, a pair with one absent, and a pair with both `/h/u`, and count the processes.
-12. (FR-017-AC-39; PLANNED/UNRUN, IR-827.) Run a batch stand-in of members `a::check`, `b::check`,
+12. (FR-017-AC-39.) Run a batch stand-in of members `a::check`, `b::check`,
     `c::check`, `d::check` and `e::check` that exits 1 with a report in the shape of a real batch report:
     `a::check` `Success` with a passing assertion, every cover satisfied and an `error_details`
     entry with no exit status; `b::check` `Failure` with no checks and exit status `exit_code_64`;
@@ -164,8 +164,9 @@ Step 11 (FR-017-AC-36) is covered by the tests of `batch_tests::no_verdict_diagn
 `tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics` in
 `tests/it/kani_obligations.rs`.
 
-Step 12 (FR-017-AC-39) is PLANNED/UNRUN (IR-827): no test is tagged with it yet; the IR-827 code
-change adds it to `batch_tests` in `src/kani/run/execute.rs`.
+Step 12 (FR-017-AC-39) is covered by `tc_043_batch_members_keep_their_cause_beside_the_timeout_rule`
+and `tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
+`batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`.
 
 ## Status
 
