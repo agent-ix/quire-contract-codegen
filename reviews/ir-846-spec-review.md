@@ -79,3 +79,22 @@ Suggested fixes:
 
 I considered the base checklist's hash/digest antipattern rule and did not apply it. This digest
 is the cross-repo identity that QSL FR-357 requires, not a tracking hash.
+
+## New findings (disposition pass 1)
+
+Reviewed at 238ca5304ed1a81717b8b02be279aab2161657a7 (rebased onto #418 75a0bb8), diff `origin/peter/ir-847-native-error-discriminant-spec...HEAD`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The driver's accepted condition "The receipt shall bind the exposed entries to the immutable snapshot CG actually executed, never to a later filesystem read" is a new `shall` with no acceptance criterion. AC-48 checks only that recomputing over the exposed entries equals the digest, and a later re-read of an unchanged snapshot would also pass that. So no test can catch the entries being sourced from a post-run read. One more clause in AC-48 would make it testable, for example: the exposed entries are the bytes measured for the identity, and no entry accessor reads the filesystem (by source scan, or by mutating a snapshot file after the receipt is built). | spec/kani/functional/FR-017-kani-execution-evidence.md:723-724, spec/kani/functional/FR-017-kani-execution-evidence.md:806 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 238ca53: the golden is computed over fixed literal entries (a literal `Cargo.lock` and adapter included), never a real staged run, and is pinned with the schema string in one assertion. "A golden change without a schema bump is rejected in review (a test cannot enforce it)" (FR-017-AC-49; TC-027 step 5). |
+| FND-002 | fixed | 238ca53: a non-UTF-8 runner-read `Cargo.lock` or adapter is refused as `Snapshot` / `snapshot_io` / `EnvironmentFault` (not `InvalidRequest`) with no receipt, and TC-027 names the seam that writes non-UTF-8 bytes. This fits #418's frozen row ("Host I/O failure creating, writing or measuring the private snapshot"): the check is part of measuring, and std's own `read_to_string` reports invalid UTF-8 as `io::ErrorKind::InvalidData`. |
+| FND-003 | fixed | 238ca53: a "Driver follow-up" bullet records that quire-driver FR-009 statement and AC-7 must be amended to artifact-only recomputation, owned by the quire-driver team, blocking IR-773 AC-6/7 (routed to draco). |
+| FND-004 | fixed | 238ca53: "A consumer shall not mint a wire value from operands, limits or outcome; the only legitimate recomputation is the driver's, over the exposed staged entries." |
+| FND-005 | fixed | 238ca53: AC-46 reads "the harness record at `kani-obligations/<module>.json` (the only record path the runner admits)". |
+| FND-006 | fixed | 238ca53: the Retention bullet spells out the rename map (emitted `src/lib.rs` against entry `src/oracle-artifacts-lib.rs`, harness against entry `src/lib.rs`, record against its `kani-obligations/<module>.json` entry) and adds that a path-by-path comparison would falsely mismatch. |
