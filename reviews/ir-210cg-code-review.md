@@ -97,3 +97,10 @@ Rust lane:
 - **Convention.** The legacy `/// Trace: ID, ID` doc line is used throughout, per the planner decision, with no attributes. The ids are comma-separated, and prose parentheticals come after the id list. `quire trace --file` on head shows every added id binding as `rust-trace-line`.
 - **Surface.** The diff has no panic, unsafe, integer-conversion or behavioral surface. The rename does not change test selection: the function is a `#[test]` in a support module, and nothing filters on its name.
 - **Gates.** No mutants were run. No body changed, so a mutant would only re-measure tests that already exist on main.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head 9c834a9. The function is renamed `tc_031_ac33_direct_control_case_is_unsupported`, so the name now agrees with its `Trace: FR-021-AC-33, TC-031` line. No reference to the old name remains outside the review artifacts, and the new name clashes with no other test (the AC-33 tests in exact_function_generation.rs are named `direct_case_call_node`, `direct_formula` and `direct_fairness`). `quire trace --file` still binds FR-021-AC-33 and TC-031 through `rust-trace-line`, and rustfmt --check passes. |
+| FND-002 | fixed | Round 1, head 9c834a9. The doc line now reads `Trace: FR-021-AC-15, TC-031 (duplicate declared names; the surviving origin also exercises AC-17, origin from the request function binding).` It describes AC-17's real subject, which matches the body's `RecordedOrigin::Body { function, index }` assertions. Bindings are unchanged: FR-021-AC-15 and TC-031 still bind through `rust-trace-line`, and AC-17 is still only an `evidence_near_miss` citation. |
