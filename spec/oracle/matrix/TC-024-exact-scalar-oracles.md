@@ -57,8 +57,10 @@ byte-deterministic, and agree with direct runtime execution. Agreement with the 
    negotiation, and check capability settlement reports `OperationNotRendered`
    (Planned, IR-269) with no harness emitted (FR-014-AC-51). Check that the
    function-application generator and the function schedules refuse a
-   conversion reached from a body, a call or a call argument as
-   `UnsupportedOperator`, that a conversion node with a scalar or compound
+   conversion body as `UnsupportedOperator` (generator) and
+   `ScheduleRefusal::UnsupportedOperation` (schedules), accepting an earlier
+   `Unsupported`, `NotExpression`, `UnsupportedOperandType` or argument refusal
+   where that check fires first (FR-021-AC-21), that a conversion node with a scalar or compound
    `type_argument` or a non-`exact` mode is refused as `OperandFormsNotDerivable`
    or `ModeNotDerivable` with no oracle (FR-014-AC-50), and that the composite-equality generator refuses a conversion
    root as `FormMismatch` and a conversion operand as an unsupported quantity,
