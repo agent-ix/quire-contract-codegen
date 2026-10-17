@@ -309,6 +309,21 @@ local refusal/skip behavior on mismatch, are consumer-owned checks outside this 
 driver has no defined typed outcome for a mismatch, its owner must specify and plan that outcome
 before implementation. No driver adversarial coverage is claimed here.
 
+Scalar native error discriminant (FR-017-AC-41 to AC-44): build one `KaniScalarNativeError` of each
+of the eleven variants, the nested `Kani` error once for each `KaniExecutionRefusal` variant.
+(1) Assert `code()` of each equals its table code, that the eleven codes are pairwise distinct, and
+that `Kani` gives `kani_execution` for every nested refusal. (2) Assert `class()` of each variant
+and of each nested `Kani` refusal against the FR-017 table. Produce real errors by the runner for a
+request mismatch, a mismatched dependency-lock revision, an oracle stop and an unverified proof,
+and require `CompletionRefusal`; inject a changed staged byte, a native launch failure and
+malformed helper output, and require `EnvironmentFault`. (3) Force the canonical identity encode to
+fail (a content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
+`EnvironmentFault`, and no `NativeResult`; scan the identity-measurement function for
+`NativeResult`. Feed malformed helper output and require `native_result`. (4) Keep a frozen list of
+all variants, codes and classes, with an exhaustive `match` over the type that stops compiling
+when a variant is added, and assert the nested `OutputOverLimit` and `OutputUnread` codes are
+unchanged. These steps are Planned until the IR-847 code slice lands.
+
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
 attempt a source-tree write from each child execution boundary, and require that neither child can
@@ -325,6 +340,11 @@ Every generation-time refusal above exposes no harness, so `execute_kani_obligat
 takes a `KaniObligationHarness` — has nothing to run for it: a generation-time classification can
 never surface as one of FR-017's execution outcomes because no code path converts one into the
 other.
+
+For the scalar error discriminant, each variant has its table code and class, the codes are distinct
+and frozen, the five refusal variants and the nested request-fixed `Kani` refusals are
+`CompletionRefusal`, the five fault variants and every other nested refusal are
+`EnvironmentFault`, and an identity-encode failure is `IdentityEncode`, never `NativeResult`.
 
 In the `make kani` lane the three healthy harnesses are verified, each with exit code zero and an
 argument vector that begins, after the subcommand, with its harness identity's options; the seeded defect is
