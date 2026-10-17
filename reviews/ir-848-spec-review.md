@@ -42,3 +42,4 @@ Needs changes. The mapping itself (option b, classify.rs unchanged, out_of_memor
 | FND-002 | fixed | d536e94: TC-027 :247-251 expected result now gives Incomplete(ResourceExhausted) for out_of_memory and Failed for exit_code_64 and cbmc_exploded, noting the bound test still asserts the old value until the code PR. |
 | FND-003 | fixed | d536e94: tests.md splits FR-017-AC-40 into its own row, 🚧 Partial (IR-848), TC-027 and TC-040, naming the bound test that flips; the TC-027 summary row follows. |
 | FND-004 | fixed | d536e94: AC-32..36 carry `PLANNED (IR-848).`; the Inputs bullet no longer says "today" and the cause bullet is headed "Planned (IR-848)". |
+| FND-005 | fixed | 4d29f1c: TC-027 :428-429 now says run_terminal_value takes `&KaniExecutionEvidence` and reads the cause from it. |

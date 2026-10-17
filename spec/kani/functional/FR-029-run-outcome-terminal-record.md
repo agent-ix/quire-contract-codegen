@@ -78,8 +78,8 @@ warning naming its capability kind from `quire.capability-kind/v1` (QSpec FR-290
 - Planned (IR-806): for the composite parity route, the proof subject (`production` or
   `bounded_shadow`, FR-028), the verified outcome's proof strength (FR-028-AC-17) and retained
   `refinement_failed` disagreement whatever the backend outcome. `run_terminal_value` takes none of
-  these; its inputs are the run (the outcome, with the CBMC failure cause under IR-848, below), the
-  SUCCESS-check count and the optional replay settlement.
+  these; its inputs are the run's evidence (outcome, SUCCESS-check count, cause) and the optional
+  replay settlement.
 - Planned (IR-848): the CBMC failure cause. It is not a free input: `run_terminal_value` takes the
   run's evidence, `&KaniExecutionEvidence`, and reads the outcome and the `failureCause` from it, so
   a caller cannot omit the cause of a run that has one. The planned signature is
