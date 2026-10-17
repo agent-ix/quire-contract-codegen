@@ -16,6 +16,7 @@ use syn::{
 };
 
 use crate::layout::{non_test_string_literals, source_files};
+use ix_trace_rs::trace;
 
 /// Every family the inspection drives, with the one source file that emits it. A file in this
 /// table is a file the scan allows to spell a proof attribute.
@@ -151,8 +152,14 @@ fn emitted() -> Vec<(&'static str, String)> {
 }
 
 /// Every emitting entry point's harness has exactly one cover, as its last statement.
-///
-/// Trace: FR-015-AC-7, FR-015-AC-53, FR-015-AC-54, FR-015-AC-55, FR-015-AC-58, TC-025
+#[trace(
+    "FR-015-AC-7",
+    "FR-015-AC-53",
+    "FR-015-AC-54",
+    "FR-015-AC-55",
+    "FR-015-AC-58",
+    "TC-025"
+)]
 #[test]
 fn tc_025_every_emitted_harness_ends_with_exactly_one_cover() {
     let emitted = emitted();
@@ -169,8 +176,7 @@ fn tc_025_every_emitted_harness_ends_with_exactly_one_cover() {
 
 /// The inspection fails a harness whose cover precedes an assertion, a harness with two covers
 /// and a harness with none, so it cannot pass on a source it fails to read.
-///
-/// Trace: FR-015-AC-58, TC-025
+#[trace("FR-015-AC-58", "TC-025")]
 #[test]
 fn tc_025_the_cover_inspection_rejects_a_misplaced_duplicated_or_missing_cover() {
     let harness =
@@ -247,8 +253,7 @@ fn proof_spellings(text: &str) -> usize {
 
 /// The counter sees each way a literal can spell a proof attribute, and none of the other
 /// `kani::` text the generator emits.
-///
-/// Trace: FR-015-AC-58, TC-025
+#[trace("FR-015-AC-58", "TC-025")]
 #[test]
 fn tc_025_the_proof_spelling_counter_sees_split_formatted_and_continued_attributes() {
     for spelled in [
@@ -277,8 +282,7 @@ fn tc_025_the_proof_spelling_counter_sees_split_formatted_and_continued_attribut
 
 /// A `#[cfg(test)]` item whose signature holds a `;` inside a bracket (an array type) still ends
 /// at its body, so its literals stay out of the scan.
-///
-/// Trace: FR-015-AC-58, TC-025
+#[trace("FR-015-AC-58", "TC-025")]
 #[test]
 fn tc_025_the_literal_scan_skips_a_test_item_with_an_array_type() {
     let source = "#[cfg(test)]\nfn t() -> [u8; 2] { let _ = \"#[kani::proof]\"; [0, 0] }\n\
@@ -291,8 +295,7 @@ fn tc_025_the_literal_scan_skips_a_test_item_with_an_array_type() {
 /// Every proof-attribute spelling in the non-test string literals of `src/` is in a file the
 /// inspection drives, and a driven file spells exactly the templates counted above, so a new
 /// emitter file, or a new template in a driven file, fails here until it is driven.
-///
-/// Trace: FR-015-AC-58, TC-025
+#[trace("FR-015-AC-58", "TC-025")]
 #[test]
 fn tc_025_no_proof_attribute_is_spelled_outside_what_the_inspection_drives() {
     let spelled: BTreeMap<String, usize> = source_files()

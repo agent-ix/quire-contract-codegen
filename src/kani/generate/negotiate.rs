@@ -95,8 +95,6 @@ use crate::{
 };
 
 /// Negotiates every item and, when no item is invalid, emits one harness per supported item.
-///
-/// Trace: TC-025
 // Implements: FR-015
 pub fn negotiate_kani_obligations(
     request: &KaniObligationRequest<'_>,
