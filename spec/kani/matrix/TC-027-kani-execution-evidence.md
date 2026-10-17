@@ -316,12 +316,11 @@ of the twelve variants, the nested `Kani` error once for each `KaniExecutionRefu
 `Kani` gives `kani_execution` for every nested refusal, and that the type, the class enum and the
 code constants are reachable at the crate root. (2) Assert `class()` of each variant, of each nested
 `Kani` refusal, and of `ProofNotVerified` for `Falsified`, `CoverUnsatisfied`, each inconclusive
-reason, `Cancelled`, and `FailedWithoutCounterexample` with no `failureCause`, with `properties_failed` (a real single-run stand-in of AC-38's failed assertion without playback, requiring `CompletionRefusal`) and with each of `timeout`, `out_of_memory`, `exit_code` and `unknown` (requiring `EnvironmentFault`), against
-the FR-017 table. Produce real errors by the runner for a request mismatch, a mismatched
-dependency-lock revision, an oracle stop and a falsified proof, and require `CompletionRefusal`;
+reason, `Cancelled`, `Verified` (an internal inconsistency, requiring `EnvironmentFault` and no panic), and `FailedWithoutCounterexample` with no `failureCause`, with `properties_failed` (a real single-run stand-in of AC-38's failed assertion without playback, requiring `CompletionRefusal`) and with each of `timeout`, `out_of_memory`, `exit_code` and `unknown` (requiring `EnvironmentFault`), against
+the FR-017 table. Produce real errors by the runner for a request mismatch, an oracle stop and a falsified proof, and require `CompletionRefusal`;
 produce a real single run cancelled by its retained source and a real single run stopped by its
 wall-clock timeout (launcher stand-ins), each `ProofNotVerified`, and require `EnvironmentFault`
-with the evidence outcome unchanged; inject a changed staged byte, a native launch failure,
+with the evidence outcome unchanged; construct `DependencyLock` through an in-crate seam only (it is unreachable from a canonical request, whose manifest must equal the canonical one, and a failed lock update is `NativeLaunch`) and require `CompletionRefusal`; inject a changed staged byte, a native launch failure,
 malformed helper output and an embedded lock with no runtime revision, and require
 `EnvironmentFault` (the last as `codegen_lock`). (3) Force the canonical identity encode to fail (a
 content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
