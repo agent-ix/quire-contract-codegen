@@ -98,8 +98,11 @@ not receive or execute the artifact: it carries the supplied canonical content `
 and compares exact semantics against the supplied typed observation. QSL carrying that record
 is not independent authentication of the observation. CG's checked completion contract must
 require the driver's authenticated observation, rather than silently accepting a bare outcome.
-The concrete producer/consumer representation remains CODE-gated; no signing scheme, tracking
-hash or new observation API is invented here.
+The digest's domain (`sha256-jcs`), exact preimage, artifact-only content, CG minting and driver
+recomputation are fixed by FR-017-AC-45 to AC-49 (the "Scalar proof-content identity as the FR-357
+observation digest" section); the receipt carries it as a `DigestRecord`. The remaining
+producer/consumer wiring stays CODE-gated; no signing scheme, tracking hash or new observation API
+is invented here.
 
 ## Outputs
 
