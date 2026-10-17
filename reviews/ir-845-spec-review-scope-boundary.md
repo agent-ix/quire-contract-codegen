@@ -34,3 +34,9 @@ Ticket: IR-845. This review checks the boundary the PR draws (CG claims no QSL a
 ## Verdict
 
 CHANGES REQUESTED (one medium). The new boundary is drawn the right way round. CG claims no QSL application API, it cites IR-845 and FR-014-AC-47, and it does not overlap #416's value-authority boundary. AC-18, FR-014-AC-47 and its matrix row are untouched and still true: no FR-021 line added here claims value-authority agreement. The only open boundary question is the hand-off with Contract Runtime FR-275 (FND-001).
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | IR-853 (planner ruling: cross-repo architecture). At head 18832ac, AC-32 and its tests.md row state "PLANNED, blocked on IR-853: Contract Runtime FR-275 expects the generator to name QSL's evaluation leaf, which conflicts with IR-845 and QSL arch-lint T12-A; IR-853 resolves that conflict and decides who closes this criterion". IR-853 exists in Backlog and names that conflict. |
