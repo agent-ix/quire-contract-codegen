@@ -55,6 +55,13 @@ Revise before accept: settle which input authority binds a claim to its populati
 | FND-005 | low | Regression from the bb65e1b citation split (reopens FND-004's concern). AC-98, AC-105 and AC-106 now say "needs IR-852 and QSL-819", but step 3 of the disposition sequence (:158-160) says a relationship-end claim stays `unsupported` until IR-851 too. AC-106 requires a relationship-end `Verified` control over `{0,3}` ends and AC-105 draws relationship-end edges, so their tags should also name IR-851 for the relationship-end form, as tests.md :95 does. | spec/kani/functional/FR-015-bounded-kani-obligations.md:779, spec/kani/functional/FR-015-bounded-kani-obligations.md:786, spec/kani/functional/FR-015-bounded-kani-obligations.md:787 |
 | FND-006 | low | Step 2 of the sequence (:153-157) says "Once IR-852 supplies the mapping (IR-852 is itself blocked on QSL-819), QSL still gives a state-clause `reaches` no finite population ... every claim settles `requires_bound`". Because IR-852 lands only after QSL-819, step 2 cannot describe the state before QSL-819. After QSL-819 only a claim whose population has no authored bound is `Unbounded`. Restate step 2 as "a claim whose population has no finite bound settles `requires_bound`", and drop "every claim". | spec/kani/functional/FR-015-bounded-kani-obligations.md:153 |
 
+## New findings (disposition pass 5)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The FND-005 fix put IR-851 in front of QSL-819's gloss. The AC-98, AC-105 and AC-106 tags now read "needs IR-852 and QSL-819; relationship-end form also IR-851 (bounded domain population for reaches)", so the parenthetical describes IR-851, which is the relationship-end multiplicity ticket. Move the gloss back after QSL-819. | spec/kani/functional/FR-015-bounded-kani-obligations.md:781, spec/kani/functional/FR-015-bounded-kani-obligations.md:788, spec/kani/functional/FR-015-bounded-kani-obligations.md:789 |
+| FND-008 | low | AC-108 ("`Unbounded` or `UnknownClosureOpenExtent`, which is every claim QSL emits until QSL-819") and TC-025 step (3) ("every QSL claim until QSL-819") contradict the reworded sequence. Before QSL-819 there is no selection, because IR-852 is blocked on QSL-819 and every claim is `Unavailable` (step 1). After QSL-819 and IR-852 land, only a claim with no finite authored bound is `Unbounded` (step 2). Replace the qualifier with "a claim whose population has no finite authored bound". | spec/kani/functional/FR-015-bounded-kani-obligations.md:791, spec/kani/matrix/TC-025-bounded-kani-obligations.md:85 |
+
 ## Dispositions
 
 Reviewed at e1873b156ea042a0b76fedf2a804becf17ac89e0 (round 1; fix commits d088e9c, e1873b1).
@@ -77,3 +84,10 @@ Round 3 reviewed at f7a398ec39cf8fe7186ef5cc9faf56090d5fbd20.
 | FND-004 | fixed | f7a398e: AC-98, AC-105 and AC-106 now read "needs IR-851 and QSL-819", matching the sequence and tests.md :95. |
 
 Round 4 note at bb65e1bad4c7a86cb71e4393f5c28c4cab872ea3 (fix d06fc2d..bb65e1b, citation split IR-851 / IR-852). No new outcome rows: FND-001 to FND-004 stay `fixed`. FND-002's fix holds, with step 1 now citing IR-852 for the mapping, and FND-003's reference still resolves to :147. Every citation in the Description, AC-98/105/106/108, TC-025 and tests.md :95 is a ticket (IR-851, IR-852, QSL-819); IR symbols appear only as explanation. New FND-005 and FND-006 are above.
+
+Round 5 reviewed at 9a918744823279b4d9a2fcff0a38bd477d276074 (fix bb65e1b..9a91874).
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | 9a91874: AC-98, AC-105 and AC-106 tags now add "relationship-end form also IR-851", matching sequence step 3 and tests.md :95 (gloss placement is FND-007). |
+| FND-006 | fixed | 9a91874: step 2 now says IR-852 lands only after QSL-819 and that, once both land, a claim with no finite authored bound is `Unbounded` and settles `requires_bound`; step 3 says a finite authored bound runs the Verified/Falsified path. |
