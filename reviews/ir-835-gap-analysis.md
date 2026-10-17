@@ -50,3 +50,19 @@ PR #397 overlap:
 - ef4ab49 (IR-225, #408, 2026-10-15) is an ancestor of IR-816's 6b80801 (2026-10-16), so the PR body's claim that #397's IR rev predates IR-816 holds. QSL 20b3254 is an ancestor of 2a316c0.
 - Whichever PR lands second must regenerate the lock rather than take its own hunks. If #397 keeps its hunks after #411 merges, IR falls back to before IR-816, and the 52 `InvalidSemanticGraph` failures the PR body cites return.
 - #397's kani_obligations.rs hunks (~2495-2650) do not overlap #411's line 530. #397 touches frame.rs only at `field_range`, not at `frame_grants`.
+
+## New findings (disposition pass 1)
+
+Reviewed at 86510d48b0280a9298becba1370999db5d33cf06.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | Two sentences in the PR body are stale since 86510d4. "CG ignores a field entry's `scope`" (IR-824 paragraph) is no longer true, because `frame_grants` now reads `scope`. "No scope-dependent test or mutant is possible" is also wrong: mutants that narrow the accepted set are killed (refusing `every-object` fails 43 `it` tests, refusing `receiver` fails 7). What remains true, and what the ruling covers, is that no test tells `receiver` from `every-object` (fixture swaps survive) and that the missing or unknown arm has no test. | PR #411 body |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | ba307de: a non-empty `deletes_scoped` now refuses as `UnsupportedFrameEffect::Deletes`, and FR-015-AC-29's scoped-delete half has tests in both refusal tables ("frame deletes self", "frame deletes a parameter"). The round-0 mutant m6 (`deletes self` on every shape) is now killed: 5 tests fail, and so does the parameter variant. Deleting the src line fails the 2 new tests. |
+| FND-002 | accepted-no-change | Ruling by titan:kani:plan, relayed by the lead: the single-object frame harness renders `receiver` and `every-object` the same way, QSL emits `every-object` for an unscoped `Modifies: f` on the clause's own field, and so there is no refusal of either scope and no scope-swap test. Re-measured: swapping the own scope to `every-object` and the foreign scope to `receiver` still leaves all 59 state-frame tests passing. The PR body says so, apart from the wording in FND-004. |
+| FND-003 | fixed | The PR body now reports IR-824 (#422): no effect observed, measured with a full `it` run and the four QSpec-fixture tests. It lists the 21 QSL commits by area (frame check, reachability, clause sets, spec or test only), and it no longer says src is untouched; it describes the `frame_grants` change. |
