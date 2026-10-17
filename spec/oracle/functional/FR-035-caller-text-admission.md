@@ -107,8 +107,9 @@ records the architecture boundary.
 
 ## Dependencies
 
-- **Upstream**: Contract Runtime's own `exact` text and accounting API, which
-  defines and exports `admit_text`, `TextPayload`, `TextType` and `Meter`.
+- **Upstream**: quire-exact, the exact kernel this repository locks, which
+  defines and exports `quire_exact::admit_text`, `quire_exact::TextPayload`,
+  `quire_exact::TextType` and `quire_exact::Meter`.
 - **Execution**: [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)
   classifies and retains evidence for the generated caller harness.
 - **Related**: [FR-014](./FR-014-exact-scalar-oracles.md) for checked-package
