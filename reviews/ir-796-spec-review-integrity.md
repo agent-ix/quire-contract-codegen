@@ -45,3 +45,9 @@ Round 1, reviewed at b94bdd4e7f8d15e1d317391ac0fe07fd93bc9a02.
 | --- | --- | --- |
 | FND-001 | fixed | - |
 | FND-002 | still-open | IR-837 (CG, Backlog) is now cited, which closes the CG half. The quire-exact half is still untracked. TC-050:137 and 153-155 name IR-705 as owner, but IR-705 is Done, and it has no AC-9: its acceptance list has four items. The open obligation that matches 'AC-9' is quire-exact FR-359-AC-9 (PLANNED/UNRUN), not an IR-705 criterion. IR-837 itself says the quire-exact fix is 'IR-705 option (c), awaiting Peter'. Still needed: cite an open quire-exact ticket (or reopen IR-705), and replace 'IR-705-AC-9' with quire-exact FR-359-AC-9 or the real criterion. |
+
+Round 2, reviewed at bed849da9fbc39b9fcef4a4e654e6362d2baae65 (IR-705 reopened, In Progress).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | - |
