@@ -462,10 +462,13 @@ description of one harness, with no Kani spelling in it. Its fields:
 - `Assume { condition }`: an extra `kani::assume(<condition>)` after the inputs. The scalar family
   uses none. It is in 4b's shape for one reason: the L-4 control (FR-015-AC-117) is a hand-built
   spec with an unsatisfiable `Assume`, since no scalar claim can carry an unsatisfiable input
-  domain (the constructor and the lowerer both refuse one). 4c may extend its use; it adds no
-  field here.
+  domain (the constructor and the lowerer both refuse one). At 4b only that test constructs it, so the variant carries
+  `#[cfg_attr(not(test), allow(dead_code))]`, scoped to it, so that `make lint` (clippy
+  `--all-targets -D warnings`) stays green; the attribute is removed when 4c's lowerer builds an
+  `Assume`. 4c may extend its use; it adds no field here.
 - `Let { name, ty, mutable, init }`: a binding. `ty` is an optional annotation of a spec-local `LetType`
-  (`I64`, `I128`), because the scalar harness writes `let exact: i128 = ...`. It is not
+  whose only variant at 4b is `I128` (nothing else is constructed, so no unused variant exists
+  for `make lint` to reject), because the scalar harness writes `let exact: i128 = ...`. It is not
   `KaniPrimitiveType`, which is public API with `Boolean` and `I64` only and which 4b does not
   widen.
   `init` is an `ExprText` or `Init::UnlimitedMeter` (the all-`u64::MAX` `rt::Meter` of the
@@ -484,7 +487,9 @@ validated newtype whose constructor refuses text that:
 - spells `kani::` or `#[`;
 - contains a block, `unsafe`, `async`, closure, loop (`loop`, `while`, `for`) or `let` expression
   anywhere in its tree (a `match` is allowed: the scalar outcome check is one); or
-- contains a macro invocation other than `matches!`.
+- contains a macro invocation other than `matches!`, or a `matches!` that has a guard
+  (`if ...`). The arguments of `matches!` are parsed as an expression and a pattern, and the
+  checks above apply to the expression, so a macro, block or closure nested in it is refused too.
 
 So an `ExprText` cannot hold a statement, an assertion, a panic or a cover, and R-1 item 2's
 promise that nothing a lowerer supplies changes where the cover goes is enforced rather than
