@@ -233,7 +233,7 @@ QSL application API.
   capability negotiation against registered backends, execution outcomes,
   and meter charge sequences are planned owner-path obligations; comparison
   with the QSL value authority is outside CG's boundary (FR-014-AC-47; owned by
-  quire-integration IR-842). AC-2 through AC-5, AC-8, AC-9, AC-14, AC-16 through AC-20
+  quire-integration IR-842). AC-2 through AC-5, AC-8, AC-9, AC-14, AC-16, AC-17, AC-19 and AC-20
   and their TC-031 vectors remain retained as target-neutral expected
   behavior; their present Contract Runtime `exact` witnesses are historical.
   When QSL-358/IR-349 establishes its callable API, the concrete emitter shall
@@ -246,9 +246,9 @@ QSL application API.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-021-AC-1 | Every requested `call` item receives exactly one scheduled or typed-refused disposition; a refused item contributes no instruction root, concrete symbol or location entry, while an unrelated admitted item is unchanged. Concrete generated disposition is planned after QSL-358/IR-349. | Test (TC-031) |
-| FR-021-AC-2 | No test name, trace tag, test output line or doc comment of the function-application corpus, no TC-031 step and no oracle-matrix row names agreement of an oracle's outcome, admitted charge sequence or consumed counters with a direct application through a QSL-owned package. That agreement is not claimed by CG and is owned by quire-integration IR-842 (FR-014-AC-47). | Inspection (TC-031) |
+| FR-021-AC-2 | For each function-application corpus vector, the oracle's outcome, admitted charge sequence and consumed counters equal a direct application independently assembled from the request with a fresh meter; today that application is the Contract Runtime `exact` port (historical), and its owner-path replacement is settled by QSL-358/IR-349 (IR-845). This criterion claims no agreement with the QSL value authority: that boundary is owned by quire-integration IR-842 (FR-014-AC-47, FR-021-AC-18). | Test (TC-031) |
 | FR-021-AC-3 | Each scheduled item records the requested function name and declaring V2 function node id, plus its request-order function index; any independent application a test builds for comparison is constructed from the request, never read back from generated code. The owner API origin mapping is verified when that API is available. PLANNED (QSL-358/IR-349 for origin mapping). | Test (TC-031) |
-| FR-021-AC-4 | The schedule records ordered arguments without inventing a refusal result. Whether an eventual oracle's arity, wrong-value-kind, dangling-reference and unknown-function input refusals equal the QSL-owned ones is outside CG's boundary: CG claims no agreement with the QSL value authority, owned by quire-integration IR-842 (FR-014-AC-47). | Test (TC-031) |
+| FR-021-AC-4 | The oracle returns the arity, wrong-value-kind, dangling-reference and unknown-function input refusals unchanged to the caller before any execution charge; the schedule records ordered arguments without inventing a refusal result. That the refusals equal QSL-owned ones is outside CG's boundary (IR-842, FR-014-AC-47). | Test (TC-031) |
 | FR-021-AC-5 | The schedule orders arity validation before per-argument validation, validates arguments in declared parameter order, then places `function.call` before body work; the eventual QSL-owner-path execution admits exactly that order. PLANNED (QSL-358/IR-349 for execution). | Test (TC-031) |
 | FR-021-AC-6 | A function whose declared operator requirements name a capability no registered backend can discharge is marked `unsupported` at generation time, naming the capability, before any item naming it is applied; no oracle is emitted for such an item, and the disposition is never an `Outcome` variant, never an `InputRefusal`, and takes no `Meter`. | Test (TC-031) |
 | FR-021-AC-7 | A tree-shaped 100,000-node V2 `expression`/`call` graph whose nested children are separate admitted nodes reached by `reference` produces a flat SSA instruction table on a 512 KiB stack when caller work and source-byte limits fit it; no CG analysis or emission depth cap participates. The schedule crate compiles. Running the concrete oracle against the QSL-owned iterative evaluator is a separate planned leg after QSL-358/IR-349; no Contract Runtime `MAX_CALL_DEPTH` behavior is required. | Test (TC-031) |
@@ -262,7 +262,7 @@ QSL application API.
 | FR-021-AC-15 | Each scheduled call point has one constant-size location record with function origin, stable occurrence ordinal, parent ordinal, child ordinal and instruction slot. A charged query reconstructs the same path as an independent walk of the request V2 reference graph; no record embeds the entire root-to-point path. A 100,000-link chain uses O(100,000) map storage and generation work. | Test (TC-031) |
 | FR-021-AC-16 | The schedule and its claim/location maps neither read nor depend on dynamic invocation `location` or `losses` fields. The eventual QSL-owner-path oracle makes no claim that those fields are populated; concrete behavior is PLANNED (QSL-358/IR-349). | Inspection (TC-031) |
 | FR-021-AC-17 | Each location record uses the request function binding and function-body ordering for its origin; when the QSL-owned checker publishes an origin for that function, a check refusal from an independently assembled package matches that origin. PLANNED (QSL-358/IR-349 for owner-authored cross-check). | Test (TC-031) |
-| FR-021-AC-18 | No test name, trace tag, test output line or doc comment of the function-application corpus, no TC-031 step and no oracle-matrix row names agreement in outcome, refusal or charge order with the QSL-owned application authority. That agreement is not claimed by CG and is owned by quire-integration IR-842 (FR-014-AC-47). | Inspection (TC-031) |
+| FR-021-AC-18 | No test name, trace tag, test output line or doc comment of the function-application corpus, no TC-031 step and no oracle-matrix row claims, or presents as evidence, agreement in outcome, refusal, charge order or consumed counters with the QSL-owned application authority; text that states this boundary is permitted. That agreement is not claimed by CG and is owned by quire-integration IR-842 (FR-014-AC-47). | Inspection (TC-031) |
 | FR-021-AC-19 | The emitted schedule crate for scalar, equality and nested-call corpus cases contains zero `.unwrap(`, `.expect(`, `unreachable!`, `panic!`, `todo!` and `unimplemented!` tokens; the eventual owner-path oracle has the same no-panic property. PLANNED (QSL-358/IR-349 for concrete oracle). | Test (TC-031) |
 | FR-021-AC-20 | For each scalar and equality instruction, the target-neutral schedule preserves completed, undefined, refused, incomplete and checked-invariant result distinctions without folding one into another. The eventual QSL-owner-path emitter exhaustively forwards its owner result variants and maps an unknown future variant to the owner checked-invariant refusal rather than panicking. PLANNED (QSL-358/IR-349 for concrete match). | Test (TC-031) |
 | FR-021-AC-21 | A scalar `Negate` body is refused as `UnsupportedOperator` with no schedule root, whether or not it reaches a `quire.op.quantity.convert` node (a conversion is not refused by name, because FR-021 has no quantity body, operand or argument support: the generator refuses a body that is one as `UnsupportedOperator` and the schedules as `ScheduleRefusal::UnsupportedOperation`; an earlier check that fires first is the accepted result: `Unsupported` for a direct unsupported form of the root, `NotExpression` and the other root checks, `UnsupportedOperandType` for a quantity-typed parameter or result, and the argument's own refusal for a call argument, FR-014-AC-2); the generator contains zero `unreachable!`, `panic!`, `todo!` and `unimplemented!` invocations in `src/oracle/function/mod.rs`, excluding comments. | Test (TC-031) |
@@ -288,7 +288,7 @@ written.
 | ID | Mutation that breaks it |
 |----|-------------------------|
 | FR-021-AC-1 | Abort the whole request on one refusal or assign a schedule root to a refused item. |
-| FR-021-AC-2 | Name agreement with a direct QSL application in a test name, trace tag, output line, doc comment, TC-031 step or matrix row. |
+| FR-021-AC-2 | Compare only with the former runtime port or build the direct application from emitted source, so two matching errors pass. |
 | FR-021-AC-3 | Read function identity from emitted source, so a mutated schedule and claim map agree falsely. |
 | FR-021-AC-4 | Collapse distinct owner input refusals into one generic cause after the API migration. |
 | FR-021-AC-5 | Validate arguments in a different order or schedule `function.call` after body work. |
@@ -304,7 +304,7 @@ written.
 | FR-021-AC-15 | Store every full root-to-node path or an empty path at every call point; the former is quadratic and the latter loses source position. |
 | FR-021-AC-16 | Read dynamic location or losses as if the eventual QSL owner populated them before its API states that contract. |
 | FR-021-AC-17 | Take function origin from request ordinal or emitted source instead of the binding, allowing claim and source to drift together. |
-| FR-021-AC-18 | Name agreement with the QSL-owned application authority in a test name, trace tag, output line, doc comment, TC-031 step or matrix row. |
+| FR-021-AC-18 | Claim or present as evidence agreement with the QSL-owned application authority in a test name, trace tag, output line, doc comment, TC-031 step or matrix row. |
 | FR-021-AC-19 | Leave a panic token in schedule source or a future owner-path result match. |
 | FR-021-AC-20 | Fold an unknown owner result into a completed value or an unrelated refusal. |
 | FR-021-AC-21 | Allow `Negate` to reach an unreachable arm instead of refusing it before schedule emission. |
@@ -357,7 +357,7 @@ The target-neutral graph analysis, flat schedule, compact location map and
 caller limits are planned in IR-511. The current implementation and existing
 TC-031 corpus still witness the former Contract Runtime `exact` port. Its
 behavioral obligations are retained by AC-2 through AC-5, AC-8, AC-9,
-AC-14 and AC-16 through AC-20, but their concrete execution and source
+AC-14, AC-16, AC-17, AC-19 and AC-20, but their concrete execution and source
 assertions are planned for QSL-358/IR-349 owner paths. The historical port
 is not the target architecture and no compatibility surface is specified.
 TC-031 records separate schedule-compilation and owner-execution gates.

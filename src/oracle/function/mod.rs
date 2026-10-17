@@ -124,11 +124,11 @@
 //! this generator does not attempt it (AC-16: those two fields are simply
 //! discarded by every emitted oracle).
 //!
-//! ## AC-18 (three-way authority agreement): not implemented
+//! ## AC-18 (QSL authority agreement): outside CG's boundary
 //!
-//! No test in this module's suite asserts agreement against a QSL authority: this repository
-//! depends only on `qsl-replay`'s public API (QSL arch-lint T12-A), which AC-18's
-//! direct-expression-call shape cannot reach. AC-2's two legs (generated oracle, direct runtime
+//! No test in this module's suite claims agreement against a QSL authority: this repository
+//! depends only on `qsl-replay`'s public API (QSL arch-lint T12-A), and that agreement is owned
+//! by quire-integration IR-842 (FR-014-AC-47). AC-2's two legs (generated oracle, direct runtime
 //! call) are implemented and tested in full.
 
 use crate::core::artifact::{Artifact, MAX_ARTIFACT_BYTES, MAX_GENERATED_SOURCE_BYTES};
