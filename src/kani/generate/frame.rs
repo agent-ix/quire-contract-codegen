@@ -734,6 +734,8 @@ impl ClauseShape {
         for (member, effect) in [
             ("creates", UnsupportedFrameEffect::Creates),
             ("deletes", UnsupportedFrameEffect::Deletes),
+            // A scoped delete (the receiver or a reference parameter) is a delete.
+            ("deletes_scoped", UnsupportedFrameEffect::Deletes),
         ] {
             let entries = body
                 .get(member)
