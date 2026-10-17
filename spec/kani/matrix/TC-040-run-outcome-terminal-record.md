@@ -22,7 +22,11 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
    category and vacuity cause.
 3. Map `inconclusive` with the timed-out, memory-exhausted and exhausted-unwind-bound reasons.
 4. Map `inconclusive` with the no-verdict reason.
-5. Map `inconclusive` with the failure-without-counterexample and missing-cover-summary reasons.
+5. Map `inconclusive` with the missing-cover-summary reason, and with the failure-without-counterexample
+   reason once per cause: absent, `properties_failed`, `timeout`, `out_of_memory`, `exit_code`
+   and `unknown`. Map the memory-exhausted reason. Map `NoVerdict` and `MissingCoverSummary` with each
+   cause. Build the single-run and batch stand-in evidence of FR-029-AC-32 and FR-029-AC-33
+   (`proofs::check`, `c::check`, `d::check`) and pass its cause.
 6. Map every ordinary source-predicate outcome and reason, and collect the values.
 7. Map `falsified` with a replay disagreement of each `DisagreementCause` (`Verdicts`, `Witness`,
    `NoValue`).
@@ -66,7 +70,12 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 3. `Incomplete(TimedOut)`, `Incomplete(ResourceExhausted)` and `Incomplete(ResourceExhausted)`
    (FR-029-AC-3).
 4. `Failed` (FR-029-AC-4).
-5. Each is `Failed` (FR-029-AC-5).
+5. Missing-cover-summary is `Failed` (FR-029-AC-5). The failure-without-counterexample reason is
+   `Incomplete(ResourceExhausted)` for `out_of_memory` and `Incomplete(TimedOut)` for `timeout`, and
+   `Failed` for the other causes and for none (FR-029-AC-32, FR-029-AC-33). The memory-exhausted
+   reason and `out_of_memory` agree (FR-029-AC-34). `c::check` and `d::check` are both
+   `Incomplete(TimedOut)`. No value is `Refuted`, and `NoVerdict` and `MissingCoverSummary` are `Failed`
+   whatever the cause (FR-029-AC-35).
 6. No ordinary source-predicate value is `Tested` (FR-029-AC-6).
 7. Each is `Inconclusive(ReplayParity)` carrying its `DisagreementCause` (FR-029-AC-8).
 8. `Inconclusive(ReplayRefused)` carrying the refusal's catalog code (FR-029-AC-9).
@@ -103,6 +112,8 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
     `Refuted`, never `Inconclusive(ReplayRefused)` or `Failed` (FR-029-AC-18, IR-460).
 
 ## Status
+
+Planned (IR-848): the cause arguments of step 5 and FR-029-AC-32 to FR-029-AC-35.
 
 Partly covered. Steps 1, 2 and 4 to 15 are tests of `tests/it/terminal_map.rs`. Step 3
 asserts the timed-out and exhausted-unwind-bound reasons only, because no memory-exhausted reason
