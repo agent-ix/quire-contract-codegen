@@ -57,3 +57,9 @@ Round 1, reviewed at b94bdd4e7f8d15e1d317391ac0fe07fd93bc9a02.
 | FND-001 | fixed | - |
 | FND-002 | fixed | - |
 | FND-003 | fixed | - |
+
+Round 2, reviewed at bed849da9fbc39b9fcef4a4e654e6362d2baae65 (IR-705 reopened, In Progress).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | - |
