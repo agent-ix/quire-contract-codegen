@@ -6,6 +6,7 @@
 //! The IR outcomes are built with IR's own constructors and the `Std001Code` that `qsl-replay`
 //! re-exports, so the `Declined` code arm is built through `qsl-replay` alone.
 
+use ix_trace_rs::trace;
 use qsl_replay::{
     std001_code, AdmissionFailure, CallSiteRefusal, Category, Certification, ClauseName, Code,
     DeclineCode, DependencyInput, DependencyInputRefusal, DigestDomain, DigestRecord,
@@ -64,7 +65,7 @@ fn settlement_free_outcomes() -> Vec<KaniRunOutcome> {
 }
 
 /// Both direct run-map cancellation sources preserve their exact cause and refuse replay pairs.
-/// Trace: FR-029-AC-15, FR-029-AC-29, FR-040-AC-7
+#[trace("FR-029-AC-15", "FR-029-AC-29", "FR-040-AC-7")]
 #[test]
 fn direct_cancelled_run_maps_exact_source_and_rejects_settlement() {
     for (source, exact) in [
@@ -141,8 +142,7 @@ fn non_fault_refusal() -> ReplayRefusal {
 
 /// `verified` with three SUCCESS checks is a certified `Proved` with three checks. A
 /// `falsified` run with a reproduced replay is `Refuted`.
-///
-/// Trace: FR-029-AC-1, TC-040
+#[trace("FR-029-AC-1", "TC-040")]
 #[test]
 fn tc_040_verified_proves_its_checks_and_a_reproduced_falsification_refutes() {
     assert_eq!(
@@ -160,8 +160,7 @@ fn tc_040_verified_proves_its_checks_and_a_reproduced_falsification_refutes() {
 
 /// The vacuous-proof reason and `cover-unsatisfied` each map to a certified `Proved` with
 /// zero checks, which QSL reads as category `inconclusive` with the vacuity cause.
-///
-/// Trace: FR-029-AC-2, TC-040
+#[trace("FR-029-AC-2", "TC-040")]
 #[test]
 fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks() {
     for outcome in [
@@ -187,7 +186,7 @@ fn tc_040_a_vacuous_proof_and_an_unsatisfied_cover_are_proved_with_zero_checks()
     }
 }
 
-/// Trace: FR-029-AC-3.
+#[trace("FR-029-AC-3")]
 #[test]
 fn observed_memory_exhaustion_maps_to_incomplete_resource_exhausted() {
     assert_eq!(
@@ -198,8 +197,7 @@ fn observed_memory_exhaustion_maps_to_incomplete_resource_exhausted() {
 
 /// The timed-out reason maps to `Incomplete(TimedOut)` and the exhausted-unwind-bound reason to
 /// `Incomplete(ResourceExhausted)`.
-///
-/// Trace: TC-040
+#[trace("TC-040")]
 #[test]
 fn tc_040_a_timeout_and_an_exhausted_unwind_bound_are_incomplete() {
     assert_eq!(
@@ -216,8 +214,7 @@ fn tc_040_a_timeout_and_an_exhausted_unwind_bound_are_incomplete() {
 }
 
 /// The no-verdict reason maps to `Failed`.
-///
-/// Trace: FR-029-AC-4, TC-040
+#[trace("FR-029-AC-4", "TC-040")]
 #[test]
 fn tc_040_a_run_with_no_verdict_is_failed() {
     assert_eq!(
@@ -227,8 +224,7 @@ fn tc_040_a_run_with_no_verdict_is_failed() {
 }
 
 /// The failure-without-counterexample and missing-cover-summary reasons each map to `Failed`.
-///
-/// Trace: FR-029-AC-5, TC-040
+#[trace("FR-029-AC-5", "TC-040")]
 #[test]
 fn tc_040_a_missing_counterexample_or_cover_summary_is_failed() {
     for reason in [
@@ -240,8 +236,7 @@ fn tc_040_a_missing_counterexample_or_cover_summary_is_failed() {
 }
 
 /// No outcome, with any reason and any settlement, maps to `Tested`.
-///
-/// Trace: FR-029-AC-6, TC-040
+#[trace("FR-029-AC-6", "TC-040")]
 #[test]
 fn tc_040_no_outcome_maps_to_tested() {
     let mut values: Vec<TerminalValue> = settlement_free_outcomes()
@@ -258,8 +253,7 @@ fn tc_040_no_outcome_maps_to_tested() {
 
 /// A pair outside the domain is a typed refusal, not a value: a falsified run needs its settlement
 /// and no other outcome has one.
-///
-/// Trace: FR-029-AC-15, TC-040
+#[trace("FR-029-AC-15", "TC-040")]
 #[test]
 fn tc_040_a_settlement_accompanies_a_falsified_outcome_only() {
     assert_eq!(
@@ -276,8 +270,7 @@ fn tc_040_a_settlement_accompanies_a_falsified_outcome_only() {
 }
 
 /// A replay disagreement of each cause maps to `Inconclusive(ReplayParity)` carrying that cause.
-///
-/// Trace: FR-029-AC-8, TC-040
+#[trace("FR-029-AC-8", "TC-040")]
 #[test]
 fn tc_040_a_replay_disagreement_carries_its_cause() {
     let (violation, success) = (
@@ -315,8 +308,7 @@ fn tc_040_a_replay_disagreement_carries_its_cause() {
 
 /// A non-fault `ReplayRefusal` maps to `Inconclusive(ReplayRefused)` carrying its own code, bare
 /// and as the cause of a spine replay failure.
-///
-/// Trace: FR-029-AC-9, TC-040
+#[trace("FR-029-AC-9", "TC-040")]
 #[test]
 fn tc_040_a_replay_refusal_carries_its_code() {
     let refusal = non_fault_refusal();
@@ -336,8 +328,7 @@ fn tc_040_a_replay_refusal_carries_its_code() {
 
 /// Every failure this repository raises that carries no QSL catalog code maps to `Failed`, so no
 /// `ReplayRefused` value carries a code no QSL refusal value supplied.
-///
-/// Trace: FR-029-AC-11, TC-040
+#[trace("FR-029-AC-11", "TC-040")]
 #[test]
 fn tc_040_each_failure_this_repository_raises_is_failed() {
     for_each_cg_failure(|settlement| {
@@ -502,8 +493,7 @@ fn for_each_fault(check: impl Fn(ReplaySettlement<'_>)) -> usize {
 
 /// The fault reading is `Failed` for every fault wrapper the criterion names, walked through the
 /// whole error, and a fault is neither `Refuted` nor a refusal carrying a code.
-///
-/// Trace: FR-029-AC-10, TC-040
+#[trace("FR-029-AC-10", "TC-040")]
 #[test]
 fn tc_040_a_fault_in_any_replay_wrapper_is_failed() {
     let exercised = for_each_fault(|settlement| {
@@ -514,8 +504,7 @@ fn tc_040_a_fault_in_any_replay_wrapper_is_failed() {
 
 /// Across every replay settlement other than reproduced, a falsified run is not `Refuted`, and a
 /// reproduced replay in a category other than `violation` is not read as a reproduction either.
-///
-/// Trace: FR-029-AC-12, TC-040
+#[trace("FR-029-AC-12", "TC-040")]
 #[test]
 fn tc_040_only_a_reproduced_replay_refutes() {
     let mut exercised = 0;
@@ -553,8 +542,7 @@ fn with_settlements(mut check: impl FnMut(ReplaySettlement<'_>)) {
 /// A non-fault `CallSiteRefusal` and a `DependencyLockError::Input`, each bare and wrapped in
 /// `ReplayPackageError` and `FrameReplayError`, map to `Inconclusive(ReplayRefused)` carrying the
 /// code QSL's refusal supplies, and never to `Declined`.
-///
-/// Trace: FR-029-AC-13, TC-040
+#[trace("FR-029-AC-13", "TC-040")]
 #[test]
 fn tc_040_a_setup_refusal_after_a_refutation_is_replay_refused_never_declined() {
     for_each_setup_refusal(|code, settlement| {
@@ -650,8 +638,7 @@ fn for_each_setup_refusal(check: impl Fn(Code, ReplaySettlement<'_>)) {
 /// A lock whose only defect is one library identity selected twice is refused by
 /// `ReplayPackage::new` with QSL's `DuplicateIdentity`, and a falsified run with that refusal is
 /// `Inconclusive(ReplayRefused)` carrying `invalid_package`.
-///
-/// Trace: FR-029-AC-14, TC-040
+#[trace("FR-029-AC-14", "TC-040")]
 #[test]
 fn tc_040_a_repeated_dependency_identity_is_replay_refused_with_invalid_package() {
     let refusal = repeated_identity_refusal();
@@ -712,8 +699,7 @@ fn repeated_identity_refusal() -> ReplayPackageError {
 /// reproduced result is `Refuted` and an inconclusive one `Inconclusive(ReplayParity)` carrying
 /// its cause, a refusal or a call-site or dependency refusal is read by its own code, and each
 /// failure this repository raises that carries no QSL code is `Failed`.
-///
-/// Trace: FR-029-AC-16, TC-040
+#[trace("FR-029-AC-16", "TC-040")]
 #[test]
 fn tc_040_the_state_clause_replay_reads_as_fr029_ac16() {
     let twin = Twin::new();
@@ -886,8 +872,7 @@ fn map_ir_settled<'a>(settlement: impl Into<ReplaySettlement<'a>>) -> TerminalVa
 
 /// Every pair the map's input can express maps to one value: nine kinds with no settlement and a
 /// counterexample with each of the six readings.
-///
-/// Trace: FR-030-AC-1, TC-041
+#[trace("FR-030-AC-1", "TC-041")]
 #[test]
 fn tc_041_every_expressible_pair_maps_to_one_value() {
     let mut values = Vec::new();
@@ -905,8 +890,7 @@ fn tc_041_every_expressible_pair_maps_to_one_value() {
 
 /// A pair outside the map's input is a typed refusal, not a value: a counterexample needs its
 /// settlement and no other kind has one.
-///
-/// Trace: FR-030-AC-14, TC-041
+#[trace("FR-030-AC-14", "TC-041")]
 #[test]
 fn tc_041_a_settlement_accompanies_a_counterexample_only() {
     for outcome in ir_outcomes() {
@@ -930,8 +914,7 @@ fn tc_041_a_settlement_accompanies_a_counterexample_only() {
 /// `Refused`, `InvalidInput` and `IncompleteInput` map to `Declined` with their own cause, and the
 /// outcome's STD-001 code is carried in `DeclineCode::Std001`: not respelled as a QSL catalog code
 /// and not refused when STD-001 does not register it.
-///
-/// Trace: FR-030-AC-2, TC-041
+#[trace("FR-030-AC-2", "TC-041")]
 #[test]
 fn tc_041_a_refusal_before_the_run_is_declined_with_its_kind_and_ir_code() {
     use KaniOutcomeKind as Kind;
@@ -967,8 +950,7 @@ fn tc_041_a_refusal_before_the_run_is_declined_with_its_kind_and_ir_code() {
 }
 
 /// `TimedOut`, `ResourceExhausted` and `Cancelled` map to `Incomplete` with their own cause.
-///
-/// Trace: FR-030-AC-3, TC-041
+#[trace("FR-030-AC-3", "TC-041")]
 #[test]
 fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
     use KaniOutcomeKind as Kind;
@@ -1001,8 +983,7 @@ fn tc_041_a_limit_or_a_cancellation_is_incomplete_with_its_cause() {
 
 /// `Proved` carries the transcript's SUCCESS check count, zero included, and a `Counterexample`
 /// with a reproduced replay is `Refuted`.
-///
-/// Trace: FR-030-AC-4, FR-030-AC-18, TC-041
+#[trace("FR-030-AC-4", "FR-030-AC-18", "TC-041")]
 #[test]
 fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refutes() {
     let proved = ir(KaniOutcomeKind::Proved, Std001Code::KANI_PROVED);
@@ -1028,8 +1009,7 @@ fn tc_041_a_proof_carries_its_check_count_and_a_reproduced_counterexample_refute
 
 /// `Inconclusive` with `kani_vacuous_proof` is a certified `Proved` with zero checks whatever
 /// count the caller passes; with any other code it is `Failed`.
-///
-/// Trace: FR-030-AC-5, FR-030-AC-18, TC-041
+#[trace("FR-030-AC-5", "FR-030-AC-18", "TC-041")]
 #[test]
 fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_failed() {
     let outcome = |code| ir(KaniOutcomeKind::Inconclusive, code);
@@ -1049,8 +1029,7 @@ fn tc_041_a_vacuous_proof_is_proved_with_zero_checks_and_other_inconclusive_is_f
 }
 
 /// No pair maps to `Tested`.
-///
-/// Trace: FR-030-AC-6, TC-041
+#[trace("FR-030-AC-6", "TC-041")]
 #[test]
 fn tc_041_no_outcome_maps_to_tested() {
     let mut values: Vec<TerminalValue> = ir_outcomes()
@@ -1071,8 +1050,7 @@ fn tc_041_no_outcome_maps_to_tested() {
 /// The scrutinee is a two-tuple, every arm's first element names only `KaniOutcomeKind` variants
 /// (no `_` and no binding), no arm's pattern or tuple element is a catch-all, and the variants the
 /// arms name are all ten of the kind, so a kind IR adds fails to compile in the library.
-///
-/// Trace: FR-030-AC-7, TC-041
+#[trace("FR-030-AC-7", "TC-041")]
 #[test]
 fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
     use syn::{visit::Visit, Expr, ExprMatch, Item, Pat};
@@ -1189,8 +1167,7 @@ fn tc_041_the_map_is_one_match_over_the_pair_with_no_wildcard_arm() {
 
 /// `Unavailable` with `kani_solver_absent` is `Unsupported(SolverAbsent)`; with
 /// `kani_backend_absent` or any other code it is `Unsupported(BackendAbsent)`.
-///
-/// Trace: FR-030-AC-8, TC-041
+#[trace("FR-030-AC-8", "TC-041")]
 #[test]
 fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
     let outcome = |code| ir(KaniOutcomeKind::Unavailable, code);
@@ -1212,8 +1189,7 @@ fn tc_041_an_absent_solver_or_backend_is_unsupported_with_its_cause() {
 /// A `Counterexample` with a replay disagreement is `Inconclusive(ReplayParity)` carrying its
 /// cause, and with a non-fault `ReplayRefusal` is `Inconclusive(ReplayRefused)` carrying that
 /// refusal's `code()`.
-///
-/// Trace: FR-030-AC-9, TC-041
+#[trace("FR-030-AC-9", "TC-041")]
 #[test]
 fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_cause() {
     let cause = DisagreementCause::NoValue {
@@ -1234,8 +1210,7 @@ fn tc_041_a_counterexample_disagreement_or_refusal_is_inconclusive_with_its_caus
 /// A counterexample settles as `Failed` with a fault walked through every wrapper the run-outcome
 /// map's fault criterion lists and with each failure this repository raises that carries no QSL
 /// catalog code.
-///
-/// Trace: FR-030-AC-10, TC-041
+#[trace("FR-030-AC-10", "TC-041")]
 #[test]
 fn tc_041_a_counterexample_with_a_fault_or_a_cg_defect_is_failed() {
     let faults = for_each_fault(|settlement| {
@@ -1254,8 +1229,7 @@ fn tc_041_a_counterexample_with_a_fault_or_a_cg_defect_is_failed() {
 }
 
 /// Across every replay settlement other than reproduced, a counterexample is not `Refuted`.
-///
-/// Trace: FR-030-AC-11, TC-041
+#[trace("FR-030-AC-11", "TC-041")]
 #[test]
 fn tc_041_only_a_reproduced_replay_refutes_a_counterexample() {
     let mut exercised = 0;
@@ -1275,8 +1249,7 @@ fn tc_041_only_a_reproduced_replay_refutes_a_counterexample() {
 /// A counterexample with a non-fault `CallSiteRefusal` or a `DependencyLockError::Input`, bare and
 /// wrapped, is `Inconclusive(ReplayRefused)` carrying the code QSL's refusal supplies and never
 /// `Declined`.
-///
-/// Trace: FR-030-AC-12, TC-041
+#[trace("FR-030-AC-12", "TC-041")]
 #[test]
 fn tc_041_a_setup_refusal_after_a_counterexample_is_replay_refused_never_declined() {
     for_each_setup_refusal(|code, settlement| {
@@ -1289,8 +1262,7 @@ fn tc_041_a_setup_refusal_after_a_counterexample_is_replay_refused_never_decline
 /// A lock whose only defect is one repeated library identity is refused by `ReplayPackage::new`
 /// with QSL's `DuplicateIdentity`, and a counterexample with that refusal is
 /// `Inconclusive(ReplayRefused)` carrying `invalid_package`.
-///
-/// Trace: FR-030-AC-13, TC-041
+#[trace("FR-030-AC-13", "TC-041")]
 #[test]
 fn tc_041_a_repeated_dependency_identity_after_a_counterexample_is_replay_refused() {
     let refusal = repeated_identity_refusal();

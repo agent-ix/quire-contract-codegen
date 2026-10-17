@@ -10,15 +10,23 @@
 //! and runs `tests/composite_equality_support/agreement_cases.rs` against it
 //! through `exact_scalar_agreement`'s scratch-crate runner.
 
+use ix_trace_rs::trace;
+
 use super::exact_scalar_agreement::run_agreement_cases;
 
-/// Trace: FR-018-AC-2, FR-018-AC-8, FR-018-AC-9, FR-018-AC-10, FR-018-AC-11, TC-029.
-///
 /// The crate the generator emits now for the corpus request compiles and every
 /// agreement case passes against it. Each case drives the generated oracle and
 /// a direct runtime call assembled from the request's own descriptor, so an
 /// emitted operator, operand order or conversion that disagrees with the
 /// descriptor fails here.
+#[trace(
+    "FR-018-AC-2",
+    "FR-018-AC-8",
+    "FR-018-AC-9",
+    "FR-018-AC-10",
+    "FR-018-AC-11",
+    "TC-029"
+)]
 #[test]
 fn tc_029_generated_composite_equality_crate_agrees_with_direct_runtime() {
     let oracles = super::composite_equality_generation::corpus_oracles();
