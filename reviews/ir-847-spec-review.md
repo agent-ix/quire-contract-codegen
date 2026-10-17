@@ -44,3 +44,20 @@ Ticket: IR-847 (PR agent-ix/quire-contract-codegen#418, frozen head ae13663706dd
 ## Verdict
 
 Code inventory at ae13663 matches the table: the ten existing KaniScalarNativeError variants plus the new IdentityEncode give the eleven codes, all snake_case and pairwise distinct; all twelve nested KaniExecutionRefusal variants (BatchCancelled, Tool, MemoryMechanismUnavailable, MemoryObservationFailed, BatchMemoryExhausted, HarnessNotInCrate, HarnessProvenanceMismatch, Report, OutputOverLimit, OutputUnread, BatchTimedOut, PlaybackForNonMember) are classified exactly once (4 refusal, 8 fault), and the existing nested code() (Some only for OutputOverLimit/OutputUnread) is stated unchanged. code() total, class() closed, the non_exhaustive change and its downstream wildcard consequence, and the stability contract are stated; in-repo integration tests (tests/it/kani_obligations.rs:3083-3189) only pattern-match InvalidRequest and are unaffected. The NativeResult misuse is real (scalar.rs:512) and correctly fixed by the new IdentityEncode variant. TC-027 steps cover AC-41 codes, AC-42 classes with real and injected causes, AC-43 behaviour and AC-44 frozen table, apart from FND-001 and FND-002. Author decisions accepted on merit: snake_case codes 'snapshot_io'/'kani_execution' differing from variant names (the string is the contract); no stable codes for nested refusals other than OutputOverLimit/OutputUnread (outer class() gives FR-009-AC-7 the refusal/fault split it needs). Not mergeable until FND-001 is fixed.
+
+## New findings (disposition pass 1)
+
+Rechecked at frozen head 75a0bb88176666b785d64bf7496bb5bf768a713c (fix commit 58f8bbe).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The class-enum compile_fail half ('a rustdoc compile_fail match that names a third class', TC-027 step 5) fails to compile whether or not KaniScalarNativeErrorClass is closed or non_exhaustive: naming a variant that does not exist is always an error. Only the compiling control (an external-crate exhaustive two-arm match with no wildcard) tests closedness. Drop the vacuous compile_fail or replace it with one that fails only if a third class existed; keep the control. | spec/kani/functional/FR-017-kani-execution-evidence.md:724 |
+| FND-005 | low | The stability contract says 'A variant's class() never changes', and AC-44 / TC-027 step 4 freeze 'every variant with its expected code and class', but ProofNotVerified (by evidence outcome) and Kani (by nested refusal) have no single class. State the frozen unit as the mapping (variant, and for these two the outcome or nested refusal, to class) so the contract and the frozen-table test have one reading. | spec/kani/functional/FR-017-kani-execution-evidence.md:674-676 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified in 58f8bbe at 75a0bb8 |
+| FND-002 | fixed | verified in 58f8bbe at 75a0bb8 |
+| FND-003 | fixed | verified in 58f8bbe at 75a0bb8 |

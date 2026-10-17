@@ -43,3 +43,19 @@ Ticket: IR-847 (PR agent-ix/quire-contract-codegen#418, frozen head ae13663706dd
 ## Verdict
 
 Author decisions judged: SnapshotChanged = EnvironmentFault is accepted (staged bytes changing under a sealed snapshot is not request-determined; consistent with the fault definition); nested Report = EnvironmentFault accepted (report decode fault, parallel to NativeResult); OutputOverLimit as a refusal accepted (output size is determined by the harness). The failure-domain defect is FND-001: the class of ProofNotVerified ignores that the single-run Kani path reports cancellation, timeout, memory exhaustion and launcher/build failure as evidence rather than refusals, so these host faults are classed as completion refusals, opposite to their batch counterparts and to the section's own definition. Not mergeable until FND-001 is fixed or explicitly justified.
+
+## New findings (disposition pass 1)
+
+Rechecked at frozen head 75a0bb88176666b785d64bf7496bb5bf768a713c (fix commit 58f8bbe).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | high | The new rule makes FailedWithoutCounterexample 'with any failureCause' an EnvironmentFault, listing the causes as 'a CBMC timeout, out-of-memory, exit code or unknown failure'. KaniFailureCause also has PropertiesFailed (src/kani/output/report.rs:385), which real Kani writes for a failed assertion with no playback (FR-017-AC-38; AC-39's e::check), and the code already separates it with is_cbmc_failure(). As written, the common real failed-property case is classed a fault, the reverse of the rule's own 'failed property' refusal. Make the fault branch 'a failureCause other than properties_failed' (refusal for none or properties_failed), and add a TC-027 case for FailedWithoutCounterexample with properties_failed requiring CompletionRefusal. | spec/kani/functional/FR-017-kani-execution-evidence.md:654-662 |
+| FND-004 | low | For Kani the section says the nested match is exhaustive so a new nested refusal forces this spec's decision; the ProofNotVerified rule says nothing equivalent for KaniRunOutcome, KaniInconclusiveReason and KaniFailureCause. A new reason or cause would get a class from whatever default the implementation picks. State that class() matches those enums exhaustively, with no wildcard arm, so a new value forces a spec decision. | spec/kani/functional/FR-017-kani-execution-evidence.md:654-662 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | verified in 58f8bbe at 75a0bb8 |
+| FND-002 | fixed | verified in 58f8bbe at 75a0bb8 |

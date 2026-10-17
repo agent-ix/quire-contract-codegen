@@ -316,7 +316,7 @@ of the twelve variants, the nested `Kani` error once for each `KaniExecutionRefu
 `Kani` gives `kani_execution` for every nested refusal, and that the type, the class enum and the
 code constants are reachable at the crate root. (2) Assert `class()` of each variant, of each nested
 `Kani` refusal, and of `ProofNotVerified` for `Falsified`, `CoverUnsatisfied`, each inconclusive
-reason, `Cancelled`, and `FailedWithoutCounterexample` with and without a `failureCause`, against
+reason, `Cancelled`, and `FailedWithoutCounterexample` with no `failureCause`, with `properties_failed` (a real single-run stand-in of AC-38's failed assertion without playback, requiring `CompletionRefusal`) and with each of `timeout`, `out_of_memory`, `exit_code` and `unknown` (requiring `EnvironmentFault`), against
 the FR-017 table. Produce real errors by the runner for a request mismatch, a mismatched
 dependency-lock revision, an oracle stop and a falsified proof, and require `CompletionRefusal`;
 produce a real single run cancelled by its retained source and a real single run stopped by its
@@ -326,14 +326,17 @@ malformed helper output and an embedded lock with no runtime revision, and requi
 `EnvironmentFault` (the last as `codegen_lock`). (3) Force the canonical identity encode to fail (a
 content limit of zero in a test seam) and require `IdentityEncode`, `identity_encode`,
 `EnvironmentFault`, and not `NativeResult`; feed malformed helper output and require
-`native_result`. (4) Keep a frozen list of all variants, codes and classes, with an exhaustive
-`match` over the type inside the defining crate that stops compiling when a variant is added, and
+`native_result`. (4) Keep a frozen list of all variants and codes and of the mapping to class: one class for a fixed
+variant, and for `ProofNotVerified` and `Kani` the class of every `KaniRunOutcome`,
+`KaniInconclusiveReason`, `KaniFailureCause` and nested-refusal value, with exhaustive `match`es (no
+wildcard) over those types inside the defining crate that stop compiling when one is added, and
 assert the nested `OutputOverLimit` and `OutputUnread` codes are unchanged. (5) Non-exhaustive and
 closed class: a rustdoc `compile_fail` example matches `KaniScalarNativeError` exhaustively without
-a wildcard arm and must fail to compile, with a compiling control that adds the wildcard arm; a second
-`compile_fail` example matches `KaniScalarNativeErrorClass` with a third arm naming a class that
-does not exist and must fail, with a compiling control matching exactly `CompletionRefusal` and
-`EnvironmentFault`; both run by `cargo test --doc`, the pattern of the AC-38 serialize-only check.
+a wildcard arm and must fail to compile, with a compiling control that adds the wildcard arm; the
+class enum is closed by a compiling control that matches `KaniScalarNativeErrorClass` exhaustively
+with exactly `CompletionRefusal` and `EnvironmentFault` and no wildcard, together with the absence of
+`#[non_exhaustive]` on it; the doctests run by `cargo test --doc`, the pattern of the AC-38
+serialize-only check.
 These steps are Planned until the IR-847 code slice lands.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
