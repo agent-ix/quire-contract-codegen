@@ -58,3 +58,11 @@ memory-exhausted no-cause assertions hold by construction, because `launch_evide
 `exit_status: None` for those launches. That is acceptable. They pin the contract that a stopped
 run never reads its report, and the gate in `Record::of` is covered separately by the six
 other-outcome cases. The flaky identity_ceilings test is not made worse.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (a84a772): the `KaniExecutionEvidence::diagnostics` rustdoc now says the field is present for a `NoVerdict` outcome and for a `FailedWithoutCounterexample` outcome whose cause is `timeout`, `out_of_memory`, `exit_code` or `unknown`, and absent otherwise. The `KaniNoVerdictDiagnostics` doc and the module doc say the same. Checked against `Record::of`: the record is kept only when the cause is a CBMC failure or the outcome is NoVerdict. The phase is `unknown` because a report was exported. `cargo doc -D warnings` is clean. |
+| FND-002 | fixed | Round 1 (a84a772): `src/kani/classify.rs` is byte-identical to base peter/ir-827-cbmc-failure-cause-spec, with an empty `git diff`, so `ClassifiedRun` is unchanged. The exit status now travels beside the run. In a batch it comes from `member.report.exit_status`. In a single run, `single_exit_status` re-parses the report only after the outcome is FWC. classify.rs never names `exit_status`. |
+| FND-003 | deferred | Routed downstream by the team leader (IR-809 comment 93cf3a2c) to the quire-driver owner, together with IR-809's `diagnostics` literal fix. It is out of this repo's scope. |

@@ -49,3 +49,9 @@ oracle on `Record::of`.
 - Criteria: tagged 4 · untagged 0 · tagged-by-ignored-test 0 (AC-40 has non-ignored binders as well as its ignored lane test) · method-without-symbol 0
 - Untraced behaviors / stubs: 0
 - Semantic review: ran over FR-017-AC-37 to FR-017-AC-40 (the dispatching brief asked for test-oracle strength)
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (a84a772): the tautological with/without comparison is gone. The test now asserts only that the terminal value is `Failed` for each of the three causes. The test doc and TC-027 say that independence holds by the signature of `run_terminal_value`, which takes only the outcome and the SUCCESS-check count. AC-40 keeps 3 binders, and the real-Kani lane test was re-run green on a0280e8. |
