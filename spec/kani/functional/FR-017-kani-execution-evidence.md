@@ -674,7 +674,7 @@ spec's decision. The outer `code()` of `Kani` is always `kani_execution`; the ne
 `OutputUnread`. Giving every nested refusal a stable code is not required here.
 
 Stability contract: the twelve codes above are the whole set. A code is never renamed, reused for
-another variant, or removed while its variant exists. A variant's `class()` never changes. Adding a
+another variant, or removed while its variant exists. A variant's class, or for `ProofNotVerified` and `Kani` its mapping to class, never changes. Adding a
 variant, code or nested classification is a spec change to this section, made with its tests.
 
 ## Constraints
