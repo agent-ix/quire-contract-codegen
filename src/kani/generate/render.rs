@@ -126,7 +126,9 @@ mod tests {
     #[ignore = "installed Kani backend: run this private control explicitly and serially"]
     fn unsatisfiable_assume_is_cover_unsatisfied_under_real_kani() {
         use crate::kani::{identity::{KaniScalarObligationHarness, ScalarObligationIdentity, ScalarObligationArgument}, run::{tool::KaniInstallation, execute::{execute_kani_obligation, KaniExecutionRequest}}, classify::KaniRunOutcome};
-        let spec = make_spec(oracle(), vec![input("x"), Statement::Assume { condition: expression("x < 0 && x >= 0") }, call()]);
+        // The safe addition is reached before the contradiction. Its overflow check gives
+        // the classifier a successful property; the final cover is then unsatisfied.
+        let spec = make_spec(oracle(), vec![input("x"), Statement::Let(LetBinding { name: "_shifted".into(), ty: None, mutable: false, init: Init::Expression(expression("x + 1_i64")) }), Statement::Assume { condition: expression("x < 0 && x >= 0") }, call()]);
         let rust = render(&spec).unwrap();
         let identity = ScalarObligationIdentity {
             ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
@@ -145,6 +147,7 @@ mod tests {
         std::fs::write(directory.join("build.rs"), "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n").unwrap();
         let installation = KaniInstallation::discover().expect("installed cargo-kani");
         let evidence = execute_kani_obligation(&KaniExecutionRequest { cancel: &quire_exact::Cancel::new(), installation: &installation, harness: (&harness).into(), crate_directory: &directory, target_directory: &directory.join("target"), home_directory: None }).unwrap();
+        assert!(evidence.success_checks > 0, "a reachable pre-assumption property must succeed: {evidence:?}");
         assert_eq!(evidence.outcome, KaniRunOutcome::CoverUnsatisfied { satisfied: 0, total: 1 });
         std::fs::remove_dir_all(directory).unwrap();
     }
