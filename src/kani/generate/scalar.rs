@@ -7,10 +7,12 @@ use crate::oracle::operator_catalog::{
 use quire_contract_model::{CheckedNodeId, CheckedSemanticNodeV2};
 
 #[cfg(test)]
-use crate::{core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES}, kani::abi::adapter_options};
+use crate::{
+    core::artifact::{Artifact, MAX_GENERATED_SOURCE_BYTES},
+    kani::abi::adapter_options,
+};
 
 use crate::{
-
     kani::abi::{i64_literal, readable_component, KaniSolver},
     kani::generate::outcome::{DerivedDomain, KaniObligationRequest, UnsupportedObligation},
     kani::generate::record::{harness_path, record},
@@ -374,30 +376,83 @@ pub(super) fn render_scalar(
     request: &KaniObligationRequest<'_>,
     lowered: &LoweredScalarClaim,
 ) -> Result<KaniScalarObligationHarness, UnsupportedObligation> {
-    use super::spec::{Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, LetType, ProofKind, Statement};
+    use super::spec::{
+        Argument, Cover, ExprText, HarnessSpec, Init, LetBinding, LetType, ProofKind, Statement,
+    };
     use crate::kani::abi::KaniPrimitiveType;
     let expr = |text: String| ExprText::new(text);
-    let binding = |name: &str, ty, init| LetBinding { name: name.to_owned(), ty, mutable: false, init };
+    let binding = |name: &str, ty, init| LetBinding {
+        name: name.to_owned(),
+        ty,
+        mutable: false,
+        init,
+    };
     let mut body = Vec::new();
-    for (name, (minimum, maximum)) in lowered.operation.operand_names().iter().zip(&lowered.operands) {
+    for (name, (minimum, maximum)) in lowered
+        .operation
+        .operand_names()
+        .iter()
+        .zip(&lowered.operands)
+    {
         body.push(Statement::Input {
-            name: (*name).to_owned(), ty: KaniPrimitiveType::I64,
+            name: (*name).to_owned(),
+            ty: KaniPrimitiveType::I64,
             domain: (i128::from(*minimum), i128::from(*maximum)),
             then: vec![
-                binding(&format!("{name}_native"), None, Init::Expression(expr((*name).to_owned())?)),
-                binding(name, None, Init::Expression(expr(format!("rt::Integer::from({name})"))?)),
+                binding(
+                    &format!("{name}_native"),
+                    None,
+                    Init::Expression(expr((*name).to_owned())?),
+                ),
+                binding(
+                    name,
+                    None,
+                    Init::Expression(expr(format!("rt::Integer::from({name})"))?),
+                ),
             ],
         });
     }
-    body.push(Statement::Let(LetBinding { name: "meter".to_owned(), ty: None, mutable: true, init: Init::UnlimitedMeter }));
-    let mut args = lowered.operation.operand_names().iter().map(|name| Argument::Borrow((*name).to_owned())).collect::<Vec<_>>();
+    body.push(Statement::Let(LetBinding {
+        name: "meter".to_owned(),
+        ty: None,
+        mutable: true,
+        init: Init::UnlimitedMeter,
+    }));
+    let mut args = lowered
+        .operation
+        .operand_names()
+        .iter()
+        .map(|name| Argument::Borrow((*name).to_owned()))
+        .collect::<Vec<_>>();
     args.push(Argument::BorrowMut("meter".to_owned()));
-    body.push(Statement::Call { result: "outcome".to_owned(), callee: lowered.oracle_symbol.clone(), args });
-    body.push(Statement::Let(binding("exact", Some(LetType::I128), Init::Expression(expr(lowered.operation.native_expression())?))));
-    body.push(Statement::Let(binding("admitted", None, Init::Expression(expr(format!("exact >= i128::from({}) && exact <= i128::from({})", i64_literal(lowered.lower), i64_literal(lowered.upper)))?))));
+    body.push(Statement::Call {
+        result: "outcome".to_owned(),
+        callee: lowered.oracle_symbol.clone(),
+        args,
+    });
+    body.push(Statement::Let(binding(
+        "exact",
+        Some(LetType::I128),
+        Init::Expression(expr(lowered.operation.native_expression())?),
+    )));
+    body.push(Statement::Let(binding(
+        "admitted",
+        None,
+        Init::Expression(expr(format!(
+            "exact >= i128::from({}) && exact <= i128::from({})",
+            i64_literal(lowered.lower),
+            i64_literal(lowered.upper)
+        ))?),
+    )));
     body.push(Statement::Let(binding("sound", None, Init::Expression(expr("match &outcome {\nOk(rt::Outcome::Completed(value)) => admitted && *value == rt::Integer::from(exact),\nOk(rt::Outcome::Refused(_)) => !admitted,\n_ => false,\n}".to_owned())?))));
     body.push(Statement::Assert { condition: expr("sound".to_owned())?, message: format!("the oracle must complete with exactly the native {} result when it lies in the checked domain, and refuse otherwise", lowered.operation_identity) });
-    body.push(Statement::Let(binding("completed", None, Init::Expression(expr("matches!(outcome, Ok(rt::Outcome::Completed(_)))".to_owned())?))));
+    body.push(Statement::Let(binding(
+        "completed",
+        None,
+        Init::Expression(expr(
+            "matches!(outcome, Ok(rt::Outcome::Completed(_)))".to_owned(),
+        )?),
+    )));
     let spec = HarnessSpec::new(
         format!("exact-scalar `{}`", lowered.operation_identity),
         harness_path(&lowered.module_symbol, &lowered.harness_symbol)?,
@@ -407,14 +462,32 @@ pub(super) fn render_scalar(
     )?;
     let rust = super::render::render(&spec)?;
     let identity = ScalarObligationIdentity {
-        ceilings: request.ceilings, node_id: lowered.node_id.clone(),
-        operation_identity: lowered.operation_identity.clone(), oracle_symbol: lowered.oracle_symbol.clone(),
-        module_symbol: spec.path().module.clone(), harness_symbol: spec.path().harness.clone(),
-        arguments: lowered.operation.operand_names().iter().zip(&lowered.operands).map(|(name, (minimum, maximum))| ScalarObligationArgument { identifier: (*name).to_owned(), minimum: *minimum, maximum: *maximum }).collect(),
-        inferred_operands: lowered.inferred_operands.clone(), solver: spec.solver(), unwind: spec.unwind(), options: spec.options().to_vec(),
+        ceilings: request.ceilings,
+        node_id: lowered.node_id.clone(),
+        operation_identity: lowered.operation_identity.clone(),
+        oracle_symbol: lowered.oracle_symbol.clone(),
+        module_symbol: spec.path().module.clone(),
+        harness_symbol: spec.path().harness.clone(),
+        arguments: lowered
+            .operation
+            .operand_names()
+            .iter()
+            .zip(&lowered.operands)
+            .map(|(name, (minimum, maximum))| ScalarObligationArgument {
+                identifier: (*name).to_owned(),
+                minimum: *minimum,
+                maximum: *maximum,
+            })
+            .collect(),
+        inferred_operands: lowered.inferred_operands.clone(),
+        solver: spec.solver(),
+        unwind: spec.unwind(),
+        options: spec.options().to_vec(),
     };
     let record = record(&lowered.module_symbol, &identity, &rust)?;
-    Ok(KaniScalarObligationHarness::generated(identity, rust, record))
+    Ok(KaniScalarObligationHarness::generated(
+        identity, rust, record,
+    ))
 }
 
 #[cfg(test)]
@@ -930,8 +1003,10 @@ mod tests {
     #[trace("FR-015-AC-115", "TC-025")]
     #[test]
     fn scalar_port_is_differentially_identical_for_all_operations_and_boundaries() {
-        use crate::kani::{generate::outcome::MAX_OBLIGATION_UNWIND, identity::InferredScalarOperand};
         use crate::core::canonical::{content_digest, preimage_value};
+        use crate::kani::{
+            generate::outcome::MAX_OBLIGATION_UNWIND, identity::InferredScalarOperand,
+        };
         for (operation, identity) in [
             (ScalarOperation::Add, "quire.op.integer.add"),
             (ScalarOperation::Subtract, "quire.op.integer.sub"),
@@ -939,7 +1014,11 @@ mod tests {
             (ScalarOperation::Negate, "quire.op.integer.negate"),
         ] {
             let count = operation.operand_names().len();
-            let mut cases = vec![(vec![(-9, 9); count], false), (vec![(1, 1); count], false), (vec![(-4, 7); count], true)];
+            let mut cases = vec![
+                (vec![(-9, 9); count], false),
+                (vec![(1, 1); count], false),
+                (vec![(-4, 7); count], true),
+            ];
             for position in 0..count {
                 for extreme in [i64::MIN, i64::MAX] {
                     let mut operands = vec![(-9, 9); count];
@@ -955,10 +1034,26 @@ mod tests {
                             items: &[], subject_path: "crate::unused", unwind,
                         };
                         let lowered = LoweredScalarClaim {
-                            node_id: checked_node_id("2"), operation_identity: identity.into(),
-                            oracle_source: "fn oracle_test() {}".into(), oracle_symbol: "oracle_test".into(), operation,
-                            operands: operands.clone(), inferred_operands: if inferred { vec![InferredScalarOperand { position: 0, source_node_id: checked_node_id("3"), lower: "-4".into(), upper: "7".into() }] } else { vec![] },
-                            lower: i64::MIN, upper: i64::MAX, module_symbol: "scalar_control".into(), harness_symbol: "check".into(),
+                            node_id: checked_node_id("2"),
+                            operation_identity: identity.into(),
+                            oracle_source: "fn oracle_test() {}".into(),
+                            oracle_symbol: "oracle_test".into(),
+                            operation,
+                            operands: operands.clone(),
+                            inferred_operands: if inferred {
+                                vec![InferredScalarOperand {
+                                    position: 0,
+                                    source_node_id: checked_node_id("3"),
+                                    lower: "-4".into(),
+                                    upper: "7".into(),
+                                }]
+                            } else {
+                                vec![]
+                            },
+                            lower: i64::MIN,
+                            upper: i64::MAX,
+                            module_symbol: "scalar_control".into(),
+                            harness_symbol: "check".into(),
                         };
                         let actual = render_scalar(&request, &lowered).unwrap();
                         let reference = render_scalar_reference(&request, &lowered).unwrap();
@@ -967,7 +1062,10 @@ mod tests {
                         assert_eq!(actual.identity.options, reference.identity.options);
                         assert_eq!(actual.record, reference.record);
                         assert_eq!(actual, reference);
-                        assert_eq!(content_digest(&preimage_value(&actual.identity).unwrap()).unwrap(), content_digest(&preimage_value(&reference.identity).unwrap()).unwrap());
+                        assert_eq!(
+                            content_digest(&preimage_value(&actual.identity).unwrap()).unwrap(),
+                            content_digest(&preimage_value(&reference.identity).unwrap()).unwrap()
+                        );
                     }
                 }
             }
@@ -977,11 +1075,34 @@ mod tests {
     #[trace("FR-015-AC-115", "TC-025")]
     #[test]
     fn scalar_port_preserves_resource_and_syntax_refusals() {
-        let request = KaniObligationRequest { ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(), items: &[], subject_path: "crate::unused", unwind: 2 };
-        for oracle_source in [" ".repeat(MAX_GENERATED_SOURCE_BYTES), "?".repeat(MAX_GENERATED_SOURCE_BYTES), "?".into()] {
-            let lowered = LoweredScalarClaim { node_id: checked_node_id("2"), operation_identity: "quire.op.integer.add".into(), oracle_source, oracle_symbol: "oracle_test".into(), operation: ScalarOperation::Add, operands: vec![(-1, 1); 2], inferred_operands: vec![], lower: -1, upper: 1, module_symbol: "scalar_control".into(), harness_symbol: "check".into() };
-            assert_eq!(render_scalar(&request, &lowered).unwrap_err(), render_scalar_reference(&request, &lowered).unwrap_err());
+        let request = KaniObligationRequest {
+            ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings(),
+            items: &[],
+            subject_path: "crate::unused",
+            unwind: 2,
+        };
+        for oracle_source in [
+            " ".repeat(MAX_GENERATED_SOURCE_BYTES),
+            "?".repeat(MAX_GENERATED_SOURCE_BYTES),
+            "?".into(),
+        ] {
+            let lowered = LoweredScalarClaim {
+                node_id: checked_node_id("2"),
+                operation_identity: "quire.op.integer.add".into(),
+                oracle_source,
+                oracle_symbol: "oracle_test".into(),
+                operation: ScalarOperation::Add,
+                operands: vec![(-1, 1); 2],
+                inferred_operands: vec![],
+                lower: -1,
+                upper: 1,
+                module_symbol: "scalar_control".into(),
+                harness_symbol: "check".into(),
+            };
+            assert_eq!(
+                render_scalar(&request, &lowered).unwrap_err(),
+                render_scalar_reference(&request, &lowered).unwrap_err()
+            );
         }
     }
-
 }

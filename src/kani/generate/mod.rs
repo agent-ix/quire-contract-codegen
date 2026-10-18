@@ -32,5 +32,5 @@ pub(crate) mod scalar;
 pub(crate) mod v1_bundle;
 
 // Validated private descriptions and their pure renderer.
-mod spec;
 mod render;
+mod spec;
