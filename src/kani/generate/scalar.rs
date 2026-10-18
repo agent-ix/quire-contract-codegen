@@ -864,7 +864,7 @@ mod tests {
     // An empty `checked_bounds`, and a first checked bound with no `IntegerRange` domain, are the
     // `NoRenderer` refusal (NFR-005-AC-2, the `tc_042_ac2_*` tests below).
     #[test]
-    fn tc_026_a_domain_outside_i64_is_a_typed_refusal_not_a_panic() {
+    fn a_domain_outside_i64_is_a_typed_refusal_not_a_panic() {
         let node_id = |digest: &str| -> CheckedNodeId {
             serde_json::from_value(serde_json::json!({
                 "domain": "quire.checked-semantic-node/v1",
