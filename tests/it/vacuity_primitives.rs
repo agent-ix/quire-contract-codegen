@@ -213,3 +213,78 @@ fn tc_006_file_and_segment_census_bounds_apply_across_export() {
         CoverageErrorCode::ResourceLimitExceeded
     );
 }
+
+#[trace("TC-006")]
+#[test]
+fn tc_006_exact_raw_export_limit_is_admitted_and_next_byte_refused() {
+    let mut bytes = serde_json::to_vec(&export(json!([]))).unwrap();
+    let exact_limit = 16 * 1024 * 1024;
+    assert!(bytes.len() < exact_limit);
+    bytes.resize(exact_limit, b' ');
+    parse_llvm_coverage(&bytes, "/fixture").expect("valid export at the raw-byte limit");
+
+    bytes.push(b' ');
+    assert_eq!(
+        parse_llvm_coverage(&bytes, "/fixture").unwrap_err().code,
+        CoverageErrorCode::ResourceLimitExceeded
+    );
+}
+
+#[trace("TC-006", "FR-004-AC-5")]
+#[test]
+fn tc_006_invalid_probe_components_refuse_independently() {
+    let bytes = serde_json::to_vec(&export(json!([
+        [1, 1, 1, true, true, false],
+        [2, 1, 0, false, false, false]
+    ])))
+    .unwrap();
+    let coverage = parse_llvm_coverage(&bytes, "/fixture").unwrap();
+    for (path, token) in [
+        ("src/generated.rs", probe(0, 1, 2)),
+        ("src/generated.rs", probe(1, 0, 2)),
+        ("src/generated.rs", probe(1, 1, 1)),
+        ("/fixture/src/generated.rs", probe(1, 1, 2)),
+    ] {
+        assert_eq!(
+            coverage.observe(path, token).unwrap_err().code,
+            CoverageErrorCode::InvalidPath
+        );
+    }
+}
+
+#[trace("TC-006", "FR-004-AC-5")]
+#[test]
+fn tc_006_relative_source_root_refuses_even_with_matching_manifest() {
+    let mut value = export(json!([]));
+    value["cargo_llvm_cov"]["manifest_path"] = json!("fixture/Cargo.toml");
+    let bytes = serde_json::to_vec(&value).unwrap();
+    assert_eq!(
+        parse_llvm_coverage(&bytes, "fixture").unwrap_err().code,
+        CoverageErrorCode::InvalidPath
+    );
+}
+
+#[trace("TC-006")]
+#[test]
+fn tc_006_exact_file_census_limit_is_admitted() {
+    let mut value = export(json!([]));
+    value["data"][0]["files"] = Value::Array(
+        (0..4096)
+            .map(|index| json!({"filename":format!("src/{index}.rs"),"segments":[]}))
+            .collect(),
+    );
+    let bytes = serde_json::to_vec(&value).unwrap();
+    parse_llvm_coverage(&bytes, "/fixture").expect("valid export at the file-count limit");
+}
+
+#[trace("TC-006")]
+#[test]
+fn tc_006_exact_segment_census_limit_is_admitted() {
+    let value = export(Value::Array(
+        (1..=250_000)
+            .map(|line| json!([line, 1, 0, true, true, false]))
+            .collect(),
+    ));
+    let bytes = serde_json::to_vec(&value).unwrap();
+    parse_llvm_coverage(&bytes, "/fixture").expect("valid export at the segment-count limit");
+}
