@@ -2709,19 +2709,19 @@ fn item_disposition(
             found: item.argument_node_ids.len(),
         });
     }
+    let graph = package
+        .wire()
+        .semantic_graph
+        .nodes
+        .iter()
+        .map(|source| (&source.node_id, source))
+        .collect::<Graph<'_>>();
     if node
         .body
         .get("operator")
         .and_then(serde_json::Value::as_str)
         == Some("call")
     {
-        let graph = package
-            .wire()
-            .semantic_graph
-            .nodes
-            .iter()
-            .map(|source| (&source.node_id, source))
-            .collect::<Graph<'_>>();
         let source_function_id =
             source_function_node_id(&graph, &declaration.name, &declaration.node_id)
                 .ok_or(ExactFunctionRefusal::BodyMismatch)?;
@@ -2734,13 +2734,6 @@ fn item_disposition(
             return Err(ExactFunctionRefusal::BodyMismatch);
         }
     }
-    let graph = package
-        .wire()
-        .semantic_graph
-        .nodes
-        .iter()
-        .map(|source| (&source.node_id, source))
-        .collect::<Graph<'_>>();
     for argument_id in &item.argument_node_ids {
         let argument = graph
             .get(argument_id)

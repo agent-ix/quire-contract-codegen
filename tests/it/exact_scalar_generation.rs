@@ -3618,8 +3618,8 @@ fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_convers
         assert_eq!(
             output.claim_map.items[0].result,
             ClaimDisposition::Refused {
-                refusal: ExactFunctionRefusal::UnsupportedOperandType {
-                    type_node_id: unit.clone()
+                refusal: ExactFunctionRefusal::FormMismatch {
+                    found: "conversion".to_owned()
                 }
             },
             "{body:?}"
@@ -3969,7 +3969,7 @@ fn unit_function_signatures_refuse_per_function_and_preserve_supported_siblings(
             name: CONVERTING_NAME.to_owned(),
             parameters: if parameter_is_unit {
                 vec![FunctionScheduleParameter {
-                    value_node_id: ids.resolve(&code_id(V_QUANTITY)),
+                    value_node_id: ids.resolve(&id(&key(V_QUANTITY))),
                     type_node_id: unit.clone(),
                 }]
             } else {
