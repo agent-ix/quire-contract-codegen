@@ -1765,6 +1765,42 @@ fn tc_025_every_confirmed_operation_is_rendered_or_honestly_refused() {
     }
 }
 
+/// An admitted division claim remains distinct from operand-lowering refusals:
+/// its confirmed operation has no scalar harness renderer.
+#[trace("FR-015-AC-109", "TC-023")]
+#[test]
+fn admitted_integer_division_is_unrendered_and_emits_no_harness() {
+    let (scalar, claim_map, _) = scalar_package();
+    let division = claim_map
+        .items
+        .iter()
+        .find(|claim| {
+            claim.operation.identity == "quire.op.integer.div"
+                && matches!(claim.result, ClaimDisposition::Generated(_))
+        })
+        .expect("the admitted corpus generates an integer division oracle");
+    assert_eq!(
+        division.operation.provenance,
+        OperationProvenance::IrConfirmed
+    );
+    let admitted = admitted_scalar_claims(&scalar, &claim_map);
+    let items = [ObligationItem::ScalarClaim {
+        package: &admitted,
+        claim_map: &claim_map,
+        node_id: &division.node_id,
+        claim_index: claim_index(&claim_map, &division.node_id),
+        result_selection: &quire_contract_codegen::ContractDriverResultSelection::NotApplicable,
+    }];
+    let (records, harnesses) =
+        emitted_scalar(negotiate_kani_obligations(&request(&items, "crate::subject")).unwrap());
+    assert_eq!(records.len(), 1);
+    assert!(matches!(unsupported(&records[0]),
+        UnsupportedObligation::OperationNotRendered { operation_identity, .. }
+            if operation_identity == "quire.op.integer.div"
+    ));
+    assert!(harnesses.is_empty(), "unrendered division emits no harness");
+}
+
 /// FR-015-AC-6 ("an obligation over a `caller_declared` oracle is refused with a typed reason and
 /// no harness") stayed true in code once IR-217 widened `IrConfirmed`, but the test above that is
 /// still traced to it was repurposed to check the render-or-honestly-refuse split over an

@@ -66,9 +66,6 @@ pub use kani::generate::lower::bounded_collections::{
 pub use kani::generate::lower::bounded_kani_profile::{
     classify_bounded_kani_profile, BoundedKaniProfile,
 };
-pub use kani::generate::lower::definedness_arithmetic::{
-    prepare_checked_arithmetic, ArithmeticLowering, CheckedArithmeticRequest,
-};
 pub use kani::generate::lower::finite_reference_graphs::{
     prepare_finite_graph_reaches, GraphLowering, GraphRequest,
 };
