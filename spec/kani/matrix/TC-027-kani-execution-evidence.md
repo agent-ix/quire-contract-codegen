@@ -103,7 +103,7 @@ process `HOME` values, and with each redacted value changed. Classify a verified
 cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive run and serialize
 each evidence.
 
-CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40; PLANNED/UNRUN, IR-827). Build reports
+CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40). Build reports
 in the shape the measured real reports have: one result `proofs::check` with status `Failure` and no
 checks, and one `error_details` entry `{ "harness_id": "proofs::check", "has_errors": true,
 "error_type": "verification_failure", "failed_properties_type": "Other", "exit_status": <value> }`.
@@ -224,7 +224,7 @@ and the runs that differ only in redacted values serialize byte-identical record
 `serde_json::to_string` control compiles. No evidence of a non-`NoVerdict` run has a `diagnostics`
 member, apart from the `FailedWithoutCounterexample` evidence of a CBMC failure cause below.
 
-CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40; PLANNED/UNRUN): every exit-status run
+CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40): every exit-status run
 is `Inconclusive` `FailedWithoutCounterexample`. `exit_code_64`, `exit_code_15`, `exit_code_0` and
 `exit_code_-1`, `exit_code_2147483647` and `exit_code_-2147483648` carry
 `failureCause { kind: "exit_code" }` with `code` 64, 15, 0, -1, 2147483647 and -2147483648;
@@ -379,10 +379,23 @@ tests of the phase rules, the excerpt bounds and every redaction pair. The seria
 the rustdoc `compile_fail` example on `KaniNoVerdictDiagnostics`, run by `cargo test --doc`, with
 its compiling `serde_json::to_string` control beside it.
 
-FR-017-AC-37, FR-017-AC-38 and FR-017-AC-40 are PLANNED/UNRUN (IR-827): no test is tagged with
-them, and the IR-827 code change adds the stand-in tests in `src/kani/run/execute.rs` and
-`src/kani/output/report.rs`, the rustdoc `compile_fail` example on `KaniFailureCause`, and the
-`make kani` lane test in `tests/it/kani_obligations.rs`.
+The CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40) is covered by the stand-in tests
+in `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`
+(`tc_027_every_exit_status_gives_its_cause_and_a_diagnostic_record`,
+`tc_027_a_failed_property_has_no_record_and_an_unnamed_entry_has_no_cause`,
+`tc_027_the_cause_is_kept_for_no_other_outcome`,
+`tc_027_a_malformed_exit_status_still_refuses_the_report` and
+`tc_027_the_cause_never_feeds_classification`) and, for the FR-029 terminal value,
+`tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause` in `tests/it/kani_obligations.rs`
+(the value is `Failed` for each cause; that it is independent of the cause and the record holds by the
+signature of `run_terminal_value`, which receives only the outcome and the SUCCESS-check count); by the tests of the exit-status
+vocabulary, the 64-byte cut and the one-entry rule in `src/kani/output/report.rs`; by the serialize-only
+check, which is the rustdoc `compile_fail` example on `KaniFailureCause` run by `cargo test --doc`
+beside its `serde_json::to_string` control and the `tc_027_the_cause_implements_no_deserialize`
+autoref probe; and, in the `make kani` lane, by
+`tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause` in
+`tests/it/kani_obligations.rs`, which runs real Kani on a crate whose manifest hands CBMC
+`--no-such-option`.
 
 The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
 not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No current

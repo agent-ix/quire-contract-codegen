@@ -186,3 +186,27 @@ pub(crate) fn discover_scratch(name: &str) -> PathBuf {
 use crate::kani::identity::ProofCeilings;
 #[path = "../../tests/common/proof_ceilings.rs"]
 pub(crate) mod proof_ceilings;
+
+/// Autoref probe: `implements_deserialize` is `true` through `Yes` only for a type that is
+/// `DeserializeOwned`, and `false` through `No` otherwise, with no dependency beyond serde.
+pub(crate) struct Probe<T>(pub(crate) std::marker::PhantomData<T>);
+
+pub(crate) trait Yes {
+    fn implements_deserialize(&self) -> bool;
+}
+
+impl<T: serde::de::DeserializeOwned> Yes for Probe<T> {
+    fn implements_deserialize(&self) -> bool {
+        true
+    }
+}
+
+pub(crate) trait No {
+    fn implements_deserialize(&self) -> bool;
+}
+
+impl<T> No for &Probe<T> {
+    fn implements_deserialize(&self) -> bool {
+        false
+    }
+}

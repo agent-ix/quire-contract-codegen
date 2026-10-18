@@ -4,6 +4,20 @@
 //! The subject ABI vocabulary, the proof-dependency census types and the harness and identity
 //! record types sit below the generators, the output reader, the classifier and the runner.
 
+/// Whether `$type` implements `Deserialize`, decided by method resolution through the probe of
+/// `test_support`. Defined here, ahead of every submodule, so each can use it by name.
+#[cfg(test)]
+macro_rules! implements_deserialize {
+    ($type:ty) => {{
+        // Exactly one of the two traits is chosen by resolution, so the other import is unused
+        // in each expansion.
+        #[allow(unused_imports)]
+        use $crate::kani::test_support::{No, Yes};
+        (&$crate::kani::test_support::Probe::<$type>(std::marker::PhantomData))
+            .implements_deserialize()
+    }};
+}
+
 // The subject ABI vocabulary: binding roles, primitive types, bounds, solver and options.
 pub(crate) mod abi;
 // The proof-dependency census types.
