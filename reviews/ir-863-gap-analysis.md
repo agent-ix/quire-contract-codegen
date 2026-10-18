@@ -45,3 +45,36 @@ acceptance criteria against `git diff origin/main...HEAD`. Plan completion: not 
 AC1: met (no doc-line forms; one redundant inline comment, FND-001). AC2: met; the only id not
 carried is the agreed TC-025 on a production fn. AC3: met; the matrix is unchanged per criterion.
 Mergeable. FND-001 is low.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1: tests/it/bounded_kani_corpus.rs now says `// The old struct-order encoder wrote` without the redundant trace prefix; the canonical enclosing test attribute and all comment prose remain. |
+
+## Disposition round 1 verification
+
+The original review and finding above are preserved verbatim. The candidate removes the
+redundant inline prefix and preserves both prose lines and the enclosing
+`#[trace("TC-023", "FR-028-AC-1")]` attribute. No deprecated trace doc line remains in
+the 34 changed Rust files. Per-function trace ID multisets match merged main after #408,
+except the agreed TC-025 removal from the production function.
+
+A fresh `quire matrix --scope /home/peter/dev/worktrees/ir863 --format json` using
+`QSPEC_DIR=/home/peter/dev/quire-specification` was compared independently with the coder's
+base and head JSON. Every criterion status and binder identity (path, qualified function
+name and kind, ignoring moved line positions) matches: 812 criteria, 445 tagged, 14
+tagged-by-ignored-test, 45 method-without-symbol, 308 untagged, 1141 binders. These are static
+trace claims, not proof execution evidence. The three excluded integration files remain
+unchanged. Source normalization confirms this delta introduces no runtime code or hollow
+implementation/test body.
+
+This is a disposition of the existing IR-863 delta review, not a new whole-repository gap
+audit. The unchanged 327 baseline assurance deficits recorded in SR-12730 remain routed
+to IR-726; they are not resolved by this conversion or hidden by the unchanged matrix.
+The broad baseline audit is not repeated. Optional semantic review was not requested and
+was not performed. Plan completion: not assessed.
+
+Round 1 verdict: the original low finding is fixed; no new delta findings. IR-863's three
+conversion acceptance checks remain met. Ready for the lead's aggregate gate after
+review-artifact custody; no whole-repository assurance PASS is claimed.

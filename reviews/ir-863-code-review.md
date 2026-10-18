@@ -54,3 +54,33 @@ Mergeable once the PR body is refreshed. That is a low, documentation-only findi
 is mechanical and complete within scope, attribute placement and imports are correct under every
 cfg, and nothing emitted or golden changed. Re-running the clippy/test lane for the fix-round files
 is advisable before merge, but static checks found no compile risk.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1: live PR body now describes the final owned file set, excludes the three restored files, records production TC-025 removal and 1141 binder references, and reports the confined fmt/clippy/focused-test checks covering the final source tree. |
+
+## Disposition round 1 verification
+
+The original review and finding above are preserved verbatim. This disposition rechecked the
+frozen candidate against merged main after #408. The live PR body agrees with the measured
+310 removed legacy doc trace lines, 309 added attributes, and 310 current attributes across
+34 changed Rust files (including the existing #408 attribute). The older 317-line inventory
+is historical context rather than the measured final count.
+
+Code-review and its Rust lane were rechecked for this annotation/import/comment delta. A
+source normalization that removes trace annotations/imports and the intended legacy trace
+text leaves identical source and preserved prose across all 34 Rust files. Per-function
+trace ID multisets match, except the agreed production TC-025 removal. All 310 current
+attributes precede test items, including ignored wrappers; none annotates production or
+Kani proof functions. The three excluded integration files have no net diff. CI workflow,
+manifest, lockfile, emitted-code and schema changes are absent; no new behavior, vendoring,
+seams, assertions, error handling, or resource/concurrency mechanism is introduced.
+
+Reviewed the coder's confined fmt/clippy logs and focused test result: 177 passed,
+0 failed, 34 ignored, 418 filtered. No Cargo or Kani build was repeated for this disposition.
+The dispatching lead still owns the aggregate gate after custody of these updated reviews.
+
+Round 1 verdict: the original low finding is fixed; no new findings. Ready for the lead's
+aggregate gate after review-artifact custody. This is not a whole-repository assurance PASS.
