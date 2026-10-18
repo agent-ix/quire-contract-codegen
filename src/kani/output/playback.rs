@@ -299,8 +299,9 @@ fn concrete_entries<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
-    /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-5", "FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_playback_scanning_returns_the_property_block_and_stops_at_an_unterminated_fence() {
         let cover = "Concrete playback unit test for `h`:\n```\n/// Check for `cover`: \"c\"\nfn t() { kani::concrete_playback_run(v, h); }\n```\n";
@@ -326,8 +327,7 @@ mod tests {
     /// A block is taken by the path in its own heading: another harness's earlier failing block is
     /// never the answer, a path with no failing block gets none, and every block is listed under
     /// the path it is headed for.
-    ///
-    /// Trace: FR-017-AC-23, TC-043
+    #[trace("FR-017-AC-23", "TC-043")]
     #[test]
     fn tc_043_a_playback_is_taken_by_the_path_it_is_headed_for() {
         let block = |path: &str, kind: &str, body: &str| {

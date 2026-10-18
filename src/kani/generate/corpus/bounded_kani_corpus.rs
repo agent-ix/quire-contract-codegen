@@ -956,6 +956,7 @@ fn render_artifacts(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use quire_contract_ir::kani::{
         CapabilityDisposition, CapabilityEntry, DispatchIndex, FiniteInput, FiniteObject,
         FiniteReference, KaniOutcome, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
@@ -1011,8 +1012,7 @@ mod tests {
 
     /// Each supported family retains source bytes that QSL compiles into the selected function
     /// used by replay. No case turns its generated verdict into a literal `ReplaySource::Input`.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_each_corpus_case_compiles_its_retained_qsl_source() {
         let (profile, dispatch, input) = fixture();
@@ -1097,8 +1097,7 @@ mod tests {
 
     /// A source-bound typed identity rejects a different case package and a transcript naming
     /// another harness before any replay verdict is produced.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_source_replay_rejects_wrong_package_and_harness() {
         let cases = false_cases();
@@ -1119,8 +1118,9 @@ mod tests {
         assert!(case.replay_rejects_wrong_harness(&transcript).unwrap());
     }
 
-    /// Trace: TC-023. Owner serializers supply each value; the input projection
+    /// Owner serializers supply each value; the input projection
     /// retains three established key names and the two intentionally normalized populations.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_canonical_preimage_uses_owner_serializers() {
         let (profile, _, input) = fixture();
@@ -1179,8 +1179,9 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023. The owning input's object maps may exceed the final case-name
+    /// The owning input's object maps may exceed the final case-name
     /// ceiling even though their normalized tuples fit. Admission is decided by the final bytes.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_compact_case_identity_admits_a_verbose_owner_input() {
         let fixture = fixture_with(
@@ -1218,11 +1219,12 @@ mod tests {
         assert!(case_name(&case).starts_with("arithmetic_"));
     }
 
-    /// Trace: TC-023. This preimage is authored from the fixture fields in RFC 8785
+    /// This preimage is authored from the fixture fields in RFC 8785
     /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
     /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
     /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
     /// `source_id` field in snake_case.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_case_name_matches_hand_authored_canonical_preimage() {
         const PREIMAGE: &str = concat!(
@@ -1252,8 +1254,9 @@ mod tests {
         assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));
     }
 
-    /// Trace: TC-023. The caller supplies the dependency census, so it can offer a
+    /// The caller supplies the dependency census, so it can offer a
     /// graph larger than one artifact. The counted preflight refuses before building a JSON tree.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_large_dependency_graph_refuses_canonical_projection() {
         let dependencies = (0..20_000)
@@ -1284,7 +1287,7 @@ mod tests {
         ));
     }
 
-    /// Trace: FR-028-AC-1.
+    #[trace("FR-028-AC-1")]
     #[test]
     fn either_ceiling_changes_the_canonical_corpus_identity() {
         let (profile, dispatch, input) = fixture();
@@ -1431,7 +1434,7 @@ mod tests {
         })
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_generates_deterministic_complete_artifacts_for_every_supported_family() {
         let (profile, dispatch, input) = fixture();
@@ -1501,8 +1504,7 @@ mod tests {
 
     /// A declared `Required` dependency must actually reach the emitted graph, not be silently
     /// dropped (ir#80).
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_declared_required_dependency_appears_in_the_graph() {
         let (profile, dispatch, input) = fixture();
@@ -1535,8 +1537,7 @@ mod tests {
     }
 
     /// A declared `Required` dependency whose state is not `Passed` makes the case `Incomplete`.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_missing_required_dependency_yields_incomplete_readiness() {
         let (profile, dispatch, input) = fixture();
@@ -1565,8 +1566,7 @@ mod tests {
 
     /// A declared census with a duplicate proof identity is refused by the shared dependency
     /// rules, and the refusal claims no identity: the same request with a valid census is accepted.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_duplicate_dependency_identity_is_refused_and_claims_no_identity() {
         let (profile, dispatch, input) = fixture();
@@ -1610,8 +1610,7 @@ mod tests {
     /// A finite input validated under another profile selection than the profile passed in is
     /// refused as `InvalidInput` `kani_profile_input_mismatch`, naming the request's source and
     /// the profile's own revision, before any artifact is emitted and without claiming an identity.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_an_input_for_another_profile_selection_is_refused_before_any_artifact() {
         let (profile, dispatch, _) = fixture();
@@ -1641,8 +1640,7 @@ mod tests {
 
     /// The profile's revision is the context of every outcome the corpus returns: a proved case,
     /// a counterexample, and an invalid census refusal.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_outcomes_and_refusals_carry_the_profile_revision_as_context() {
         let (profile, dispatch, input) =
@@ -1701,8 +1699,7 @@ mod tests {
     /// This corpus's generated harnesses render no `// proof-dependency-site:` marker, no
     /// `kani::assume`, and no `#[kani::stub]`, so a declared `Assumed` dependency must be refused
     /// (ir#80 review finding F1), claiming no identity.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_assumed_dependency_kind_is_refused_and_claims_no_identity() {
         let (profile, dispatch, input) = fixture();
@@ -1746,8 +1743,7 @@ mod tests {
     /// Contract IR's refusal to build a non-success outcome for a `proved` request is carried as
     /// the typed `OutcomeConstruction` refusal with IR's own code, and holds no outcome. The
     /// generator never makes that request, so this is the only way to reach the variant.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_an_outcome_construction_refusal_is_typed_and_carries_no_outcome() {
         let error = KaniOutcome::non_success(
@@ -1786,7 +1782,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_non_success_emits_no_partial_artifacts_or_boolean_claim() {
         let (profile, dispatch, input) = fixture();
@@ -1814,7 +1810,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_unreachable_graph_request_classifies_as_false() {
         let (profile, dispatch, input) = fixture();
@@ -1838,7 +1834,7 @@ mod tests {
         assert_eq!(generated.outcome.boolean_claim(), Some(false));
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
         let (profile, dispatch, input) = fixture();
@@ -1864,8 +1860,7 @@ mod tests {
     }
 
     /// A provable request with an operand outside `i64`'s range still generates.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_provable_arithmetic_with_an_out_of_i64_range_operand_still_generates() {
         let (profile, dispatch, input) = fixture();
@@ -1891,7 +1886,7 @@ mod tests {
         assert_eq!(generated.outcome.source_id, "out-of-i64-range");
     }
 
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_collection_oracle_evaluates_the_selected_ordered_population() {
         let (profile, dispatch, input) = fixture();
@@ -1972,8 +1967,9 @@ mod tests {
         })
     }
 
-    /// Trace: TC-023, NFR-005-AC-1. The canonical preimage keeps both adjacent wide i128
+    /// The canonical preimage keeps both adjacent wide i128
     /// values exactly by spelling them as decimal strings, so the identity never rounds them.
+    #[trace("TC-023", "NFR-005-AC-1")]
     #[test]
     fn tc_023_wide_request_values_are_exact_canonical_strings() {
         let first_request = arithmetic("wide", (1_i128 << 53) + 1, 0);
@@ -1991,8 +1987,9 @@ mod tests {
             .any(|part| part == b"9007199254740994"));
     }
 
-    /// Trace: TC-023, NFR-005-AC-1. An over-bound canonical preimage returns the typed input
+    /// An over-bound canonical preimage returns the typed input
     /// refusal before lowering or claiming a registry identity; a valid retry still admits.
+    #[trace("TC-023", "NFR-005-AC-1")]
     #[test]
     fn tc_023_unencodable_case_identity_refuses_without_claiming() {
         let fixture = fixture();
@@ -2016,8 +2013,7 @@ mod tests {
     /// A case's name, paths and `#[kani::proof]` symbol come from its request content, so the
     /// same request yields the same ones in any emission order and in any run, and the symbol
     /// carries the name its artifact paths carry.
-    ///
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_case_identity_is_independent_of_emission_order_and_run() {
         let fixture = fixture();
@@ -2052,8 +2048,7 @@ mod tests {
     /// Requests that differ in any one field -- including a field the rendered oracle never
     /// reads (`max_items`), the source id, or the declared census -- get distinct names, paths
     /// and proof symbols, so no case overwrites another.
-    ///
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_distinct_requests_get_distinct_names_paths_and_proof_symbols() {
         let fixture = fixture();
@@ -2089,8 +2084,7 @@ mod tests {
 
     /// Emitting one request twice through one registry refuses the second deterministically and
     /// leaves the first untouched; a fresh registry accepts it again with the same artifacts.
-    ///
-    /// Trace: TC-023.
+    #[trace("TC-023")]
     #[test]
     fn tc_023_a_request_emitted_twice_is_refused_as_an_identity_collision() {
         let fixture = fixture();
@@ -2167,7 +2161,7 @@ mod tests {
         })
     }
 
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_every_arithmetic_request_field_changes_the_identity() {
         use NumericOperator::{Add, Subtract};
@@ -2185,7 +2179,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_every_graph_request_field_changes_the_identity() {
         assert_each_variation_changes_identity(
@@ -2201,7 +2195,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_every_collection_request_field_changes_the_identity() {
         let query = |source_id: &str, values: Vec<i128>, max_items, kind| {
@@ -2243,8 +2237,7 @@ mod tests {
     /// Every part of the finite input and the profile selection is part of the identity: the
     /// graph oracle is built from the input's references, and the input also fixes the bounds
     /// the case was admitted under.
-    ///
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_every_input_and_profile_field_changes_the_identity() {
         let request = || checked("s", NumericOperator::Add, [1, 1, 0, 2]);
@@ -2324,8 +2317,7 @@ mod tests {
 
     /// The same graph offered with its objects and references in another order is the same case
     /// (so a second emission is refused), and a genuinely different graph is a different one.
-    ///
-    /// Trace: FR-015-AC-94, TC-023.
+    #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_identity_is_canonical_over_the_input_population_order() {
         let node = |identity: &str| FiniteObject {

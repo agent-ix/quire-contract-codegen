@@ -184,7 +184,7 @@ fn assert_failed_without_run(output: &Output, sandbox: &Sandbox) {
     assert!(!sandbox.marker(), "the real lane must not start");
 }
 
-/// Trace: NFR-006-AC-1, NFR-006-AC-2, NFR-006-AC-3, TC-045.
+#[trace("NFR-006-AC-1", "NFR-006-AC-2", "NFR-006-AC-3", "TC-045")]
 #[test]
 fn scope_classifies_changed_paths_and_both_rename_directions() {
     let sandbox = Sandbox::new();
@@ -247,7 +247,7 @@ fn scope_classifies_changed_paths_and_both_rename_directions() {
     }
 }
 
-/// Trace: NFR-006-AC-5, NFR-006-AC-6, NFR-006-AC-7, TC-045.
+#[trace("NFR-006-AC-5", "NFR-006-AC-6", "NFR-006-AC-7", "TC-045")]
 #[test]
 fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
     let sandbox = Sandbox::new();
@@ -299,7 +299,7 @@ fn gate_runs_once_under_lock_and_refuses_missing_tests_or_failures() {
     }
 }
 
-/// Trace: FR-041-AC-5, NFR-006-AC-19, TC-056.
+#[trace("FR-041-AC-5", "NFR-006-AC-19", "TC-056")]
 #[test]
 fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
     let sandbox = Sandbox::new();
@@ -358,8 +358,9 @@ fn gate_invoked_through_a_symlink_finds_its_scope_script() {
     assert!(sandbox.marker(), "scope step passed and the run started");
 }
 
-/// Trace: NFR-006-AC-5, TC-045. A positive observed waiter precedes the
+/// A positive observed waiter precedes the
 /// no-start assertion; elapsed time is only a deadlock ceiling.
+#[trace("NFR-006-AC-5", "TC-045")]
 #[test]
 fn gate_waits_for_the_existing_lock_holder() {
     let sandbox = Sandbox::new();
@@ -421,7 +422,13 @@ fn gate_waits_for_the_existing_lock_holder() {
     assert!(sandbox.marker(), "lane must start after lock release");
 }
 
-/// Trace: NFR-006-AC-8, NFR-006-AC-9, NFR-006-AC-10, NFR-006-AC-14, TC-045.
+#[trace(
+    "NFR-006-AC-8",
+    "NFR-006-AC-9",
+    "NFR-006-AC-10",
+    "NFR-006-AC-14",
+    "TC-045"
+)]
 #[test]
 fn gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main() {
     let sandbox = Sandbox::new();
@@ -476,7 +483,7 @@ fn gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main() {
     );
 }
 
-/// Trace: NFR-006-AC-4, NFR-006-AC-12, TC-045.
+#[trace("NFR-006-AC-4", "NFR-006-AC-12", "TC-045")]
 #[test]
 fn make_targets_share_one_real_lane_and_ci_excludes_it() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -576,7 +583,7 @@ fn tagged_ignore(item: &syn::ItemFn) -> (bool, bool) {
     (ignored, tagged)
 }
 
-/// Trace: NFR-006-AC-11, NFR-006-AC-18, TC-045.
+#[trace("NFR-006-AC-11", "NFR-006-AC-18", "TC-045")]
 #[test]
 fn ignored_lane_selection_and_transitive_include_targets_match_scope() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));

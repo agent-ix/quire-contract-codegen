@@ -254,6 +254,7 @@ fn inconclusive(reason: KaniInconclusiveReason) -> KaniRunOutcome {
 mod synthetic {
     use super::*;
     use crate::kani::test_support::{report, COVER_NO, COVER_OK, PASSED};
+    use ix_trace_rs::trace;
 
     const COVER_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `cover`: \"contract assumptions are jointly satisfiable\"\n\n#[test]\nfn kani_concrete_playback_h_1() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![0, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
     const ASSERTION_PLAYBACK: &str = "Concrete playback unit test for `m::h`:\n```\n/// Test generated for harness `m::h` that checks contract for `c`\n///\n/// Check for `assertion`: \"|post_state: &i64| *post_state <= 5\"\n\n#[test]\nfn kani_concrete_playback_h_2() {\n    let concrete_vals: Vec<Vec<u8>> = vec![vec![8, 0, 0, 0, 0, 0, 0, 0]];\n    kani::concrete_playback_run(concrete_vals, h);\n}\n```\n";
@@ -271,8 +272,7 @@ mod synthetic {
 
     /// Only a successful report with every cover satisfied is verified; each other shape of run
     /// settles on its own outcome or reason.
-    ///
-    /// Trace: FR-017-AC-4, FR-017-AC-5, TC-027
+    #[trace("FR-017-AC-4", "FR-017-AC-5", "TC-027")]
     #[test]
     fn tc_027_run_classification_never_defaults_to_verified() {
         let verified = report("Success", &[PASSED, COVER_OK]);
@@ -364,8 +364,7 @@ mod synthetic {
 
     /// A report listing no successful check is inconclusive under `VacuousProof`, never verified,
     /// even with every cover satisfied.
-    ///
-    /// Trace: FR-017-AC-13, TC-027
+    #[trace("FR-017-AC-13", "TC-027")]
     #[test]
     fn a_report_with_no_successful_check_is_inconclusive_not_verified_even_with_every_cover_satisfied(
     ) {
@@ -409,8 +408,7 @@ mod synthetic {
 
     /// An exhausted unwind bound is inconclusive even when Kani prints a playback and a
     /// property also failed; a succeeded unwinding check is not a failure.
-    ///
-    /// Trace: FR-017-AC-5, TC-027
+    #[trace("FR-017-AC-5", "TC-027")]
     #[test]
     fn tc_027_an_exhausted_unwind_bound_is_inconclusive_not_falsified() {
         let unwound = report(
@@ -443,8 +441,7 @@ mod synthetic {
     /// A run that exits successfully but exports no report, and every report this crate cannot
     /// read exactly, is a refusal rather than an outcome: the result is never
     /// `Inconclusive` by default.
-    ///
-    /// Trace: FR-017-AC-18, TC-027
+    #[trace("FR-017-AC-18", "TC-027")]
     #[test]
     fn tc_027_an_unreadable_or_missing_report_is_refused_never_inconclusive() {
         assert_eq!(
@@ -464,6 +461,7 @@ mod synthetic {
 mod real_capture {
     use super::*;
     use crate::kani::output::report::{KaniCheckClass, KaniCheckLocation, KaniCheckStatus};
+    use ix_trace_rs::trace;
 
     /// A real Kani capture of one `--exact` harness: the exported report, its stdout, and
     /// whether it exited successfully.
@@ -508,7 +506,7 @@ mod real_capture {
         KaniHarnessReport::parse(capture.report.as_bytes()).expect("a real Kani report is readable")
     }
 
-    /// Trace: FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_real_kani_success_with_a_satisfied_cover_is_verified() {
         let capture = capture!("verified-satisfied-cover");
@@ -520,7 +518,7 @@ mod real_capture {
         assert_eq!(classified(&capture), KaniRunOutcome::Verified);
     }
 
-    /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-5", "FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_real_kani_failure_carries_the_assertion_playback_not_the_cover_one() {
         let capture = capture!("falsified-with-playback");
@@ -537,7 +535,7 @@ mod real_capture {
         ));
     }
 
-    /// Trace: FR-017-AC-5, FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-5", "FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_real_kani_unwinding_failure_is_inconclusive_not_falsified() {
         let capture = capture!("unwind-exhausted");
@@ -558,8 +556,7 @@ mod real_capture {
 
     /// Kani reports a harness whose every check is unreachable as a success with zero successful
     /// checks, so it is vacuous before its cover is consulted.
-    ///
-    /// Trace: FR-017-AC-12, FR-017-AC-13, TC-027
+    #[trace("FR-017-AC-12", "FR-017-AC-13", "TC-027")]
     #[test]
     fn tc_027_real_kani_a_run_with_no_successful_check_is_a_vacuous_proof() {
         let capture = capture!("vacuous-cover");
@@ -575,7 +572,7 @@ mod real_capture {
         );
     }
 
-    /// Trace: FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_real_kani_partly_satisfied_covers_are_cover_unsatisfied() {
         let capture = capture!("partial-cover");
@@ -590,7 +587,7 @@ mod real_capture {
         );
     }
 
-    /// Trace: FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_real_kani_success_without_a_cover_is_inconclusive() {
         let capture = capture!("no-cover");
@@ -605,8 +602,7 @@ mod real_capture {
 
     /// A run's verdict is the report's, whatever the console says: the success banner printed
     /// beside a failing report decides nothing.
-    ///
-    /// Trace: FR-017-AC-4, FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-4", "FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_the_console_banner_never_decides_the_verdict() {
         let capture = capture!("falsified-with-playback");
@@ -645,8 +641,7 @@ mod real_capture {
 
     /// A report that differs from the schema this module reads is refused with its own typed
     /// cause and never classified.
-    ///
-    /// Trace: FR-017-AC-18, TC-027
+    #[trace("FR-017-AC-18", "TC-027")]
     #[test]
     fn tc_027_a_report_that_changed_shape_is_refused_not_classified() {
         let version = mutated(|report| report["metadata"]["version"] = "2.0".into());
@@ -695,8 +690,7 @@ mod real_capture {
     /// A report holding any number of harness results but one is refused: a run selects one
     /// `--exact` harness, so another count means the selection or the report is not what was
     /// asked for.
-    ///
-    /// Trace: FR-017-AC-18, TC-027
+    #[trace("FR-017-AC-18", "TC-027")]
     #[test]
     fn tc_027_a_report_without_exactly_one_harness_is_refused() {
         let none = mutated(|report| {
@@ -722,8 +716,7 @@ mod real_capture {
     /// A report whose harness says success but which lists a check that failed, errored, was
     /// undetermined or unknown, or an unwinding assertion that failed, contradicts itself and is
     /// refused with its own cause, for every obligation kind. It is never `Verified`.
-    ///
-    /// Trace: FR-017-AC-4, FR-017-AC-18, TC-027
+    #[trace("FR-017-AC-4", "FR-017-AC-18", "TC-027")]
     #[test]
     fn tc_027_a_success_report_listing_a_failed_check_is_refused_never_verified() {
         for status in ["Failure", "Error", "Undetermined", "Unknown"] {
@@ -754,8 +747,7 @@ mod real_capture {
 
     /// The per-check view of a real run names every check with its id, class, source location and
     /// status, so a consumer can attribute each successful check to a source line.
-    ///
-    /// Trace: FR-017-AC-20, TC-027
+    #[trace("FR-017-AC-20", "TC-027")]
     #[test]
     fn tc_027_real_kani_the_per_check_view_carries_id_class_location_and_status() {
         let capture = capture!("falsified-with-playback");
@@ -805,8 +797,7 @@ mod real_capture {
 
     /// A location Kani leaves unknown has no line; a line that is neither a number nor Kani's
     /// word for none is a malformed report, not a dropped location.
-    ///
-    /// Trace: FR-017-AC-20, TC-027
+    #[trace("FR-017-AC-20", "TC-027")]
     #[test]
     fn tc_027_an_unknown_line_is_none_and_a_non_numeric_line_is_refused() {
         let unknown = mutated(|report| {
@@ -837,8 +828,7 @@ mod real_capture {
 
     /// A check category outside the two this module names is a property: an unknown category must
     /// still count against a proof, never be dropped.
-    ///
-    /// Trace: FR-017-AC-12, TC-027
+    #[trace("FR-017-AC-12", "TC-027")]
     #[test]
     fn tc_027_an_unnamed_check_category_is_a_property() {
         let report = mutated(|report| {

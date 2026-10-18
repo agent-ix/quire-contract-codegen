@@ -528,11 +528,11 @@ impl KaniHarnessReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     /// `Other` cannot shadow the named classes: a spelling of `cover` or `unwind` is always that
     /// class, so its serialized form, its equality and its counting agree.
-    ///
-    /// Trace: FR-017-AC-20, TC-027
+    #[trace("FR-017-AC-20", "TC-027")]
     #[test]
     fn tc_027_a_class_spelled_cover_or_unwind_is_never_other() {
         assert_eq!(
@@ -553,8 +553,7 @@ mod tests {
     /// The per-check view has one wire shape: it serializes as `id`, `class`, `location { file,
     /// line }` and `status`, with the line a number (or null), and it is not read back from any
     /// other spelling. Kani's own `category` key is not part of it.
-    ///
-    /// Trace: FR-017-AC-20, TC-027
+    #[trace("FR-017-AC-20", "TC-027")]
     #[test]
     fn tc_027_the_per_check_view_has_one_serialized_wire_shape() {
         let checks = [

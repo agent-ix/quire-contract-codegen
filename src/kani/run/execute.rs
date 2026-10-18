@@ -1079,6 +1079,7 @@ mod report_fixture {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use std::path::PathBuf;
 
     use super::*;
@@ -1093,8 +1094,7 @@ mod tests {
     /// A precondition harness asserts nothing; its only property is its cover. The same report
     /// that is a vacuous proof for any other harness therefore decides by the cover alone for a
     /// precondition harness, whose satisfied cover is its one successful check.
-    ///
-    /// Trace: FR-017-AC-13, TC-027
+    #[trace("FR-017-AC-13", "TC-027")]
     #[test]
     fn a_precondition_harness_with_no_checks_is_decided_by_its_cover_not_the_zero_checks_rule() {
         let run = |kind: Option<ObligationKind>, checks: &[(&str, &str)]| {
@@ -1229,8 +1229,7 @@ mod tests {
 
     /// A run's report is read from the file the launch names, the previous run's file is never
     /// read in its place, and a successful exit without a report is refused.
-    ///
-    /// Trace: FR-017-AC-18, TC-027
+    #[trace("FR-017-AC-18", "TC-027")]
     #[test]
     fn tc_027_execution_reads_only_the_report_its_own_run_exported() {
         let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
@@ -1259,8 +1258,7 @@ mod tests {
 
     /// The command exports the report to the request's target directory after the harness
     /// identity's options, which are passed unchanged.
-    ///
-    /// Trace: FR-017-AC-6, TC-027
+    #[trace("FR-017-AC-6", "TC-027")]
     #[test]
     fn tc_027_the_launch_exports_the_report_after_the_harness_options() {
         let cancel = quire_exact::Cancel::new();
@@ -1302,8 +1300,7 @@ mod tests {
 
     /// Two runs sharing a target directory at the same time each read their own report: the
     /// report of a run that is still going is neither read nor removed by another.
-    ///
-    /// Trace: TC-027
+    #[trace("TC-027")]
     #[test]
     fn tc_027_concurrent_runs_in_one_target_directory_keep_their_own_reports() {
         let verified = String::from_utf8(report("Success", &[PASSED, COVER_OK])).unwrap();
@@ -1353,8 +1350,7 @@ mod tests {
     /// A launch stopped over a stream or over one that was not read is the refusal that names the
     /// stream and carries its stable code, never an outcome, and launch evidence is never taken
     /// from empty text in its place.
-    ///
-    /// Trace: FR-017-AC-14, FR-017-AC-25, TC-043
+    #[trace("FR-017-AC-14", "FR-017-AC-25", "TC-043")]
     #[test]
     fn tc_043_a_launch_stopped_over_a_stream_is_refused_with_its_stable_code() {
         let over = launch_evidence(
@@ -1409,6 +1405,7 @@ mod tests {
 
 #[cfg(test)]
 mod batch_tests {
+    use ix_trace_rs::trace;
     use quire_contract_ir::kani::KaniOutcomeKind;
     use std::path::PathBuf;
 
@@ -1515,8 +1512,8 @@ wait
         harness
     }
 
-    /// Trace: FR-028-AC-3, FR-028-AC-21, FR-040-AC-3, FR-040-AC-4.
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-028-AC-3", "FR-028-AC-21", "FR-040-AC-3", "FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn child_memory_overage_is_inconclusive_and_kills_the_entire_backend_tree() {
@@ -1568,7 +1565,7 @@ wait
     }
 
     /// A live cancellation recorded before accepting a measured overage cannot replace it.
-    /// Trace: FR-040-AC-4
+    #[trace("FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn measured_memory_overage_competing_with_cancellation_keeps_resource_outcome() {
@@ -1623,8 +1620,8 @@ wait
         recorded_process_gone(&stand_in.directory.join("calls.sibling"));
     }
 
-    /// Trace: FR-028-AC-21.
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-028-AC-21")]
     #[cfg(target_os = "linux")]
     #[test]
     fn batch_memory_overage_refuses_every_member_without_classifying_a_partial_report() {
@@ -1653,8 +1650,8 @@ wait
         assert_eq!(stand_in.calls().len(), 1);
     }
 
-    /// Trace: FR-028-AC-2, FR-028-AC-4, FR-028-AC-21.
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-028-AC-2", "FR-028-AC-4", "FR-028-AC-21")]
     #[cfg(target_os = "linux")]
     #[test]
     fn identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory() {
@@ -1710,8 +1707,8 @@ wait
         );
     }
 
-    /// Trace: FR-028-AC-21.
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-028-AC-21")]
     #[cfg(target_os = "linux")]
     #[test]
     fn unequal_identity_memory_ceilings_run_in_separate_backend_processes() {
@@ -1737,7 +1734,7 @@ wait
 
     /// Unequal identity memory ceilings plan separate groups; each planned selection and argv
     /// retains its member, without executing an unsupported platform's bounded runner.
-    /// Trace: FR-028-AC-21, FR-017-AC-21.
+    #[trace("FR-028-AC-21", "FR-017-AC-21")]
     #[test]
     fn unequal_memory_ceilings_plan_separate_groups_with_their_own_selections() {
         let harnesses = [
@@ -1983,7 +1980,7 @@ exit 0
     }
 
     /// Incomplete capture refuses the real public run even when a cancellation follows its bytes.
-    /// Trace: FR-040-AC-3, FR-040-AC-4
+    #[trace("FR-040-AC-3", "FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn output_over_limit_is_not_relabelled_as_cancellation() {
@@ -2043,7 +2040,7 @@ exec sleep 45
     }
 
     /// The public pre-spawn path retains the caller's source and starts no backend.
-    /// Trace: FR-040-AC-1, FR-040-AC-6, FR-040-AC-7
+    #[trace("FR-040-AC-1", "FR-040-AC-6", "FR-040-AC-7")]
     #[cfg(target_os = "linux")]
     #[test]
     fn cancellation_before_spawn_has_no_backend_or_report() {
@@ -2294,7 +2291,7 @@ exec sleep 45
     }
 
     /// A failed real RSS observation owns the public refusal even if a cause is already recorded.
-    /// Trace: FR-040-AC-4
+    #[trace("FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn memory_observation_failure_competing_with_cancellation_refuses_public_evidence() {
@@ -2368,7 +2365,7 @@ exec sleep 45
     }
 
     /// Actual pipe polling failure refuses even when cancellation selected the preceding stop.
-    /// Trace: FR-040-AC-4
+    #[trace("FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn unread_capture_competing_with_cancellation_refuses_public_evidence() {
@@ -2429,7 +2426,7 @@ exec sleep 45
     }
 
     /// Confirmation failure leaves the actual owner unconfirmed; its real Drop retries teardown.
-    /// Trace: FR-040-AC-4
+    #[trace("FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn cleanup_nonconfirmation_competing_with_cancellation_refuses_public_evidence() {
@@ -2499,7 +2496,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     }
 
     /// Reversing real caller events reverses the launch/evidence/IR/QSL cause; no report exists.
-    /// Trace: FR-040-AC-1, FR-040-AC-2, FR-040-AC-6
+    #[trace("FR-040-AC-1", "FR-040-AC-2", "FR-040-AC-6")]
     #[cfg(target_os = "linux")]
     #[test]
     fn live_cancellation_preserves_first_event_through_ir_and_qsl() {
@@ -2543,7 +2540,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     }
 
     /// One cancelled group has no member evidence; an independent handle's group still completes.
-    /// Trace: FR-040-AC-5
+    #[trace("FR-040-AC-5")]
     #[cfg(target_os = "linux")]
     #[test]
     fn cancelled_batch_retains_first_source_and_independent_group() {
@@ -2598,7 +2595,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     }
 
     /// Otherwise groupable requests with distinct handles run in separate real processes.
-    /// Trace: FR-040-AC-5
+    #[trace("FR-040-AC-5")]
     #[cfg(target_os = "linux")]
     #[test]
     fn distinct_cancellation_handles_have_distinct_launchers() {
@@ -2628,7 +2625,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     }
 
     /// A late timer event cannot relabel either a completed report or a no-event execution ceiling.
-    /// Trace: FR-040-AC-3, FR-040-AC-4
+    #[trace("FR-040-AC-3", "FR-040-AC-4")]
     #[cfg(target_os = "linux")]
     #[test]
     fn completed_and_elapsed_runs_do_not_acquire_late_cancellation() {
@@ -2718,7 +2715,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
         vec![member("a", "check", 4), member("b", "check", 4)]
     }
 
-    /// Trace: FR-028-AC-21.
+    #[trace("FR-028-AC-21")]
     #[cfg(not(target_os = "linux"))]
     #[test]
     fn unsupported_platform_refuses_single_and_batch_before_backend_dispatch() {
@@ -2746,9 +2743,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// `--harness-timeout` T, then the shared options; one harness starts one process with the
     /// single-run vector. Counting the processes before (one run each) and after batching gives
     /// N and 1 for N = 1, 10 and 50.
-    ///
-    /// Trace: FR-017-AC-21, FR-017-AC-22, TC-043
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-017-AC-21", "FR-017-AC-22", "TC-043")]
     #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_compatible_harnesses_start_one_process_with_one_selection_each_in_request_order() {
@@ -2833,8 +2829,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// Harnesses with a different option vector or a different request timeout do not share a
     /// process: N harnesses in G such groups start G processes, each group's members in request
     /// order.
-    ///
-    /// Trace: FR-017-AC-21, TC-043
+    #[trace("FR-017-AC-21", "TC-043")]
     #[test]
     fn tc_043_harnesses_group_by_option_vector_and_by_request_timeout() {
         // Two unwind bounds times two timeouts, two harnesses in each: eight, four groups,
@@ -2884,8 +2879,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// The per-member timeout is T in whole seconds rounded up; a T whose rounded value is above
     /// 4294967295 omits `--harness-timeout`, and one at the maximum carries it.
-    ///
-    /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
+    #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[test]
     fn tc_043_the_member_timeout_is_whole_seconds_rounded_up_and_omitted_above_kani_maximum() {
         let cancel = quire_exact::Cancel::new();
@@ -2929,8 +2923,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// name another of any of the three are never grouped, however equal their options and
     /// timeouts. Each case runs two requests and counts the processes each launcher was started
     /// as.
-    ///
-    /// Trace: FR-017-AC-21, TC-043
+    #[trace("FR-017-AC-21", "TC-043")]
     #[test]
     fn tc_043_requests_naming_another_launcher_crate_or_target_directory_are_not_grouped() {
         let cancel = quire_exact::Cancel::new();
@@ -2986,9 +2979,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// The stand-in's sleep never ends early, so it outlasts T and N times T halved however the
     /// scheduler treats the test; only the 4 s between it and the 12 s bound can be eaten by a
     /// loaded host (an earlier 1 s / 2 s / 4 s version left 2 s and flaked on a loaded runner).
-    ///
-    /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_batch_may_run_longer_than_t_when_it_is_inside_n_times_t() {
@@ -3009,8 +3001,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// The outer bound is the member count times T, and a product that does not fit never
     /// elapses.
-    ///
-    /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
+    #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[test]
     fn tc_043_the_outer_bound_is_member_count_times_timeout_and_overflow_never_elapses() {
         assert_eq!(
@@ -3043,9 +3034,8 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// A batch still running at N times T is killed and refused as timed out, and no member is
     /// classified: the stand-in sleeps far past the bound and writes no report.
-    ///
-    /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
     // Exercises the real Linux namespace/procfs bounded execution API.
+    #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[cfg(target_os = "linux")]
     #[test]
     fn tc_043_a_batch_still_running_at_its_outer_bound_is_refused_as_timed_out() {
@@ -3068,8 +3058,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// A `Duration::MAX` batch launches without `--harness-timeout` and still runs (its bound
     /// never elapses); a batch at 4294967295 seconds carries it and runs.
-    ///
-    /// Trace: FR-017-AC-21, FR-028-AC-12, TC-039, TC-043
+    #[trace("FR-017-AC-21", "FR-028-AC-12", "TC-039", "TC-043")]
     #[test]
     fn tc_043_a_duration_max_batch_runs_without_a_member_timeout_and_the_maximum_runs_with_one() {
         let without = StandIn::verifying("duration-max");
@@ -3102,8 +3091,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// A batch that exits successfully and exported no report is refused as a single run is, and
     /// no member is classified; one that exits unsuccessfully with none leaves every member
     /// inconclusive `NoVerdict`, carrying the exit code and the batch statement.
-    ///
-    /// Trace: FR-017-AC-21, TC-043
+    #[trace("FR-017-AC-21", "TC-043")]
     #[test]
     fn tc_043_a_batch_with_no_report_is_refused_after_a_clean_exit_and_no_verdict_after_a_failed_one(
     ) {
@@ -3137,8 +3125,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// Members are matched by `module::harness` path, never by the bare symbol both share, and
     /// each member's outcome, checks and SUCCESS count come from its own entry: the report lists
     /// the members in the reverse of the request order, one falsified and one verified.
-    ///
-    /// Trace: FR-017-AC-22, TC-043
+    #[trace("FR-017-AC-22", "TC-043")]
     #[test]
     fn tc_043_members_are_matched_by_path_and_classified_from_their_own_entry() {
         let report = batch_report(&[
@@ -3169,8 +3156,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// Each member's evidence carries its kind, harness path, launcher path, unwind bound, solver,
     /// outcome and checks beside the batch's argument vector, the member list, the statement that
     /// it was a batch and the exit code.
-    ///
-    /// Trace: FR-017-AC-22, TC-043
+    #[trace("FR-017-AC-22", "TC-043")]
     #[test]
     fn tc_043_a_member_evidence_carries_its_own_fields_and_the_batch_invocation() {
         let report = batch_report(&[
@@ -3240,8 +3226,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// A member's success is believed beside a non-zero exit only when some entry states the
     /// failure that exit stands for: every member Success with exit 1 is inconclusive, and one
     /// Failure entry makes the other member's success verified.
-    ///
-    /// Trace: FR-017-AC-22, TC-043
+    #[trace("FR-017-AC-22", "TC-043")]
     #[test]
     fn tc_043_a_success_beside_a_non_zero_exit_is_verified_only_when_an_entry_states_failure() {
         let no_verdict = KaniRunOutcome::Inconclusive {
@@ -3279,8 +3264,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// An entry that states failure with no checks and exit status `timeout` is inconclusive as
     /// timed out, naming T, while the others keep their results; one with no checks and no
     /// timeout is inconclusive with no counterexample.
-    ///
-    /// Trace: FR-017-AC-22, FR-028-AC-12, TC-039, TC-043
+    #[trace("FR-017-AC-22", "FR-028-AC-12", "TC-039", "TC-043")]
     #[test]
     fn tc_043_a_timed_out_entry_is_timed_out_naming_t_and_a_bare_failure_has_no_counterexample() {
         let report = batch_report(&[
@@ -3347,8 +3331,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// A batch report that lacks a requested harness, holds one twice or holds one that was not
     /// requested refuses the whole batch with its own typed cause.
-    ///
-    /// Trace: FR-017-AC-23, TC-043
+    #[trace("FR-017-AC-23", "TC-043")]
     #[test]
     fn tc_043_a_report_that_lacks_repeats_or_adds_a_harness_refuses_the_batch() {
         let verified = [PASSED, COVER_OK];
@@ -3389,8 +3372,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
 
     /// A member whose source is not in the crate refuses the whole batch with
     /// `HarnessNotInCrate` before any process starts, even when the other members are present.
-    ///
-    /// Trace: FR-017-AC-23, TC-043
+    #[trace("FR-017-AC-23", "TC-043")]
     #[test]
     fn tc_043_a_member_missing_from_the_crate_refuses_the_batch_and_starts_nothing() {
         let stand_in = StandIn::verifying("missing-member");
@@ -3410,8 +3392,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
     /// earlier member's failing block; a member whose entry names a failed property and has no
     /// block headed for it is inconclusive with no counterexample, and its neighbours keep their
     /// results.
-    ///
-    /// Trace: FR-017-AC-23, TC-043
+    #[trace("FR-017-AC-23", "TC-043")]
     #[test]
     fn tc_043_a_member_is_given_the_playback_headed_for_its_own_path() {
         let report = batch_report(&[
@@ -3535,8 +3516,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
     /// A member that fails two property checks has two counterexample blocks under its own path in
     /// real Kani's console. It takes the first, as the same harness run alone does, and neither
     /// it nor its verified neighbour loses its evidence: the group is not refused.
-    ///
-    /// Trace: FR-017-AC-22, FR-017-AC-23, TC-043
+    #[trace("FR-017-AC-22", "FR-017-AC-23", "TC-043")]
     #[test]
     fn tc_043_a_member_failing_two_checks_takes_its_first_block_and_keeps_its_neighbour() {
         let report = batch_report(&[
@@ -3584,8 +3564,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
 
     /// A console block headed for a path that is not a member refuses the whole group and
     /// classifies no member.
-    ///
-    /// Trace: FR-017-AC-23, TC-043
+    #[trace("FR-017-AC-23", "TC-043")]
     #[test]
     fn tc_043_an_unattributable_playback_refuses_the_whole_group() {
         let report = batch_report(&[
@@ -3607,8 +3586,7 @@ fn kani_concrete_playback_check_1077496887511954657() {
     /// A run over the limit for its harness count is refused with the stable code naming the
     /// stream, the limit and the count: one harness at 8 MiB, a batch of two at 16 MiB; a batch
     /// at exactly its limit completes with its real exit status.
-    ///
-    /// Trace: FR-017-AC-14, FR-028-AC-21, TC-043
+    #[trace("FR-017-AC-14", "FR-028-AC-21", "TC-043")]
     #[test]
     fn tc_043_an_over_limit_stream_refuses_a_single_run_and_a_batch_by_its_member_count() {
         let flood = |bytes: usize, exit: i32| {

@@ -8,6 +8,7 @@ use crate::{
     kani_obligations::scratch,
     scratch_crate::{runtime_dependency, write_manifest},
 };
+use ix_trace_rs::trace;
 use qsl_replay::{
     call_site, object_reference_witness, replay, write_object_environment, ByteDigest, Category,
     DeclarationKey, DependencyInput, DigestDomain, DigestRecord, DomainPackageRef,
@@ -700,7 +701,7 @@ fn try_emitted_from_document_and_body(document: Value, body: &str) -> Result<Emi
     })
 }
 
-/// Trace: FR-015-AC-96, TC-025.
+#[trace("FR-015-AC-96", "TC-025")]
 #[test]
 fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     let fixture = emitted();
@@ -970,7 +971,7 @@ fn qsl_emits_and_ir_admits_the_authored_collection_and_reference_shapes() {
     );
 }
 
-/// Trace: FR-015-AC-96, FR-015-AC-100, TC-025.
+#[trace("FR-015-AC-96", "FR-015-AC-100", "TC-025")]
 #[test]
 fn negotiation_renders_the_selected_sequence_claims_deterministically() {
     let fixture = emitted();
@@ -1187,7 +1188,7 @@ fn negotiation_renders_the_selected_sequence_claims_deterministically() {
     }
 }
 
-/// Trace: FR-015-AC-96, FR-015-AC-101, TC-025.
+#[trace("FR-015-AC-96", "FR-015-AC-101", "TC-025")]
 #[test]
 fn collection_claims_nested_under_not_or_disjunction_are_refused() {
     for body in [
@@ -1217,7 +1218,7 @@ fn collection_claims_nested_under_not_or_disjunction_are_refused() {
     }
 }
 
-/// Trace: FR-015-AC-101, TC-025.
+#[trace("FR-015-AC-101", "TC-025")]
 #[test]
 fn collection_unwind_must_cover_maximum_length_and_loop_exit() {
     let fixture = emitted();
@@ -1245,7 +1246,7 @@ fn collection_unwind_must_cover_maximum_length_and_loop_exit() {
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-96, FR-015-AC-99, TC-025.
+#[trace("FR-015-AC-96", "FR-015-AC-99", "TC-025")]
 #[test]
 fn out_of_range_integer_literal_is_rendered_as_a_falsifiable_claim() {
     let fixture = emitted_from_document_and_body(
@@ -1272,7 +1273,7 @@ fn out_of_range_integer_literal_is_rendered_as_a_falsifiable_claim() {
         .contains("item >= 0 && item <= 3"));
 }
 
-/// Trace: FR-015-AC-96, FR-015-AC-100, TC-025.
+#[trace("FR-015-AC-96", "FR-015-AC-100", "TC-025")]
 #[test]
 fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
     let fixture = emitted_from_document_and_body(
@@ -1341,7 +1342,7 @@ fn boolean_sequence_uses_symbolic_slots_for_both_boolean_values() {
     assert!(harness.rust.contents.contains("index as usize"));
 }
 
-/// Trace: FR-015-AC-96, FR-015-AC-100, TC-025.
+#[trace("FR-015-AC-96", "FR-015-AC-100", "TC-025")]
 #[test]
 fn nonzero_sequence_bounds_are_inclusive_in_the_symbolic_domain() {
     let mut document = model_document();
@@ -1392,7 +1393,7 @@ fn nonzero_sequence_bounds_are_inclusive_in_the_symbolic_domain() {
         .contains("kani::cover!(selected_items_len == 1 || selected_items_len == 3"));
 }
 
-/// Trace: FR-015-AC-100, TC-025.
+#[trace("FR-015-AC-100", "TC-025")]
 #[test]
 fn collection_identity_tracks_domains_claim_subject_and_unwind() {
     let base_document = model_document();
@@ -1456,7 +1457,7 @@ fn collection_identity_tracks_domains_claim_subject_and_unwind() {
     );
 }
 
-/// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
+#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
     let mut document = model_document();
@@ -1539,7 +1540,7 @@ fn ordered_set_shape_is_refused_without_erasing_its_uniqueness_semantics() {
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
+#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn unsupported_collection_predicate_is_refused_without_harness() {
     let fixture = emitted_from_document_and_body(
@@ -1603,7 +1604,7 @@ fn unsupported_collection_predicate_is_refused_without_harness() {
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-101, TC-025.
+#[trace("FR-015-AC-101", "TC-025")]
 #[test]
 fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_harness() {
     let fixture = emitted();
@@ -1670,7 +1671,7 @@ fn collection_domain_larger_than_the_request_memory_ceiling_is_refused_without_h
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-101, TC-025.
+#[trace("FR-015-AC-101", "TC-025")]
 #[test]
 fn canonical_model_wire_rejects_cardinality_above_i64() {
     let mut document = model_document();
@@ -1694,7 +1695,7 @@ fn canonical_model_wire_rejects_cardinality_above_i64() {
     assert!(error.contains("9223372036854775808"), "{error}");
 }
 
-/// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
+#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness() {
     let mut document = model_document();
@@ -1790,7 +1791,7 @@ fn qsl_admitted_collection_without_an_upper_bound_requires_bound_without_harness
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-97, TC-025.
+#[trace("FR-015-AC-97", "TC-025")]
 #[test]
 fn unbounded_sequence_of_reference_elements_is_unsupported_not_requires_bound() {
     let mut document = model_document();
@@ -1842,7 +1843,7 @@ fn unbounded_sequence_of_reference_elements_is_unsupported_not_requires_bound() 
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-97, TC-025.
+#[trace("FR-015-AC-97", "TC-025")]
 #[test]
 fn qsl_rejects_a_missing_upper_bound_with_a_positive_minimum() {
     let mut document = model_document();
@@ -1874,7 +1875,7 @@ fn qsl_rejects_a_missing_upper_bound_with_a_positive_minimum() {
     assert!(error.contains("Node/items"), "{error}");
 }
 
-/// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
+#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_it() {
     let mut document = model_document();
@@ -1987,7 +1988,7 @@ fn finite_sequence_of_unbounded_integer_elements_requires_bound_when_qsl_admits_
     assert!(collection_harnesses.is_empty());
 }
 
-/// Trace: FR-015-AC-97, TC-025.
+#[trace("FR-015-AC-97", "TC-025")]
 #[test]
 fn bounded_sequences_of_string_uuid_and_timestamp_require_element_bounds() {
     for (type_ref, expected, semantic_form) in [
@@ -2059,7 +2060,7 @@ fn bounded_sequences_of_string_uuid_and_timestamp_require_element_bounds() {
     }
 }
 
-/// Trace: FR-015-AC-99, TC-025.
+#[trace("FR-015-AC-99", "TC-025")]
 #[test]
 fn native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions() {
     let healthy = emitted_from_document_and_body(
@@ -2074,7 +2075,7 @@ fn native_collection_replay_evaluates_the_authored_healthy_and_mutated_functions
     assert_native_collection_result(&mutated, &[0], false);
 }
 
-/// Trace: FR-015-AC-99, TC-025.
+#[trace("FR-015-AC-99", "TC-025")]
 #[test]
 #[ignore = "kani lane: run serially through make kani-gate"]
 fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
@@ -2112,7 +2113,7 @@ fn tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies() {
     assert_ne!(mutated_evidence.exit_code, Some(0));
 }
 
-/// Trace: FR-015-AC-97, FR-015-AC-102, TC-025.
+#[trace("FR-015-AC-97", "FR-015-AC-102", "TC-025")]
 #[test]
 fn collection_negotiation_accounts_for_each_supported_or_refused_item() {
     let fixture = emitted();
