@@ -1065,16 +1065,28 @@ mod tests {
                         assert_eq!(actual.record, reference.record);
                         assert_eq!(actual, reference);
                         let digest = content_digest(&preimage_value(&actual.identity).unwrap())
-                            .map_err(|error| error.to_string());
-                        if digest.is_ok() {
-                            digest_successes += 1;
-                        } else {
+                            .map_err(|error| format!("{error:?}"));
+                        let extreme = operands
+                            .iter()
+                            .flat_map(|(low, high)| [*low, *high])
+                            .find(|value| matches!(*value, i64::MIN | i64::MAX));
+                        if let Some(extreme) = extreme {
+                            let expected = quire_canonical::Error::IntegerMagnitudeAboveMaximum(
+                                i128::from(extreme),
+                            );
+                            assert_eq!(digest, Err(format!("DigestError(Encode({expected:?}))")));
                             digest_refusals += 1;
+                        } else {
+                            assert!(
+                                digest.is_ok(),
+                                "ordinary-domain identity must have a digest: {digest:?}"
+                            );
+                            digest_successes += 1;
                         }
                         assert_eq!(
                             digest,
                             content_digest(&preimage_value(&reference.identity).unwrap())
-                                .map_err(|error| error.to_string())
+                                .map_err(|error| format!("{error:?}"))
                         );
                         assert_eq!(
                             content_digest(
