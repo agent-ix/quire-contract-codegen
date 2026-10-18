@@ -3831,9 +3831,9 @@ fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused() {
         matches!(
             &generated.claims[0].result,
             FunctionScheduleDisposition::Refused {
-                refusal: FunctionScheduleRefusal::UnsupportedOperation(_),
+                refusal: FunctionScheduleRefusal::MissingNode(type_node_id),
                 ..
-            }
+            } if type_node_id == &ids.resolve(&id(&unit_type()))
         ),
         "{:?}",
         generated.claims[0].result
@@ -3940,20 +3940,26 @@ fn unit_function_signatures_refuse_per_function_and_preserve_supported_siblings(
         generate_function_schedules, FunctionScheduleDeclaration, FunctionScheduleParameter,
         FunctionScheduleRefusal,
     };
-    let (package, ids) = conversion_operand_package().admit_resolved();
+    let mut builder = conversion_operand_package();
+    builder.node_with(
+        &key(9910),
+        "function",
+        "pure_function",
+        &key(T_INTEGER),
+        serde_json::json!({"term":"reference", "target":id(&key(ADDER_RIGHT))}),
+        &[key(ADDER_RIGHT)],
+    );
+    let (package, ids) = builder.admit_resolved();
     let integer = ids.resolve(&code_id(T_INTEGER));
     let unit = ids.resolve(&id(&unit_type()));
     let supported = FunctionScheduleDeclaration {
-        function_node_id: ids.resolve(&code_id(REFERENCE_FUNCTION)),
-        body_node_id: ids.resolve(&code_id(1001)),
-        name: ADDER_NAME.to_owned(),
-        parameters: [ADDER_LEFT, ADDER_RIGHT]
-            .into_iter()
-            .map(|code| FunctionScheduleParameter {
-                value_node_id: ids.resolve(&code_id(code)),
-                type_node_id: integer.clone(),
-            })
-            .collect(),
+        function_node_id: ids.resolve(&id(&key(9910))),
+        body_node_id: ids.resolve(&code_id(ADDER_RIGHT)),
+        name: "identity".to_owned(),
+        parameters: vec![FunctionScheduleParameter {
+            value_node_id: ids.resolve(&code_id(ADDER_RIGHT)),
+            type_node_id: integer.clone(),
+        }],
         result_type_node_id: integer.clone(),
     };
     for parameter_is_unit in [false, true] {

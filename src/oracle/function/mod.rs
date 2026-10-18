@@ -2734,6 +2734,30 @@ fn item_disposition(
             return Err(ExactFunctionRefusal::BodyMismatch);
         }
     }
+    let graph = package
+        .wire()
+        .semantic_graph
+        .nodes
+        .iter()
+        .map(|source| (&source.node_id, source))
+        .collect::<Graph<'_>>();
+    for argument_id in &item.argument_node_ids {
+        let argument = graph
+            .get(argument_id)
+            .copied()
+            .ok_or(ExactFunctionRefusal::BodyMismatch)?;
+        let type_node = graph.get(&argument.semantic_type).copied().ok_or_else(|| {
+            ExactFunctionRefusal::UnknownTypeNode {
+                type_node_id: argument.semantic_type.clone(),
+            }
+        })?;
+        let type_node_id = if type_node.node_tag.as_ref() == "bounded_domain" {
+            &type_node.semantic_type
+        } else {
+            &argument.semantic_type
+        };
+        resolve_operand_type(&graph, type_node_id)?;
+    }
     let index = function_index[&declaration.node_id];
     if let Some(cause) = package_refusal {
         return Err(ExactFunctionRefusal::PackageRefused {
