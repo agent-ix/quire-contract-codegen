@@ -1177,8 +1177,7 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
 }
 
 /// A quantity conversion node declared by the caller reaches the Kani obligation engine only as
-/// a refused claim: each is accounted `unsupported` with the named capability and no harness is
-/// emitted.
+/// Exact conversion claims remain unrendered for Kani and emit no harness.
 #[trace("FR-014-AC-2", "FR-015-AC-15", "TC-025")]
 #[test]
 fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {

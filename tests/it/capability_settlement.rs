@@ -1212,8 +1212,7 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
     ));
 }
 
-/// A selected quantity conversion settles as unsupported with the named capability: the Kani
-/// arm cannot accept an operation its generator refuses.
+/// A selected exact quantity conversion settles as OperationNotRendered for Kani.
 #[trace("FR-014-AC-2", "FR-019-AC-44", "TC-024")]
 #[test]
 fn a_selected_quantity_conversion_settles_as_operation_not_rendered() {

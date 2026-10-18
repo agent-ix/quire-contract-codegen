@@ -631,6 +631,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             "rt::compare_ieee(rt::IeeeComparison::TotalOrder,".to_owned(),
         ),
         (1064, "rt::convert_ieee_width(".to_owned()),
+        (1140, "rt::convert_quantity(".to_owned()),
         (
             1065,
             "rt::evaluate_ieee(rt::IeeeOperation::Subtract(".to_owned(),
@@ -3553,9 +3554,7 @@ fn contract_request(
     (contract, positions)
 }
 
-/// A function whose declared body is a quantity conversion node, called by a requested call, is
-/// refused on that call's claim with the named capability and the conversion node's id, under
-/// either declared body kind, and no oracle and no location entry exists for it.
+/// Unit-typed function results retain the generic operand-type refusal under either body kind.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion() {
@@ -3713,9 +3712,7 @@ fn tc_024_function_schedules_refuse_quantity_bodies_per_function() {
     }
 }
 
-/// A call that passes a quantity conversion node as an argument to a declared function is
-/// refused on its claim with the named capability and the conversion node's id, and generates no
-/// oracle: the conversion is found anywhere in the closure of the call.
+/// A quantity conversion argument retains the argument's generic type refusal.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_argument() {
@@ -3778,8 +3775,7 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
     );
 }
 
-/// A schedule item whose call passes a quantity conversion node as an argument is refused with
-/// the named capability, and no schedule is produced for it.
+/// An unsupported conversion argument refuses its schedule item.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused() {

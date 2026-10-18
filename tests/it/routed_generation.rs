@@ -2151,9 +2151,7 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
     }
 }
 
-/// A quantity conversion is unsupported with its named capability and emits no harness: the
-/// record carries `quantity_conversion_unsupported` with the operation identity and the
-/// capability text, and the group is not rejected.
+/// Exact quantity conversions generate an oracle and settle Kani as OperationNotRendered.
 #[trace("FR-014-AC-2", "FR-022-AC-11", "FR-015-AC-15", "TC-033")]
 #[test]
 fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
