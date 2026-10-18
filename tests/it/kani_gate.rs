@@ -1,6 +1,7 @@
 //! Contract controls for the real-Kani lane gate (NFR-006, TC-045).
 //! The stand-ins exercise gate control flow; the actual Kani lane is run separately.
 
+use ix_trace_rs::trace;
 use std::{
     collections::BTreeSet,
     fs,
@@ -337,8 +338,9 @@ fn gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports() {
     );
 }
 
-/// Trace: TC-045. A gate reached through a symlink still finds its
+/// A gate reached through a symlink still finds its
 /// sibling scope script and proceeds to the run phase.
+#[trace("TC-045")]
 #[test]
 fn gate_invoked_through_a_symlink_finds_its_scope_script() {
     let sandbox = Sandbox::new();
