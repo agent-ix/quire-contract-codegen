@@ -5257,7 +5257,7 @@ mod tests {
     /// The number of `ExactScalarOperation` variants: [`expected_family`]'s match names each, and
     /// adding one fails to compile there until it has an arm. `every_operation` must then carry a
     /// descriptor of it, which the coverage assertion below checks.
-    const OPERATION_VARIANTS: usize = 14;
+    const OPERATION_VARIANTS: usize = 15;
 
     /// The family each descriptor belongs to, by an exhaustive match with no wildcard arm over
     /// `ExactScalarOperation` and, where the operator selects the identity, over the operator.
@@ -5422,6 +5422,26 @@ mod tests {
             Err(ExactScalarRefusal::InvalidInput),
             "an unlowered record is refused before the body is read"
         );
+    }
+
+    #[trace("FR-014-AC-48", "TC-024")]
+    #[test]
+    fn quantity_conversion_confirmation_requires_identity_and_exact_mode() {
+        for identity in [QUANTITY_CONVERT_IDENTITY, "quire.op.quantity.add"] {
+            for mode in ["exact", "nearest-even"] {
+                let (_, node) = application_node(serde_json::json!({"operation": {
+                    "identity": identity, "mode": {"kind":"rounding", "value": mode}
+                }}));
+                assert_eq!(
+                    operation_confirmed(
+                        &lowered_node(&node),
+                        &ExactScalarOperation::QuantityConversion
+                    )
+                    .unwrap(),
+                    identity == QUANTITY_CONVERT_IDENTITY && mode == "exact"
+                );
+            }
+        }
     }
 
     /// Scalar targets cannot enter an admitted package; mode validation runs first at this seam.
