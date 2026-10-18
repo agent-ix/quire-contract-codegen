@@ -17,11 +17,7 @@
 //! own `quire_contract_codegen::decode_falsification` — the actual production function, not a
 //! reimplementation of it.
 
-use std::{
-    fs,
-    path::PathBuf,
-    time::Duration,
-};
+use std::{fs, path::PathBuf, time::Duration};
 
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
