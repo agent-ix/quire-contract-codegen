@@ -38,3 +38,66 @@ The arithmetic and collection arm lists match the code: lower/definedness_arithm
 | FND-002 | fixed | Verified at 455b1b1 (round 1) |
 | FND-003 | fixed | Verified at 455b1b1 (round 1) |
 | FND-004 | fixed | Verified at b682a3c (round 2) |
+
+## Refresh assessment
+
+**PASS for refreshed spec delivery.** The replayed deletion lists and source closure remain consistent. All named census-validation items are also imported/used by v1_bundle.rs; final corpus deletion removes its calls, not those still-live items. No held step 4f work is absorbed. Parent AC108 and HarnessSpec criteria are unchanged. Original FND004 round-2 repair remains intact. No new finding or fix round; every prior finding retains its terminal fixed disposition. Original findings, verdict and dispositions above are historical and remain verbatim.
+
+The frozen candidate changes Markdown only. No source, test, manifest, workflow or source-embedded input changes. No Cargo, Kani or measurements ran; no current proof result is claimed. No applicable AssuranceProfile exists in spec/.
+
+### Refresh scope
+
+```yaml
+scope:
+- id: FR-015-AC-109
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'PLANNED (IR-598 arithmetic slice; gated on IR-858, AD-004 step 4b, merged
+    first, because the V2 scalar path must already render through `HarnessSpec` and
+    `render.rs` for the deletion to leave the family served). After this slice no
+    source under `src/` contains the corpus `Arithmetic` request variant and arm,
+    `BoundedCorpusFamily::DefinednessArithmetic`, `prepare_checked_arithmetic`, `checked_method`,
+    `render_arithmetic_*` or `lower/definedness_arithmetic.rs` and their re-exports,
+    and no test in `tests/` drives them. The slice deletes only what the arithmetic
+    family owns: the corpus replay (`Bo'
+- id: FR-015-AC-110
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: PLANNED (IR-598 collection slice; gated on IR-858, AD-004 step 4b, and
+    on AD-004 step 4h, because the collection family renders through `HarnessSpec`
+    and `render.rs` only after 4h). The gate opens when the AC-99 installed-backend
+    controls are green, with their tagged tests present (`tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies`
+    and the symbolic-domain tests tagged FR-015-AC-96 and FR-015-AC-99 in `tests/it/kani_obligations_symbolic_domains.rs`).
+    Evidence for a real-Kani precondition is a recorded `make kani` or `make kani-gate`
+    run on the slice PR's head that is green
+- id: FR-015-AC-111
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: PLANNED (IR-598 graph and final slice; gated on IR-858, AD-004 step 4b,
+    on FR-015-AC-109 and FR-015-AC-110 having landed, and on IR-805, whose graph claims
+    need CG integration of the merged IR-851/IR-852 accessors and QSL-820 real-package
+    population emission (after QSL-819)). Graph claims are served by FR-015-AC-98
+    and FR-015-AC-105 to FR-015-AC-108, and FR-015-AC-106's real-Kani graph replay
+    is the replacement for the corpus graph replay; Evidence for a real-Kani precondition
+    is a recorded `make kani` or `make kani-gate` run on the slice PR's head that
+    is green, cited in the PR (the real-Kani
+- id: AD-004-last-caller
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: "it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place. The\
+    \ items of\n     `census_validation.rs` (`validate_dependencies`, `KaniDiagnostic`,\
+    \ `KaniErrorCode`) are removed once their last caller is gone: the V1 bundle path\n\
+    \     (removed at 4f) and the corpus (removed at 4g), or earlier when the V2 census\
+    \ input replaces them. It is not in `kani/census.rs`"
+- id: AD-004-4g
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: "- 4g: the corpus, retired per family in three slices with no compatibility\
+    \ wrapper and no second\n     public generator (IR-598, FR-015-AC-109 to AC-111);\
+    \ step 4b (IR-858) gates every slice. The\n     arithmetic slice deletes the `Arithmetic`\
+    \ arm and `definedness_arithmetic.rs`; V2 does not\n     serve divide or remainder\
+    \ (div settles `Unsupported(OperationNotRendered)`, rem stays a\n     refused\
+    \ identity) until IR-854, which also owns `mod`. The collection slice, gated also\
+    \ on\n     step 4h, deletes the `Collection` arm and `bounded_collections.rs`.\
+    \ The graph slice, gated\n     on IR-805, deletes t"
+```

@@ -31,3 +31,87 @@ The boundaries are mostly right: CG owns no population input, division moves to 
 | FND-001 | fixed | Verified at 455b1b1 (round 1) |
 | FND-002 | fixed | Verified at 455b1b1 (round 1) |
 | FND-003 | fixed | Verified at 455b1b1 (round 1) |
+
+## Refresh assessment
+
+**PASS for refreshed spec delivery.** IR858 gates every implementation slice and owns step4b only. Collection additionally waits for step4h; graph/final waits for AC109+110 and IR805, with merged IR851/852 accessors still needing CG integration and QSL820 real-package population emission after QSL819. Live tracker confirms IR851/852/QSL819 Done and QSL820/IR858/IR805 In Progress. The owner ruling retains holds on 4c–4e/4f/5/6 and the later last-caller note leaves 4f ownership with its owner. No upstream authority is restated locally and no arithmetic replay bridge is introduced. No new finding or fix round; every prior finding retains its terminal fixed disposition. Original findings, verdict and dispositions above are historical and remain verbatim.
+
+The frozen candidate changes Markdown only. No source, test, manifest, workflow or source-embedded input changes. No Cargo, Kani or measurements ran; no current proof result is claimed. No applicable AssuranceProfile exists in spec/.
+
+### Refresh scope
+
+```yaml
+scope:
+- id: FR-015-AC-109
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'PLANNED (IR-598 arithmetic slice; gated on IR-858, AD-004 step 4b, merged
+    first, because the V2 scalar path must already render through `HarnessSpec` and
+    `render.rs` for the deletion to leave the family served). After this slice no
+    source under `src/` contains the corpus `Arithmetic` request variant and arm,
+    `BoundedCorpusFamily::DefinednessArithmetic`, `prepare_checked_arithmetic`, `checked_method`,
+    `render_arithmetic_*` or `lower/definedness_arithmetic.rs` and their re-exports,
+    and no test in `tests/` drives them. The slice deletes only what the arithmetic
+    family owns: the corpus replay (`Bo'
+- id: FR-015-AC-110
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: PLANNED (IR-598 collection slice; gated on IR-858, AD-004 step 4b, and
+    on AD-004 step 4h, because the collection family renders through `HarnessSpec`
+    and `render.rs` only after 4h). The gate opens when the AC-99 installed-backend
+    controls are green, with their tagged tests present (`tc_025_real_kani_collection_claim_verifies_and_mutated_claim_falsifies`
+    and the symbolic-domain tests tagged FR-015-AC-96 and FR-015-AC-99 in `tests/it/kani_obligations_symbolic_domains.rs`).
+    Evidence for a real-Kani precondition is a recorded `make kani` or `make kani-gate`
+    run on the slice PR's head that is green
+- id: FR-015-AC-111
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: PLANNED (IR-598 graph and final slice; gated on IR-858, AD-004 step 4b,
+    on FR-015-AC-109 and FR-015-AC-110 having landed, and on IR-805, whose graph claims
+    need CG integration of the merged IR-851/IR-852 accessors and QSL-820 real-package
+    population emission (after QSL-819)). Graph claims are served by FR-015-AC-98
+    and FR-015-AC-105 to FR-015-AC-108, and FR-015-AC-106's real-Kani graph replay
+    is the replacement for the corpus graph replay; Evidence for a real-Kani precondition
+    is a recorded `make kani` or `make kani-gate` run on the slice PR's head that
+    is green, cited in the PR (the real-Kani
+- id: FR-015-retirement-gates
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'FR-015-AC-96 to FR-015-AC-102 retain the collection implementation and
+    partial
+
+    statuses recorded below; graph clauses remain PLANNED. This retirement plan
+
+    adds no proof credit or current backend results.
+
+    FR-015-AC-109 to FR-015-AC-111 state the slices and FR-015-AC-95 their end
+
+    state. QSL-353 establishes that
+
+    QSL-emitted packages read through Contract IR; it does not supply the symbolic
+
+    corpus or the graph population input. The graph slice also waits for IR-805: CG
+    integration of the merged IR-851/IR-852
+
+    accessors and QSL-820 real-package population emission (after QSL-819). Retirement
+    of each'
+- id: AD-004-last-caller
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: "it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place. The\
+    \ items of\n     `census_validation.rs` (`validate_dependencies`, `KaniDiagnostic`,\
+    \ `KaniErrorCode`) are removed once their last caller is gone: the V1 bundle path\n\
+    \     (removed at 4f) and the corpus (removed at 4g), or earlier when the V2 census\
+    \ input replaces them. It is not in `kani/census.rs`"
+- id: AD-004-4g
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: "- 4g: the corpus, retired per family in three slices with no compatibility\
+    \ wrapper and no second\n     public generator (IR-598, FR-015-AC-109 to AC-111);\
+    \ step 4b (IR-858) gates every slice. The\n     arithmetic slice deletes the `Arithmetic`\
+    \ arm and `definedness_arithmetic.rs`; V2 does not\n     serve divide or remainder\
+    \ (div settles `Unsupported(OperationNotRendered)`, rem stays a\n     refused\
+    \ identity) until IR-854, which also owns `mod`. The collection slice, gated also\
+    \ on\n     step 4h, deletes the `Collection` arm and `bounded_collections.rs`.\
+    \ The graph slice, gated\n     on IR-805, deletes t"
+```
