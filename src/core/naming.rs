@@ -124,11 +124,11 @@ pub(crate) fn oracle_symbol(requirement: &str, revision: u64, clause: &str) -> S
 #[cfg(test)]
 mod tests {
     use super::{oracle_symbol, unique_names};
+    use ix_trace_rs::trace;
 
     /// Items sharing a stem are numbered in key order, whatever order they arrive in; an item
     /// with a stem of its own keeps it.
-    ///
-    /// Trace: FR-022-AC-9, TC-033
+    #[trace("FR-022-AC-9", "TC-033")]
     #[test]
     fn equal_stems_take_ordinals_in_key_order_not_arrival_order() {
         let forward = unique_names(vec![
@@ -147,8 +147,7 @@ mod tests {
 
     /// A suffixed name that meets another item's own stem is suffixed again, so every name is
     /// distinct.
-    ///
-    /// Trace: FR-022-AC-9, TC-033
+    #[trace("FR-022-AC-9", "TC-033")]
     #[test]
     fn a_suffixed_name_meeting_another_stem_is_disambiguated_again() {
         let names = unique_names(vec![
@@ -162,8 +161,7 @@ mod tests {
     /// Two clause identities whose readable forms coincide get distinct names: a requirement,
     /// revision and clause split differently, and two clause ids equal in their first 24
     /// characters.
-    ///
-    /// Trace: FR-022-AC-9, TC-033
+    #[trace("FR-022-AC-9", "TC-033")]
     #[test]
     fn readable_stems_that_coincide_still_yield_distinct_names() {
         let split = [("fr-1", 2, "c"), ("fr", 1, "2-c")];

@@ -222,6 +222,7 @@ pub(crate) fn artifact_json<T: ArtifactJsonRecord + ?Sized>(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use serde::Serialize;
 
     use super::artifact_json;
@@ -234,8 +235,9 @@ mod tests {
 
     impl super::ArtifactJsonRecord for Unsorted<'_> {}
 
-    /// Trace: TC-023. The emitted file has canonical key order and one newline;
+    /// The emitted file has canonical key order and one newline;
     /// an ordinary serde_json serializer would preserve this struct's opposite field order.
+    #[trace("TC-023")]
     #[test]
     fn generated_json_uses_canonical_bytes() {
         let text = artifact_json(&Unsorted {
@@ -246,8 +248,9 @@ mod tests {
         assert_eq!(text, "{\"alpha\":1,\"zeta\":\"z\"}\n");
     }
 
-    /// Trace: TC-023. A typed artifact above its byte ceiling refuses rather than
+    /// A typed artifact above its byte ceiling refuses rather than
     /// returning a truncated or partially encoded JSON file.
+    #[trace("TC-023")]
     #[test]
     fn generated_json_refuses_an_over_bound_record() {
         let large = "x".repeat(super::MAX_ARTIFACT_BYTES);

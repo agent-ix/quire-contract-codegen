@@ -28,8 +28,9 @@ pub(crate) fn oracle_crate_manifest(crate_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::oracle_crate_manifest;
+    use ix_trace_rs::trace;
 
-    /// Trace: TC-024, TC-029, TC-031.
+    #[trace("TC-024", "TC-029", "TC-031")]
     #[test]
     fn tc_024_oracle_manifest_names_the_runtime_by_branch_and_carries_no_pinned_revision() {
         let manifest = oracle_crate_manifest("probe-crate");
