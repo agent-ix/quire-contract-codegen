@@ -1007,6 +1007,8 @@ mod tests {
         use crate::kani::{
             generate::outcome::MAX_OBLIGATION_UNWIND, identity::InferredScalarOperand,
         };
+        let mut digest_successes = 0;
+        let mut digest_refusals = 0;
         for (operation, identity) in [
             (ScalarOperation::Add, "quire.op.integer.add"),
             (ScalarOperation::Subtract, "quire.op.integer.sub"),
@@ -1062,14 +1064,40 @@ mod tests {
                         assert_eq!(actual.identity.options, reference.identity.options);
                         assert_eq!(actual.record, reference.record);
                         assert_eq!(actual, reference);
+                        let digest = content_digest(&preimage_value(&actual.identity).unwrap())
+                            .map_err(|error| error.to_string());
+                        if digest.is_ok() {
+                            digest_successes += 1;
+                        } else {
+                            digest_refusals += 1;
+                        }
                         assert_eq!(
-                            content_digest(&preimage_value(&actual.identity).unwrap()).unwrap(),
-                            content_digest(&preimage_value(&reference.identity).unwrap()).unwrap()
+                            digest,
+                            content_digest(&preimage_value(&reference.identity).unwrap())
+                                .map_err(|error| error.to_string())
+                        );
+                        assert_eq!(
+                            content_digest(
+                                &preimage_value(&[&actual.rust, &actual.record]).unwrap()
+                            )
+                            .unwrap(),
+                            content_digest(
+                                &preimage_value(&[&reference.rust, &reference.record]).unwrap()
+                            )
+                            .unwrap()
                         );
                     }
                 }
             }
         }
+        assert!(
+            digest_successes > 0,
+            "ordinary identities have equal derived digests"
+        );
+        assert!(
+            digest_refusals > 0,
+            "i64 extremes retain RFC 8785 magnitude refusals"
+        );
     }
 
     #[trace("FR-015-AC-115", "TC-025")]
