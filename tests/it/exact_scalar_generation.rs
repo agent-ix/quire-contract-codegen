@@ -26,9 +26,7 @@ use quire_contract_model::{
     CheckedPackageRefusalCode, CheckedPackageV2, CheckedPackageV2ReadResult, CheckedSemanticNodeV2,
     StructuralCandidateError,
 };
-use quire_exact::{
-    ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval,
-};
+use quire_exact::{ComparisonOperator, DivisionProfile, Integer, IntegerDomain, IntegerInterval};
 use serde_json::{json, Value};
 
 // package.rs holds a process-global `application_registry()` static keyed by small integer
