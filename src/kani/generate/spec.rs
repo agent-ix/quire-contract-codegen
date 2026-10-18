@@ -51,7 +51,7 @@ impl ExprText {
         let expression =
             syn::parse_str::<Expr>(&text).map_err(|_| HarnessSpecError::InvalidExpression)?;
         let mut check = ExpressionCheck {
-            forbidden: text.contains("kani::") || text.contains("#["),
+            forbidden: text.contains("#["),
         };
         check.visit_expr(&expression);
         if check.forbidden {
@@ -738,7 +738,11 @@ mod tests {
             "matches!(value, rt::r#kani)",
             "r#matches!(rt::r#kani, _)",
         ] {
-            assert_eq!(expression(text).as_str(), text, "legal expression {text}");
+            assert_eq!(
+                ExprText::new(text).map(|expression| expression.as_str().to_owned()),
+                Ok(text.to_owned()),
+                "legal expression {text}"
+            );
         }
         for text in [
             "kani :: any::<i64>()",
