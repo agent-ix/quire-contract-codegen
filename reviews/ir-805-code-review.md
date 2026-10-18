@@ -343,3 +343,16 @@ scope:
 
     Method: spec-review/integrity (completeness, internal consistency, atomicity).'
 ```
+
+## Dispositions
+
+Round 1 inspected the frozen fix candidate. The original findings and original review verdict above remain historical records.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The complete producer wire shape and nine-field accessor record were removed. QSL FR-365/FR-105 and Contract IR FR-038/FR-053 are linked by authoritative ix references; all four target artifact IDs independently resolve on producer main. CG-owned clause/path identity, domain authority, finite multiplicity consumption, harness and proof controls remain. |
+| FND-002 | fixed | FR-015, TC-025 and tests.md distinguish merged IR-851/852 from outstanding CG integration and QSL-820 package population emission. Unavailable remains conditionally unsupported, unbounded requires_bound and finite-domain success requires finite edge multiplicity. All graph runtime/proof credit remains Planned. |
+
+## Round 1 verdict
+
+**PASS** for the reviewed specification delta: both supplemental findings are fixed and no new defect was found. Eight graph AC payloads (98–102, 105–107) are byte-identical before their Planned status suffixes. AC-108 retains every refusal category and location-before-accessor ordering; its availability qualifiers now refer to the particular admitted claim. All five prior SR artifacts are unchanged and their 19 fixed findings remain terminal. No runtime, Cargo/Kani, or whole-repository pass is claimed.
