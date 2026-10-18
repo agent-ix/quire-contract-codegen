@@ -70,12 +70,13 @@ sequences the corpus behind QSL-353, so the guard of FR-015-AC-58 is an inspecti
 emitted text. When a family renders through `HarnessSpec`, its constructor refusal
 (AD-004 L-4) joins the inspection and does not replace it.
 
-Current interim ownership (IR-329): the bounded-profile classifier, the three
-finite-input semantic-family lowerers and the bounded-corpus emitter are auxiliary
-operations of this Kani generator, governed today by FR-015-AC-82 to
-FR-015-AC-94 and, at the step 4g boundary, by the planned per-family retirement
-slices FR-015-AC-109 (arithmetic), FR-015-AC-110 (collection) and FR-015-AC-111
-(graph and the whole corpus API), with FR-015-AC-95 as their end state.
+Current interim ownership (IR-329): the bounded-profile classifier, the two
+retained finite-input semantic-family lowerers (collection and graph) and the
+bounded-corpus emitter are auxiliary operations of this Kani generator, governed
+today by FR-015-AC-82 to FR-015-AC-94. The arithmetic retirement slice
+FR-015-AC-109 is implemented; the remaining step 4g retirement slices
+FR-015-AC-110 (collection) and FR-015-AC-111 (graph and the whole corpus API)
+remain planned, with FR-015-AC-95 as their end state.
 They consume Contract IR's validated finite-input/profile interfaces, not a V2
 clause claim. The corpus emits oracle, strategy, Kani harness and proof graph
 from one admitted case; it does not retain a replay packet or claim a native
