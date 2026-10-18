@@ -1276,9 +1276,8 @@ mod tests {
                 );
 
                 let directory =
-                    std::env::temp_dir().join(format!("ir496-ac7-schedule-{}", std::process::id()));
+                    crate::kani::test_support::discover_scratch("oracle-function-schedule");
                 let source_directory = directory.join("src");
-                let _ = std::fs::remove_dir_all(&directory);
                 std::fs::create_dir_all(&source_directory).expect("create source directory");
                 std::fs::write(source_directory.join("lib.rs"), source)
                     .expect("write schedule crate root");

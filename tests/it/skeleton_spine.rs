@@ -1208,17 +1208,17 @@ fn printed_values(transcript: &str) -> (Vec<i64>, Vec<i64>) {
 fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
-    let directory = write_crate(harness, subject);
+    let scratch = write_crate(harness, subject);
+    let directory = &scratch.path;
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation: &installation,
         harness: harness.into(),
-        crate_directory: &directory,
+        crate_directory: directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-spine"),
         home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
-    let _ = fs::remove_dir_all(directory);
     evidence.outcome
 }
 

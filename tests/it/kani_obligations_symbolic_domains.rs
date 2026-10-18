@@ -4,10 +4,7 @@
 //! native source and a test-authored domain model document. No Contract IR
 //! package wire is constructed in this module.
 
-use crate::{
-    kani_obligations::scratch,
-    scratch_crate::{runtime_dependency, write_manifest},
-};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use ix_trace_rs::trace;
 use qsl_replay::{
     call_site, object_reference_witness, replay, write_object_environment, ByteDigest, Category,
@@ -356,12 +353,13 @@ fn collection_item_outcome(
     .expect("valid collection request")
 }
 
-fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> PathBuf {
-    let directory = scratch("collection-claim");
+fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> TemporaryDirectory {
+    let scratch = TemporaryDirectory::new("quire-kani-symbolic-domains-collection");
+    let directory = &scratch.path;
     fs::write(directory.join("src/lib.rs"), &harness.rust.contents)
         .expect("write the generated artifact byte for byte");
     write_manifest(
-        &directory,
+        directory,
         &format!(
             "[package]\nname = \"generated-kani-collection\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&["exact"])
@@ -372,7 +370,7 @@ fn write_collection_scratch(harness: &KaniCollectionObligationHarness) -> PathBu
         "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
     )
     .expect("allow Kani's generated cfg");
-    directory
+    scratch
 }
 
 fn run_collection_kani(
@@ -380,13 +378,14 @@ fn run_collection_kani(
     harness: &KaniCollectionObligationHarness,
     label: &str,
 ) -> quire_contract_codegen::KaniExecutionEvidence {
-    let crate_directory = write_collection_scratch(harness);
+    let scratch = write_collection_scratch(harness);
+    let crate_directory = &scratch.path;
     let cancel = quire_exact::Cancel::new();
     let evidence = execute_kani_obligation(&KaniExecutionRequest {
         cancel: &cancel,
         installation,
         harness: KaniExecutableHarness::from(harness),
-        crate_directory: &crate_directory,
+        crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-collection"),
         home_directory: None,
     })
@@ -404,7 +403,6 @@ fn run_collection_kani(
         &harness.rust.contents,
     )
     .unwrap();
-    let _ = fs::remove_dir_all(crate_directory);
     evidence
 }
 
