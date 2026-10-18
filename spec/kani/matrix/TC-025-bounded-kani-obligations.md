@@ -449,10 +449,20 @@ the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the 
 FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
 harness, so its previous test evidence remains planned until that migration lands.
 
-## One renderer and the scalar family port (planned, IR-858)
+## One renderer and the scalar family port (implemented, IR-858)
 
 These steps verify AD-004 step 4b (AD-004 "The HarnessSpec and render contract (step 4b)"); they back FR-015-AC-112 to FR-015-AC-117. Steps 42 to 47
 are numbered after step 41 and are independent of the IR-805 prose above.
+
+Implementation evidence: the private constructor, renderer and scalar differential tests pass
+(`cargo test --locked --lib -- --test-threads=1 kani::generate::spec:: kani::generate::render::
+kani::generate::scalar::`), as does the twelve-entrypoint inspection (`cargo test --locked
+--test it cover_last -- --test-threads=1`). The private installed-backend control is explicitly
+run with `cargo test --locked --lib
+kani::generate::render::tests::unsatisfiable_assume_is_cover_unsatisfied_under_real_kani --
+--ignored --exact --test-threads=1`: it requires successful reachable checks and exactly
+`CoverUnsatisfied { satisfied: 0, total: 1 }`. The existing healthy/mutated scalar control runs
+with the required author `make kani-gate`; independent review and final acceptance remain separate.
 
 42. Build `HarnessSpec`s by hand that break each invariant: no cover, two covers, a `true` cover
     condition, no call, two calls, an input after the call, an assertion before the call, a name bound
