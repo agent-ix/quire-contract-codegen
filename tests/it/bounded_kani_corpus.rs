@@ -748,7 +748,7 @@ fn tc_023_proof_graph_artifact_validates_against_its_published_schema() {
         let instance: serde_json::Value =
             serde_json::from_str(&generated.artifacts.proof_graph.contents)
                 .expect("the corpus proof-dependency graph must parse as JSON");
-        // Trace: TC-023. The old struct-order encoder wrote `schemaVersion`
+        // The old struct-order encoder wrote `schemaVersion`
         // second; canonical bytes sort `dependencies` before it and end with one newline.
         let graph_text = &generated.artifacts.proof_graph.contents;
         assert!(
