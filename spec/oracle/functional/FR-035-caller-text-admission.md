@@ -18,11 +18,17 @@ When a caller requests runtime Text admission, the code generator shall emit an
 oracle and a separately bounded Kani obligation for a caller-owned
 `TextPayload` and declared `TextType`. This is a caller-ingress claim, not a
 claim about an expression node in an admitted `CheckedPackageV2`. The oracle
-calls Contract Runtime's own `exact::admit_text` API and
-returns its outcome and metering unchanged. Its evidence identifies the
-caller-declared profile, inclusive length bounds, payload class and proof
-configuration, without `ir_confirmed` provenance, a checked node id or a QSL
-term identity.
+calls the exact kernel's `quire_exact::admit_text` API and returns its
+outcome and metering unchanged. Its evidence identifies the caller-declared
+profile, inclusive length bounds, payload class and proof configuration,
+without `ir_confirmed` provenance, a checked node id or a QSL term identity.
+
+In this requirement, `rt::` denotes the exact API that the generated oracle
+and harness import, and the specified binding is `quire_exact`. The draft
+PR #381 generator binds `rt` to Contract Runtime's separate
+`quire_contract_runtime::exact` copy; that caller-ingress generator is not
+implemented on main. Moving the draft harness binding to `quire_exact` is
+IR-837's slice.
 
 [FR-014](./FR-014-exact-scalar-oracles.md) continues to own generated oracles
 for admitted, catalogued text comparison nodes. A comparison's existing
@@ -107,11 +113,19 @@ records the architecture boundary.
 
 ## Dependencies
 
-- **Upstream**: Contract Runtime's own `exact` text and accounting API, which
-  defines and exports `admit_text`, `TextPayload`, `TextType` and `Meter`.
+- **Upstream**: quire-exact, the exact kernel this repository locks, which
+  defines and exports `quire_exact::admit_text`, `quire_exact::TextPayload`,
+  `quire_exact::TextType` and `quire_exact::Meter`.
 - **Execution**: [FR-017](../../kani/functional/FR-017-kani-execution-evidence.md)
   classifies and retains evidence for the generated caller harness.
 - **Related**: [FR-014](./FR-014-exact-scalar-oracles.md) for checked-package
   text comparison. QSL-694 explores text-to-number parsing inside a term; it
   does not gate this caller-ingress operation.
+- **Proof cost**: IR-796 records a proof-cost obstacle for the kernel and
+  toolchain measured in that work. FR-035-AC-4 and FR-035-AC-5 depend on exact
+  admission and metering completing in Kani within the published bound.
+  The historical measured disposition and its owners,
+  IR-705 and IR-837, are recorded in
+  [TC-050](../matrix/TC-050-caller-text-admission.md). The criteria are
+  unchanged and stay planned and unrun until that dependency is met.
 - **Verification**: [TC-050](../matrix/TC-050-caller-text-admission.md).
