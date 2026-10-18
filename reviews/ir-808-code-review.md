@@ -1,0 +1,302 @@
+---
+id: "SR-11995"
+title: "IR-808 code review: kani_gate stand-in tests run in their own sandbox"
+type: SpecReview
+scope: "agent-ix/quire-contract-codegen; IR-808; scripts/kani_gate.sh, tests/it/kani_gate.rs, src/kani/run/memory.rs, src/kani/run/namespace.rs, src/kani/run/execute.rs, spec/kani/"
+---
+
+# SR-11995: IR-808 code review
+
+## Summary
+
+Ticket: IR-808. PR: agent-ix/quire-contract-codegen#408 (draft), head 3254cf4, base main
+494937f. Scope is `git diff origin/main...origin/peter/ir-808-kani-gate-report-race`: one line of
+`scripts/kani_gate.sh` and the sandbox wiring in `tests/it/kani_gate.rs`. Method: code-review with
+the rust-review lane and a shell review of the script folded in.
+
+## Method
+
+I read the whole script, `scripts/kani_scope.sh`, the Makefile `kani-gate` target and the test
+module, and traced each cwd-relative path the gate uses. Then I ran the `kani_gate::` module 8
+times on main and 8 times on the PR head, and ran the full `--test it` binary once on the PR
+head. After each set of runs I checked the checkout for `target-codex-backends/` and for git
+status changes.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | low | The gate now finds `kani_scope.sh` from `$0`, but it still resolves `git`, the claim evidence directory and the cargo test command from cwd. If the gate is called through a symlink (for example `~/bin/kani-gate -> scripts/kani_gate.sh`), `dirname "$0"` is the link's own directory, so `kani_scope.sh` is not found. The gate then exits 1 with the misleading `source stale against origin/main ()`. That fails closed. If the gate is called by absolute path from another cwd, it now gets past the freshness step and checks the evidence of that other directory, where before it stopped at the helper lookup. `make kani-gate` cannot reach either case. | scripts/kani_gate.sh:69, scripts/kani_gate.sh:96 |
+| FND-002 | low | The negative test's stdout oracle checks only the `result=failed ran=3 expected=3` prefix. It does not check `tree=clean` or the full result line, so it does not pin that the trusted-cargo identity check is the only reason for rejection. Example: a stub change makes the tree dirty and a later change drops the `test_command[0] == trusted_cargo` term. The gate still fails (tree=dirty), so the test still passes while FR-041-AC-5's identity guard is gone. | tests/it/kani_gate.rs:324 |
+
+## Verdict
+
+Approve. Both findings are low and neither blocks the merge.
+
+- Root cause confirmed. On main 494937f, `kani_gate::gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports`
+  failed at kani_gate.rs:312 in 2 of 8 module-only runs. Main also leaves a
+  `target-codex-backends/` directory in the checkout. On the PR head the module passed 8 of 8
+  times, and the full `--test it` run passed once (594 passed, 0 failed, 34 ignored). Neither left
+  `target-codex-backends/` in the checkout or changed git status.
+- `make kani-gate` behaves the same as before. The recipe is `$(BASH) scripts/kani_gate.sh ...`
+  from the repo root, so `dirname -- "$0"` is `scripts` and line 69 expands to the old path. The
+  `exec flock ... "$0"` re-exec keeps both `$0` and cwd. The real lane still checks
+  `target-codex-backends/ir19-claim-crate` relative to cwd. That is CARGO_MANIFEST_DIR, which is
+  where `real_kani_claims_have_discharge_and_falsifying_mutations` writes it.
+- The negative test still proves its claim. The reports are now in the same cwd-relative
+  directory the gate reads. The fake git reports a stable head and a clean tree, and the list and
+  run grep lines both match. So every pass condition holds except the trusted-cargo identity
+  check, and dropping that term would make the gate pass and the test fail.
+- No other shared checkout paths are written. The scope tests, the `make -n` test and the include
+  walk only read the checkout. The lock and markers are in the sandbox, and mktemp logs are
+  removed by the EXIT trap.
+- `dirname -- "$0"` is correct for relative calls (`scripts/...` and `./kani_gate.sh`), for paths
+  with spaces (quoted) and for paths that start with `-` (`--`). The only weak case is a symlink
+  (FND-001).
+- The rust-review lane found nothing. `to_str().expect` on a CARGO_MANIFEST_DIR path is
+  acceptable in tests, and the ps needle and the spawned argv are built from the same env value.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The new test `gate_invoked_through_a_symlink_finds_its_scope_script` carries `Trace: NFR-006-AC-8`. NFR-006-AC-8 covers a tree or head that moves between the before-build and after-run reads, and this test does not exercise that. What the test shows is that the freshness step is reached and passes, so the run starts. That is closest to NFR-006-AC-14's "it may run" clause, or else it is a robustness test with no criterion tag. As written, the matrix credits AC-8 with a test that cannot fail when AC-8 is violated. | tests/it/kani_gate.rs:340-341 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7df0f6: kani_gate.sh now sets `script_dir=$(dirname -- "$(/usr/bin/readlink -f -- "$0")")` and has a comment saying that only the sibling script is located by real path. The new symlink test fails against the 3254cf4 script (panic at kani_gate.rs:356) and passes at 5013686. `/usr/bin/readlink` follows the hard-coded `/usr/bin/readlink` at line 49 and `/usr/bin/bash` and `/usr/bin/python3` elsewhere, so it is consistent. Under `make kani-gate` the helper is now called by absolute path, which behaves the same because kani_scope.sh uses `$0` only in its usage message. |
+| FND-002 | fixed | e7df0f6: the negative test now requires the full result line, from `kani-gate: result=failed ran=3 expected=3 elapsed=` through `s kani=Kani 1.0 tree=clean`. Red check: with `FAKE_MOVE_TREE=yes` the 3254cf4 oracle passes and the e7df0f6 oracle fails with "only the identity check may fail: ... tree=dirty". |
+| FND-003 | fixed | Round 2, dfa4bb0: the symlink test is now tagged `Trace: TC-045.` only. That tag is honest. TC-045 is the case for the `make kani-scope` and `make kani-gate` targets, and it names `scripts/kani_scope.sh` and `scripts/kani_gate.sh`, so the tag places the test in that case without crediting any criterion it cannot fail. The criterion trace set in kani_gate.rs at 99d7000 is the same as on main and at 5013686: FR-041-AC-5, NFR-006-AC-1 through AC-12, AC-14, AC-18 and AC-19, TC-045 and TC-056. NFR-006-AC-8 stays bound through `gate_refuses_missing_launcher_dirty_or_moving_tree_and_stale_main` (kani_gate.rs:422), which runs the moving-head case. |
+
+
+## Follow-up review (disposition pass 3)
+
+Provisional local review only. Frozen candidate: 80378693a29f745dfb7dc1d6b4eddb07ce294a1c;
+new delta: e2f6c1b..8037869, `src/kani/run/memory.rs`. The locally cached
+`origin/main...HEAD` diff was inspected as context, including the gate script and tests;
+remote freshness was not verified. No spec/plan or CI workflow changes appear in that diff.
+No applicable AssuranceProfile was found under `spec/`.
+
+All prior finding text and disposition rows above are preserved. SR-11995 FND-001,
+FND-002 and FND-003 already have terminal `fixed` outcomes; no redundant outcome rows
+are added. This round introduces no new findings. This does not renew historical test-run
+claims: no Cargo or Kani command ran in this review. The leader reports that the required
+systemd user scope was denied before Cargo launch; this reviewer did not retry it or run
+unscoped commands. Formatting, clippy, execution tests and the aggregate gate remain UNRUN.
+
+Tracker team-key validation, private comment dedup/publication/read-back and label state
+are unavailable in this environment. No tracker or GitHub comment was posted. No remote
+state, mergeability or merge approval is asserted. This scratch artifact requires custody
+by the leader; the frozen branch was not edited.
+
+
+### Code and Rust lane evidence
+
+Provisional verdict: no new defect found in the reviewed delta; executable validation pending.
+`NamespaceOwner::dispatch` claims the init identity and calls `bind_root` before writing the
+startup-gate byte (`src/kani/run/namespace.rs:260-271`). Thus the bound init is still held
+before backend dispatch, and its identity-checked RSS is an actual observation of the owned
+root. `bind_root` propagates failed/mismatched identity reads before mutating the peak.
+The fix stores that already measured value via `Some(previous.unwrap_or(0).max(bound))`.
+Later successful `observe` calls retain the maximum; an unavailable read does not create
+an invented zero. A measured zero is legitimate, as already modeled by `resident_bytes`.
+No new panic, integer conversion, unsafe code, lock, wire schema, or spawned work is added.
+The update uses the existing peak field and max rule; it adds no new helper or copied
+upstream authority. Existing prepare-only behavior remains `None` until a tree is bound.
+
+The inspected successful-evidence test asserts `peak_resident_bytes.is_some()` after a
+real bounded launch (`src/kani/run/execute.rs:1660-1686`), and the prepare-only test asserts
+`None` (`src/kani/run/memory.rs:769-775`). These are existing behavioral checks, not new
+execution evidence. The prepare-only trace remains FR-028-AC-21, and the success test
+also cites FR-028-AC-2/4 as context. The historical symlink test's TC-045-only tag is unchanged;
+no claim is made that the pending scratch trace conversion is applied on this old base.
+
+`git diff HEAD^ HEAD --check` passed. The full local delta preserves existing CI lanes.
+
+
+## Follow-up review (disposition pass 4)
+
+Formal follow-up at frozen pushed candidate 715d41da048b2e5c20d7c68b72ec8249d4e7d961,
+base bacde1b; actual diff `origin/main...HEAD` examined. The earlier pass-3 limitations
+remain historical statements, superseded by the evidence in this section. No original
+finding or disposition text was edited. All SR-11995 findings retain terminal fixed
+outcomes; no unresolved finding requires a fresh outcome row and no new code defect was found.
+
+Code-review, Rust lane and shell lane: PASS for this PR delta. No applicable
+AssuranceProfile exists under spec/. No spec, plan, dependency or CI workflow change.
+The initial resident_bytes value is obtained with the owned init identity before the
+startup gate is released. Recording that measured RSS fixes missing successful-run
+observations without inventing an estimate or changing prepare-only None. Later samples
+retain their existing maximum. Identity/read failures propagate before peak mutation.
+No new unsafe/panic, conversion, wire field, lock, unbounded work or duplicate helper.
+The symlink test uses canonical ix_trace_rs::trace on a #[test] only; existing trace
+cleanup outside this delta stays in its owning migration work. Prior symlink, oracle
+precision and trace findings are still fixed by inspection.
+
+Focused validation evidence was read directly from the coder's restored logs at
+/home/peter/dev/worktrees/kani-lead-codex/ir808/: fmt-check and locked all-target
+clippy passed; kani_gate 8/8, memory observer 8/8, RSS 1/1 and cancellation 1/1 passed.
+These are coder execution results, not fresh reviewer runs. No reason to repeat them
+was found; this reviewer ran no Cargo/Kani job and no aggregate gate.
+
+The production change requires genuine gap-analysis: SR-12730 records the full audit,
+including unchanged baseline gaps and explicit out-of-scope dispositions. SR-11996's
+original manual check remains historical evidence, not a substitute for that audit.
+Cancellation behavior is unchanged and one focused passing test does not establish
+elimination of its historical race. IR-808 must remain open for residual cancellation scope.
+Merge eligibility for the reviewed delta depends on committing the latest review artifacts
+and the leader's successful aggregate gate on the exact final head.
+
+### Round 4 examined scope
+
+```yaml
+scope:
+- id: FR-028-AC-21
+  path: spec/kani/functional/FR-028-bounded-proof-ceilings.md
+  role: examined
+  excerpt: The backend process tree of every run is held to the harness identity's memory ceiling by a mechanism
+    that observes or limits the tree's memory (the choice is the code change's, Open Questions); every execution
+    evidence records the mechanism and, where it observes memory, the tree's peak resident memory; a tree that exceeds
+    the ceiling is killed whole and settles as FR-028-AC-3 states, with `KaniInconclusiveReason::MemoryExhausted`,
+    serialized `memory_exhausted`, a variant distinct from every existing reason; a FR-017 batch's launcher process
+    tree is held to the ceiling as one group, killed wh
+- id: src/kani/run/memory.rs::MemoryObserver::bind_root
+  path: src/kani/run/memory.rs
+  role: examined
+  excerpt: "let bound = self.resident_bytes(pid, start)?.ok_or_else(|| {\n    io::Error::new(\n        io::ErrorKind::InvalidData,\n\
+    \        \"owned init RSS identity changed\",\n    )\n})?;"
+- id: src/kani/run/namespace.rs::NamespaceOwner::dispatch
+  path: src/kani/run/namespace.rs
+  role: examined
+  excerpt: 'self.init = Some((info.child, start, handle));
+
+    observer.bind_root(info.child, start)?;'
+- id: src/kani/run/memory.rs::MemoryObserver::observe
+  path: src/kani/run/memory.rs
+  role: examined
+  excerpt: "self.observation.peak_resident_bytes =\n    Some(self.observation.peak_resident_bytes.unwrap_or(0).max(total));"
+- id: src/kani/run/execute.rs::identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory
+  path: src/kani/run/execute.rs
+  role: examined
+  excerpt: assert!(evidence.memory.peak_resident_bytes.is_some());
+- id: src/kani/run/memory.rs::available_observer_does_not_invent_a_peak_before_observing_a_tree
+  path: src/kani/run/memory.rs
+  role: examined
+  excerpt: assert_eq!(observer.observation().peak_resident_bytes, None);
+- id: scripts/kani_gate.sh
+  path: scripts/kani_gate.sh
+  role: examined
+  excerpt: 'script_dir=$(dirname -- "$(/usr/bin/readlink -f -- "$0")")
+
+    if ! freshness=$(/usr/bin/bash "$script_dir/kani_scope.sh" --main-freshness); then'
+- id: tests/it/kani_gate.rs::gate_script
+  path: tests/it/kani_gate.rs
+  role: examined
+  excerpt: command.current_dir(&self.root);
+- id: tests/it/kani_gate.rs::gate_rejects_fake_cargo_and_kani_with_printed_proof_and_reports
+  path: tests/it/kani_gate.rs
+  role: examined
+  excerpt: "result.starts_with(\"kani-gate: result=failed ran=3 expected=3 elapsed=\")\n    && result.ends_with(\"\
+    s kani=Kani 1.0 tree=clean\")"
+- id: tests/it/kani_gate.rs::gate_invoked_through_a_symlink_finds_its_scope_script
+  path: tests/it/kani_gate.rs
+  role: examined
+  excerpt: '#[trace("TC-045")]
+
+    #[test]
+
+    fn gate_invoked_through_a_symlink_finds_its_scope_script() {'
+- id: tests/it/kani_gate.rs::gate_waits_for_the_existing_lock_holder
+  path: tests/it/kani_gate.rs
+  role: examined
+  excerpt: '"flock -x {} /usr/bin/bash {}/scripts/kani_gate.sh"'
+- id: Makefile::kani-gate
+  path: Makefile
+  role: examined
+  excerpt: $(BASH) scripts/kani_gate.sh $(KANI_LOCK) -- $(KANI_TEST)
+- id: scripts/kani_scope.sh
+  path: scripts/kani_scope.sh
+  role: context_only
+  excerpt: base=$(git merge-base HEAD origin/main)
+- id: FR-028-AC-2
+  path: spec/kani/functional/FR-028-bounded-proof-ceilings.md
+  role: examined
+  excerpt: A backend Kani run that exceeds its wall-clock ceiling is stopped and classified KaniRunOutcome::Inconclusive
+    with the timed-out reason naming the ceiling, never verified or falsified. FR-029 maps this source outcome to
+    final QSL Incomplete(TimedOut); the backend classification is not the terminal category.
+- id: FR-028-AC-4
+  path: spec/kani/functional/FR-028-bounded-proof-ceilings.md
+  role: examined
+  excerpt: Every execution evidence records the bounds of each symbolic argument and the two ceilings the run was
+    held to.
+- id: FR-041-AC-5
+  path: spec/kani/functional/FR-041-claimed-module-proof-gate.md
+  role: examined
+  excerpt: A stubbed executor, predetermined outcome or build-only run produces no qualifying module evidence and
+    cannot pass the gate.
+- id: NFR-006-AC-5
+  path: spec/kani/non-functional/NFR-006-real-kani-lane-gating.md
+  role: examined
+  excerpt: '`make kani-gate` starts the lane''s `cargo test` once with `--test-threads=1`, holds the lock named
+    by `KANI_LOCK` while it runs, and does not start it while another process holds that lock.'
+- id: NFR-006-AC-8
+  path: spec/kani/non-functional/NFR-006-real-kani-lane-gating.md
+  role: examined
+  excerpt: When the tree state or the head commit read after the run differs from the one read before the build,
+    `make kani-gate` prints `result=failed` and exits non-zero.
+- id: NFR-006-AC-14
+  path: spec/kani/non-functional/NFR-006-real-kani-lane-gating.md
+  role: examined
+  excerpt: Given Kani-reaching paths changed on `origin/main` since the candidate's merge base and main absent from
+    the candidate, `make kani-gate` refuses before running tests and names those paths. Given only non-touching
+    main changes, it may run. The merger updates a stale candidate from current main and the full gate passes on
+    the updated clean candidate before merge.
+- id: NFR-006-AC-19
+  path: spec/kani/non-functional/NFR-006-real-kani-lane-gating.md
+  role: examined
+  excerpt: On a clean current candidate, `make kani-gate` runs FR-041's module census and real mutation controls
+    in its one required lane, and a failure of any claim or shared-helper control makes the gate exit non-zero.
+    An optional mutation target or saved earlier result cannot substitute.
+bindings:
+- test_id: gate_invoked_through_a_symlink_finds_its_scope_script
+  ac_id: TC-045
+  trace: correct
+- test_id: identity_ceilings_govern_execution_and_successful_evidence_records_observed_memory
+  ac_id: FR-028-AC-21
+  trace: correct
+- test_id: available_observer_does_not_invent_a_peak_before_observing_a_tree
+  ac_id: FR-028-AC-21
+  trace: correct
+```
+
+
+## Formal publication and read-back
+
+IR-808 already carries has-review. GitHub PR title/body already references IR-808;
+no findings were posted to GitHub. Optional spec/plan review methods were not applicable
+(no changed spec or plan), and optional deep semantic gap review was not requested.
+The required code-review includes its Rust lane; the genuine gap-analysis is separate.
+
+The first attempted full gap comment was rejected before creation by Linear's confirmed
+100000-character body limit. On dispatching lead instruction, the same logical method
+record was split into eight parts with identical SR/method/run markers and explicit part
+numbers. Every part was read back; YAML parsed, content matched after trailing-newline
+normalization, and the union exactly matched all 327 finding IDs and 817 scope units.
+The single dispositions comment read back with 327/327 deferred outcomes and nonempty
+reasons. Prior methods' round-4 dispositions lists are empty because their findings already
+had terminal outcomes before this round. No prior review text or comments were edited.
+
+Comment IDs:
+- code-dispositions-comment.md: b1c43bc8-e8e9-4543-b140-4a40d5d17331 — read-back passed.
+- acceptance-dispositions-comment.md: 54926bb5-52ab-4929-8217-cd503eed468f — read-back passed.
+- gap-review-part-01.md: 02205a17-263c-4b64-8c20-649cea3cfb25 — read-back passed.
+- gap-review-part-02.md: f6f5c645-7b70-4e06-85aa-1def489466f5 — read-back passed.
+- gap-review-part-03.md: 425834e3-036d-40af-81a5-7addd006b541 — read-back passed.
+- gap-review-part-04.md: 04b40552-3850-490c-b8fe-f0e5e3bb33cc — read-back passed.
+- gap-review-part-05.md: 2bd5a56b-d13d-4d0d-8556-2f1d067dc734 — read-back passed.
+- gap-review-part-06.md: 755bac97-9648-497e-8d81-99945ca8590c — read-back passed.
+- gap-review-part-07.md: 8cccc445-e443-4d5d-860a-0729a06ede79 — read-back passed.
+- gap-review-part-08.md: ad333a01-92b3-4ad3-902e-3e5149e0b068 — read-back passed.
+- gap-dispositions-comment.md: 85139f49-30e0-4e4a-a7ee-f4cdd6891d9e — read-back passed.

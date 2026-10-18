@@ -110,12 +110,17 @@ impl MemoryObserver {
                 "owned namespace init identity changed",
             ));
         }
-        self.resident_bytes(pid, start)?.ok_or_else(|| {
+        let bound = self.resident_bytes(pid, start)?.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "owned init RSS identity changed",
             )
         })?;
+        // Binding reads the init's resident memory under the pinned identity: a real
+        // observation of the owned tree. Record it, so a backend that finishes before the
+        // wait loop's first sample still reports the peak that was observed, never none.
+        self.observation.peak_resident_bytes =
+            Some(self.observation.peak_resident_bytes.unwrap_or(0).max(bound));
         self.known.insert(pid, start);
         Ok(())
     }
