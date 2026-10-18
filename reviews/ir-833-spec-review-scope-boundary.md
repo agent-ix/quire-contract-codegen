@@ -1,0 +1,62 @@
+---
+id: SR-12088
+title: "IR-833 scope-boundary review: the QSL value-authority boundary and FR-014-AC-47"
+type: SpecReview
+analysis: scope-boundary
+scope: "agent-ix/quire-contract-codegen@843588258cc236867caedfc34ef5683ea7b77076 (PR #416); spec/oracle/functional/FR-014-exact-scalar-oracles.md, spec/oracle/functional/FR-018-composite-equality-oracles.md, spec/oracle/functional/FR-021-function-application-oracles.md, spec/oracle/matrix/TC-024-exact-scalar-oracles.md, spec/oracle/matrix/TC-029-composite-equality-oracles.md, spec/oracle/matrix/tests.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-contract-codegen/FR-014
+    type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-018
+    type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-021
+    type: references
+---
+
+## Summary
+
+Ticket: IR-833. Checked that every boundary sentence the PR adds is consistent with FR-014-AC-47 and names the right owner (IR-842 for generated oracle against QSL, IR-669 for RT against QSL), and that the boundary is enforced by an Inspection criterion whose scope covers the artifacts it speaks for. Owner attribution is consistent throughout: IR-842 is named for every generated-oracle leg and IR-669 only for the RT composition (FR-014 Dependencies, tests.md FR-018-AC-2 row). The new FR-021-AC-2 and AC-18 mirror FR-014-AC-47's form (test name, trace tag, output line, doc comment, TC step, matrix row) for the function-application corpus.
+
+## Reviewed scope
+
+| Unit | Role | Excerpt |
+| --- | --- | --- |
+| FR-014-AC-47 | examined | No test name, trace tag, test output line or doc comment of the TC-187 agreement cases, no TC-024 step and no oracle-matrix row for a TC-187 vector names agreement with the QSL value authority. \| Inspection |
+| FR-014-AC-37 | examined | This criterion claims no agreement with the QSL value authority: that boundary is owned by quire-integration IR-842 (generated-oracle against QSL agreement), and FR-014-AC-47 keeps CG's artifacts from claiming it. |
+| FR-014 Dependencies | examined | quire-integration IR-669 owns a Contract Runtime against QSL composition ...; generated-oracle against QSL agreement is owned by quire-integration IR-842, not by CG. |
+| FR-018 Purpose :44-50 | examined | Agreement with the quire-spec-language value authority is outside CG's boundary and not claimed by CG (FR-014-AC-47) |
+| FR-018-AC-2 | examined | This criterion claims no agreement with the QSL value authority: that boundary is owned by quire-integration IR-842 (FR-014-AC-47). |
+| TC-029 Description, step 4 | examined | No comparison with the QSL value authority runs here (FR-014-AC-47). |
+| FR-021-AC-2 | examined | That agreement is not claimed by CG and is owned by quire-integration IR-842 (FR-014-AC-47). |
+| FR-021-AC-4 | examined | CG claims no agreement with the QSL value authority, owned by quire-integration IR-842 (FR-014-AC-47). |
+| FR-021-AC-18 | examined | That agreement is not claimed by CG and is owned by quire-integration IR-842 (FR-014-AC-47). |
+| TC-024 :221-226, step 1 | examined | No comparison with the QSL value authority runs here: it is outside CG's boundary (CG may call the `qsl-replay` facade only, QSL arch-lint T12-A), owned by quire-integration IR-842, and FR-014-AC-47 keeps CG's artifacts from claiming it. |
+| tests.md FR-018-AC-2 row | examined | generated-oracle against QSL agreement is owned by quire-integration IR-842 and Contract Runtime against QSL composition by IR-669 |
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | Every new boundary sentence cites FR-014-AC-47 as what keeps CG's artifacts from claiming QSL agreement, but FR-014-AC-47's scope is the TC-187 agreement cases, TC-024 steps and matrix rows for a TC-187 vector only. It does not cover FR-014-AC-37's Boolean and integer `eq`/`ne` differential corpus, TC-024's integer/rational/ordering paragraph, or FR-018-AC-2's composite-equality corpus, TC-029 steps and FR-018 rows. For those, the boundary is a sentence that no Inspection enforces. Keeping AC-37 and FR-018-AC-2 as Test with a boundary sentence rather than new ids is sound only if FR-014-AC-47 is widened to every oracle corpus, TC step and oracle-matrix row (FR-014, FR-018, FR-021), or an FR-018 Inspection id is added in AC-47's form, as FR-021-AC-2/AC-18 did for FR-021. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:486, spec/oracle/functional/FR-014-exact-scalar-oracles.md:477, spec/oracle/functional/FR-018-composite-equality-oracles.md:376, spec/oracle/matrix/TC-029-composite-equality-oracles.md:19-20 |
+| FND-002 | low | FR-021-AC-18 (with AC-2, and inherited from FR-014-AC-47) forbids any artifact that "names agreement" with the QSL authority, while the boundary sentences, matrix rows and test doc comments this ruling relies on all name that agreement in order to disclaim it, the FR-021-AC-18 matrix row included. The intended reading (no artifact claims or evidences the agreement) is not what the text says. Saying "claims or presents as evidence agreement" would make the inspection decidable; since the ruling asks for AC-47's form, fixing AC-47 at the same time keeps them mirrored. | spec/oracle/functional/FR-021-function-application-oracles.md:265, spec/oracle/matrix/tests.md:46, spec/oracle/functional/FR-014-exact-scalar-oracles.md:486 |
+
+## Verdict
+
+CHANGES REQUESTED (one medium, one low). The boundary is drawn in the right place and owners are attributed correctly: CG keeps its direct-runtime agreement, IR-842 owns the generated oracle against QSL and IR-669 the RT composition. T12-A is cited as the reason. No line in the diff moves a QSL-owned application API line (IR-845) or contradicts it.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The widened FR-014-AC-47 covers the TC-187 cases and the FR-014-AC-37, FR-018-AC-2 and FR-021 corpora, but not FR-014-AC-6's other agreement vectors (QSpec TC-185, TC-186, TC-192, TC-193). TC-024's integer arithmetic, rational arithmetic and ordering paragraph states the QSL boundary for exactly those oracles and cites AC-47, so that boundary is still unenforced for their test corpus. Saying "every oracle-agreement corpus of FR-014, FR-018 and FR-021" would close it. | spec/oracle/functional/FR-014-exact-scalar-oracles.md:505, spec/oracle/matrix/TC-024-exact-scalar-oracles.md:227-230 |
+| FND-004 | low | `tests/exact_scalar_support/agreement.rs:12-14` (unchanged) says generated-oracle against QSL comparison for the quantity vectors "is owned by the quire-integration lane (Contract Runtime FR-007-AC-5, TC-022)", which is IR-669's RT composition. The FR-014 Dependencies note this PR rewrites now assigns that comparison to IR-842. Comment-only follow-up: name IR-842. | tests/exact_scalar_support/agreement.rs:12-14, spec/oracle/functional/FR-014-exact-scalar-oracles.md:516 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1, head ee9da7736b18: FR-014-AC-47 now covers the TC-187 cases and the FR-014-AC-37, FR-018-AC-2 and FR-021 corpora, the TC-024, TC-029 and TC-031 steps, and their matrix rows; the AC-47 matrix row matches. The residual FR-014-AC-6 non-TC-187 gap is new FND-003. The AC-47 change applies to #415's final FR-014 text (93d7747) without conflict: AC-6 already claims no QSL agreement and AC-48 to AC-50 compare only with direct convert_quantity. |
+| FND-002 | fixed | round 1, head ee9da7736b18: FR-014-AC-47 and FR-021-AC-18 now read "claims, or presents as evidence" and "text that states this boundary is permitted"; the mutation row for AC-18 matches. |
+| FND-003 | fixed | round 2, head a8b5a087593: FR-014-AC-47 now covers every oracle-agreement corpus of FR-014, FR-018 and FR-021, naming the TC-185, TC-186, TC-187, TC-192 and TC-193 vectors, the FR-014-AC-37 corpus, and the composite-equality and function-application corpora; the AC-47 matrix row matches. |
+| FND-004 | fixed | round 2, head a8b5a087593: tests/exact_scalar_support/agreement.rs:14 now reads "owned by quire-integration IR-842."; one `//!` comment line changed, nothing else. |

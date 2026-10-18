@@ -11,7 +11,7 @@
 //!
 //! This crate checks generated==RT only and claims no agreement with the QSL
 //! value authority (FR-014-AC-47); that comparison for the quantity vectors is
-//! owned by the quire-integration lane (Contract Runtime FR-007-AC-5, TC-022).
+//! owned by quire-integration IR-842.
 //! QSL arch-lint T12-A confines this
 //! crate to `qsl_replay`'s public API, and none of this file's vectors are
 //! shaped as compiled source plus a witness -- they call value-level

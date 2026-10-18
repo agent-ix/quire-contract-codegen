@@ -1,6 +1,6 @@
 ---
 id: TC-029
-title: "Verify composite equality oracle generation and three-way agreement"
+title: "Verify composite equality oracle generation and agreement with direct runtime execution"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-contract-codegen/FR-018
@@ -8,7 +8,7 @@ relationships:
   - target: ix://agent-ix/quire-contract-runtime/TC-026
     type: references
 ---
-# TC-029: Verify composite equality oracle generation and three-way agreement
+# TC-029: Verify composite equality oracle generation and agreement with direct runtime execution
 
 ## Description
 
@@ -16,7 +16,8 @@ Verify that composite equality oracles generated from an admitted
 CheckedPackage V2 cover every admitted composite and collection shape, refuse
 every non-generated item with its own typed reason, are byte-deterministic, and
 agree — outcome, admitted charges and consumed counters — with direct runtime
-execution and with the quire-spec-language value authority.
+execution. Agreement with the QSL value authority is outside CG's boundary and
+not claimed by CG (FR-014-AC-47); it is owned by quire-integration IR-842.
 
 The discriminating evidence is the agreement of step 4. No generated output is
 committed: step 4 generates the corpus crate at test time and executes it
@@ -61,13 +62,13 @@ descriptor fails step 4. Determinism is checked by regeneration in step 2.
    with the `exact` feature.
 4. Generate the corpus crate at test time, compile it with the agreement cases
    as its integration test, and execute it on the corpus vectors. For each vector compare the `Outcome<bool>`, the admitted
-   charge sequence and the consumed counters against (a) a direct call to
+   charge sequence and the consumed counters against a direct call to
    `TypeEnvironment::check_equality` and `CheckedEquality::evaluate` on an
    environment, operands **and descriptor** constructed in the test from the
-   request, not by or from the generator, and (b) the same call through
-   `quire_spec_language::value`. The descriptor
+   request, not by or from the generator. No comparison with the QSL value
+   authority runs here (FR-014-AC-47). The descriptor
    is the thing an emitter mutation changes, so reading it back out of the
-   generated crate would make leg (a) follow the mutation and the comparison
+   generated crate would make the comparison follow the mutation and be
    vacuous; it is held by the test.
 5. Re-execute every vector with a denial injected at each of
    `equality.plan-form`, `equality.plan`, `equality.pair`,
