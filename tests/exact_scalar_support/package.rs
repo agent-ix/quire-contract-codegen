@@ -933,11 +933,8 @@ impl PackageBuilder {
                 self.add_dependency(&anchor, key);
             }
         }
-        if let Some(declaration) = body["operation"]["member"]["declaration"]["digest"].as_str() {
-            dependencies.push(declaration.to_owned());
-            dependencies.sort();
-            dependencies.dedup();
-        }
+        dependencies.sort();
+        dependencies.dedup();
         self.application_code_with(code, tag, form, semantic_type, body, &dependencies);
         self
     }
