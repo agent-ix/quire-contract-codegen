@@ -5,8 +5,8 @@
 //! emitted source with `syn` and checks every function attributed `#[kani::proof]` or
 //! `#[kani::proof_for_contract]`. The scan reads the non-test string literals of `src/` and fails
 //! when a file outside the driven set spells either proof attribute, so a new emitter cannot be
-//! added without being driven here. The emitters have no single seam today (AD-004 step 4b's
-//! `HarnessSpec` does not exist), so this is an inspection of emitted text.
+//! added without being driven here. The scalar family uses the private HarnessSpec renderer; the other families
+//! retain their own emitters, so this inspection still drives every emitted source.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,7 +24,7 @@ const FAMILIES: [(&str, &str); 12] = [
     ("precondition", "kani/generate/precondition.rs"),
     ("v1 contract postcondition", "kani/generate/contract.rs"),
     ("v1 contract invariant", "kani/generate/contract.rs"),
-    ("scalar", "kani/generate/scalar.rs"),
+    ("scalar", "kani/generate/render.rs"),
     ("state clause", "kani/generate/frame.rs"),
     ("frame effect", "kani/generate/frame.rs"),
     ("v1 bundle", "kani/generate/v1_bundle.rs"),
@@ -158,6 +158,7 @@ fn emitted() -> Vec<(&'static str, String)> {
     "FR-015-AC-54",
     "FR-015-AC-55",
     "FR-015-AC-58",
+    "FR-015-AC-116",
     "TC-025"
 )]
 #[test]
@@ -198,7 +199,7 @@ const PROOF_TEMPLATES: [(&str, usize); 7] = [
     ("kani/generate/collection.rs", 1),
     ("kani/generate/precondition.rs", 1),
     ("kani/generate/contract.rs", 1),
-    ("kani/generate/scalar.rs", 1),
+    ("kani/generate/render.rs", 1),
     ("kani/generate/frame.rs", 2),
     ("kani/generate/v1_bundle.rs", 1),
     ("kani/generate/corpus/bounded_kani_corpus.rs", 1),

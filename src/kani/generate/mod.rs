@@ -30,3 +30,14 @@ mod role_parity_tests;
 pub(crate) mod scalar;
 // The V1 bundle generator; interim, see the file header.
 pub(crate) mod v1_bundle;
+
+// Validated private descriptions and their pure renderer.
+mod render;
+mod spec;
+
+// The private libtest fixture returns the existing sealed output, never a HarnessSpec.
+#[cfg(test)]
+pub(crate) fn unsatisfiable_harness_for_test() -> crate::kani::identity::KaniScalarObligationHarness
+{
+    render::tests::unsatisfiable_harness()
+}
