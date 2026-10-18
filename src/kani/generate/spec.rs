@@ -132,8 +132,12 @@ impl<'ast> Visit<'ast> for ExpressionCheck {
             Err(_) => self.forbidden = true,
         }
     }
-    fn visit_pat_macro(&mut self, _: &'ast syn::PatMacro) {
-        self.forbidden = true;
+    fn visit_pat(&mut self, pattern: &'ast Pat) {
+        if matches!(pattern, Pat::Macro(_)) {
+            self.forbidden = true;
+            return;
+        }
+        visit::visit_pat(self, pattern);
     }
 }
 
