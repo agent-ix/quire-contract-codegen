@@ -526,6 +526,7 @@ fn check_output_size(body: &ObservationBody, limit: usize) -> Result<(), Coverag
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_model::EXECUTABLE_PROJECTION_FORMAT;
     use serde_json::{json, Value};
 
@@ -626,9 +627,10 @@ mod tests {
             .collect()
     }
 
-    /// Trace: NFR-005-AC-4, NFR-005-M-2, TC-042. With a coverage export supplied, a map region with no probe
+    /// With a coverage export supplied, a map region with no probe
     /// is the `MapMismatch` diagnostic and no classification; with no export it is
     /// `UnavailableObservation`.
+    #[trace("NFR-005-AC-4", "NFR-005-M-2", "TC-042")]
     #[test]
     fn tc_042_ac4_a_region_without_a_probe_is_a_map_mismatch_not_a_panic() {
         let package = implication_package();
@@ -667,8 +669,9 @@ mod tests {
         }
     }
 
-    /// Trace: NFR-005-AC-7, NFR-005-M-2, TC-042. A map with fewer than two regions is the census `MapMismatch`
+    /// A map with fewer than two regions is the census `MapMismatch`
     /// with nothing observed, with or without a coverage export; two probed regions are not.
+    #[trace("NFR-005-AC-7", "NFR-005-M-2", "TC-042")]
     #[test]
     fn tc_042_ac7_a_map_shorter_than_two_regions_is_a_census_mismatch_not_a_panic() {
         let package = implication_package();
@@ -706,7 +709,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-006, FR-004-AC-5
+    #[trace("TC-006", "FR-004-AC-5")]
     #[test]
     fn output_bound_counts_exact_bytes_before_allocating_output() {
         let mut writer = CountWriter { bytes: 0, limit: 2 };

@@ -170,12 +170,12 @@ pub(crate) mod failed_records {
 mod tests {
     use super::failed_records::{failed_record, unrecognised_kinds};
     use super::*;
+    use ix_trace_rs::trace;
 
     /// The classifier gives `work` its own outcome, `bytes` its own, and every other kind the
     /// unrecognised outcome under its snake_case name, with the record's `limit` and `consumed`
     /// unchanged; a record that did not fail is none of them.
-    ///
-    /// Trace: FR-014-AC-41, TC-024.
+    #[trace("FR-014-AC-41", "TC-024")]
     #[test]
     fn tc_024_the_classifier_reads_each_limit_kind_once() {
         assert_eq!(

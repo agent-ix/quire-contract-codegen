@@ -629,6 +629,7 @@ mod tests {
         kani::identity::{KaniScalarObligationHarness, ScalarObligationIdentity},
         routed::capability::{BackendKind, Candidate},
     };
+    use ix_trace_rs::trace;
 
     fn node_id() -> quire_contract_model::CheckedNodeId {
         serde_json::from_value(serde_json::json!({
@@ -664,7 +665,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-022-AC-4, FR-022-AC-18, TC-046.
+    #[trace("FR-022-AC-4", "FR-022-AC-18", "TC-046")]
     #[test]
     fn mismatched_private_kinds_refuse_before_generation() {
         let mut kani = item(1);
@@ -695,7 +696,7 @@ mod tests {
         );
     }
 
-    /// Trace: NFR-005-AC-5, NFR-005-M-2, TC-042.
+    #[trace("NFR-005-AC-5", "NFR-005-M-2", "TC-042")]
     #[test]
     fn tc_042_ac5_a_record_count_other_than_the_item_count_is_a_typed_refusal() {
         let items = [item(10), item(11), item(12)];
@@ -739,7 +740,7 @@ mod tests {
         }
     }
 
-    /// Trace: NFR-005-AC-6, NFR-005-M-2, TC-042.
+    #[trace("NFR-005-AC-6", "NFR-005-M-2", "TC-042")]
     #[test]
     fn tc_042_ac6_a_duplicate_position_outside_the_group_is_a_typed_refusal() {
         let items = [item(10), item(11), item(12)];
@@ -770,9 +771,10 @@ mod tests {
         assert_eq!(other, record(0));
     }
 
-    /// Trace: NFR-005-AC-6, TC-042. The refusal reaches the caller of the Kani arm's
+    /// The refusal reaches the caller of the Kani arm's
     /// record routing: one record naming a position outside the group refuses the whole call and
     /// yields no output, while in-range duplicates are rewritten to request indices.
+    #[trace("NFR-005-AC-6", "TC-042")]
     #[test]
     fn tc_042_ac6_an_out_of_range_duplicate_position_refuses_the_whole_routing() {
         let items = [item(10), item(11), item(12)];
@@ -841,7 +843,7 @@ mod tests {
         )
     }
 
-    /// Trace: TC-033, FR-022-AC-16.
+    #[trace("TC-033", "FR-022-AC-16")]
     #[test]
     fn tc_033_two_harnesses_sharing_a_symbol_are_a_typed_error_not_a_silent_overwrite() {
         let refused = index_harnesses(vec![

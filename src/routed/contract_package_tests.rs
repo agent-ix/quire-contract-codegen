@@ -18,6 +18,7 @@ mod tests {
         generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
         RoutedGenerationItem,
     };
+    use ix_trace_rs::trace;
     use qsl_replay::{
         compile_package, DependencyInput, ReplayLimits, SourceIdentity, StageLimits,
         SuppliedLibrary,
@@ -481,7 +482,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-039-AC-1, FR-039-AC-2, TC-053.
+    #[trace("FR-039-AC-1", "FR-039-AC-2", "TC-053")]
     #[test]
     fn admitted_ordering_variants_change_routed_oracle_bytes_and_keep_refused_sibling() {
         let mut emitted = Vec::new();
@@ -613,7 +614,7 @@ mod tests {
     }
 
     /// A scalar caller must select its own checked application occurrence.
-    /// Trace: FR-039-AC-2, FR-049-AC-1, TC-053.
+    #[trace("FR-039-AC-2", "FR-049-AC-1", "TC-053")]
     #[test]
     fn scalar_own_result_without_conversion_differs_from_not_applicable() {
         use crate::oracle::claim::ClaimDisposition;
@@ -670,7 +671,18 @@ mod tests {
     }
 
     /// RR-16 supplies two result contexts for one semantic add key.
-    /// Trace: FR-039-AC-2, FR-049-AC-1, FR-049-AC-5, FR-019-AC-43, FR-019-AC-44, FR-022-AC-23, FR-022-AC-24, TC-030, TC-033, TC-053.
+    #[trace(
+        "FR-039-AC-2",
+        "FR-049-AC-1",
+        "FR-049-AC-5",
+        "FR-019-AC-43",
+        "FR-019-AC-44",
+        "FR-022-AC-23",
+        "FR-022-AC-24",
+        "TC-030",
+        "TC-033",
+        "TC-053"
+    )]
     #[test]
     fn duplicate_expression_uses_each_selected_conversion_context() {
         use crate::oracle::claim::ClaimDisposition;
@@ -1138,7 +1150,7 @@ mod tests {
         )));
     }
 
-    /// Trace: FR-039-AC-1, TC-053.
+    #[trace("FR-039-AC-1", "TC-053")]
     #[test]
     fn admitted_bounded_integer_operation_generates_from_reached_bounds() {
         let source = SOURCE.replace("Boolean pure { a = a }", "Int[0, 18] pure { a + a }");
@@ -1217,7 +1229,7 @@ mod tests {
             .contains("rt::IntegerArithmetic::Add"));
     }
 
-    /// Trace: FR-039-AC-6, TC-053.
+    #[trace("FR-039-AC-6", "TC-053")]
     #[test]
     fn admitted_failed_accounting_refuses_without_an_oracle() {
         let checked = admitted_source(SOURCE);
@@ -1274,7 +1286,7 @@ mod tests {
             .contains("pub fn oracle_"));
     }
 
-    /// Trace: FR-039-AC-7, FR-039-AC-8, TC-053.
+    #[trace("FR-039-AC-7", "FR-039-AC-8", "TC-053")]
     #[test]
     fn genuine_qsl_function_claim_uses_admitted_package_identity_and_reached_keys() {
         use crate::oracle::function::{
@@ -1393,7 +1405,7 @@ mod tests {
             .contains("pub fn oracle_"));
     }
 
-    /// Trace: FR-039-AC-2, FR-039-AC-7, TC-053.
+    #[trace("FR-039-AC-2", "FR-039-AC-7", "TC-053")]
     #[test]
     fn one_routed_profile_admits_function_and_equality_beside_scalar_bound_refusal() {
         use crate::oracle::claim::ClaimDisposition;
@@ -1761,7 +1773,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-039-AC-3, TC-053.
+    #[trace("FR-039-AC-3", "TC-053")]
     #[test]
     fn selected_function_targets_keep_reader_identity_and_order() {
         let SelectedFixture {
@@ -1862,7 +1874,7 @@ mod tests {
         assert_eq!(extra_generated, generated);
     }
 
-    /// Trace: FR-039-AC-3, TC-053.
+    #[trace("FR-039-AC-3", "TC-053")]
     #[test]
     fn checked_reader_refuses_forged_same_key_local_function() {
         let SelectedFixture {
