@@ -140,3 +140,87 @@ Notes on the leader's questions (no new finding):
   - Sweep: verified empirically. A planted fake-0-4194000 directory (a dead pid) was removed, a directory named after a live `sleep` pid was kept, and an unparsable name was ignored.
   - Pid reuse can only keep a dead run's directory longer: it is skipped while an unrelated process holds that pid. It cannot delete a live run's directory, because a live pid has `/proc/<pid>`.
   - The one exposure is concurrent runs in different pid namespaces that share one target directory, where /proc does not show the other run's pids. That is acceptable, since the crate is already Linux-only through rustix pidfd.
+
+## Follow-up review after maintenance refresh
+
+The frozen maintenance candidate was reviewed against its assigned parent. All 19 own paths
+were read: 17 Rust test/helper files and these two historical SR artifacts. No production-code,
+normative-specification, dependency, manifest/lock, Makefile or CI changes are in this delta.
+`src/kani/mod.rs` retains `#[cfg(test)]` on `test_support`; a `src/` location alone does not
+make the helper production code. No applicable AssuranceProfile was found under `spec/`.
+Code review includes the Rust lane. A production Quoin gap audit and spec review methods do
+not apply; SR-11991 remains a manual ticket-acceptance check, not a genuine whole-repository
+gap analysis. No additional method or SR id was allocated.
+
+Independent inspection confirmed the original fixes still hold: distinct generated Kani
+prefixes (including simultaneously live contract/conditional crates); the eight local
+manifests retain `[workspace]`; the sibling advisory lock remains held until after directory
+removal; same-thread reacquisition is rejected before blocking; waiter diagnostics and the
+six helper behavior tests remain. The removal assertion fails if Drop is deleted, the
+live-lock probe detects an omitted lock, and waiter completion/cleared-content assertions
+exercise release and reclaim. The waiter's 300ms absence check alone is not treated as proof
+that the waiter reached lock acquisition; it is corroborated by the independent live-lock
+probe and final completion. The previously recorded cross-thread-move/reacquire exposure
+has no current caller and remains the historical observation, not a newly introduced defect.
+All prefixes are trusted test constants or local finite fixture labels. No new untrusted path
+surface, unsafe block, error boundary, production panic, asynchronous lock or suppression
+was introduced. The existing nested Cargo sources, commands, lock seeding and assertions
+are preserved apart from the documented path/helper and workspace changes.
+
+The ten rebase joins retain main's trace imports/attributes and inherited helper changes.
+A direct per-file parent/head comparison found all 272 `#[trace]` payloads identical across
+the 17 Rust paths. The six new helper tests verify test infrastructure against this ticket;
+there is no authored FR for that hygiene mechanism and they do not claim unrelated AC tags.
+No existing AC binding was removed or redirected. `quire matrix --strict --format json`
+executed: exit 1, 840 criteria (454 tagged, 326 untagged, 46 method-without-symbol,
+14 tagged-by-ignored-test). This is a trace check, not a whole-repository semantic audit.
+The own diff changes no spec text or trace payload, so its existing coverage deficits are
+not newly introduced by this maintenance. No whole-repository PASS is asserted.
+
+Focused validation receipts were read, not rerun by this reviewer: fmt check, all-target
+Clippy with denied warnings and all-target compilation succeeded; 97 selected library tests
+plus two one-test child probes passed; 312 affected integration tests passed with 14 ignored
+in 141.79s. The historical real-Kani receipts remain historical evidence; no ignored proof
+or Cargo invocation ran in this review. Exact-head aggregate gating remains the leader's
+next obligation after final restack and custody.
+
+No new defect was found. Original findings, original verdict text and all disposition rows
+above are preserved verbatim; latest outcomes remain terminal. This follow-up appends no
+finding or disposition table rows and does not reopen terminal findings.
+
+### Scope examined in this follow-up
+
+| Unit | Role | Excerpt |
+| --- | --- | --- |
+| `src/kani/test_support.rs` | examined | `pub(crate) fn discover_scratch(name: &str) -> PathBuf {` |
+| `tests/it/bound_census.rs` | examined | `let temporary = TemporaryDirectory::new("quire-generated-bound-census");` |
+| `tests/it/bound_coverage.rs` | examined | `use crate::scratch_crate::TemporaryDirectory;` |
+| `tests/it/bound_generation.rs` | examined | `use crate::scratch_crate::TemporaryDirectory;` |
+| `tests/it/bound_populations.rs` | examined | `let temporary = TemporaryDirectory::new("quire-generated-bound-populations");` |
+| `tests/it/bound_strategy_generation.rs` | examined | `let temporary = TemporaryDirectory::new("quire-bound-integer-oracles");` |
+| `tests/it/bounded_kani_corpus.rs` | examined | `let directory = TemporaryDirectory::new("quire-codegen-bounded-kani");` |
+| `tests/it/capability_settlement.rs` | examined | `let guard = crate::scratch_crate::TemporaryDirectory::new("quire-codegen-process-settlement");` |
+| `tests/it/composite_equality_generation.rs` | examined | `let directory = TemporaryDirectory::new("quire-composite-equality-oracles");` |
+| `tests/it/exact_function_generation.rs` | examined | `let scratch = crate::scratch_crate::TemporaryDirectory::new("exact-function-schedule");` |
+| `tests/it/exact_scalar_generation.rs` | examined | `let directory = TemporaryDirectory::new("quire-exact-scalar-oracles");` |
+| `tests/it/harness_generation.rs` | examined | `let temporary = TemporaryDirectory::new("quire-generated-harness");` |
+| `tests/it/kani_generation.rs` | examined | `) -> TemporaryDirectory {` |
+| `tests/it/oracle_arithmetic.rs` | examined | `let directory = TemporaryDirectory::new(&format!("quire-arithmetic-{label}"));` |
+| `tests/it/oracle_generation.rs` | examined | `let directory = TemporaryDirectory::new("quire-native-vacuity");` |
+| `tests/it/scratch_crate.rs` | examined | `pub(crate) struct TemporaryDirectory {     pub(crate) path: PathBuf,     _lock: fs::File, }` |
+| `tests/it/strategy_generation.rs` | examined | `let temporary = TemporaryDirectory::new("quire-generated-strategies");` |
+
+### Current manual acceptance and deferred scope
+
+The claimed delivery is the shared bounded, locked helper and its converted callers, with
+no change to what their generated-code tests prove. Stable target placement, reclaim before
+use, lifetime locking and Drop cleanup implement the bound_populations ticket goal. Unit
+`discover_scratch` places process/call names under the executable's target ancestor and its
+once-per-process sweep skips live pids; pid reuse can delay removal, not erase a live owner.
+The intentionally partial migration remains explicit in the PR title/body. IR-834 was read
+live and remains Backlog. Its integration follow-up covers kani_obligations (two sites),
+kani_witness_join, kani_batching and kani_generation_claims; its recorded extension covers
+unit scratch in oracle/equality, oracle/function/schedule, publication/publish and
+kani/run/scalar. Both SR-11991 deferrals remain deferred to IR-834. This review does not
+close that ticket or claim those sites were migrated. The leader must preserve its state
+if the PR's separate closes attachment triggers automation.
