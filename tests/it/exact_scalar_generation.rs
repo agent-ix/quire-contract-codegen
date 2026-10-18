@@ -1188,6 +1188,7 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
             | ExactScalarOperation::EnumComparison { .. }
             | ExactScalarOperation::QuantityArithmetic { .. }
             | ExactScalarOperation::QuantityComparison { .. }
+            | ExactScalarOperation::QuantityConversion
     )
 }
 

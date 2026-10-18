@@ -2152,7 +2152,13 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
 }
 
 /// Exact quantity conversions generate an oracle and settle Kani as OperationNotRendered.
-#[trace("FR-014-AC-2", "FR-022-AC-11", "FR-015-AC-15", "TC-033")]
+#[trace(
+    "FR-014-AC-2",
+    "FR-014-AC-51",
+    "FR-022-AC-11",
+    "FR-015-AC-15",
+    "TC-033"
+)]
 #[test]
 fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
     let derived = derived();

@@ -1213,7 +1213,7 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
 }
 
 /// A selected exact quantity conversion settles as OperationNotRendered for Kani.
-#[trace("FR-014-AC-2", "FR-019-AC-44", "TC-024")]
+#[trace("FR-014-AC-2", "FR-014-AC-51", "FR-019-AC-44", "TC-024")]
 #[test]
 fn a_selected_quantity_conversion_settles_as_operation_not_rendered() {
     let (package, _, ids) = crate::kani_obligations::routed_scalar_package();
