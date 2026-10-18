@@ -5450,7 +5450,7 @@ mod tests {
     fn quantity_conversion_rejects_scalar_targets_after_mode() {
         for form in ["decimal", "integer", "compound_unit"] {
             let target = v2_node('b', "scalar_type", form, 'b', serde_json::json!({}));
-            for mode in ["exact", "nearest_even", "toward_zero"] {
+            for mode in ["exact", "nearest-even", "toward-zero"] {
                 let (id, node) = application_node(serde_json::json!({
                     "term": "application", "operation": {
                         "identity": QUANTITY_CONVERT_IDENTITY,
