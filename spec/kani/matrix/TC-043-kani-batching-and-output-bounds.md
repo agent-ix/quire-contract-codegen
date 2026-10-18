@@ -168,8 +168,10 @@ Step 11 (FR-017-AC-36) is covered by the tests of `batch_tests::no_verdict_diagn
 `tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics` in
 `tests/it/kani_obligations.rs`.
 
-Step 12 (FR-017-AC-39) is covered by `tc_043_batch_members_keep_their_cause_beside_the_timeout_rule`
-and `tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
+Step 12 (FR-017-AC-39) is covered by
+`bounded_five_member_batch_keeps_classifications_and_agrees_on_timeouts` in
+`tests/it/kani_terminal_private.rs`, which reuses `batch_failure_reports`, and by
+`tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged` in
 `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`.
 
 ## Status

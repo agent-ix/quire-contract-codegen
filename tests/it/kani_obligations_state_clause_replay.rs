@@ -686,7 +686,11 @@ fn tc_040_out_of_range_debit_post_state_is_exact_and_refuted() {
         counterexample: String::new(),
     };
     assert_eq!(
-        run_terminal_value(&outcome, 0, Some((&result).into())).expect("falsified run maps"),
+        run_terminal_value(
+            &crate::terminal_map::synthetic_evidence(outcome.clone(), 0),
+            Some((&result).into())
+        )
+        .expect("falsified run maps"),
         TerminalValue::Refuted
     );
 }
@@ -1105,7 +1109,8 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
         },
     )
     .expect("emitted package generates");
-    let outcome = prove(&generated.postcondition);
+    let evidence = super::kani_obligations_state_frame::prove_evidence(&generated.postcondition);
+    let outcome = &evidence.outcome;
     falsified(
         outcome.clone(),
         "postcondition `post.balance >= pre.balance` failed",
@@ -1113,7 +1118,7 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
     let mut inputs = twin.state_clause_inputs(&package, &clause, BALANCE, (0, 0), (0, 0));
     inputs.playback.clear();
     inputs
-        .decode_falsification(&generated.postcondition.identity, &outcome)
+        .decode_falsification(&generated.postcondition.identity, outcome)
         .expect("real Kani playback decodes");
     assert_eq!(
         inputs.playback,
@@ -1141,7 +1146,7 @@ fn tc_040_real_kani_out_of_range_debit_replays_as_refuted() {
     );
     assert_eq!(arm.category(), Category::Violation);
     assert_eq!(
-        run_terminal_value(&outcome, 0, Some((&result).into())).expect("falsified run maps"),
+        run_terminal_value(&evidence, Some((&result).into())).expect("falsified run maps"),
         TerminalValue::Refuted
     );
 }

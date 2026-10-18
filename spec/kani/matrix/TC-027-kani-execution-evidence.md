@@ -246,9 +246,10 @@ evidence. The
 equal outcome, checks, SUCCESS count and playback, equal evidence in every field but
 `failureCause`, `diagnostics`, `memory` and the report-path argument, and FR-029 terminal value
 `Incomplete(ResourceExhausted)` for the `out_of_memory` run and `Failed` for the `exit_code_64` and
-`cbmc_exploded` runs (IR-848, FR-029-AC-32; planned, and the bound test
-`tests/it/kani_obligations.rs` `tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause`
-asserts the old value `Failed` for every cause until the code change flips it). The real run whose manifest passes `--no-such-option` to CBMC exits
+`cbmc_exploded` runs (FR-029-AC-32), as asserted by
+`cbmc_failure_terminal_value_reads_the_retained_cause` in `tests/it/kani_obligations.rs` and
+`bounded_cause_changes_only_terminal_projection_and_retains_evidence` in
+`tests/it/kani_terminal_private.rs`. The real run whose manifest passes `--no-such-option` to CBMC exits
 unsuccessfully, exports a report and is `FailedWithoutCounterexample` with
 `{ kind: "exit_code", code: 64 }` and a stderr excerpt holding `Unknown option: --no-such-option`.
 
@@ -428,18 +429,16 @@ tests of the phase rules, the excerpt bounds and every redaction pair. The seria
 the rustdoc `compile_fail` example on `KaniNoVerdictDiagnostics`, run by `cargo test --doc`, with
 its compiling `serde_json::to_string` control beside it.
 
-The CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40) is covered by the stand-in tests
-in `batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`
-(`tc_027_every_exit_status_gives_its_cause_and_a_diagnostic_record`,
-`tc_027_a_failed_property_has_no_record_and_an_unnamed_entry_has_no_cause`,
-`tc_027_the_cause_is_kept_for_no_other_outcome`,
-`tc_027_a_malformed_exit_status_still_refuses_the_report` and
-`tc_027_the_cause_never_feeds_classification`) and, for the FR-029 terminal value,
-`tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause` in `tests/it/kani_obligations.rs`
-(IR-848 replaces this test: the value is read from the cause by `run_terminal_value`, which takes
-`&KaniExecutionEvidence` and reads the cause from it; `out_of_memory` gives `Incomplete(ResourceExhausted)` and `exit_code_64` and
-`cbmc_exploded` give `Failed`, FR-029-AC-32; independence from the diagnostic record holds because the
-map never reads the diagnostics record); by the tests of the exit-status
+The CBMC failure cause (FR-017-AC-37, FR-017-AC-38, FR-017-AC-40) is covered by the bounded
+report controls in `tests/it/kani_terminal_private.rs`, which reuse
+`batch_tests::no_verdict_diagnostics::failure_cause` in `src/kani/run/execute.rs`, and the
+remaining execution tests `tc_027_the_cause_is_kept_for_no_other_outcome` and
+`tc_027_a_malformed_exit_status_still_refuses_the_report`. For the FR-029 terminal value,
+`cbmc_failure_terminal_value_reads_the_retained_cause` in `tests/it/kani_obligations.rs`
+passes `&KaniExecutionEvidence` to `run_terminal_value`: `out_of_memory` gives
+`Incomplete(ResourceExhausted)`, `timeout` gives `Incomplete(TimedOut)`, and `exit_code_64` and
+`cbmc_exploded` give `Failed` (FR-029-AC-32, FR-029-AC-33). The map never reads the diagnostic
+record. The cause is also covered by the tests of the exit-status
 vocabulary, the 64-byte cut and the one-entry rule in `src/kani/output/report.rs`; by the serialize-only
 check, which is the rustdoc `compile_fail` example on `KaniFailureCause` run by `cargo test --doc`
 beside its `serde_json::to_string` control and the `tc_027_the_cause_implements_no_deserialize`

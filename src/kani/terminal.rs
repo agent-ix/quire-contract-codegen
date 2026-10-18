@@ -1,5 +1,5 @@
 //! The terminal-value maps of a Kani run (FR-029) and of a Contract IR outcome (FR-030): one
-//! total `match` each, from a [`KaniRunOutcome`] or an IR [`KaniOutcome`], paired with the
+//! total `match` each, from [`KaniExecutionEvidence`] or an IR [`KaniOutcome`], paired with the
 //! settlement of its counterexample's replay, to QSL's FR-331 terminal value.
 //!
 //! The map is total over the pair, not over the outcome alone: a falsified run is a refutation
@@ -19,6 +19,7 @@ use quire_contract_ir::kani::{
 use quire_exact::CancelCause;
 
 use crate::kani::classify::{KaniInconclusiveReason, KaniRunOutcome};
+use crate::kani::output::report::KaniFailureCause;
 use crate::kani::run::execute::KaniExecutionEvidence;
 
 /// The settlement of a falsified run's replay, read as one of the six readings FR-029 states.
@@ -77,8 +78,9 @@ impl std::fmt::Display for TerminalPairError {
 
 impl std::error::Error for TerminalPairError {}
 
-/// Maps one run outcome, with the SUCCESS check count its transcript reports and, for a
-/// falsified outcome, its replay settlement, to QSL's terminal value (FR-029).
+/// Maps one run's evidence and, for a falsified outcome, its replay settlement to QSL's
+/// terminal value (FR-029). Outcome, SUCCESS count and CBMC cause come from the same evidence.
+/// A resource cause affects only failure-without-counterexample; diagnostics are not read.
 ///
 /// A vacuous proof and a cover-unsatisfied run have a zero-check `Checks` basis and
 /// `Certified` certification. QSL reads them as category `inconclusive`; no outcome maps to
@@ -88,15 +90,16 @@ impl std::error::Error for TerminalPairError {}
 ///
 /// [`TerminalPairError`] when a falsified outcome has no settlement, or another outcome has one.
 pub fn run_terminal_value(
-    outcome: &KaniRunOutcome,
-    success_checks: u32,
+    evidence: &KaniExecutionEvidence,
     settlement: Option<ReplaySettlement<'_>>,
 ) -> Result<TerminalValue, TerminalPairError> {
     use KaniInconclusiveReason as Reason;
     use KaniRunOutcome::{Cancelled, CoverUnsatisfied, Falsified, Inconclusive, Verified};
-    Ok(match (outcome, settlement) {
+    Ok(match (&evidence.outcome, settlement) {
         (Verified, None) => TerminalValue::Proved {
-            basis: ProofBasis::Checks { success_checks },
+            basis: ProofBasis::Checks {
+                success_checks: evidence.success_checks,
+            },
             certification: Certification::Certified,
         },
         (CoverUnsatisfied { .. }, None) => TerminalValue::Proved {
@@ -126,13 +129,25 @@ pub fn run_terminal_value(
         ) => TerminalValue::Incomplete(IncompleteCause::ResourceExhausted),
         (
             Inconclusive {
-                reason:
-                    Reason::NoVerdict
-                    | Reason::FailedWithoutCounterexample
-                    | Reason::MissingCoverSummary,
+                reason: Reason::NoVerdict | Reason::MissingCoverSummary,
             },
             None,
         ) => TerminalValue::Failed,
+        (
+            Inconclusive {
+                reason: Reason::FailedWithoutCounterexample,
+            },
+            None,
+        ) => match evidence.failure_cause.as_ref() {
+            Some(KaniFailureCause::OutOfMemory) => {
+                TerminalValue::Incomplete(IncompleteCause::ResourceExhausted)
+            }
+            Some(KaniFailureCause::Timeout) => TerminalValue::Incomplete(IncompleteCause::TimedOut),
+            None
+            | Some(KaniFailureCause::PropertiesFailed)
+            | Some(KaniFailureCause::ExitCode { .. })
+            | Some(KaniFailureCause::Unknown { .. }) => TerminalValue::Failed,
+        },
         (Cancelled { source }, None) => cancelled_value(*source),
         (Falsified { .. }, Some(settlement)) => settled(settlement),
         (Falsified { .. }, None) => return Err(TerminalPairError::MissingSettlement),

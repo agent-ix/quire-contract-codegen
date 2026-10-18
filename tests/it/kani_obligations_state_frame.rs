@@ -2915,10 +2915,12 @@ fn tc_035_a_field_with_no_declared_range_is_decoded_and_not_checked() {
     };
     assert_eq!(unranged, &harness.unranged);
     let terminal = quire_contract_codegen::run_terminal_value(
-        &KaniRunOutcome::Falsified {
-            counterexample: "model-type mismatch".to_owned(),
-        },
-        0,
+        &crate::terminal_map::synthetic_evidence(
+            KaniRunOutcome::Falsified {
+                counterexample: "model-type mismatch".to_owned(),
+            },
+            0,
+        ),
         Some((&error).into()),
     )
     .expect("a falsified run has a settlement");
@@ -3091,10 +3093,12 @@ fn tc_025_wide_model_override_preserves_unranged_context_without_a_replay_claim(
         unreachable!("the QSL refusal was checked above")
     };
     let terminal = quire_contract_codegen::run_terminal_value(
-        &KaniRunOutcome::Falsified {
-            counterexample: "model-type mismatch".to_owned(),
-        },
-        0,
+        &crate::terminal_map::synthetic_evidence(
+            KaniRunOutcome::Falsified {
+                counterexample: "model-type mismatch".to_owned(),
+            },
+            0,
+        ),
         Some((&error).into()),
     )
     .expect("a falsified run has a settlement");
@@ -3675,6 +3679,13 @@ fn scratch(name: &str) -> PathBuf {
 
 /// Runs `harness` with the real prover over the subject module every generated harness names.
 pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
+    prove_evidence(harness).outcome
+}
+
+/// Retains real run evidence for terminal projection after replay.
+pub(crate) fn prove_evidence(
+    harness: &StateFrameHarness,
+) -> quire_contract_codegen::KaniExecutionEvidence {
     let cancel = quire_exact::Cancel::new();
     let installation = KaniInstallation::discover().expect("cargo-kani is installed");
     let directory = scratch("crate");
@@ -3706,7 +3717,7 @@ pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
     })
     .unwrap_or_else(|refusal| panic!("the run must start: {refusal}"));
     let _ = fs::remove_dir_all(directory);
-    evidence.outcome
+    evidence
 }
 
 /// The counterexample of a falsified proof, which must name `reason`.

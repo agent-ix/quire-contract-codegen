@@ -16,6 +16,10 @@ mod kani_render_private;
 #[path = "../tests/it/kani_scalar_native_private.rs"]
 mod kani_scalar_native_private;
 
+#[cfg(all(test, target_os = "linux"))]
+#[path = "../tests/it/kani_terminal_private.rs"]
+mod kani_terminal_private;
+
 // The leaf directory: artifact, diagnostic, identity, profile and source-map.
 // `core` here is this crate's own layout module (the AD names the directory `core/`). In this
 // file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
