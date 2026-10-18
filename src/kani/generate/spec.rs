@@ -108,13 +108,24 @@ fn bind(names: &mut BTreeSet<String>, name: &str) -> Result<(), HarnessSpecError
     if !names.insert(name.to_owned()) { return Err(HarnessSpecError::DuplicateBinding(name.to_owned())); }
     Ok(())
 }
+fn literal_true(expression: &Expr) -> bool {
+    let mut expression = expression;
+    loop {
+        expression = match expression {
+            Expr::Paren(parenthesized) => &parenthesized.expr,
+            Expr::Group(group) => &group.expr,
+            Expr::Lit(syn::ExprLit { lit: syn::Lit::Bool(value), .. }) => return value.value,
+            _ => return false,
+        };
+    }
+}
 impl HarnessSpec {
     pub(super) fn new(label: String, path: HarnessPath, oracle_source: String, proof: ProofKind, body: Vec<Statement>, covers: Vec<Cover>, unwind: u32, solver: KaniSolver) -> Result<Self, HarnessSpecError> {
         if covers.len() != 1 { return Err(HarnessSpecError::CoverCount(covers.len())); }
         let mut covers = covers.into_iter();
         let cover = covers.next().ok_or(HarnessSpecError::CoverCount(0))?;
         message(&label)?; message(&cover.message)?;
-        if matches!(syn::parse_str::<Expr>(cover.condition.as_str()), Ok(Expr::Lit(syn::ExprLit { lit: syn::Lit::Bool(value), .. })) if value.value) { return Err(HarnessSpecError::LiteralTrueCover); }
+        if syn::parse_str::<Expr>(cover.condition.as_str()).is_ok_and(|expression| literal_true(&expression)) { return Err(HarnessSpecError::LiteralTrueCover); }
         if !(1..=MAX_OBLIGATION_UNWIND).contains(&unwind) { return Err(HarnessSpecError::InvalidUnwind(unwind)); }
         let calls = body.iter().filter(|s| matches!(s, Statement::Call { .. })).count();
         if calls != 1 { return Err(HarnessSpecError::CallCount(calls)); }
@@ -178,7 +189,9 @@ mod tests {
     fn constructor_refuses_cover_call_and_statement_order_violations() {
         assert_eq!(error(vec![call()], vec![], 1), HarnessSpecError::CoverCount(0));
         assert_eq!(error(vec![call()], vec![cover(), cover()], 1), HarnessSpecError::CoverCount(2));
-        assert_eq!(error(vec![call()], vec![Cover { condition: expression("true"), ..cover() }], 1), HarnessSpecError::LiteralTrueCover);
+        for text in ["true", " true ", "(true)", "((true))"] {
+            assert_eq!(error(vec![call()], vec![Cover { condition: expression(text), ..cover() }], 1), HarnessSpecError::LiteralTrueCover);
+        }
         assert_eq!(error(vec![], vec![cover()], 1), HarnessSpecError::CallCount(0));
         assert_eq!(error(vec![call(), call()], vec![cover()], 1), HarnessSpecError::CallCount(2));
         assert_eq!(error(vec![call(), input("x")], vec![cover()], 1), HarnessSpecError::InputAfterCall);
