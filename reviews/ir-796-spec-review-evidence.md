@@ -142,3 +142,16 @@ FAIL for the refreshed publication context: one new evidence-scope defect, FND-0
 - {excerpt: "| TC-050 | Verify caller TextPayload admission and bounded Kani agreement | Integration | P0 | FR-035-AC-1, FR-035-AC-2, FR-035-AC-3, FR-035-AC-4, FR-035-AC-5, FR-035-AC-6, FR-017-AC-26 | \U0001F6A7 Planned (IR-494, IR-796); PR #381 candidate exists, but the measured NFC `Text[1,1]` run is inconclusive, IR-796's measured proof-bound disposition places the cost floor in one concrete admission and its exact metering (next owners: IR-705, IR-837), and the twelve-harness proof and mutation control are unrun and uncredited |", id: TC-050/status, path: spec/oracle/matrix/tests.md, role: examined}
 - {excerpt: "| FR-035 | FR-035-AC-4, FR-035-AC-5, FR-035-AC-6 | TC-050 | \U0001F6A7 Planned (IR-494, IR-796); PR #381 has a symbolic caller `TextPayload` harness candidate, but the original NFC `Text[1,1]` Kani run ended `MemoryExhausted` and AC-4/5 remain unrun and uncredited. IR-796 measured that per-literal, partitioned and byte-table shapes all exhaust the published bound, so TC-050 records a proof-bound disposition with IR-705 and IR-837 as next owners. This route retains its own caller-ingress identity, separate from FR-015's checked-package obligations and FR-025's subject ABI |", id: FR-035/status, path: spec/kani/matrix/tests.md, role: examined}
 - {excerpt: "| TC-050 | Verify caller TextPayload admission and bounded Kani agreement | Integration | P0 | FR-035-AC-4, FR-035-AC-5, FR-035-AC-6, FR-017-AC-26 | \U0001F6A7 Planned (IR-494, IR-796); one original NFC `Text[1,1]` real-Kani run is inconclusive after `MemoryExhausted`, and IR-796's measured disposition shows no criterion-preserving shape fits the published bound (next owners: IR-705, IR-837); twelve verified harnesses, falsifying control and production proof evidence remain open |", id: TC-050/status, path: spec/kani/matrix/tests.md, role: examined}
+
+
+## Dispositions (standalone follow-up)
+
+Round 3. Rechecked only unresolved FND-004 against the coder fix.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | TC-050 limits the observations and conclusions to the IR-796 measured kernel/toolchain and expressly excludes later dependencies/toolchains; FR-035 proof-cost wording and all four matrix status rows have matching historical attribution. Numeric bounds, observations, control descriptions, planned/uncredited criteria and current main procedure remain unchanged. No experiments or current proof credit were added. |
+
+## Final standalone verdict
+
+PASS for publication of this historical disposition. The code, EARS, base, integrity and scope-boundary contexts were inspected for impact from the four-file prose fix; no new defect or normative change was found, so no unchanged method or historical measurement was repeated. All twelve original terminal findings remain preserved. This is not acceptance of draft #381 or completed IR-796; required implementation and full CI/Kani gates remain open. No branch edits, Cargo or Kani runs.
