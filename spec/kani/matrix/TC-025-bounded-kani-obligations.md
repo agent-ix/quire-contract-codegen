@@ -74,19 +74,21 @@ a bounded `Sequence<Reference<Order>>` field, and relationships `next`
 end; write invariant/precondition/postcondition clauses of the form
 `reaches(self, target, <name>)` and `not reaches(self, self, <name>)`. Emit
 through QSL and admit through Contract IR (no copied wire or hand-built
-builder). QSL gives such a clause no finite population (it is a state-clause
-`reaches`, not a function parameter typed `Population<T>[N]`), so no fixture
-can show a successful harness until IR-852 and QSL-819 (bounded domain
-population for reaches) land, and IR-851 for a relationship-end claim. Steps testable now (refusals, no harness): (1) the claim is
-the `state_clause` node id and argument path of a `quire.op.model.reaches`
-(member `relationship_end`) or `quire.op.model.reaches_field` (member `field`)
-application; (2) today every emitted claim's population selection is `Unavailable` (no IR
-mapping, IR-852), so each settles `unsupported`; (3) with a selection supplied
-as `Unbounded`, the claim settles `requires_bound` (a claim whose population has no finite
-authored bound, after QSL-819 and IR-852), and an unbounded collection edge settles `requires_bound`; (4) each
-other FR-015-AC-108 `unsupported` input reachable from an admitted package
-settles `unsupported` naming it, including a relationship-end claim while the
-IR-851 accessor code is unmerged or unpinned; (5)
+builder). The IR-851 `relationship_end` and IR-852 `reaches_population`
+accessors are merged (IR #438 and #442); CG dependency integration and graph
+harness generation remain outstanding. Real-package population emission and
+the claim's population link remain owned by QSL-820. The following refusal
+controls remain Planned CG checks, with no harness: (1) the claim is the
+`state_clause` node id and argument path of a reachability application of one
+of the forms defined by [QSL FR-365](ix://agent-ix/quire-spec-language/FR-365)
+and [QSL FR-105](ix://agent-ix/quire-spec-language/FR-105); (2) a claim with
+`Unavailable` population selection settles `unsupported` naming it, without
+assuming the merged IR mapping makes a missing package link available;
+(3) with an `Unbounded` selection, a claim whose population has no finite
+authored bound settles `requires_bound`, and an unbounded collection edge
+settles `requires_bound`; (4) each other FR-015-AC-108 `unsupported` input
+reachable from an admitted package settles `unsupported` naming it,
+including a relationship-end claim whose typed end is unavailable to CG; (5)
 claim location: the same reachability twice in a condition, one node under two
 clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no
 caller `max_expansions`, population or multiplicity changes any outcome.
@@ -96,9 +98,9 @@ FR-038-AC-268) cannot arise from a QSL-emitted, IR-admitted package
 (`UnresolvedEnd` needs a crate-internal post-admission mutation), so their
 `unsupported` mapping in FR-015-AC-108 is checked by inspection of the
 generator's error mapping, or by a named in-crate accessor test double, and is
-not a testable-now step. AC-107's location refusal runs before the accessor, so
+not a real-package runtime step. AC-107's location refusal runs before the accessor, so
 a path naming no reachability is never `NotReachesApplication`. Also, QSL refuses `reaches` in a function body, so no function-body graph
-claim can reach the generator. Steps that wait on the QSL ticket (unbacked):
+claim can reach the generator. Real-package steps that wait on CG integration and QSL-820 emission (unbacked):
 positive-length semantics (an isolated `start = target` unreachable, a self-loop
 reachable) in the generated draw and the `qsl_replay` oracle; inclusive
 populations `N = 0` and the maximum, edge counts `lower`, `upper` and between,
