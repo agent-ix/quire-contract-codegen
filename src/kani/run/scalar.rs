@@ -886,7 +886,7 @@ fn execute_native(
     request: &KaniScalarNativeRequest<'_>,
     root: &Path,
 ) -> Result<(Outcome<Integer>, NativeMeterObservation), KaniScalarNativeError> {
-    let mut command = BackendCommand::new("cargo");
+    let mut command = BackendCommand::new(request.installation.scalar_native_launcher());
     let mut arguments = vec![
         "run".to_owned(),
         "--quiet".to_owned(),
@@ -958,18 +958,7 @@ fn decode_native_output(
             "unknown helper record".into(),
         ));
     }
-    let result_lines = text
-        .lines()
-        .filter(|line| line.starts_with("IR791_NATIVE_V1\t"));
-    let mut result_lines = result_lines;
-    let result = result_lines.next().ok_or_else(|| {
-        KaniScalarNativeError::NativeResult("missing structured native result".into())
-    })?;
-    if result_lines.next().is_some() {
-        return Err(KaniScalarNativeError::NativeResult(
-            "multiple structured native result records".into(),
-        ));
-    }
+    let result = single_record(text, "IR791_NATIVE_V1")?;
     let fields = result.split('\t').collect::<Vec<_>>();
     let native = match fields.as_slice() {
         ["IR791_NATIVE_V1", "completed", value] => {
@@ -1224,7 +1213,13 @@ fn verify_runtime_revision(
     expected: &str,
     lock: std::io::Result<String>,
 ) -> Result<(), KaniScalarNativeError> {
-    let actual = lock.ok().and_then(|lock| {
+    let lock = match lock {
+        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+            return Err(KaniScalarNativeError::Snapshot(error));
+        }
+        other => other.ok(),
+    };
+    let actual = lock.and_then(|lock| {
         lock_revision(
             &lock,
             "quire-contract-runtime",
@@ -1409,6 +1404,7 @@ fn seal_snapshot(root: &Path) -> Result<(), KaniScalarNativeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kani::test_support::scalar_native_digest::independent_digest;
     use ix_trace_rs::trace;
 
     #[trace("FR-017-AC-28")]
@@ -1559,24 +1555,6 @@ mod tests {
         .collect()
     }
 
-    // This oracle encodes this string-only JSON shape independently, with explicit object-key order.
-    fn independent_digest(entries: &[(String, Vec<u8>)]) -> [u8; 32] {
-        use sha2::{Digest, Sha256};
-        let artifacts = entries
-            .iter()
-            .map(|(path, bytes)| {
-                format!(
-                    "{{\"contents\":{},\"path\":{}}}",
-                    serde_json::to_string(std::str::from_utf8(bytes).unwrap()).unwrap(),
-                    serde_json::to_string(path).unwrap()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        let bytes = format!("{{\"artifacts\":[{artifacts}],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v2\"}}");
-        Sha256::digest(bytes.as_bytes()).into()
-    }
-
     #[trace("FR-017-AC-43", "FR-017-AC-45", "FR-017-AC-46", "FR-017-AC-49")]
     #[test]
     fn literal_seven_entry_jcs_golden_and_mutation_controls() {
@@ -1715,6 +1693,30 @@ mod tests {
         }
     }
 
+    #[trace("FR-017-AC-42", "FR-017-AC-46")]
+    #[test]
+    fn runtime_revision_read_preserves_dependency_mismatch_and_unreadable_lock_faults() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        let path = snapshot.path().join("Cargo.lock");
+        let expected = "a".repeat(40);
+        let actual = "b".repeat(40);
+        let lock = format!("[[package]]\nname = \"quire-contract-runtime\"\nsource = \"git+https://github.com/agent-ix/quire-contract-runtime?branch=main#{actual}\"\n");
+        fs::write(&path, lock).unwrap();
+        let error = verify_runtime_revision(&expected, fs::read_to_string(&path)).unwrap_err();
+        assert!(
+            matches!(&error, KaniScalarNativeError::DependencyLock { expected: wanted, actual: Some(found) } if wanted == &expected && found == &actual)
+        );
+        assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
+        assert!(verify_runtime_revision(&actual, fs::read_to_string(&path)).is_ok());
+        fs::remove_file(&path).unwrap();
+        let error = verify_runtime_revision(&expected, fs::read_to_string(&path)).unwrap_err();
+        assert!(matches!(
+            error,
+            KaniScalarNativeError::DependencyLock { actual: None, .. }
+        ));
+        assert_eq!(error.code(), "dependency_lock");
+    }
+
     // Fabricated evidence is used only to cover the classification vocabulary.
     fn classification_evidence(
         outcome: KaniRunOutcome,
@@ -1749,59 +1751,125 @@ mod tests {
         }
     }
 
+    // These literal expectations are an independent frozen table. Each match is exhaustive:
+    // adding a vocabulary item requires an explicit expected row even if production is updated.
+    fn expected_error(error: &KaniScalarNativeError) -> (&'static str, KaniScalarNativeErrorClass) {
+        use KaniScalarNativeError as E;
+        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
+        match error {
+            E::InvalidRequest(_) => ("invalid_request", R),
+            E::ArtifactPackage(_) => ("artifact_package", R),
+            E::Snapshot(_) => ("snapshot_io", F),
+            E::Kani(nested) => ("kani_execution", expected_nested(nested).0),
+            E::ProofNotVerified(evidence) => (
+                "proof_not_verified",
+                expected_outcome(&evidence.outcome, evidence.failure_cause.as_ref()),
+            ),
+            E::OracleStop(_) => ("oracle_stop", R),
+            E::NativeLaunch(_) => ("native_launch", F),
+            E::DependencyLock { .. } => ("dependency_lock", F),
+            E::NativeResult(_) => ("native_result", F),
+            E::SnapshotChanged => ("snapshot_changed", F),
+            E::IdentityEncode(_) => ("identity_encode", F),
+            E::CodegenLock => ("codegen_lock", F),
+        }
+    }
+
+    fn expected_outcome(
+        outcome: &KaniRunOutcome,
+        cause: Option<&KaniFailureCause>,
+    ) -> KaniScalarNativeErrorClass {
+        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
+        match outcome {
+            KaniRunOutcome::Verified => F,
+            KaniRunOutcome::Falsified { .. } => R,
+            KaniRunOutcome::CoverUnsatisfied { .. } => R,
+            KaniRunOutcome::Cancelled { .. } => F,
+            KaniRunOutcome::Inconclusive { reason } => expected_reason(*reason, cause),
+        }
+    }
+
+    fn expected_reason(
+        reason: KaniInconclusiveReason,
+        cause: Option<&KaniFailureCause>,
+    ) -> KaniScalarNativeErrorClass {
+        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
+        match reason {
+            KaniInconclusiveReason::FailedWithoutCounterexample => expected_cause(cause),
+            KaniInconclusiveReason::NoVerdict => F,
+            KaniInconclusiveReason::MissingCoverSummary => R,
+            KaniInconclusiveReason::VacuousProof => R,
+            KaniInconclusiveReason::UnwindBoundExhausted => R,
+            KaniInconclusiveReason::TimedOut => F,
+            KaniInconclusiveReason::MemoryExhausted => F,
+        }
+    }
+
+    fn expected_cause(cause: Option<&KaniFailureCause>) -> KaniScalarNativeErrorClass {
+        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
+        match cause {
+            None => R,
+            Some(KaniFailureCause::PropertiesFailed) => R,
+            Some(KaniFailureCause::Timeout) => F,
+            Some(KaniFailureCause::OutOfMemory) => F,
+            Some(KaniFailureCause::ExitCode { .. }) => F,
+            Some(KaniFailureCause::Unknown { .. }) => F,
+        }
+    }
+
+    fn expected_nested(
+        nested: &KaniExecutionRefusal,
+    ) -> (KaniScalarNativeErrorClass, Option<&'static str>) {
+        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
+        match nested {
+            KaniExecutionRefusal::BatchCancelled { .. } => (F, None),
+            KaniExecutionRefusal::Tool(_) => (F, None),
+            KaniExecutionRefusal::MemoryMechanismUnavailable { .. } => (F, None),
+            KaniExecutionRefusal::MemoryObservationFailed { .. } => (F, None),
+            KaniExecutionRefusal::BatchMemoryExhausted { .. } => (F, None),
+            KaniExecutionRefusal::HarnessNotInCrate { .. } => (R, None),
+            KaniExecutionRefusal::HarnessProvenanceMismatch { .. } => (R, None),
+            KaniExecutionRefusal::Report(_) => (F, None),
+            KaniExecutionRefusal::OutputOverLimit { .. } => (R, Some("kani_output_over_limit")),
+            KaniExecutionRefusal::OutputUnread { .. } => (F, Some("kani_output_unread")),
+            KaniExecutionRefusal::BatchTimedOut { .. } => (F, None),
+            KaniExecutionRefusal::PlaybackForNonMember { .. } => (R, None),
+        }
+    }
+
     #[trace("FR-017-AC-41", "FR-017-AC-42", "FR-017-AC-44")]
     #[test]
     fn frozen_outer_code_and_class_table_has_exactly_twelve_distinct_codes() {
         use KaniScalarNativeError as E;
-        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
-        let encode = identity_from_entries(&literal_entries(), Limits::new(0)).unwrap_err();
-        let diagnostic = ArtifactBundle::new(vec![Artifact::new("../invalid", "")]).unwrap_err();
-        let table = [
-            (E::InvalidRequest("table"), "invalid_request", R),
-            (E::ArtifactPackage(diagnostic), "artifact_package", R),
-            (
-                E::Snapshot(std::io::Error::other("table")),
-                "snapshot_io",
-                F,
+        let errors = [
+            E::InvalidRequest("table"),
+            E::ArtifactPackage(
+                ArtifactBundle::new(vec![Artifact::new("../invalid", "")]).unwrap_err(),
             ),
-            (
-                E::Kani(KaniExecutionRefusal::HarnessNotInCrate {
-                    harness_path: "table".into(),
-                }),
-                "kani_execution",
-                R,
-            ),
-            (
-                E::ProofNotVerified(Box::new(classification_evidence(
-                    KaniRunOutcome::Falsified {
-                        counterexample: "table".into(),
-                    },
-                    None,
-                ))),
-                "proof_not_verified",
-                R,
-            ),
-            (
-                E::OracleStop(ScalarOracleStopKind::IllTyped),
-                "oracle_stop",
-                R,
-            ),
-            (E::NativeLaunch("table".into()), "native_launch", F),
-            (
-                E::DependencyLock {
-                    expected: "table".into(),
-                    actual: None,
+            E::Snapshot(std::io::Error::other("table")),
+            E::Kani(KaniExecutionRefusal::HarnessNotInCrate {
+                harness_path: "table".into(),
+            }),
+            E::ProofNotVerified(Box::new(classification_evidence(
+                KaniRunOutcome::Falsified {
+                    counterexample: "table".into(),
                 },
-                "dependency_lock",
-                F,
-            ),
-            (E::NativeResult("table".into()), "native_result", F),
-            (E::SnapshotChanged, "snapshot_changed", F),
-            (encode, "identity_encode", F),
-            (E::CodegenLock, "codegen_lock", F),
+                None,
+            ))),
+            E::OracleStop(ScalarOracleStopKind::IllTyped),
+            E::NativeLaunch("table".into()),
+            E::DependencyLock {
+                expected: "table".into(),
+                actual: None,
+            },
+            E::NativeResult("table".into()),
+            E::SnapshotChanged,
+            identity_from_entries(&literal_entries(), Limits::new(0)).unwrap_err(),
+            E::CodegenLock,
         ];
         let mut codes = std::collections::BTreeSet::new();
-        for (error, code, class) in table {
+        for error in errors {
+            let (code, class) = expected_error(&error);
             assert_eq!(error.code(), code);
             assert_eq!(error.class(), class);
             assert!(codes.insert(error.code()), "duplicate code {code}");
@@ -1813,92 +1881,58 @@ mod tests {
     #[test]
     fn frozen_evidence_classification_covers_all_outcomes_reasons_and_causes_unchanged() {
         use KaniInconclusiveReason as I;
-        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
-        let table = [
-            (KaniRunOutcome::Verified, F),
-            (
-                KaniRunOutcome::Falsified {
-                    counterexample: "table-only".into(),
-                },
-                R,
-            ),
-            (
-                KaniRunOutcome::CoverUnsatisfied {
-                    satisfied: 0,
-                    total: 1,
-                },
-                R,
-            ),
-            (
-                KaniRunOutcome::Cancelled {
-                    source: quire_contract_ir::kani::KaniCancellationSource::Requested,
-                },
-                F,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::MissingCoverSummary,
-                },
-                R,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::VacuousProof,
-                },
-                R,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::UnwindBoundExhausted,
-                },
-                R,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::TimedOut,
-                },
-                F,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::MemoryExhausted,
-                },
-                F,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::NoVerdict,
-                },
-                F,
-            ),
-            (
-                KaniRunOutcome::Inconclusive {
-                    reason: I::FailedWithoutCounterexample,
-                },
-                R,
-            ),
+        let outcomes = [
+            KaniRunOutcome::Verified,
+            KaniRunOutcome::Falsified {
+                counterexample: "table-only".into(),
+            },
+            KaniRunOutcome::CoverUnsatisfied {
+                satisfied: 0,
+                total: 1,
+            },
+            KaniRunOutcome::Cancelled {
+                source: quire_contract_ir::kani::KaniCancellationSource::Requested,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::FailedWithoutCounterexample,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::NoVerdict,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::MissingCoverSummary,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::VacuousProof,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::UnwindBoundExhausted,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::TimedOut,
+            },
+            KaniRunOutcome::Inconclusive {
+                reason: I::MemoryExhausted,
+            },
         ];
-        for (outcome, expected) in table {
+        for outcome in outcomes {
             let evidence = classification_evidence(outcome, None);
             let error = KaniScalarNativeError::ProofNotVerified(Box::new(evidence.clone()));
-            assert_eq!(error.class(), expected);
+            assert_eq!((error.code(), error.class()), expected_error(&error));
             let KaniScalarNativeError::ProofNotVerified(retained) = error else {
                 unreachable!()
             };
             assert_eq!(*retained, evidence);
         }
-        for (cause, expected) in [
-            (None, R),
-            (Some(KaniFailureCause::PropertiesFailed), R),
-            (Some(KaniFailureCause::Timeout), F),
-            (Some(KaniFailureCause::OutOfMemory), F),
-            (Some(KaniFailureCause::ExitCode { code: 7 }), F),
-            (
-                Some(KaniFailureCause::Unknown {
-                    exit_status: "other".into(),
-                }),
-                F,
-            ),
+        for cause in [
+            None,
+            Some(KaniFailureCause::PropertiesFailed),
+            Some(KaniFailureCause::Timeout),
+            Some(KaniFailureCause::OutOfMemory),
+            Some(KaniFailureCause::ExitCode { code: 7 }),
+            Some(KaniFailureCause::Unknown {
+                exit_status: "other".into(),
+            }),
         ] {
             for failed_check in [false, true] {
                 let mut evidence = classification_evidence(
@@ -1908,7 +1942,7 @@ mod tests {
                     cause.clone(),
                 );
                 if failed_check {
-                    let classified = crate::kani::classify::classify_kani_run(
+                    evidence.checks = crate::kani::classify::classify_kani_run(
                         false,
                         Some(&crate::kani::test_support::report(
                             "Failure",
@@ -1917,12 +1951,12 @@ mod tests {
                         "",
                         None,
                     )
-                    .unwrap();
-                    evidence.checks = classified.checks;
+                    .unwrap()
+                    .checks;
                     assert_eq!(evidence.checks.len(), 1);
                 }
                 let error = KaniScalarNativeError::ProofNotVerified(Box::new(evidence.clone()));
-                assert_eq!(error.class(), expected);
+                assert_eq!((error.code(), error.class()), expected_error(&error));
                 let KaniScalarNativeError::ProofNotVerified(retained) = error else {
                     unreachable!()
                 };
@@ -1942,111 +1976,65 @@ mod tests {
                 tool::{KaniTool, KaniToolError},
             },
         };
-        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault as F};
-        let table = [
-            (
-                KaniExecutionRefusal::HarnessNotInCrate {
-                    harness_path: "table".into(),
+        let refusals = [
+            KaniExecutionRefusal::HarnessNotInCrate {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::HarnessProvenanceMismatch {
+                harness_path: "table".into(),
+            },
+            KaniExecutionRefusal::OutputOverLimit {
+                stream: CaptureStream::Stdout,
+                limit: 1,
+                harnesses: 1,
+            },
+            KaniExecutionRefusal::PlaybackForNonMember {
+                harness: "table".into(),
+            },
+            KaniExecutionRefusal::Tool(KaniToolError::Missing {
+                tool: KaniTool::Launcher,
+                path: "table".into(),
+            }),
+            KaniExecutionRefusal::MemoryMechanismUnavailable {
+                cause: std::io::Error::other("table"),
+            },
+            KaniExecutionRefusal::MemoryObservationFailed {
+                detail: "table".into(),
+            },
+            KaniExecutionRefusal::BatchMemoryExhausted {
+                members: 1,
+                memory_bytes: 1,
+                memory: MemoryObservation {
+                    mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+                    peak_resident_bytes: Some(2),
                 },
-                R,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::HarnessProvenanceMismatch {
-                    harness_path: "table".into(),
-                },
-                R,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::OutputOverLimit {
-                    stream: CaptureStream::Stdout,
-                    limit: 1,
-                    harnesses: 1,
-                },
-                R,
-                Some("kani_output_over_limit"),
-            ),
-            (
-                KaniExecutionRefusal::PlaybackForNonMember {
-                    harness: "table".into(),
-                },
-                R,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::Tool(KaniToolError::Missing {
-                    tool: KaniTool::Launcher,
-                    path: "table".into(),
-                }),
-                F,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::MemoryMechanismUnavailable {
-                    cause: std::io::Error::other("table"),
-                },
-                F,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::MemoryObservationFailed {
-                    detail: "table".into(),
-                },
-                F,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::BatchMemoryExhausted {
-                    members: 1,
-                    memory_bytes: 1,
-                    memory: MemoryObservation {
-                        mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
-                        peak_resident_bytes: Some(2),
-                    },
-                },
-                F,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::BatchTimedOut {
-                    members: 1,
-                    timeout: std::time::Duration::from_secs(1),
-                },
-                F,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::BatchCancelled {
-                    source: quire_contract_ir::kani::KaniCancellationSource::Requested,
-                    members: 1,
-                },
-                F,
-                None,
-            ),
-            (
-                KaniExecutionRefusal::OutputUnread {
-                    stream: CaptureStream::Stdout,
-                    detail: "table".into(),
-                },
-                F,
-                Some("kani_output_unread"),
-            ),
-            (
-                KaniExecutionRefusal::Report(KaniReportRefusal::Missing),
-                F,
-                None,
-            ),
+            },
+            KaniExecutionRefusal::BatchTimedOut {
+                members: 1,
+                timeout: std::time::Duration::from_secs(1),
+            },
+            KaniExecutionRefusal::BatchCancelled {
+                source: quire_contract_ir::kani::KaniCancellationSource::Requested,
+                members: 1,
+            },
+            KaniExecutionRefusal::OutputUnread {
+                stream: CaptureStream::Stdout,
+                detail: "table".into(),
+            },
+            KaniExecutionRefusal::Report(KaniReportRefusal::Missing),
         ];
-        for (nested, expected, code) in table {
-            assert_eq!(nested.code(), code);
+        for nested in refusals {
+            let (expected_class, expected_code) = expected_nested(&nested);
+            assert_eq!(nested.code(), expected_code);
             let error = KaniScalarNativeError::Kani(nested);
-            assert_eq!(error.code(), "kani_execution");
-            assert_eq!(error.class(), expected);
+            assert_eq!(
+                (error.code(), error.class()),
+                ("kani_execution", expected_class)
+            );
             let KaniScalarNativeError::Kani(nested) = error else {
                 unreachable!()
             };
-            assert_eq!(nested.code(), code);
+            assert_eq!(nested.code(), expected_code);
         }
     }
     #[trace("FR-017-AC-42")]
@@ -2056,5 +2044,36 @@ mod tests {
         assert!(matches!(error, KaniScalarNativeError::NativeLaunch(_)));
         assert_eq!(error.code(), "native_launch");
         assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
+    }
+    #[trace("FR-017-AC-46")]
+    #[test]
+    fn regression_non_utf8_lock_uses_the_early_runtime_revision_read_path() {
+        let snapshot = PrivateSnapshot::create().unwrap();
+        fs::write(snapshot.path().join("Cargo.lock"), [0xff]).unwrap();
+        let error = verify_runtime_revision(
+            "expected",
+            fs::read_to_string(snapshot.path().join("Cargo.lock")),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, KaniScalarNativeError::Snapshot(ref io) if io.kind() == std::io::ErrorKind::InvalidData),
+            "{error:?}"
+        );
+        assert_eq!(error.code(), "snapshot_io");
+        assert_eq!(error.class(), KaniScalarNativeErrorClass::EnvironmentFault);
+    }
+
+    #[trace("FR-017-AC-43", "FR-017-AC-50")]
+    #[test]
+    fn regression_bare_native_result_records_are_counted_and_refused() {
+        let limits = unequal_limits();
+        let valid = helper_output(&limits_array(limits));
+        for text in [
+            format!("{valid}IR791_NATIVE_V1\n"),
+            format!("IR791_NATIVE_V1\n{valid}"),
+            valid.replace("IR791_NATIVE_V1\tcompleted\t5", "IR791_NATIVE_V1"),
+        ] {
+            assert_native_result(decode_native_output(&text, limits));
+        }
     }
 }

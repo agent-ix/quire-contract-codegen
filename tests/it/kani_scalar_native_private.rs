@@ -3,136 +3,24 @@
 mod package;
 use crate::{
     core::artifact::Artifact,
-    core::contract_package::{
-        routed_contract_lowering_profile, ContractDriverResultSelection, ContractRequestPosition,
-    },
     kani::{
         identity::KaniScalarObligationHarness,
         run::{
             scalar::{execute_with_cleanup, KaniScalarNativeRequest},
             tool::KaniInstallation,
         },
-    },
-    routed::{
-        capability::{BackendDescriptor, Candidate, ProviderOrigin},
-        generate::{
-            generate_routed, GenerationContexts, KaniGenerationContext, KindOutput,
-            RoutedGenerationItem,
+        test_support::{
+            proof_ceilings::proof_ceilings_with_wall_clock,
+            scalar_native_digest::independent_digest,
         },
     },
 };
 use ix_trace_rs::trace;
 use package::Bound;
-use quire_contract_model::{
-    CheckedPackageReadLimits, ContractDependencies, ContractPackageReadResult,
-    ContractPackageWireV1,
-};
+#[path = "kani_scalar_native_fixture.rs"]
+mod scalar_native_fixture;
+use scalar_native_fixture::routed_scalar_with_artifacts;
 use std::{fs, path::PathBuf, time::Duration};
-fn routed_scalar_with_artifacts(
-    mut builder: package::PackageBuilder,
-    operation_code: u32,
-    narrow_code: u32,
-    result_bound: Bound,
-    wall_clock: Duration,
-) -> (KaniScalarObligationHarness, Vec<Artifact>) {
-    let bound = builder.bound(&result_bound);
-    builder.narrow(
-        narrow_code,
-        package::code_id(operation_code).digest.as_ref(),
-        &bound,
-    );
-    builder.expression_occurrences();
-    let (package, ids) = builder.admit_resolved();
-    let node_id = ids.resolve(&package::code_id(operation_code));
-    let narrow_id = ids.resolve(&package::code_id(narrow_code));
-    let roots = [node_id.clone(), narrow_id.clone()];
-    let lowered = package.lower(&roots, &routed_contract_lowering_profile());
-    let admitted = match ContractPackageWireV1::read(
-        lowered.package.canonical_bytes().expect("FR-330 bytes"),
-        CheckedPackageReadLimits::bounded(),
-        &ContractDependencies::new(),
-    ) {
-        ContractPackageReadResult::Admitted(package) => package,
-        other => panic!("IR must admit the routed scalar package: {other:?}"),
-    };
-    let occurrence = |node: &quire_contract_model::CheckedNodeId| {
-        let entries = package
-            .source_map()
-            .iter()
-            .filter(|entry| {
-                &entry.node_id == node
-                    && entry.role == quire_contract_model::CheckedOccurrenceRole::Expression
-            })
-            .collect::<Vec<_>>();
-        let [entry] = entries.as_slice() else {
-            panic!("one caller-authored expression occurrence");
-        };
-        quire_contract_model::ContractOccurrenceKeyV1 {
-            node_id: node.clone(),
-            role: entry.role.clone(),
-            ordinal: entry.ordinal,
-        }
-    };
-    let positions = [
-        ContractRequestPosition::DriverItem {
-            node_id: node_id.clone(),
-            result_selection: ContractDriverResultSelection::OwnResult {
-                application: occurrence(&node_id),
-                conversion: Some(occurrence(&narrow_id)),
-            },
-        },
-        ContractRequestPosition::ContextRoot { node_id: narrow_id },
-    ];
-    let generation = generate_routed(
-        &admitted,
-        &positions,
-        &[RoutedGenerationItem::from_descriptor(
-            0,
-            node_id,
-            Candidate {
-                identity: "kani".to_owned(),
-            },
-            &BackendDescriptor {
-                identity: "kani".to_owned(),
-                advertised: Vec::new(),
-                origin: ProviderOrigin::Linked,
-                domains: None,
-                bounds: Default::default(),
-            },
-        )
-        .expect("linked Kani descriptor")
-        .with_scalar_selection(
-            &admitted,
-            match &positions[0] {
-                ContractRequestPosition::DriverItem {
-                    result_selection, ..
-                } => result_selection.clone(),
-                ContractRequestPosition::ContextRoot { .. } => unreachable!("driver position"),
-            },
-        )],
-        &GenerationContexts {
-            kani: Some(KaniGenerationContext {
-                ceilings: crate::kani::test_support::proof_ceilings::proof_ceilings_with_wall_clock(
-                    wall_clock,
-                ),
-                subject_path: "crate::subject",
-                unwind: 3,
-            }),
-        },
-    )
-    .expect("routed generation succeeds");
-    let artifacts = generation.oracle_artifacts.expect("a Kani group ran");
-    let [item] = generation.items.as_slice() else {
-        panic!("one routed item, got {:?}", generation.items);
-    };
-    let KindOutput::Kani { harness, .. } = &item.output else {
-        panic!("expected Kani output");
-    };
-    (
-        harness.as_deref().cloned().expect("the item is supported"),
-        artifacts,
-    )
-}
 
 fn fixture(wall_clock: Duration) -> (KaniScalarObligationHarness, Vec<Artifact>) {
     routed_scalar_with_artifacts(
@@ -222,14 +110,10 @@ fn cleanup_success_and_failure_preserve_real_receipt_after_snapshot_removal() {
         success.meter_observation().limits(),
         failure.meter_observation().limits()
     );
-    // The actual returned entries, independently encoded after both snapshots disappeared.
-    use sha2::{Digest, Sha256};
-    let artifacts = failure.staged_entries().iter().map(|(path, bytes)| {
-        serde_json::json!({"path": path, "contents": std::str::from_utf8(bytes).unwrap()})
-    }).collect::<Vec<_>>();
-    let jcs = serde_json::to_vec(&serde_json::json!({"schema": "agent-ix/cg-kani-scalar-proof-content/v2", "artifacts": artifacts})).unwrap();
-    let digest: [u8; 32] = Sha256::digest(jcs).into();
-    assert_eq!(failure.proof_content_digest().as_bytes(), &digest);
+    assert_eq!(
+        failure.proof_content_digest().as_bytes(),
+        &independent_digest(failure.staged_entries())
+    );
 }
 
 #[trace("FR-017-AC-42")]
@@ -352,4 +236,73 @@ fn seeded_false_bound_harness_produces_a_paired_completion_refusal() {
         !target.join("kani-scalar-native").exists(),
         "falsification prevents native invocation"
     );
+}
+
+/// Real proof execution followed by a bounded native-helper protocol stand-in. The actual
+/// process emits OracleStop; neither proof evidence nor the returned outer error is constructed.
+#[trace("FR-017-AC-42")]
+#[test]
+#[ignore = "real Kani with bounded native-helper stop stand-in: run this private lib control explicitly and serially"]
+fn bounded_paired_runner_propagates_the_native_helpers_oracle_stop() {
+    use crate::kani::run::scalar::{
+        execute_kani_scalar_native, KaniScalarNativeError, KaniScalarNativeErrorClass,
+        ScalarOracleStopKind,
+    };
+    use std::os::unix::fs::PermissionsExt;
+    let (harness, artifacts) = fixture(Duration::from_secs(600));
+    let control = crate::kani::test_support::discover_scratch("paired-oracle-stop");
+    fs::create_dir_all(&control).unwrap();
+    let helper = control.join("native-helper");
+    let observed_arguments = control.join("native-arguments");
+    fs::write(&helper, format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf 'IR791_NATIVE_V1\\toracle_stop\\tinvalid_constant\\nIR791_LIMITS_V1\\t101\\t102\\t103\\t104\\t105\\t106\\t107\\t108\\t109\\t110\\nIR791_METER_V1\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\n'\n", observed_arguments.display())).unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
+    let installation = KaniInstallation::discover()
+        .expect("installed real Kani")
+        .with_scalar_native_launcher(helper);
+    let cancel = quire_exact::Cancel::new();
+    let target =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/private-scalar-oracle-stop");
+    let error = execute_kani_scalar_native(&KaniScalarNativeRequest {
+        cancel: &cancel,
+        installation: &installation,
+        harness: &harness,
+        oracle_artifacts: &artifacts,
+        operands: &[4, 1],
+        scalar_limits: limits(),
+        target_directory: &target,
+    })
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        KaniScalarNativeError::OracleStop(ScalarOracleStopKind::InvalidConstant)
+    ));
+    assert_eq!(error.code(), "oracle_stop");
+    assert_eq!(error.class(), KaniScalarNativeErrorClass::CompletionRefusal);
+    assert_eq!(
+        fs::read_to_string(observed_arguments)
+            .unwrap()
+            .lines()
+            .collect::<Vec<_>>(),
+        [
+            "run",
+            "--quiet",
+            "--locked",
+            "--bin",
+            "ir791_native",
+            "--",
+            "4",
+            "1",
+            "101",
+            "102",
+            "103",
+            "104",
+            "105",
+            "106",
+            "107",
+            "108",
+            "109",
+            "110"
+        ]
+    );
+    fs::remove_dir_all(control).unwrap();
 }

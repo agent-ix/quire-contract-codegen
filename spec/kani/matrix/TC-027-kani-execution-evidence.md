@@ -345,7 +345,12 @@ single-run launcher stand-ins. Their real-Kani seeded false-bound fixture keeps 
 package and embedded oracle intact, changes the asserted bound before the normal renderer and
 origin seal, and requires the paired runner to return real `Falsified` evidence without starting
 native execution. It is a deliberately defective proof property, not a naturally failing admitted
-production claim. Fabricated evidence is confined to the exhaustive classification table.
+production claim. A separate real-proof control selects a bounded native-helper protocol
+stand-in through an immutable private installation dependency; it records the actual native
+arguments and emits an oracle-stop record, and the public paired runner must return
+`OracleStop` / `oracle_stop` / `CompletionRefusal`. This exercises runner propagation without
+claiming an actual runtime-produced stop for a supported admitted integer operation. Fabricated
+proof evidence is confined to the exhaustive classification table.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;

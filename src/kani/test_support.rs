@@ -234,3 +234,7 @@ impl<T> No for &Probe<T> {
         false
     }
 }
+
+// Shared with the integration binary; this oracle never calls production canonicalization.
+#[path = "../../tests/it/kani_scalar_native_digest.rs"]
+pub(crate) mod scalar_native_digest;
