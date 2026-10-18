@@ -81,11 +81,6 @@ operations:
     inputs: [KaniProfile, requested constructs, source id]
     output: CapabilityEntry list | KaniOutcome
     semantics: classifies one request through the public bounded Kani profile with no reverse Contract IR dependency; a malformed request is a typed refusal, not a disposition
-  - name: prepare_checked_arithmetic
-    status: live finite-input auxiliary under FR-015-AC-84 and AC-85; deleted by the arithmetic slice (FR-015-AC-109)
-    inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CheckedArithmeticRequest]
-    output: ArithmeticLowering | FamilyLoweringError (IR KaniOutcome or KaniOutcomeError)
-    semantics: CG-owned bounded checked-arithmetic lowering over the IR finite-input/profile/dispatch ABI; division by zero, overflow, invalid ranges, profile refusal and dispatch mismatch stay IR typed non-Boolean outcomes, never an assumption or partial artifact
   - name: prepare_bounded_collection_query
     status: live finite-input auxiliary under FR-015-AC-88 and AC-89; deleted by the collection slice (FR-015-AC-110)
     inputs: [KaniProfile, DispatchIndex, ValidatedFiniteInput, CollectionQuery]
@@ -412,6 +407,10 @@ open_design_gates:
 
 The interface's features in declaration order: every operation the contract above declares, one row each.
 
+IR-598 / FR-015-AC-109 retired the finite-input checked-arithmetic auxiliary and
+its request/result types. The collection and graph auxiliaries and corpus API
+remain public until their separately gated retirement slices.
+
 | Feature | Kind |
 |---|---|
 | source_obligation_census | operation |
@@ -429,7 +428,6 @@ The interface's features in declaration order: every operation the contract abov
 | classify_clause | operation |
 | parse_llvm_coverage | operation |
 | classify_bounded_kani_profile | operation |
-| prepare_checked_arithmetic | operation |
 | prepare_bounded_collection_query | operation |
 | prepare_finite_graph_reaches | operation |
 | generate_bounded_kani_corpus_case | operation |
