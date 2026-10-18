@@ -1656,10 +1656,15 @@ fn exact_quantity_conversion_vectors_agree() {
     let denied = rt::denials(rt::unit_tuple([8, 0, 1, 1, 6, 1]), |m| {
         typed(quantity_convert(&source, &unit, m))
     });
-    assert!(denied.iter().any(|(point, _, outcome, retained)| *point
-        == rt::ChargePoint::UnitResultRetain
-        && matches!(outcome, Ok(Outcome::Incomplete(_)))
-        && *retained == 0));
+    let result_units_index = rt::LimitKind::ALL
+        .iter()
+        .position(|kind| *kind == rt::LimitKind::ResultUnits)
+        .expect("result units counter");
+    assert!(denied
+        .iter()
+        .any(|run| run.point == rt::ChargePoint::UnitResultRetain
+            && matches!(run.outcome, Ok(Outcome::Incomplete(_)))
+            && run.consumed[result_units_index] == 0));
     assert_eq!(vectors_run() - before, 15, "every conversion row ran");
 }
 
@@ -1704,4 +1709,91 @@ fn quantity_conversion_ill_typed_preserves_meter() {
         );
     }
     assert_eq!(vectors_run() - before, 4);
+}
+
+/// A test-only faulty adapter adds arithmetic charges after an incomplete conversion,
+/// then returns the original outcome without retaining another result.
+fn conversion_with_incomplete_meter_mutation(
+    source: &Quantity,
+    unit: &rt::QuantityUnit,
+    meter: &mut Meter,
+) -> Result<Outcome<Quantity>, IllTyped> {
+    let outcome = typed(quantity_convert(source, unit, meter));
+    if matches!(outcome, Ok(Outcome::Incomplete(_))) {
+        let one = rt::int(1);
+        let zero = rt::IntegerInterval::new(rt::int(0), rt::int(0)).unwrap();
+        assert_eq!(
+            rt::evaluate_integer_arithmetic(
+                rt::IntegerArithmetic::Add(&one, &one),
+                Some(&zero),
+                meter,
+            ),
+            Outcome::Refused(rt::Refusal::IntegerOutOfDomain)
+        );
+    }
+    outcome
+}
+
+/// The old outcome/result-unit projection misses this mutation; full denied observations
+/// make the same agreement comparison reject it.
+#[trace("FR-014-AC-6", "FR-014-AC-48", "TC-024")]
+#[test]
+#[should_panic(expected = "generated oracle disagrees with direct runtime")]
+fn denied_conversion_agreement_detects_non_result_meter_mutation() {
+    let f = conversion_fixture();
+    let source = f.qi(100, "cm");
+    let unit = f.unit("m");
+    assert_eq!(
+        rt::metered(rt::UNLIMITED, |meter| direct_conversion(
+            &source, &unit, meter
+        )),
+        rt::metered(rt::UNLIMITED, |meter| {
+            conversion_with_incomplete_meter_mutation(&source, &unit, meter)
+        }),
+        "the faulty adapter changes only incomplete runs"
+    );
+    let direct = rt::denials(rt::UNLIMITED, |meter| {
+        direct_conversion(&source, &unit, meter)
+    });
+    let mutated = rt::denials(rt::UNLIMITED, |meter| {
+        conversion_with_incomplete_meter_mutation(&source, &unit, meter)
+    });
+    assert!(!direct.is_empty(), "the control must exercise denied runs");
+    let result_units_index = rt::LimitKind::ALL
+        .iter()
+        .position(|kind| *kind == rt::LimitKind::ResultUnits)
+        .expect("result units counter");
+    let old_projection = |runs: &[rt::DeniedRun<Result<Outcome<Quantity>, IllTyped>>]| {
+        runs.iter()
+            .map(|run| {
+                (
+                    run.point,
+                    run.occurrence,
+                    format!("{:?}", run.outcome),
+                    run.consumed[result_units_index],
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        old_projection(&direct),
+        old_projection(&mutated),
+        "outcome/result-unit comparison alone misses the defect"
+    );
+    assert!(
+        direct
+            .iter()
+            .zip(&mutated)
+            .all(
+                |(direct, mutated)| direct.admitted_charges != mutated.admitted_charges
+                    && direct.consumed != mutated.consumed
+            ),
+        "each injected incomplete path must expose its extra charges and counters"
+    );
+    agree2! {
+        limits: rt::UNLIMITED,
+        setup: {},
+        direct: |meter| direct_conversion(&source, &unit, meter),
+        generated: |meter| conversion_with_incomplete_meter_mutation(&source, &unit, meter),
+    };
 }

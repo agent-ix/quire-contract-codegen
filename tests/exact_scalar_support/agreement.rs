@@ -179,12 +179,27 @@ macro_rules! shared_helpers {
             (outcome, meter.admitted_charges().to_vec(), consumed)
         }
 
-        /// Deny each admitted charge occurrence in turn:
-        /// `(point, occurrence, outcome, result units consumed)`.
+        /// One denied execution with its complete meter observation.
+        #[derive(Debug, Eq, PartialEq)]
+        pub struct DeniedRun<T> {
+            /// The charge point whose occurrence was denied.
+            pub point: ChargePoint,
+            /// The one-based denied occurrence at that point.
+            pub occurrence: u64,
+            /// The original returned value or stop.
+            pub outcome: T,
+            /// Every admitted charge point in execution order.
+            pub admitted_charges: Vec<ChargePoint>,
+            /// Consumed counters in `LimitKind::ALL` order, including every kind.
+            pub consumed: Vec<u64>,
+        }
+
+        /// Deny each admitted charge occurrence in turn, retaining the outcome,
+        /// admitted charge order and every consumed counter of each denied run.
         pub fn denials<T>(
             limits: ScalarLimits,
             run: impl Fn(&mut Meter) -> T,
-        ) -> Vec<(ChargePoint, u64, T, u64)> {
+        ) -> Vec<DeniedRun<T>> {
             let mut meter = Meter::new(limits);
             let _ = run(&mut meter);
             let charges = meter.admitted_charges().to_vec();
@@ -199,12 +214,13 @@ macro_rules! shared_helpers {
                         occurrence: to_occurrence(occurrence),
                     });
                     let outcome = run(&mut denied);
-                    (
+                    DeniedRun {
                         point,
                         occurrence,
                         outcome,
-                        denied.consumed(LimitKind::ResultUnits),
-                    )
+                        admitted_charges: denied.admitted_charges().to_vec(),
+                        consumed: LimitKind::ALL.iter().map(|kind| denied.consumed(*kind)).collect(),
+                    }
                 })
                 .collect()
         }
