@@ -687,12 +687,12 @@ impl FrameReplay {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     /// The frame envelope's `declared_domains` is the empty list and this module builds no
     /// declared-domain value and no key for one; its header says once, and only once, that the
     /// declaration is empty until QSL-345 settles the key. The fixed per-operation transcript the
     /// module once passed to `Witness::parse` is gone.
-    ///
-    /// Trace: FR-024-AC-25, FR-024-AC-29, TC-035
+    #[trace("FR-024-AC-25", "FR-024-AC-29", "TC-035")]
     #[test]
     fn tc_035_the_declared_domains_are_empty_and_the_header_names_qsl_345_once() {
         let source = include_str!("frame.rs");

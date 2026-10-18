@@ -268,6 +268,7 @@ pub(crate) fn frame_identity(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use qsl_replay::{Origin, Role};
 
     use super::*;
@@ -319,8 +320,7 @@ mod tests {
 
     /// The identity depends on the function, the declaration key, the kind and the arguments
     /// only: arguments given in any order give one identity, and each member changes it.
-    ///
-    /// Trace: FR-016-AC-23, TC-026
+    #[trace("FR-016-AC-23", "TC-026")]
     #[test]
     fn tc_026_only_the_four_members_decide_the_identity() {
         let kind = ObligationKind::Postcondition;
@@ -347,8 +347,7 @@ mod tests {
 
     /// An `i64` bound above 2^53 is a decimal string in the preimage, so the encoder accepts it
     /// and the identity tells the extreme domain from a near one.
-    ///
-    /// Trace: FR-016-AC-21, TC-026
+    #[trace("FR-016-AC-21", "TC-026")]
     #[test]
     fn tc_026_an_i64_extreme_domain_is_encodable() {
         let kind = ObligationKind::Invariant;
@@ -368,8 +367,7 @@ mod tests {
     /// Ascending by identifier is not ascending by node id: with `a` bound to a node id above
     /// `b`'s, the digest equals the hand-written text that lists `a` first. A sort by node id
     /// would list `b` first and fail.
-    ///
-    /// Trace: FR-016-AC-21, TC-026
+    #[trace("FR-016-AC-21", "TC-026")]
     #[test]
     fn tc_026_arguments_are_ordered_by_identifier_not_by_node_id() {
         use sha2::{Digest, Sha256};
@@ -410,8 +408,7 @@ mod tests {
     /// the order the preimage struct declares them in (`function`, `declaration`, `kind`,
     /// `arguments`), so a digest of the struct's own order, or of any other order, fails. A
     /// function identity over a fixed site equals the digest of its own hand-written text too.
-    ///
-    /// Trace: FR-024-AC-20, TC-035
+    #[trace("FR-024-AC-20", "TC-035")]
     #[test]
     fn tc_035_the_frame_and_function_identities_equal_their_hand_written_digests() {
         use sha2::{Digest, Sha256};
@@ -449,8 +446,7 @@ mod tests {
     /// own occurrence and no arguments: it equals that call, and changes when the kind, the
     /// frame node, or the occurrence's node, role or ordinal changes alone. The frame node is
     /// the only place a node enters: the anchor is not a member.
-    ///
-    /// Trace: FR-024-AC-20, FR-024-AC-21, FR-024-AC-22, TC-035
+    #[trace("FR-024-AC-20", "FR-024-AC-21", "FR-024-AC-22", "TC-035")]
     #[test]
     fn tc_035_a_frame_identity_is_the_one_function_over_the_frame_and_its_occurrence() {
         let site = frame_site(7, "generated", 2);
@@ -495,8 +491,7 @@ mod tests {
 
     /// The kind is read from the harness's property: a frame is the `frame` kind and a
     /// postcondition has none.
-    ///
-    /// Trace: FR-024-AC-22, TC-035
+    #[trace("FR-024-AC-22", "TC-035")]
     #[test]
     fn tc_035_the_frame_kind_is_derived_from_the_property() {
         use crate::kani::identity::StateComparison;
@@ -516,8 +511,7 @@ mod tests {
     /// The one minting function encodes and digests through `core::canonical` only: the
     /// non-test source names no encoder function of `quire_canonical`, no `sha2` and no
     /// `ByteDigest::of`, and `sha2` is not in `[dependencies]`.
-    ///
-    /// Trace: FR-024-AC-20, TC-035
+    #[trace("FR-024-AC-20", "TC-035")]
     #[test]
     fn tc_035_the_identity_is_encoded_and_digested_only_through_core_canonical() {
         let source = include_str!("obligation.rs");
