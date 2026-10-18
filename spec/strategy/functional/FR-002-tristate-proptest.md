@@ -84,7 +84,7 @@ proptest strategies that preserve pass, failed postcondition, and rejected preco
 |----|----------|--------------|
 | FR-002-AC-1 | Rejected inputs remain distinct from passing cases in generated reports. | Test (TC-004) |
 | FR-002-AC-2 | Boundary strategies exercise immediately inside and outside supported constraints. | Test (TC-004) |
-| FR-002-AC-3 | Supported correlated constraints do not rely on improbable filtering. | Analysis |
+| FR-002-AC-3 | Supported correlated constraints do not rely on improbable filtering. | Test (TC-004) |
 | FR-002-AC-4 | Shrinking preserves generated constraints or records a residual rejection. | Test (TC-004) |
 | FR-002-AC-5 | The generated campaign runner owns execution, explicit-discard accounting, and conclusion, returns a typed terminal result, and rejects campaigns below either configured coverage floor or above the explicit-discard ceiling; exhausted searches retain their reason and any missed floor without becoming a completed floor failure. | Test (TC-004) |
 | FR-002-AC-6 | Integer and generated Boolean harness campaign cases bind exact values to executable accepted/rejected expectations; enum cases execute an all-admitted membership expectation. | Test (TC-004) |

@@ -109,9 +109,11 @@ mod generated_tests {{
     #[test]
     fn supported_shrinks_stay_shaped_and_residuals_stay_rejected() {{
         let mut runner = TestRunner::deterministic();
-        let mut correlated_config = Config::default();
-        correlated_config.max_local_rejects = 0;
-        correlated_config.max_global_rejects = 0;
+        // Zero local rejects: a filtering strategy fails `new_tree` on its first rejection.
+        let correlated_config = Config {{
+            max_local_rejects: 0,
+            ..Config::default()
+        }};
         let algorithm = correlated_config.rng_algorithm;
         let mut correlated_runner = TestRunner::new_with_rng(
             correlated_config,
