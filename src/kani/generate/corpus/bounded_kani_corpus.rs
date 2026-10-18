@@ -32,9 +32,6 @@ use crate::{
     kani::generate::census_validation::validate_dependencies,
     kani::generate::lower::{
         bounded_collections::{prepare_bounded_collection_query, CollectionQuery, QueryKind},
-        definedness_arithmetic::{
-            prepare_checked_arithmetic, ArithmeticLowering, CheckedArithmeticRequest,
-        },
         finite_reference_graphs::{prepare_finite_graph_reaches, GraphLowering, GraphRequest},
         FamilyLoweringError,
     },
@@ -56,8 +53,6 @@ pub const CORPUS_PROOF_GRAPH_SCHEMA: &str = "quire.kani-corpus-proof-graph/v1";
 /// One semantic family represented in the bounded corpus.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BoundedCorpusFamily {
-    /// Checked arithmetic and its definedness boundary.
-    DefinednessArithmetic,
     /// Identity-preserving positive-length reachability.
     FiniteReferenceGraph,
     /// Ordered, duplicate-preserving finite collection queries.
@@ -67,7 +62,6 @@ pub enum BoundedCorpusFamily {
 impl BoundedCorpusFamily {
     const fn construct(self) -> &'static str {
         match self {
-            Self::DefinednessArithmetic => "checked-arithmetic",
             Self::FiniteReferenceGraph => "finite-reference-graph",
             Self::BoundedCollection => "bounded-collection-query",
         }
@@ -75,7 +69,6 @@ impl BoundedCorpusFamily {
 
     const fn label(self) -> &'static str {
         match self {
-            Self::DefinednessArithmetic => "arithmetic",
             Self::FiniteReferenceGraph => "graph",
             Self::BoundedCollection => "collection",
         }
@@ -85,8 +78,6 @@ impl BoundedCorpusFamily {
 /// One exact semantic request selected for corpus generation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BoundedCorpusRequest {
-    /// A checked arithmetic operation.
-    Arithmetic(CheckedArithmeticRequest),
     /// A finite positive-length reachability query.
     Graph(GraphRequest),
     /// An ordered finite collection query.
@@ -96,7 +87,6 @@ pub enum BoundedCorpusRequest {
 impl BoundedCorpusRequest {
     const fn family(&self) -> BoundedCorpusFamily {
         match self {
-            Self::Arithmetic(_) => BoundedCorpusFamily::DefinednessArithmetic,
             Self::Graph(_) => BoundedCorpusFamily::FiniteReferenceGraph,
             Self::Collection(_) => BoundedCorpusFamily::BoundedCollection,
         }
@@ -104,7 +94,6 @@ impl BoundedCorpusRequest {
 
     fn source_id(&self) -> &str {
         match self {
-            Self::Arithmetic(request) => request.source_id,
             Self::Graph(request) => &request.source_id,
             Self::Collection(request) => &request.source_id,
         }
@@ -147,9 +136,9 @@ pub struct CorpusProofDependencyGraph {
     /// The corpus case's own `#[kani::proof]` symbol; identical to the suffix-bearing function
     /// name in [`BoundedCorpusArtifacts::kani_harness`].
     pub proof_id: String,
-    /// Semantic family label (e.g. `arithmetic`).
+    /// Semantic family label (e.g. `collection`).
     pub family: String,
-    /// Contract IR construct name this case lowers (e.g. `checked-arithmetic`).
+    /// Contract IR construct name this case lowers (e.g. `bounded-collection-query`).
     pub construct: String,
     /// The corpus case's name, `{family}_{digest}`; the same name its artifact paths carry.
     pub identity: String,
@@ -204,14 +193,6 @@ struct CaseIdentity<'a> {
 #[derive(Serialize, FixedShape)]
 #[serde(rename_all = "camelCase")]
 enum RequestIdentity<'a> {
-    Arithmetic {
-        source_id: &'a str,
-        operator: &'static str,
-        left: String,
-        right: String,
-        minimum: String,
-        maximum: String,
-    },
     Graph {
         source_id: &'a str,
         start_id: &'a str,
@@ -239,24 +220,6 @@ impl<'a> From<&'a BoundedCorpusRequest> for RequestIdentity<'a> {
     // error here rather than a field silently left out of the identity.
     fn from(request: &'a BoundedCorpusRequest) -> Self {
         match request {
-            BoundedCorpusRequest::Arithmetic(request) => {
-                let CheckedArithmeticRequest {
-                    source_id,
-                    operator,
-                    left,
-                    right,
-                    minimum,
-                    maximum,
-                } = request;
-                Self::Arithmetic {
-                    source_id,
-                    operator: checked_method(*operator),
-                    left: left.to_string(),
-                    right: right.to_string(),
-                    minimum: minimum.to_string(),
-                    maximum: maximum.to_string(),
-                }
-            }
             BoundedCorpusRequest::Graph(request) => {
                 let GraphRequest {
                     source_id,
@@ -617,17 +580,6 @@ pub fn generate_bounded_kani_corpus_case(
         )
     })?;
     let (value, oracle_body, qsl_body) = match request {
-        BoundedCorpusRequest::Arithmetic(request) => {
-            let lowered = prepare_checked_arithmetic(profile, dispatch, input, request)?;
-            // Admission establishes the checked arithmetic/definedness property; the numeric
-            // result itself is not a Boolean verdict (zero is as valid as any other in-range
-            // result).
-            (
-                true,
-                render_arithmetic_oracle(&lowered),
-                render_arithmetic_qsl(&lowered),
-            )
-        }
         BoundedCorpusRequest::Graph(request) => {
             let lowered = prepare_finite_graph_reaches(profile, dispatch, input, request)?;
             let qsl_body = render_graph_qsl(&lowered, input).ok_or_else(|| {
@@ -716,45 +668,6 @@ pub fn generate_bounded_kani_corpus_case(
         harness_symbol,
         artifacts,
     })
-}
-
-const fn checked_method(operator: quire_contract_model::NumericOperator) -> &'static str {
-    match operator {
-        quire_contract_model::NumericOperator::Add => "checked_add",
-        quire_contract_model::NumericOperator::Subtract => "checked_sub",
-        quire_contract_model::NumericOperator::Multiply => "checked_mul",
-        quire_contract_model::NumericOperator::Divide => "checked_div",
-        quire_contract_model::NumericOperator::Remainder => "checked_rem",
-    }
-}
-
-fn render_arithmetic_oracle(lowered: &ArithmeticLowering) -> String {
-    let operator = checked_method(lowered.request.operator);
-    format!(
-        "{}i128.{operator}({}i128).is_some_and(|value| value >= {}i128 && value <= {}i128)",
-        lowered.request.left,
-        lowered.request.right,
-        lowered.request.minimum,
-        lowered.request.maximum,
-    )
-}
-
-fn render_arithmetic_qsl(lowered: &ArithmeticLowering) -> String {
-    let operator = match lowered.request.operator {
-        quire_contract_model::NumericOperator::Add => "+",
-        quire_contract_model::NumericOperator::Subtract => "-",
-        quire_contract_model::NumericOperator::Multiply => "*",
-        quire_contract_model::NumericOperator::Divide => "/",
-        quire_contract_model::NumericOperator::Remainder => "%",
-    };
-    let calculation = format!(
-        "({} {operator} {})",
-        lowered.request.left, lowered.request.right
-    );
-    format!(
-        "({calculation} >= {}) and ({calculation} <= {})",
-        lowered.request.minimum, lowered.request.maximum
-    )
 }
 
 fn render_collection_qsl(values: &[i128], kind: QueryKind) -> String {
@@ -962,13 +875,13 @@ mod tests {
         FiniteReference, KaniOutcome, KaniOutcomeKind, KaniProfile, ModuleDescriptor,
         PopulationCompleteness, ProfileSelection, ResourceBounds, SemanticFamily,
     };
-    use quire_contract_model::{std001_code, NumericOperator, Std001Code};
+    use quire_contract_model::{std001_code, Std001Code};
 
     use super::{
         generate_bounded_kani_corpus_case, BoundedCorpusRequest, CorpusProofDependencyGraph,
         EmittedCorpusIdentities, ProofReadiness, CORPUS_PROOF_GRAPH_SCHEMA,
     };
-    use super::{CheckedArithmeticRequest, CollectionQuery, GraphRequest, QueryKind};
+    use super::{CollectionQuery, GraphRequest, QueryKind};
     use crate::kani::census::{ProofDependencyKind, ProofDependencyRequest, ProofDependencyState};
 
     type InputEdit = Box<dyn Fn(&mut FiniteInput)>;
@@ -1017,23 +930,6 @@ mod tests {
     fn tc_023_each_corpus_case_compiles_its_retained_qsl_source() {
         let (profile, dispatch, input) = fixture();
         let cases = vec![
-            generate_bounded_kani_corpus_case(
-                crate::kani::test_support::proof_ceilings::proof_ceilings(),
-                &profile,
-                &dispatch,
-                &input,
-                BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-                    source_id: "source",
-                    operator: NumericOperator::Add,
-                    left: 1,
-                    right: 1,
-                    minimum: 0,
-                    maximum: 2,
-                }),
-                &[],
-                &mut EmittedCorpusIdentities::new(),
-            )
-            .unwrap(),
             emit(
                 &(profile.clone(), dispatch.clone(), input.clone()),
                 BoundedCorpusRequest::Graph(GraphRequest {
@@ -1155,10 +1051,10 @@ mod tests {
             source_site: None,
         };
         let dependencies = [edge];
-        let request = arithmetic("source", 1, 1);
+        let request = collection(3, "source");
         let identity = super::CaseIdentity {
             ceilings,
-            construct: "checked-arithmetic",
+            construct: "bounded-collection-query",
             profile: profile.selection(),
             input: normalized,
             request: super::RequestIdentity::from(&request),
@@ -1211,17 +1107,17 @@ mod tests {
 
         let case = emit(
             &fixture,
-            arithmetic("source", 1, 1),
+            collection(3, "source"),
             &[],
             &mut EmittedCorpusIdentities::new(),
         )
         .expect("the bounded canonical case identity admits");
-        assert!(case_name(&case).starts_with("arithmetic_"));
+        assert!(case_name(&case).starts_with("collection_"));
     }
 
     /// This preimage is authored from the fixture fields in RFC 8785
-    /// key order, not obtained from the generator or canonical encoder. The fixed digest pins the
-    /// emitted name, so replacing the canonical digest with struct-order JSON changes this test.
+    /// key order, not obtained from the generator or canonical encoder. Its content identity binds
+    /// the emitted name, so struct-order JSON cannot substitute for canonical encoding.
     /// Serde's enum-level camelCase renames the variant, but leaves its struct-variant
     /// `source_id` field in snake_case.
     #[trace("TC-023")]
@@ -1229,29 +1125,23 @@ mod tests {
     fn tc_023_case_name_matches_hand_authored_canonical_preimage() {
         const PREIMAGE: &str = concat!(
             r#"{"ceilings":{"memoryBytes":17179869184,"wallClock":{"nanos":0,"secs":600}},"#,
-            r#""construct":"checked-arithmetic","dependencies":[],"input":{"bounds":{"#,
+            r#""construct":"bounded-collection-query","dependencies":[],"input":{"bounds":{"#,
             r#""max_input_bytes":2,"max_objects":2,"max_references":1},"completeness":"complete","#,
             r#""inputBytes":1,"modelId":"model","objects":[["a","node","s"],["b","node","s"]],"#,
             r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
             r#""references":[["a","next","b"]],"sourceId":"source"},"#,
             r#""profile":{"abi_revision":"abi","profile":"kani-bounded/1","revision":"r1"},"#,
-            r#""request":{"arithmetic":{"left":"1","maximum":"2","minimum":"0","#,
-            r#""operator":"checked_add","right":"1","source_id":"source"}}}"#,
+            r#""request":{"collection":{"kind":{"existsEqual":"7"},"max_items":3,"source_id":"source","values":["2","2","7"]}}}"#,
         );
-        const DIGEST: &str = "4afb9c72a943cbd2db73a206e083012480ee4218adb534e96cbc13c44cc7a525";
-        assert_eq!(
-            format!("{:x}", qsl_replay::ByteDigest::of(PREIMAGE.as_bytes())),
-            DIGEST,
-            "the hand-authored preimage must retain its fixed digest"
-        );
+        let digest = format!("{:x}", qsl_replay::ByteDigest::of(PREIMAGE.as_bytes()));
         let case = emit(
             &fixture(),
-            arithmetic("source", 1, 1),
+            collection(3, "source"),
             &[],
             &mut EmittedCorpusIdentities::new(),
         )
-        .expect("the fixture is an admitted arithmetic case");
-        assert_eq!(case_name(&case), format!("arithmetic_{DIGEST}"));
+        .expect("the fixture is an admitted collection case");
+        assert_eq!(case_name(&case), format!("collection_{digest}"));
     }
 
     /// The caller supplies the dependency census, so it can offer a
@@ -1301,7 +1191,7 @@ mod tests {
                 &profile,
                 &dispatch,
                 &input,
-                arithmetic("source", 1, 1),
+                collection(3, "source"),
                 &[],
                 &mut EmittedCorpusIdentities::new(),
             )
@@ -1348,12 +1238,6 @@ mod tests {
             selection.clone(),
             vec![
                 CapabilityEntry {
-                    construct: "checked-arithmetic".to_owned(),
-                    disposition: CapabilityDisposition::Supported {
-                        module: "arithmetic".to_owned(),
-                    },
-                },
-                CapabilityEntry {
                     construct: "finite-reference-graph".to_owned(),
                     disposition: CapabilityDisposition::Supported {
                         module: "graphs".to_owned(),
@@ -1369,12 +1253,6 @@ mod tests {
         )
         .unwrap();
         let dispatch = DispatchIndex::new(vec![
-            ModuleDescriptor {
-                module_id: "arithmetic".to_owned(),
-                family: SemanticFamily::DefinednessArithmetic,
-                abi_revision: "abi".to_owned(),
-                constructs: vec!["checked-arithmetic".to_owned()],
-            },
             ModuleDescriptor {
                 module_id: "graphs".to_owned(),
                 family: SemanticFamily::ObjectsReferencesGraphs,
@@ -1423,23 +1301,11 @@ mod tests {
         (profile, dispatch, input)
     }
 
-    fn arithmetic(source_id: &'static str, left: i128, right: i128) -> BoundedCorpusRequest {
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id,
-            operator: NumericOperator::Add,
-            left,
-            right,
-            minimum: 0,
-            maximum: 2,
-        })
-    }
-
     #[trace("TC-023")]
     #[test]
     fn tc_023_generates_deterministic_complete_artifacts_for_every_supported_family() {
         let (profile, dispatch, input) = fixture();
         let cases = vec![
-            arithmetic("source", 1, 1),
             BoundedCorpusRequest::Graph(GraphRequest {
                 source_id: "source".to_owned(),
                 start_id: "a".to_owned(),
@@ -1520,7 +1386,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            arithmetic("with-dependency", 1, 1),
+            collection(3, "with-dependency"),
             &[dependency],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1553,7 +1419,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            arithmetic("missing-dependency", 1, 1),
+            collection(3, "missing-dependency"),
             &[dependency],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1583,7 +1449,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            arithmetic("duplicate-census", 1, 1),
+            collection(3, "duplicate-census"),
             &[duplicate, duplicate],
             &mut emitted,
         )
@@ -1591,12 +1457,13 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
         assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
+        assert!(emitted.0.is_empty());
         let retry = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
-            arithmetic("duplicate-census", 1, 1),
+            collection(3, "duplicate-census"),
             &[],
             &mut emitted,
         )
@@ -1622,7 +1489,7 @@ mod tests {
             &profile,
             &dispatch,
             &other_input,
-            arithmetic("mismatched-profile", 1, 1),
+            collection(3, "mismatched-profile"),
             &[],
             &mut emitted,
         )
@@ -1650,7 +1517,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            arithmetic("proved-case", 1, 1),
+            collection(3, "proved-case"),
             &[],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1686,7 +1553,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            arithmetic("refused-case", 1, 1),
+            collection(3, "refused-case"),
             &[duplicate, duplicate],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -1716,7 +1583,7 @@ mod tests {
             &profile,
             &dispatch,
             &input,
-            arithmetic("assumed-census", 1, 1),
+            collection(3, "assumed-census"),
             &[assumed],
             &mut emitted,
         )
@@ -1724,12 +1591,13 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind, KaniOutcomeKind::InvalidInput);
         assert_eq!(error.code, std001_code!("kani_corpus_dependency_invalid"));
+        assert!(emitted.0.is_empty());
         let retry = generate_bounded_kani_corpus_case(
             crate::kani::test_support::proof_ceilings::proof_ceilings(),
             &profile,
             &dispatch,
             &input,
-            arithmetic("assumed-census", 1, 1),
+            collection(3, "assumed-census"),
             &[],
             &mut emitted,
         )
@@ -1836,58 +1704,6 @@ mod tests {
 
     #[trace("TC-023")]
     #[test]
-    fn tc_023_admitted_zero_arithmetic_is_a_proof_not_a_false_verdict() {
-        let (profile, dispatch, input) = fixture();
-        let generated = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-                source_id: "checked-zero",
-                operator: NumericOperator::Subtract,
-                left: 1,
-                right: 1,
-                minimum: 0,
-                maximum: 1,
-            }),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .unwrap();
-        assert_eq!(generated.outcome.kind, KaniOutcomeKind::Proved);
-        assert_eq!(generated.outcome.source_id, "checked-zero");
-    }
-
-    /// A provable request with an operand outside `i64`'s range still generates.
-    #[trace("TC-023")]
-    #[test]
-    fn tc_023_provable_arithmetic_with_an_out_of_i64_range_operand_still_generates() {
-        let (profile, dispatch, input) = fixture();
-        let left = i64::MAX as i128 + 1;
-        let generated = generate_bounded_kani_corpus_case(
-            crate::kani::test_support::proof_ceilings::proof_ceilings(),
-            &profile,
-            &dispatch,
-            &input,
-            BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-                source_id: "out-of-i64-range",
-                operator: NumericOperator::Add,
-                left,
-                right: 0,
-                minimum: left,
-                maximum: left,
-            }),
-            &[],
-            &mut EmittedCorpusIdentities::new(),
-        )
-        .expect("a provable case with an operand outside i64's range generates");
-        assert_eq!(generated.outcome.kind, KaniOutcomeKind::Proved);
-        assert_eq!(generated.outcome.source_id, "out-of-i64-range");
-    }
-
-    #[trace("TC-023")]
-    #[test]
     fn tc_023_collection_oracle_evaluates_the_selected_ordered_population() {
         let (profile, dispatch, input) = fixture();
         let generated = generate_bounded_kani_corpus_case(
@@ -1972,12 +1788,22 @@ mod tests {
     #[trace("TC-023", "NFR-005-AC-1")]
     #[test]
     fn tc_023_wide_request_values_are_exact_canonical_strings() {
-        let first_request = arithmetic("wide", (1_i128 << 53) + 1, 0);
-        let second_request = arithmetic("wide", (1_i128 << 53) + 2, 0);
+        let wide = |value| {
+            BoundedCorpusRequest::Collection(CollectionQuery {
+                source_id: "wide".to_owned(),
+                values: vec![value],
+                max_items: 1,
+                kind: QueryKind::ExistsEqual(value),
+            })
+        };
+        let first_request = wide((1_i128 << 53) + 1);
+        let second_request = wide((1_i128 << 53) + 2);
         let first = super::RequestIdentity::from(&first_request);
         let second = super::RequestIdentity::from(&second_request);
         let first_bytes = crate::core::canonical::content_bytes(&first).expect("string preimage");
         let second_bytes = crate::core::canonical::content_bytes(&second).expect("string preimage");
+        assert_eq!(first_bytes, br#"{"collection":{"kind":{"existsEqual":"9007199254740993"},"max_items":1,"source_id":"wide","values":["9007199254740993"]}}"#);
+        assert_eq!(second_bytes, br#"{"collection":{"kind":{"existsEqual":"9007199254740994"},"max_items":1,"source_id":"wide","values":["9007199254740994"]}}"#);
         assert_ne!(first_bytes, second_bytes);
         assert!(first_bytes
             .windows(b"9007199254740993".len())
@@ -2019,9 +1845,9 @@ mod tests {
         let fixture = fixture();
         let requests = || {
             [
-                arithmetic("first", 1, 1),
+                collection(3, "first"),
                 collection(3, "second"),
-                arithmetic("third", 1, 0),
+                collection(5, "third"),
             ]
         };
         let mut forward = EmittedCorpusIdentities::new();
@@ -2061,11 +1887,10 @@ mod tests {
         }];
         let mut emitted = EmittedCorpusIdentities::new();
         let cases = [
-            emit(&fixture, arithmetic("a", 1, 1), &[], &mut emitted),
-            emit(&fixture, arithmetic("b", 1, 1), &[], &mut emitted),
-            emit(&fixture, arithmetic("a", 1, 0), &[], &mut emitted),
-            emit(&fixture, arithmetic("a", 1, 1), &census, &mut emitted),
             emit(&fixture, collection(3, "a"), &[], &mut emitted),
+            emit(&fixture, collection(3, "b"), &[], &mut emitted),
+            emit(&fixture, collection(5, "a"), &[], &mut emitted),
+            emit(&fixture, collection(3, "a"), &census, &mut emitted),
             emit(&fixture, collection(4, "a"), &[], &mut emitted),
         ]
         .map(|case| case.expect("each distinct request is accepted"));
@@ -2089,9 +1914,9 @@ mod tests {
     fn tc_023_a_request_emitted_twice_is_refused_as_an_identity_collision() {
         let fixture = fixture();
         let mut emitted = EmittedCorpusIdentities::new();
-        let first = emit(&fixture, arithmetic("same", 1, 1), &[], &mut emitted).unwrap();
+        let first = emit(&fixture, collection(3, "same"), &[], &mut emitted).unwrap();
         for _ in 0..2 {
-            let refusal = emit(&fixture, arithmetic("same", 1, 1), &[], &mut emitted)
+            let refusal = emit(&fixture, collection(3, "same"), &[], &mut emitted)
                 .map_err(refusal_outcome)
                 .unwrap_err();
             assert_eq!(refusal.kind, KaniOutcomeKind::InvalidInput);
@@ -2100,7 +1925,7 @@ mod tests {
         }
         let again = emit(
             &fixture,
-            arithmetic("same", 1, 1),
+            collection(3, "same"),
             &[],
             &mut EmittedCorpusIdentities::new(),
         )
@@ -2130,21 +1955,6 @@ mod tests {
         }
     }
 
-    fn checked(
-        source_id: &'static str,
-        operator: NumericOperator,
-        [left, right, minimum, maximum]: [i128; 4],
-    ) -> BoundedCorpusRequest {
-        BoundedCorpusRequest::Arithmetic(CheckedArithmeticRequest {
-            source_id,
-            operator,
-            left,
-            right,
-            minimum,
-            maximum,
-        })
-    }
-
     fn reach(
         source_id: &str,
         start_id: &str,
@@ -2159,24 +1969,6 @@ mod tests {
             field_id: field_id.to_owned(),
             max_expansions,
         })
-    }
-
-    #[trace("FR-015-AC-94", "TC-023")]
-    #[test]
-    fn tc_023_every_arithmetic_request_field_changes_the_identity() {
-        use NumericOperator::{Add, Subtract};
-        assert_each_variation_changes_identity(
-            &fixture(),
-            checked("s", Add, [1, 1, 0, 2]),
-            vec![
-                ("source_id", checked("t", Add, [1, 1, 0, 2])),
-                ("operator", checked("s", Subtract, [1, 1, 0, 2])),
-                ("left", checked("s", Add, [0, 1, 0, 2])),
-                ("right", checked("s", Add, [1, 0, 0, 2])),
-                ("minimum", checked("s", Add, [1, 1, -1, 2])),
-                ("maximum", checked("s", Add, [1, 1, 0, 3])),
-            ],
-        );
     }
 
     #[trace("FR-015-AC-94", "TC-023")]
@@ -2240,7 +2032,7 @@ mod tests {
     #[trace("FR-015-AC-94", "TC-023")]
     #[test]
     fn tc_023_every_input_and_profile_field_changes_the_identity() {
-        let request = || checked("s", NumericOperator::Add, [1, 1, 0, 2]);
+        let request = || collection(3, "s");
         let base = identity_of(&fixture(), request());
         let object = |identity: &str| FiniteObject {
             identity: identity.to_owned(),

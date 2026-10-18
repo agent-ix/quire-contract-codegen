@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify the current bounded-profile classifier, three CG-owned finite-input
+Verify the current bounded-profile classifier, graph and collection finite-input
 lowerers and corpus emitter against FR-015-AC-82 through
 FR-015-AC-95 and the retirement slices FR-015-AC-109 to FR-015-AC-111. Before AD-004 step 4g, the hand-built path's generated
 `KaniOutcome` is a case classification; after step 4g, generation returns no
@@ -19,17 +19,17 @@ Each successful case retains a QSL source unit and its imported dependency
 source. The real-Kani lane passes the run's actual falsification playback
 immediately to the replay facade; playback is run evidence, not a persisted
 case artifact. Current
-source tests carry `TC-023` trace tags. The computed matrix tags FR-015-AC-94
-with seven corpus unit tests; FR-015-AC-82 through FR-015-AC-93 and
-FR-015-AC-95 and FR-015-AC-109 to FR-015-AC-111 remain untagged. A trace tag alone does not establish proof
-evidence for the planned replacement.
+source tests carry `TC-023` trace tags. FR-015-AC-94 retains graph/collection canonical-identity controls.
+FR-015-AC-109 is traced by the admitted division refusal and routed remainder
+refusal tests. FR-015-AC-95 and FR-015-AC-110 to FR-015-AC-111 remain planned.
+A trace tag alone does not establish installed-backend proof evidence.
 
 ## Test Procedure
 
 Request supported, refused and inconclusive constructs from one selected
 profile in a reordered subset; submit empty, duplicate and unknown names.
-For each CG-owned semantic family, exercise the admitted boundary and each
-typed refusal of FR-015-AC-84 through FR-015-AC-89. Generate the oracle,
+For each retained CG-owned semantic family, exercise the admitted boundary and each
+typed refusal of FR-015-AC-86 through FR-015-AC-89. Generate the oracle,
 finite strategy, Kani harness and proof graph from one validated Contract IR
 finite input; compare their selected family, profile, case identity and oracle
 truth value. Vary one case input at a time, reorder graph objects and edges,
@@ -106,14 +106,41 @@ a lowering refusal and the mismatch refusal) is the revision of the profile
 selection while the hand-built path remains (FR-015-AC-52); its `Proved` and
 `Counterexample` values classify generated cases rather than Kani runs.
 
-Implemented (IR-464): the harness every corpus case emits, of each of the arithmetic, graph
-and collection families, ends with exactly one `kani::cover!` after its assertion of the
+Implemented (IR-464; arithmetic corpus retired by IR-598 AC-109): the harness
+every retained graph and collection corpus case emits, ends with exactly one `kani::cover!` after its assertion of the
 case's oracle, and the installed backend classifies a case of each family whose oracle is true
-`Verified`, and a graph or collection case whose oracle is false (an arithmetic case's
-oracle is always true) `Falsified` with the assertion's
+`Verified`, and a graph or collection case whose oracle is false
+`Falsified` with the assertion's
 playback, which its cover after the assertion keeps from being the one Kani prints
 (FR-015-AC-55, FR-015-AC-57). `tc_023_kani_falsifies_the_generated_false_collection_harness`
 and `tc_023_kani_verifies_a_true_collection_and_falsifies_a_false_graph_harness` run the false
-cases through `classify_kani_run`, and the arithmetic, graph and true collection cases are
+cases through `classify_kani_run`, and the graph and true collection cases are
 classified `Verified` the same way. A corpus case has no symbolic input and no
 precondition, so no vacuous corpus run exists to classify.
+
+
+Arithmetic retirement status (IR-598, FR-015-AC-109 only): the finite-request
+arithmetic API, corpus arm and renderer are deleted. Shared canonical-preimage,
+dependency, refusal, collision, emission-order, ceiling and exact wide `i128`
+checks use retained collection requests. Graph/collection source-backed replay,
+cover controls, schemas, census validation and V1 generation remain. The admitted
+`quire.op.integer.div` test requires `Unsupported(OperationNotRendered)` with no
+harness; the separate `quire.op.integer.rem` test requires an `Underived`, refused
+claim with no generated scalar family or harness.
+
+Coverage retired from FR-015-AC-84/85 includes finite-input `i128` checked
+add/subtract/multiply/divide/remainder admission and range/refusal behavior,
+including requests outside `i64`. Divide/remainder had only ground Rust
+`checked_div`/`checked_rem` checks for exact result, nonzero divisor and range,
+with no mutation control. Their retained QSL text used `/` and `%`; this slice
+claims no QSL division/modulo proof and passes none to IR-854. V2 supports symbolic
+`i64` add/subtract/multiply/negate with independent `i128` assertions; it does not
+replace the old finite-request API. IR-858's differential reference renderer,
+authentic QSL-emitted AC-103 inputs, real healthy Add/Add-to-Subtract mutant and
+routed healthy/bound-violation controls remain; this does not claim dedicated
+real Subtract/Multiply/Negate mutants.
+
+IR-598 and IR-348 remain open. Collection retirement (AC-110) waits for released
+step 4h and actual AC-99 controls. Graph/final retirement (AC-111) also waits for
+AC-110 and IR-805/QSL-820. Held steps 4c–4f, 5 and 6 and the separately gated
+IR-854 division/modulo replacement remain unchanged.

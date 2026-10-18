@@ -1045,6 +1045,8 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      returns no proof verdict (FR-015-AC-95); the installed backend supplies one under FR-017.
      L-3 lands after 4f, 4g and 4h. The Kani family lowerings
      are implemented in CG by IR-347; IR removal follows this consumer change.
+     Arithmetic retirement (FR-015-AC-109) is implemented. The collection and graph
+     corpus arms, replay and shared auxiliaries remain; this does not complete step 4g.
    - 4h: the collection family. `kani/generate/collection.rs` lowers an admitted model-field
      collection claim to a `HarnessSpec` and `render.rs` renders it under the cover rule, so the
      file no longer emits `#[kani::proof]`, `kani::any`, `kani::assume` or `kani::cover!` itself.

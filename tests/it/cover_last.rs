@@ -20,7 +20,7 @@ use ix_trace_rs::trace;
 
 /// Every family the inspection drives, with the one source file that emits it. A file in this
 /// table is a file the scan allows to spell a proof attribute.
-const FAMILIES: [(&str, &str); 12] = [
+const FAMILIES: [(&str, &str); 11] = [
     ("precondition", "kani/generate/precondition.rs"),
     ("v1 contract postcondition", "kani/generate/contract.rs"),
     ("v1 contract invariant", "kani/generate/contract.rs"),
@@ -31,10 +31,6 @@ const FAMILIES: [(&str, &str); 12] = [
     (
         "v1 bundle with an assumed and a stubbed dependency",
         "kani/generate/v1_bundle.rs",
-    ),
-    (
-        "corpus arithmetic",
-        "kani/generate/corpus/bounded_kani_corpus.rs",
     ),
     (
         "corpus graph",

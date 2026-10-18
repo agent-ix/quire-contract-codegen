@@ -64,7 +64,6 @@ const MODULE_FILES: &[&str] = &[
     "kani/generate/frame.rs",
     "kani/generate/lower/bounded_collections.rs",
     "kani/generate/lower/bounded_kani_profile.rs",
-    "kani/generate/lower/definedness_arithmetic.rs",
     "kani/generate/lower/finite_reference_graphs.rs",
     "kani/generate/negotiate.rs",
     "kani/generate/outcome.rs",
