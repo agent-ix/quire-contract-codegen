@@ -2212,8 +2212,8 @@ fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
         .expect("a NoVerdict run has a record");
     assert_eq!(record.stderr.text, "error: unexpected argument\n");
     assert_eq!(record.phase, KaniFailurePhase::Launcher);
-    let terminal = run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
-    assert_eq!(format!("{terminal:?}"), "Failed");
+    let terminal = run_terminal_value(&evidence, None).unwrap();
+    assert_eq!(terminal, qsl_replay::TerminalValue::Failed);
     evidence.diagnostics = Some(record);
     let wire = serde_json::to_value(&evidence).unwrap();
     assert_eq!(wire["diagnostics"]["phase"], "launcher");
@@ -2302,20 +2302,30 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
     }
 }
 
-/// The FR-029 terminal value of `FailedWithoutCounterexample` evidence is `Failed` whatever its
-/// CBMC cause. The independence from the cause and the record holds by the signature of
-/// `run_terminal_value`, which takes only the outcome and the SUCCESS-check count.
+/// Bounded launcher stand-ins preserve failure classification while resource causes determine
+/// the terminal value from the retained execution evidence.
 ///
-#[trace("FR-017-AC-40", "TC-027")]
+#[trace("FR-017-AC-40", "FR-029-AC-32", "FR-029-AC-33", "TC-027")]
 #[cfg(unix)]
 #[test]
-fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
+fn cbmc_failure_terminal_value_reads_the_retained_cause() {
     let cancel = quire_exact::Cancel::new();
     let package = bound_package(1000);
     let harness = supported_contract_harnesses(&package, "crate::withdraw").remove(1);
     let directory = write_crate(&harness, HEALTHY_SUBJECT);
     fs::create_dir_all(directory.join("target")).unwrap();
-    for status in ["exit_code_64", "out_of_memory", "cbmc_exploded"] {
+    for (status, expected) in [
+        ("exit_code_64", qsl_replay::TerminalValue::Failed),
+        (
+            "out_of_memory",
+            qsl_replay::TerminalValue::Incomplete(qsl_replay::IncompleteCause::ResourceExhausted),
+        ),
+        (
+            "timeout",
+            qsl_replay::TerminalValue::Incomplete(qsl_replay::IncompleteCause::TimedOut),
+        ),
+        ("cbmc_exploded", qsl_replay::TerminalValue::Failed),
+    ] {
         let report = json!({
             "metadata": { "version": "1.0" },
             "error_details": [{ "harness_id": "m::h", "has_errors": true, "exit_status": status }],
@@ -2353,9 +2363,8 @@ fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
             serde_json::to_value(&evidence).unwrap()["failureCause"].is_object(),
             "{status}"
         );
-        let terminal =
-            run_terminal_value(&evidence.outcome, evidence.success_checks, None).unwrap();
-        assert_eq!(format!("{terminal:?}"), "Failed", "{status}");
+        let terminal = run_terminal_value(&evidence, None).unwrap();
+        assert_eq!(terminal, expected, "{status}");
     }
     let _ = fs::remove_dir_all(&directory);
 }
@@ -2402,6 +2411,10 @@ fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause(
         wire["failureCause"],
         json!({ "kind": "exit_code", "code": 64 }),
         "{wire}"
+    );
+    assert_eq!(
+        run_terminal_value(&evidence, None),
+        Ok(qsl_replay::TerminalValue::Failed)
     );
     let record = evidence
         .diagnostics

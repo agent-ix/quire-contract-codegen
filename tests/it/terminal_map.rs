@@ -20,15 +20,47 @@ use qsl_replay::{
 use quire_contract_codegen::{
     ir_outcome_terminal_value, run_terminal_value, DecodeFailure, DependencyLock,
     DependencyLockError, DocumentError, EvidenceFailureCause, FrameReplayError,
-    KaniInconclusiveReason, KaniRunOutcome, LockedSource, ModelError, ObligationIdentityError,
-    OperationDeclaration, PreStateFault, ReplayInputs, ReplayPackage, ReplayPackageError,
-    ReplaySettlement, ReplayVerdict, ScopeMember, SpineReplayError, StateClauseReplay,
-    StateClauseReplayError, StateFrameRefusal, TerminalPairError,
+    KaniExecutionEvidence, KaniFailureCause, KaniInconclusiveReason, KaniRunOutcome, KaniSolver,
+    LockedSource, MemoryMechanism, MemoryObservation, ModelError, ObligationIdentityError,
+    OperationDeclaration, PreStateFault, ProofCeilings, ReplayInputs, ReplayPackage,
+    ReplayPackageError, ReplaySettlement, ReplayVerdict, ScopeMember, SpineReplayError,
+    StateClauseReplay, StateClauseReplayError, StateFrameRefusal, TerminalPairError,
 };
 use quire_contract_ir::kani::{KaniCancellationSource, KaniOutcome, KaniOutcomeKind};
 use quire_exact::CancelCause;
 
 use crate::kani_obligations_state_frame::{emitted_fixture, native_twin::Twin};
+
+/// Explicitly synthetic evidence for mapping tables, independent of launcher fixtures.
+pub(crate) fn synthetic_evidence(
+    outcome: KaniRunOutcome,
+    success_checks: u32,
+) -> KaniExecutionEvidence {
+    KaniExecutionEvidence {
+        ceilings: ProofCeilings {
+            memory_bytes: std::num::NonZeroU64::new(1_073_741_824).unwrap(),
+            wall_clock: std::time::Duration::from_secs(30),
+        },
+        memory: MemoryObservation {
+            mechanism: MemoryMechanism::LinuxPidNamespaceProcfsTreeRss,
+            peak_resident_bytes: None,
+        },
+        symbolic_arguments: Vec::new(),
+        kind: None,
+        harness_path: "synthetic::mapping".into(),
+        launcher_path: "synthetic".into(),
+        arguments: Vec::new(),
+        unwind: 4,
+        solver: KaniSolver::Cadical,
+        exit_code: None,
+        outcome,
+        success_checks,
+        checks: Vec::new(),
+        batch: None,
+        diagnostics: None,
+        failure_cause: None,
+    }
+}
 
 /// Every inconclusive reason the classifier has today.
 const REASONS: [KaniInconclusiveReason; 7] = [
@@ -74,20 +106,24 @@ fn direct_cancelled_run_maps_exact_source_and_rejects_settlement() {
     ] {
         let outcome = KaniRunOutcome::Cancelled { source };
         assert_eq!(
-            run_terminal_value(&outcome, 0, None),
+            run_terminal_value(&synthetic_evidence(outcome.clone(), 0), None),
             Ok(TerminalValue::Incomplete(IncompleteCause::Cancelled {
                 source: exact
             }))
         );
         assert_eq!(
-            run_terminal_value(&outcome, 0, Some(ReplaySettlement::Reproduced)),
+            run_terminal_value(
+                &synthetic_evidence(outcome.clone(), 0),
+                Some(ReplaySettlement::Reproduced)
+            ),
             Err(TerminalPairError::UnexpectedSettlement)
         );
     }
 }
 
 fn map_run(outcome: &KaniRunOutcome, settlement: Option<ReplaySettlement<'_>>) -> TerminalValue {
-    run_terminal_value(outcome, 3, settlement).expect("a well-paired outcome maps")
+    run_terminal_value(&synthetic_evidence(outcome.clone(), 3), settlement)
+        .expect("a well-paired outcome maps")
 }
 
 fn map_settled<'a>(settlement: impl Into<ReplaySettlement<'a>>) -> TerminalValue {
@@ -257,12 +293,15 @@ fn tc_040_no_outcome_maps_to_tested() {
 #[test]
 fn tc_040_a_settlement_accompanies_a_falsified_outcome_only() {
     assert_eq!(
-        run_terminal_value(&falsified(), 0, None),
+        run_terminal_value(&synthetic_evidence(falsified(), 0), None),
         Err(TerminalPairError::MissingSettlement)
     );
     for outcome in settlement_free_outcomes() {
         assert_eq!(
-            run_terminal_value(&outcome, 3, Some(ReplaySettlement::Reproduced)),
+            run_terminal_value(
+                &synthetic_evidence(outcome.clone(), 3),
+                Some(ReplaySettlement::Reproduced)
+            ),
             Err(TerminalPairError::UnexpectedSettlement),
             "{outcome:?}"
         );
@@ -1271,4 +1310,202 @@ fn tc_041_a_repeated_dependency_identity_after_a_counterexample_is_replay_refuse
         replayed(Code::InvalidPackage),
         "{refusal}"
     );
+}
+
+/// Explicit columns: absent, properties_failed, timeout, out_of_memory, exit_code, unknown.
+/// Matching the closed cause type makes an added variant a compile error in this inventory.
+fn cause_column(cause: Option<&KaniFailureCause>) -> usize {
+    match cause {
+        None => 0,
+        Some(KaniFailureCause::PropertiesFailed) => 1,
+        Some(KaniFailureCause::Timeout) => 2,
+        Some(KaniFailureCause::OutOfMemory) => 3,
+        Some(KaniFailureCause::ExitCode { .. }) => 4,
+        Some(KaniFailureCause::Unknown { .. }) => 5,
+    }
+}
+
+fn cause_probes() -> Vec<Option<KaniFailureCause>> {
+    vec![
+        None,
+        Some(KaniFailureCause::PropertiesFailed),
+        Some(KaniFailureCause::Timeout),
+        Some(KaniFailureCause::OutOfMemory),
+        Some(KaniFailureCause::ExitCode { code: i32::MIN }),
+        Some(KaniFailureCause::ExitCode { code: 0 }),
+        Some(KaniFailureCause::ExitCode { code: 64 }),
+        Some(KaniFailureCause::ExitCode { code: i32::MAX }),
+        Some(KaniFailureCause::Unknown {
+            exit_status: "timeout out_of_memory".into(),
+        }),
+    ]
+}
+
+/// Independent literal specification rows; the compiler checks every outcome and reason.
+fn ordinary_row(outcome: &KaniRunOutcome, count: u32) -> Option<[TerminalValue; 6]> {
+    use KaniInconclusiveReason as R;
+    use TerminalValue::{Failed, Incomplete};
+    let proved = |success_checks| TerminalValue::Proved {
+        basis: ProofBasis::Checks { success_checks },
+        certification: Certification::Certified,
+    };
+    let repeated = |value: TerminalValue| std::array::from_fn(|_| value.clone());
+    Some(match outcome {
+        KaniRunOutcome::Verified => repeated(proved(count)),
+        KaniRunOutcome::CoverUnsatisfied { .. } => repeated(proved(0)),
+        KaniRunOutcome::Falsified { .. } => return None,
+        KaniRunOutcome::Cancelled { source } => repeated(Incomplete(IncompleteCause::Cancelled {
+            source: match source {
+                KaniCancellationSource::Requested => CancelCause::Requested,
+                KaniCancellationSource::Deadline => CancelCause::Deadline,
+            },
+        })),
+        KaniRunOutcome::Inconclusive { reason } => match reason {
+            R::VacuousProof => repeated(proved(0)),
+            R::TimedOut => repeated(Incomplete(IncompleteCause::TimedOut)),
+            R::MemoryExhausted | R::UnwindBoundExhausted => {
+                repeated(Incomplete(IncompleteCause::ResourceExhausted))
+            }
+            R::NoVerdict | R::MissingCoverSummary => repeated(Failed),
+            R::FailedWithoutCounterexample => [
+                Failed,
+                Failed,
+                Incomplete(IncompleteCause::TimedOut),
+                Incomplete(IncompleteCause::ResourceExhausted),
+                Failed,
+                Failed,
+            ],
+        },
+    })
+}
+
+/// Exhaust the closed replay vocabulary independently of the run-map implementation.
+fn assert_settlement_row(evidence: &KaniExecutionEvidence, settlement: ReplaySettlement<'_>) {
+    let expected = match &settlement {
+        ReplaySettlement::Reproduced => TerminalValue::Refuted,
+        ReplaySettlement::Disagreement(cause) => {
+            TerminalValue::Inconclusive(InconclusiveCause::ReplayParity((*cause).clone()))
+        }
+        ReplaySettlement::Refused(refusal) => TerminalValue::from_replay_refusal(refusal),
+        ReplaySettlement::SetupRefused(code) => replayed(*code),
+        ReplaySettlement::Fault | ReplaySettlement::CgDefect => TerminalValue::Failed,
+    };
+    assert_eq!(run_terminal_value(evidence, Some(settlement)), Ok(expected));
+}
+
+/// Cross every closed outcome/reason with every cause, payload probes and varied evidence counts.
+#[trace(
+    "FR-029-AC-32",
+    "FR-029-AC-33",
+    "FR-029-AC-34",
+    "FR-029-AC-35",
+    "FR-029-AC-15",
+    "TC-040"
+)]
+#[test]
+fn cause_matrix_preserves_literal_terminal_rows_and_pair_refusals() {
+    let mut outcomes = settlement_free_outcomes();
+    outcomes.extend([
+        falsified(),
+        KaniRunOutcome::Cancelled {
+            source: KaniCancellationSource::Requested,
+        },
+        KaniRunOutcome::Cancelled {
+            source: KaniCancellationSource::Deadline,
+        },
+    ]);
+    // Compile the intentionally breaking root-exported evidence API too.
+    let map: fn(
+        &KaniExecutionEvidence,
+        Option<ReplaySettlement<'_>>,
+    ) -> Result<TerminalValue, TerminalPairError> = run_terminal_value;
+    for count in [0, 7, 19] {
+        for outcome in &outcomes {
+            for cause in cause_probes() {
+                let mut evidence = synthetic_evidence(outcome.clone(), count);
+                evidence.failure_cause = cause;
+                let before = evidence.clone();
+                if let Some(row) = ordinary_row(outcome, count) {
+                    let value = map(&evidence, None).unwrap();
+                    assert_eq!(
+                        value,
+                        row[cause_column(evidence.failure_cause.as_ref())],
+                        "{evidence:?}"
+                    );
+                    if matches!(
+                        outcome,
+                        KaniRunOutcome::CoverUnsatisfied { .. }
+                            | KaniRunOutcome::Inconclusive {
+                                reason: KaniInconclusiveReason::VacuousProof
+                            }
+                    ) {
+                        assert_eq!(value.category(), Category::Inconclusive);
+                        assert_eq!(
+                            value.vacuous_proof_cause(),
+                            Some(ReportedInconclusiveCause::KaniVacuousProof)
+                        );
+                    }
+                    assert_eq!(
+                        map(&evidence, Some(ReplaySettlement::Reproduced)),
+                        Err(TerminalPairError::UnexpectedSettlement)
+                    );
+                    with_settlements(|settlement| {
+                        assert_eq!(
+                            map(&evidence, Some(settlement)),
+                            Err(TerminalPairError::UnexpectedSettlement)
+                        )
+                    });
+                } else {
+                    assert_eq!(
+                        map(&evidence, None),
+                        Err(TerminalPairError::MissingSettlement)
+                    );
+                    assert_eq!(
+                        map(&evidence, Some(ReplaySettlement::Reproduced)),
+                        Ok(TerminalValue::Refuted)
+                    );
+                    with_settlements(|settlement| assert_settlement_row(&evidence, settlement));
+                    for_each_fault(|settlement| {
+                        assert_eq!(map(&evidence, Some(settlement)), Ok(TerminalValue::Failed))
+                    });
+                    for_each_cg_failure(|settlement| {
+                        assert_eq!(map(&evidence, Some(settlement)), Ok(TerminalValue::Failed))
+                    });
+                    for_each_setup_refusal(|code, settlement| {
+                        assert_eq!(map(&evidence, Some(settlement)), Ok(replayed(code)))
+                    });
+                    let refusal = non_fault_refusal();
+                    assert_eq!(
+                        map(&evidence, Some(ReplaySettlement::Refused(&refusal))),
+                        Ok(replayed(refusal.code()))
+                    );
+                    for cause in [
+                        DisagreementCause::Verdicts {
+                            proved: Verdict::from_category(Category::Violation),
+                            replayed: Verdict::from_category(Category::Success),
+                        },
+                        DisagreementCause::NoValue {
+                            proved: Verdict::from_category(Category::Violation),
+                            replayed: Verdict::from_category(Category::Violation),
+                        },
+                        DisagreementCause::Witness {
+                            proved: Verdict::from_category(Category::Violation),
+                            replayed: Verdict::from_category(Category::Violation),
+                            given: None,
+                            derived: None,
+                            failure: WitnessFailure::Mismatch,
+                        },
+                    ] {
+                        assert_eq!(
+                            map(&evidence, Some(ReplaySettlement::Disagreement(&cause))),
+                            Ok(TerminalValue::Inconclusive(
+                                InconclusiveCause::ReplayParity(cause.clone())
+                            ))
+                        );
+                    }
+                }
+                assert_eq!(evidence, before, "terminal projection retains raw evidence");
+            }
+        }
+    }
 }

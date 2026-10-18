@@ -114,11 +114,14 @@ with a reproduced replay. Composite parity uses a distinct typed input and plann
 
 ## Status
 
-Planned (IR-848): the cause arguments of step 5 and FR-029-AC-32 to FR-029-AC-35.
+Step 5 and FR-029-AC-32 to FR-029-AC-35 are covered by the literal cause matrix in
+`tests/it/terminal_map.rs`, the bounded report controls in `tests/it/kani_terminal_private.rs`
+(reusing the execution fixtures in `src/kani/run/execute.rs`), and
+`cbmc_failure_terminal_value_reads_the_retained_cause` in `tests/it/kani_obligations.rs`.
 
-Partly covered. Steps 1, 2 and 4 to 15 are tests of `tests/it/terminal_map.rs`. Step 3
-asserts the timed-out and exhausted-unwind-bound reasons only, because no memory-exhausted reason
-exists until FR-028-AC-3 adds it, so FR-029-AC-3 stays planned. Step 9 (FR-029-AC-10) is covered
+Partly covered. Steps 1 to 15 are tests of `tests/it/terminal_map.rs` and the bounded report
+controls above. Step 3 includes timed-out, memory-exhausted and exhausted-unwind-bound reasons.
+Step 9 (FR-029-AC-10) is covered
 by `tc_040_a_fault_in_any_replay_wrapper_is_failed`, which builds each fault wrapper from QSL's
 constructible `InternalFault` (QSL bcca433) and asserts `Failed`. Step 15 (FR-029-AC-16, IR-460)
 is covered: the reproduced and the inconclusive results are real `StateClauseReplayResult`s of the
