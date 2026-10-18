@@ -3574,7 +3574,7 @@ fn contract_request(
     (contract, positions)
 }
 
-/// Unit-typed function results retain the generic operand-type refusal under either body kind.
+/// Conversion function bodies retain the earlier form refusal under either declared body kind.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion() {
