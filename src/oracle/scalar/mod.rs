@@ -4310,6 +4310,7 @@ fn derive_operation_from_view<'g>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_model::{CheckedPackageIncomplete, CheckedPackageLimit};
 
     fn node_id(digit: char) -> CheckedNodeId {
@@ -4381,8 +4382,7 @@ mod tests {
 
     /// Admission normally prevents malformed cycles and references; the inference boundary still
     /// reports each cause distinctly if a damaged graph reaches it.
-    ///
-    /// Trace: FR-014-AC-46, TC-024.
+    #[trace("FR-014-AC-46", "TC-024")]
     #[test]
     fn tc_024_nested_inference_reports_missing_cycle_unsupported_and_bad_literals() {
         let integer = node_id('0');
@@ -4493,7 +4493,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-014-AC-45, FR-014-AC-46, TC-024.
+    #[trace("FR-014-AC-45", "FR-014-AC-46", "TC-024")]
     #[test]
     fn tc_024_nested_inference_accepts_inline_canonical_integer_literals() {
         let integer = node_id('0');
@@ -4548,7 +4548,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-014-AC-46, FR-015-AC-104, TC-024, TC-033.
+    #[trace("FR-014-AC-46", "FR-015-AC-104", "TC-024", "TC-033")]
     #[test]
     fn tc_024_nested_inference_enforces_depth_before_reusing_memoized_nodes() {
         let integer = node_id('0');
@@ -4659,8 +4659,7 @@ mod tests {
 
     /// Admission re-validates every body before lowering, so an admitted package
     /// cannot produce these records; they are built directly.
-    ///
-    /// Trace: FR-014-AC-3, TC-024.
+    #[trace("FR-014-AC-3", "TC-024")]
     #[test]
     fn tc_024_invalid_and_incomplete_bodies_are_typed_refusals() {
         let refusal = match quire_contract_model::CheckedPackageV2::read(
@@ -4705,8 +4704,7 @@ mod tests {
     /// `limit` and `consumed` (the per-node case Contract IR's FR-038-AC-95 defines and CG's
     /// public API cannot reach), and every other kind as `LoweringLimitUnrecognised` under its
     /// snake_case name, never as work exhaustion and without a panic.
-    ///
-    /// Trace: FR-014-AC-40, FR-014-AC-41, TC-024.
+    #[trace("FR-014-AC-40", "FR-014-AC-41", "TC-024")]
     #[test]
     fn tc_024_a_failed_record_is_refused_by_its_limit_kind() {
         use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
@@ -4760,8 +4758,7 @@ mod tests {
     /// application node with no `operation.identity`, which is the very thing
     /// admission refuses to produce. Do not read this test as evidence that the
     /// generator refuses such a node end to end.
-    ///
-    /// Trace: FR-014-AC-3, TC-024.
+    #[trace("FR-014-AC-3", "TC-024")]
     #[test]
     fn tc_024_catalogued_operation_identity_refuses_a_node_whose_operation_has_no_identity() {
         let inner: CheckedSemanticNodeV2 = serde_json::from_value(serde_json::json!({
@@ -4901,8 +4898,7 @@ mod tests {
     /// A conversion narrows a node only with the catalogued narrow identity and exactly one
     /// argument, a reference to that node. IR refuses a two-argument narrow at admission, so this
     /// reaches the check through a raw graph node.
-    ///
-    /// Trace: FR-014-AC-27, TC-024
+    #[trace("FR-014-AC-27", "TC-024")]
     #[test]
     fn tc_024_a_conversion_narrows_only_its_one_referenced_argument() {
         let target = node_id('2');
@@ -4944,8 +4940,7 @@ mod tests {
 
     /// A reference to a parameter typed by a `bounded_domain` is classified by the domain's base
     /// scalar type, not refused as `found: None`.
-    ///
-    /// Trace: FR-014-AC-17, TC-024.
+    #[trace("FR-014-AC-17", "TC-024")]
     #[test]
     fn tc_024_reference_typed_by_a_bounded_domain_is_classified_by_its_base_scalar_type() {
         let nodes = bounded_parameter_nodes();
@@ -4967,8 +4962,7 @@ mod tests {
 
     /// The bound is read from binding-shaped members (`min`, `max`); the bare-literal shape this
     /// generator once read is refused as unreadable.
-    ///
-    /// Trace: FR-014-AC-16, TC-024.
+    #[trace("FR-014-AC-16", "TC-024")]
     #[test]
     fn tc_024_integer_range_is_read_from_binding_members_and_refuses_bare_literals() {
         let bound_id = node_id('2');
@@ -5034,8 +5028,7 @@ mod tests {
 
     /// Bound members are looked up by name, in any order (QSpec's reader does the same); a
     /// missing, duplicate or unknown name is refused.
-    ///
-    /// Trace: FR-014-AC-16, TC-024.
+    #[trace("FR-014-AC-16", "TC-024")]
     #[test]
     fn tc_024_bound_members_are_looked_up_by_name_in_any_order() {
         // Swapped integer range.
@@ -5278,8 +5271,7 @@ mod tests {
     /// identity inverts to the family that descriptor belongs to, no two families share an
     /// identity, and `every_operation` covers every `ExactScalarOperation` variant. A catalogued
     /// identity added to one map and not the other fails here.
-    ///
-    /// Trace: FR-014-AC-18, FR-014-AC-19, TC-024.
+    #[trace("FR-014-AC-18", "FR-014-AC-19", "TC-024")]
     #[test]
     fn tc_024_the_identity_inverse_matches_the_forward_catalogue_for_every_descriptor() {
         let operations = every_operation();
@@ -5312,8 +5304,7 @@ mod tests {
 
     /// Catalogued identities derivation refuses (checked against the operation catalog): every
     /// one is outside `family_of_identity`, so it is `OperationNotDerivable`.
-    ///
-    /// Trace: FR-014-AC-18, TC-024.
+    #[trace("FR-014-AC-18", "TC-024")]
     #[test]
     fn tc_024_the_refused_catalogue_identities_have_no_family() {
         for identity in [
@@ -5383,8 +5374,7 @@ mod tests {
 
     /// A node absent from the graph, and one whose record did not lower, keep the refusal
     /// `generate_exact_scalar_oracles` gives them, before any identity is read.
-    ///
-    /// Trace: FR-014-AC-18, FR-022-AC-8, TC-024.
+    #[trace("FR-014-AC-18", "FR-022-AC-8", "TC-024")]
     #[test]
     fn tc_024_derivation_checks_the_graph_and_the_lowering_before_the_identity() {
         let (id, node) = application_node(serde_json::json!({"term": "literal"}));
@@ -5406,8 +5396,7 @@ mod tests {
     /// A node with no `operation.identity` (which admission forbids), a node that is not an
     /// application, and one naming an identity outside the derivable set each get their own
     /// typed refusal.
-    ///
-    /// Trace: FR-014-AC-18, TC-024.
+    #[trace("FR-014-AC-18", "TC-024")]
     #[test]
     fn tc_024_derivation_refuses_a_missing_identity_a_non_application_and_a_foreign_identity() {
         assert_eq!(
@@ -5432,8 +5421,7 @@ mod tests {
 
     /// `integer.div` names its profile only through `operation.laws`: none, or two different
     /// profiles, select no profile; a foreign definition selects none either.
-    ///
-    /// Trace: FR-014-AC-18, TC-024.
+    #[trace("FR-014-AC-18", "TC-024")]
     #[test]
     fn tc_024_derivation_reads_the_division_profile_from_the_laws_and_nowhere_else() {
         let laws = |identities: &[&str]| {
@@ -5482,8 +5470,7 @@ mod tests {
 
     /// `operation.mode` must carry the rounding of the bound it is read against: absent, of
     /// another kind or another value is `ModeNotDerivable`.
-    ///
-    /// Trace: FR-014-AC-18, TC-024.
+    #[trace("FR-014-AC-18", "TC-024")]
     #[test]
     fn tc_024_derivation_requires_the_mode_to_agree_with_the_bound_rounding() {
         let derivation_of = |mode: Value| {
