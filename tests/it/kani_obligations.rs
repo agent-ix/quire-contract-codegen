@@ -2836,7 +2836,17 @@ fn tc_027_a_routed_scalar_harness_verifies() {
 }
 
 /// A retained routed scalar is proved and invoked with normal and constrained native limits.
-#[trace("FR-017-AC-27", "FR-017-AC-28", "FR-017-AC-29", "FR-017-AC-30")]
+#[trace(
+    "FR-017-AC-27",
+    "FR-017-AC-28",
+    "FR-017-AC-29",
+    "FR-017-AC-30",
+    "FR-017-AC-45",
+    "FR-017-AC-46",
+    "FR-017-AC-47",
+    "FR-017-AC-48",
+    "FR-017-AC-50"
+)]
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
@@ -2860,6 +2870,7 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     assert_eq!(receipt.proof_evidence().outcome, KaniRunOutcome::Verified);
     assert_eq!(receipt.operands(), operands);
     assert_eq!(receipt.scalar_limits(), &limits);
+    assert_retained_scalar_content(&receipt, &harness, &artifacts);
     assert!(
         matches!(receipt.native_outcome(), Outcome::Completed(value) if value.to_string() == "5")
     );
@@ -2887,6 +2898,11 @@ fn tc_027_attested_scalar_receipt_binds_real_proof_and_native_result() {
     );
     assert_eq!(constrained_receipt.operands(), operands);
     assert_eq!(constrained_receipt.scalar_limits(), &constrained_limits);
+    assert_retained_scalar_content(&constrained_receipt, &harness, &artifacts);
+    assert_eq!(
+        receipt.proof_content_digest(),
+        constrained_receipt.proof_content_digest()
+    );
     assert_eq!(
         receipt.proof_content_identity(),
         constrained_receipt.proof_content_identity(),
@@ -2923,7 +2939,7 @@ fn tc_027_attested_scalar_subtraction_fixture_has_two_bounded_operands() {
         .all(|argument| argument.minimum == 0 && argument.maximum == 9));
 }
 
-#[trace("FR-017-AC-31")]
+#[trace("FR-017-AC-31", "FR-017-AC-47", "FR-017-AC-50")]
 #[test]
 #[ignore = "kani lane: run serially through make kani"]
 fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
@@ -2977,6 +2993,12 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
     assert_eq!(right_first_receipt.operands(), right_first);
     assert_eq!(left_first_receipt.scalar_limits(), &limits);
     assert_eq!(right_first_receipt.scalar_limits(), &limits);
+    assert_retained_scalar_content(&left_first_receipt, &harness, &artifacts);
+    assert_retained_scalar_content(&right_first_receipt, &harness, &artifacts);
+    assert_eq!(
+        left_first_receipt.proof_content_digest(),
+        right_first_receipt.proof_content_digest()
+    );
     assert_eq!(
         left_first_receipt.proof_content_identity(),
         right_first_receipt.proof_content_identity(),
@@ -2990,18 +3012,116 @@ fn tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders() {
     );
 }
 
+fn assert_retained_scalar_content(
+    receipt: &quire_contract_codegen::KaniScalarNativeReceipt,
+    harness: &KaniScalarObligationHarness,
+    artifacts: &[quire_contract_codegen::Artifact],
+) {
+    let entries = receipt.staged_entries();
+    assert_eq!(
+        entries
+            .iter()
+            .map(|(path, _)| path.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "Cargo.lock",
+            "Cargo.toml",
+            "claim-map.json",
+            &harness.record.path,
+            "src/bin/ir791_native.rs",
+            "src/lib.rs",
+            "src/oracle-artifacts-lib.rs"
+        ]
+    );
+    let expected = independent_scalar_digest(entries);
+    for index in 0..entries.len() {
+        for mutation in 0..5 {
+            let mut changed = entries.to_vec();
+            match mutation {
+                0 => {
+                    changed.remove(index);
+                }
+                1 => changed[index].0.push('x'),
+                2 => changed.swap(index, (index + 1) % entries.len()),
+                3 => changed.insert(index, changed[index].clone()),
+                4 => changed[index].1[0] ^= 1,
+                _ => unreachable!(),
+            }
+            assert_ne!(
+                independent_scalar_digest(&changed),
+                expected,
+                "member {index}, mutation {mutation}"
+            );
+        }
+    }
+    let digest: &qsl_replay::DigestRecord = receipt.proof_content_digest();
+    assert_eq!(digest.domain().as_str(), "sha256-jcs");
+    assert_eq!(digest.as_bytes(), &expected);
+    assert_eq!(receipt.proof_content_identity().as_bytes(), &expected);
+    for artifact in artifacts {
+        let path = if artifact.path == "src/lib.rs" {
+            "src/oracle-artifacts-lib.rs"
+        } else {
+            &artifact.path
+        };
+        assert_eq!(
+            &entries.iter().find(|(name, _)| name == path).unwrap().1,
+            artifact.contents.as_bytes()
+        );
+    }
+    assert_eq!(
+        &entries
+            .iter()
+            .find(|(name, _)| name == "src/lib.rs")
+            .unwrap()
+            .1,
+        harness.rust.contents.as_bytes()
+    );
+    assert_eq!(
+        &entries
+            .iter()
+            .find(|(name, _)| name == &harness.record.path)
+            .unwrap()
+            .1,
+        harness.record.contents.as_bytes()
+    );
+    assert_eq!(
+        receipt.meter_observation().limits(),
+        receipt.scalar_limits()
+    );
+    assert!(receipt.cleanup_diagnostic().is_none());
+}
+
+// RFC 8785 for this string-only shape, with explicit object-key order and independent SHA-256.
+fn independent_scalar_digest(entries: &[(String, Vec<u8>)]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let encoded_entries = entries
+        .iter()
+        .map(|(path, bytes)| {
+            format!(
+                "{{\"contents\":{},\"path\":{}}}",
+                serde_json::to_string(std::str::from_utf8(bytes).unwrap()).unwrap(),
+                serde_json::to_string(path).unwrap()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let jcs = format!("{{\"artifacts\":[{encoded_entries}],\"schema\":\"agent-ix/cg-kani-scalar-proof-content/v2\"}}");
+    Sha256::digest(jcs.as_bytes()).into()
+}
+
 fn attested_scalar_limits() -> quire_contract_runtime::exact::ScalarLimits {
     quire_contract_runtime::exact::ScalarLimits {
-        integer_bits: u64::MAX,
-        decimal_digits: u64::MAX,
-        scale_expansion: u64::MAX,
-        text_input_bytes: u64::MAX,
-        text_scalars: u64::MAX,
-        normalized_scalars: u64::MAX,
-        unit_edges: u64::MAX,
-        value_occurrences: u64::MAX,
-        work_units: u64::MAX,
-        result_units: u64::MAX,
+        integer_bits: 10000,
+        decimal_digits: 10001,
+        scale_expansion: 10002,
+        text_input_bytes: 10003,
+        text_scalars: 10004,
+        normalized_scalars: 10005,
+        unit_edges: 10006,
+        value_occurrences: 10007,
+        work_units: 10008,
+        result_units: 10009,
     }
 }
 
@@ -3055,6 +3175,11 @@ fn tc_027_attested_scalar_rejects_preflight_mismatches_without_launch() {
         scalar_limits: limits,
         target_directory: &target,
     });
+    assert_eq!(changed_path.as_ref().unwrap_err().code(), "invalid_request");
+    assert_eq!(
+        changed_path.as_ref().unwrap_err().class(),
+        quire_contract_codegen::KaniScalarNativeErrorClass::CompletionRefusal
+    );
     assert!(matches!(
         changed_path,
         Err(KaniScalarNativeError::InvalidRequest(

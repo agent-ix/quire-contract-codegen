@@ -490,6 +490,50 @@ pub(super) fn render_scalar(
     ))
 }
 
+// Deliberately false claim built before the normal renderer seals its output. The embedded
+// generated oracle and its package remain intact; only the independently asserted bound differs.
+#[cfg(test)]
+pub(super) fn false_bound_harness_for_test(
+    original: &KaniScalarObligationHarness,
+    artifacts: &[Artifact],
+) -> KaniScalarObligationHarness {
+    let identity = &original.identity;
+    let lowered = LoweredScalarClaim {
+        node_id: identity.node_id.clone(),
+        operation_identity: identity.operation_identity.clone(),
+        oracle_source: artifacts
+            .iter()
+            .find(|artifact| artifact.path == "src/lib.rs")
+            .unwrap()
+            .contents
+            .clone(),
+        oracle_symbol: identity.oracle_symbol.clone(),
+        operation: ScalarOperation::of(&identity.operation_identity).unwrap(),
+        operands: identity
+            .arguments
+            .iter()
+            .map(|argument| (argument.minimum, argument.maximum))
+            .collect(),
+        inferred_operands: identity.inferred_operands.clone(),
+        lower: 0,
+        upper: 5,
+        module_symbol: identity.module_symbol.as_str().to_owned(),
+        harness_symbol: identity.harness_symbol.as_str().to_owned(),
+    };
+    let mut harness = render_scalar(
+        &KaniObligationRequest {
+            ceilings: identity.ceilings,
+            items: &[],
+            subject_path: "crate::subject",
+            unwind: identity.unwind,
+        },
+        &lowered,
+    )
+    .unwrap();
+    harness.bind_artifact_package(artifacts);
+    harness
+}
+
 #[cfg(test)]
 fn render_scalar_reference(
     request: &KaniObligationRequest<'_>,
