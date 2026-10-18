@@ -6866,7 +6866,10 @@ scope:
   role: context_only
 - id: StR-001
   path: spec/core/stakeholder/StR-001-traceable-generation.md
-  excerpt: ''
+  excerpt: |-
+    Assurance engineers require that the generator shall derive executable, property-test, proof, and
+    coverage artifacts reproducibly from one validated contract without hiding unsupported semantics,
+    vacuity, rejection, or assumptions.
   role: context_only
 - id: FR-004
   path: spec/evidence/functional/FR-004-vacuity-evidence.md
