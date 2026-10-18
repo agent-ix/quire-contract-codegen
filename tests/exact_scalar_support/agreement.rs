@@ -486,7 +486,8 @@ pub mod rt_side {
     pub use quire_contract_runtime::exact::{
         compare_enum, compare_quantity, convert_quantity, evaluate_quantity, CompoundUnit,
         Conversion, EnumDeclaration, EnumValue, InvalidSemanticGraph, NodeKey, Quantity,
-        QuantityOperation, QuantityTarget, QuantityUnit, Unit, UnitDeclaration, UnitGraph,
+        QuantityOperation, QuantityTarget, QuantityUnit, SemanticGraphCause, Unit, UnitDeclaration,
+        UnitGraph,
     };
 
     /// The runtime's `InjectedDenial::occurrence` is `NonZeroU64`
