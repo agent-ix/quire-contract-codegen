@@ -339,7 +339,18 @@ class enum is closed by a compiling control that matches `KaniScalarNativeErrorC
 with exactly `CompletionRefusal` and `EnvironmentFault` and no wildcard, together with the absence of
 `#[non_exhaustive]` on it; the doctests run by `cargo test --doc`, the pattern of the AC-38
 serialize-only check.
-These steps are Planned until the IR-847 code slice lands.
+These controls are implemented in the scalar runner's unit tests and public rustdoc examples.
+The crate-root private scalar-native tests exercise cancellation and timeout with bounded
+single-run launcher stand-ins. Their real-Kani seeded false-bound fixture keeps the routed
+package and embedded oracle intact, changes the asserted bound before the normal renderer and
+origin seal, and requires the paired runner to return real `Falsified` evidence without starting
+native execution. It is a deliberately defective proof property, not a naturally failing admitted
+production claim. A separate real-proof control selects a bounded native-helper protocol
+stand-in through an immutable private installation dependency; it records the actual native
+arguments and emits an oracle-stop record, and the public paired runner must return
+`OracleStop` / `oracle_stop` / `CompletionRefusal`. This exercises runner propagation without
+claiming an actual runtime-produced stop for a supported admitted integer operation. Fabricated
+proof evidence is confined to the exhaustive classification table.
 
 Snapshot controls (FR-017-AC-29 and AC-30): measure the staged path/byte set for the complete
 generated package, retained harness, native invocation adapter and resolved dependency lock;
@@ -469,4 +480,10 @@ literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema str
 assertion. Change the `Cargo.lock` bytes in a test seam to see the digest change with the schema
 unchanged. A golden edited without a schema bump is a review rule, not a test. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same verdict, exposed entries and digest as an un-failed run, a non-empty `cleanup_diagnostic()` naming the removal failure, and an empty `cleanup_diagnostic()` when removal succeeds; the diagnostic is in neither the digest nor the entries No
 driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
-driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These steps are Planned until the IR-846 code slice lands.
+driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These controls are implemented by the scalar runner unit tests, the real paired receipt and
+subtraction tests in `tests/it/kani_obligations.rs`, and the private cleanup control in
+`tests/it/kani_scalar_native_private.rs`. The private real controls run separately from the
+integration lane with `cargo test --locked --lib kani_scalar_native_private -- --ignored
+--test-threads=1`; the default private control covers cancellation and timeout stand-ins.
+The literal JCS/SHA-256 golden stays independent of real lock contents, and schema/golden
+changes remain subject to review. No driver authentication coverage is claimed.

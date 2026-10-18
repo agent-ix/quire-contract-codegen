@@ -12,6 +12,10 @@ extern crate self as quire_contract_codegen;
 #[path = "../tests/it/kani_render_private.rs"]
 mod kani_render_private;
 
+#[cfg(test)]
+#[path = "../tests/it/kani_scalar_native_private.rs"]
+mod kani_scalar_native_private;
+
 // The leaf directory: artifact, diagnostic, identity, profile and source-map.
 // `core` here is this crate's own layout module (the AD names the directory `core/`). In this
 // file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
@@ -156,9 +160,15 @@ pub use kani::run::execute::{
 pub use kani::run::harness::KaniExecutableHarness;
 pub use kani::run::launch::CaptureStream;
 pub use kani::run::scalar::{
-    execute_kani_scalar_native, KaniScalarNativeError, KaniScalarNativeReceipt,
-    KaniScalarNativeRequest, NativeMeterObservation, ScalarOracleStopKind,
-    ScalarProofContentIdentity,
+    execute_kani_scalar_native, KaniScalarNativeError, KaniScalarNativeErrorClass,
+    KaniScalarNativeReceipt, KaniScalarNativeRequest, NativeMeterObservation, ScalarOracleStopKind,
+    ScalarProofContentIdentity, SCALAR_NATIVE_CODE_ARTIFACT_PACKAGE,
+    SCALAR_NATIVE_CODE_CODEGEN_LOCK, SCALAR_NATIVE_CODE_DEPENDENCY_LOCK,
+    SCALAR_NATIVE_CODE_IDENTITY_ENCODE, SCALAR_NATIVE_CODE_INVALID_REQUEST,
+    SCALAR_NATIVE_CODE_KANI_EXECUTION, SCALAR_NATIVE_CODE_NATIVE_LAUNCH,
+    SCALAR_NATIVE_CODE_NATIVE_RESULT, SCALAR_NATIVE_CODE_ORACLE_STOP,
+    SCALAR_NATIVE_CODE_PROOF_NOT_VERIFIED, SCALAR_NATIVE_CODE_SNAPSHOT_CHANGED,
+    SCALAR_NATIVE_CODE_SNAPSHOT_IO,
 };
 pub use kani::run::tool::{KaniInstallation, KaniTool, KaniToolError};
 pub use kani::terminal::{
@@ -247,3 +257,6 @@ pub use kani::identity::{ProofCeilings, SymbolicArgumentBounds, SymbolicBounds};
 
 /// The actual tree memory mechanism and observations recorded by bounded backend runs.
 pub use kani::run::memory::{MemoryMechanism, MemoryObservation};
+
+/// QSL-owned canonical observation digest record.
+pub use qsl_replay::DigestRecord;

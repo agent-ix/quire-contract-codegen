@@ -41,3 +41,12 @@ pub(crate) fn unsatisfiable_harness_for_test() -> crate::kani::identity::KaniSca
 {
     render::tests::unsatisfiable_harness()
 }
+
+// A false-bound paired-run control uses the same renderer and origin sealing as production.
+#[cfg(test)]
+pub(crate) fn false_bound_harness_for_test(
+    original: &crate::kani::identity::KaniScalarObligationHarness,
+    artifacts: &[crate::core::artifact::Artifact],
+) -> crate::kani::identity::KaniScalarObligationHarness {
+    scalar::false_bound_harness_for_test(original, artifacts)
+}
