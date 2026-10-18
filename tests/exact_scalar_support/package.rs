@@ -1692,6 +1692,14 @@ pub fn corpus() -> Vec<Expression> {
     };
 
     let mut corpus = vec![
+        expression(
+            1140,
+            CONVERSION,
+            QTY1,
+            "unit",
+            Op::QuantityConversion,
+            Vec::new(),
+        ),
         integer(
             1001,
             BINARY,
@@ -2286,6 +2294,15 @@ fn corpus_operation(expr: &Expression) -> (&'static str, Value) {
         Op::EnumComparison { operator } => {
             (expr.operator, op(text_family_identity("enum", *operator)))
         }
+        Op::QuantityConversion => (
+            expr.operator,
+            op_full(
+                "quire.op.quantity.convert",
+                vec![],
+                Some(mode_kv("rounding", "exact")),
+                Some(member_kind("type_argument")),
+            ),
+        ),
         Op::QuantityArithmetic { operator } => {
             let identity = match operator {
                 QuantityOperator::Add => "quire.op.quantity.add",
@@ -2666,8 +2683,35 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             &bounds,
         );
     }
-    // Node ids are digests of the body, so the three conversions differ by the quantity operand
-    // they reference: the shared one, an unbounded dedicated one, and one dedicated to `INT`.
+    // Distinct admitted target declarations keep provenance independent of operand bounds.
+    let mut alternate = builder.value["semantic_graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["node_id"] == node_ref(&unit_type()))
+        .unwrap()
+        .clone();
+    alternate["nominal_identity_preimage"]["qualified_declaration"] =
+        json!(["Example", "other_pace"]);
+    alternate["declaration"]["qualified_name"] = json!(["Example", "other_pace"]);
+    let alternate_key = base_preimage_digest(alternate["nominal_identity_preimage"].clone());
+    alternate["node_id"] = node_ref(&alternate_key);
+    builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .push(alternate);
+    let mut correspondence = builder.value["source_map"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["node_id"] == node_ref(&unit_type()))
+        .unwrap()
+        .clone();
+    correspondence["node_id"] = node_ref(&alternate_key);
+    builder.value["source_map"]
+        .as_array_mut()
+        .unwrap()
+        .push(correspondence);
     let int_key = builder.bound(&INT);
     for (code, operand, bounds) in [
         (QUANTITY_CONVERSIONS[0], key(V_QUANTITY), Vec::new()),
@@ -2682,20 +2726,25 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
             vec![INT],
         ),
     ] {
+        let target = if code == QUANTITY_CONVERSIONS[1] {
+            alternate_key.clone()
+        } else {
+            unit_type()
+        };
         builder.application_bounded(
             code,
             "expression",
             "conversion",
-            &unit_type(),
+            &target,
             application(
                 "convert",
                 op_full(
                     "quire.op.quantity.convert",
                     vec![],
                     Some(mode_kv("rounding", "exact")),
-                    Some(type_argument_member(&unit_type())),
+                    Some(type_argument_member(&target)),
                 ),
-                &unit_type(),
+                &target,
                 vec![reference(&operand)],
             ),
             &bounds,
@@ -4484,4 +4533,43 @@ mod fixture_identity_tests {
             enum_id.digest.as_ref(),
         );
     }
+}
+
+/// A conversion to an admitted compound type, outside the oracle's supported target forms.
+pub fn compound_conversion_package() -> PackageBuilder {
+    let mut builder = derivation_package();
+    let compound = key(9901);
+    builder.node(
+        &compound,
+        "scalar_type",
+        "compound_unit",
+        &compound,
+        json!({"term":"aggregate", "members":[]}),
+    );
+    let node = builder.value["semantic_graph"]["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .last_mut()
+        .unwrap();
+    node.as_object_mut().unwrap().remove("declaration");
+    node.as_object_mut().unwrap().remove("owner");
+    builder.application_bounded(
+        9902,
+        "expression",
+        "conversion",
+        &compound,
+        application(
+            "convert",
+            op_full(
+                "quire.op.quantity.convert",
+                vec![],
+                Some(mode_kv("rounding", "exact")),
+                Some(type_argument_member(&compound)),
+            ),
+            &compound,
+            vec![reference(&key(V_QUANTITY))],
+        ),
+        &[],
+    );
+    builder
 }

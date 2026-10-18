@@ -1181,15 +1181,13 @@ fn tc_025_unbounded_non_finite_and_blocked_items_are_refused_without_harnesses()
 /// emitted.
 #[trace("FR-014-AC-2", "FR-015-AC-15", "TC-025")]
 #[test]
-fn tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_and_no_harness() {
+fn tc_025_a_quantity_conversion_claim_is_unrendered_with_no_harness() {
     let (scalar, _, ids) = scalar_package();
     let declared = package::QUANTITY_CONVERSIONS
         .iter()
         .map(|code| ExactScalarItem {
             node_id: ids.resolve(&code_id(*code)),
-            operation: ExactScalarOperation::QuantityArithmetic {
-                operator: quire_contract_codegen::QuantityOperator::Add,
-            },
+            operation: ExactScalarOperation::QuantityConversion,
         })
         .collect::<Vec<_>>();
     let claim_map = generate_exact_scalar_oracles(&scalar, &declared)
@@ -1246,17 +1244,11 @@ fn tc_025_a_quantity_conversion_claim_is_unsupported_with_its_named_capability_a
     );
     assert_eq!(control_harnesses.len(), 1);
     assert_eq!(records.len(), package::QUANTITY_CONVERSIONS.len());
-    for (record, code) in records.iter().zip(package::QUANTITY_CONVERSIONS) {
-        assert_eq!(
-            unsupported(record),
-            &UnsupportedObligation::NoDerivableClaim {
-                node_id: ids.resolve(&code_id(code)),
-                reason:
-                    quire_contract_codegen::ClaimDerivationRefusal::QuantityConversionUnsupported {
-                        operation_identity: "quire.op.quantity.convert".to_owned(),
-                        capability: quire_contract_codegen::QUANTITY_CONVERSION_CAPABILITY,
-                    },
-            }
+    for record in &records {
+        assert!(
+            matches!(unsupported(record), UnsupportedObligation::OperationNotRendered {
+            operation_identity, ..
+        } if operation_identity == "quire.op.quantity.convert")
         );
     }
 }

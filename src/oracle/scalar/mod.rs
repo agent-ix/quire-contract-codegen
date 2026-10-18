@@ -268,6 +268,8 @@ pub enum ExactScalarOperation {
         /// Operator.
         operator: ComparisonOperator,
     },
+    /// Exact quantity conversion into the unit supplied at call time.
+    QuantityConversion,
     /// `evaluate_quantity`.
     QuantityArithmetic {
         /// Operator.
@@ -619,6 +621,9 @@ pub struct GeneratedScalarClaim {
     pub semantic_form: String,
     /// Semantic type key.
     pub semantic_type: CheckedNodeId,
+    /// Admitted conversion type-argument identity, when this is a quantity conversion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantity_conversion_target: Option<CheckedNodeId>,
     /// Exact source correspondence.
     pub source_map: Vec<CheckedSourceMapEntry>,
     /// Reachable claim keys.
@@ -801,6 +806,7 @@ pub fn plan_exact_scalar_oracles(
                                     package_id: lowering.package.source_package_id().clone(),
                                     semantic_form: node.node.semantic_form.to_string(),
                                     semantic_type: node.semantic_type.clone(),
+                                    quantity_conversion_target: conversion_target(&node.node),
                                     source_map: node.source_map.clone(),
                                     claims: node.claims.clone(),
                                     bounds: node.bounds.clone(),
@@ -1100,6 +1106,7 @@ fn build_contract_scalar_oracles(
                                     package_id: package.wire().package.source.package_id.clone(),
                                     semantic_form: closure.root.semantic_form.to_string(),
                                     semantic_type: closure.root.semantic_type.clone(),
+                                    quantity_conversion_target: conversion_target(closure.root),
                                     source_map: root_sources.to_vec(),
                                     claims: closure.claims,
                                     bounds: closure.bounds,
@@ -1460,13 +1467,17 @@ fn check_item<'r>(
         }
         .into());
     }
-    // The refusal precedes every check against the caller's descriptor: no descriptor can make a
-    // quantity conversion generate.
-    if let Some(refusal) = node.node.body["operation"]["identity"]
-        .as_str()
-        .and_then(quantity_conversion_refusal)
-    {
-        return Err(refusal.into());
+    if matches!(operation, ExactScalarOperation::QuantityConversion) {
+        let derivation = Derivation {
+            graph,
+            node: &node.node,
+            bounds: BoundView::complete(node),
+            identity: QUANTITY_CONVERT_IDENTITY,
+        };
+        derivation.require_mode(RoundingMode::Exact)?;
+        if !quantity_conversion_target_is_unit(graph, &node.node) {
+            return Err(derivation.operand_forms_not_derivable().into());
+        }
     }
     let shape = Shape::of(operation).map_err(ItemCheckError::Generation)?;
     if &*node.node.semantic_form != shape.form {
@@ -2195,7 +2206,8 @@ fn check_parameters_from_view(
         | ExactScalarOperation::TextComparison { .. }
         | ExactScalarOperation::EnumComparison { .. }
         | ExactScalarOperation::QuantityArithmetic { .. }
-        | ExactScalarOperation::QuantityComparison { .. } => return Ok(Vec::new()),
+        | ExactScalarOperation::QuantityComparison { .. }
+        | ExactScalarOperation::QuantityConversion => return Ok(Vec::new()),
     };
     Ok(vec![checked])
 }
@@ -2827,6 +2839,7 @@ impl Shape {
                 | QuantityOperator::Multiply
                 | QuantityOperator::Divide => Self::binary(&[F::Unit, F::Unit], F::Unit),
             },
+            ExactScalarOperation::QuantityConversion => Self::conversion(&[F::Unit], F::Unit),
             ExactScalarOperation::QuantityComparison { .. } => {
                 Self::binary(&[F::Unit, F::Unit], F::Boolean)
             }
@@ -3028,6 +3041,7 @@ fn catalogued_operation(
         Op::EnumComparison { operator } => {
             plain(comparison_identity(ComparisonFamily::Enum, operator)?)
         }
+        Op::QuantityConversion => with_rounding(QUANTITY_CONVERT_IDENTITY, RoundingMode::Exact),
         Op::QuantityArithmetic { operator } => plain(match operator {
             QuantityOperator::Add => "quire.op.quantity.add",
             QuantityOperator::Subtract => "quire.op.quantity.sub",
@@ -3300,6 +3314,7 @@ fn operation_identity(operation: &ExactScalarOperation) -> Result<String, Oracle
         ExactScalarOperation::EnumComparison { operator } => {
             format!("enum.compare.{}", comparison_name(*operator)?)
         }
+        ExactScalarOperation::QuantityConversion => "quantity.convert.exact".to_owned(),
         ExactScalarOperation::QuantityArithmetic { operator } => {
             let name = match operator {
                 QuantityOperator::Add => "add",
@@ -3712,6 +3727,21 @@ impl SourceBuilder {
             ExactScalarOperation::EnumComparison { operator } => {
                 comparison_body("&rt::EnumValue", "compare_enum", *operator)?
             }
+            ExactScalarOperation::QuantityConversion => Body {
+                parameters: vec![("operand", "&rt::Quantity"), ("unit", "&rt::QuantityUnit")],
+                output: "rt::Quantity",
+                prelude: Vec::new(),
+                call: "match rt::convert_quantity(operand, unit, &rt::QuantityTarget::Exact, meter).map_err(OracleStop::IllTyped)? {
+        rt::Outcome::Completed(conversion) => match conversion.value() {
+            rt::ConvertedValue::Exact(value) => Ok(rt::Outcome::Completed(rt::Quantity::new(value.clone(), conversion.unit().clone()))),
+            _ => Err(OracleStop::InvalidConstant),
+        },
+        rt::Outcome::Undefined(reason) => Ok(rt::Outcome::Undefined(reason)),
+        rt::Outcome::Refused(reason) => Ok(rt::Outcome::Refused(reason)),
+        rt::Outcome::Incomplete(reason) => Ok(rt::Outcome::Incomplete(reason)),
+        _ => Err(OracleStop::InvalidConstant),
+    }".to_owned(),
+            },
             ExactScalarOperation::QuantityComparison { operator } => {
                 comparison_body("&rt::Quantity", "compare_quantity", *operator)?
             }
@@ -3818,24 +3848,23 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 // Deriving the descriptor from the node
 // ---------------------------------------------------------------------------
 
-/// The capability a `quire.op.quantity.convert` node needs and this generator lacks.
-pub const QUANTITY_CONVERSION_CAPABILITY: &str = "quantity conversion is not supported: the \
-     runtime converts a quantity only to a scalar target and has no conversion whose result is a \
-     quantity (tracked as IR-818)";
-
 /// The operation identity of a quantity conversion.
 pub(crate) const QUANTITY_CONVERT_IDENTITY: &str = "quire.op.quantity.convert";
 
-/// The refusal for a node whose operation identity is a quantity conversion, whichever entry
-/// point received it; `None` for every other identity.
-fn quantity_conversion_refusal(identity: &str) -> Option<ExactScalarRefusal> {
-    (identity == QUANTITY_CONVERT_IDENTITY).then(|| {
-        ClaimDerivationRefusal::QuantityConversionUnsupported {
-            operation_identity: identity.to_owned(),
-            capability: QUANTITY_CONVERSION_CAPABILITY,
-        }
-        .refusal()
-    })
+fn conversion_target(node: &CheckedSemanticNodeV2) -> Option<CheckedNodeId> {
+    (node.body["operation"]["identity"].as_str() == Some(QUANTITY_CONVERT_IDENTITY))
+        .then(|| {
+            serde_json::from_value(node.body["operation"]["member"]["declaration"].clone()).ok()
+        })
+        .flatten()
+}
+
+fn quantity_conversion_target_is_unit(graph: &Graph<'_>, node: &CheckedSemanticNodeV2) -> bool {
+    conversion_target(node)
+        .and_then(|id| graph.get(&id).copied())
+        .is_some_and(|target| {
+            target.node_tag.as_ref() == "scalar_type" && target.semantic_form.as_ref() == "unit"
+        })
 }
 
 /// Why a node has no derivable [`ExactScalarItem`], beyond the refusals
@@ -3857,13 +3886,6 @@ pub enum ClaimDerivationRefusal {
     OperationNotDerivable {
         /// The node's `operation.identity`.
         operation_identity: String,
-    },
-    /// The identity is `quire.op.quantity.convert`, which this generator does not support.
-    QuantityConversionUnsupported {
-        /// The node's `operation.identity`.
-        operation_identity: String,
-        /// The capability that is absent, as [`QUANTITY_CONVERSION_CAPABILITY`] spells it.
-        capability: &'static str,
     },
     /// The operand or result scalar forms select no operator for the identity.
     OperandFormsNotDerivable {
@@ -3911,6 +3933,7 @@ enum Family {
     NumericConvert,
     TextComparison(ComparisonOperator),
     EnumComparison(ComparisonOperator),
+    QuantityConversion,
     QuantityArithmetic(QuantityOperator),
     QuantityComparison(ComparisonOperator),
 }
@@ -3995,6 +4018,7 @@ fn family_of_identity(identity: &str) -> Option<Family> {
         "quire.op.enum.le" => Family::EnumComparison(C::LessOrEqual),
         "quire.op.enum.gt" => Family::EnumComparison(C::Greater),
         "quire.op.enum.ge" => Family::EnumComparison(C::GreaterOrEqual),
+        QUANTITY_CONVERT_IDENTITY => Family::QuantityConversion,
         "quire.op.quantity.add" => Family::QuantityArithmetic(QuantityOperator::Add),
         "quire.op.quantity.sub" => Family::QuantityArithmetic(QuantityOperator::Subtract),
         "quire.op.quantity.mul" => Family::QuantityArithmetic(QuantityOperator::Multiply),
@@ -4217,9 +4241,6 @@ fn derive_operation_from_view<'g>(
         bounds,
         identity,
     };
-    if let Some(refusal) = quantity_conversion_refusal(identity) {
-        return Err(refusal);
-    }
     let family = family_of_identity(identity).ok_or_else(|| {
         ClaimDerivationRefusal::OperationNotDerivable {
             operation_identity: identity.to_owned(),
@@ -4302,6 +4323,13 @@ fn derive_operation_from_view<'g>(
         }
         Family::TextComparison(operator) => Op::TextComparison { operator },
         Family::EnumComparison(operator) => Op::EnumComparison { operator },
+        Family::QuantityConversion => {
+            derivation.require_mode(RoundingMode::Exact)?;
+            if !quantity_conversion_target_is_unit(graph, node) {
+                return Err(derivation.operand_forms_not_derivable());
+            }
+            Op::QuantityConversion
+        }
         Family::QuantityArithmetic(operator) => Op::QuantityArithmetic { operator },
         Family::QuantityComparison(operator) => Op::QuantityComparison { operator },
     })
@@ -4640,6 +4668,7 @@ mod tests {
             package_id: identity,
             semantic_form: "binary".to_owned(),
             semantic_type: node_id('c'),
+            quantity_conversion_target: None,
             source_map: Vec::new(),
             claims: Vec::new(),
             bounds: Vec::new(),
@@ -5212,6 +5241,7 @@ mod tests {
             all.push(Op::EnumComparison { operator });
             all.push(Op::QuantityComparison { operator });
         }
+        all.push(Op::QuantityConversion);
         for operator in [
             QuantityOperator::Add,
             QuantityOperator::Subtract,
@@ -5261,6 +5291,7 @@ mod tests {
             Op::TextAdmission { .. } => Family::NumericConvert,
             Op::TextComparison { operator } => Family::TextComparison(*operator),
             Op::EnumComparison { operator } => Family::EnumComparison(*operator),
+            Op::QuantityConversion => Family::QuantityConversion,
             Op::QuantityArithmetic { operator } => Family::QuantityArithmetic(*operator),
             Op::QuantityComparison { operator } => Family::QuantityComparison(*operator),
         })
@@ -5391,6 +5422,42 @@ mod tests {
             Err(ExactScalarRefusal::InvalidInput),
             "an unlowered record is refused before the body is read"
         );
+    }
+
+    /// Scalar targets cannot enter an admitted package; mode validation runs first at this seam.
+    #[trace("FR-014-AC-50", "TC-024")]
+    #[test]
+    fn quantity_conversion_rejects_scalar_targets_after_mode() {
+        for form in ["decimal", "integer", "compound_unit"] {
+            let target = v2_node('b', "scalar_type", form, 'b', serde_json::json!({}));
+            for mode in ["exact", "nearest_even", "toward_zero"] {
+                let (id, node) = application_node(serde_json::json!({
+                    "term": "application", "operation": {
+                        "identity": QUANTITY_CONVERT_IDENTITY,
+                        "mode": {"kind": "rounding", "value": mode},
+                        "member": {"kind": "type_argument", "declaration": target.node_id},
+                    }
+                }));
+                let graph = BTreeMap::from([(&id, &node), (&target.node_id, &target)]);
+                let record = CompleteLoweringRecordV2::Lowered {
+                    node: Box::new(lowered_node(&node)),
+                };
+                let reason = if mode == "exact" {
+                    ClaimDerivationRefusal::OperandFormsNotDerivable {
+                        operation_identity: QUANTITY_CONVERT_IDENTITY.to_owned(),
+                    }
+                } else {
+                    ClaimDerivationRefusal::ModeNotDerivable {
+                        operation_identity: QUANTITY_CONVERT_IDENTITY.to_owned(),
+                    }
+                };
+                assert_eq!(
+                    derive_operation(&graph, &id, &record),
+                    Err(no_claim(reason)),
+                    "{form}: {mode}"
+                );
+            }
+        }
     }
 
     /// A node with no `operation.identity` (which admission forbids), a node that is not an

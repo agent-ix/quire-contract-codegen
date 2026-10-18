@@ -13,7 +13,6 @@ use quire_contract_codegen::{
     KaniObligationRequest, KaniScalarObligationHarness, KindOutput, ObligationDisposition,
     ObligationItem, ObligationRecord, OracleGenerationError, ProviderOrigin, RoutedGeneration,
     RoutedGenerationError, RoutedGenerationItem, UnsupportedObligation,
-    QUANTITY_CONVERSION_CAPABILITY,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -2157,7 +2156,7 @@ fn tc_033_an_underivable_item_keeps_its_refusal_and_its_siblings_are_unaffected(
 /// capability text, and the group is not rejected.
 #[trace("FR-014-AC-2", "FR-022-AC-11", "FR-015-AC-15", "TC-033")]
 #[test]
-fn tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_harness() {
+fn tc_033_quantity_conversion_has_an_oracle_and_no_harness() {
     let derived = derived();
     let contexts = kani_context("crate::subject", 1);
     for refused in &derived.quantity_conversions {
@@ -2168,44 +2167,27 @@ fn tc_033_a_quantity_conversion_is_unsupported_with_its_named_capability_and_no_
         assert!(generated.rejected.is_empty());
         let (record, harness) = kani_parts(&generated.items[0].output);
         assert!(harness.is_none(), "no harness is emitted");
-        // The obligation's whole artifact set is empty: the claim map holds a refusal and no
-        // generated claim, and the oracle crate defines no function.
         let claim_map = generated.claim_map.as_ref().expect("claim map");
         assert!(claim_map
             .items
             .iter()
-            .all(|claim| matches!(claim.result, ClaimDisposition::Refused { .. })));
+            .all(|claim| matches!(claim.result, ClaimDisposition::Generated(_))));
         let oracle_artifacts = generated.oracle_artifacts.as_ref().expect("oracle crate");
         let oracle_source = oracle_artifacts
             .iter()
             .find(|artifact| artifact.path == "src/lib.rs")
             .expect("oracle lib.rs");
         assert!(
-            !oracle_source.contents.contains("fn "),
-            "no oracle function is emitted"
+            oracle_source.contents.contains("rt::convert_quantity"),
+            "the exact conversion oracle is emitted"
         );
-        assert_eq!(
-            record.disposition,
-            ObligationDisposition::Unsupported {
-                reason: UnsupportedObligation::NoDerivableClaim {
-                    node_id: refused.clone(),
-                    reason: ClaimDerivationRefusal::QuantityConversionUnsupported {
-                        operation_identity: "quire.op.quantity.convert".to_owned(),
-                        capability: QUANTITY_CONVERSION_CAPABILITY,
-                    },
-                }
-            }
+        assert!(
+            matches!(&record.disposition, ObligationDisposition::Unsupported {
+            reason: UnsupportedObligation::OperationNotRendered { operation_identity, .. }
+        } if operation_identity == "quire.op.quantity.convert")
         );
         let wire = serde_json::to_value(&record.disposition).expect("serializes");
-        assert_eq!(wire["reason"]["code"], "no_derivable_claim");
-        assert_eq!(
-            wire["reason"]["reason"]["code"],
-            "quantity_conversion_unsupported"
-        );
-        assert_eq!(
-            wire["reason"]["reason"]["capability"],
-            QUANTITY_CONVERSION_CAPABILITY
-        );
+        assert_eq!(wire["reason"]["code"], "operation_not_rendered");
     }
 }
 

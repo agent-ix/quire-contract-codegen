@@ -34,10 +34,11 @@ use generated::{
     enum_equal, enum_greater, enum_less, enum_not_equal, integer_add, integer_at_least,
     integer_at_most, integer_divide, integer_less, integer_multiply, integer_negate,
     integer_subtract, modulo_bounded, narrow_to_binary32, quantity_add, quantity_at_least,
-    quantity_at_most, quantity_divide, quantity_equal, quantity_greater, quantity_less,
-    quantity_multiply, quantity_not_equal, quantity_power, quantity_subtract, rational_add,
-    rational_divide, rational_greater, rational_multiply, rational_negate, rational_subtract,
-    text_at_least, text_at_most, text_equal, text_greater, text_less, text_not_equal, OracleStop,
+    quantity_at_most, quantity_convert, quantity_divide, quantity_equal, quantity_greater,
+    quantity_less, quantity_multiply, quantity_not_equal, quantity_power, quantity_subtract,
+    rational_add, rational_divide, rational_greater, rational_multiply, rational_negate,
+    rational_subtract, text_at_least, text_at_most, text_equal, text_greater, text_less,
+    text_not_equal, OracleStop,
 };
 use ix_trace_rs::trace;
 use quire_contract_runtime::exact::{
@@ -1417,4 +1418,249 @@ fn tc_024_no_vector_here_has_an_authority_leg_and_all_agree_with_direct_runtime(
     assert_rows_agreed(&[("runtime-only vectors", vectors)]);
     assert_eq!(vectors, 41 + 7 * 41 * 41 + 39 + 5 * 39 * 39);
     println!("runtime-only agreement (no authority leg): {vectors} vectors");
+}
+
+/// Adapt the direct runtime conversion outcome to the oracle's quantity result.
+fn direct_conversion(
+    source: &Quantity,
+    unit: &rt::QuantityUnit,
+    meter: &mut Meter,
+) -> Result<Outcome<Quantity>, IllTyped> {
+    rt::convert_quantity(source, unit, &rt::QuantityTarget::Exact, meter).map(|outcome| {
+        match outcome {
+            Outcome::Completed(converted) => {
+                let rt::ConvertedValue::Exact(value) = converted.value() else {
+                    panic!("exact target")
+                };
+                Outcome::Completed(Quantity::new(value.clone(), converted.unit().clone()))
+            }
+            Outcome::Undefined(reason) => Outcome::Undefined(reason),
+            Outcome::Refused(reason) => Outcome::Refused(reason),
+            Outcome::Incomplete(reason) => Outcome::Incomplete(reason),
+            _ => panic!("unknown outcome"),
+        }
+    })
+}
+
+fn conversion_fixture() -> rt::Fixture {
+    rt::admit_graph(&support::GraphSpec::conversions()).expect("conversion graph")
+}
+
+fn compound_source(f: &rt::Fixture, magnitude: i64, terms: &[(&str, i64)]) -> Quantity {
+    let mut terms = terms
+        .iter()
+        .map(|(unit, exponent)| (f.key(unit), rt::int(i128::from(*exponent))))
+        .collect::<Vec<_>>();
+    terms.sort_by_key(|(key, _)| *key);
+    Quantity::new(
+        rt::ratio(magnitude, 1),
+        rt::QuantityUnit::Compound(f.graph.compound_unit(&terms).unwrap()),
+    )
+}
+
+fn agree_conversion(
+    bounds: ScalarLimits,
+    source: &Quantity,
+    unit: &rt::QuantityUnit,
+) -> QuantityRun<Quantity> {
+    note_vector();
+    agree2! {
+        limits: bounds,
+        setup: {},
+        direct: |m| direct_conversion(source, unit, m),
+        generated: |m| typed(quantity_convert(source, unit, m)),
+    };
+    rt::metered(bounds, |m| direct_conversion(source, unit, m))
+}
+
+/// QSpec TC-187 U01/U04/U09b/U10/U15/U22/U25(second)/U26, including each denied charge.
+#[trace("FR-014-AC-6", "FR-014-AC-48", "FR-014-AC-50", "TC-024")]
+#[test]
+fn exact_quantity_conversion_vectors_agree() {
+    let before = vectors_run();
+    let f = conversion_fixture();
+    for (row, source, target, bounds, expected) in [
+        (
+            "U01",
+            f.qi(250, "cm"),
+            "m",
+            rt::UNLIMITED,
+            Some(rt::ratio(5, 2)),
+        ),
+        (
+            "U04 C",
+            f.qi(0, "degC"),
+            "K",
+            rt::UNLIMITED,
+            Some(rt::ratio(5463, 20)),
+        ),
+        (
+            "U04 F",
+            f.qi(32, "degF"),
+            "K",
+            rt::UNLIMITED,
+            Some(rt::ratio(5463, 20)),
+        ),
+        (
+            "U09b",
+            f.qi(1, "m_alias"),
+            "m",
+            rt::UNLIMITED,
+            Some(rt::ratio(1, 1)),
+        ),
+        (
+            "U10",
+            f.qi(100, "cm"),
+            "m",
+            rt::unit_tuple([8, 0, 1, 1, 6, 1]),
+            Some(rt::ratio(1, 1)),
+        ),
+        (
+            "U15",
+            f.qi(1, "in"),
+            "cm",
+            rt::unit_tuple([15, 0, 2, 1, 9, 1]),
+            Some(rt::ratio(127, 50)),
+        ),
+        (
+            "U15 denied edge",
+            f.qi(1, "in"),
+            "cm",
+            rt::unit_tuple([7, 0, 1, 1, 9, 1]),
+            None,
+        ),
+        (
+            "U22 m2",
+            compound_source(&f, 4, &[("m", 2)]),
+            "m2",
+            rt::unit_tuple([3, 0, 0, 1, 3, 1]),
+            Some(rt::ratio(4, 1)),
+        ),
+        (
+            "U22 cm2",
+            compound_source(&f, 4, &[("m", 2)]),
+            "cm2",
+            rt::unit_tuple([17, 0, 1, 1, 6, 1]),
+            Some(rt::ratio(40000, 1)),
+        ),
+        (
+            "U22 denied bits",
+            compound_source(&f, 4, &[("m", 2)]),
+            "cm2",
+            rt::unit_tuple([16, 0, 1, 1, 6, 1]),
+            None,
+        ),
+        (
+            "U25 second",
+            compound_source(&f, 1, &[("kg", 1), ("m", 2), ("s", -2)]),
+            "J",
+            rt::unit_tuple([1, 0, 0, 1, 3, 1]),
+            Some(rt::ratio(1, 1)),
+        ),
+        (
+            "U26",
+            f.qi(1, "u2"),
+            "u1",
+            rt::unit_tuple([6, 0, 3, 1, 12, 1]),
+            Some(rt::ratio(-9, 1)),
+        ),
+        (
+            "U26 denied edge",
+            f.qi(1, "u2"),
+            "u1",
+            rt::unit_tuple([6, 0, 2, 1, 12, 1]),
+            None,
+        ),
+    ] {
+        let unit = f.unit(target);
+        let run = agree_conversion(bounds, &source, &unit);
+        if let Some(value) = expected {
+            assert_eq!(
+                run.0,
+                Ok(Outcome::Completed(Quantity::new(value, unit))),
+                "{row}"
+            );
+        } else {
+            match row {
+                "U15 denied edge" => assert_incomplete(
+                    &run.0,
+                    rt::LimitKind::UnitEdges,
+                    1,
+                    1,
+                    "2",
+                    rt::ChargePoint::UnitEdge,
+                ),
+                "U22 denied bits" => assert_incomplete(
+                    &run.0,
+                    rt::LimitKind::IntegerBits,
+                    16,
+                    5,
+                    "17",
+                    rt::ChargePoint::UnitRationalArithmetic,
+                ),
+                "U26 denied edge" => assert_incomplete(
+                    &run.0,
+                    rt::LimitKind::UnitEdges,
+                    2,
+                    2,
+                    "3",
+                    rt::ChargePoint::UnitEdge,
+                ),
+                _ => panic!("unexpected incomplete row {row}"),
+            }
+        }
+    }
+    let unit = f.unit("m");
+    let source = f.qi(100, "cm");
+    let denied = rt::denials(rt::unit_tuple([8, 0, 1, 1, 6, 1]), |m| {
+        typed(quantity_convert(&source, &unit, m))
+    });
+    assert!(denied.iter().any(|(point, _, outcome, retained)| *point
+        == rt::ChargePoint::UnitResultRetain
+        && matches!(outcome, Ok(Outcome::Incomplete(_)))
+        && *retained == 0));
+    assert_eq!(vectors_run() - before, 13, "every conversion row ran");
+}
+
+/// Dimension identity mismatches refuse before any charge, including with a populated meter.
+#[trace("FR-014-AC-49", "TC-024")]
+#[test]
+fn quantity_conversion_ill_typed_preserves_meter() {
+    let before = vectors_run();
+    let f = conversion_fixture();
+    for (row, source, target) in [
+        ("m to s", f.qi(1, "m"), "s"),
+        ("U09", f.qi(1, "m_foreign"), "m"),
+        ("U22 nominal", f.qi(1, "N_m"), "J"),
+        ("compound to m", compound_source(&f, 4, &[("m", 2)]), "m"),
+    ] {
+        let unit = f.unit(target);
+        let run = agree_conversion(rt::UNLIMITED, &source, &unit);
+        assert_ill_typed_without_charge(row, &run);
+        let mut meter = Meter::new(rt::UNLIMITED);
+        let seed = f.qi(100, "cm");
+        let _ = quantity_convert(&seed, &f.unit("m"), &mut meter).expect("seed");
+        let baseline = (
+            meter.admitted_charges().to_vec(),
+            rt::LimitKind::ALL
+                .iter()
+                .map(|kind| meter.consumed(*kind))
+                .collect::<Vec<_>>(),
+        );
+        assert!(matches!(
+            quantity_convert(&source, &unit, &mut meter),
+            Err(OracleStop::IllTyped(_))
+        ));
+        assert_eq!(
+            baseline,
+            (
+                meter.admitted_charges().to_vec(),
+                rt::LimitKind::ALL
+                    .iter()
+                    .map(|kind| meter.consumed(*kind))
+                    .collect::<Vec<_>>()
+            )
+        );
+    }
+    assert_eq!(vectors_run() - before, 4);
 }

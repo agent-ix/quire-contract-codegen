@@ -9,11 +9,11 @@ use qsl_replay::{
 };
 use quire_contract_codegen::{
     negotiate_backend_provider, routed_contract_lowering_profile, BackendDescriptor, BackendKind,
-    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause, ClaimDerivationRefusal,
+    BackendProviderEnvelope, Candidate, Candidates, CapabilityKind, Cause,
     ContractDriverResultSelection, ContractRequestPosition, Disposition, EnvelopeRefusal,
     ExtentClassification, ExtentDomain, InvalidObligationItem, ItemSettlement, KaniForm, Mode,
     ProviderOrigin, RequestItem, RequestedKind, UnsupportedObligation, BACKEND_PROVIDER_CONTRACT,
-    CAPABILITY_VOCABULARY, QUANTITY_CONVERSION_CAPABILITY,
+    CAPABILITY_VOCABULARY,
 };
 use quire_contract_model::{
     CheckedNodeId, CheckedOccurrenceRole, CheckedPackageEvidence, CheckedPackageReadLimits,
@@ -1216,7 +1216,7 @@ fn kani_form_preflight_gates_support_and_preserves_extent_rules() {
 /// arm cannot accept an operation its generator refuses.
 #[trace("FR-014-AC-2", "FR-019-AC-44", "TC-024")]
 #[test]
-fn a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capability() {
+fn a_selected_quantity_conversion_settles_as_operation_not_rendered() {
     let (package, _, ids) = crate::kani_obligations::routed_scalar_package();
     let backend = BackendKind::Kani.identity().to_owned();
     let mut request = item(
@@ -1236,19 +1236,11 @@ fn a_selected_quantity_conversion_settles_as_unsupported_with_its_named_capabili
             &settled.disposition,
             Disposition::Unsupported {
                 cause: Cause::KaniFormRefused {
-                    refusal: UnsupportedObligation::NoDerivableClaim {
-                        node_id: refused,
-                        reason: ClaimDerivationRefusal::QuantityConversionUnsupported {
-                            capability,
-                            ..
-                        },
-                    },
+                    refusal: UnsupportedObligation::OperationNotRendered { operation_identity, .. },
                     backend: refusing,
                     ..
                 }
-            } if refused == &node_id
-                && *capability == QUANTITY_CONVERSION_CAPABILITY
-                && *refusing == backend
+            } if operation_identity == "quire.op.quantity.convert" && *refusing == backend
         ),
         "{:?}",
         settled.disposition

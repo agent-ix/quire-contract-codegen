@@ -343,6 +343,30 @@ impl GraphSpec {
         }
     }
 
+    /// TC-187 conversion dimensions, kept separate from the arithmetic fixture.
+    pub fn conversions() -> Self {
+        let mut spec = Self::tc187();
+        for (name, terms) in [
+            ("Area", &[("L", 2)][..]),
+            ("Torque", &[("L", 2), ("M", 1), ("T", -2)][..]),
+            ("Energy", &[("L", 2), ("M", 1), ("T", -2)][..]),
+        ] {
+            spec.dimensions.push(DimSpec {
+                name,
+                owner: "example-model",
+                declaration: name,
+                terms,
+            });
+        }
+        spec.units.extend([
+            root("m2", "Area"),
+            unit("cm2", "Area", Some("m2"), (1, 10000), (0, 1)),
+            root("N_m", "Torque"),
+            root("J", "Energy"),
+        ]);
+        spec
+    }
+
     fn node_id(key: &str) -> Value {
         json!({"domain": NODE_KEY_DOMAIN, "digest": key})
     }

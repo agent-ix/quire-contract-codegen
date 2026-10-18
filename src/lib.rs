@@ -68,7 +68,7 @@ pub use oracle::scalar::{
     ExactScalarPlan, ExactScalarRefusal, GeneratedScalarClaim, IeeeArithmeticOperator,
     OperandRangeLimitKind, OperationClaim, OperationProvenance, OrderingOperandKind,
     QuantityOperator, RationalOperator, ScalarForm, EXACT_SCALAR_CRATE_NAME,
-    QUANTITY_CONVERSION_CAPABILITY, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 
 pub use oracle::equality::{
