@@ -21,6 +21,7 @@ help:
 	@echo "  make fmt-check        - Verify formatting (CI gate)"
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
+	@echo "  make qspec-preflight  - Verify the explicit QSpec fixture root"
 	@echo "  make build            - Release build"
 	@echo "  make kani             - Run the Kani obligation lane serially"
 	@echo "  make kani-scope       - Show whether changed paths require the real-Kani lane"
@@ -52,9 +53,31 @@ fmt-check:
 lint:
 	$(CARGO) clippy $(LOCKED) --all-targets -- -D warnings
 
+export QSPEC_DIR
+QSPEC_FIXTURES := positive-union-nodes positive-clause-operations positive-all-families
+
+.PHONY: qspec-preflight
+qspec-preflight:
+	@if [ -z "$$QSPEC_DIR" ]; then \
+	  echo 'QSPEC_DIR is required: pass the quire-specification checkout root explicitly' >&2; exit 2; \
+	fi; \
+	if [ ! -d "$$QSPEC_DIR" ]; then \
+	  echo "QSPEC_DIR is not a directory: $$QSPEC_DIR" >&2; exit 2; \
+	fi; \
+	for name in $(QSPEC_FIXTURES); do \
+	  fixture="$$QSPEC_DIR/proposals/checked-package-v2/fixtures/$$name.json"; \
+	  if [ ! -f "$$fixture" ]; then \
+	    echo "QSPEC_DIR is missing required fixture: $$fixture" >&2; exit 2; \
+	  fi; \
+	done
+
+.PHONY: qspec-preflight-selftest
+qspec-preflight-selftest:
+	$(BASH) scripts/test_qspec_preflight.sh
+
 .PHONY: test
-test:
-	QSPEC_DIR="$(QSPEC_DIR)" $(CARGO) test $(LOCKED)
+test: qspec-preflight qspec-preflight-selftest
+	$(CARGO) test $(LOCKED)
 
 # The Kani lane (FR-015, TC-025). Kani and CBMC are memory-heavy, so the lane
 # holds a host-wide lock, runs one harness at a time, and builds in its own
@@ -161,7 +184,6 @@ rustdoc:
 # =============================================================================
 
 SIBLINGS ?= $(abspath $(shell git rev-parse --path-format=absolute --git-common-dir)/../..)
-QSPEC_DIR ?= $(SIBLINGS)/quire-specification
 LOCAL_PATCHES ?= quire-contract-ir:quire-contract-ir:. quire-contract-ir:quire-contract-model:crates/quire-contract-model \
 	quire-contract-runtime:quire-contract-runtime:. \
 	quire-verification-contracts:quire-verification-contracts:. \
@@ -220,4 +242,5 @@ use-remote:
 
 .NOTPARALLEL: ci
 .PHONY: ci
-ci: fmt-check spec lint msrv deny audit-unsafe rustdoc test
+ci: qspec-preflight
+	$(MAKE) -j1 fmt-check spec lint msrv deny audit-unsafe rustdoc test
