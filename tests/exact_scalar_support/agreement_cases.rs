@@ -1609,6 +1609,19 @@ fn exact_quantity_conversion_vectors_agree() {
             }
         }
     }
+    let final_denial = agree_conversion(
+        rt::unit_tuple([8, 0, 1, 1, 6, 0]),
+        &f.qi(100, "cm"),
+        &f.unit("m"),
+    );
+    assert_incomplete(
+        &final_denial.0,
+        rt::LimitKind::ResultUnits,
+        0,
+        0,
+        "1",
+        rt::ChargePoint::UnitResultRetain,
+    );
     let unit = f.unit("m");
     let source = f.qi(100, "cm");
     let denied = rt::denials(rt::unit_tuple([8, 0, 1, 1, 6, 1]), |m| {
@@ -1618,7 +1631,7 @@ fn exact_quantity_conversion_vectors_agree() {
         == rt::ChargePoint::UnitResultRetain
         && matches!(outcome, Ok(Outcome::Incomplete(_)))
         && *retained == 0));
-    assert_eq!(vectors_run() - before, 13, "every conversion row ran");
+    assert_eq!(vectors_run() - before, 14, "every conversion row ran");
 }
 
 /// Dimension identity mismatches refuse before any charge, including with a populated meter.

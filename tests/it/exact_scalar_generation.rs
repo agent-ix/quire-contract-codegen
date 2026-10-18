@@ -3492,6 +3492,25 @@ fn quantity_conversion_derives_and_preserves_target_provenance() {
             serde_json::to_value(target).unwrap()
         );
     }
+    let targets = generated
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| {
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("generated")
+            };
+            generated
+                .quantity_conversion_target
+                .clone()
+                .expect("target identity")
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        targets.len(),
+        2,
+        "distinct admitted target declarations remain distinct"
+    );
     let source = contents(&generated, "src/lib.rs");
     assert!(source.contains("unit: &rt::QuantityUnit"));
     assert!(

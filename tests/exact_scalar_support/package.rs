@@ -2714,7 +2714,11 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         .push(correspondence);
     let int_key = builder.bound(&INT);
     for (code, operand, bounds) in [
-        (QUANTITY_CONVERSIONS[0], key(V_QUANTITY), Vec::new()),
+        (
+            QUANTITY_CONVERSIONS[0],
+            builder.dedicated_unit_operand(&[]),
+            Vec::new(),
+        ),
         (
             QUANTITY_CONVERSIONS[1],
             builder.dedicated_unit_operand(&[]),
