@@ -2695,7 +2695,7 @@ fn corpus_package_with_expression_operand() -> PackageBuilder {
         json!(["Example", "other_pace"]);
     alternate["declaration"]["qualified_name"] = json!(["Example", "other_pace"]);
     alternate["nominal_identity_preimage"]["target_unit_node_id"] = node_ref(&unit_type());
-    let mut dependencies = vec![base_node_ids().dimension, unit_type()];
+    let mut dependencies = [base_node_ids().dimension, unit_type()];
     dependencies.sort();
     alternate["dependencies"] = json!(dependencies
         .iter()
