@@ -9,8 +9,8 @@
 
 use std::{fs, process::Command};
 
-use ix_trace_rs::trace;
 use crate::scratch_crate::TemporaryDirectory;
+use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_bounded_kani_corpus_case, prepare_finite_graph_reaches,

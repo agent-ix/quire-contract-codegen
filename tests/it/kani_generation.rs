@@ -1,7 +1,7 @@
 use std::{fs, process::Command};
 
-use ix_trace_rs::trace;
 use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
+use ix_trace_rs::trace;
 use jsonschema::{Draft, JSONSchema};
 use quire_contract_codegen::{
     classify_kani_run, generate_boolean_oracle, generate_kani_bundle, GenerationErrorCode,
