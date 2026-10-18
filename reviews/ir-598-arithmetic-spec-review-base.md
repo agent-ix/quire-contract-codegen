@@ -294,3 +294,56 @@ scope:
     is (AD-004 "The HarnessSpec and render contract (step 4b)", P-3).
 bindings: []
 ```
+
+## Dispositions
+
+Round 1; inspected frozen fix 12426831d1f1590ed6e65e8ce9169b654243b168. Original verdict and findings above remain immutable; latest disposition resolves the sole finding. No new findings.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The current ownership paragraph now names the two retained collection/graph lowerers, marks AC109 implemented, and leaves AC110/AC111 planned. No normative acceptance contract or later gate changed. |
+
+```yaml
+round: 1
+reviewed_head: 12426831d1f1590ed6e65e8ce9169b654243b168
+scope:
+- id: FR-015-current-interim-ownership
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: examined
+  excerpt: 'Current interim ownership (IR-329): the bounded-profile classifier, the
+    two
+
+    retained finite-input semantic-family lowerers (collection and graph) and the
+
+    bounded-corpus emitter are auxiliary operations of this Kani generator, governed
+
+    today by FR-015-AC-82 to FR-015-AC-94. The arithmetic retirement slice
+
+    FR-015-AC-109 is implemented; the remaining step 4g retirement slices
+
+    FR-015-AC-110 (collection) and FR-015-AC-111 (graph and the whole corpus API)
+
+    remain planned, with FR-015-AC-95 as their end state.'
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  reason: The current ownership paragraph now names the two retained collection/graph
+    lowerers, marks AC109 implemented, and leaves AC110/AC111 planned. No normative
+    acceptance contract or later gate changed.
+  after_excerpt: 'Current interim ownership (IR-329): the bounded-profile classifier,
+    the two
+
+    retained finite-input semantic-family lowerers (collection and graph) and the
+
+    bounded-corpus emitter are auxiliary operations of this Kani generator, governed
+
+    today by FR-015-AC-82 to FR-015-AC-94. The arithmetic retirement slice
+
+    FR-015-AC-109 is implemented; the remaining step 4g retirement slices
+
+    FR-015-AC-110 (collection) and FR-015-AC-111 (graph and the whole corpus API)
+
+    remain planned, with FR-015-AC-95 as their end state.'
+```
+
+No source/test/build/script/schema/embedded Kani input changed in this fix: only the owning Description paragraph and verbatim custody of nine original review artifacts. Author backend PASS remains on clean 2f9508c486d9b0eb697c2d6edbfe1759f7ac6ea3 (35/35) with separate private cover PASS; no backend result is attributed to this fix. All actual findings are terminal fixed. Inherited whole-repository gap FAIL is unchanged. Final full Kani and aggregate ci remain owed after latest review custody. No heavy grant was requested or used; both target dirs retained.
