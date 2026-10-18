@@ -260,6 +260,7 @@ fn injected_with_state(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use std::{fs, path::PathBuf};
 
     use super::*;
@@ -299,7 +300,15 @@ mod tests {
             .collect()
     }
 
-    /// Trace: TC-001, TC-002, FR-005-AC-1, FR-005-AC-2, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    #[trace(
+        "TC-001",
+        "TC-002",
+        "FR-005-AC-1",
+        "FR-005-AC-2",
+        "NFR-001-AC-1",
+        "NFR-001-AC-2",
+        "NFR-001-AC-3"
+    )]
     #[test]
     fn publication_is_order_independent_and_replaces_only_its_destination() {
         let parent = temporary("replace");
@@ -331,7 +340,15 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3, NFR-001-M-2, NFR-001-M-3, FR-005-AC-7
+    #[trace(
+        "TC-002",
+        "FR-005-AC-1",
+        "NFR-001-AC-2",
+        "NFR-001-AC-3",
+        "NFR-001-M-2",
+        "NFR-001-M-3",
+        "FR-005-AC-7"
+    )]
     #[test]
     fn every_injected_failure_preserves_old_and_developer_owned_bytes() {
         let faults = (0..bundle("new\n").artifacts().len())
@@ -371,7 +388,7 @@ mod tests {
         }
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3, FR-005-AC-9
+    #[trace("TC-002", "FR-005-AC-1", "NFR-001-AC-2", "NFR-001-AC-3", "FR-005-AC-9")]
     #[test]
     fn failed_rollback_reports_unknown_and_preserves_complete_recovery_bundles() {
         let parent = temporary("failed-rollback");
@@ -408,7 +425,7 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
+    #[trace("TC-002", "FR-005-AC-1", "NFR-001-AC-2", "NFR-001-AC-3")]
     #[test]
     fn post_commit_cleanup_failure_reports_that_the_new_bundle_is_published() {
         let parent = temporary("post-commit-cleanup");
@@ -471,10 +488,11 @@ mod tests {
         }
     }
 
-    /// Trace: TC-002, FR-005-AC-8. The real backup-cleanup failure path: the replaced bundle's
+    /// The real backup-cleanup failure path: the replaced bundle's
     /// backup holds a read-only directory, so removing it fails after the swap has committed.
     /// Skips when the process ignores directory permissions (root).
     #[cfg(unix)]
+    #[trace("TC-002", "FR-005-AC-8")]
     #[test]
     fn real_backup_cleanup_failure_reports_published_with_both_new_artifacts() {
         use std::os::unix::fs::PermissionsExt;
@@ -515,7 +533,7 @@ mod tests {
         );
     }
 
-    /// Trace: TC-002, FR-005-AC-1, FR-005-AC-6, FR-005-AC-10, NFR-001-AC-3
+    #[trace("TC-002", "FR-005-AC-1", "FR-005-AC-6", "FR-005-AC-10", "NFR-001-AC-3")]
     #[test]
     fn unsafe_and_duplicate_artifact_paths_are_refused() {
         for path in [
@@ -548,7 +566,7 @@ mod tests {
         assert_eq!(duplicate.path, "bundle.artifacts[1].path");
     }
 
-    /// Trace: TC-002, FR-005-AC-5
+    #[trace("TC-002", "FR-005-AC-5")]
     #[test]
     fn bundle_construction_refuses_more_than_the_bounded_artifact_count() {
         let artifacts: Vec<Artifact> = (0..=MAX_ARTIFACTS)
@@ -561,7 +579,7 @@ mod tests {
         assert!(error.message.contains("4096"));
     }
 
-    /// Trace: TC-002, FR-005-AC-5
+    #[trace("TC-002", "FR-005-AC-5")]
     #[test]
     fn bundle_construction_refuses_an_artifact_over_the_bounded_size() {
         let oversized = "x".repeat(MAX_ARTIFACT_BYTES + 1);
@@ -571,7 +589,7 @@ mod tests {
         assert_eq!(error.path, "bundle.artifacts[0].contents");
     }
 
-    /// Trace: TC-002, FR-005-AC-5
+    #[trace("TC-002", "FR-005-AC-5")]
     #[test]
     fn bundle_construction_refuses_a_complete_bundle_over_the_bounded_size() {
         let large = "x".repeat(MAX_ARTIFACT_BYTES);
@@ -593,8 +611,8 @@ mod tests {
         assert!(error.message.contains("complete bundle"));
     }
 
-    /// Trace: TC-002, FR-005-AC-1, NFR-001-AC-2, NFR-001-AC-3
     #[cfg(unix)]
+    #[trace("TC-002", "FR-005-AC-1", "NFR-001-AC-2", "NFR-001-AC-3")]
     #[test]
     fn cleanup_removes_a_sibling_symlink_without_following_it() {
         use std::os::unix::fs::symlink;
