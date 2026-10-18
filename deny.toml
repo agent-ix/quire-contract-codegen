@@ -23,6 +23,9 @@ confidence-threshold = 0.9
 # permissive-only.
 exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-codegen" },
+    # First-party compile-time macro for production #[implements] markers. Scoped to
+    # ix-trace-rs; remove this exception when CG removes those markers and the dependency.
+    { allow = ["AGPL-3.0-or-later"], crate = "ix-trace-rs" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-ir" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-model" },
     { allow = ["AGPL-3.0-or-later"], crate = "quire-contract-runtime" },

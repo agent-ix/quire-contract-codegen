@@ -14,6 +14,7 @@ name = "quire_contract_codegen"
 path = "src/lib.rs"
 
 [dependencies]
+ix-trace-rs = { version = "=0.1.0", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
 quire-exact = { git = "https://github.com/agent-ix/quire-exact", branch = "main" }
 quire-contract-ir = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-contract-ir", branch = "main" }
 # The model items (`CheckedPackageV2`, `RequirementRef`, ...) come from quire-contract-model, a crate in
@@ -45,8 +46,6 @@ quire-contract-runtime = { version = "=0.1.0", git = "https://github.com/agent-i
 # definitions from it instead of copying them.
 quire-verification-contracts = { version = "=0.1.0", git = "https://github.com/agent-ix/quire-verification-contracts", branch = "main" }
 sha2 = "=0.10.9"
-# The canonical `#[trace("TC-NNN", "FR-nnn-AC-n")]` attribute (IR-210); same source as the IR repository.
-ix-trace-rs = { version = "=0.1.0", git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
 
 [profile.release]
 lto = "thin"
