@@ -304,3 +304,39 @@ scope:
     \ meter limits; schema/golden changes require review and driver authentication remains consumer-owned |"
 bindings: []
 ```
+
+## Dispositions
+
+### Pass 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The new private control passes the public paired runner through real Kani verification and an actually launched bounded native protocol stand-in, observes OracleStop(InvalidConstant), code/class and exact native arguments, and never constructs returned errors or proof evidence. The private ignored-lib actual run passed. The dependency seam defaults to cargo in production and is selectable only by cfg(test) construction; this tests runner propagation without claiming a runtime-generated stop from a supported canonical integer operation. |
+
+## Disposition pass 1 assessment
+
+PASS for the scoped implementation review: all recorded findings are fixed, no new findings.
+
+Disposition pass 1 reviewed frozen fix head 7e5392c74a8d58ddbf822f8564cb6a2e549bd441 against original reviewed head 5ee6f3f0be5863e4a5d22cd70325a454d3ef9a23, on unchanged cb96317 base. Original artifacts/findings/verdict sections remain byte-for-byte prefixes; this section records later facts only. No new defects were found in the complete fix delta.
+
+Independent source inspection confirms all six findings fixed. The fixture and digest implementations each have one source home with both target consumers; caller package registries remain isolated. The public production API is not widened: the native executable is an immutable installation dependency defaulting to cargo, with a cfg(test)-only setter. Both proof and native dependency execute under the existing bounded launcher; lock generation continues to use cargo. The native stop stand-in records actual arguments and emits protocol output at the external process boundary; no harness/origin/receipt/evidence is forged and production decoder/orchestration remains the unit under test. No generator/run/classify back-edge, production test bypass, scanner weakening, CI/dependency/lock change, canonical preimage/schema change or held AD004 change was added. Root-private bridge and unchanged production generator inputs remain intact.
+
+Inspected author fix1 logs: early-read/duplicate-native regressions first fail red (2), fixed scalar units pass (13), omission of five independent expected arms yields exactly five E0004 errors, docs pass (14), layout/lane census/preflight/fixture pass (9), default private pass (10, 3 ignored), explicit private actual controls pass (3, 202.89 seconds), affected actual receipt/subtraction integration controls pass (2, 188.65 seconds), and tool/differential pass (2). Lint, compile, format and spec checks pass. The checked tree 6066c5a8bf5ac281458aaf87832d43a81ef7d5af independently equals HEAD^{tree}; logs are author evidence for that exact content, not independently rerun tests. Full aggregate and full Kani gates were not repeated and remain lead-owned after custody. The old full Kani result still belongs only to 4f2cf0bb and is not a current fix-head gate claim.
+
+Static inspection plus existing focused author evidence was sufficient; this reviewer launched no compiler/Cargo/Kani. The exclusive heavy slot was explicitly released after an empty exact-name pgrep guard; heavy-release.txt records it. Source/worktree remained read-only. The original whole-repository gap FAIL is unchanged inherited assurance debt; no repository PASS or full matrix rerun is claimed. The spec base review remains clean. Terminal review permits this PR to proceed to the lead's final gates and artifact custody; there are no open review findings.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "let error = execute_kani_scalar_native(&KaniScalarNativeRequest {\n        cancel: &cancel,\n\
+    \        installation: &installation,\n        harness: &harness,\n        oracle_artifacts: &artifacts,\n \
+    \       operands: &[4, 1],\n        scalar_limits: limits(),\n        target_directory: &target,\n    })\n \
+    \   .unwrap_err();\n    assert!(matches!(\n        error,\n        KaniScalarNativeError::OracleStop(ScalarOracleStopKind::InvalidConstant)\n\
+    \    ));"
+  reason: The new private control passes the public paired runner through real Kani verification and an actually
+    launched bounded native protocol stand-in, observes OracleStop(InvalidConstant), code/class and exact native
+    arguments, and never constructs returned errors or proof evidence. The private ignored-lib actual run passed.
+    The dependency seam defaults to cargo in production and is selectable only by cfg(test) construction; this tests
+    runner propagation without claiming a runtime-generated stop from a supported canonical integer operation.
+```

@@ -801,3 +801,73 @@ bindings:
   ac_id: FR-017-AC-50
   trace: correct
 ```
+
+## Dispositions
+
+### Pass 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The production early read now preserves InvalidData as Snapshot before revision parsing. The real-file UTF-8 regression is green; matching, mismatched and unreadable lock semantics remain explicitly covered. |
+| FND-002 | fixed | Independent literal expected_error/outcome/reason/cause/nested lookups now exhaustively match their vocabularies. Five removed-arm compiler controls each produce E0004, while the restored frozen-head units pass. |
+| FND-003 | fixed | Only one admitted routing fixture implementation remains, parameterized by wall-clock budget. Both original consumers include it while retaining their isolated package registry and caller budget helper. |
+| FND-004 | fixed | Only one independent_digest implementation remains. Runner units, integration controls and private cleanup recomputation consume it; it does not call production canonicalization, and the separate literal schema/golden is unchanged. |
+| FND-005 | fixed | The native-result parser counts exact-tag records like limits and meter. Prepended/appended bare duplicates and a sole bare tag now exercise NativeResult refusals; the new regressions were red before the fix and green afterward. |
+
+## Disposition pass 1 assessment
+
+PASS for the scoped implementation review: all recorded findings are fixed, no new findings.
+
+Disposition pass 1 reviewed frozen fix head 7e5392c74a8d58ddbf822f8564cb6a2e549bd441 against original reviewed head 5ee6f3f0be5863e4a5d22cd70325a454d3ef9a23, on unchanged cb96317 base. Original artifacts/findings/verdict sections remain byte-for-byte prefixes; this section records later facts only. No new defects were found in the complete fix delta.
+
+Independent source inspection confirms all six findings fixed. The fixture and digest implementations each have one source home with both target consumers; caller package registries remain isolated. The public production API is not widened: the native executable is an immutable installation dependency defaulting to cargo, with a cfg(test)-only setter. Both proof and native dependency execute under the existing bounded launcher; lock generation continues to use cargo. The native stop stand-in records actual arguments and emits protocol output at the external process boundary; no harness/origin/receipt/evidence is forged and production decoder/orchestration remains the unit under test. No generator/run/classify back-edge, production test bypass, scanner weakening, CI/dependency/lock change, canonical preimage/schema change or held AD004 change was added. Root-private bridge and unchanged production generator inputs remain intact.
+
+Inspected author fix1 logs: early-read/duplicate-native regressions first fail red (2), fixed scalar units pass (13), omission of five independent expected arms yields exactly five E0004 errors, docs pass (14), layout/lane census/preflight/fixture pass (9), default private pass (10, 3 ignored), explicit private actual controls pass (3, 202.89 seconds), affected actual receipt/subtraction integration controls pass (2, 188.65 seconds), and tool/differential pass (2). Lint, compile, format and spec checks pass. The checked tree 6066c5a8bf5ac281458aaf87832d43a81ef7d5af independently equals HEAD^{tree}; logs are author evidence for that exact content, not independently rerun tests. Full aggregate and full Kani gates were not repeated and remain lead-owned after custody. The old full Kani result still belongs only to 4f2cf0bb and is not a current fix-head gate claim.
+
+Static inspection plus existing focused author evidence was sufficient; this reviewer launched no compiler/Cargo/Kani. The exclusive heavy slot was explicitly released after an empty exact-name pgrep guard; heavy-release.txt records it. Source/worktree remained read-only. The original whole-repository gap FAIL is unchanged inherited assurance debt; no repository PASS or full matrix rerun is claimed. The spec base review remains clean. Terminal review permits this PR to proceed to the lead's final gates and artifact custody; there are no open review findings.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "let lock = match lock {\n        Err(error) if error.kind() == std::io::ErrorKind::InvalidData\
+    \ => {\n            return Err(KaniScalarNativeError::Snapshot(error));\n        }\n        other => other.ok(),\n\
+    \    };"
+  reason: The production early read now preserves InvalidData as Snapshot before revision parsing. The real-file
+    UTF-8 regression is green; matching, mismatched and unreadable lock semantics remain explicitly covered.
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: "fn expected_outcome(\n        outcome: &KaniRunOutcome,\n        cause: Option<&KaniFailureCause>,\n\
+    \    ) -> KaniScalarNativeErrorClass {\n        use KaniScalarNativeErrorClass::{CompletionRefusal as R, EnvironmentFault\
+    \ as F};\n        match outcome {\n            KaniRunOutcome::Verified => F,\n            KaniRunOutcome::Falsified\
+    \ { .. } => R,\n            KaniRunOutcome::CoverUnsatisfied { .. } => R,\n            KaniRunOutcome::Cancelled\
+    \ { .. } => F,\n            KaniRunOutcome::Inconclusive { reason } => expected_reason(*reason, cause),\n  \
+    \      }\n    }"
+  reason: Independent literal expected_error/outcome/reason/cause/nested lookups now exhaustively match their vocabularies.
+    Five removed-arm compiler controls each produce E0004, while the restored frozen-head units pass.
+- fnd: FND-003
+  outcome: fixed
+  after_excerpt: "pub(super) fn routed_scalar_with_artifacts(\n    mut builder: package::PackageBuilder,\n    operation_code:\
+    \ u32,\n    narrow_code: u32,\n    result_bound: Bound,\n    wall_clock: Duration,\n) -> (KaniScalarObligationHarness,\
+    \ Vec<Artifact>) {"
+  reason: Only one admitted routing fixture implementation remains, parameterized by wall-clock budget. Both original
+    consumers include it while retaining their isolated package registry and caller budget helper.
+- fnd: FND-004
+  outcome: fixed
+  after_excerpt: "//! Independent JCS/SHA-256 oracle for the scalar proof-content string-only shape.\npub(crate)\
+    \ fn independent_digest(entries: &[(String, Vec<u8>)]) -> [u8; 32] {\n    use sha2::{Digest, Sha256};\n    let\
+    \ artifacts = entries\n        .iter()\n        .map(|(path, bytes)| {\n            format!(\n             \
+    \   \"{{\\\"contents\\\":{},\\\"path\\\":{}}}\",\n                serde_json::to_string(std::str::from_utf8(bytes).unwrap()).unwrap(),\n\
+    \                serde_json::to_string(path).unwrap()\n            )\n        })\n        .collect::<Vec<_>>()\n\
+    \        .join(\",\");\n    let bytes = format!(\n        \"{{\\\"artifacts\\"
+  reason: Only one independent_digest implementation remains. Runner units, integration controls and private cleanup
+    recomputation consume it; it does not call production canonicalization, and the separate literal schema/golden
+    is unchanged.
+- fnd: FND-005
+  outcome: fixed
+  after_excerpt: "    let result = single_record(text, \"IR791_NATIVE_V1\")?;\n    let fields = result.split('\\\
+    t').collect::<Vec<_>>();"
+  reason: The native-result parser counts exact-tag records like limits and meter. Prepended/appended bare duplicates
+    and a sole bare tag now exercise NativeResult refusals; the new regressions were red before the fix and green
+    afterward.
+```
