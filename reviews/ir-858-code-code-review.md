@@ -516,3 +516,149 @@ dispositions:
     \ identity = identifier(name)?;\n    if !names.insert(identity.clone()) {\n        return Err(HarnessSpecError::DuplicateBinding(name.to_owned()));\n\
     \    }\n    Ok(identity)\n}"
 ```
+
+### Round 2
+
+Pinned failing head: `1824067a0d0e56c9ac515b43b48e113df26de51c`. FND-001..003 retain their previous fixed outcomes and receive no redundant rows. FND-004 was exposed by the lead's actual final aggregate gate, before any final full Kani run started. The initial review missed the ignored test module's import-direction violation. No branch/source edits or Cargo/rustc/Kani invocation were performed during this pass; the failing source was read with git show, independent of the concurrently changing coder worktree.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | still-open | No measured fix has yet been reviewed. Pinned 1824067 still contains all four prohibited imports and its required aggregate gate fails. The same-PR coder is preparing a narrow architecture/test-support fix; final execution and review remain pending. |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The new private installed-backend control imports kani::classify and kani::run from kani::generate::render. AD-004 L-2 explicitly applies dependency direction to cfg(test) modules; generate may import only earlier Kani layers. At pinned head 1824067 the required make ci fails layout::l_2_every_import_follows_the_dependency_direction on all four classify/run imports. Move execution/classification orchestration to a permitted test-support boundary while retaining private HarnessSpec construction, the real unsatisfiable-Assume control and its successful-check/CoverUnsatisfied assertions; do not weaken or bypass the layout checker. | src/kani/generate/render.rs:311-319 |
+
+The lead's `final-ci-1824067.log` lines 1024–1034 records the actual layout failure at tests/it/layout.rs:564. Its four edges are classify::KaniRunOutcome, run::execute::execute_kani_obligation, run::execute::KaniExecutionRequest and run::tool::KaniInstallation. 604 other integration tests passed. Focused constructor/render/differential tests and the explicit real backend control did not exercise this architecture gate; they therefore did not establish aggregate readiness. This finding does not invalidate the measured CoverUnsatisfied result, but its test placement violates the declared architecture and blocks the required aggregate gate.
+
+AD-004's dependency-direction paragraph puts generate before classify/run and explicitly applies the rule to cfg(test) modules. The pinned test_support module owns shared test helpers and imports identity/abi but no generator. A test bridge must preserve that no-generator direction, keep HarnessSpec private, and not turn a qualified path or checker exclusion into a workaround. The implementation choice and measured fix remain with the coder and next disposition round. No unchanged matrix debt or clean spec artifact is reopened.
+
+```yaml
+scope:
+- id: AD-004-L-2
+  path: spec/assurance/AD-004-cg-crate-layout.md
+  role: examined
+  excerpt: "- L-2. The import graph is acyclic and follows the dependency direction above, `#[cfg(test)]`\n  modules\
+    \ included, and no file imports an item through the crate root. Test: a layout test that\n  reads `use crate::`\
+    \ lines and flags a bare `crate::<Item>` path in code (inline types, calls;\n  not string literals or comments,\
+    \ so intra-doc links are rewritten by step 2g-0 but not checked). It lands at the end of step 2, after the edge-removal\
+    \ steps, so it can\n  pass when it lands."
+- id: FR-015-AC-117
+  path: spec/kani/functional/FR-015-bounded-kani-obligations.md
+  role: context_only
+  excerpt: Implemented (IR-858). With the installed backend, after the scalar port, the unmutated scalar harness
+    classifies `Verified` with its cover satisfied and the existing scalar mutation control (the oracle's `Add`
+    swapped for `Subtract`, FR-015-AC-37) classifies `Falsified`; and a hand-built `HarnessSpec` with an unsatisfiable
+    `Assume`, rendered by `render`, does not classify `Verified` (L-4). This run is a smoke over the ported source
+    and not the evidence of equivalence, which FR-015-AC-115 is (AD-004 "The HarnessSpec and render contract (step
+    4b)", P-3).
+- id: tests/it/layout.rs::l_2_every_import_follows_the_dependency_direction
+  path: tests/it/layout.rs
+  role: examined
+  excerpt: "/// L-2, the second clause: every import points at a directory its own directory may reach, and\n///\
+    \ inside `kani/` only at an earlier name.\n///\n/// Architecture evidence: AD-004 L-2\n#[test]\nfn l_2_every_import_follows_the_dependency_direction()\
+    \ {\n    let files = source_files();\n    let modules: BTreeSet<Vec<String>> = files.keys().map(|file| module_of(file)).collect();\n\
+    \    let mut violations = Vec::new();\n    for edge in edges(&files) {\n        let from = module_of(&edge.file);\n\
+    \        let (Some(directory), Some(target)) = (from.first(), edge.path.first()) else {\n            continue;\n\
+    \        "
+findings:
+- fnd: FND-004
+  severity: high
+  confidence: high
+  method: code-review
+  check: code-bug
+  artifact_id: AD-004-L-2
+  related_ids:
+  - FR-015-AC-117
+  - AD-004-R-1
+  path: src/kani/generate/render.rs
+  lines: 311-319
+  excerpt: "- L-2. The import graph is acyclic and follows the dependency direction above, `#[cfg(test)]`\n  modules\
+    \ included, and no file imports an item through the crate root. Test: a layout test that\n  reads `use crate::`\
+    \ lines and flags a bare `crate::<Item>` path in code (inline types, calls;\n  not string literals or comments,\
+    \ so intra-doc links are rewritten by step 2g-0 but not checked). It lands at the end of step 2, after the edge-removal\
+    \ steps, so it can\n  pass when it lands."
+  finding: The new private installed-backend control imports kani::classify and kani::run from kani::generate::render.
+    AD-004 L-2 explicitly applies dependency direction to cfg(test) modules; generate may import only earlier Kani
+    layers. At pinned head 1824067 the required make ci fails layout::l_2_every_import_follows_the_dependency_direction
+    on all four classify/run imports. Move execution/classification orchestration to a permitted test-support boundary
+    while retaining private HarnessSpec construction, the real unsatisfiable-Assume control and its successful-check/CoverUnsatisfied
+    assertions; do not weaken or bypass the layout checker.
+dispositions:
+- fnd: FND-004
+  outcome: still-open
+  reason: No measured fix has yet been reviewed. Pinned 1824067 still contains all four prohibited imports and its
+    required aggregate gate fails. The same-PR coder is preparing a narrow architecture/test-support fix; final
+    execution and review remain pending.
+bindings: []
+```
+
+## Dispositions (round 3)
+
+Independently reviewed frozen fix head `f90604ff87b042550f2418c51816caab2428d217`. FND-004 is fixed. FND-001..003 retain their prior fixed outcomes, with no redundant disposition rows. No new finding arose in the actual bridge/source/test/document delta. The original review, new finding and earlier still-open outcome remain unchanged above; this later fixed outcome supersedes round 2 for FND-004.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-004 | fixed | Execution/classification moved to a cfg(test) crate-root module, physically tests/it/kani_render_private.rs. Generate retains only private fixture construction and returns the existing sealed harness; it no longer imports classify/run. The unchanged original L-2 gate and all six layout tests pass. |
+
+Latest review verdict: all four findings fixed, no open review defect. Root final aggregate and required full Kani gates remain pending on the latest custodied candidate; focused evidence does not substitute for those gates.
+
+### Round 3 boundary and measured evidence
+
+The reviewed source delta from 1824067 changes exactly src/lib.rs, src/kani/generate/mod.rs, src/kani/generate/render.rs, tests/it/kani_render_private.rs and TC-025's explicit private-control command path. lib.rs includes the new test module with cfg(test) and an explicit path; the module belongs to the crate root, whose orchestration may reach generation and execution. It uses crate::kani module paths, not crate-root item reexports. This satisfies AD-004's instruction that tests needing a generator fixture live physically in tests/it/ and avoids a forbidden generate-to-run or run-to-generate edge. It also avoids modifying kani/test_support, whose identity/ABI-only restriction remains intact.
+
+HarnessSpec, ExprText, Statement, their constructors and protected fields are unchanged and remain private to generate. The cfg(test) generate wrapper returns only existing KaniScalarObligationHarness; neither it nor the fixture exists in production builds or the external public API. The render tests module is visible only to its parent and remains cfg(test). The fixture still constructs the safe pre-Assume arithmetic, contradictory Assume, subject call, identity, record and rendered artifact. The moved test runs the unchanged executor and retains success_checks > 0 and exact CoverUnsatisfied { satisfied: 0, total: 1 }, then cleans its scratch crate.
+
+No checker weakening, qualified-name bypass, scanner exemption, integration-main include, Cargo target, dependency, held family or public API change occurred. tests/it/layout.rs, tests/it/kani_gate.rs, tests/it/main.rs and the Kani selection scripts are unchanged from the failing pinned head. The new ignore reason explicitly calls this a private lib control, not a kani-lane member. It runs separately as:
+
+`cargo test --locked --lib kani_render_private::unsatisfiable_assume_is_cover_unsatisfied_under_real_kani -- --ignored --exact --test-threads=1 --nocapture`
+
+TC-025 now records that actual path. Its Test evidence/method intent is unchanged; no new gap baseline or clean spec review artifact is generated. The new AC117 test binding validates the same unsatisfiable-control obligation part as before; healthy/mutant smoke remains a separate installed-backend control.
+
+Actual author logs at this exact head were inspected: fix2-layout-lane-cover.log passes 12 tests, including the original failing L-2 test, all six layout tests, the unchanged lane census and all five cover checks over twelve emitters. fix2-lib.log passes 19 focused tests plus the determinism child, with the moved private backend control intentionally ignored in the default invocation. fix2-private-unsat.log explicitly executes that control and passes 1/1. fix2-lint.log, fix2-fmt-check.log and fix2-spec-validation.log pass. No full aggregate or full Kani rerun is claimed for this head. No Cargo, rustc, rustfmt or Kani was launched by the reviewer during this disposition.
+
+```yaml
+scope:
+- id: src/kani/generate/render.rs::tests::unsatisfiable_harness
+  path: src/kani/generate/render.rs
+  role: examined
+  excerpt: "    pub(crate) fn unsatisfiable_harness() -> crate::kani::identity::KaniScalarObligationHarness {\n\
+    \        use crate::kani::identity::{\n            KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,\n\
+    \        };"
+- id: src/kani/generate/mod.rs::unsatisfiable_harness_for_test
+  path: src/kani/generate/mod.rs
+  role: examined
+  excerpt: " returns the existing sealed output, never a HarnessSpec.\n#[cfg(test)]\npub(crate) fn unsatisfiable_harness_for_test()\
+    \ -> crate::kani::identity::KaniScalarObligationHarness\n{\n    render::tests::unsatisfiable_harness()\n}\n"
+- id: src/lib.rs::kani_render_private
+  path: src/lib.rs
+  role: examined
+  excerpt: '// Private integration control needs internal generation and execution in the library test binary.
+
+    #[cfg(test)]
+
+    #[path = "../tests/it/kani_render_private.rs"]
+
+    mod kani_render_private;'
+- id: tests/it/kani_render_private.rs::unsatisfiable_assume_is_cover_unsatisfied_under_real_kani
+  path: tests/it/kani_render_private.rs
+  role: examined
+  excerpt: "//! Private libtest orchestration of a generated unsatisfiable-assumption control.\n\nuse crate::kani::{\n\
+    \    classify::KaniRunOutcome,\n    generate::unsatisfiable_harness_for_test,\n    run::{\n        execute::{execute_kani_obligation,\
+    \ KaniExecutionRequest},\n        tool::KaniInstallation,\n    },\n    test_support::discover_scratch,\n};\n\
+    use ix_trace_rs::trace;\n\n#[trace(\"FR-015-AC-117\", \"TC-025\")]\n#[test]\n#[ignore = \"installed Kani backend:\
+    \ run this private lib control explicitly and serially\"]\nfn unsatisfiable_assume_is_cover_unsatisfied_under_real_kani()\
+    \ {\n    let harness = unsatisfiable_harness_f"
+dispositions:
+- fnd: FND-004
+  outcome: fixed
+  after_excerpt: "    pub(crate) fn unsatisfiable_harness() -> crate::kani::identity::KaniScalarObligationHarness\
+    \ {\n        use crate::kani::identity::{\n            KaniScalarObligationHarness, ScalarObligationArgument,\
+    \ ScalarObligationIdentity,\n        };"
+bindings:
+- test_id: tests/it/kani_render_private.rs::unsatisfiable_assume_is_cover_unsatisfied_under_real_kani
+  ac_id: FR-015-AC-117
+  trace: correct
+```
