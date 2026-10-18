@@ -1609,6 +1609,35 @@ fn exact_quantity_conversion_vectors_agree() {
             }
         }
     }
+    note_vector();
+    let source = f.qi(250, "cm");
+    let unit = f.unit("m");
+    let one = f.qi(1, "m");
+    agree2! {
+        limits: rt::UNLIMITED,
+        setup: {},
+        direct: |m| match direct_conversion(&source, &unit, m) {
+            Ok(Outcome::Completed(converted)) => rt::evaluate_quantity(rt::QuantityOperation::Add(&converted, &one), m),
+            other => other,
+        },
+        generated: |m| match typed(quantity_convert(&source, &unit, m)) {
+            Ok(Outcome::Completed(converted)) => typed(quantity_add(&converted, &one, m)),
+            other => other,
+        },
+    };
+    let converted = quantity_convert(&source, &unit, &mut Meter::new(rt::UNLIMITED))
+        .unwrap()
+        .completed()
+        .unwrap();
+    assert_eq!(
+        quantity_add(&converted, &one, &mut Meter::new(rt::UNLIMITED)).unwrap(),
+        Outcome::Completed(f.q(rt::ratio(7, 2), "m"))
+    );
+    assert_ne!(
+        f.unit("m_alias"),
+        f.unit("m"),
+        "U09b preserves distinct source identity"
+    );
     let final_denial = agree_conversion(
         rt::unit_tuple([8, 0, 1, 1, 6, 0]),
         &f.qi(100, "cm"),
@@ -1631,7 +1660,7 @@ fn exact_quantity_conversion_vectors_agree() {
         == rt::ChargePoint::UnitResultRetain
         && matches!(outcome, Ok(Outcome::Incomplete(_)))
         && *retained == 0));
-    assert_eq!(vectors_run() - before, 14, "every conversion row ran");
+    assert_eq!(vectors_run() - before, 15, "every conversion row ran");
 }
 
 /// Dimension identity mismatches refuse before any charge, including with a populated meter.
