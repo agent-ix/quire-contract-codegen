@@ -494,8 +494,7 @@ validated newtype whose constructor refuses text that:
 So an `ExprText` cannot hold a statement, an assertion, a panic or a cover, and R-1 item 2's
 promise that nothing a lowerer supplies changes where the cover goes is enforced rather than
 hoped for. Adding a macro to the allowlist is a spec change here. An `ExprText` may span lines;
-its lines after the first carry their indentation relative to the statement, and `render.rs` adds
-the statement's own indent to each, which is what lets the port be byte-identical. A typed
+`render.rs` preserves its text and indentation verbatim, including lines after the first. A typed
 expression tree was considered and rejected for 4b: it would be a second Rust AST inside the crate
 for four arithmetic expressions, and `syn` is already the validity check on the rendered whole.
 The cost is that an `ExprText` is checked for parse, form and the absence of Kani spellings, not
@@ -561,7 +560,9 @@ spec, from the same lowered claim, and `record.rs` joins identity and artifact a
    supplied and the fixed structure, and nothing else.
 4. Design rationale: it is a pure function of the spec, with no map or set iteration, no clock,
    no environment and no address-dependent formatting, so equal specs render equal bytes.
-   Indentation is four spaces per level, as the scalar template writes it today.
+   The scalar harness wrapper and body preserve the pre-port template's actual whitespace: eight
+   spaces before each `Input` declaration and no renderer-added indentation on other lines. Rust
+   string continuations in that template strip its source indentation.
 5. It validates what it renders as today's `render_scalar` does, in the same order and with the
    same refusals: first `ResourceLimitExceeded` when the source exceeds `MAX_GENERATED_SOURCE_BYTES`
    (core/artifact), then `InvalidGeneratedSyntax` when `syn::parse_file` rejects the source. Those
