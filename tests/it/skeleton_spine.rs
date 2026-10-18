@@ -17,7 +17,7 @@
 //! `#[ignore]` here, not part of `make ci`) runs the real prover.
 
 use ix_trace_rs::trace;
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use qsl_replay::WitnessValue;
 use qsl_replay::{
