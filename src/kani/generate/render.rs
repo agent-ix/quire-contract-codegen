@@ -121,7 +121,7 @@ pub(super) fn render(spec: &HarnessSpec) -> Result<Artifact, UnsupportedObligati
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::super::spec::{Cover, ExprText};
     use super::*;
     use crate::{
@@ -304,19 +304,9 @@ mod tests {
         );
     }
 
-    #[trace("FR-015-AC-117", "TC-025")]
-    #[test]
-    #[ignore = "installed Kani backend: run this private control explicitly and serially"]
-    fn unsatisfiable_assume_is_cover_unsatisfied_under_real_kani() {
-        use crate::kani::{
-            classify::KaniRunOutcome,
-            identity::{
-                KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
-            },
-            run::{
-                execute::{execute_kani_obligation, KaniExecutionRequest},
-                tool::KaniInstallation,
-            },
+    pub(crate) fn unsatisfiable_harness() -> crate::kani::identity::KaniScalarObligationHarness {
+        use crate::kani::identity::{
+            KaniScalarObligationHarness, ScalarObligationArgument, ScalarObligationIdentity,
         };
         // The safe addition is reached before the contradiction. Its overflow check gives
         // the classifier a successful property; the final cover is then unsatisfied.
@@ -347,37 +337,6 @@ mod tests {
         };
         let record =
             super::super::record::record(spec.path().module.as_str(), &identity, &rust).unwrap();
-        let harness = KaniScalarObligationHarness::generated(identity, rust, record);
-        let directory = crate::kani::test_support::discover_scratch("render-unsat");
-        std::fs::create_dir_all(directory.join("src")).unwrap();
-        std::fs::write(directory.join("Cargo.toml"), "[package]\nname = \"render-unsat-control\"\nversion = \"0.0.0\"\nedition = \"2021\"\n[workspace]\n").unwrap();
-        std::fs::write(directory.join("src/lib.rs"), &harness.rust.contents).unwrap();
-        std::fs::write(
-            directory.join("build.rs"),
-            "fn main() { println!(\"cargo:rustc-check-cfg=cfg(kani)\"); }\n",
-        )
-        .unwrap();
-        let installation = KaniInstallation::discover().expect("installed cargo-kani");
-        let evidence = execute_kani_obligation(&KaniExecutionRequest {
-            cancel: &quire_exact::Cancel::new(),
-            installation: &installation,
-            harness: (&harness).into(),
-            crate_directory: &directory,
-            target_directory: &directory.join("target"),
-            home_directory: None,
-        })
-        .unwrap();
-        assert!(
-            evidence.success_checks > 0,
-            "a reachable pre-assumption property must succeed: {evidence:?}"
-        );
-        assert_eq!(
-            evidence.outcome,
-            KaniRunOutcome::CoverUnsatisfied {
-                satisfied: 0,
-                total: 1
-            }
-        );
-        std::fs::remove_dir_all(directory).unwrap();
+        KaniScalarObligationHarness::generated(identity, rust, record)
     }
 }

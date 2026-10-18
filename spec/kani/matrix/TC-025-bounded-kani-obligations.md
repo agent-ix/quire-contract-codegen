@@ -459,7 +459,7 @@ Implementation evidence: the private constructor, renderer and scalar differenti
 kani::generate::scalar::`), as does the twelve-entrypoint inspection (`cargo test --locked
 --test it cover_last -- --test-threads=1`). The private installed-backend control is explicitly
 run with `cargo test --locked --lib
-kani::generate::render::tests::unsatisfiable_assume_is_cover_unsatisfied_under_real_kani --
+kani_render_private::unsatisfiable_assume_is_cover_unsatisfied_under_real_kani --
 --ignored --exact --test-threads=1`: it requires successful reachable checks and exactly
 `CoverUnsatisfied { satisfied: 0, total: 1 }`. The existing healthy/mutated scalar control runs
 with the required author `make kani-gate`; independent review and final acceptance remain separate.

@@ -7,6 +7,11 @@
 #[cfg(test)]
 extern crate self as quire_contract_codegen;
 
+// Private integration control needs internal generation and execution in the library test binary.
+#[cfg(test)]
+#[path = "../tests/it/kani_render_private.rs"]
+mod kani_render_private;
+
 // The leaf directory: artifact, diagnostic, identity, profile and source-map.
 // `core` here is this crate's own layout module (the AD names the directory `core/`). In this
 // file it shadows the extern `core` crate, so `crate::core::` is the explicit spelling.
