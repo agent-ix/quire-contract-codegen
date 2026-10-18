@@ -364,7 +364,7 @@ const EXIT_STATUS_LIMIT: usize = 64;
 /// `{ kind: "exit_code", code }` and as `{ kind: "unknown", exitStatus }`. It is diagnostic only
 /// and is never read back, so it implements no deserialization:
 ///
-/// Trace: FR-017-AC-38, TC-027
+/// The serialization contract is covered by FR-017-AC-38 and TC-027.
 ///
 /// ```compile_fail
 /// let _: quire_contract_codegen::KaniFailureCause = serde_json::from_str("{}").unwrap();
@@ -693,7 +693,7 @@ mod tests {
     /// The vocabulary: each reserved status names its cause, `exit_code_<n>` keeps a canonical
     /// signed 32-bit decimal as stated, and any other value is `unknown`.
     ///
-    /// Trace: FR-017-AC-37, TC-027
+    #[trace("FR-017-AC-37", "TC-027")]
     #[test]
     fn tc_027_the_exit_status_vocabulary_maps_to_its_causes() {
         assert_eq!(
@@ -737,7 +737,7 @@ mod tests {
 
     /// An unknown status is redacted and then cut to 64 bytes on a character boundary.
     ///
-    /// Trace: FR-017-AC-37, TC-027
+    #[trace("FR-017-AC-37", "TC-027")]
     #[test]
     fn tc_027_an_unknown_exit_status_is_redacted_and_cut_to_64_bytes_on_a_character() {
         for (length, kept) in [(64, 64), (65, 64), (100, 64), (10, 10)] {
@@ -766,7 +766,7 @@ mod tests {
 
     /// The reported exit status is the one of the single entry that names the result's harness.
     ///
-    /// Trace: FR-017-AC-38, TC-027
+    #[trace("FR-017-AC-38", "TC-027")]
     #[test]
     fn tc_027_the_exit_status_is_read_only_from_the_one_entry_naming_the_harness() {
         let entry = |harness: &str, status: serde_json::Value| json!({ "harness_id": harness, "exit_status": status });
@@ -817,7 +817,7 @@ mod tests {
 
     /// A number and a lone surrogate escape are refused as malformed; any other string is read.
     ///
-    /// Trace: FR-017-AC-38, TC-027
+    #[trace("FR-017-AC-38", "TC-027")]
     #[test]
     fn tc_027_a_number_or_lone_surrogate_exit_status_is_still_malformed() {
         let with = |literal: &str| {
@@ -840,7 +840,7 @@ mod tests {
 
     /// The cause has the stated wire shape and implements no deserialization.
     ///
-    /// Trace: FR-017-AC-38, TC-027
+    #[trace("FR-017-AC-38", "TC-027")]
     #[test]
     fn tc_027_the_cause_implements_no_deserialize() {
         assert!(

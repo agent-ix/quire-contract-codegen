@@ -4571,7 +4571,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// A `FailedWithoutCounterexample` run keeps the cause the report states, and a
             /// cause that names a CBMC failure brings the diagnostic record.
             ///
-            /// Trace: FR-017-AC-37, TC-027
+            #[trace("FR-017-AC-37", "TC-027")]
             #[test]
             fn tc_027_every_exit_status_gives_its_cause_and_a_diagnostic_record() {
                 let stand_in = cbmc_failed("cause-vocabulary", &failing_with("exit_code_64"));
@@ -4655,7 +4655,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// A failed property keeps its cause and no record; a report naming no single entry
             /// for the harness keeps neither.
             ///
-            /// Trace: FR-017-AC-38, TC-027
+            #[trace("FR-017-AC-38", "TC-027")]
             #[test]
             fn tc_027_a_failed_property_has_no_record_and_an_unnamed_entry_has_no_cause() {
                 let harness = proofs();
@@ -4718,7 +4718,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// An entry with `exit_code_64` beside any other outcome leaves that outcome as it
             /// was and adds no cause: the cause is read only for `FailedWithoutCounterexample`.
             ///
-            /// Trace: FR-017-AC-38, TC-027
+            #[trace("FR-017-AC-38", "TC-027")]
             #[test]
             fn tc_027_the_cause_is_kept_for_no_other_outcome() {
                 let harness = proofs();
@@ -4815,7 +4815,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// A number and a lone surrogate escape as the exit status are still refused as
             /// malformed, with no evidence; a string no vocabulary names never is.
             ///
-            /// Trace: FR-017-AC-38, TC-027
+            #[trace("FR-017-AC-38", "TC-027")]
             #[test]
             fn tc_027_a_malformed_exit_status_still_refuses_the_report() {
                 let harness = proofs();
@@ -4839,7 +4839,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
             /// A batch member keeps the cause beside the batch timeout rule.
             ///
-            /// Trace: FR-017-AC-39, TC-043
+            #[trace("FR-017-AC-39", "TC-043")]
             #[test]
             fn tc_043_batch_members_keep_their_cause_beside_the_timeout_rule() {
                 let members = ["a", "b", "c", "d", "e"].map(|module| member(module, "check", 4));
@@ -4902,7 +4902,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// Two entries for `b::check`, one `timeout` and one `exit_code_64`: the timeout rule
             /// reads the entries as before and the member is timed out with no cause.
             ///
-            /// Trace: FR-017-AC-39, TC-043
+            #[trace("FR-017-AC-39", "TC-043")]
             #[test]
             fn tc_043_two_entries_for_a_member_leave_the_timeout_rule_unchanged() {
                 let members = ["a", "b"].map(|module| member(module, "check", 4));
@@ -4942,7 +4942,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
             /// classify alike and have equal evidence outside the cause, the record, the memory
             /// observation and the report path.
             ///
-            /// Trace: FR-017-AC-40, TC-027
+            #[trace("FR-017-AC-40", "TC-027")]
             #[test]
             fn tc_027_the_cause_never_feeds_classification() {
                 let harness = proofs();

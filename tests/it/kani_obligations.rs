@@ -2309,7 +2309,7 @@ fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {
 /// CBMC cause. The independence from the cause and the record holds by the signature of
 /// `run_terminal_value`, which takes only the outcome and the SUCCESS-check count.
 ///
-/// Trace: FR-017-AC-40, TC-027
+#[trace("FR-017-AC-40", "TC-027")]
 #[cfg(unix)]
 #[test]
 fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
@@ -2368,7 +2368,7 @@ fn tc_027_the_terminal_value_of_a_cbmc_failure_ignores_its_cause() {
 /// `FailedWithoutCounterexample` with the cause `exit_code` 64 and a diagnostic record whose
 /// stderr excerpt holds CBMC's own message.
 ///
-/// Trace: FR-017-AC-40, TC-027
+#[trace("FR-017-AC-40", "TC-027")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_real_kani_unknown_cbmc_option_keeps_exit_code_64_as_the_failure_cause() {
