@@ -15,8 +15,8 @@ relationships:
 Verify that bounded contracts produce one harness per obligation kind and
 refuse non-finite obligations. IR-268 covers the collection half of planned V2
 symbolic obligations: the claim is an admitted QSL clause/function body over a
-selected model collection field. Graph reachability remains required by
-FR-015-AC-98, assigned to IR-805 and blocked on QSL-804; it is not IR-268
+selected model collection field. Graph reachability is required by
+FR-015-AC-98 and FR-015-AC-105 to FR-015-AC-108 (IR-805); it is not IR-268
 evidence. The finite-input collection and graph corpus is not proof evidence
 for either symbolic family.
 
@@ -67,13 +67,49 @@ run evidence, including actual Kani, Rust and solver versions. These tests are
 planned until the symbolic collection generation exists. The finite-input
 corpus's Boolean and generation-time outcome do not satisfy these controls.
 
-For the graph family retained in FR-015-AC-98, IR-805 must later supply the
-QSL-emitted graph claim and Contract IR's typed finite object population before
-its symbolic reachability controls can run. Preserve tests for selected-field
-positive-length reachability (including isolated and self-loop `start =
-target`), inclusive population/multiplicity bounds, unbounded and unsupported
-refusals, seeded counterexample, and identity changes; none is implementation
-or proof evidence for IR-268. This graph work is blocked on QSL-804.
+For the graph family (IR-805), author a QSL unit whose model has an object
+type `Order` with an optional `Reference<Order>` field, a `Reference` field and
+a bounded `Sequence<Reference<Order>>` field, and relationships `next`
+(`{0,1}`), `kids` (`{0,3}` unique), `litter` (`{0,3}` not unique) and a `{2,3}`
+end; write invariant/precondition/postcondition clauses of the form
+`reaches(self, target, <name>)` and `not reaches(self, self, <name>)`. Emit
+through QSL and admit through Contract IR (no copied wire or hand-built
+builder). The IR-851 `relationship_end` and IR-852 `reaches_population`
+accessors are merged (IR #438 and #442); CG dependency integration and graph
+harness generation remain outstanding. Real-package population emission and
+the claim's population link remain owned by QSL-820. The following refusal
+controls remain Planned CG checks, with no harness: (1) the claim is the
+`state_clause` node id and argument path of a reachability application of one
+of the forms defined by [QSL FR-365](ix://agent-ix/quire-spec-language/FR-365)
+and [QSL FR-105](ix://agent-ix/quire-spec-language/FR-105); (2) a claim with
+`Unavailable` population selection settles `unsupported` naming it, without
+assuming the merged IR mapping makes a missing package link available;
+(3) with an `Unbounded` selection, a claim whose population has no finite
+authored bound settles `requires_bound`, and an unbounded collection edge
+settles `requires_bound`; (4) each other FR-015-AC-108 `unsupported` input
+reachable from an admitted package settles `unsupported` naming it,
+including a relationship-end claim whose typed end is unavailable to CG; (5)
+claim location: the same reachability twice in a condition, one node under two
+clauses, the two forms, a collection claim and a bad path (FR-015-AC-107); no
+caller `max_expansions`, population or multiplicity changes any outcome.
+Inspection: the three `relationship_end` refusals (`UnknownNode`,
+`NotReachesApplication`, `UnresolvedEnd`; Contract IR FR-038-AC-262 to
+FR-038-AC-268) cannot arise from a QSL-emitted, IR-admitted package
+(`UnresolvedEnd` needs a crate-internal post-admission mutation), so their
+`unsupported` mapping in FR-015-AC-108 is checked by inspection of the
+generator's error mapping, or by a named in-crate accessor test double, and is
+not a real-package runtime step. AC-107's location refusal runs before the accessor, so
+a path naming no reachability is never `NotReachesApplication`. Also, QSL refuses `reaches` in a function body, so no function-body graph
+claim can reach the generator. Real-package steps that wait on CG integration and QSL-820 emission (unbacked):
+positive-length semantics (an isolated `start = target` unreachable, a self-loop
+reachable) in the generated draw and the `qsl_replay` oracle; inclusive
+populations `N = 0` and the maximum, edge counts `lower`, `upper` and between,
+`kids` uniqueness, `litter` repeats and `{2,3}`; the healthy `Verified` case and
+each FR-015-AC-106 mutant `Falsified` with an in-domain playback; and identity
+changes for the clause path, form, field or role, population extent, edge
+multiplicity, subject and unwind, with byte identity on equal inputs. The
+finite-input `GraphRequest` corpus is not evidence.
+
 Generate harnesses for a contract with a precondition, postcondition,
 invariant and frame condition over bounded scalar domains, and for a contract
 with an unbounded domain, one with unsatisfiable bounds, and one over a
