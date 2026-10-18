@@ -942,6 +942,7 @@ fn bound_diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use quire_contract_model::EXECUTABLE_PROJECTION_FORMAT;
     use serde_json::{json, Value};
 
@@ -988,7 +989,7 @@ mod tests {
         package.clauses()[0].clone()
     }
 
-    /// Trace: FR-008-CON-3, TC-017.
+    #[trace("FR-008-CON-3", "TC-017")]
     #[test]
     fn tc_017_direct_relation_admission_refuses_wide_integer_domain() {
         for (minimum, maximum) in [
@@ -1006,7 +1007,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-008-CON-4, TC-017.
+    #[trace("FR-008-CON-4", "TC-017")]
     #[test]
     fn tc_017_direct_literal_conversion_refuses_outside_i64() {
         let clause = wide_clause(i128::MIN, i128::MAX);

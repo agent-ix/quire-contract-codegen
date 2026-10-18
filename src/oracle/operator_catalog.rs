@@ -254,8 +254,9 @@ impl Operator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
-    /// Trace: FR-038-AC-1, FR-038-AC-2, FR-038-AC-3
+    #[trace("FR-038-AC-1", "FR-038-AC-2", "FR-038-AC-3")]
     #[test]
     fn catalog_entries_preserve_identity_family_arity_result_and_consumer_projection() {
         let expected = [
