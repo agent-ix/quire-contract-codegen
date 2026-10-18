@@ -17,9 +17,8 @@ use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles, BoundForm,
     ClaimDerivationRefusal, ClaimDisposition, DecimalOperator, ExactScalarItem,
     ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
-    OperationProvenance, OracleGenerationError, QuantityOperator, RationalOperator, ScalarForm,
-    UpstreamBlocker, EXACT_SCALAR_CRATE_NAME, QUANTITY_CONVERSION_CAPABILITY,
-    SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
+    OperationProvenance, OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker,
+    EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
@@ -632,6 +631,7 @@ fn tc_024_every_scalar_family_generates_one_oracle_calling_its_runtime_operator(
             "rt::compare_ieee(rt::IeeeComparison::TotalOrder,".to_owned(),
         ),
         (1064, "rt::convert_ieee_width(".to_owned()),
+        (1140, "rt::convert_quantity(".to_owned()),
         (
             1065,
             "rt::evaluate_ieee(rt::IeeeOperation::Subtract(".to_owned(),
@@ -1188,6 +1188,7 @@ fn checks_no_bound(operation: &ExactScalarOperation) -> bool {
             | ExactScalarOperation::EnumComparison { .. }
             | ExactScalarOperation::QuantityArithmetic { .. }
             | ExactScalarOperation::QuantityComparison { .. }
+            | ExactScalarOperation::QuantityConversion
     )
 }
 
@@ -3452,25 +3453,70 @@ fn tc_031_ac21_the_whole_file_scan_counts_a_test_module_and_not_a_comment() {
     assert!(!non_test_code(source).lines().any(invokes_panicking_macro));
 }
 
-/// `quire.op.quantity.convert` is refused with its own named capability for every conversion node:
-/// the refusal carries the operation identity and the capability text, and no descriptor is built.
-#[trace("FR-014-AC-2", "FR-014-AC-18", "TC-024")]
+/// Exact conversions derive a unit-free descriptor and preserve the admitted target identity.
+#[trace("FR-014-AC-48", "FR-014-AC-5", "TC-024")]
 #[test]
-fn tc_024_quantity_conversion_is_refused_with_its_named_capability() {
-    let package = derivation_package().admit();
-    for code in QUANTITY_CONVERSIONS {
+fn quantity_conversion_derives_and_preserves_target_provenance() {
+    let (package, ids) = derivation_package().admit_resolved();
+    let items = QUANTITY_CONVERSIONS
+        .iter()
+        .map(|code| {
+            let node_id = ids.resolve(&code_id(*code));
+            let operation = derive_exact_scalar_items(&package, std::slice::from_ref(&node_id))
+                .pop()
+                .expect("one item")
+                .expect("derives")
+                .operation;
+            assert_eq!(operation, ExactScalarOperation::QuantityConversion);
+            ExactScalarItem { node_id, operation }
+        })
+        .collect::<Vec<_>>();
+    let generated = generate_exact_scalar_oracles(&package, &items).expect("generates");
+    for claim in &generated.claim_map.items {
+        assert_eq!(claim.operation.provenance, OperationProvenance::IrConfirmed);
+        let ClaimDisposition::Generated(generated) = &claim.result else {
+            panic!("{claim:?}")
+        };
+        assert!(generated.checked_bounds.is_empty());
+        let node = package
+            .graph()
+            .nodes
+            .iter()
+            .find(|node| node.node_id == claim.node_id)
+            .expect("node");
+        let target: quire_contract_model::CheckedNodeId =
+            serde_json::from_value(node.body["operation"]["member"]["declaration"].clone())
+                .expect("target");
+        assert_eq!(generated.quantity_conversion_target.as_ref(), Some(&target));
         assert_eq!(
-            derive_one(&package, code),
-            Err(no_claim(
-                ClaimDerivationRefusal::QuantityConversionUnsupported {
-                    operation_identity: "quire.op.quantity.convert".to_owned(),
-                    capability: QUANTITY_CONVERSION_CAPABILITY,
-                }
-            )),
-            "node {code}"
+            serde_json::to_value(generated).unwrap()["quantity_conversion_target"],
+            serde_json::to_value(target).unwrap()
         );
     }
-    assert!(QUANTITY_CONVERSION_CAPABILITY.contains("quantity conversion is not supported"));
+    let targets = generated
+        .claim_map
+        .items
+        .iter()
+        .map(|claim| {
+            let ClaimDisposition::Generated(generated) = &claim.result else {
+                panic!("generated")
+            };
+            generated
+                .quantity_conversion_target
+                .clone()
+                .expect("target identity")
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        targets.len(),
+        2,
+        "distinct admitted target declarations remain distinct"
+    );
+    let source = contents(&generated, "src/lib.rs");
+    assert!(source.contains("unit: &rt::QuantityUnit"));
+    assert!(
+        source.contains("rt::convert_quantity(operand, unit, &rt::QuantityTarget::Exact, meter)")
+    );
 }
 
 /// The Contract IR package of a request for `nodes`, and its driver positions in the same order.
@@ -3528,9 +3574,7 @@ fn contract_request(
     (contract, positions)
 }
 
-/// A function whose declared body is a quantity conversion node, called by a requested call, is
-/// refused on that call's claim with the named capability and the conversion node's id, under
-/// either declared body kind, and no oracle and no location entry exists for it.
+/// Conversion function bodies retain the earlier form refusal under either declared body kind.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_conversion() {
@@ -3575,9 +3619,8 @@ fn tc_024_function_generator_refuses_a_function_whose_body_is_a_quantity_convers
         assert_eq!(
             output.claim_map.items[0].result,
             ClaimDisposition::Refused {
-                refusal: ExactFunctionRefusal::QuantityConversionUnsupported {
-                    node_id: conversion.clone(),
-                    capability: QUANTITY_CONVERSION_CAPABILITY,
+                refusal: ExactFunctionRefusal::FormMismatch {
+                    found: "conversion".to_owned()
                 }
             },
             "{body:?}"
@@ -3637,7 +3680,7 @@ fn tc_024_equality_generator_refuses_a_quantity_conversion_node_before_any_artif
 /// and no artifact is produced, and the request as a whole still settles.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
-fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_capability() {
+fn tc_024_function_schedules_refuse_quantity_bodies_per_function() {
     use quire_contract_codegen::{
         generate_function_schedules, generate_function_schedules_with_limits,
         FunctionScheduleDeclaration, FunctionScheduleLimits, FunctionScheduleRefusal,
@@ -3676,19 +3719,20 @@ fn tc_024_function_schedules_refuse_a_quantity_conversion_body_with_the_named_ca
             );
             assert_eq!(
                 generated.refused_functions[0].refusal,
-                FunctionScheduleRefusal::QuantityConversionUnsupported {
-                    body: body.clone(),
-                    capability: QUANTITY_CONVERSION_CAPABILITY,
-                },
+                FunctionScheduleRefusal::UnsupportedOperation(
+                    if result_type_node_id == ids.resolve(&id(&unit_type())) {
+                        function.clone()
+                    } else {
+                        body.clone()
+                    }
+                ),
                 "result {result_type_node_id:?}"
             );
         }
     }
 }
 
-/// A call that passes a quantity conversion node as an argument to a declared function is
-/// refused on its claim with the named capability and the conversion node's id, and generates no
-/// oracle: the conversion is found anywhere in the closure of the call.
+/// A quantity conversion argument retains the argument's generic type refusal.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
 fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_argument() {
@@ -3703,10 +3747,9 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
     let integer_value = ids.resolve(&code_id(V_INTEGER));
     let integer = ids.resolve(&code_id(T_INTEGER));
     let (contract, positions) = contract_request(&package, &[adder_body.clone(), call.clone()]);
-    let expected = |node_id| ClaimDisposition::Refused {
-        refusal: ExactFunctionRefusal::QuantityConversionUnsupported {
-            node_id,
-            capability: QUANTITY_CONVERSION_CAPABILITY,
+    let expected = |_node_id| ClaimDisposition::Refused {
+        refusal: ExactFunctionRefusal::UnsupportedOperandType {
+            type_node_id: ids.resolve(&id(&unit_type())),
         },
     };
     let output = generate_exact_function_oracles(
@@ -3752,18 +3795,16 @@ fn tc_024_function_generator_refuses_a_call_passing_a_quantity_conversion_as_an_
     );
 }
 
-/// A schedule item whose call passes a quantity conversion node as an argument is refused with
-/// the named capability, and no schedule is produced for it.
+/// An unsupported conversion argument refuses its schedule item.
 #[trace("FR-014-AC-2", "TC-024")]
 #[test]
-fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_named_capability() {
+fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused() {
     use quire_contract_codegen::{
         generate_function_schedules, FunctionScheduleDeclaration, FunctionScheduleDisposition,
         FunctionScheduleItem, FunctionScheduleParameter, FunctionScheduleRefusal,
     };
     let (package, ids) = conversion_operand_package().admit_resolved();
     let integer = ids.resolve(&code_id(T_INTEGER));
-    let conversion = ids.resolve(&code_id(QUANTITY_CONVERSIONS[0]));
     let declaration = FunctionScheduleDeclaration {
         function_node_id: ids.resolve(&code_id(REFERENCE_FUNCTION)),
         body_node_id: ids.resolve(&code_id(1001)),
@@ -3791,12 +3832,9 @@ fn tc_024_function_schedule_item_with_a_conversion_argument_is_refused_with_the_
         matches!(
             &generated.claims[0].result,
             FunctionScheduleDisposition::Refused {
-                refusal: FunctionScheduleRefusal::QuantityConversionUnsupported {
-                    body,
-                    capability,
-                },
+                refusal: FunctionScheduleRefusal::MissingNode(type_node_id),
                 ..
-            } if body == &conversion && *capability == QUANTITY_CONVERSION_CAPABILITY
+            } if type_node_id == &ids.resolve(&id(&unit_type()))
         ),
         "{:?}",
         generated.claims[0].result
@@ -3853,61 +3891,113 @@ fn tc_024_equality_over_a_conversion_operand_is_refused_as_an_unsupported_quanti
     );
 }
 
-/// The caller-declared entry points refuse a quantity conversion node under every descriptor the
-/// caller can declare: `generate_exact_scalar_oracles` and `plan_exact_scalar_oracles` return the
-/// named refusal, the plan holds no oracle to render, and the generated crate has no oracle
-/// function and no harness.
-#[trace("FR-014-AC-2", "FR-014-AC-18", "TC-024")]
+/// Caller-declared exact conversion descriptors are confirmed against the admitted node.
+#[trace("FR-014-AC-48", "TC-024")]
 #[test]
-fn tc_024_caller_declared_quantity_conversion_is_refused_and_generates_nothing() {
-    let package = derivation_package().admit();
-    let ids = fixture_ids_for(&package);
-    let declared = [
-        ExactScalarOperation::QuantityArithmetic {
-            operator: QuantityOperator::Add,
-        },
-        ExactScalarOperation::QuantityComparison {
-            operator: ComparisonOperator::Less,
-        },
-        ExactScalarOperation::IntegerArithmetic {
-            operator: IntegerOperator::Add,
-            domain: bounded(-1000, 1000),
-        },
-    ];
+fn caller_declared_quantity_conversion_is_confirmed() {
+    let (package, ids) = derivation_package().admit_resolved();
     for code in QUANTITY_CONVERSIONS {
-        for operation in &declared {
-            let items = resolved_items(
-                &[ExactScalarItem {
-                    node_id: code_id(code),
-                    operation: operation.clone(),
-                }],
-                &ids,
-            );
-            let expected = no_claim(ClaimDerivationRefusal::QuantityConversionUnsupported {
-                operation_identity: "quire.op.quantity.convert".to_owned(),
-                capability: QUANTITY_CONVERSION_CAPABILITY,
-            });
+        let items = [ExactScalarItem {
+            node_id: ids.resolve(&code_id(code)),
+            operation: ExactScalarOperation::QuantityConversion,
+        }];
+        let plan = plan_exact_scalar_oracles(&package, &items).expect("plans");
+        assert_eq!(
+            plan.claims()[0].operation.provenance,
+            OperationProvenance::IrConfirmed
+        );
+        assert!(matches!(
+            plan.claims()[0].result,
+            ClaimDisposition::Generated(_)
+        ));
+    }
+}
 
-            let plan = plan_exact_scalar_oracles(&package, &items).expect("plans");
-            assert_eq!(plan.claims().len(), 1);
-            assert_eq!(
-                plan.claims()[0].result,
-                ClaimDisposition::Refused {
-                    refusal: expected.clone()
-                },
-                "plan, node {code}, {operation:?}"
-            );
+#[trace("FR-014-AC-50", "TC-024")]
+#[test]
+fn admitted_compound_conversion_target_refuses_without_changing_sibling() {
+    let (package, ids) = compound_conversion_package().admit_resolved();
+    let nodes = [ids.resolve(&code_id(9902)), ids.resolve(&code_id(1001))];
+    let derived = derive_exact_scalar_items(&package, &nodes);
+    assert_eq!(
+        derived[0],
+        Err(no_claim(ClaimDerivationRefusal::OperandFormsNotDerivable {
+            operation_identity: "quire.op.quantity.convert".to_owned(),
+        }))
+    );
+    assert!(derived[1].is_ok(), "supported sibling derives");
+    let generated = generate_exact_scalar_oracles(&package, &[derived[1].clone().unwrap()])
+        .expect("sibling generates");
+    assert!(matches!(
+        generated.claim_map.items[0].result,
+        ClaimDisposition::Generated(_)
+    ));
+}
 
-            let oracles = generate_exact_scalar_oracles(&package, &items).expect("generates");
-            assert_eq!(
-                refusal_of(&oracles, code),
-                expected,
-                "generate, node {code}, {operation:?}"
-            );
-            assert!(
-                !contents(&oracles, "src/lib.rs").contains("fn "),
-                "no oracle function is emitted for node {code}"
-            );
-        }
+#[trace("FR-014-AC-2", "FR-014-AC-50", "TC-024")]
+#[test]
+fn unit_function_signatures_refuse_per_function_and_preserve_supported_siblings() {
+    use quire_contract_codegen::{
+        generate_function_schedules, FunctionScheduleDeclaration, FunctionScheduleParameter,
+        FunctionScheduleRefusal,
+    };
+    let mut builder = conversion_operand_package();
+    builder.node_with(
+        &key(9910),
+        "function",
+        "pure_function",
+        &key(T_INTEGER),
+        serde_json::json!({"term":"reference", "target":id(&key(ADDER_RIGHT))}),
+        &[key(ADDER_RIGHT)],
+    );
+    let (package, ids) = builder.admit_resolved();
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let unit = ids.resolve(&id(&unit_type()));
+    let supported = FunctionScheduleDeclaration {
+        function_node_id: ids.resolve(&id(&key(9910))),
+        body_node_id: ids.resolve(&code_id(ADDER_RIGHT)),
+        name: "identity".to_owned(),
+        parameters: vec![FunctionScheduleParameter {
+            value_node_id: ids.resolve(&code_id(ADDER_RIGHT)),
+            type_node_id: integer.clone(),
+        }],
+        result_type_node_id: integer.clone(),
+    };
+    for parameter_is_unit in [false, true] {
+        let unsupported = FunctionScheduleDeclaration {
+            function_node_id: ids.resolve(&code_id(CONVERSION_FUNCTION)),
+            body_node_id: ids.resolve(&code_id(QUANTITY_CONVERSIONS[0])),
+            name: CONVERTING_NAME.to_owned(),
+            parameters: if parameter_is_unit {
+                vec![FunctionScheduleParameter {
+                    value_node_id: ids.resolve(&id(&key(V_QUANTITY))),
+                    type_node_id: unit.clone(),
+                }]
+            } else {
+                vec![]
+            },
+            result_type_node_id: if parameter_is_unit {
+                integer.clone()
+            } else {
+                unit.clone()
+            },
+        };
+        let output = generate_function_schedules(
+            &package,
+            &[unsupported.clone(), supported.clone()],
+            &[],
+            1000,
+        )
+        .expect("request settles");
+        assert_eq!(output.functions.len(), 1);
+        assert_eq!(
+            output.functions[0].function_node_id,
+            supported.function_node_id
+        );
+        assert_eq!(output.refused_functions.len(), 1);
+        assert_eq!(
+            output.refused_functions[0].refusal,
+            FunctionScheduleRefusal::UnsupportedOperation(unsupported.function_node_id)
+        );
     }
 }
