@@ -447,3 +447,21 @@ collector/lifetime criterion whose O-origin or independent termination
 witness remains owed to IR-655 slice 2. Both slices remain PLANNED/UNRUN; actual export or unit-test
 compile/adaptation gaps are reported, not bypassed with named compatibility, helper identity
 override, skipped tests or invented coverage. All guarantees precede complete IR-639/MVP acceptance.
+
+Scalar proof-content digest (FR-017-AC-45 to AC-50): run the paired runner on a genuine routed
+`x + 1` package. (1) Assert the receipt's `DigestRecord` has domain `sha256-jcs` and 32 bytes equal
+to `as_bytes()`, and recompute SHA-256 of the RFC 8785 encoding of the schema object and the sorted
+artifact list in the test, independently of the runner's encoder. (2) Assert the exposed entry
+paths are exactly the AC-46 set in UTF-8 byte order, with the library under
+`src/oracle-artifacts-lib.rs` and the harness under `src/lib.rs`; then drop, rename, reorder,
+duplicate and one-byte-change each entry in turn and require a different digest; through a test
+seam that writes non-UTF-8 bytes to the snapshot's `Cargo.lock` (and again to the adapter) after
+it is generated, require `Snapshot`, `snapshot_io`, `EnvironmentFault`, and no receipt. (3) Run the two operand orders of AC-31 and a different `ScalarLimits`
+value and require equal `DigestRecord`s. (4) After the receipt is returned, assert the snapshot path no longer exists (the private snapshot is dropped before the receipt is returned), then require the exposed entries to still read and the digest to recompute byte-identically; this is a mutation-style check, not a source scan. (5) Recompute from only the exposed entries, including
+`Cargo.lock` and `src/bin/ir791_native.rs`, and require equality; substitute one byte of the
+package, harness or record and require inequality. (6) Compute a golden digest with the measurement function over fixed literal entries, including a
+literal `Cargo.lock` and adapter and not a real staged run, and pin `(schema string, golden)` in one
+assertion. Change the `Cargo.lock` bytes in a test seam to see the digest change with the schema
+unchanged. A golden edited without a schema bump is a review rule, not a test. (7) Meter limits (FR-017-AC-50): require the meter observation's `ScalarLimits` equal the request's and `scalar_limits()`, equal and unchanged after the snapshot is gone; through a seam that makes the adapter report a different limit, require `native_result`, `EnvironmentFault` and no receipt. (8) Name `quire_contract_codegen::DigestRecord` and `qsl_replay::DigestRecord` as the same type, and make the snapshot directory removal fail through a seam: require the same verdict, exposed entries and digest as an un-failed run, a non-empty `cleanup_diagnostic()` naming the removal failure, and an empty `cleanup_diagnostic()` when removal succeeds; the diagnostic is in neither the digest nor the entries No
+driver-side authentication coverage is claimed here: the driver's recomputation and refusal are
+driver-owned (FR-032 boundary), as is the quire-driver FR-009 amendment named in FR-017. These steps are Planned until the IR-846 code slice lands.
