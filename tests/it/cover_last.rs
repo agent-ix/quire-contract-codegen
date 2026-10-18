@@ -158,6 +158,7 @@ fn emitted() -> Vec<(&'static str, String)> {
     "FR-015-AC-54",
     "FR-015-AC-55",
     "FR-015-AC-58",
+    "FR-015-AC-116",
     "TC-025"
 )]
 #[test]
