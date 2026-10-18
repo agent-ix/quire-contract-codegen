@@ -33,7 +33,7 @@ fn embedded_source(source: &str) -> String {
     format!("//{crate_docs}\n{}\n", lines.collect::<Vec<_>>().join("\n"))
 }
 
-#[trace("FR-002-AC-4", "FR-002-AC-6", "TC-004")]
+#[trace("FR-002-AC-3", "FR-002-AC-4", "FR-002-AC-6", "TC-004")]
 #[test]
 fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraints() {
     let requirement = requirement();
@@ -104,11 +104,19 @@ fn tc_004_supported_populations_are_directly_shaped_and_shrink_inside_constraint
 mod generated_tests {{
     use super::*;
     use proptest::strategy::{{Strategy as _, ValueTree as _}};
-    use proptest::test_runner::TestRunner;
+    use proptest::test_runner::{{Config, TestRng, TestRunner}};
 
     #[test]
     fn supported_shrinks_stay_shaped_and_residuals_stay_rejected() {{
         let mut runner = TestRunner::deterministic();
+        let mut correlated_config = Config::default();
+        correlated_config.max_local_rejects = 0;
+        correlated_config.max_global_rejects = 0;
+        let algorithm = correlated_config.rng_algorithm;
+        let mut correlated_runner = TestRunner::new_with_rng(
+            correlated_config,
+            TestRng::deterministic_rng(algorithm),
+        );
         for _ in 0..64 {{
             let mut tree = {range_function}().new_tree(&mut runner).unwrap();
             loop {{
@@ -128,7 +136,7 @@ mod generated_tests {{
                 }}
             }}
 
-            let mut tree = {correlated_function}().new_tree(&mut runner).unwrap();
+            let mut tree = {correlated_function}().new_tree(&mut correlated_runner).unwrap();
             loop {{
                 let case = tree.current();
                 let related = case.related.unwrap();
