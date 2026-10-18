@@ -1009,8 +1009,9 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      in `kani/census.rs` stay: the V2 census input needs them, and the corpus imports them until
      4g. `validate_dependencies` (census validation, and the `KaniDiagnostic` it returns with the
      identity and path helpers it uses) is not bundle validation for this purpose: the corpus calls
-     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place and it is deleted with the
-     corpus lowerer at 4g, or when the V2 census input replaces it. It is not in `kani/census.rs`
+     it until 4g (`bounded_kani_corpus.rs`), so 4f leaves it in place. The items of
+     `census_validation.rs` (`validate_dependencies`, `KaniDiagnostic`, `KaniErrorCode`) are removed once their last caller is gone: the V1 bundle path
+     (removed at 4f) and the corpus (removed at 4g), or earlier when the V2 census input replaces them. It is not in `kani/census.rs`
      because it returns the V1 bundle's error type. Step 2f put it, with `KaniDiagnostic`,
      `KaniErrorCode`, the helpers and `deterministic_json`, in `kani/generate/census_validation.rs`,
      and everything else of the bundle in `kani/generate/v1_bundle.rs`, so 4f deletes `v1_bundle.rs`
@@ -1019,13 +1020,22 @@ map, 6 is the V1 reader deletions and 7 is the publication move.
      passes on the V2 contract arm (4c), and the V2 census input exists (4d). FR-015's census and
      FR-015-AC-22 and AC-25 stay verbatim; if the V2 side does not back them by this step, their
      matrix rows go to planned or unbacked, and nothing is deleted or rewritten.
-   - 4g: the corpus. Until its V2 replacement serves all three families, the corpus stays as it is,
+   - 4g: the corpus, retired per family in three slices with no compatibility wrapper and no second
+     public generator (IR-598, FR-015-AC-109 to AC-111); step 4b (IR-858) gates every slice. The
+     arithmetic slice deletes the `Arithmetic` arm and `definedness_arithmetic.rs`; V2 does not
+     serve divide or remainder (div settles `Unsupported(OperationNotRendered)`, rem stays a
+     refused identity) until IR-854, which also owns `mod`. The collection slice, gated also on
+     step 4h, deletes the `Collection` arm and `bounded_collections.rs`. The graph slice, gated
+     on IR-805, deletes the `Graph` arm, `finite_reference_graphs.rs`, the classifier, the corpus
+     replay (`replay_counterexample` on the corpus case, `compile_corpus_qsl_package` and their
+     identity helpers in `replay/function.rs`, with their only caller) and the whole public
+     corpus API with the generation-time `KaniOutcome`. It removes the corpus's calls to `validate_dependencies` but not `census_validation.rs`: every item there is also used by `v1_bundle.rs` (public `KaniDiagnostic` and `KaniErrorCode` included), so its items go once their last caller is gone, as 4f says. Until a family's slice lands, that family's corpus arm stays as it is,
      with its own template: it has
      no symbolic input (a ground `assert!` over literals), and its cover after that assertion
      (FR-015-AC-55, IR-464) is reachability past the assertion only. It is an interim exception
      to L-3 and, until it renders through `HarnessSpec`, outside L-4; FR-015-AC-58's inspection
      covers its text meanwhile. QSL-353 establishes emission-to-admission coverage but does not
-     provide the symbolic corpus. After the V2 arithmetic, collection and graph cases are backed
+     provide the symbolic corpus. After a family's V2 cases are backed
      from QSL-emitted packages admitted through Contract IR, and the collection and graph cases
      satisfy FR-015-AC-96 to AC-102, the hand-built package lowerer retires. The graph path first
      needs Contract IR's typed finite model-object population input; a caller expansion ceiling
