@@ -84,8 +84,8 @@ falsified with concrete playback before the restored call verifies over that
 same class. A fixed literal, a static enumeration, a branch-local control or
 a higher resource ceiling does not discharge these criteria. An inconclusive
 run alone does not establish impossibility; the measured disposition below
-records the impossibility IR-796 established for the current kernel path and
-the tickets that own the next change.
+records the impossibility IR-796 established for the kernel and toolchain
+measured in that work, and the tickets that own the next change.
 
 Non-normative observation: IR-796 records that the original NFC `Text[1,1]`
 candidate from PR #381 reached CBMC and ended `MemoryExhausted` under the
@@ -101,8 +101,10 @@ IR-796 measured whether a different harness shape could satisfy FR-035-AC-4
 and FR-035-AC-5 under the unchanged published bound of 1 GiB per obligation,
 600 seconds, `--unwind 8` and Cadical. The toolchain and dependency revisions
 of each run are recorded in the IR-796 ticket receipts, not in this test.
-Three shapes were measured in a scratch copy of the generated harness, each
-keeping the public `TextPayload::from_utf8` constructor, the
+The observations and conclusions in this section apply to that measured
+context; they do not establish impossibility for later dependencies or
+toolchains. Three shapes were measured in a scratch copy of the generated
+harness, each keeping the public `TextPayload::from_utf8` constructor, the
 generated-versus-direct agreement assertions and the final cover:
 
 - one concrete literal per harness, so the harness set rather than a selector
@@ -125,9 +127,9 @@ one concrete payload, not the 21-way selection:
 
 - A single admission of the literal `e` under `unicode-scalars` `Text[0,8]`,
   with no agreement comparison, exhausts 1 GiB. The IR-796 review reproduced
-  this for both the Contract Runtime admission path and the current
-  `quire_exact::admit_text` kernel path, and at a 4 GiB diagnostic ceiling
-  the single admission still ended `MemoryExhausted`, after 481 seconds on
+  this for both the Contract Runtime admission path and the
+  `quire_exact::admit_text` kernel path measured in IR-796, and at a 4 GiB
+  diagnostic ceiling the single admission still ended `MemoryExhausted`, after 481 seconds on
   the runtime path and 65 seconds on the kernel path.
 - On the kernel path, symbolic execution is dominated by `BigUint::from(u128)`
   unwinding inside the exact `Meter::charge`, the same integer-encoding cost
@@ -140,8 +142,9 @@ one concrete payload, not the 21-way selection:
 
 No harness shape that keeps the public constructor, the direct admission call
 and full outcome and metering agreement fits the published ceiling with the
-current kernel and toolchain. A narrower assertion or a stub of admission or
-metering would weaken FR-035-AC-4 or FR-035-AC-5. A raised memory ceiling, a
+kernel and toolchain measured in IR-796. A narrower assertion or a stub of
+admission or metering would weaken FR-035-AC-4 or FR-035-AC-5. A raised memory
+ceiling, a
 higher global unwind bound or a per-harness unwind override would change the
 published bound rather than meet it. None of these is accepted as discharge.
 FR-035-AC-4 and FR-035-AC-5 remain planned and unrun, and they have no proof

@@ -121,9 +121,10 @@ records the architecture boundary.
 - **Related**: [FR-014](./FR-014-exact-scalar-oracles.md) for checked-package
   text comparison. QSL-694 explores text-to-number parsing inside a term; it
   does not gate this caller-ingress operation.
-- **Proof cost**: With the current kernel and toolchain, FR-035-AC-4 and
-  FR-035-AC-5 depend on exact admission and metering completing in Kani
-  within the published bound. The measured disposition and its owners,
+- **Proof cost**: IR-796 records a proof-cost obstacle for the kernel and
+  toolchain measured in that work. FR-035-AC-4 and FR-035-AC-5 depend on exact
+  admission and metering completing in Kani within the published bound.
+  The historical measured disposition and its owners,
   IR-705 and IR-837, are recorded in
   [TC-050](../matrix/TC-050-caller-text-admission.md). The criteria are
   unchanged and stay planned and unrun until that dependency is met.
