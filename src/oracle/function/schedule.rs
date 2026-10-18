@@ -1016,6 +1016,7 @@ fn validate_binary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     fn id(value: u8) -> CheckedNodeId {
         CheckedNodeId {
@@ -1051,8 +1052,16 @@ mod tests {
         }
     }
 
+    #[trace(
+        "FR-021-AC-7",
+        "FR-021-AC-15",
+        "FR-021-AC-25",
+        "FR-021-AC-27",
+        "FR-021-AC-28",
+        "FR-021-AC-29",
+        "TC-031"
+    )]
     #[test]
-    /// Trace: FR-021-AC-7, FR-021-AC-15, FR-021-AC-25, FR-021-AC-27, FR-021-AC-28, FR-021-AC-29, TC-031.
     fn ac7_hundred_thousand_call_nodes_schedule_on_a_512_kib_stack() {
         const CALLS: u32 = 100_000;
         const CALL_COUNT: usize = 100_000;
@@ -1302,8 +1311,8 @@ mod tests {
         schedule.join().expect("deep schedule stays within 512 KiB");
     }
 
+    #[trace("FR-021-AC-25", "FR-021-AC-26", "FR-021-AC-27", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-25, FR-021-AC-26, FR-021-AC-27, TC-031.
     fn ac25_nested_add_schedule_is_postorder_and_budget_refusal_publishes_nothing() {
         let root = id(3);
         let left = id(2);
@@ -1435,8 +1444,8 @@ mod tests {
         ));
     }
 
+    #[trace("FR-021-AC-25", "FR-021-AC-27", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-25, FR-021-AC-27, TC-031.
     fn ac27_integer_literal_is_an_ordered_inline_schedule_operand() {
         let root = id(3);
         let parameter = id(1);
@@ -1482,8 +1491,8 @@ mod tests {
         );
     }
 
+    #[trace("FR-021-AC-27", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-27, TC-031.
     fn equality_operation_identity_preserves_its_scalar_domain() {
         assert_eq!(
             Operation::from_identity("quire.op.integer.eq", &id(3)).unwrap(),
@@ -1527,8 +1536,8 @@ mod tests {
         ));
     }
 
+    #[trace("FR-021-AC-27", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-27, TC-031.
     fn ac27_call_uses_exact_declaration_identity_and_rejects_mismatched_binding() {
         let root = id(4);
         let arg = id(1);
@@ -1574,8 +1583,8 @@ mod tests {
         ));
     }
 
+    #[trace("FR-021-AC-27", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-27, TC-031.
     fn ac27_unknown_operation_and_mismatched_operand_types_refuse_before_schedule() {
         let root = id(3);
         let unsupported = BTreeMap::from([
@@ -1636,8 +1645,8 @@ mod tests {
         ));
     }
 
+    #[trace("FR-021-AC-25", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-25, TC-031.
     fn ac25_max_limit_is_rejected_before_any_graph_action() {
         let root = id(1);
         let nodes = BTreeMap::from([(
@@ -1657,8 +1666,8 @@ mod tests {
         );
     }
 
+    #[trace("FR-021-AC-27", "TC-031")]
     #[test]
-    /// Trace: FR-021-AC-27, TC-031.
     fn ac27_cycle_shared_node_and_unbound_parameter_refuse_without_a_schedule() {
         let root = id(2);
         let cycle = BTreeMap::from([(

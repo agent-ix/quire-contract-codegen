@@ -3026,9 +3026,10 @@ fn render_body(body: &ClassifiedBody<'_>) -> String {
 mod tests {
     use super::*;
     use crate::oracle::failed_records::{failed_record, unrecognised_kinds};
+    use ix_trace_rs::trace;
     use quire_contract_model::CheckedPackageLimit;
 
-    /// Trace: FR-021-AC-27, TC-031.
+    #[trace("FR-021-AC-27", "TC-031")]
     #[test]
     fn ac27_inline_scalar_literal_is_retained_with_its_admitted_type() {
         let owner = CheckedNodeId {
@@ -3109,8 +3110,7 @@ mod tests {
 
     /// The public flat scheduler preserves Contract IR's per-record limit details for its
     /// separate call-item batch as well as the function-body batch.
-    ///
-    /// Trace: FR-021-AC-23, TC-031.
+    #[trace("FR-021-AC-23", "TC-031")]
     #[test]
     fn schedule_call_item_lowering_failure_keeps_its_own_limit_details() {
         assert_eq!(

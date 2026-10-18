@@ -2056,6 +2056,7 @@ fn profile_path(profile: TextProfile) -> Result<&'static str, OracleGenerationEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
     use serde_json::json;
 
     fn test_source(source: SourceBuilder) -> String {
@@ -2171,7 +2172,7 @@ mod tests {
         *package
     }
 
-    /// Trace: FR-018-AC-26, FR-018-AC-27, TC-029.
+    #[trace("FR-018-AC-26", "FR-018-AC-27", "TC-029")]
     #[test]
     fn tc_029_qsl_recursive_package_uses_the_reader_shapes() {
         let package = qsl_recursive_package();
@@ -2347,7 +2348,7 @@ mod tests {
         outcomes.remove(0)
     }
 
-    /// Trace: FR-018-AC-24, TC-029.
+    #[trace("FR-018-AC-24", "TC-029")]
     #[test]
     fn tc_029_unclosed_option_and_sequence_cycles_refuse_at_the_repeated_node() {
         const TEST_NAME: &str = "oracle::equality::tests::tc_029_unclosed_option_and_sequence_cycles_refuse_at_the_repeated_node";
@@ -2402,7 +2403,7 @@ mod tests {
         }
     }
 
-    /// Trace: FR-018-AC-25, TC-029.
+    #[trace("FR-018-AC-25", "TC-029")]
     #[test]
     fn tc_029_type_resolution_charges_each_entry_and_the_first_over_limit_entry() {
         const TEST_NAME: &str = "oracle::equality::tests::tc_029_type_resolution_charges_each_entry_and_the_first_over_limit_entry";
@@ -2529,7 +2530,7 @@ mod tests {
         assert!(emitted.contains("pub fn oracle_test1"));
     }
 
-    /// Trace: FR-018-AC-25, TC-029.
+    #[trace("FR-018-AC-25", "TC-029")]
     #[test]
     fn tc_029_deep_option_resolution_and_runtime_type_operations_fit_a_small_stack() {
         const DEPTH: usize = 2_048;
@@ -2586,7 +2587,7 @@ mod tests {
             .expect("deep Option operations fit the worker stack");
     }
 
-    /// Trace: FR-018-AC-29, TC-029.
+    #[trace("FR-018-AC-29", "TC-029")]
     #[test]
     fn cycle_refusal_follows_its_charged_entry_and_work_refusal_wins_at_the_boundary() {
         let mut nodes = recursive_shape_nodes();
@@ -2674,7 +2675,7 @@ mod tests {
         assert!(denied_lib.contains("oracle_test1"));
     }
 
-    /// Trace: FR-018-AC-31, TC-029.
+    #[trace("FR-018-AC-31", "TC-029")]
     #[test]
     fn maximum_work_setting_refuses_and_last_denied_count_is_representable() {
         let mut closure = TypeClosure {
@@ -2696,7 +2697,7 @@ mod tests {
         );
     }
 
-    /// Trace: FR-018-AC-30, TC-029.
+    #[trace("FR-018-AC-30", "TC-029")]
     #[test]
     fn source_limit_refuses_before_a_function_or_module_fragment_is_appended() {
         let limit = SOURCE_HEADER.len();
@@ -2723,7 +2724,7 @@ mod tests {
         assert!(source.module_declarations.is_empty());
     }
 
-    /// Trace: FR-018-AC-28, FR-018-AC-30, TC-029.
+    #[trace("FR-018-AC-28", "FR-018-AC-30", "TC-029")]
     #[test]
     fn deep_acyclic_closure_generates_flat_compilable_source_on_a_small_stack() {
         const RECORDS: usize = 50_000;
@@ -2955,7 +2956,7 @@ fn deep_matches_shallow() {{
         );
     }
 
-    /// Trace: FR-018-AC-25, TC-029.
+    #[trace("FR-018-AC-25", "TC-029")]
     #[test]
     fn tc_029_inline_collection_bound_is_charged_before_lookup() {
         let mut nodes = recursive_shape_nodes();
@@ -2994,7 +2995,7 @@ fn deep_matches_shallow() {{
         );
     }
 
-    /// Trace: FR-018-AC-26, FR-018-AC-27, TC-029.
+    #[trace("FR-018-AC-26", "FR-018-AC-27", "TC-029")]
     #[test]
     fn tc_029_recursive_list_and_tree_shapes_close_at_record_keys() {
         let nodes = recursive_shape_nodes();
@@ -3026,7 +3027,7 @@ fn deep_matches_shallow() {{
         );
     }
 
-    /// Trace: FR-018-AC-26, TC-029.
+    #[trace("FR-018-AC-26", "TC-029")]
     #[test]
     fn tc_029_optional_wrapper_malformed_shapes_refuse_without_affecting_tree() {
         for mutation in ["remove", "rename", "second", "non_option"] {
@@ -3056,7 +3057,7 @@ fn deep_matches_shallow() {{
         }
     }
 
-    /// Trace: FR-018-AC-26, TC-029.
+    #[trace("FR-018-AC-26", "TC-029")]
     #[test]
     fn tc_029_direct_option_field_is_required_not_silently_optional() {
         let mut nodes = recursive_shape_nodes();
@@ -3073,7 +3074,7 @@ fn deep_matches_shallow() {{
         );
     }
 
-    /// Trace: FR-018-AC-27, TC-029.
+    #[trace("FR-018-AC-27", "TC-029")]
     #[test]
     fn tc_029_sequence_bound_shape_mutants_refuse_without_affecting_list() {
         for mutation in [
@@ -3149,8 +3150,7 @@ fn deep_matches_shallow() {{
 
     /// Integer ranges, decimal ranges, text bounds and collection cardinalities are read from
     /// binding-shaped members named as in QSpec's `positive-operation-identities.json`.
-    ///
-    /// Trace: FR-018-AC-14, TC-029.
+    #[trace("FR-018-AC-14", "TC-029")]
     #[test]
     fn tc_029_bound_members_are_read_from_named_bindings() {
         assert_eq!(
@@ -3183,8 +3183,7 @@ fn deep_matches_shallow() {{
 
     /// A bare literal in place of a `binding` member is refused: the integer endpoints, the
     /// decimal `rounding`, the text `text_profile` and a collection cardinality.
-    ///
-    /// Trace: FR-018-AC-14, TC-029.
+    #[trace("FR-018-AC-14", "TC-029")]
     #[test]
     fn tc_029_bare_literal_bound_members_are_refused() {
         assert_eq!(
@@ -3327,8 +3326,7 @@ fn deep_matches_shallow() {{
     /// `render_value_type` returns the typed error for `ValueType::Quantity` and for
     /// `ValueType::Reference`, directly, nested in an option, and inside a composite declaration
     /// (the second call site, beside an operand's own types). It does not panic.
-    ///
-    /// Trace: FR-018-AC-18, TC-029.
+    #[trace("FR-018-AC-18", "TC-029")]
     #[test]
     fn tc_029_ac18_render_value_type_refuses_quantity_and_reference_with_a_typed_error() {
         for (value_type, family) in [(quantity(), "quantity"), (reference(), "reference")] {
@@ -3356,8 +3354,7 @@ fn deep_matches_shallow() {{
     /// naming the family and the item's expression node, renders no code for it, and leaves a
     /// sibling's claim unchanged; `RenderError::Generation` still fails the whole call, with the
     /// carried error, and touches no claim.
-    ///
-    /// Trace: FR-018-AC-18, TC-029.
+    #[trace("FR-018-AC-18", "TC-029")]
     #[test]
     fn tc_029_ac18_the_item_boundary_refuses_the_item_and_fails_the_call_on_a_generation_error() {
         for family in ["quantity", "reference"] {
@@ -3468,8 +3465,7 @@ fn deep_matches_shallow() {{
     /// An item that fails to render is refused on its own claim, emits no code, and leaves its
     /// sibling's claim and symbols unchanged, whichever of the two fails; the sibling keeps the
     /// bare stem the refused item would otherwise have shared. A whole-call render error aborts.
-    ///
-    /// Trace: FR-018-AC-18, TC-029.
+    #[trace("FR-018-AC-18", "TC-029")]
     #[test]
     fn tc_029_ac18_a_render_failure_refuses_only_its_item_and_never_renames_a_sibling() {
         let quantity = RenderError::UnsupportedValueType { family: "quantity" };
