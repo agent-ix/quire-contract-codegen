@@ -449,6 +449,39 @@ the typed accessor refusal and AC-66 mapping tests, and edits or supersedes the 
 FR-024-AC-30 that calls `Twin::aligned`; this PR restates AC-30 over the emitted-package
 harness, so its previous test evidence remains planned until that migration lands.
 
+## One renderer and the scalar family port (planned, IR-858)
+
+These steps verify AD-004 step 4b (AD-004 "The HarnessSpec and render contract (step 4b)"); they back FR-015-AC-112 to FR-015-AC-117. Steps 42 to 47
+are numbered after step 41 and are independent of the IR-805 prose above.
+
+42. Build `HarnessSpec`s by hand that break each invariant: no cover, two covers, a `true` cover
+    condition, no call, two calls, an input after the call, an assertion before the call, a name bound
+    twice, a name that is not a Rust identifier, an inverted domain, a domain outside its type, an
+    `unwind` of 0 and of `MAX_OBLIGATION_UNWIND` plus one, a message containing each of `"`, `\`, `{`,
+    `}` and a line break, and `ExprText`s that do not parse, spell `kani::`, hold a block, `unsafe`,
+    closure, loop or `let` expression, or hold a macro other than `matches!` (`assert!`, `panic!`,
+    a `kani` macro), a `matches!` with a guard, and a `matches!` whose expression holds a nested
+    `panic!` or block. Read a typed `HarnessSpecError` for each and no spec; read that a `match` and a
+    `matches!` expression construct (FR-015-AC-112).
+43. Render valid hand-built specs whose statements are in several legal orders and read the cover as
+    the last statement of the function in each; render the same spec twice, and in a second process,
+    and compare the bytes; reorder two inputs and read different bytes; render a spec with non-scalar
+    labels, expressions and messages and read that the source is the fixed structure plus exactly what
+    the spec supplied (FR-015-AC-113, FR-015-AC-114, FR-015-AC-116).
+44. Keep today's `render_scalar` body as a `#[cfg(test)]` reference function. Over the claim set of
+    FR-015-AC-115 (four operations, a literal operand, an inferred operand, `i64` extremes, two unwind
+    values including `MAX_OBLIGATION_UNWIND`, two ceilings values) compare the ported path with the
+    reference: artifact path and bytes, identity, options and record, equal. There is no bless mode.
+45. Drive a claim whose source exceeds `MAX_GENERATED_SOURCE_BYTES` and read `ResourceLimitExceeded`
+    with the same byte count as the reference, and drive invalid generated syntax and read
+    `InvalidGeneratedSyntax`, each raised by `render`, the size check first (FR-015-AC-115).
+46. Run the FR-015-AC-58 inspection with `render.rs` among the driven files and `scalar.rs` out of the
+    list; read the scalar harness's cover as its last statement (FR-015-AC-58, FR-015-AC-116).
+47. With the installed backend, run the existing scalar lane tests (`tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic`
+    and its healthy run): `Verified` with its cover satisfied, and the
+    `Add` to `Subtract` mutation `Falsified`; then run a hand-built spec with an unsatisfiable `Assume`
+    through `render` and read that it is not `Verified` (FR-015-AC-117).
+
 ## Blocked
 
 - Frame harnesses in the clause negotiation: FR-025 accounts every frame obligation
