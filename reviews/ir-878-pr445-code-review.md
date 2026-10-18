@@ -48,3 +48,9 @@ scope:
   role: context_only
   excerpt: Integer and generated Boolean harness campaign cases bind exact values to executable accepted/rejected expectations; enum cases execute an all-admitted membership expectation.
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit 2f7eb2bd replaces the mutate-after-default form with `Config { max_local_rejects: 0, ..Config::default() }` and drops `max_global_rejects`. The added comment says exactly what is guarded. Against proptest 1.5.0, `Filter::new_tree` calls `reject_local`, which returns `Err` when `local_rejects >= 0`. Scoped `strategy_generation::` tests at 2f7eb2bd: 13 passed, 0 failed. A scratch mutation of the real test killed the mutant through the runtime guard alone, with `Too many local rejects`. The mutation made the generator's broad correlated body filter-based and removed the static `prop_filter` assertion. |

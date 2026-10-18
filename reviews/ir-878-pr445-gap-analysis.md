@@ -46,3 +46,9 @@ scope:
   role: context_only
   excerpt: Preserve shaped proptest strategies
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit 2f7eb2bd changes the FR-002-AC-3 Verification cell to `Test (TC-004)`, which matches the TC-004 row in spec/strategy/matrix/tests.md. No other spec/ or plan/ document records AC-3 as Analysis. `quoin advise` reports authored Test, mismatch false. Strict coverage at 2f7eb2bd: 527/904 backed, 225 unbacked, 0 contradicted. |
