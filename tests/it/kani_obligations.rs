@@ -2175,7 +2175,7 @@ fn write_failing_launcher(path: &Path) {
 /// The FR-029 terminal value of a `NoVerdict` evidence that carries a diagnostic record is
 /// `Failed`, and the record rides the public evidence and its wire form.
 ///
-/// Trace: FR-017-AC-32, FR-017-AC-36, TC-027, TC-043
+#[trace("FR-017-AC-32", "FR-017-AC-36", "TC-027", "TC-043")]
 #[cfg(unix)]
 #[test]
 fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
@@ -2222,7 +2222,7 @@ fn tc_043_the_terminal_value_of_no_verdict_evidence_ignores_its_diagnostics() {
 /// `Failed to execute cargo` line in the stdout excerpt, and Cargo's `could not compile` line,
 /// with the crate path redacted, in the stderr excerpt.
 ///
-/// Trace: FR-017-AC-32, TC-027
+#[trace("FR-017-AC-32", "TC-027")]
 #[test]
 #[ignore = "kani lane: run serially through `make kani`"]
 fn tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile() {

@@ -47,7 +47,7 @@ pub struct KaniStreamExcerpt {
 /// The record serializes as `{ phase, stdout { text, omittedBytes }, stderr { text,
 /// omittedBytes } }` and is never read back, so it implements no deserialization:
 ///
-/// Trace: FR-017-AC-35, TC-027
+/// Serialize-only evidence for FR-017-AC-35 (TC-027).
 ///
 /// ```compile_fail
 /// let _: quire_contract_codegen::KaniNoVerdictDiagnostics = serde_json::from_str("{}").unwrap();
@@ -580,6 +580,8 @@ fn process_id_span(rest: &str) -> Option<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
+
     use super::*;
 
     const HOME: &str = "/h/u";
@@ -603,7 +605,7 @@ mod tests {
 
     /// Every input FR-017-AC-35 names yields its stated output, one per line, in order.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_every_redaction_input_yields_its_stated_output() {
         let pairs = [
@@ -647,7 +649,7 @@ mod tests {
     /// A path is matched at a component boundary only, a home directory of `/` redacts nothing
     /// as `<HOME>`, and an absent one leaves a path under it as `<PATH>`.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_known_directories_match_whole_components_and_unusable_homes_redact_nothing() {
         let sibling = KnownDirectories {
@@ -670,7 +672,7 @@ mod tests {
 
     /// A directory is tried longest first and the crate wins an equal-length tie with the home.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_the_longest_known_directory_wins_and_a_tie_goes_crate_target_home() {
         let same = KnownDirectories {
@@ -693,7 +695,7 @@ mod tests {
     /// Every character the spec lists as opening a path token opens one, and any other
     /// preceding character does not.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_every_listed_path_opener_starts_a_token_and_no_other_character_does() {
         for opener in ['\n', ' ', '\t', '(', '[', '{', '\'', '"', '`', '='] {
@@ -716,7 +718,7 @@ mod tests {
     /// Every character the spec lists as ending a path token ends it, and any other character
     /// stays inside it.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_every_listed_path_closer_ends_a_token_and_no_other_character_does() {
         for closer in [
@@ -737,7 +739,7 @@ mod tests {
 
     /// Redaction rules that are about boundaries: durations, process identities and timestamps.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_duration_pid_and_timestamp_rules_respect_their_boundaries() {
         for (input, output) in [
@@ -780,7 +782,7 @@ mod tests {
     /// Escapes are removed and other control characters are replaced; invalid UTF-8 is decoded
     /// with U+FFFD.
     ///
-    /// Trace: FR-017-AC-34, TC-027
+    #[trace("FR-017-AC-34", "TC-027")]
     #[test]
     fn tc_027_ansi_escapes_go_and_controls_and_invalid_bytes_become_replacement_characters() {
         let colored = "\u{1b}[1;31merror\u{1b}[0m: \u{1b}]0;title\u{7}bad\u{1b}(Bx\tz\ry\u{7}";
@@ -794,7 +796,7 @@ mod tests {
     /// A stream of exactly the limit is whole; one byte more keeps the longest line-aligned
     /// suffix and counts what it dropped.
     ///
-    /// Trace: FR-017-AC-34, TC-027
+    #[trace("FR-017-AC-34", "TC-027")]
     #[test]
     fn tc_027_a_stream_at_the_limit_is_whole_and_one_over_keeps_a_line_aligned_suffix() {
         let whole = format!("{}\n", "a".repeat(8191));
@@ -816,7 +818,7 @@ mod tests {
     /// A final line over the limit is cut at a character boundary and ends at the last byte; a
     /// 4-byte character is never split.
     ///
-    /// Trace: FR-017-AC-34, TC-027
+    #[trace("FR-017-AC-34", "TC-027")]
     #[test]
     fn tc_027_a_final_line_over_the_limit_is_cut_on_a_character_boundary() {
         let long = format!("x\n{}", "y".repeat(10_000));
@@ -835,7 +837,7 @@ mod tests {
     /// One 10000-byte line and its line feed keeps the last 8192 bytes ending in the line feed,
     /// never an empty excerpt; a long line followed by a short last line keeps only the last.
     ///
-    /// Trace: FR-017-AC-34, TC-027
+    #[trace("FR-017-AC-34", "TC-027")]
     #[test]
     fn tc_027_a_long_line_with_its_line_feed_is_never_an_empty_excerpt() {
         let one = format!("{}\n", "z".repeat(10_000));
@@ -852,7 +854,7 @@ mod tests {
 
     /// A stream of line feeds only is kept up to the limit; an empty stream is an empty excerpt.
     ///
-    /// Trace: FR-017-AC-34, TC-027
+    #[trace("FR-017-AC-34", "TC-027")]
     #[test]
     fn tc_027_a_line_feed_only_stream_is_kept_and_an_empty_one_is_empty() {
         let tail = kept(&"\n".repeat(9000));
@@ -866,7 +868,7 @@ mod tests {
     /// A stream of the 8 MiB limit still yields an excerpt of at most 8192 bytes, counting the
     /// rest as omitted.
     ///
-    /// Trace: FR-017-AC-34, TC-027
+    #[trace("FR-017-AC-34", "TC-027")]
     #[test]
     fn tc_027_a_stream_at_the_eight_mebibyte_limit_still_yields_a_bounded_excerpt() {
         let line = "stream line of text that Kani printed\n";
@@ -907,7 +909,7 @@ mod tests {
     /// Each member takes the stage of its own segment; a member that never started is `unknown`
     /// even beside a neighbour that reached the solver.
     ///
-    /// Trace: FR-017-AC-36, TC-043
+    #[trace("FR-017-AC-36", "TC-043")]
     #[test]
     fn tc_043_each_member_takes_the_phase_of_its_own_segment() {
         let members = names(&["a::check", "b::check", "c::check"]);
@@ -933,7 +935,7 @@ mod tests {
 
     /// A solver line before any segment, or in another member's segment, is not the member's.
     ///
-    /// Trace: FR-017-AC-33, TC-027
+    #[trace("FR-017-AC-33", "TC-027")]
     #[test]
     fn tc_027_a_solver_line_outside_the_members_segment_does_not_make_it_solver() {
         let members = names(&["a::check", "b::check"]);
@@ -948,7 +950,7 @@ mod tests {
     /// `-j`, `--jobs` and `--jobs=N` make every member a segment would decide `unknown`, and
     /// leave a member decided by another rule where it was.
     ///
-    /// Trace: FR-017-AC-33, TC-027
+    #[trace("FR-017-AC-33", "TC-027")]
     #[test]
     fn tc_027_parallel_jobs_make_segment_phases_unknown_but_not_compile_or_launcher() {
         let members = names(&["a::check"]);
@@ -982,7 +984,7 @@ mod tests {
     /// The phase comes from the whole stream, not the excerpt: a marker 20000 bytes before the
     /// end still decides it.
     ///
-    /// Trace: FR-017-AC-33, TC-027
+    #[trace("FR-017-AC-33", "TC-027")]
     #[test]
     fn tc_027_a_marker_before_the_excerpt_window_still_decides_the_phase() {
         let members = names(&["a::check"]);
@@ -1030,7 +1032,7 @@ mod tests {
     /// The record and its parts implement no deserialization, so Kani output can never be
     /// decoded into them. The probe is sound: a deserializable control type reports `true`.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_the_record_and_its_parts_implement_no_deserialize() {
         assert!(
@@ -1044,7 +1046,7 @@ mod tests {
 
     /// The record serializes as `diagnostics { phase, stdout { text, omittedBytes }, stderr {...} }`.
     ///
-    /// Trace: FR-017-AC-35, TC-027
+    #[trace("FR-017-AC-35", "TC-027")]
     #[test]
     fn tc_027_the_record_serializes_with_the_stated_member_names() {
         let members = names(&["a::check"]);

@@ -3817,7 +3817,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// A launcher that exits 1, exports no report and prints nothing is `NoVerdict` with
         /// phase `launcher`, two empty excerpts and the exit code.
         ///
-        /// Trace: FR-017-AC-32, TC-027
+        #[trace("FR-017-AC-32", "TC-027")]
         #[test]
         fn tc_027_a_silent_launcher_with_no_report_is_no_verdict_with_phase_launcher() {
             let stand_in = printing("diag-silent", None, "", "", 1);
@@ -3871,7 +3871,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// Single-run stand-ins that exit 1: each marker set gives its phase, and the marker
         /// need not be in the excerpt.
         ///
-        /// Trace: FR-017-AC-33, TC-027
+        #[trace("FR-017-AC-33", "TC-027")]
         #[test]
         fn tc_027_marker_stand_ins_decide_the_failure_phase() {
             let checking = "Checking harness proofs::check...\n";
@@ -4000,7 +4000,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// The redaction of the streams of a real run uses the request's directories: the crate,
         /// target and home directory it was given, and nothing from the process environment.
         ///
-        /// Trace: FR-017-AC-35, TC-027
+        #[trace("FR-017-AC-35", "TC-027")]
         #[test]
         fn tc_027_a_runs_streams_are_redacted_against_the_requests_directories() {
             let stand_in = StandIn::scaffold("diag-redact");
@@ -4040,7 +4040,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
 
         /// Two runs whose streams differ only in redacted values serialize byte-identical records.
         ///
-        /// Trace: FR-017-AC-35, TC-027
+        #[trace("FR-017-AC-35", "TC-027")]
         #[test]
         fn tc_027_runs_differing_only_in_redacted_values_serialize_identical_records() {
             let stand_in = StandIn::scaffold("diag-identical");
@@ -4065,7 +4065,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// The process `HOME` is never read: the same run under two `HOME` values gives the same
         /// record. The probe below runs in a child test process that carries the `HOME`.
         ///
-        /// Trace: FR-017-AC-35, TC-027
+        #[trace("FR-017-AC-35", "TC-027")]
         #[test]
         fn tc_027_the_same_run_under_two_process_homes_gives_the_same_record() {
             let exe = std::env::current_exe().unwrap();
@@ -4108,7 +4108,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive runs
         /// have none.
         ///
-        /// Trace: FR-017-AC-32, TC-027
+        #[trace("FR-017-AC-32", "TC-027")]
         #[test]
         fn tc_027_evidence_of_every_other_outcome_has_no_diagnostics_member() {
             let harness = proofs();
@@ -4196,7 +4196,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// A refusal returns no evidence and so no record: an over-limit stream by its code, an
         /// unread one by its code.
         ///
-        /// Trace: FR-017-AC-32, FR-017-AC-36, TC-043
+        #[trace("FR-017-AC-32", "FR-017-AC-36", "TC-043")]
         #[test]
         fn tc_043_over_limit_and_unread_streams_stay_refused_with_no_record() {
             let flood = StandIn::running(
@@ -4233,7 +4233,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// classify alike, and two no-report runs differing only in their streams have equal
         /// evidence outside `diagnostics` and `memory`.
         ///
-        /// Trace: FR-017-AC-36, TC-043
+        #[trace("FR-017-AC-36", "TC-043")]
         #[test]
         fn tc_043_stream_text_never_changes_the_classification() {
             let harness = proofs();
@@ -4307,7 +4307,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// Each member of a no-report group has its own phase and the group's excerpts; a compile
         /// failure with no segment gives every member `compile`.
         ///
-        /// Trace: FR-017-AC-36, TC-043
+        #[trace("FR-017-AC-36", "TC-043")]
         #[test]
         fn tc_043_group_members_take_their_own_phase_and_share_the_groups_excerpts() {
             let stdout = format!(
@@ -4342,7 +4342,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// `NoVerdict` with phase `unknown` for every member; one whose report holds a failure has
         /// no `NoVerdict` member and no record.
         ///
-        /// Trace: FR-017-AC-36, TC-043
+        #[trace("FR-017-AC-36", "TC-043")]
         #[test]
         fn tc_043_a_group_report_decides_between_unknown_and_no_record() {
             let all_success = batch_report(&[
@@ -4375,7 +4375,7 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
         /// Requests whose `home_directory` differs start separate processes; equal ones share
         /// one, and its members' excerpts of the shared output are byte-identical.
         ///
-        /// Trace: FR-017-AC-36, TC-043
+        #[trace("FR-017-AC-36", "TC-043")]
         #[test]
         fn tc_043_requests_with_different_home_directories_are_not_grouped() {
             let (u, v) = (PathBuf::from("/h/u"), PathBuf::from("/h/v"));

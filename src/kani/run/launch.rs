@@ -1005,7 +1005,7 @@ mod tests {
     /// The merged text classification reads is built from the kept streams alone, byte for byte
     /// as the launch used to join them: lossy stdout, one line feed, lossy stderr.
     ///
-    /// Trace: FR-017-AC-36, TC-043
+    #[trace("FR-017-AC-36", "TC-043")]
     #[test]
     fn the_merged_text_is_the_lossy_streams_joined_by_one_line_feed() {
         let mut command = Command::new("sh");
