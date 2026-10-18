@@ -437,9 +437,8 @@ fn tc_024_tc186_text_and_enum_oracles_agree() {
 /// The unit families the generated TC-187 grid runs every same-unit operation over.
 const UNIT_GRID: [&str; 6] = ["m", "cm", "in", "rev", "u2", "s"];
 
-/// The TC-187 arithmetic, comparison, power and tabled-limit vectors. The vectors that convert a
-/// quantity (U01, U04, U07, U08, U09b, U10, U15 to U18, U22, U25, U26 and U29) have no oracle and
-/// are not agreement rows: a conversion is refused.
+/// The TC-187 arithmetic, comparison, power and tabled-limit vectors. Exact conversion
+/// vectors run separately below; scalar and compound targets remain refusal-only cases.
 #[trace("FR-014-AC-6", "TC-024")]
 #[test]
 fn tc_024_tc187_quantity_oracles_agree() {

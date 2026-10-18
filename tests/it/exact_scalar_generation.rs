@@ -17,9 +17,8 @@ use quire_contract_codegen::{
     derive_exact_scalar_items, generate_exact_scalar_oracles, plan_exact_scalar_oracles, BoundForm,
     ClaimDerivationRefusal, ClaimDisposition, DecimalOperator, ExactScalarItem,
     ExactScalarOperation, ExactScalarOracles, ExactScalarRefusal, GeneratedScalarClaim,
-    OperationProvenance, OracleGenerationError, QuantityOperator, RationalOperator, ScalarForm,
-    UpstreamBlocker, EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS,
-    SCALAR_LOWERING_WORK_LIMIT,
+    OperationProvenance, OracleGenerationError, RationalOperator, ScalarForm, UpstreamBlocker,
+    EXACT_SCALAR_CRATE_NAME, SCALAR_LOWERING_SUPPORTED_TAGS, SCALAR_LOWERING_WORK_LIMIT,
 };
 use quire_contract_model::{
     derive_application_node_id, derive_structural_candidates, ApplicationNodeDraft,
@@ -3917,4 +3916,66 @@ fn admitted_compound_conversion_target_refuses_without_changing_sibling() {
         generated.claim_map.items[0].result,
         ClaimDisposition::Generated(_)
     ));
+}
+
+#[trace("FR-014-AC-2", "FR-014-AC-50", "TC-024")]
+#[test]
+fn unit_function_signatures_refuse_per_function_and_preserve_supported_siblings() {
+    use quire_contract_codegen::{
+        generate_function_schedules, FunctionScheduleDeclaration, FunctionScheduleParameter,
+        FunctionScheduleRefusal,
+    };
+    let (package, ids) = conversion_operand_package().admit_resolved();
+    let integer = ids.resolve(&code_id(T_INTEGER));
+    let unit = ids.resolve(&id(&unit_type()));
+    let supported = FunctionScheduleDeclaration {
+        function_node_id: ids.resolve(&code_id(REFERENCE_FUNCTION)),
+        body_node_id: ids.resolve(&code_id(1001)),
+        name: ADDER_NAME.to_owned(),
+        parameters: [ADDER_LEFT, ADDER_RIGHT]
+            .into_iter()
+            .map(|code| FunctionScheduleParameter {
+                value_node_id: ids.resolve(&code_id(code)),
+                type_node_id: integer.clone(),
+            })
+            .collect(),
+        result_type_node_id: integer.clone(),
+    };
+    for parameter_is_unit in [false, true] {
+        let unsupported = FunctionScheduleDeclaration {
+            function_node_id: ids.resolve(&code_id(CONVERSION_FUNCTION)),
+            body_node_id: ids.resolve(&code_id(QUANTITY_CONVERSIONS[0])),
+            name: CONVERTING_NAME.to_owned(),
+            parameters: if parameter_is_unit {
+                vec![FunctionScheduleParameter {
+                    value_node_id: ids.resolve(&code_id(V_QUANTITY)),
+                    type_node_id: unit.clone(),
+                }]
+            } else {
+                vec![]
+            },
+            result_type_node_id: if parameter_is_unit {
+                integer.clone()
+            } else {
+                unit.clone()
+            },
+        };
+        let output = generate_function_schedules(
+            &package,
+            &[unsupported.clone(), supported.clone()],
+            &[],
+            1000,
+        )
+        .expect("request settles");
+        assert_eq!(output.functions.len(), 1);
+        assert_eq!(
+            output.functions[0].function_node_id,
+            supported.function_node_id
+        );
+        assert_eq!(output.refused_functions.len(), 1);
+        assert_eq!(
+            output.refused_functions[0].refusal,
+            FunctionScheduleRefusal::UnsupportedOperation(unsupported.function_node_id)
+        );
+    }
 }
