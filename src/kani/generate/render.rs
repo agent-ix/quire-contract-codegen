@@ -112,7 +112,7 @@ mod tests {
     fn renderer_refuses_size_before_invalid_syntax_with_exact_byte_count() {
         let valid = render(&make_spec(oracle(), vec![input("x"), call()])).unwrap();
         let overhead = valid.contents.len() - oracle().len();
-        for oracle in [" ".repeat(MAX_GENERATED_SOURCE_BYTES), "?".repeat(MAX_GENERATED_SOURCE_BYTES)] {
+        for oracle in [" ".repeat(MAX_GENERATED_SOURCE_BYTES), "?".repeat(MAX_GENERATED_SOURCE_BYTES), "é".repeat(MAX_GENERATED_SOURCE_BYTES)] {
             let bytes = oracle.len() + overhead;
             assert_eq!(render(&make_spec(oracle, vec![input("x"), call()])).unwrap_err(), UnsupportedObligation::ResourceLimitExceeded { bytes });
         }
