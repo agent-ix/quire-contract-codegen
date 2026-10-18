@@ -7,6 +7,7 @@ use crate::{
 };
 use std::collections::BTreeSet;
 use syn::{
+    ext::IdentExt,
     parse::{Parse, ParseStream},
     visit::{self, Visit},
     Expr, Pat, Token,
@@ -109,7 +110,13 @@ impl<'ast> Visit<'ast> for ExpressionCheck {
         self.forbidden = true;
     }
     fn visit_path(&mut self, path: &'ast syn::Path) {
-        if path.segments.iter().any(|segment| segment.ident == "kani") {
+        if path.segments.pairs().any(|pair| {
+            let segment = pair.value();
+            identifier_identity(&segment.ident) == "kani"
+                && (pair.punct().is_some()
+                    || matches!(&segment.arguments, syn::PathArguments::AngleBracketed(arguments)
+                        if arguments.colon2_token.is_some()))
+        }) {
             self.forbidden = true;
         }
         visit::visit_path(self, path);
@@ -118,7 +125,7 @@ impl<'ast> Visit<'ast> for ExpressionCheck {
         self.forbidden = true;
     }
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        if !mac.path.is_ident("matches") {
+        if !mac.path.get_ident().is_some_and(|name| identifier_identity(name) == "matches") {
             self.forbidden = true;
             return;
         }
@@ -208,9 +215,12 @@ pub(super) struct HarnessSpec {
     solver: KaniSolver,
     options: Vec<String>,
 }
-fn identifier(name: &str) -> Result<(), HarnessSpecError> {
+fn identifier_identity(identifier: &syn::Ident) -> String {
+    identifier.unraw().to_string()
+}
+fn identifier(name: &str) -> Result<String, HarnessSpecError> {
     syn::parse_str::<syn::Ident>(name)
-        .map(|_| ())
+        .map(|identifier| identifier_identity(&identifier))
         .map_err(|_| HarnessSpecError::InvalidIdentifier(name.to_owned()))
 }
 fn message(text: &str) -> Result<(), HarnessSpecError> {
@@ -220,12 +230,12 @@ fn message(text: &str) -> Result<(), HarnessSpecError> {
         Ok(())
     }
 }
-fn bind(names: &mut BTreeSet<String>, name: &str) -> Result<(), HarnessSpecError> {
-    identifier(name)?;
-    if !names.insert(name.to_owned()) {
+fn bind(names: &mut BTreeSet<String>, name: &str) -> Result<String, HarnessSpecError> {
+    let identity = identifier(name)?;
+    if !names.insert(identity.clone()) {
         return Err(HarnessSpecError::DuplicateBinding(name.to_owned()));
     }
-    Ok(())
+    Ok(identity)
 }
 fn literal_true(expression: &Expr) -> bool {
     let mut expression = expression;
@@ -294,10 +304,10 @@ impl HarnessSpec {
                     if minimum > maximum || *minimum < low || *maximum > high {
                         return Err(HarnessSpecError::InvalidDomain);
                     }
-                    bind(&mut names, name)?;
+                    let input_identity = bind(&mut names, name)?;
                     let mut shadowed = false;
                     for binding in then {
-                        if binding.name == *name && !shadowed {
+                        if identifier(&binding.name)? == input_identity && !shadowed {
                             shadowed = true;
                         } else {
                             bind(&mut names, &binding.name)?;
@@ -308,7 +318,7 @@ impl HarnessSpec {
                     return Err(HarnessSpecError::AssumeAfterCall)
                 }
                 Statement::Assume { .. } => {}
-                Statement::Let(binding) => bind(&mut names, &binding.name)?,
+                Statement::Let(binding) => { bind(&mut names, &binding.name)?; }
                 Statement::Call {
                     result,
                     callee,
@@ -706,4 +716,76 @@ mod tests {
             assert_eq!(expression(text).as_str(), text);
         }
     }
+
+    #[trace("FR-015-AC-112", "TC-025")]
+    #[test]
+    fn expression_namespace_checks_use_identifier_identity_and_path_position() {
+        for text in [
+            "kani", "r#kani", "rt::kani", "rt::r#kani", "rt /* gap */ :: r#kani",
+            "not_kani::any::<i64>()", "Kani::value", "matches!(r#kani, true)",
+            "matches!(value, rt::r#kani)", "r#matches!(rt::r#kani, _)",
+        ] {
+            assert_eq!(expression(text).as_str(), text, "legal expression {text}");
+        }
+        for text in [
+            "kani :: any::<i64>()", "kani /* gap */ :: assume(false)",
+            "r#kani :: any::<i64>()", "r#kani /* gap */ :: assume(false)",
+            ":: r#kani :: any::<bool>()", "rt :: r#kani :: value",
+            "kani :: <i64>()", "r#kani /* gap */ :: <i64>()",
+            "rt :: r#kani :: <i64>()", "matches!(r#kani :: any::<bool>(), true)",
+            "matches!(matches!(r#kani /* gap */ :: any::<bool>(), true), true)",
+            "r#matches!(r#kani :: any::<bool>(), true)",
+            "matches!(value, r#kani /* gap */ :: Some(_))",
+        ] {
+            assert_eq!(ExprText::new(text), Err(HarnessSpecError::ForbiddenExpression),
+                "Kani namespace or turbofish spelling {text}");
+        }
+    }
+
+    #[trace("FR-015-AC-112", "TC-025")]
+    #[test]
+    fn raw_identifiers_cannot_evade_duplicate_binding_checks() {
+        for (first, second) in [("x", "r#x"), ("r#x", "x")] {
+            for body in [
+                vec![input(first), input(second), call()],
+                vec![input(first), Statement::Let(binding(second)), call()],
+                vec![Statement::Let(binding(first)), Statement::Let(binding(second)), call()],
+                vec![input(first), Statement::Call { result: second.into(), callee: "probe".into(), args: vec![] }],
+                vec![Statement::Let(binding(first)), Statement::Call { result: second.into(), callee: "probe".into(), args: vec![] }],
+                vec![Statement::Input { name: first.into(), ty: KaniPrimitiveType::I64,
+                    domain: (-1, 1), then: vec![binding(first), binding(second)] }, call()],
+                vec![Statement::Input { name: "other".into(), ty: KaniPrimitiveType::I64,
+                    domain: (-1, 1), then: vec![binding(first), binding(second)] }, call()],
+            ] {
+                assert_eq!(error(body, vec![cover()], 1),
+                    HarnessSpecError::DuplicateBinding(second.into()));
+            }
+        }
+        for (result, later) in [("answer", "r#answer"), ("r#answer", "answer")] {
+            assert_eq!(error(vec![Statement::Call { result: result.into(), callee: "probe".into(), args: vec![] }, Statement::Let(binding(later))], vec![cover()], 1),
+                HarnessSpecError::DuplicateBinding(later.into()));
+        }
+    }
+
+    #[trace("FR-015-AC-112", "FR-015-AC-116", "TC-025")]
+    #[test]
+    fn own_input_shadow_accepts_raw_alias_once_and_preserves_source_spelling() {
+        for (name, shadow) in [("x", "r#x"), ("r#x", "x"), ("r#x", "r#x")] {
+            let spec = construct(vec![Statement::Input { name: name.into(),
+                ty: KaniPrimitiveType::I64, domain: (-1, 1),
+                then: vec![binding("native"), binding(shadow)] },
+                Statement::Let(binding("r#distinct")),
+                Statement::Call { result: "r#answer".into(), callee: "r#probe".into(),
+                    args: vec![Argument::Borrow("r#x".into())] }], vec![cover()], 1).unwrap();
+            let source = super::super::render::render(&spec).unwrap().contents;
+            assert!(source.contains(&format!("let {name}: i64 =")));
+            assert!(source.contains(&format!("let {shadow} = x;")));
+            assert!(source.contains("let r#answer = r#probe(&r#x);"));
+            assert_eq!(error(vec![Statement::Input { name: name.into(),
+                ty: KaniPrimitiveType::I64, domain: (-1, 1),
+                then: vec![binding(shadow), binding(name)] }, call()], vec![cover()], 1),
+                HarnessSpecError::DuplicateBinding(name.into()));
+        }
+    }
+
 }
