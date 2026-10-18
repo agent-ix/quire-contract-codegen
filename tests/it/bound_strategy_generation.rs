@@ -1,15 +1,9 @@
 //! Synthetic public executable projections for the complete numeric strategy slice.
 
 use ix_trace_rs::trace;
-use std::{
-    fmt::Write as _,
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fmt::Write as _, fs, process::Command};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_bound_oracles, generate_bound_strategy, BoundGenerationError, BoundStrategyPopulation,
     BoundStrategyRequest, GenerationErrorCode, GenerationTerminalState, StrategyErrorCode,
@@ -18,27 +12,6 @@ use quire_contract_model::{
     BoundPackage, ClauseId, ClauseRef, RequirementRef, EXECUTABLE_PROJECTION_FORMAT,
 };
 use serde_json::{json, Value};
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(path.join("src")).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 fn span(line: u64) -> Value {
     let source = json!({"document":"synthetic-numeric", "revision":1});
@@ -273,7 +246,7 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     for (index, (generated, expected)) in cases.iter().enumerate() {
         let oracle = generated_item(generated, "pub fn oracle_");
         fs::write(
-            temporary.0.join(format!("src/oracle_{index}.rs")),
+            temporary.path.join(format!("src/oracle_{index}.rs")),
             generated,
         )
         .unwrap();
@@ -296,9 +269,9 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     }
     checks.push_str("}\n");
     root.push_str(&checks);
-    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), root).unwrap();
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
             "[package]\nname = \"bound-integer-oracles\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
@@ -306,9 +279,9 @@ fn run_integer_oracles(cases: &[(&str, &str)]) {
     );
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(
@@ -1019,18 +992,18 @@ mod generated_checks {{
     ));
     let temporary = TemporaryDirectory::new("quire-bound-strategy-consumer");
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
             "[package]\nname = \"bound-strategy-consumer\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&["snapshot-json"])
         ),
     );
-    fs::write(temporary.0.join("src/lib.rs"), source).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), source).unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(
@@ -1154,7 +1127,7 @@ pub fn {oracle}({oracle_parameters}) -> bool {{
 }}
 "#,
         ));
-        fs::write(temporary.0.join(format!("src/{module}.rs")), source).unwrap();
+        fs::write(temporary.path.join(format!("src/{module}.rs")), source).unwrap();
         writeln!(
             root,
             "/// Generated {module} campaign with a deliberately negated oracle.\npub mod {module};"
@@ -1209,9 +1182,9 @@ pub fn {oracle}({oracle_parameters}) -> bool {{
     }
     checks.push_str("}\n");
     root.push_str(&checks);
-    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), root).unwrap();
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
             "[package]\nname = \"bound-strategy-mismatch\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
@@ -1219,9 +1192,9 @@ pub fn {oracle}({oracle_parameters}) -> bool {{
     );
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(
@@ -1322,7 +1295,7 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
             }
             let module = format!("{fixture}_{population_name}");
             fs::write(
-                temporary.0.join(format!("src/{module}.rs")),
+                temporary.path.join(format!("src/{module}.rs")),
                 &generated.rust.contents,
             )
             .unwrap();
@@ -1482,9 +1455,9 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     }
     checks.push_str("}\n");
     root.push_str(&checks);
-    fs::write(temporary.0.join("src/lib.rs"), root).unwrap();
+    fs::write(temporary.path.join("src/lib.rs"), root).unwrap();
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
             "[package]\nname = \"bound-strategy-all-populations\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&[])
@@ -1492,9 +1465,9 @@ fn tc_020_all_clause_kinds_and_populations_run_without_discards() {
     );
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(

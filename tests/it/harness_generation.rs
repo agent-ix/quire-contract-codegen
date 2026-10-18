@@ -1,12 +1,7 @@
 use ix_trace_rs::trace;
-use std::{
-    fs,
-    path::PathBuf,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, process::Command};
 
-use crate::scratch_crate::{runtime_dependency, write_manifest};
+use crate::scratch_crate::{runtime_dependency, write_manifest, TemporaryDirectory};
 use quire_contract_codegen::{
     generate_tristate_harness, GenerationErrorCode, GenerationTerminalState, HarnessErrorCode,
     HarnessRequest, MAX_GENERATED_SOURCE_BYTES,
@@ -17,27 +12,6 @@ use quire_contract_model::{
     SourceDocumentId, SourceIdentity, SourceLocation, SourceRevision, SourceSpan, StateObservation,
     SymbolName, TypedExpression, ValueDeclaration, ValueDeclarationKind, ValueType,
 };
-
-struct TemporaryDirectory(PathBuf);
-
-impl TemporaryDirectory {
-    fn new(prefix: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{}-{nonce}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(path.join("src")).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 fn requirement() -> RequirementRef {
     RequirementRef::new(
@@ -222,9 +196,9 @@ fn tc_004_generated_harness_binds_clauses_and_executes_all_three_terminal_paths(
 
     let temporary = TemporaryDirectory::new("quire-generated-harness");
     write_manifest(
-        &temporary.0,
+        &temporary.path,
         &format!(
-            "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+            "[package]\nname = \"generated-harness-check\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
             runtime_dependency(&["proptest"])
         ),
     );
@@ -549,15 +523,15 @@ mod generated_tests {
     )
     .replace("HARNESS_FN", harness_function_name(&first.rust.contents));
     fs::write(
-        temporary.0.join("src/lib.rs"),
+        temporary.path.join("src/lib.rs"),
         format!("{}{}", first.rust.contents, tests),
     )
     .unwrap();
     let output = Command::new(env!("CARGO"))
         .args(["test", "--offline", "--quiet"])
-        .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+        .env("CARGO_TARGET_DIR", temporary.path.join("target"))
         .env("RUSTFLAGS", "-Dwarnings")
-        .current_dir(&temporary.0)
+        .current_dir(&temporary.path)
         .output()
         .unwrap();
     assert!(
@@ -677,9 +651,9 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
         let function = harness_function_name(&artifact.rust.contents);
         let temporary = TemporaryDirectory::new(&format!("quire-generated-harness-{name}"));
         write_manifest(
-            &temporary.0,
+            &temporary.path,
             &format!(
-                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n",
+                "[package]\nname = \"generated-harness-shape\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\nproptest = {{ version = \"=1.5.0\", default-features = false, features = [\"std\"] }}\n{}\n\n[workspace]\n",
                 runtime_dependency(&["proptest"])
             ),
         );
@@ -688,15 +662,15 @@ fn tc_004_state_only_and_dependency_free_harnesses_compile_with_denied_warnings(
             invocation.replace("HARNESS_FN", function),
         );
         fs::write(
-            temporary.0.join("src/lib.rs"),
+            temporary.path.join("src/lib.rs"),
             format!("{}{}", artifact.rust.contents, generated_test),
         )
         .unwrap();
         let output = Command::new(env!("CARGO"))
             .args(["test", "--offline", "--quiet"])
-            .env("CARGO_TARGET_DIR", temporary.0.join("target"))
+            .env("CARGO_TARGET_DIR", temporary.path.join("target"))
             .env("RUSTFLAGS", "-Dwarnings")
-            .current_dir(&temporary.0)
+            .current_dir(&temporary.path)
             .output()
             .unwrap();
         assert!(
