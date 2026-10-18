@@ -388,6 +388,7 @@ fn run_collection_kani(
         harness: KaniExecutableHarness::from(harness),
         crate_directory: &crate_directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-collection"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{label}: {refusal}"));
     let evidence_directory =

@@ -1215,6 +1215,7 @@ fn prove(harness: &KaniObligationHarness, subject: &str) -> KaniRunOutcome {
         harness: harness.into(),
         crate_directory: &directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kani-spine"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("{refusal}"));
     let _ = fs::remove_dir_all(directory);

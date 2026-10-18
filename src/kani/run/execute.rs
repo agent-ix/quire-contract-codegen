@@ -28,6 +28,7 @@ use crate::kani::{
     },
     identity::ObligationKind,
     output::{
+        diagnostics::{KaniNoVerdictDiagnostics, KnownDirectories, ProcessOutput},
         playback::{counterexample_playback, playback_blocks},
         report::{
             members_in_request_order, KaniCheckResult, KaniHarnessReport, KaniHarnessStatus,
@@ -37,7 +38,8 @@ use crate::kani::{
     run::{
         harness::{HarnessView, KaniExecutableHarness},
         launch::{
-            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream, LaunchOutcome,
+            run_bounded_launcher, BoundedLaunch, BoundedLaunchError, CaptureStream,
+            CapturedStreams, LaunchOutcome,
         },
         memory::MemoryObservation,
         report_file::{fresh_report_path, read_report, remove_stale_report},
@@ -63,6 +65,10 @@ pub struct KaniExecutionRequest<'a> {
     pub crate_directory: &'a Path,
     /// Cargo target directory for the run.
     pub target_directory: &'a Path,
+    /// The home directory of the launcher's environment, when the caller knows it. It redacts
+    /// the diagnostics of a run that gave no verdict and keeps requests with different home
+    /// directories out of one launcher process; it is never read from the process environment.
+    pub home_directory: Option<&'a Path>,
 }
 
 /// Why a harness was not run.
@@ -281,6 +287,10 @@ pub struct KaniExecutionEvidence {
     /// says so and names who shared it. Absent for a run of one harness.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub batch: Option<KaniBatchInvocation>,
+    /// Present exactly when the outcome is [`KaniInconclusiveReason::NoVerdict`]: why the
+    /// backend gave no verdict, from the launcher's streams. It is never an input to the outcome.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<KaniNoVerdictDiagnostics>,
 }
 
 /// A backend report and its invocation metadata, without an attestation of resource enforcement.
@@ -300,6 +310,7 @@ struct ReportedExecution {
     success_checks: u32,
     checks: Vec<KaniCheckResult>,
     batch: Option<KaniBatchInvocation>,
+    diagnostics: Option<KaniNoVerdictDiagnostics>,
 }
 
 impl ReportedExecution {
@@ -319,6 +330,7 @@ impl ReportedExecution {
             success_checks: self.success_checks,
             checks: self.checks,
             batch: self.batch,
+            diagnostics: self.diagnostics,
         }
     }
 }
@@ -445,6 +457,7 @@ fn evidence_of(
     exit_code: Option<i32>,
     run: ClassifiedRun,
     batch: Option<KaniBatchInvocation>,
+    diagnostics: Option<KaniNoVerdictDiagnostics>,
 ) -> ReportedExecution {
     ReportedExecution {
         ceilings: harness.ceilings,
@@ -460,6 +473,7 @@ fn evidence_of(
         success_checks: run.success_checks,
         checks: run.checks,
         batch,
+        diagnostics,
     }
 }
 
@@ -493,10 +507,64 @@ fn finish_single(
     report: Option<Vec<u8>>,
 ) -> Result<ReportedExecution, KaniExecutionRefusal> {
     let harness = request.harness.view();
-    let (run, exit_code) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
+    let (run, exit_code, streams) = launch_evidence(outcome, report.as_deref(), harness.kind)?;
+    let diagnostics = no_verdict_streams(&run, streams.as_ref()).map(|streams| {
+        process_output(
+            request,
+            streams,
+            std::slice::from_ref(&harness.selection),
+            &arguments,
+            report.is_some(),
+        )
+        .analyse()
+        .diagnostics_of(&harness.selection)
+    });
     Ok(evidence_of(
-        request, &harness, arguments, exit_code, run, None,
+        request,
+        &harness,
+        arguments,
+        exit_code,
+        run,
+        None,
+        diagnostics,
     ))
+}
+
+/// The streams of a run, when its outcome is `NoVerdict` and so carries a diagnostic record.
+fn no_verdict_streams<'a>(
+    run: &ClassifiedRun,
+    streams: Option<&'a CapturedStreams>,
+) -> Option<&'a CapturedStreams> {
+    matches!(
+        run.outcome,
+        KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict
+        }
+    )
+    .then_some(streams)
+    .flatten()
+}
+
+/// What one launcher process printed, with the request's directories to redact it against.
+fn process_output<'a>(
+    request: &'a KaniExecutionRequest<'_>,
+    streams: &'a CapturedStreams,
+    selections: &'a [String],
+    arguments: &'a [String],
+    report_exported: bool,
+) -> ProcessOutput<'a> {
+    ProcessOutput {
+        stdout: &streams.stdout,
+        stderr: &streams.stderr,
+        selections,
+        arguments,
+        report_exported,
+        directories: KnownDirectories {
+            crate_directory: request.crate_directory,
+            target_directory: request.target_directory,
+            home_directory: request.home_directory,
+        },
+    }
 }
 
 /// What one launcher process (one group) of a batch yielded: the harnesses it ran and their evidence or the
@@ -579,6 +647,7 @@ fn shares_process(first: &KaniExecutionRequest<'_>, other: &KaniExecutionRequest
         && first.installation == other.installation
         && first.crate_directory == other.crate_directory
         && first.target_directory == other.target_directory
+        && first.home_directory == other.home_directory
         && without_selection(first.harness.view().options)
             == without_selection(other.harness.view().options)
 }
@@ -672,12 +741,12 @@ fn run_group(
         count,
     )?;
     let report = take_report(&launch.outcome, &report_path);
-    let (exited_successfully, exit_code, text) = match settle(launch.outcome)? {
+    let (exited_successfully, exit_code, streams) = match settle(launch.outcome)? {
         Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
-        } => (exited_successfully, exit_code, text),
+            streams,
+        } => (exited_successfully, exit_code, streams),
         Concluded::Cancelled { source } => {
             return Err(KaniExecutionRefusal::BatchCancelled {
                 source,
@@ -703,7 +772,7 @@ fn run_group(
         arguments,
         exited_successfully,
         exit_code,
-        &text,
+        &streams,
         report?,
     )
     .map(|reported| {
@@ -720,7 +789,7 @@ fn finish_group(
     arguments: Vec<String>,
     exited_successfully: bool,
     exit_code: Option<i32>,
-    text: &str,
+    streams: &CapturedStreams,
     report: Option<Vec<u8>>,
 ) -> Result<Vec<ReportedExecution>, KaniExecutionRefusal> {
     let Some((_, first)) = group.first() else {
@@ -735,12 +804,21 @@ fn finish_group(
         members: selections.clone(),
         timeout_seconds: whole_seconds(first.harness.view().ceilings.wall_clock),
     };
+    let report_exported = report.is_some();
+    let output = process_output(first, streams, &selections, &arguments, report_exported);
+    // Read once for the whole group, and only when some member has a record to carry.
+    let shared = std::cell::OnceCell::new();
     let evidence = |run: Vec<ClassifiedRun>| -> Vec<ReportedExecution> {
         group
             .iter()
             .zip(&views)
             .zip(run)
             .map(|(((_, request), view), run)| {
+                let diagnostics = no_verdict_streams(&run, Some(streams)).map(|_| {
+                    shared
+                        .get_or_init(|| output.analyse())
+                        .diagnostics_of(&view.selection)
+                });
                 evidence_of(
                     request,
                     view,
@@ -748,6 +826,7 @@ fn finish_group(
                     exit_code,
                     run,
                     Some(invocation.clone()),
+                    diagnostics,
                 )
             })
             .collect()
@@ -772,7 +851,8 @@ fn finish_group(
         };
     };
     let members = members_in_request_order(&selections, &KaniHarnessReport::parse_batch(&report)?)?;
-    let blocks = playback_blocks(text);
+    let text = streams.merged_text();
+    let blocks = playback_blocks(&text);
     if let Some(block) = blocks
         .iter()
         .find(|block| !selections.contains(&block.harness.to_owned()))
@@ -799,7 +879,7 @@ fn finish_group(
                 classify_member(
                     process_succeeded,
                     member,
-                    || counterexample_playback(text, Some(&view.selection)),
+                    || counterexample_playback(&text, Some(&view.selection)),
                     view.kind,
                 )
             })
@@ -814,7 +894,7 @@ enum Concluded {
     Completed {
         exited_successfully: bool,
         exit_code: Option<i32>,
-        text: String,
+        streams: CapturedStreams,
     },
     /// The budget elapsed and the group was killed.
     TimedOut,
@@ -831,11 +911,11 @@ fn settle(launch: LaunchOutcome) -> Result<Concluded, KaniExecutionRefusal> {
         LaunchOutcome::Completed {
             exited_successfully,
             exit_code,
-            text,
+            streams,
         } => Ok(Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
+            streams,
         }),
         LaunchOutcome::TimedOut => Ok(Concluded::TimedOut),
         LaunchOutcome::Cancelled { source } => Ok(Concluded::Cancelled { source }),
@@ -907,7 +987,7 @@ pub(super) fn launch_evidence(
     launch: LaunchOutcome,
     report: Option<&[u8]>,
     kind: Option<ObligationKind>,
-) -> Result<(ClassifiedRun, Option<i32>), KaniExecutionRefusal> {
+) -> Result<(ClassifiedRun, Option<i32>, Option<CapturedStreams>), KaniExecutionRefusal> {
     let stopped = |reason| {
         (
             ClassifiedRun {
@@ -916,16 +996,18 @@ pub(super) fn launch_evidence(
                 checks: Vec::new(),
             },
             None,
+            None,
         )
     };
     match settle(launch)? {
         Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
+            streams,
         } => Ok((
-            classify_kani_run(exited_successfully, report, &text, kind)?,
+            classify_kani_run(exited_successfully, report, &streams.merged_text(), kind)?,
             exit_code,
+            Some(streams),
         )),
         Concluded::Cancelled { source } => Ok((
             ClassifiedRun {
@@ -933,6 +1015,7 @@ pub(super) fn launch_evidence(
                 success_checks: 0,
                 checks: Vec::new(),
             },
+            None,
             None,
         )),
         Concluded::TimedOut => Ok(stopped(KaniInconclusiveReason::TimedOut)),
@@ -1061,7 +1144,7 @@ mod report_fixture {
         let Concluded::Completed {
             exited_successfully,
             exit_code,
-            text,
+            streams,
         } = settle(outcome)?
         else {
             panic!("report fixture must complete; bounded lifecycle is tested separately");
@@ -1071,7 +1154,7 @@ mod report_fixture {
             arguments,
             exited_successfully,
             exit_code,
-            &text,
+            &streams,
             report?,
         )
     }
@@ -1102,7 +1185,7 @@ mod tests {
                 LaunchOutcome::Completed {
                     exited_successfully: true,
                     exit_code: Some(0),
-                    text: String::new(),
+                    streams: CapturedStreams::default(),
                 },
                 Some(&report("Success", checks)),
                 kind,
@@ -1206,6 +1289,7 @@ mod tests {
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: &crate_directory,
             target_directory: &target_directory,
+            home_directory: None,
         });
         if stale.is_some() {
             assert!(
@@ -1280,6 +1364,7 @@ mod tests {
             harness: KaniExecutableHarness::from(&harness),
             crate_directory: Path::new("/crate"),
             target_directory: Path::new("/target"),
+            home_directory: None,
         };
         let (arguments, _) = kani_launch_command(&request);
         let options = request.harness.view().options;
@@ -1336,7 +1421,9 @@ mod tests {
     #[test]
     fn a_timed_out_launch_carries_no_exit_code_into_the_evidence() {
         // A timed-out run is killed before it writes a report, so none is consulted.
-        let (run, exit_code) = launch_evidence(LaunchOutcome::TimedOut, None, None).unwrap();
+        let (run, exit_code, streams) =
+            launch_evidence(LaunchOutcome::TimedOut, None, None).unwrap();
+        assert!(streams.is_none());
         assert_eq!(exit_code, None);
         assert_eq!(
             run.outcome,
@@ -1912,6 +1999,7 @@ exit 0
                 harness: harness.into(),
                 crate_directory: &self.crate_directory,
                 target_directory: &self.target_directory,
+                home_directory: None,
             }
         }
 
@@ -2894,6 +2982,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                 harness: (&harness).into(),
                 crate_directory: Path::new("/crate"),
                 target_directory: Path::new("/target"),
+                home_directory: None,
             };
             let (arguments, _) = batch_launch_command(
                 &request,
@@ -2964,6 +3053,7 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
             KaniExecutionRequest {
                 cancel: &cancel,
                 target_directory: &second.target_directory,
+                home_directory: None,
                 ..first.request(&b, T)
             },
         ];
@@ -3645,5 +3735,683 @@ printf '%s' "$(readlink /proc/self/ns/pid)" > "$CALLS.namespace"
                 2
             ]
         );
+    }
+
+    /// The diagnostic record of a run Kani gave no verdict for, over launcher stand-ins
+    /// (FR-017-AC-32 to FR-017-AC-36).
+    #[cfg(target_os = "linux")]
+    mod no_verdict_diagnostics {
+        use super::*;
+        use crate::kani::{
+            output::diagnostics::KaniFailurePhase,
+            test_support::{report, COVER_NO},
+        };
+
+        const BANNER: &str = "Kani Rust Verifier 0.68.0 (cargo plugin)\n";
+        const SOLVING: &str = "Solving with CaDiCaL 3.0.0\n";
+        const NO_VERDICT: KaniRunOutcome = KaniRunOutcome::Inconclusive {
+            reason: KaniInconclusiveReason::NoVerdict,
+        };
+
+        /// A stand-in that exports `report` (when given), prints `stdout` and `stderr` apart and
+        /// exits with `exit`.
+        fn printing(
+            name: &str,
+            report: Option<&[u8]>,
+            stdout: &str,
+            stderr: &str,
+            exit: i32,
+        ) -> StandIn {
+            let stand_in = StandIn::scaffold(name);
+            stand_in.install(&print_body(&stand_in, report, exit));
+            stand_in.set_streams(stdout, stderr);
+            stand_in
+        }
+
+        fn print_body(stand_in: &StandIn, report: Option<&[u8]>, exit: i32) -> String {
+            let mut body = String::new();
+            if let Some(report) = report {
+                let exported = stand_in.directory.join("report.json");
+                fs::write(&exported, report).unwrap();
+                body.push_str(&format!("cp '{}' \"$last\"\n", exported.display()));
+            }
+            body.push_str(&format!(
+                "cat '{0}/stdout'\ncat '{0}/stderr' 1>&2\nexit {exit}\n",
+                stand_in.directory.display()
+            ));
+            body
+        }
+
+        impl StandIn {
+            /// What the next run of a `printing` stand-in writes to each stream.
+            fn set_streams(&self, stdout: &str, stderr: &str) {
+                fs::write(self.directory.join("stdout"), stdout).unwrap();
+                fs::write(self.directory.join("stderr"), stderr).unwrap();
+            }
+        }
+
+        fn proofs() -> StateFrameHarness {
+            member("proofs", "check", 4)
+        }
+
+        fn run(stand_in: &StandIn, harness: &StateFrameHarness) -> KaniExecutionEvidence {
+            execute_kani_obligation(&stand_in.request(harness, T)).unwrap()
+        }
+
+        fn diagnostics(evidence: &KaniExecutionEvidence) -> &KaniNoVerdictDiagnostics {
+            evidence
+                .diagnostics
+                .as_ref()
+                .unwrap_or_else(|| panic!("no diagnostic record on {:?}", evidence.outcome))
+        }
+
+        fn wire_has_no_diagnostics(evidence: &KaniExecutionEvidence) -> bool {
+            serde_json::to_value(evidence)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("diagnostics")
+                .is_none()
+        }
+
+        /// A launcher that exits 1, exports no report and prints nothing is `NoVerdict` with
+        /// phase `launcher`, two empty excerpts and the exit code.
+        ///
+        #[trace("FR-017-AC-32", "TC-027")]
+        #[test]
+        fn tc_027_a_silent_launcher_with_no_report_is_no_verdict_with_phase_launcher() {
+            let stand_in = printing("diag-silent", None, "", "", 1);
+            let evidence = run(&stand_in, &proofs());
+            assert_eq!(evidence.outcome, NO_VERDICT);
+            assert_eq!(evidence.exit_code, Some(1));
+            let record = diagnostics(&evidence);
+            assert_eq!(record.phase, KaniFailurePhase::Launcher);
+            for excerpt in [&record.stdout, &record.stderr] {
+                assert_eq!((excerpt.text.as_str(), excerpt.omitted_bytes), ("", 0));
+            }
+            assert_eq!(
+                serde_json::to_value(&evidence).unwrap()["diagnostics"],
+                serde_json::json!({
+                    "phase": "launcher",
+                    "stdout": { "text": "", "omittedBytes": 0 },
+                    "stderr": { "text": "", "omittedBytes": 0 },
+                })
+            );
+        }
+
+        /// One launcher stand-in of the marker table: what it prints, whether it exports a report,
+        /// the extra options of its harness and the phase expected.
+        struct Case<'a> {
+            label: &'a str,
+            stdout: String,
+            stderr: &'a str,
+            exported: Option<&'a [u8]>,
+            extra: &'a [&'a str],
+            expected: KaniFailurePhase,
+        }
+
+        fn case<'a>(
+            label: &'a str,
+            stdout: String,
+            stderr: &'a str,
+            exported: Option<&'a [u8]>,
+            extra: &'a [&'a str],
+            expected: KaniFailurePhase,
+        ) -> Case<'a> {
+            Case {
+                label,
+                stdout,
+                stderr,
+                exported,
+                extra,
+                expected,
+            }
+        }
+
+        /// Single-run stand-ins that exit 1: each marker set gives its phase, and the marker
+        /// need not be in the excerpt.
+        ///
+        #[trace("FR-017-AC-33", "TC-027")]
+        #[test]
+        fn tc_027_marker_stand_ins_decide_the_failure_phase() {
+            let checking = "Checking harness proofs::check...\n";
+            let cargo_failed =
+                "error: Failed to execute cargo (exit status: 101). Found 1 compilation errors.\n";
+            let filler = "filler line\n".repeat(2000);
+            let solver_stdout = format!("{BANNER}{checking}{SOLVING}");
+            let long_after = format!("{solver_stdout}{filler}");
+            let success = report("Success", &[PASSED, COVER_OK]);
+            let cases = [
+                case(
+                    "solver",
+                    solver_stdout.clone(),
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Solver,
+                ),
+                case(
+                    "backend",
+                    format!("{BANNER}{checking}"),
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Backend,
+                ),
+                case(
+                    "compile-stdout",
+                    format!("{BANNER}{cargo_failed}"),
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Compile,
+                ),
+                case(
+                    "compile-stderr",
+                    BANNER.to_owned(),
+                    "error: could not compile `x` (lib) due to 1 previous error\n",
+                    None,
+                    &[],
+                    KaniFailurePhase::Compile,
+                ),
+                case(
+                    "launcher",
+                    String::new(),
+                    "error: unexpected argument\n",
+                    None,
+                    &[],
+                    KaniFailurePhase::Launcher,
+                ),
+                case(
+                    "banner",
+                    BANNER.to_owned(),
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Unknown,
+                ),
+                case(
+                    "other-wording",
+                    format!("{BANNER}{checking}Running the SAT solver CaDiCaL\n"),
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Backend,
+                ),
+                case(
+                    "foreign-path",
+                    format!("{BANNER}Checking harness other::path...\n{SOLVING}"),
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Unknown,
+                ),
+                case(
+                    "parallel",
+                    solver_stdout.clone(),
+                    "",
+                    None,
+                    &["-j", "2"],
+                    KaniFailurePhase::Unknown,
+                ),
+                case(
+                    "report",
+                    solver_stdout,
+                    "",
+                    Some(&success),
+                    &[],
+                    KaniFailurePhase::Unknown,
+                ),
+                case(
+                    "before-window",
+                    long_after,
+                    "",
+                    None,
+                    &[],
+                    KaniFailurePhase::Solver,
+                ),
+            ];
+            for Case {
+                label,
+                stdout,
+                stderr,
+                exported,
+                extra,
+                expected,
+            } in cases
+            {
+                let stand_in = printing(&format!("diag-{label}"), exported, &stdout, stderr, 1);
+                let mut harness = proofs();
+                harness
+                    .identity
+                    .options
+                    .extend(extra.iter().map(|o| (*o).to_owned()));
+                let evidence = run(&stand_in, &harness);
+                assert_eq!(evidence.outcome, NO_VERDICT, "{label}");
+                assert_eq!(diagnostics(&evidence).phase, expected, "{label}");
+                if label == "before-window" {
+                    let kept = &diagnostics(&evidence).stdout;
+                    assert!(kept.omitted_bytes > 0 && kept.text.len() <= 8192);
+                    assert!(!kept.text.contains("Solving with"));
+                }
+            }
+        }
+
+        /// The redaction of the streams of a real run uses the request's directories: the crate,
+        /// target and home directory it was given, and nothing from the process environment.
+        ///
+        #[trace("FR-017-AC-35", "TC-027")]
+        #[test]
+        fn tc_027_a_runs_streams_are_redacted_against_the_requests_directories() {
+            let stand_in = StandIn::scaffold("diag-redact");
+            stand_in.install(&print_body(&stand_in, None, 1));
+            let (crate_directory, target, home) = (
+                stand_in.crate_directory.display().to_string(),
+                stand_in.target_directory.display().to_string(),
+                stand_in.directory.display().to_string(),
+            );
+            let stdout = format!(
+                "{BANNER}({crate_directory})\n{crate_directory}/src/lib.rs:6:21\n{target}/debug/x.out\n{home}/.kani/bin\n/opt/tool/bin\nhttps://host/x/y\n2026-10-16T22:27:04.275975036Z\nRuntime Solver: 1.385e-05s\ncheck_ttl_30s\nthread 'main' (4242) panicked\n"
+            );
+            stand_in.set_streams(&stdout, "pid 4242\n");
+            let harness = proofs();
+            let home_directory = PathBuf::from(&home);
+            let with_home = execute_kani_obligation(&KaniExecutionRequest {
+                home_directory: Some(&home_directory),
+                ..stand_in.request(&harness, T)
+            })
+            .unwrap();
+            let record = diagnostics(&with_home);
+            assert_eq!(
+                record.stdout.text,
+                format!(
+                    "{BANNER}(<CRATE_DIR>)\n<CRATE_DIR>/src/lib.rs:6:21\n<TARGET_DIR>/debug/x.out\n<HOME>/.kani/bin\n<PATH>\nhttps://host/x/y\n<TIMESTAMP>\nRuntime Solver: <DURATION>\ncheck_ttl_30s\nthread 'main' (<PID>) panicked\n"
+                )
+            );
+            assert_eq!(record.stderr.text, "pid <PID>\n");
+
+            let without_home = run(&stand_in, &harness);
+            let text = &diagnostics(&without_home).stdout.text;
+            assert!(
+                !text.contains("<HOME>") && text.contains("<PATH>\n<PATH>\n"),
+                "{text}"
+            );
+        }
+
+        /// Two runs whose streams differ only in redacted values serialize byte-identical records.
+        ///
+        #[trace("FR-017-AC-35", "TC-027")]
+        #[test]
+        fn tc_027_runs_differing_only_in_redacted_values_serialize_identical_records() {
+            let stand_in = StandIn::scaffold("diag-identical");
+            stand_in.install(&print_body(&stand_in, None, 1));
+            let dir = stand_in.crate_directory.display().to_string();
+            let harness = proofs();
+            let mut records = Vec::new();
+            for (stamp, seconds, pid) in [
+                ("2026-10-16T22:27:04.275975036Z", "0.00331318s", 4242),
+                ("2025-01-02T03:04:05+01:00", "1.385e-05s", 17),
+            ] {
+                stand_in.set_streams(
+                    &format!("{BANNER}{dir}/src/lib.rs:6:21\nat {stamp} in {seconds}\n"),
+                    &format!("process {pid} aborted\n"),
+                );
+                records
+                    .push(serde_json::to_string(diagnostics(&run(&stand_in, &harness))).unwrap());
+            }
+            assert_eq!(records[0], records[1]);
+        }
+
+        /// The process `HOME` is never read: the same run under two `HOME` values gives the same
+        /// record. The probe below runs in a child test process that carries the `HOME`.
+        ///
+        #[trace("FR-017-AC-35", "TC-027")]
+        #[test]
+        fn tc_027_the_same_run_under_two_process_homes_gives_the_same_record() {
+            let exe = std::env::current_exe().unwrap();
+            let scratch = discover_scratch("diag-home");
+            let mut records = Vec::new();
+            for home in ["/ir809-home-a", "/ir809-home-b"] {
+                let out = scratch.join(home.trim_start_matches('/'));
+                let status = std::process::Command::new(&exe)
+                    .args(["--exact", PROBE, "--test-threads=1"])
+                    .env("HOME", home)
+                    .env(PROBE_OUT, &out)
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+                records.push(fs::read_to_string(&out).expect("the probe wrote its record"));
+            }
+            let _ = fs::remove_dir_all(scratch);
+            assert!(records[0].contains("<PATH>"), "{}", records[0]);
+            assert_eq!(records[0], records[1]);
+        }
+
+        const PROBE: &str = "kani::run::execute::batch_tests::no_verdict_diagnostics::home_probe";
+        const PROBE_OUT: &str = "IR809_HOME_PROBE_OUT";
+
+        /// Run by the test above in a child process; a no-op elsewhere.
+        #[test]
+        fn home_probe() {
+            let Ok(out) = std::env::var(PROBE_OUT) else {
+                return;
+            };
+            let home = std::env::var("HOME").unwrap();
+            let stand_in = StandIn::scaffold("diag-home-probe");
+            stand_in.install(&print_body(&stand_in, None, 1));
+            stand_in.set_streams(&format!("{BANNER}{home}/.kani/bin\n"), "");
+            let evidence = run(&stand_in, &proofs());
+            fs::write(out, serde_json::to_string(diagnostics(&evidence)).unwrap()).unwrap();
+        }
+
+        /// Only `NoVerdict` evidence has a `diagnostics` member on the wire: verified,
+        /// cover-unsatisfied, falsified, timed-out, memory-exhausted and other inconclusive runs
+        /// have none.
+        ///
+        #[trace("FR-017-AC-32", "TC-027")]
+        #[test]
+        fn tc_027_evidence_of_every_other_outcome_has_no_diagnostics_member() {
+            let harness = proofs();
+            let noisy = format!("{BANNER}error: could not compile\n{SOLVING}");
+            let falsifying = block("proofs::check", "assertion", "falsify");
+            let runs: [(&str, Option<Vec<u8>>, String, i32); 4] = [
+                (
+                    "verified",
+                    Some(report("Success", &[PASSED, COVER_OK])),
+                    noisy.clone(),
+                    0,
+                ),
+                (
+                    "cover",
+                    Some(report("Success", &[PASSED, COVER_NO])),
+                    noisy.clone(),
+                    0,
+                ),
+                (
+                    "falsified",
+                    Some(report("Failure", &[FAILED, COVER_OK])),
+                    falsifying,
+                    1,
+                ),
+                (
+                    "failed-bare",
+                    Some(report("Failure", &[FAILED, COVER_OK])),
+                    noisy,
+                    1,
+                ),
+            ];
+            let mut seen = Vec::new();
+            for (label, exported, stdout, exit) in runs {
+                let stand_in = printing(
+                    &format!("diag-other-{label}"),
+                    exported.as_deref(),
+                    &stdout,
+                    "",
+                    exit,
+                );
+                let evidence = run(&stand_in, &harness);
+                assert!(
+                    wire_has_no_diagnostics(&evidence),
+                    "{label}: {:?}",
+                    evidence.outcome
+                );
+                assert!(evidence.diagnostics.is_none());
+                seen.push(evidence.outcome);
+            }
+            assert!(matches!(seen[0], KaniRunOutcome::Verified));
+            assert!(matches!(seen[1], KaniRunOutcome::CoverUnsatisfied { .. }));
+            assert!(matches!(seen[2], KaniRunOutcome::Falsified { .. }));
+            assert!(matches!(
+                seen[3],
+                KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::FailedWithoutCounterexample
+                }
+            ));
+
+            let mut short = proofs();
+            short.identity.ceilings.wall_clock = Duration::from_secs(1);
+            let slow = StandIn::running("diag-timeout", "exec sleep 30");
+            let timed_out =
+                execute_kani_obligation(&slow.request(&short, Duration::from_secs(1))).unwrap();
+            assert_eq!(
+                timed_out.outcome,
+                KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::TimedOut
+                }
+            );
+            assert!(wire_has_no_diagnostics(&timed_out));
+
+            let memory = memory_member("proofs", 32 * 1024 * 1024);
+            let hog = StandIn::running("diag-memory", CHILD_MEMORY_OVERAGE);
+            let exhausted = execute_kani_obligation(&hog.request(&memory, T)).unwrap();
+            assert_eq!(
+                exhausted.outcome,
+                KaniRunOutcome::Inconclusive {
+                    reason: KaniInconclusiveReason::MemoryExhausted
+                }
+            );
+            assert!(wire_has_no_diagnostics(&exhausted));
+        }
+
+        /// A refusal returns no evidence and so no record: an over-limit stream by its code, an
+        /// unread one by its code.
+        ///
+        #[trace("FR-017-AC-32", "FR-017-AC-36", "TC-043")]
+        #[test]
+        fn tc_043_over_limit_and_unread_streams_stay_refused_with_no_record() {
+            let flood = StandIn::running(
+                "diag-flood",
+                &format!("head -c {} /dev/zero\nexit 1\n", CAPTURE_LIMIT + 1),
+            );
+            let refusal = execute_kani_obligation(&flood.request(&proofs(), T)).unwrap_err();
+            assert_eq!(refusal.code(), Some("kani_output_over_limit"));
+
+            let members = StandIn::running(
+                "diag-flood-group",
+                &format!("head -c {} /dev/zero\nexit 1\n", 2 * CAPTURE_LIMIT + 1),
+            );
+            let group = only_group(members.batch(&pair(), T)).unwrap_err();
+            assert_eq!(group.code(), Some("kani_output_over_limit"));
+            assert!(matches!(
+                group,
+                KaniExecutionRefusal::OutputOverLimit { harnesses: 2, .. }
+            ));
+
+            let refusal = launch_evidence(
+                LaunchOutcome::OutputUnread {
+                    stream: CaptureStream::Stderr,
+                    detail: "read failed".to_owned(),
+                },
+                None,
+                None,
+            )
+            .unwrap_err();
+            assert_eq!(refusal.code(), Some("kani_output_unread"));
+        }
+
+        /// The record never feeds classification: the same report and exit with other stream text
+        /// classify alike, and two no-report runs differing only in their streams have equal
+        /// evidence outside `diagnostics` and `memory`.
+        ///
+        #[trace("FR-017-AC-36", "TC-043")]
+        #[test]
+        fn tc_043_stream_text_never_changes_the_classification() {
+            let harness = proofs();
+            let exported = report("Failure", &[FAILED, COVER_OK]);
+            let stand_in = printing(
+                "diag-independent",
+                Some(&exported),
+                &block("proofs::check", "assertion", "falsify"),
+                "",
+                1,
+            );
+            let plain = run(&stand_in, &harness);
+            stand_in.set_streams(
+                &format!(
+                    "{BANNER}{SOLVING}{}",
+                    block("proofs::check", "assertion", "falsify")
+                ),
+                "error: could not compile `x`\nerror: Failed to execute cargo (exit status: 1)\n",
+            );
+            let noisy = run(&stand_in, &harness);
+            assert!(matches!(plain.outcome, KaniRunOutcome::Falsified { .. }));
+            assert_eq!(
+                (&plain.outcome, &plain.checks, plain.success_checks),
+                (&noisy.outcome, &noisy.checks, noisy.success_checks)
+            );
+
+            let silent = printing("diag-no-report", None, "first run\n", "", 1);
+            let first = run(&silent, &harness);
+            silent.set_streams(&format!("{BANNER}{SOLVING}"), "something else\n");
+            let second = run(&silent, &harness);
+            assert_ne!(first.diagnostics, second.diagnostics);
+
+            // The one argument that may differ is the run's own report path, the last one,
+            // which each run gave the launcher.
+            let received = silent.calls();
+            assert_eq!(received.len(), 2);
+            let mut paths = Vec::new();
+            let mut stripped = Vec::new();
+            for (evidence, argv) in [first, second].into_iter().zip(received) {
+                assert_eq!(
+                    evidence.arguments, argv,
+                    "the evidence names the launch's vector"
+                );
+                let mut evidence = evidence;
+                paths.push(evidence.arguments.pop().expect("a report path"));
+                evidence.diagnostics = None;
+                evidence.memory = stripped.first().map_or_else(
+                    || evidence.memory.clone(),
+                    |first: &KaniExecutionEvidence| first.memory.clone(),
+                );
+                stripped.push(evidence);
+            }
+            assert!(paths.iter().all(|path| path.contains("quire-kani-report-")));
+            assert_ne!(
+                paths[0], paths[1],
+                "each run exports to its own report path"
+            );
+            assert_eq!(stripped[0], stripped[1]);
+        }
+
+        fn three() -> Vec<StateFrameHarness> {
+            ["a", "b", "c"]
+                .map(|module| member(module, "check", 4))
+                .to_vec()
+        }
+
+        fn group_evidence(stand_in: &StandIn) -> Vec<KaniExecutionEvidence> {
+            only_group(stand_in.batch(&three(), T)).unwrap()
+        }
+
+        /// Each member of a no-report group has its own phase and the group's excerpts; a compile
+        /// failure with no segment gives every member `compile`.
+        ///
+        #[trace("FR-017-AC-36", "TC-043")]
+        #[test]
+        fn tc_043_group_members_take_their_own_phase_and_share_the_groups_excerpts() {
+            let stdout = format!(
+                "{BANNER}Checking harness a::check...\n{SOLVING}Checking harness b::check...\n"
+            );
+            let stand_in = printing("diag-group", None, &stdout, "warning: x\n", 1);
+            let evidence = group_evidence(&stand_in);
+            assert!(evidence.iter().all(|e| e.outcome == NO_VERDICT));
+            let phases: Vec<_> = evidence.iter().map(|e| diagnostics(e).phase).collect();
+            assert_eq!(
+                phases,
+                [
+                    KaniFailurePhase::Solver,
+                    KaniFailurePhase::Backend,
+                    KaniFailurePhase::Unknown
+                ]
+            );
+            for member in &evidence {
+                assert_eq!(diagnostics(member).stdout.text, stdout);
+                assert_eq!(diagnostics(member).stderr.text, "warning: x\n");
+            }
+
+            let failed = format!("{BANNER}error: Failed to execute cargo (exit status: 101).\n");
+            let evidence = group_evidence(&printing("diag-group-compile", None, &failed, "", 1));
+            assert!(evidence
+                .iter()
+                .all(|e| e.outcome == NO_VERDICT
+                    && diagnostics(e).phase == KaniFailurePhase::Compile));
+        }
+
+        /// A group whose report states success for every member beside an unsuccessful exit is
+        /// `NoVerdict` with phase `unknown` for every member; one whose report holds a failure has
+        /// no `NoVerdict` member and no record.
+        ///
+        #[trace("FR-017-AC-36", "TC-043")]
+        #[test]
+        fn tc_043_a_group_report_decides_between_unknown_and_no_record() {
+            let all_success = batch_report(&[
+                entry("a::check", "Success", &[PASSED, COVER_OK]),
+                entry("b::check", "Success", &[PASSED, COVER_OK]),
+                entry("c::check", "Success", &[PASSED, COVER_OK]),
+            ]);
+            let stdout = format!("{BANNER}Checking harness a::check...\n{SOLVING}");
+            let stand_in = printing("diag-group-success", Some(&all_success), &stdout, "", 1);
+            let evidence = group_evidence(&stand_in);
+            assert!(evidence.iter().all(|e| e.outcome == NO_VERDICT));
+            assert!(evidence
+                .iter()
+                .all(|e| diagnostics(e).phase == KaniFailurePhase::Unknown));
+            assert!(evidence
+                .iter()
+                .all(|e| diagnostics(e).stdout.text == stdout));
+
+            let with_failure = batch_report(&[
+                entry("a::check", "Success", &[PASSED, COVER_OK]),
+                entry("b::check", "Success", &[PASSED, COVER_OK]),
+                entry("c::check", "Failure", &[FAILED, COVER_OK]),
+            ]);
+            let stand_in = printing("diag-group-failure", Some(&with_failure), &stdout, "", 1);
+            let evidence = group_evidence(&stand_in);
+            assert!(evidence.iter().all(|e| e.outcome != NO_VERDICT));
+            assert!(evidence.iter().all(wire_has_no_diagnostics));
+        }
+
+        /// Requests whose `home_directory` differs start separate processes; equal ones share
+        /// one, and its members' excerpts of the shared output are byte-identical.
+        ///
+        #[trace("FR-017-AC-36", "TC-043")]
+        #[test]
+        fn tc_043_requests_with_different_home_directories_are_not_grouped() {
+            let (u, v) = (PathBuf::from("/h/u"), PathBuf::from("/h/v"));
+            let pair = pair();
+            let processes = |first: Option<&Path>, second: Option<&Path>| {
+                let stand_in = printing("diag-homes", None, &format!("{BANNER}/h/u/x\n"), "", 1);
+                let requests = [
+                    KaniExecutionRequest {
+                        home_directory: first,
+                        ..stand_in.request(&pair[0], T)
+                    },
+                    KaniExecutionRequest {
+                        home_directory: second,
+                        ..stand_in.request(&pair[1], T)
+                    },
+                ];
+                let runs = execute_kani_obligations(&requests).unwrap();
+                let evidence: Vec<_> = runs
+                    .into_iter()
+                    .flat_map(|run| run.evidence.unwrap())
+                    .collect();
+                (stand_in.calls().len(), evidence)
+            };
+            assert_eq!(processes(Some(&u), Some(&v)).0, 2);
+            assert_eq!(processes(Some(&u), None).0, 2);
+            let (count, evidence) = processes(Some(&u), Some(&u));
+            assert_eq!(count, 1);
+            assert_eq!(
+                diagnostics(&evidence[0]).stdout,
+                diagnostics(&evidence[1]).stdout
+            );
+            assert_eq!(
+                diagnostics(&evidence[0]).stdout.text,
+                format!("{BANNER}<HOME>/x\n")
+            );
+            assert_eq!(processes(None, None).0, 1);
+        }
     }
 }

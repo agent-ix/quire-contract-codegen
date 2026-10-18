@@ -80,7 +80,7 @@ backing, unmapped pages or absent/overflowed accounting quantities. A success re
 failed, errored, undetermined or unknown check remains refused under FR-017-AC-18; class spelling
 remains governed by FR-017-AC-20.
 
-NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35), PLANNED/UNRUN. In the `make kani` lane,
+NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35). In the `make kani` lane,
 assemble a crate whose `src/lib.rs` holds a generated harness byte for byte and, beside it, a
 function that reads an undefined name, and run it through `execute_kani_obligation` (the
 deliberately non-compiling harness). With single-run launcher stand-ins, run one that exits 1,
@@ -172,7 +172,7 @@ Each capture's exported report parses to the expected typed report and classifie
 the assertion playback passed through verbatim, exhausted bound, cover-unsatisfied 0 of 1,
 cover-unsatisfied 1 of 2 and missing cover summary respectively (FR-017-AC-12).
 
-NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35), PLANNED/UNRUN: the non-compiling harness
+NoVerdict diagnostics (FR-017-AC-32 to FR-017-AC-35): the non-compiling harness
 exits unsuccessfully, exports no report and is `Inconclusive` `NoVerdict`, with phase `compile`, the
 rustc error code and Kani's `error: Failed to execute cargo` line in the stdout excerpt and Cargo's
 `error: could not compile` line, its crate path as `<CRATE_DIR>`, in the stderr excerpt; the silent
@@ -310,12 +310,19 @@ generation/execution boundary and the `make kani` lane. The lane is `#[ignore]`d
 `make kani` under a host-wide lock, because Kani and CBMC are memory-heavy and must run one harness
 at a time.
 
-No current test covers FR-017-AC-32 to FR-017-AC-35. The non-compiling harness belongs in the
-`make kani` lane of `tests/it/kani_obligations.rs`; the stand-in, marker, excerpt and redaction
-cases belong beside the existing `NoVerdict` stand-ins in `src/kani/run/execute.rs` and with the
-output readers in `src/kani/output/`. The serialize-only check is a rustdoc `compile_fail` example on
-the record type in `src/kani/output/`, run by `cargo test --doc`, with a compiling
-`serde_json::to_string` control beside it. They are PLANNED/UNRUN and credit nothing until they run.
+FR-017-AC-32 to FR-017-AC-35 are covered by: the `make kani` lane test
+`tc_027_real_kani_non_compiling_crate_is_no_verdict_with_phase_compile` in
+`tests/it/kani_obligations.rs` (real Kani on a crate holding the harness beside an item that does
+not compile); the `src/kani/run/execute.rs` stand-in tests in `batch_tests::no_verdict_diagnostics`
+(`tc_027_a_silent_launcher_with_no_report_is_no_verdict_with_phase_launcher`,
+`tc_027_marker_stand_ins_decide_the_failure_phase`,
+`tc_027_a_runs_streams_are_redacted_against_the_requests_directories`,
+`tc_027_runs_differing_only_in_redacted_values_serialize_identical_records`,
+`tc_027_the_same_run_under_two_process_homes_gives_the_same_record` and
+`tc_027_evidence_of_every_other_outcome_has_no_diagnostics_member`); and the `src/kani/output/diagnostics.rs`
+tests of the phase rules, the excerpt bounds and every redaction pair. The serialize-only check is
+the rustdoc `compile_fail` example on `KaniNoVerdictDiagnostics`, run by `cargo test --doc`, with
+its compiling `serde_json::to_string` control beside it.
 
 The previously named-file AC-19 tests demonstrate the superseded internal allocation only; they do
 not cover the unnamed writer bound, descriptor roundtrip or kernel reclamation above. No current

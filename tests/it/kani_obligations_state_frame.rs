@@ -3702,6 +3702,7 @@ pub(crate) fn prove(harness: &StateFrameHarness) -> KaniRunOutcome {
         harness: harness.into(),
         crate_directory: &directory,
         target_directory: &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("state-frame-kani"),
+        home_directory: None,
     })
     .unwrap_or_else(|refusal| panic!("the run must start: {refusal}"));
     let _ = fs::remove_dir_all(directory);
