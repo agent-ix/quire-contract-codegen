@@ -1183,6 +1183,7 @@ fn operation_declaration(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     /// A document whose members are in non-sorted source order, whose text holds characters JSON
     /// escapes and whose numbers include a large integer, a fraction and an exponent form.
@@ -1209,8 +1210,7 @@ mod tests {
 
     /// FR-024-AC-14: the builder returns the bytes and digest `core::canonical` returns, and the
     /// bytes are RFC 8785's: members by UTF-16 code unit, JSON escapes, ES6 number spellings.
-    ///
-    /// Trace: FR-024-AC-14, TC-035
+    #[trace("FR-024-AC-14", "TC-035")]
     #[test]
     fn tc_035_the_builder_returns_what_core_canonical_returns_for_the_vector() {
         let document = vector();
@@ -1236,8 +1236,7 @@ mod tests {
     /// digest; an unreadable package, a package under another digest domain, a type nobody owns,
     /// a type that is no address, a package whose identity only shares a prefix, and two owners
     /// are each their own error.
-    ///
-    /// Trace: FR-024-AC-13, TC-035
+    #[trace("FR-024-AC-13", "TC-035")]
     #[test]
     fn tc_035_the_model_header_is_the_one_owner_or_a_distinct_error() {
         let bank = package(BANK, DigestDomain::Sha256Jcs);
@@ -1293,8 +1292,7 @@ mod tests {
 
     /// FR-024-AC-14: the production source of this module holds no encoder, no hashing, no member
     /// sort and no escaping routine of its own, and `sha2` is not a dependency.
-    ///
-    /// Trace: FR-024-AC-14, TC-035
+    #[trace("FR-024-AC-14", "TC-035")]
     #[test]
     fn tc_035_the_module_encodes_and_hashes_only_through_core_canonical() {
         let source = include_str!("state_clause.rs");

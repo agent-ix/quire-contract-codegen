@@ -272,6 +272,7 @@ pub(crate) fn first_out_of_domain<'a>(
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
     use quire_contract_model::{IntegerDomain, OverflowPolicy};
 
     use super::*;
@@ -297,8 +298,7 @@ mod tests {
 
     /// The schema is order-preserving: every argument keeps its identifier and primitive type, in
     /// the generator's own `arguments` order.
-    ///
-    /// Trace: FR-016-AC-8, TC-026
+    #[trace("FR-016-AC-8", "TC-026")]
     #[test]
     fn argument_types_preserve_order_and_type() {
         let arguments = vec![
@@ -318,8 +318,7 @@ mod tests {
 
     /// A binding name used twice refuses the schema rather than typing two playback positions as
     /// one value.
-    ///
-    /// Trace: FR-024-AC-23, TC-035
+    #[trace("FR-024-AC-23", "TC-035")]
     #[test]
     fn decode_falsification_refuses_a_repeated_binding_name() {
         let transcript = two_value_transcript("mod::h", 1, false);
@@ -336,8 +335,7 @@ mod tests {
     /// A `Result`-role binding refuses rather than being silently included: it does not
     /// correspond to any `kani::any()` call, so typing it would mistype a position that does not
     /// exist in the concrete bytes.
-    ///
-    /// Trace: FR-016-AC-8, TC-026
+    #[trace("FR-016-AC-8", "TC-026")]
     #[test]
     fn argument_types_refuse_a_non_argument_binding() {
         let mut result_binding = argument("post_state", KaniPrimitiveType::I64);
@@ -405,8 +403,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// persisted schema refuses by name rather than decoding: one `i64`
     /// value against a two-argument schema is an arity mismatch, and against
     /// a one-`Boolean` schema is a width mismatch.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_refuses_arity_and_width_mismatches() {
         let transcript = synthetic_transcript("mod::harness_ok", 42);
@@ -434,8 +431,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// `decode_falsification` is a real join, not a signature that merely compiles: given a
     /// transcript whose qualified harness symbol matches the caller's declared identity, it
     /// decodes the value the transcript's bytes encode.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_decodes_a_matching_transcript() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
@@ -453,8 +449,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// purely positional and never compare the harness symbol a caller declares against the one
     /// the transcript actually names — `decode_falsification` adds that comparison, so this is
     /// the only place in the crate that can refuse it.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_refuses_a_transcript_whose_harness_symbol_disagrees() {
         let arguments = vec![argument("value", KaniPrimitiveType::I64)];
@@ -481,8 +476,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// binding's identifier and the second takes the second's, so a swapped or shifted pairing
     /// changes the result. A `Boolean` is placed after an `i64` so the two positions also differ
     /// in width and cannot be confused by value alone.
-    ///
-    /// Trace: FR-016-AC-8, TC-026
+    #[trace("FR-016-AC-8", "TC-026")]
     #[test]
     fn decode_falsification_names_each_value_by_its_binding_position() {
         let arguments = vec![
@@ -504,8 +498,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// The integer domain is inclusive at both ends: the minimum and maximum are in domain, and
     /// the values one past either end and the extremes of `i64` are not. A value with no
     /// bounded binding, and a Boolean, are never out of domain.
-    ///
-    /// Trace: FR-016-AC-2, TC-026
+    #[trace("FR-016-AC-2", "TC-026")]
     #[test]
     fn first_out_of_domain_is_inclusive_at_both_bounds() {
         let arguments = vec![argument("amount", KaniPrimitiveType::I64)];
@@ -547,8 +540,7 @@ fn kani_concrete_playback_synthetic() {{\n\
 
     /// Kani's own `//` comment is a cross-check on the bytes, and a Boolean is exactly `0` or `1`:
     /// a value whose comment disagrees, and a Boolean byte of `2`, each refuse by name.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_refuses_a_disagreeing_comment_and_an_invalid_boolean_byte() {
         let block = |comment: &str, byte: u8| {
@@ -579,8 +571,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     /// Only a single assertion block is a witness: a run holding only a cover block, or two
     /// assertion blocks, refuses rather than picking one; a cover beside one assertion selects
     /// the assertion.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_selects_exactly_one_assertion_block() {
         let block = |kind: &str, value: i64| {
@@ -606,8 +597,7 @@ fn kani_concrete_playback_synthetic() {{\n\
 
     /// A contract harness's check text spans several lines; the closing quote is not on the
     /// `Check for` line. It decodes, and its check text is the whole multi-line text.
-    ///
-    /// Trace: FR-016-AC-1, TC-026
+    #[trace("FR-016-AC-1", "TC-026")]
     #[test]
     fn decode_falsification_reads_a_multi_line_check_text() {
         let transcript = synthetic_transcript("mod::h", 42).replace(
@@ -632,8 +622,7 @@ fn kani_concrete_playback_synthetic() {{\n\
     }
 
     /// Negative and extreme integers decode from their little-endian bytes.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_decodes_negative_and_extreme_integers() {
         for value in [-1, i64::MIN, i64::MAX] {
@@ -653,8 +642,7 @@ fn kani_concrete_playback_synthetic() {{\n\
 
     /// Every remaining refusal names its own code: each malformed transcript below breaks
     /// exactly one rule, so a check that is relaxed, swallowed or re-coded turns one case red.
-    ///
-    /// Trace: TC-026
+    #[trace("TC-026")]
     #[test]
     fn decode_falsification_refuses_each_malformed_transcript_by_code() {
         let good = synthetic_transcript("mod::h", 42);

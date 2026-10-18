@@ -492,11 +492,11 @@ fn node_equality_operator(identity: Option<&str>) -> Result<EqualityOperator, Co
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     /// A quantity conversion is not an equality operation: the builder refuses it as an
     /// unsupported node operation, with no request.
-    ///
-    /// Trace: FR-014-AC-2, TC-024.
+    #[trace("FR-014-AC-2", "TC-024")]
     #[test]
     fn a_quantity_conversion_is_an_unsupported_node_operation() {
         assert!(matches!(

@@ -1165,6 +1165,7 @@ mod tests {
         abi::{KaniBindingRole, KaniIntegerBounds, KaniPrimitiveType},
         identity::ObligationBinding,
     };
+    use ix_trace_rs::trace;
     use qsl_replay::{OccurrenceKey, WireNodeId};
     use quire_contract_model::{IntegerDomain, OverflowPolicy};
 
@@ -1224,8 +1225,7 @@ mod tests {
 
     /// With the function, declaration, kind and arguments fixed, reordering `FunctionSite.parameters`
     /// leaves the identity unchanged, and a perturbed `function` or `declaration` changes it.
-    ///
-    /// Trace: FR-016-AC-23, TC-026
+    #[trace("FR-016-AC-23", "TC-026")]
     #[test]
     fn tc_026_the_identity_ignores_the_declared_order_of_the_site_parameters() {
         use crate::kani::identity::ObligationKind;
@@ -1276,8 +1276,7 @@ mod tests {
 
     /// A reproduced settlement in any category other than `violation` is not a reproduced
     /// failure, and an inconclusive settlement never is, whatever its category.
-    ///
-    /// Trace: FR-016-AC-13, TC-026
+    #[trace("FR-016-AC-13", "TC-026")]
     #[test]
     fn only_a_reproduced_violation_reproduces() {
         use WitnessSettlement::{Inconclusive, ReproducedWithEvaluatedWitness as Reproduced};
