@@ -1643,7 +1643,7 @@ fn tc_044_the_first_stop_in_evaluation_order_is_the_outcome() {
 /// A completed native connective retains its result exactly once, including a
 /// left-decided short circuit; an operand stop contributes no outer retention.
 ///
-/// Trace: TC-044, FR-031-AC-26
+#[trace("TC-044", "FR-031-AC-26")]
 #[test]
 fn tc_044_native_connectives_retain_only_completed_results() {
     let mut modules = Vec::new();
