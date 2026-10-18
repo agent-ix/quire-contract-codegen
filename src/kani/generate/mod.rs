@@ -30,3 +30,7 @@ mod role_parity_tests;
 pub(crate) mod scalar;
 // The V1 bundle generator; interim, see the file header.
 pub(crate) mod v1_bundle;
+
+// Validated private descriptions and their pure renderer.
+mod spec;
+mod render;
