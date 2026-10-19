@@ -2346,6 +2346,10 @@ fn tc_030_a_foreign_capability_vocabulary_refuses_the_carrier() {
             },
             "no settlement is returned, so no label of the carrier was read"
         );
+        assert_eq!(
+            serde_json::to_value(&refusal).expect("typed refusal serializes")["code"],
+            "invalid_capability"
+        );
     }
 }
 
