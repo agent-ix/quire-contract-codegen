@@ -2384,6 +2384,76 @@ exec sleep 45
         gate: std::sync::Arc<OwnerGate>,
     }
 
+    /// A successful real observation can be held before the ordinary stop decision.
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct ControlledMemory {
+        ready: PathBuf,
+        gate: std::sync::Arc<OwnerGate>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl super::super::owners::MemorySampling for ControlledMemory {
+        fn observe(
+            &self,
+            observer: &mut super::super::memory::MemoryObserver,
+            root: u32,
+        ) -> std::io::Result<u64> {
+            let measured = observer.observe(root)?;
+            if self.ready.is_file() {
+                self.gate.enter();
+            }
+            Ok(measured)
+        }
+    }
+
+    /// Release gates before joining an aborted controller's real execution worker.
+    #[cfg(target_os = "linux")]
+    struct DiagnosticReleases<'a> {
+        memory: OwnerControl,
+        cleanup: OwnerControl,
+        shared: &'a Cancel,
+        independent: &'a Cancel,
+        memory_released: bool,
+        cleanup_released: bool,
+        settled: bool,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl DiagnosticReleases<'_> {
+        fn release_memory(&mut self) {
+            self.memory.release();
+            self.memory_released = true;
+        }
+
+        fn release_cleanup(&mut self) {
+            self.cleanup.release();
+            self.cleanup_released = true;
+        }
+
+        fn abort(&mut self) {
+            self.shared.cancel(quire_exact::CancelCause::Requested);
+            self.independent.cancel(quire_exact::CancelCause::Requested);
+            if !self.memory_released {
+                let _ = self.memory.release.try_send(());
+                self.memory_released = true;
+            }
+            if !self.cleanup_released {
+                let _ = self.cleanup.release.try_send(());
+                self.cleanup_released = true;
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for DiagnosticReleases<'_> {
+        fn drop(&mut self) {
+            if !self.settled {
+                self.abort();
+            }
+        }
+    }
+
     /// Pause only after the real observer has measured overage; return its exact sample.
     #[cfg(target_os = "linux")]
     #[derive(Debug)]
@@ -2760,6 +2830,158 @@ while [ ! -f "$CALLS.finish" ]; do sleep 0.01; done
                     .any(|args| args == ["--harness", member, "--exact"]));
             }
         }
+    }
+
+    /// Injected event ordering distinguishes running cancellation from accepted completion.
+    #[trace("FR-040-AC-3", "FR-040-AC-5")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn controlled_caller_order_distinguishes_cancelled_and_completed_batch() {
+        for withhold in [false, true] {
+            controlled_batch_cancellation_arm(withhold);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn controlled_batch_cancellation_arm(withhold: bool) {
+        use super::super::owners::{LaunchOwners, SystemPoll};
+        use quire_exact::CancelCause::{Deadline, Requested};
+
+        let harnesses = [
+            member("a", "check", 4),
+            member("b", "check", 4),
+            member("c", "check", 4),
+        ];
+        let body = format!("case \"$ids\" in *a::check*)\n{CANCELLATION_BARRIER};;\nesac\n{VERIFY_EVERY_HARNESS}");
+        let mut stand_in = StandIn::running("controlled-caller-order", &body);
+        stand_in.containing(&harnesses.iter().collect::<Vec<_>>());
+        let independent = Cancel::new();
+        let clone = stand_in.cancel.clone();
+        let (memory, observation) = OwnerGate::new();
+        let (cleanup, confirmation) = OwnerGate::new();
+        stand_in.installation = KaniInstallation::with_owners(
+            stand_in.installation.launcher.clone(),
+            std::sync::Arc::new(LaunchOwners {
+                memory: std::sync::Arc::new(ControlledMemory {
+                    ready: stand_in.directory.join("calls.ready"),
+                    gate: memory,
+                }),
+                stdout: std::sync::Arc::new(SystemPoll),
+                stderr: std::sync::Arc::new(SystemPoll),
+                confirmation: std::sync::Arc::new(ControlledPoll {
+                    ready: None,
+                    gate: cleanup,
+                    fail: false,
+                }),
+            }),
+        );
+        let requests = [
+            stand_in.request(&harnesses[0], T),
+            KaniExecutionRequest {
+                cancel: &clone,
+                ..stand_in.request(&harnesses[1], T)
+            },
+            KaniExecutionRequest {
+                cancel: &independent,
+                ..stand_in.request(&harnesses[2], T)
+            },
+        ];
+        let groups = std::thread::scope(|scope| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let requests = &requests;
+            let worker = scope.spawn(move || {
+                let _ = sender.send(execute_kani_obligations(requests));
+            });
+            let mut releases = DiagnosticReleases {
+                memory: observation,
+                cleanup: confirmation,
+                shared: &stand_in.cancel,
+                independent: &independent,
+                memory_released: false,
+                cleanup_released: false,
+                settled: false,
+            };
+            let scheduled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                releases.memory.entered();
+                assert_eq!(stand_in.cancel.cause(), None);
+                eprintln!("controlled withhold={withhold}: real memory acknowledged after readiness");
+                if !withhold {
+                    stand_in.cancel.cancel(Requested);
+                    stand_in.cancel.cancel(Deadline);
+                    assert_eq!(stand_in.cancel.cause(), Some(Requested));
+                }
+                releases.release_memory();
+                releases
+                    .cleanup
+                    .entered
+                    .recv_timeout(Duration::from_secs(65))
+                    .expect("real owned cleanup confirmation reached");
+                eprintln!("controlled withhold={withhold}: real cleanup acknowledged");
+                if withhold {
+                    assert_eq!(stand_in.cancel.cause(), None);
+                    stand_in.cancel.cancel(Requested);
+                    stand_in.cancel.cancel(Deadline);
+                    assert_eq!(stand_in.cancel.cause(), Some(Requested));
+                }
+                releases.release_cleanup();
+            }));
+            if scheduled.is_err() {
+                releases.abort();
+            }
+            let received = receiver.recv_timeout(Duration::from_secs(40));
+            if received.is_err() {
+                releases.abort();
+            }
+            let joined = worker.join();
+            releases.settled = scheduled.is_ok() && received.is_ok() && joined.is_ok();
+            drop(releases);
+            eprintln!("controlled withhold={withhold}: settled public result {received:#?}");
+            for name in ["calls", "calls.ready", "calls.namespace", "calls.child"] {
+                eprintln!(
+                    "controlled withhold={withhold}: {name}={:?}",
+                    fs::read_to_string(stand_in.directory.join(name))
+                );
+            }
+            if stand_in.directory.join("calls.child").is_file() {
+                recorded_process_gone(&stand_in.directory.join("calls.child"));
+            }
+            if let Err(panic) = scheduled {
+                std::panic::resume_unwind(panic);
+            }
+            joined.expect("controlled execution worker joined");
+            received.expect("full public batch settled after cleanup and independent group")
+        })
+        .unwrap();
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].members, [0, 1]);
+        if withhold {
+            assert!(matches!(
+                groups[0].evidence,
+                Err(KaniExecutionRefusal::Report(KaniReportRefusal::Missing))
+            ));
+        } else {
+            assert!(matches!(
+                groups[0].evidence,
+                Err(KaniExecutionRefusal::BatchCancelled {
+                    source: KaniCancellationSource::Requested,
+                    members: 2,
+                })
+            ));
+        }
+        assert_eq!(groups[1].members, [2]);
+        let evidence = groups[1].evidence.as_ref().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].outcome, KaniRunOutcome::Verified);
+        assert_eq!(evidence[0].cancellation_terminal_value().unwrap(), None);
+        assert_eq!(independent.cause(), None);
+        let calls = stand_in.calls();
+        assert_eq!(calls.len(), 2);
+        for member in ["a::check", "b::check"] {
+            assert!(calls[0]
+                .windows(3)
+                .any(|args| args == ["--harness", member, "--exact"]));
+        }
+        recorded_process_gone(&stand_in.directory.join("calls.child"));
     }
 
     /// Otherwise groupable requests with distinct handles run in separate real processes.
