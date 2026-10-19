@@ -214,14 +214,18 @@ drops `Refused` and `Incomplete` with `_ => return false`. Its caller in
 `src/routed/capability.rs` then returns `KaniFormRefused` with
 `OperationNotRendered(quire.op.function.call)`, replacing the reader's typed
 refusal or limit result with a CG backend refusal. IR-892 tracks a tests-first
-fix under FR-019-AC-48 through FR-019-AC-50 and TC-030: the routed negotiation
-result must carry the reader's exact `CheckedPackageRefusal` or
-`CheckedPackageIncomplete` as a whole-request `EnvelopeRefusal`, while an
+fix under FR-019-AC-48 through FR-019-AC-52 and TC-030: the routed negotiation
+result must carry a CG-owned serializable projection of the reader's public
+`CheckedPackageRefusal` or `CheckedPackageIncomplete` fields as a whole-request
+`EnvelopeRefusal`, while an
 admitted read keeps its existing supported or genuine backend-refusal decision.
 These criteria are planned; this deviation remains until the code PR lands.
-The production request boundary also needs analysis for a second parse or
-checked-graph fallback. AC-5's preservation clause remains unmet; this Analysis
-is planned and does not claim full conformity.
+The current oracle-function helper re-lowers `CheckedPackageV2` and reads the
+resulting wire. AC-48 and AC-49 describe that current helper's observable
+outcome; the FR-330 production caller has already performed the authoritative
+read, and the code PR must carry its result rather than re-read or fall back to
+the checked graph. AC-5's preservation clause remains unmet; this Analysis is
+planned and does not claim full conformity.
 
 Contract IR owner evidence on origin/main at 4213b98 separates criterion text
 from test tags. [FR-035-AC-10](ix://agent-ix/quire-contract-ir/FR-035-AC-10)

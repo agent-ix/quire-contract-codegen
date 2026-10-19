@@ -22,7 +22,7 @@ type: TestMatrix
 | FR-037 | FR-037-AC-4 | TC-052 | 🚧 Planned |
 | FR-037 | FR-037-AC-5 | TC-052 | 🚧 Planned |
 | FR-039 | FR-039-AC-1 through FR-039-AC-3, FR-039-AC-6 through FR-039-AC-8 | TC-053 | 🚧 Planned; production FR-330 consumer and criterion-tagged integration tests are not implemented |
-| FR-039 | FR-039-AC-5 | Analysis | 🚧 Planned; CG's admitted-package type boundary is checkable in source, but result preservation has a known deviation (IR-892; planned FR-019-AC-48 to AC-50 in TC-030). Contract IR has tagged TC-047 reader tests for wrong version (AC-10), Incomplete (AC-11), invalid source map (AC-5), and stale identities (AC-5-tagged tests; AC-2 text, TC-044 tests planned/unrun for FR-330). Malformed and noncanonical wires and invalid accounting have AC-5-tagged tests but no FR-035 criterion stating those reader obligations (IR-893). No CG implementation credit |
+| FR-039 | FR-039-AC-5 | Analysis | 🚧 Planned; CG's admitted-package type boundary is checkable in source, but result preservation has a known deviation (IR-892; planned FR-019-AC-48 to AC-52 in TC-030). Contract IR has tagged TC-047 reader tests for wrong version (AC-10), Incomplete (AC-11), invalid source map (AC-5), and stale identities (AC-5-tagged tests; AC-2 text, TC-044 tests planned/unrun for FR-330). Malformed and noncanonical wires and invalid accounting have AC-5-tagged tests but no FR-035 criterion stating those reader obligations (IR-893). No CG implementation credit |
 | FR-039 | FR-039-AC-4 | TC-054 | 🚧 Planned; FR-322 worked-carrier positive and recomputed adverse strict-reader controls are feasible now, while genuine QSL/IR source-to-CG positive and changed-binding controls depend on QSL-764; no CG implementation credit |
 
 ## Non-Functional Requirement Coverage
